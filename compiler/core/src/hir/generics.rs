@@ -332,7 +332,7 @@ pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions 
 }
 
 /// The signature a function declaration declares, if it is one.
-fn declared_signature(
+pub(super) fn declared_signature(
     snapshot: &SemanticSnapshot,
     declaration: nts_semantic_schema::NodeId,
 ) -> Option<&nts_semantic_schema::SignatureRecord> {

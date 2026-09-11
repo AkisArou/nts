@@ -2156,6 +2156,195 @@ fn uninstantiated(
     Some(FuncBuilder::new(snapshot).unsupported(id, &what))
 }
 
+/// Copies of ordinary functions specialised to the concrete type an argument
+/// actually has.
+///
+/// # The construct
+///
+/// ```text
+/// class Thing  { id: number; name: string }   name at offset 32
+/// interface Named { name: string }            name at offset 24
+/// function readName(v: Named) { return v.name.length }
+/// readName(new Thing(1))
+/// ```
+///
+/// A compiled reference is a pointer, so passing a `Thing` where a `Named` is
+/// wanted is a pointer cast — and it is only sound where the target's fields are
+/// the source's first fields, which `laid_out_as_a_prefix` decides. Here they are
+/// not, so `readName` would load `id` as an `NtsString *`. That was a **segfault**
+/// before it was a refusal.
+///
+/// A copy of `readName` over `Thing` reads `name` at *Thing's* offset. No cast,
+/// no dispatch, nothing to be wrong about.
+///
+/// # Why specialising, and not laying the interface out like its implementor
+///
+/// Reordering an interface's fields to match its one implementor would make the
+/// cast a genuine prefix and need no copies at all — and it fixes two backends of
+/// three. **A prefix buys the JVM nothing**: that lane relates classes by name,
+/// so coinciding offsets are not a relation and `getfield Counted.n` still needs
+/// the object to *be* a `Counted`. It also needs the complete set of classes
+/// satisfying each interface, which the snapshot does not carry.
+///
+/// And on ART, where that lane's product actually runs, there is no inline cache:
+/// a monomorphic interface call costs 1.97x a direct read rather than 1.04x. So
+/// specialisation is not "make dispatch predictable" — worth nothing at a site
+/// that is already monomorphic — it is **remove dispatch**, worth about half the
+/// call there. Record 0294.
+///
+/// # What this deliberately does not do
+///
+/// Only where the argument's concrete type is known at the call. A value read out
+/// of a field declared at the interface type has no concrete type to specialise
+/// over, and stays refused — that is the quarter of this construct that needs an
+/// interface to have a representation, and it is a different piece of work.
+/// Which parameters a copy re-types, by position.
+///
+/// **By position, not by type**, and the difference is the whole of why the
+/// first attempt was thrown away. Binding the interface's `TypeId` in a
+/// `Substitution` -- which is what a generic copy does with a type parameter --
+/// makes *every* mention of `Named` in that body mean `Thing`, including a local
+/// declared `const other: Named = somethingElse`. A type parameter is only ever
+/// inhabited by what it was substituted with, so a generic can do that soundly.
+/// An interface is an ordinary type and other values of it live in the same
+/// function.
+///
+/// Seven of twenty-four addons stopped building on that, with refusals like
+/// ``null` or `undefined` where what it stands in for is not a reference`` --
+/// which name a consequence several steps downstream of the cause.
+///
+/// A position is exactly as much as the copy changes.
+type Retyped = std::collections::BTreeMap<u32, HirType>;
+
+#[derive(Default)]
+struct Structural {
+    /// Copies to emit, by declaration node.
+    copies: rustc_hash::FxHashMap<NodeId, Vec<(Retyped, String)>>,
+    /// What each call site names, and which parameters its callee's copy
+    /// re-typed — the second half is what the *caller* needs, so it coerces its
+    /// argument to the copy's parameter rather than the declaration's.
+    at_call: rustc_hash::FxHashMap<NodeId, (String, Retyped)>,
+}
+
+fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy) -> Structural {
+    let mut found = Structural::default();
+    // One probe for the whole pass. `layout_of` builds a layout on demand from
+    // the snapshot, which is the only way to ask about prefixes before lowering
+    // has run — layouts accumulate *during* lowering, so a pass that runs first
+    // has none to read.
+    //
+    // Its layouts are **discarded**. `layout_of` is not a query: two of the four
+    // `collect_layouts` calls merge a builder's layouts into the program, and a
+    // probe whose layouts reached the program would materialise a struct for
+    // every type this pass asks about.
+    let mut probe = FuncBuilder::new(snapshot);
+    probe.hierarchy = hierarchy.clone();
+
+    let mut calls: Vec<(&NodeId, &nts_semantic_schema::CallTarget)> =
+        snapshot.call_targets.iter().collect();
+    // Sorted, so one compiler on one input emits its copies in one order.
+    calls.sort_by_key(|(call, _)| call.0);
+
+    for (call, target) in calls {
+        let Some(declaration) = target.callee else {
+            continue;
+        };
+        // A generic function's copies come from `function_instantiations`, and a
+        // function cannot be specialised twice over.
+        if is_generic_function(snapshot, declaration) {
+            continue;
+        }
+        let Some(signature) = super::generics::declared_signature(snapshot, declaration) else {
+            continue;
+        };
+        let parameters: Vec<TypeId> = signature.parameters.iter().map(|p| p.ty).collect();
+        let arguments = probe.arguments_of(*call);
+
+        let mut retyped = Retyped::new();
+        let mut spelled = Vec::new();
+        for (at, (declared, argument)) in parameters.iter().zip(&arguments).enumerate() {
+            let Some(actual) = snapshot.node_types.get(argument).copied() else {
+                continue;
+            };
+            if actual == *declared {
+                continue;
+            }
+            // Both sides have to be object types for this to be a pointer cast
+            // at all. A number where a number is wanted is not this question.
+            let (Some(HirType::Managed(ManagedType::Object(want))), Some(HirType::Managed(
+                ManagedType::Object(have),
+            ))) = (probe.represent(*declared), probe.represent(actual))
+            else {
+                continue;
+            };
+            if want == have {
+                continue;
+            }
+            // Already sound: a base's fields keep their offsets in a subclass, so
+            // that cast is the no-op the comment describes and a copy would be
+            // one more function for nothing.
+            // **A closure or a signature is not a field-layout question**, and
+            // specialising one is a different feature with a different name.
+            //
+            // `laid_out_as_a_prefix` opens with exactly this guard and answers
+            // `true` for them, so skipping prefixes had been carrying it by
+            // accident. Specialising prefixes removed that cover and
+            // `blockers/callback-binding` regressed at once: a `declare
+            // function` taking a callback got a copy, and the emitted prototype
+            // stopped being `void nts_take_callback(NtsHeader *)` -- the very
+            // shape that fixture exists to hold.
+            //
+            // A guard inherited from a call whose answer happened to include it
+            // is not a guard. It has to be its own test, here, where the
+            // question is asked.
+            if super::is_closure_type(*declared)
+                || super::is_closure_type(actual)
+                || probe.is_a_signature(*declared)
+                || probe.is_a_signature(actual)
+            {
+                continue;
+            }
+            // **A prefix is specialised too**, which is not obvious and was
+            // measured rather than assumed. On C and LLVM a prefix cast is
+            // already the no-op `laid_out_as_a_prefix` describes, so a copy
+            // there buys nothing. The JVM relates classes by **name**: coinciding
+            // offsets are not a relation, `getfield Counted.n` needs the object
+            // to *be* a `Counted`, and that lane refused
+            // `examples/a-structural-cast-that-is-a-prefix` for a year of
+            // evenings on exactly that.
+            //
+            // Skipping prefixes here left it refusing. Specialising them closes
+            // it, because a copy over `Prefixed` takes a `Prefixed` and there is
+            // no cast to relate anything. The cost is one more function on a
+            // lane where a copy is a static method and the constant pool has two
+            // orders of magnitude spare.
+            retyped.insert(
+                u32::try_from(at).unwrap_or(u32::MAX),
+                HirType::Managed(ManagedType::Object(have)),
+            );
+            spelled.push(format!("{at}obj{}", have.0));
+        }
+        if retyped.is_empty() {
+            continue;
+        }
+        // `@` cannot appear in a TypeScript identifier, so a copy's name cannot
+        // collide with a declared one — the same trick the generic suffix uses,
+        // with a different marker so the two are told apart by eye.
+        let suffix = format!("@{}", spelled.join("_"));
+        found
+            .at_call
+            .insert(*call, (suffix.clone(), retyped.clone()));
+        let copies = found.copies.entry(declaration).or_default();
+        if !copies.iter().any(|(_, at)| *at == suffix) {
+            copies.push((retyped, suffix));
+        }
+    }
+    for copies in found.copies.values_mut() {
+        copies.sort_by(|a, b| a.1.cmp(&b.1));
+    }
+    found
+}
+
 /// The copies of a function to lower.
 ///
 /// A generic function is lowered once per instantiation and not at all as
@@ -2166,26 +2355,53 @@ fn uninstantiated(
 fn function_copies(
     snapshot: &SemanticSnapshot,
     generic: &super::generics::GenericFunctions,
+    structural: &Structural,
     id: NodeId,
-) -> Vec<(Substitution, super::generics::Sources, String)> {
-    match generic.copies.get(&id) {
-        Some(instances) => instances
+) -> Vec<Copy> {
+    if let Some(instances) = generic.copies.get(&id) {
+        return instances
             .iter()
-            .map(|instance| {
-                (
-                    instance.substitution.clone(),
-                    instance.sources.clone(),
-                    instance.suffix.clone(),
-                )
+            .map(|instance| Copy {
+                substitution: instance.substitution.clone(),
+                sources: instance.sources.clone(),
+                retyped: Retyped::new(),
+                suffix: instance.suffix.clone(),
             })
-            .collect(),
-        None if is_generic_function(snapshot, id) => Vec::new(),
-        None => vec![(
-            Substitution::default(),
-            super::generics::Sources::default(),
-            String::new(),
-        )],
+            .collect();
     }
+    if is_generic_function(snapshot, id) {
+        return Vec::new();
+    }
+    // **The unspecialised version as well**, which is the difference from a
+    // generic. A generic is lowered once per instantiation and *not at all* as
+    // itself, because a parameter of type `T` has no width. An ordinary function
+    // has a perfectly good width; a structural copy is an addition, not a
+    // replacement, and a call that passes the declared type still names the
+    // plain one.
+    let mut copies = vec![Copy::default()];
+    copies.extend(
+        structural
+            .copies
+            .get(&id)
+            .into_iter()
+            .flatten()
+            .map(|(retyped, suffix)| Copy {
+                retyped: retyped.clone(),
+                suffix: suffix.clone(),
+                ..Copy::default()
+            }),
+    );
+    copies
+}
+
+/// One version of a function to emit: a generic instantiation, a structural
+/// specialisation, or the plain one with neither.
+#[derive(Default)]
+struct Copy {
+    substitution: Substitution,
+    sources: super::generics::Sources,
+    retyped: Retyped,
+    suffix: String,
 }
 
 /// Whether a function declaration has type parameters of its own.
@@ -2245,7 +2461,13 @@ fn lower_class(
             if copy > 0 && is_static_member(snapshot, member) {
                 continue;
             }
-            let mut builder = shared.builder(snapshot, substitution.clone(), super::generics::Sources::default(), String::new());
+            let mut builder = shared.builder(
+                snapshot,
+                Copy {
+                    substitution: substitution.clone(),
+                    ..Copy::default()
+                },
+            );
             // An overload signature declares a call shape and has no body. The
             // implementation beside it is the one member emitted, and every
             // call resolving to a signature is built against that one -- so
@@ -2323,6 +2545,9 @@ struct Shared {
     closures: Vec<ClosureInfo>,
     naming: Naming,
     generics: super::generics::GenericFunctions,
+    /// Copies of ordinary functions specialised to a concrete argument type.
+    /// See [`structural_instantiations`].
+    structural: Structural,
 }
 
 impl Shared {
@@ -2341,27 +2566,31 @@ impl Shared {
             closures: closures.to_vec(),
             naming: naming(snapshot),
             generics: super::generics::function_instantiations(snapshot),
+            structural: structural_instantiations(snapshot, hierarchy),
         }
     }
 
     /// A builder for one copy, wired to the program-wide naming.
-    fn builder<'a>(
-        &self,
-        snapshot: &'a SemanticSnapshot,
-        substitution: Substitution,
-        sources: super::generics::Sources,
-        suffix: String,
-    ) -> FuncBuilder<'a> {
+    fn builder<'a>(&self, snapshot: &'a SemanticSnapshot, copy: Copy) -> FuncBuilder<'a> {
         let mut builder = FuncBuilder::instantiating(
             snapshot,
             self.module.clone(),
             self.hierarchy.clone(),
             self.closures.clone(),
-            substitution,
-            suffix,
+            copy.substitution,
+            copy.suffix,
         );
-        builder.sources = sources;
+        builder.sources = copy.sources;
+        builder.retyped = copy.retyped;
         builder.generic_calls.clone_from(&self.generics.at_call);
+        // A structural call names its copy the same way a generic one does, so
+        // the naming site needs no second question -- one map, two sources.
+        for (call, (suffix, bindings)) in &self.structural.at_call {
+            builder.generic_calls.insert(*call, suffix.clone());
+            builder
+                .structural_calls
+                .insert(*call, bindings.clone());
+        }
         wire_naming(&mut builder, &self.naming);
         builder
     }
@@ -2759,7 +2988,7 @@ fn refused_initializers(
 ) -> rustc_hash::FxHashSet<u32> {
     let mut refused = rustc_hash::FxHashSet::default();
     for (symbol, initializer) in &shared.module.deferred {
-        let mut probe = shared.builder(snapshot, Substitution::default(), super::generics::Sources::default(), String::new());
+        let mut probe = shared.builder(snapshot, Copy::default());
         if let Err(diagnostic) = probe.lower_expression(*initializer) {
             lowered.diagnostics.push(diagnostic);
             refused.insert(*symbol);
@@ -2804,7 +3033,7 @@ fn lower_module_initializer(
         // that declares its own local also consumes it.
         let mut lost = Vec::new();
         statements.retain(|statement| {
-            let mut probe = shared.builder(snapshot, Substitution::default(), super::generics::Sources::default(), String::new());
+            let mut probe = shared.builder(snapshot, Copy::default());
             let attempt = if probe.kind_of(*statement) == Some(syntax::VARIABLE_STATEMENT) {
                 probe.lower_module_binding(*statement, refused)
             } else if probe.kind_of(*statement) == Some(syntax::CLASS_DECLARATION) {
@@ -2852,7 +3081,7 @@ fn lower_module_initializer(
             ));
         }
 
-        let mut builder = shared.builder(snapshot, Substitution::default(), super::generics::Sources::default(), String::new());
+        let mut builder = shared.builder(snapshot, Copy::default());
         match builder.lower_module_init(file, &statements, refused) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => {
@@ -3778,7 +4007,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
             lowered.diagnostics.push(ambiguous_name(snapshot, id));
             continue;
         }
-        let copies = function_copies(snapshot, &shared.generics, id);
+        let copies = function_copies(snapshot, &shared.generics, &shared.structural, id);
         // **An empty answer is two different things, and only one of them is
         // silence worth keeping.** A generic nothing calls is dead, and
         // reporting it would refuse a program nobody wrote. A generic a call
@@ -3798,8 +4027,8 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
             lowered.diagnostics.push(diagnostic);
             continue;
         }
-        for (substitution, sources, suffix) in copies {
-            let mut builder = shared.builder(snapshot, substitution, sources, suffix);
+        for copy in copies {
+            let mut builder = shared.builder(snapshot, copy);
             match builder.lower_function(id) {
                 Ok(func) => lowered.program.funcs.push(func),
                 Err(diagnostic) => {
@@ -6321,6 +6550,18 @@ struct FuncBuilder<'a> {
     /// A call has to reach the copy made for its own instantiation, and the
     /// copy's name is the only thing that distinguishes one from another.
     generic_calls: rustc_hash::FxHashMap<NodeId, String>,
+    /// What each call site's callee was *specialised* with, where it was.
+    ///
+    /// The suffix above names the copy; this is the other half, and the caller
+    /// needs it: `coerce_to_parameter` asks what the parameter is represented as
+    /// and reads that from the **declaration**, which still says `Named`. A call
+    /// to a copy over `Thing` must coerce to `Thing` -- otherwise the argument
+    /// meets the same prefix check and the same refusal, and the copy is emitted
+    /// and never reached.
+    structural_calls: rustc_hash::FxHashMap<NodeId, Retyped>,
+    /// Which of *this* copy's own parameters are re-typed, by position. Empty
+    /// for every function that is not a structural specialisation.
+    retyped: Retyped,
     /// Whether this function is a constructor.
     ///
     /// The one place a `readonly` field may be written: TypeScript permits it
@@ -6450,6 +6691,8 @@ impl<'a> FuncBuilder<'a> {
             suffix: String::new(),
             qualified: rustc_hash::FxHashMap::default(),
             generic_calls: rustc_hash::FxHashMap::default(),
+            structural_calls: rustc_hash::FxHashMap::default(),
+            retyped: Retyped::new(),
             in_constructor: false,
             hierarchy: Hierarchy::default(),
             base: None,
@@ -8843,7 +9086,19 @@ impl<'a> FuncBuilder<'a> {
 
     /// How a call's `at`th parameter is represented, from the resolved
     /// signature rather than from the argument.
+    ///
+    /// **Unless this call was specialised**, in which case the copy's parameter
+    /// is what the argument has to match. The declaration still says `Named`
+    /// and the copy takes a `Thing`; coercing to the declaration would meet the
+    /// prefix check that the copy exists to avoid.
     fn parameter_representation(&self, call: NodeId, at: usize) -> Option<HirType> {
+        if let Some(bound) = self
+            .structural_calls
+            .get(&call)
+            .and_then(|retyped| retyped.get(&u32::try_from(at).unwrap_or(u32::MAX)))
+        {
+            return Some(bound.clone());
+        }
         self.represent(self.parameter_type_id(call, at)?)
     }
 
@@ -11021,6 +11276,13 @@ impl<'a> FuncBuilder<'a> {
                 .type_of(name_node)
                 .ok_or_else(|| self.unrepresentable(name_node, "a parameter"))?,
         };
+        // **A structural specialisation re-types this parameter and nothing
+        // else.** `readName(v: Named)` specialised over `Thing` takes a `Thing`
+        // here, so the body's `v.name` reads Thing's layout at Thing's offset --
+        // and every *other* mention of `Named` in the same function still means
+        // `Named`, which is the distinction the first attempt got wrong by
+        // substituting the type. See [`Structural`].
+        let ty = self.retyped.get(&index).cloned().unwrap_or(ty);
         self.materialize(name_node, &ty)?;
 
         let origin = self.origin(name_node);
