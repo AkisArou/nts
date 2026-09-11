@@ -21289,6 +21289,41 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## Two of the profile's top chokepoints emit no diagnostic at all
+
+`asRequest` was the first: named as refused by twenty `NTS1003` lines, and
+`fs/src/request.ts` contains **zero** `NTS1001` in the entire file.
+`displayBytePath` is the second: three `NTS1003` lines name it, and its own
+lines 426-428 hold none. Both take a union -- `asRequest` a generic rest,
+`displayBytePath` a `string | number[]` -- and neither says so anywhere.
+
+They are the first and third largest heads in `fs`. A census that ranks
+diagnostic text is blind to both, by construction, because they produce none.
+
+### A generalisation I tried to make and could not
+
+The obvious next question is how many of the 333 terminals in `fs` are like this.
+A first attempt asked "is this terminal's name mentioned by any `NTS1001` line"
+and answered **325 of 333**, which would have been a spectacular finding and is
+an artifact of the test.
+
+`NTS1001` names the **construct and its file:line**; `NTS1003` names the
+**function**. That asymmetry is recorded in this ledger already and I walked into
+it anyway. "Not named by an NTS1001" is true of nearly every function in the
+profile, refused or not, so the 325 measures the diagnostic's grammar rather than
+the compiler's silence.
+
+Measuring it properly needs each terminal's file and line range, which is the
+attribution that has already produced one wrong answer today. So the number is
+two confirmed instances and no estimate, which is worth more than 325 of a
+population I had not looked at.
+
+The second attempt is the one above: take the function's actual extent and ask
+whether any root refusal is located inside it. That is how both were confirmed,
+and it also caught the range being too wide -- an `options.ts:433` hit belongs to
+`symlinkTypeFlags`, which starts at 431, not to `displayBytePath`, which ends at
+428.
+
 ## A blocker removed, nine dependents freed, zero exports published
 
 `internal/validators.ts` held `const OCTAL = /^[0-7]+$/`, a module-scope regular
