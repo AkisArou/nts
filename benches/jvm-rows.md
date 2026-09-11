@@ -4215,11 +4215,27 @@ of the case directory; this one compiles their sources into the same output), th
 driver shape, or the warmup reaching a different tier on a 4.4us row. None is
 checked and I am not guessing between them here.
 
-**It is open and it belongs to `tooling/bench`, which is the compiler lane's.**
-Recorded in `benches/` rather than left in a message because the published column
-is what a reader acts on, and this says the published 0.94x has a second
-measurement against it that nobody has adjudicated. The row's ART figures --
-1.14x and 1.15x -- inherit the doubt and are marked with it.
+**It is open and it is mine.** Both harnesses are: `tooling/bench/**` and
+`tooling/android/**` are this lane's, so there is no other session to hand a
+disagreement between them to. Recorded in `benches/` rather than left in a
+message because the published column is what a reader acts on, and this says the
+published 0.94x has a second measurement against it that nobody has adjudicated.
+The row's ART figures -- 1.14x and 1.15x -- inherit the doubt and are marked.
+
+**First attempt at adjudicating it, and what it cost.** The emitted classes are
+**byte-identical** between the two harnesses (`cmp` on all four), the generated
+drivers are the same text, and the JVM flags are the same, which leaves the
+harness class -- `benches/common/Bench.java` against this lane's transcription of
+its timing arm. Running `tooling/bench`'s own compiled artefact to compare gave
+**9806, 11527, 11655 ns** against a published figure implying about 4400, and the
+explanation was on the machine rather than in the artefact: `uptime` said **load
+average 33.08**. A peer was building. The run is discarded and the comparison is
+queued behind `wait-idle` and the lock.
+
+Worth keeping as the reason the two *sittings* are trustworthy where that run was
+not: both sittings took the lock, and their HotSpot controls reproduced the
+published column on 35 of 40 rows. A number measured at load 33 reproduces
+nothing.
 
 ## Open, and whose
 
