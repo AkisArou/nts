@@ -48,10 +48,25 @@ util zlib"
 # Twelve of these fail on `blockers/duplicate-type-name` and `timers` fails on
 # an undeclared identifier. When that fixture is fixed most of this list moves,
 # and the run will say so by name.
-# The two that do not build. Both are the largest modules in the profile and
-# both have the most declared-but-unimplemented bindings, so neither is one
-# compiler fix away.
-BLOCKED=""
+#
+# `dns` is here for one reason and it is *one compiler fix away*, which is the
+# opposite of what this list usually holds. `node:dns` publishes 24 c-ares error
+# constants and two of them are named `EOF` and `FILE`. They emit as unqualified
+# C identifiers, and `addon.c` includes `node_api.h` and so `<stdio.h>`, where
+# `FILE` is a type and `EOF` is `#define EOF (-1)`. See
+# `blockers/an-export-named-like-a-c-keyword`.
+#
+# It was measured rather than assumed: renaming those two names in a throwaway
+# worktree builds the whole module clean, 384920 bytes and zero errors. Nothing
+# else in `dns` is blocked.
+#
+# The obvious workaround does not work, and the reason is worth keeping. Moving
+# the 24 constants into an object literal -- same published names, installed by
+# `shape.mjs` -- emits a C struct whose *member* is `NtsString * EOF;`, and the
+# macro substitutes there too. So the fix has to cover emitted struct members and
+# not only module-scope globals, and there is no way to route around it from this
+# side that still publishes the names node publishes.
+BLOCKED="dns"
 
 # **Empty, and it held `fs` and `process` an hour ago.**
 #

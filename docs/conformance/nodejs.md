@@ -21289,6 +21289,42 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## `dns`'s compiled lane is one fix away, and the fix is wider than it looked
+
+The module is green on the interpreted lane and does not build as an addon. Both
+halves of that are now measured rather than asserted.
+
+**The collision is the only blocker.** Renaming `EOF` and `FILE` in a throwaway
+worktree -- `git worktree add --detach`, with `third_party`, `node_modules` and
+`target/tsgo` linked back -- builds the entire module clean:
+
+    control (HEAD)        5 clang errors, all of them EOF or FILE
+    with the two renamed  0 errors, dns.node, 384920 bytes
+
+So nothing else in `dns` is waiting behind it. One compiler fix moves the whole
+module, which is not what `BLOCKED` usually holds, and the entry there says so.
+
+**The obvious workaround does not work, and that is the finding.** Moving the 24
+constants into an object literal -- identical published names, installed by
+`shape.mjs`, nothing weakened -- emits this:
+
+    struct { ... NtsString * EOF; NtsString * FILE; ... }
+    status = nts_to_napi_string(env, result->EOF, &value);
+
+`EOF` is a **macro**, so it substitutes in member position exactly as it does at
+module scope, and the build fails at a different line for the same reason. A
+namespace applied only to module-scope globals would therefore not fix `dns`. The
+fix has to reach every C identifier taken from a JavaScript name, struct members
+included.
+
+And there is no third option from this side. Any spelling that avoids the macro
+also stops publishing `dns.EOF`, which node publishes, so it would be buying a
+green lane by dropping a name -- and the constants are exactly what the one
+pinned test asserts.
+
+`dns` is in `BLOCKED` rather than `FLOOR`, so `build-floor.sh` will report it the
+moment it starts building instead of leaving it as a module nobody rechecks.
+
 ## `http2` is the largest prize, and nghttp2 vendors in 26 files
 
 The yield table puts `http2` first at 244 addressable files -- more than `tls`
