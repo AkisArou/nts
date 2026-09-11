@@ -33,7 +33,7 @@ cd "$(dirname "$0")/../.."
 # predicted. A stale floor does not just miss a regression, it manufactures
 # progress, and the second failure is louder than the first.
 FLOOR="assert async_hooks buffer console dgram diagnostics_channel dns events fs http
-net os path process punycode querystring readline stream string_decoder timers url
+net os path process punycode querystring readline stream string_decoder timers tty url
 util zlib"
 
 # And the ones that do not, which is the half that rots.
