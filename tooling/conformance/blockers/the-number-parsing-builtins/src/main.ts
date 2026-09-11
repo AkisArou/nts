@@ -1,12 +1,21 @@
-// expect: `parseFloat`, a builtin this compiler does not provide
+// expect: `toFixed` on a number
 //
 // Three number-facing builtins that are not provided, and one string method
 // that is provided with fewer arguments than it has.
 //
-// **`parseInt` is provided now** and the expectation moved to the next name in
-// the file, which is what this fixture was shaped for: four things behind one
+// **`parseInt` and `parseFloat` are provided now** and the expectation has moved
+// twice, which is what this fixture was shaped for: four things behind one
 // expectation, so a fix that lands one and not the others still reports the
-// fixture as reproducing rather than as closed. It did exactly that.
+// fixture as reproducing rather than as closed. It has done exactly that twice.
+//
+// `parseFloat` landed on 2026-09-11 as `nts_parse_float`, and it is not `strtod`
+// on the whole string: `parseFloat("0x10")` is 0 where `strtod` reads a
+// hexadecimal float and answers 16, `parseFloat("inf")` is NaN where `strtod`
+// accepts it, and `parseFloat("1e")` is 1 because an exponent needs a digit
+// after it. The longest prefix the grammar admits is measured first and
+// `strtod` is handed only that. `examples/parse-float` carries the behaviour
+// over twenty-four strings, including both infinities, the smallest subnormal
+// and a value past the largest double.
 //
 // `parseInt` was the largest of the four -- 14 sites across 6 modules, with
 // `os.networkInterfaces` behind it through `getCIDR` -- and it is `nts_parse_int`

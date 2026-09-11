@@ -4045,6 +4045,112 @@ double nts_value_to_number(NtsValue value) {
   }
 }
 
+/* `parseFloat(string)`.
+ *
+ * Not `strtod` on the whole string, and not `Number(s)` either. Three
+ * differences, each of which is a wrong answer rather than a rounding:
+ *
+ *   parseFloat("0x10")   is 0   -- it parses "0" and stops at 'x'; strtod reads
+ *                                  a hexadecimal float and answers 16
+ *   parseFloat("inf")    is NaN -- strtod accepts "inf" and "nan", the language
+ *                                  accepts only "Infinity"
+ *   parseFloat("12abc")  is 12  -- Number("12abc") is NaN
+ *
+ * So the longest prefix the grammar admits is measured here and `strtod` is
+ * given only that. It is the same split `nts_parse_int` makes for the same
+ * reason: stopping where the text stops being a number is the whole of what
+ * these two do that a conversion does not.
+ *
+ * The digits themselves are handed to `strtod` rather than accumulated, because
+ * correctly rounding a decimal string to the nearest double is exactly what it
+ * is for, and doing it by multiplication loses the last bit. */
+double nts_parse_float(const NtsString *s) {
+  if (!s) {
+    return (double)NAN;
+  }
+  uint32_t units = s->length;
+  uint32_t at = 0;
+  /* `StrWhiteSpaceChar`, the same set `nts_parse_int` skips. */
+  while (at < units) {
+    uint16_t unit = nts_unit(s, at);
+    if (unit != 0x20 && unit != 0x09 && unit != 0x0a && unit != 0x0d &&
+        unit != 0x0b && unit != 0x0c && unit != 0xa0 && unit != 0xfeff) {
+      break;
+    }
+    at++;
+  }
+  uint32_t start = at;
+  bool negative = false;
+  if (at < units && (nts_unit(s, at) == '+' || nts_unit(s, at) == '-')) {
+    negative = nts_unit(s, at) == '-';
+    at++;
+  }
+  /* `Infinity`, spelled out. Checked before the digits because it shares no
+   * prefix with them and because "Infinity" is the only word form admitted. */
+  static const char infinity[] = "Infinity";
+  uint32_t spelled = 0;
+  while (spelled < 8u && at + spelled < units &&
+         nts_unit(s, at + spelled) == (uint16_t)infinity[spelled]) {
+    spelled++;
+  }
+  if (spelled == 8u) {
+    return negative ? -(double)INFINITY : (double)INFINITY;
+  }
+
+  uint32_t digits = at;
+  while (at < units && nts_unit(s, at) >= '0' && nts_unit(s, at) <= '9') {
+    at++;
+  }
+  bool any = at > digits;
+  if (at < units && nts_unit(s, at) == '.') {
+    at++;
+    while (at < units && nts_unit(s, at) >= '0' && nts_unit(s, at) <= '9') {
+      at++;
+      any = true;
+    }
+  }
+  if (!any) {
+    return (double)NAN;
+  }
+  /* An exponent counts only if it has at least one digit after it. `"1e"` is
+   * 1 and not NaN, so the scan backs up rather than failing. */
+  if (at < units && (nts_unit(s, at) == 'e' || nts_unit(s, at) == 'E')) {
+    uint32_t after = at + 1u;
+    if (after < units && (nts_unit(s, after) == '+' || nts_unit(s, after) == '-')) {
+      after++;
+    }
+    uint32_t exponent = after;
+    while (after < units && nts_unit(s, after) >= '0' && nts_unit(s, after) <= '9') {
+      after++;
+    }
+    if (after > exponent) {
+      at = after;
+    }
+  }
+
+  /* The admitted prefix as bytes. Every unit in it is ASCII by construction --
+   * a digit, a sign, a dot or an `e` -- so one byte each is exact and no
+   * encoding step is needed. */
+  uint32_t length = at - start;
+  char stack[64];
+  char *text = stack;
+  if (length + 1u > sizeof stack) {
+    text = (char *)malloc((size_t)length + 1u);
+    if (!text) {
+      return (double)NAN;
+    }
+  }
+  for (uint32_t i = 0; i < length; i++) {
+    text[i] = (char)nts_unit(s, start + i);
+  }
+  text[length] = '\0';
+  double value = strtod(text, NULL);
+  if (text != stack) {
+    free(text);
+  }
+  return value;
+}
+
 double nts_parse_int(const NtsString *s, double radix) {
   if (!s) {
     return (double)NAN;

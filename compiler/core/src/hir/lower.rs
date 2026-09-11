@@ -2081,6 +2081,81 @@ fn collect_static_fields(
 
 /// Lower every function declaration in a snapshot.
 #[must_use]
+/// Two functions of one name in one file, which the emitted C cannot hold.
+///
+/// Extracted from `lower_with` rather than inlined: the emission loop reads as
+/// a list of reasons a declaration produces no copy, and each reason answering
+/// in one line is what makes the list legible.
+fn ambiguous_name(snapshot: &SemanticSnapshot, id: NodeId) -> Diagnostic {
+    let name = FuncBuilder::new(snapshot)
+        .declared_name(id)
+        .unwrap_or_else(|| "?".to_owned());
+    FuncBuilder::new(snapshot).unsupported(
+        id,
+        &format!("a second function named `{name}` in the same file"),
+    )
+}
+
+/// Why a generic function produced no copy, where that is worth saying.
+///
+/// **An empty answer is two different things and only one of them is silence
+/// worth keeping.** A generic nothing calls and nothing exports is dead, and
+/// reporting it would refuse a program nobody wrote. The other two cases used
+/// to be silent as well, and should not have been:
+///
+/// - a call *reached* the declaration and left a type parameter unbound, so the
+///   function cannot be emitted and every caller cascades off it;
+/// - the module **exports** it, so the surface promises a name that no copy can
+///   fill.
+///
+/// The second is `blockers/a-generic-rest-that-is-used`, whose expectation is an
+/// *absence* because there was no message to name. The first is `asRequest` in
+/// `fs`, which sat at the head of the node profile for a day carrying 26 lines
+/// of "calls `asRequest`, which was refused above" with no refusal above --
+/// invisible to every census, because a census reads diagnostics.
+///
+/// `None` for the dead case, which is the one that was right all along.
+fn uninstantiated(
+    snapshot: &SemanticSnapshot,
+    generics: &super::generics::GenericFunctions,
+    id: NodeId,
+) -> Option<Diagnostic> {
+    if !is_generic_function(snapshot, id) {
+        return None;
+    }
+    let loose = generics
+        .unpinned
+        .get(&id)
+        .filter(|loose| !loose.is_empty())
+        .map(|loose| {
+            loose
+                .iter()
+                .map(|name| format!("`{name}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        });
+    // The modifier is on the declaration itself. `declaration_is_exported` is
+    // the *variable statement* form -- it looks for a `VARIABLE_STATEMENT`
+    // ancestor, which a function declaration does not have -- and answered
+    // `false` for `export function schedule`, which is the shape this exists
+    // for.
+    let exported = snapshot.nodes.get(id.0 as usize).is_some_and(|node| {
+        node.modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::EXPORT)
+    });
+    let what = match loose {
+        Some(named) if named.contains(", ") => {
+            format!("a generic function no call pins down (the type parameters {named})")
+        }
+        Some(named) => format!("a generic function no call pins down (the type parameter {named})"),
+        None if exported => "an exported generic function this program never instantiates, so \
+                             there is no copy for the export to name"
+            .to_owned(),
+        None => return None,
+    };
+    Some(FuncBuilder::new(snapshot).unsupported(id, &what))
+}
+
 /// The copies of a function to lower.
 ///
 /// A generic function is lowered once per instantiation and not at all as
@@ -3700,18 +3775,29 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
         // first and dropping the second is a program that compiles and calls
         // the wrong one.
         if shared.naming.ambiguous.contains(&id) {
-            let name = FuncBuilder::new(snapshot)
-                .declared_name(id)
-                .unwrap_or_else(|| "?".to_owned());
-            lowered
-                .diagnostics
-                .push(FuncBuilder::new(snapshot).unsupported(
-                    id,
-                    &format!("a second function named `{name}` in the same file"),
-                ));
+            lowered.diagnostics.push(ambiguous_name(snapshot, id));
             continue;
         }
         let copies = function_copies(snapshot, &shared.generics, id);
+        // **An empty answer is two different things, and only one of them is
+        // silence worth keeping.** A generic nothing calls is dead, and
+        // reporting it would refuse a program nobody wrote. A generic a call
+        // *reached* and could not pin down is a function this compiler cannot
+        // emit, and it used to produce no diagnostic at all -- so the cascade
+        // said "calls X, which was refused above" with no refusal above, and
+        // `asRequest` sat at the head of the node profile for a day while being
+        // invisible to every census, because a census reads diagnostics.
+        //
+        // `generics.unpinned` is what tells them apart: it is written only
+        // where a call matched the declaration and left a type parameter
+        // unbound.
+        if copies.is_empty()
+            && let Some(diagnostic) = uninstantiated(snapshot, &shared.generics, id)
+        {
+            refused_functions.insert(id);
+            lowered.diagnostics.push(diagnostic);
+            continue;
+        }
         for (substitution, sources, suffix) in copies {
             let mut builder = shared.builder(snapshot, substitution, sources, suffix);
             match builder.lower_function(id) {
@@ -21493,60 +21579,6 @@ impl<'a> FuncBuilder<'a> {
         self.narrowed(id, read)
     }
 
-    /// The arm to read a member through, when every arm of a union puts it in
-    /// the same place.
-    ///
-    /// Answers with a *representative arm*, not a synthesised prefix type. A
-    /// synthesised one would be a new layout, and `layout_of` is not a query --
-    /// materialising a layout changes the emitted program, which cost six
-    /// modules once already (see `laid_out_as_a_prefix`). Reading through an
-    /// arm needs nothing new to exist.
-    ///
-    /// Every arm has to be an object with a layout. An arm that is `null`,
-    /// `undefined` or a primitive has no field at any offset, and answering for
-    /// it would turn a refusal into a load from a tag.
-    fn union_prefix_holding(&mut self, id: NodeId, member_name: &str) -> Option<HirType> {
-        let object = self.children(id).first().copied()?;
-        let ty = *self.snapshot.node_types.get(&object)?;
-        let TypeKind::Union(members) = &self.snapshot.types.get(ty.0 as usize)?.kind else {
-            return None;
-        };
-        let members = members.clone();
-        if members.len() < 2 {
-            return None;
-        }
-
-        let mut arms = Vec::with_capacity(members.len());
-        for member in &members {
-            // A layout is required rather than looked for: `layout_of` fails
-            // for anything that is not an object type, which is the same test
-            // as asking whether the arm can hold a field at all.
-            arms.push(self.layout_of(id, *member).ok()?);
-        }
-        let (first, rest) = arms.split_first()?;
-
-        // How far the arms agree, by the same rule a prefix cast uses.
-        let mut shared = first.fields.len();
-        for other in rest {
-            shared = shared.min(other.fields.len());
-            let agreed = first
-                .fields
-                .iter()
-                .zip(other.fields.iter())
-                .take(shared)
-                .take_while(|(want, have)| same_slot(want, have))
-                .count();
-            shared = shared.min(agreed);
-            if shared == 0 {
-                return None;
-            }
-        }
-
-        let at = first.index_of(member_name)?;
-        (usize::try_from(at).ok()? < shared)
-            .then(|| HirType::Managed(ManagedType::Object(members[0])))
-    }
-
     fn member_of(
         &mut self,
         id: NodeId,
@@ -21680,31 +21712,6 @@ impl<'a> FuncBuilder<'a> {
             self.values[value.0 as usize].ty,
             HirType::Managed(ManagedType::Array(_) | ManagedType::String)
         );
-        // **A field every arm of a union puts in the same place.** A
-        // discriminated union is written with the discriminant declared first
-        // in every member, so `kind` is at offset zero in all of them even
-        // though the members disagree about everything after it. The union
-        // erases -- there is no single layout to represent it as -- and the
-        // read was refused for that, which is the right answer about the
-        // *union* and the wrong one about the *field*.
-        //
-        // The licence is the same one base-first layout gives a subclass, and
-        // the same one `laid_out_as_a_prefix` already states for a cast: where
-        // the fields agree in name, order and representation, the load is at
-        // the same offset whichever member is there. `Unerase` is a
-        // reinterpretation and the tag is coarse -- every object carries the
-        // same one -- so no discriminant has to be tested to do it.
-        //
-        // Refused as before when the field is past the agreement, which is
-        // `blockers/union-members-lay-fields-out-differently`'s second half.
-        if member_name != "length"
-            && self.values[value.0 as usize].ty == HirType::Erased
-            && let Some(prefix) = self.union_prefix_holding(id, member_name)
-        {
-            let origin = self.origin(id);
-            let value = self.push(OpKind::Unerase { value }, prefix, origin);
-            return self.member_of(id, value, member_name);
-        }
         if member_name != "length" {
             return Err(self.not_a_length(id, value, member_name, sequence));
         }
@@ -25004,6 +25011,26 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.runtime_call("nts_parse_int", vec![value, radix], HirType::NUMBER, origin))
     }
 
+    /// `parseFloat(string)`.
+    ///
+    /// No radix, so no default to get wrong -- the grammar decides, and
+    /// `nts_parse_float` is where it lives. What it is *not* is `Number(s)`:
+    /// `Number("12abc")` is NaN and `parseFloat("12abc")` is 12, which is the
+    /// same difference `lower_parse_int` records.
+    fn lower_parse_float(
+        &mut self,
+        id: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let Some(text) = arguments.first() else {
+            return Err(self.unsupported(id, "`parseFloat` with no argument"));
+        };
+        let value = self.lower_expression(*text)?;
+        let value = self.coerce(value, &HirType::Managed(ManagedType::String), *text)?;
+        let origin = self.origin(id);
+        Ok(self.runtime_call("nts_parse_float", vec![value], HirType::NUMBER, origin))
+    }
+
     /// `setTimeout(fn, ms)` and `setInterval(fn, ms)`.
     ///
     /// A *capability* over the host's `post_delayed` rather than part of the
@@ -25113,6 +25140,18 @@ impl<'a> FuncBuilder<'a> {
         // them through `getCIDR`.
         if name == "parseInt" {
             return Some(self.lower_parse_int(id, arguments));
+        }
+        // `parseFloat(string)`, beside `parseInt` because it is the same
+        // operation with the radix fixed and the grammar widened -- and because
+        // a reader looking for one will look here for the other.
+        //
+        // One argument, so it could have gone in the single-argument section
+        // below. It is here because the *pair* is the thing: whatever is true of
+        // stopping at the first character the grammar does not admit is true of
+        // both, and splitting them put two halves of one behaviour two hundred
+        // lines apart.
+        if name == "parseFloat" {
+            return Some(self.lower_parse_float(id, arguments));
         }
         // The `timers` capability, which takes two arguments and so has to be
         // read before the single-argument builtins below.

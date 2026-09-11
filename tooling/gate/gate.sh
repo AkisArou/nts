@@ -20,7 +20,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
 
-[ -x target/release/nts ] || { echo "build first: cargo build --release"; exit 1; }
+[ -x "${NTS_BIN:-target/release/nts}" ] || { echo "build first: cargo build --release"; exit 1; }
 [ -e "${NTS_TSGO:-$root/target/tsgo}" ] || { echo "no tsgo: tooling/bootstrap/bootstrap.sh"; exit 1; }
 NTS_TSGO=${NTS_TSGO:-$root/target/tsgo}
 export NTS_TSGO
@@ -28,7 +28,7 @@ export NTS_TSGO
 # One example, named on the command line: run it plainly so its output is the
 # point rather than a tally.
 if [ $# -gt 0 ]; then
-  exec ./target/release/nts check "examples/$1/tsconfig.json"
+  exec "${NTS_BIN:-./target/release/nts}" check "examples/$1/tsconfig.json"
 fi
 
 # Capped, not `nproc`. Every worker starts a frontend of its own, and enough of
@@ -67,7 +67,7 @@ ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
       # What is actually wanted is that these two *refuse* something -- which is
       # the whole reason they exist and is visible in the output. `invalid` is
       # rejected by the typechecker, `unsupported` by the lowering.
-      if ./target/release/nts check "$d" 2>&1 | grep -q "refused:\|does not typecheck"
+      if "${NTS_BIN:-./target/release/nts}" check "$d" 2>&1 | grep -q "refused:\|does not typecheck"
         then echo "ok   $n (not an oracle case)"
         else echo "DIS  $n (refused nothing)"
       fi ;;
@@ -81,7 +81,7 @@ ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
       # and node will not run either, so there can be no oracle for them. They
       # are lowering fixtures, and the point is that the headline should not
       # call them agreements.
-      out=$(./target/release/nts check "$d" 2>&1)
+      out=$("${NTS_BIN:-./target/release/nts}" check "$d" 2>&1)
       if [ $? -ne 0 ]
         then echo "DIS  $n"
       elif [ "${out#*nothing to check}" != "$out" ]

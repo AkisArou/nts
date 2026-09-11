@@ -52,6 +52,13 @@ pub(super) const ERRORS: &[&str] = &[
     "RangeError",
     "URIError",
     "SyntaxError",
+    // `EvalError` and `ReferenceError` are one site each in `runtime/node` and
+    // are here for what a missing one *costs* rather than for the sites: a
+    // class absent from this list refuses its caller and its caller's caller,
+    // so the cheap ones are worth having before something behind them is found
+    // the expensive way.
+    "EvalError",
+    "ReferenceError",
 ];
 
 /// Members of the declared `Error` that this compiler does not provide.

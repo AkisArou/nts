@@ -10,41 +10,81 @@ all of them, however much they disagree about everything after it:
     value.kind    ->  `kind` on a union, whose members lay their fields out
                       differently
 
-The refusal was the right answer about the **union** and the wrong one about the
+The refusal is the right answer about the **union** and the wrong one about the
 **field**. The union genuinely has no single representation and erases; the
 field genuinely is at one offset.
 
-## The licence already existed twice
+This was built, measured, landed, and **reverted the same evening**. The
+reversion is the useful half of the record.
 
-Nothing new had to be invented, which is the useful part. `laid_out_as_a_prefix`
-already states the rule for a cast — fields agreeing in name, order and
-representation means a load lands at the same offset either way — and
-base-first layout already relies on it for every subclass. This is the third
-place that same sentence is true, and it is now written once and read three
-times rather than argued again.
+## What worked, and on which machines
 
-Two facts make the read cheap. `Unerase` is a **reinterpretation**, not a
-checked cast. And the tag an erased object carries is coarse — every object has
-the same one, because the tags are spelled as `typeof`'s answers. So no
+On C and LLVM the read is free. A pointer cast between two structs with a common
+initial sequence is exactly what base-first layout already relies on for every
+subclass, `laid_out_as_a_prefix` already states the rule for a cast, and
+`Unerase` is a **reinterpretation** against a tag that is coarse — every object
+carries the same one, because the tags are spelled as `typeof`'s answers. So no
 discriminant is tested to do this:
 
     export func unionField(value: erased) -> managed<str> {
       %1 = unerase %0 : managed<obj#1>
       %2 = field.get %1.0 : managed<str>
 
-## Reading through an arm, not through a synthesised type
+Sixteen cases agreed with node, including the exhaustive `switch` that
+`typescript.md` had carried as struck-through and audited-blocked.
 
-The obvious shape is a synthetic layout holding exactly the shared prefix, and
-it is the wrong one. `layout_of` is **not a query** — it creates a layout for a
-type that has none and pushes it into the function's list, and materialising one
-changed the emitted program badly enough to break six modules the last time
-(see `laid_out_as_a_prefix`, where the same trap is recorded from the other
-direction). A representative arm needs nothing new to exist.
+**The JVM cannot do it, and does not fail quietly:**
 
-`members[0]` is that representative. Every arm must have a layout, which is also
-exactly the test for whether an arm can hold a field at all — an arm that is
-`null`, `undefined` or a primitive answers `None` and the read stays refused
-rather than becoming a load from a tag.
+    java.lang.ClassCastException: class nts.gen.Right cannot be cast to
+    class nts.gen.Left
+
+Seventeen aborts in one example. `Unerase` becomes a `CHECKCAST` there and the
+class is checked.
+
+## Why it came out rather than staying
+
+The JVM floor absorbed it — 168 against a floor of 167 — and that is the
+argument for reverting, not against it. A floor one below the count cannot see
+one regression. A throw is loud on one lane and only if somebody looks; a
+refusal is loud on all three. The JVM lane made the call in one sentence I had
+handed them myself, and they were right to use it.
+
+The alternative they raised and rejected is worth keeping too: raising their
+floor to 168 would turn their step red until the op lands, blocking three
+sessions on a construct none of us is working on today.
+
+**Documenting a throw in three places does not change what the gate reports to
+whoever runs it next.** That is the whole reason "I wrote it down" was not
+enough here.
+
+## The shape it is waiting for, which is decided rather than open
+
+The HIR said *reinterpret*, which is an instruction. One machine can execute it
+and one cannot. So the op has to state the **fact** — these arms agree about
+this field — and let each backend choose. That is the third time this month the
+answer was to move a statement about the machine up into a statement about the
+program, after `declared_by` and `ClassIdentity`.
+
+The JVM lane measured the two candidates rather than agreeing with my guess,
+over 3000 mixed elements and three arms:
+
+    instanceof chain        1759 ns/pass
+    synthesised interface   6213 ns/pass    3.5x slower
+
+An interface makes every read a megamorphic `invokeinterface` whose itable
+lookup defeats inline caching, and it would change the arms' class shapes. The
+chain stays branch-predictable and its field loads inline.
+
+So the op carries **the arm type ids and the field index**. Not a field name:
+the name is per-arm on the JVM even where the precondition makes them equal, and
+one fact with two derivations is the error this compiler keeps repeating. C and
+LLVM emit the pointer read they already would; the JVM emits one `instanceof`,
+one `checkcast` and one `getfield` per arm.
+
+The precondition is the op's entire contract, and it is one sentence both halves
+can be checked against: **every arm agrees about name, index and
+representation.** It is what makes the C read sound and what makes the chain
+sound.
 
 ## What the check has to be, and what a weaker one would do
 
@@ -56,25 +96,12 @@ passes this:
 
 and emits a load at offset zero that reads a `double` out of a slot holding a
 pointer. Nothing refuses and nothing crashes; the answer is a number made of a
-pointer's bits. That is the worst failure mode available here, so it is a
-fixture rather than a comment.
+pointer's bits.
 
 The agreement is a **prefix and not a set**. `tail` above agrees in both arms
-and is still refused, because field 0 does not agree and nothing after an
-disagreement sits at a known offset. Reaching it would need the discriminant
-tested and one load per arm, which is a different feature — and there is no
-discriminant to test, for the same reason the read is cheap.
+and must still be refused, because field 0 does not agree and nothing after a
+disagreement sits at a known offset.
 
-## Where the halves live
-
-The positive cases are `examples/a-member-every-arm-puts-in-the-same-place` and
-the refusals are `blockers/union-members-lay-fields-out-differently`, and the
-split is forced rather than stylistic: a refused function leaves the
-differential silently, so an example holding both would report agreement over
-whatever lowered and go green having stopped testing the two it was written for.
-That is the same trap record `0287` hit from the other side, twice in one day.
-
-The example's load-bearing function is `bothArms`, which reads the discriminant
-from a `Left` **and** a `Right` in one answer. Reading only one arm would pass
-while being wrong about the other, which is precisely what this feature is
-capable of getting wrong.
+Both shapes, and the discriminant that will lower, are in
+`blockers/union-members-lay-fields-out-differently`. There is no example,
+because there is nothing landed to guard.

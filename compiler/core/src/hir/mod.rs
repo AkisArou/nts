@@ -1539,6 +1539,19 @@ pub const CONSTRUCTOR_TOKENS: u32 = u32::MAX - 15;
 /// name are the same class and only two of *different* names are refused.
 pub const PROVIDED_ERRORS: u32 = CONSTRUCTOR_TOKENS - 16;
 
+/// The names of the classes in [`builtin::ERRORS`], for the backends.
+///
+/// **Re-exported rather than repeated.** The napi wrapper carried its own
+/// `ROOTS: [&str; 5]` of the same five names, eight thousand lines away and
+/// with its own arity in the type, so appending to the list here changed what
+/// the compiler provided and not what the boundary recognised -- and the
+/// mismatch would have shown up as an error class the wrapper treated as a
+/// user-declared one, which is a different `name` and no `code`.
+///
+/// One fact, one derivation. The array's fixed size was half of why the copy
+/// existed, so this is a slice.
+pub const PROVIDED_ERROR_NAMES: &[&str] = builtin::ERRORS;
+
 /// The synthetic type of the `n`th class this compiler provides.
 #[must_use]
 pub fn provided_error_type(index: usize) -> TypeId {

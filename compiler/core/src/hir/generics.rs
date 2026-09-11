@@ -209,6 +209,22 @@ pub struct GenericFunctions {
     pub copies: FxHashMap<nts_semantic_schema::NodeId, Vec<FunctionInstance>>,
     /// The suffix each *call site* appends to its callee's name.
     pub at_call: FxHashMap<nts_semantic_schema::NodeId, String>,
+    /// Generic declarations a call *reached* and could not pin down, and the
+    /// type parameters that stayed unbound.
+    ///
+    /// **This exists because the alternative was silence.** A generic with no
+    /// instantiation produces no copy, and producing no copy produced no
+    /// diagnostic anywhere -- so a function that could not be compiled was
+    /// indistinguishable from one nobody called, and the cascade said "calls X,
+    /// which was refused above" with no refusal above. `asRequest` was the
+    /// largest chokepoint in the node profile for a day while being invisible
+    /// to every census, because a census reads diagnostics and there was none
+    /// to read.
+    ///
+    /// Recorded here rather than decided here: whether an empty answer is dead
+    /// code or a refusal is a question about the *whole* program, and this pass
+    /// sees one call at a time.
+    pub unpinned: FxHashMap<nts_semantic_schema::NodeId, Vec<String>>,
 }
 
 /// Every instantiation of every generic function, from the calls that make one.
@@ -276,6 +292,25 @@ pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions 
             .iter()
             .all(|parameter| substitution.contains_key(parameter))
         {
+            // Which ones, by name, so the diagnostic names the thing the author
+            // wrote rather than the count of them.
+            let loose: Vec<String> = generic
+                .type_parameters
+                .iter()
+                .filter(|parameter| !substitution.contains_key(parameter))
+                .filter_map(|parameter| {
+                    match &snapshot.types.get(parameter.0 as usize)?.kind {
+                        TypeKind::TypeParameter { name, .. } => Some(name.clone()),
+                        _ => None,
+                    }
+                })
+                .collect();
+            let seen = found.unpinned.entry(declaration).or_default();
+            for name in loose {
+                if !seen.contains(&name) {
+                    seen.push(name);
+                }
+            }
             continue;
         }
         let suffix = suffix_of(snapshot, &generic.type_parameters, &substitution, &sources);

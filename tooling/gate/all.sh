@@ -361,7 +361,7 @@ profile() {
   ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
     m=$1
     name=$(basename "$(dirname "$m")")
-    out=$("'"$root"'/target/release/nts" emit-c "$m" \
+    out=$("'"${NTS_BIN:-$root/target/release/nts}"'" emit-c "$m" \
             --out "'"$work"'/$name" --napi 2>&1)
     printf "%s" "$out" | grep -c "NTS1001" > "'"$work"'/$name.refusals"
     printf "%s" "$out" | grep -q "panicked at" && echo "$name" > "'"$work"'/$name.crashed"
@@ -470,7 +470,7 @@ profile() {
   # different order is a different string.
   invalid=$(ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
       m=$1
-      if "'"$root"'/target/release/nts" hir "$m" 2>&1 | grep -q "does NOT verify"; then
+      if "'"${NTS_BIN:-$root/target/release/nts}"'" hir "$m" 2>&1 | grep -q "does NOT verify"; then
         basename "$(dirname "$m")"
       fi
       exit 0

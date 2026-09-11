@@ -76,7 +76,7 @@ NTS_RC=1 ls examples/*/tsconfig.json | NTS_RC=1 xargs -P "$jobs" -n 1 sh -c '
       # apostrophes in this block: it is the body of `sh -c` inside single
       # quotes, and one closes the string. The comment fifteen lines up says so,
       # and I wrote `node` with an apostrophe anyway.)
-      if NTS_RC=1 ./target/release/nts check "$d" 2>&1 | grep -q "refused:\|does not typecheck"
+      if NTS_RC=1 "${NTS_BIN:-./target/release/nts}" check "$d" 2>&1 | grep -q "refused:\|does not typecheck"
         then echo "ok   $n (not an oracle case)"
         else echo "DIS  $n (refused nothing)"
       fi ;;
@@ -87,7 +87,7 @@ NTS_RC=1 ls examples/*/tsconfig.json | NTS_RC=1 xargs -P "$jobs" -n 1 sh -c '
       #
       # No apostrophes in here: this whole block is the body of `sh -c` inside
       # single quotes, and one closes the string.
-      out=$(NTS_RC=1 ./target/release/nts check "$d" 2>&1)
+      out=$(NTS_RC=1 "${NTS_BIN:-./target/release/nts}" check "$d" 2>&1)
       if [ $? -ne 0 ]
         then echo "DIS  $n"
       elif [ "${out#*nothing to check}" != "$out" ]

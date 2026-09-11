@@ -1334,6 +1334,7 @@ double nts_str_to_number(const NtsString *s);
  * double reaches it -- and no call site in this tree parses a sixteen-digit
  * base-36 number. Named rather than hidden. */
 double nts_parse_int(const NtsString *s, double radix);
+double nts_parse_float(const NtsString *s);
 
 /* `Number(v)` on an erased value: ToNumber over the tags a value carries.
  *

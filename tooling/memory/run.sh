@@ -74,7 +74,7 @@ for dir in tooling/memory/cases/*/; do
     # variable, and the compiler asks whether it is set. Setting it empty made
     # both halves of this measurement naive and the ratio a flat 1.00, which
     # reads exactly like an elision pass that does nothing.
-    if ! env "${@:2}" ./target/release/nts emit-c "$dir/tsconfig.json" --out "$where" --rc \
+    if ! env "${@:2}" "${NTS_BIN:-./target/release/nts}" emit-c "$dir/tsconfig.json" --out "$where" --rc \
          >/dev/null 2>&1; then
       echo "  $name: emit failed" >&2
       return 1

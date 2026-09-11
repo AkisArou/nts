@@ -2039,10 +2039,10 @@ fn class_definition(
 /// keeps the old behaviour: `name` set to the class, and no code. That is the
 /// honest answer for a class this cannot read one from.
 fn error_classes(program: &hir::Program) -> Vec<(String, String, String)> {
-    const ROOTS: [&str; 5] = ["Error", "TypeError", "RangeError", "URIError", "SyntaxError"];
+    let roots = hir::PROVIDED_ERROR_NAMES;
     let mut found = Vec::new();
     for layout in &program.layouts {
-        if ROOTS.contains(&layout.name.as_str()) {
+        if roots.contains(&layout.name.as_str()) {
             continue;
         }
         // The root of the chain, walked rather than named: a class two or three
@@ -2053,7 +2053,7 @@ fn error_classes(program: &hir::Program) -> Vec<(String, String, String)> {
         for _ in 0..16 {
             let Some(ty) = at else { break };
             let Some(above) = program.layout(ty) else { break };
-            if ROOTS.contains(&above.name.as_str()) {
+            if roots.contains(&above.name.as_str()) {
                 root = Some(above.name.clone());
                 break;
             }

@@ -1,14 +1,26 @@
 // expect: emit-c --napi -> lacks-c schedule
 //
-// A generic function whose rest parameter is **used**. It is not lowered, and
-// **no diagnostic is emitted for it at all** -- the only sign is the wrapper
-// saying "no wrapper for schedule: is exported and no function of that name was
-// compiled", which is true and does not say why.
+// A generic function whose rest parameter is **used**. It is not lowered.
 //
-// The expectation is an absence for that reason: there is no message to name.
-// `lacks-c schedule` says the symbol is nowhere in the emitted C, which is what
-// was checked by hand -- `grep -c schedule program.c` is 0, so the wrapper's
-// claim is accurate and the silence is the defect.
+// **The silence is fixed as of 2026-09-11, and the absence is not.** This
+// fixture was written when no diagnostic was emitted for it anywhere -- the only
+// sign was the wrapper saying "no wrapper for schedule: is exported and no
+// function of that name was compiled", which is true and does not say why. It
+// now says why, at the declaration:
+//
+//     main.ts:87:18 NTS1001 an exported generic function this program never
+//     instantiates, so there is no copy for the export to name
+//
+// So what this fixture guards has narrowed to the thing that is still true:
+// `schedule` is **still not in the emitted C**, and `lacks-c schedule` is still
+// the check. The expectation stays an absence because the absence is real; what
+// changed is that it is now an *explained* absence, which is the difference
+// between an item a census can rank and one it cannot see.
+//
+// Keeping the expectation on the C rather than moving it to the new message is
+// deliberate. The message is the diagnosis; the missing symbol is the defect,
+// and a fixture that asserted the message would go green the day the message
+// was reworded and say nothing about whether the export was ever filled.
 //
 // # Why this one is worth more than its size
 //

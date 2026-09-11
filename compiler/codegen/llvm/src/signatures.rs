@@ -220,6 +220,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_number_to_string_radix", returns: "ptr", params: &["double", "double"], attributes: &[] },
     Signature { name: "nts_object_new", returns: "noalias nonnull ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_parse_int", returns: "double", params: &["ptr", "double"], attributes: &[] },
+    Signature { name: "nts_parse_float", returns: "double", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_permanent_count", returns: "i64", params: &[], attributes: &[] },
     Signature { name: "nts_post_delayed", returns: "i64", params: &["ptr byval(%struct.NtsTask) align 8", "double", "i1 zeroext"], attributes: &[] },
     Signature { name: "nts_post_from_any_thread", returns: "void", params: &["ptr byval(%struct.NtsTask) align 8"], attributes: &[] },
