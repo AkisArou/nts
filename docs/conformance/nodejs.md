@@ -22977,6 +22977,57 @@ it compiles `program.c`, which includes nothing that defines `FILE`.
 defect is the **emission**; whether it bites depends on which headers the
 translation unit pulls in, and `emits-c` is what says that.
 
+## The concrete twin: how to find the next link in a refusal chain
+
+Written down because it was rediscovered four times in one day and asked for by
+the other session. It is the only method here that reliably answers "what is
+actually stopping this", and its limitation is exact.
+
+### The method
+
+1. `git worktree add --detach ~/.cache/probe HEAD`, then symlink `third_party`,
+   `node_modules`, `runtime/node/node_modules` and `target/tsgo` back. Nothing
+   you do next touches the shared tree.
+2. Give the refused thing a **twin that differs in exactly one property** --
+   concrete arity instead of generic, a local instead of a member call, a declared
+   class instead of a cast -- and leave every call site alone. Export it.
+3. `emit-c <module>/tsconfig.json --napi` and read what the twin says. A twin that
+   compiles tells you the property you changed was the cause. A twin that is
+   refused **names the cause**, which the original may not: a generic with no
+   instantiation emits no diagnostic at all.
+4. **Then remove the blocker it named and do it again.** This is the step that
+   gets skipped.
+
+### Why step 4 is not optional
+
+The compiler reports the *first* refused callee and stops. Stopping at step 3
+produces a true statement about link one and a false statement about the chain,
+and the two are indistinguishable in a ledger entry.
+
+    dns              "three fixes stand between dns and a compiled lane"   wrong
+    lookup           "blocked by a module-scope WeakMap"                   wrong
+    promises         "the compiled lane has no promises at all"            wrong
+    asRequest        "blocked by the returned closure carrying A"          wrong
+    asRequest again  "blocked by emitInit"                                 half
+
+Every one of those was link one mistaken for the chain, and every correction came
+from doing step 4.
+
+### What it cannot do
+
+It shows link N+1 and says nothing about N+2. `asRequest` is `emitInit` and then
+the closure, and whether a third waits behind the closure is unknown because only
+the first was removed. **Never report what a fix will publish** -- report what
+cannot proceed until it lands. The measured example: the generic-rest lowering
+landed, was correct, and moved the profile from 485 declined exports to 485.
+
+### Where it has paid
+
+`nextTick` (found `emitInit` behind the rest parameter), `dns.lookup` (found
+`isIP`, then the wrapper), `asRequest` (found `emitInit`, then the generic),
+`emitInit` itself (five formulations, four messages), and the `tty` boundary
+throw. Cost: one `git worktree add` each, about a minute.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
