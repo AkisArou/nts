@@ -21289,6 +21289,45 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## `node:tty` should not be built, and the reason is every route, not a count
+
+The goal named `tty` first: three tests, and it "unblocks `setRawMode` and `isTTY`
+on the stream". Neither half survives being checked.
+
+**`isTTY` is already there.** `internal/stdio.ts` has had `get isTTY()` since the
+stdio seam was written, with `nts_stdout_is_tty` and `nts_stderr_is_tty` behind
+it. `console` reads it for colour selection and `assert` reads it for terminal
+width. There was nothing to unblock.
+
+**Every test that requires `tty` is accounted for without it.** Five files in
+`test/parallel` require the module:
+
+    test-net-access-byteswritten.js   excluded: language non-goal, typescript.md
+    test-util-styletext.js            excluded: the harness has no TTY fd
+    test-util-styletext-hex.js        PASSES TODAY, in util's lane, 1 passed
+    test-tty-backwards-api.js         internalBinding('tty_wrap'), an RFC non-goal
+    test-ttywrap-invalid-fd.js        internalBinding('uv'), the same
+
+The two that are not excluded are not excluded because no module's `test-pattern`
+claims them; both reach for `internal/test/binding`, so a complete `tty` would not
+move either. And the `pseudo-tty/*` files that name TTY behaviour launch node
+inside a real pseudo-terminal -- a harness capability, not a module.
+
+So the yield is zero by every route: zero tests turned green, zero capabilities
+unblocked, zero exclusions retired. The three-test figure was a **name-prefix
+count**, which the table it comes from says of itself, and I read it as a
+value estimate twice -- once for `tty` and once for `dns`, where 30 became 1.
+
+### The general form, since it has now cost two modules
+
+A module's worth is the number of currently-failing-or-unclaimed files it would
+turn green, and the name-prefix count is an upper bound that has been off by 3x
+and 30x. Before the next module, ask of each file: is it already excluded for an
+independent reason, does it pass already, and does it reach for a binding the RFC
+rules out. Three greps, and they would have saved the `dns` module the trouble of
+existing -- though `dns` at least left a `getaddrinfo` binding and a compiler
+defect behind, and `tty` would leave nothing.
+
 ## The provider decision is a `crypto` decision, and `tls` has no vote
 
 The goal asked for the other half of the mbedTLS question: beside "12% of tls and
