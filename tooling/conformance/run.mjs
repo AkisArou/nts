@@ -229,6 +229,42 @@ const upstream = [
 // per line. A path can name a suite directory (every `test-*.js` in it) or one
 // exact test file when a shared suite contains tests for many subsystems. Names
 // retain the directory prefix so duplicate basenames remain auditable.
+// **Tests that need their stdio to be a terminal.** A module names them one per
+// line in `needs-pty`, and they run under `script(1)`, which allocates a
+// pseudo-terminal and gives the child fds 0, 1 and 2 on it.
+//
+// This exists because `pseudo-tty/test-tty-isatty.js` asserts `isatty(0)`,
+// `isatty(1)` and `isatty(2)` are **true**. The runner gives its children pipes,
+// so a correct `tty` fails that file, and every `tty` test worth running is in
+// the same position -- which made "green with 0 hollow" unsatisfiable for that
+// module by writing any amount of code.
+//
+// Inert without the file: no module that lacks one changes behaviour, and only
+// the named tests take the wrapped path. `script` is util-linux and is not
+// everywhere, so its absence is a **skip with a reason** rather than a failure --
+// a missing harness tool is not the profile's defect.
+const needsPtyPath = join(moduleDir, "needs-pty");
+const needsPty = new Set(
+  existsSync(needsPtyPath)
+    ? readFileSync(needsPtyPath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#"))
+    : [],
+);
+let ptyAvailable = null;
+const haveScript = () => {
+  if (ptyAvailable === null) {
+    try {
+      execFileSync("script", ["--version"], { stdio: "ignore" });
+      ptyAvailable = true;
+    } catch {
+      ptyAvailable = false;
+    }
+  }
+  return ptyAvailable;
+};
+
 const additionalSuitesPath = join(moduleDir, "test-suites");
 if (existsSync(additionalSuitesPath)) {
   for (const suiteName of readFileSync(additionalSuitesPath, "utf8")
@@ -353,10 +389,23 @@ for (const test of tests) {
     rows.push({ name, kind: "n/a", why: notApplicableReason });
     continue;
   }
+  const wantsPty = needsPty.has(name) || (shortName !== undefined && needsPty.has(shortName));
+  if (wantsPty && !haveScript()) {
+    rows.push({ name, kind: "skip", why: "needs a pseudo-terminal and script(1) is not installed" });
+    continue;
+  }
   try {
+    const argv = [...nodeFlags(test.path), join(HERE, "run-one.mjs"), moduleName, test.path, addon ?? "-"];
+    // `script -qec <command> /dev/null`: quiet, no timing file, run the command
+    // under a pty. The command is one string, so each argument is single-quoted;
+    // these are absolute paths this file built, not user input.
+    const quoted = [process.execPath, ...argv]
+      .map((part) => `'${String(part).replaceAll("'", "'\\''")}'`)
+      .join(" ");
     const out = execFileSync(
-      process.execPath,
-      [...nodeFlags(test.path), join(HERE, "run-one.mjs"), moduleName, test.path, addon ?? "-"],
+      ...(wantsPty
+        ? ["script", ["-qec", quoted, "/dev/null"]]
+        : [process.execPath, argv]),
       {
         encoding: "utf8",
         timeout: 60_000,
@@ -374,6 +423,7 @@ for (const test of tests) {
       },
     );
     const line = out
+      .replaceAll("\r", "")
       .trim()
       .split("\n")
       .filter((candidate) => candidate.startsWith(RESULT_PREFIX))

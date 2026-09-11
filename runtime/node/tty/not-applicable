@@ -1,0 +1,20 @@
+# **This module claims exactly one file from `test/parallel`, and that is not an
+# oversight.** Four files there are named for `tty` and one more for `ttywrap`,
+# and only `test-ttywrap-invalid-fd.js` requires the module:
+#
+#   test-tty-stdin-end.js      three lines emitting `end` on `process.stdin`
+#   test-tty-stdin-pipe.js     a `readline` interface and `Reflect.apply`
+#   test-ttywrap-stack.js      an infinitely recursive async function
+#   test-tty-backwards-api.js  requires tty, and stubs internalBinding('tty_wrap')
+#
+# The default pattern would claim all of them, and doing so made this lane read
+# **3 passed, and 2 passed under `--sabotage`** -- a file that never touches the
+# module cannot notice it being blanked. That is the hollowness the rule exists to
+# catch, produced by one line of regular expression, and it is why the pattern
+# here names a single file instead of a prefix. `audit.mjs` reports the others as
+# unclaimed, which is true and is where a reader should meet them.
+#
+# `test-tty-backwards-api.js` does require `tty`, and is excluded below with the
+# other `internalBinding` one.
+
+test-ttywrap-invalid-fd.js: unavailable provider; it reads `internalBinding('uv')` for UV_EBADF and stubs `internalBinding('tty_wrap')`, both of which the RFC rules out

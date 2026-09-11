@@ -21331,6 +21331,69 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## `tty` exists, the pty harness works, and the compiled lane is two assertions short
+
+The entry below says `tty` green with 0 hollow is unsatisfiable and names the fix:
+a harness that allocates a pseudo-terminal. That fix is now in, and it was one
+line of `script(1)`:
+
+    script -qec '<command>' /dev/null      fds 0, 1 and 2 on a pty
+
+`run.mjs` reads a `needs-pty` file beside `test-pattern`, runs those tests
+wrapped, and strips the carriage returns a pty adds. **Inert without the file** --
+no module that lacks one changes behaviour -- and a missing `script` is a skip
+with a reason rather than a failure.
+
+    tty interpreted            1 passed, 0 failed, 0 skipped, 1 not applicable
+    tty interpreted sabotage   0 passed, 1 failed
+
+`pseudo-tty/test-tty-isatty.js` passes. It was unreachable this morning.
+
+### The hollowness the default pattern produced, caught by the rule
+
+First run read **3 passed** -- and **2 passed under `--sabotage`**. The default
+pattern `^test-tty(-.*)?` claims four files and only one requires the module:
+
+    test-tty-stdin-end.js      three lines emitting `end` on `process.stdin`
+    test-tty-stdin-pipe.js     a `readline` interface and `Reflect.apply`
+    test-ttywrap-stack.js      an infinitely recursive async function
+    test-tty-backwards-api.js  requires tty; stubs internalBinding('tty_wrap')
+
+A file that never touches the module cannot notice it being blanked. So the
+pattern here names **one file** instead of a prefix, `audit.mjs` reports the rest
+as unclaimed, and `not-applicable` explains why in the module rather than in a
+commit message.
+
+### The compiled lane is two assertions short, and it is the boundary again
+
+    isatty(0) (-1) (1.1) ("1") (null) (undefined)    all correct
+    isatty({})                                       TypeError
+    isatty(() => {})                                 TypeError
+
+    an argument of this type has no representation in the compiled runtime
+
+The addon publishes `isatty` and answers correctly for every scalar. Node's
+`lib/tty.js` is `NumberIsInteger(fd) && ... && binding(fd)`, so `isatty({})` is
+`false` there, and the test asserts `!isatty({})` and `!isatty(() => {})` on the
+two lines after `!isatty('1')`.
+
+An `unknown` parameter carries null, undefined, booleans, numbers and strings
+across the wrapper, and throws on objects, arrays and symbols. Scalars cross,
+references do not -- the same shape as `a-reference-cannot-cross-inward`, seen
+through an `unknown` rather than a declared type, and probably the same mechanism.
+
+**Not filed as a fixture**, and the reason is a precedent worth keeping: the
+defect is at runtime, `blockers/` keys on refusals, and a `publishes` guard beside
+it reads "guard ok" while saying nothing about the throw. I wrote one, watched it
+report exactly that, and removed it. The compiler session declined to file their
+verifier defect for the same reason an hour earlier.
+
+### So the clause's `tty` half, stated exactly
+
+Interpreted: green, 0 hollow, one real test that needed a capability that did not
+exist. Compiled: `0 passed`, because two of nine assertions in the only runnable
+file hand an object to an `unknown` parameter.
+
 ## `tty` green with 0 hollow is unsatisfiable, and here is every file
 
 Not "low value" and not a judgment. Searched the **whole** of node's test tree,
