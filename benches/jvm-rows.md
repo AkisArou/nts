@@ -82,6 +82,9 @@ meets them. This is the map; the row table below it is the current state.
   - `loops.rs` exists, my rows are not waiting on it, and the row table said they were
   - A rule written for the only instance of a category is a rule about that instance
   - `cargo test --release` is the gate's test with the assertions removed
+  - The interface cliff is at three, it is per call site, and my first number was the cliff quoted as the function
+  - And the cliff is per call site, not per interface
+  - Every number in that exchange is HotSpot, in a goal about Android
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3228,6 +3231,56 @@ type, which is the whole point of it.
 That is the same shape as `puts_label` being right about comparisons and
 untested about everything else: a rule with one kind of caller has never been
 asked a second question.
+
+### The interface cliff is at three, it is per call site, and my first number was the cliff quoted as the function
+
+I told MainClaude an interface was **3.5x** slower than an `instanceof` chain --
+6,213ns against 1,759ns -- and shaped `SharedFieldGet` around it. That number is
+correct and it is not the function. It is one point on a curve, measured at the
+worst end, and I quoted it as though it were the whole shape.
+
+Measured properly, a *nominal* interface known at compile time, varying only the
+implementor count:
+
+    direct field read       1092 ns/pass
+    interface, 1 impl       1141 ns/pass     1.04x    free
+    interface, 2 impls      1319 ns/pass     1.21x    cheap
+    interface, 3 impls      3703 ns/pass     3.39x    the cliff
+
+That is HotSpot's inline cache exactly: monomorphic is a guarded direct call,
+bimorphic is two guards, three gives up to an itable walk. My `SharedFieldGet`
+measurement was over three *unrelated* classes through a synthesised interface --
+the third row -- and for that op the chain is still right, because a union's arms
+are by construction more than one type at one site. What was wrong was carrying
+the number to a different question.
+
+### And the cliff is per call site, not per interface
+
+    site that sees 1 of 4 implementors     1105 ns/pass
+    site that sees all 4                   6519 ns/pass
+
+Four implementors live in the program, and the site that sees one is on the
+direct-read row. **The inline cache is attached to the site, not to the type**,
+so an interface's population never enters the cost unless a single site actually
+sees three or more arrive.
+
+That refuted the statistic I had just handed over. "How many classes implement
+this" decides nothing; "how many concrete types arrive at this site" decides
+everything. MainClaude then measured the real one across six modules: **63 sites,
+63 distinct (site, type) pairs, not one polymorphic** -- so on that corpus an
+interface and a specialised copy are both on the top row and the curve does not
+choose between them.
+
+### Every number in that exchange is HotSpot, in a goal about Android
+
+Worth stating plainly because it is this file's own thesis pointed at its own
+work: **"C2 handles it, therefore it is free" does not transfer, and ART has no
+C2.** An inline cache is precisely the mechanism the premise distrusts, and I
+produced four figures resting on one without saying so until the end.
+
+The half that survives any runtime is specialisation, because a monomorphic call
+needs no cache to be fast. The interface figures are unmeasured on the runtime
+this lane exists for, and should not be quoted as 1.04x until they are.
 
 ## Open, and whose
 
