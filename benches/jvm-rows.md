@@ -99,6 +99,7 @@ meets them. This is the map; the row table below it is the current state.
   - `widen` does not invert on ART. It is worth more there, and I expected the opposite
   - The dex ratchet, made to fail on purpose
   - The two worst bar 1 rows, method by method: over half of what we emit is slot traffic
+  - What a stack peephole would actually reach: 19% and 8%, not the 58%
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -4008,6 +4009,46 @@ expensive operations, against which eighteen slot moves are a small share. Here
 the real work is three array loads and two adds. **A percentage measured on one
 body is not a property of the transformation**, and I treated it as one, which is
 the same error as pricing a fix by its reach on one row.
+
+### What a stack peephole would actually reach: 19% and 8%, not the 58%
+
+Reach before building, which is the thing this file keeps relearning. The cheap
+version of the fix is a peephole: a value whose single use is the very next
+operation, and which is that operation's *first* operand, can stay on the operand
+stack instead of being stored and reloaded. That touches neither the slot table
+nor the frames -- the stack is still empty at every block boundary and every local
+still has one type -- so it does **not** pay the price `body.rs`'s header declines:
+
+> Reusing slots by live range is an optimization whose price is per-block frames
+
+Slot reuse would pay that. The round trip does not, and the two are different
+optimizations that the header's sentence is easy to read as one.
+
+Counted in the emitted bytecode, as adjacent `Xstore n` / `Xload n` on one slot:
+
+    Queens$getRowColumn     55 instr   37 slot-ops    7 pairs  (14 instr)
+    Queens$placeQueen       66          36            5        (10)
+    Queens$setRowColumn     34          23            2         (4)
+    Queens$queens           50          23            5        (10)
+    awfy-queens                                      38 of 205 instructions -- 19%
+
+    Towers$pushDisk         93 instr   51 slot-ops    6 pairs  (12 instr)
+    Towers$popDiskFrom      61          32            1         (2)
+    Towers$moveTopDisk      19          12            1         (2)
+    Towers$moveDisks        39          24            1         (2)
+    awfy-towers                                      18 of 212 instructions -- 8%
+
+**So the cheap fix reaches a third of the slot traffic on one row and a seventh
+on the other**, not the 58% and 56% the totals show. The rest is non-adjacent:
+a value stored once and loaded later, sometimes more than once, which is inherent
+to one-slot-per-SSA-value. Keeping *those* on the stack is stack scheduling --
+emitting a block so tree-shaped subexpressions stay on the stack, which is what
+javac gets for free because Java expressions *are* trees and our HIR is flat SSA.
+That is a much larger change and a different one.
+
+Two numbers, then, not one: what the traffic costs, and what each fix reaches.
+The second is measured above; the first is the probe, and the first attempt at it
+compared control-flow shapes instead.
 
 ## Open, and whose
 
