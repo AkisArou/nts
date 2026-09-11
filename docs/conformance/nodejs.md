@@ -21289,6 +21289,66 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## `dns.lookup` is not a lowering problem at the end, it is a boundary one
+
+Walking the last of `lookup`'s chain in a worktree -- remove `nextTick`, fix what
+appears, repeat -- ends somewhere the whole session had been assuming it would
+not.
+
+    1  isIP -> a module-scope `new RegExp`          FIXED and committed (400fbc67)
+    2  nextTick -> generic rest -> emitInit         not reformulable (a965f4b0)
+    3  `answer(null, [])`                           an array literal that is not
+                                                    an array -- the parameter is
+                                                    `string | LookupAddress[] | null`,
+                                                    so an inline `[]` is typed as
+                                                    the union. FIXED below.
+    4  the wrapper                                  **takes or returns a union that
+                                                    erases and whose members the
+                                                    boundary cannot build, so no
+                                                    argument would satisfy it**
+
+At step 4 `lookup` **compiles**. The message stops being "no function of that name
+was compiled" and becomes a complaint from the N-API wrapper about its signature.
+`dns.lookup(hostname, options?, callback)` is overloaded in node -- the middle
+argument is a family number or an options object -- and the boundary cannot build
+a union.
+
+So even a perfect lowering pass does not publish `lookup`. That is a different
+kind of obstacle from everything above it, and nothing in this ledger had
+distinguished the two.
+
+### It is 128 of 488 profile-wide
+
+`export-reach.mjs` separates them already, and its unattributed bucket turns out
+to be exactly this category:
+
+     92  is exported and is not a function this backend can name
+     17  takes an object
+      6  returns an object
+      4  is a field of type Date and does not cross
+      3  takes or returns a union that erases    <- `lookup` joins these
+      2  returns Promise<void>
+      1  takes an object[], which crosses outward only
+      1  takes an object, which crosses outward only
+      1  returns Record<string, unknown[]>
+      1  returns Map<f64, string[]>
+
+**26% of what the compiled lane is missing is the boundary, not the lowering.**
+No amount of compiler work publishes those 128; they need the wrapper to carry
+objects, unions, `Promise`, `Date` and `Map` across. The goal's list of what gates
+the axis -- rest parameters, inbound references, `.call` rebinding,
+`URL#constructor` -- is a list of lowering gaps, and a quarter of the gap is not
+one.
+
+### The fix that is landed
+
+Step 3, because it is correct independently of the rest: an empty array literal
+in a union-typed argument position gets a `const` with its own annotation. The
+lane is unchanged at 1 passed, 0 failed.
+
+Steps 2 and 4 are not this side's to fix, and 4 is not even the compiler's in the
+usual sense -- it is what the Node-API wrapper can construct.
+
 ## Five formulations of a hook call, and none of them lowers
 
 The `emitInit` diagnosis, finished. Every arrangement of `hook.init(...)` a

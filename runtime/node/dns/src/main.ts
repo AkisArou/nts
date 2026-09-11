@@ -251,7 +251,13 @@ export function lookup(
   // for.
   if (!hostname) {
     if (all) {
-      nextTick(() => answer(null, []));
+      // Hoisted and annotated, not written inline. The parameter is
+      // `string | LookupAddress[] | null`, so an inline `[]` is contextually
+      // typed as that union and the backend reads "an array literal that is not
+      // an array". A `const` with its own annotation gives the literal a
+      // concrete array type at the point it is written.
+      const noAddresses: LookupAddress[] = [];
+      nextTick(() => answer(null, noAddresses));
     } else {
       nextTick(() => answer(null, null, family === 6 ? 6 : 4));
     }
