@@ -21289,6 +21289,57 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## What the nine blocked modules would actually buy
+
+`module-yield.mjs`, written because the name-prefix count was wrong by 3x for
+`tty` and 30x for `dns`. It runs nothing; it applies the three greps that would
+have caught both, to every candidate at once.
+
+     excl  clmd  goal  noreq  blkd  ADDR   total  module
+        0     0     9      6    18   244    277  http2
+        0     0     7     30    30   153    220  tls
+        1     0     4      2    12   125    144  worker_threads
+        1     0     2      4     9   113    129  crypto
+        1     0     1      2     0   108    112  child_process
+        0     0     0      2     4    91     97  vm
+        8     0     0      2     8    65     83  cluster
+        0     0     0      0    20    47     67  https
+        0     0     1      2     0     0      3  tty
+
+`ADDR` is an upper bound -- a file that clears every filter can still fail on the
+module's own behaviour, which is the ordinary work. What it rules out is the
+opposite error: building a module for files that could never have passed.
+
+### Two columns that are findings rather than bookkeeping
+
+**`noreq` -- carries the module's name and never requires it.** 30 of `tls`'s 220
+and 6 of `http2`'s. This column did not exist in the first run, and `tty` scored
+**2** without it against a hand-checked 0. Adding it took `tty` to 0, which is
+the only case where the true answer was already known, so it is also the control.
+
+**`blkd` -- waiting on another absent module.** `https` is 20 of 67 and would be
+more if `tls` counted transitively. This is the DAG, measured instead of drawn.
+
+### The zero that was a broken pattern
+
+The first run scored `worker_threads` **0 of 0**. Node names those tests
+`test-worker-*`, so the pattern matched nothing, and a module with 144 files read
+exactly like a module nobody tests. That is `grep -c`'s standing failure in a new
+place, and it is why every candidate is now checked for an empty match and says
+so by name rather than printing a zero.
+
+### What it says about order
+
+`http2` is the largest single prize in the profile at 244, ahead of `tls` at 153,
+and 18 of its files wait on `tls` rather than the other way round. `crypto` --
+which the goal put first, as the root of the dependency chain -- is fourth at
+113. `child_process` is 108 with **nothing blocking it at all**, the only
+candidate in the list with a zero in that column.
+
+So the chain the goal drew is real but does not rank the way it implies: the
+module that unblocks the most is not the module that is worth the most, and the
+one thing nothing blocks is not near the front.
+
 ## `node:tty` should not be built, and the reason is every route, not a count
 
 The goal named `tty` first: three tests, and it "unblocks `setRawMode` and `isTTY`
