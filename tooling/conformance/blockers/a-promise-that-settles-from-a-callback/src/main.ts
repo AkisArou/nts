@@ -2,8 +2,14 @@
 // control: exports.settle(3) instanceof Promise
 //
 // A promise whose resolver is **stored** rather than called inside the executor.
-// This is the shape every `promises` namespace in node is built from, and it is
-// the reason the compiled lane has none of them.
+// This is the shape a TypeScript promisifier is built from.
+//
+// It is NOT the reason the compiled lane has no `promises` namespace -- an
+// earlier version of this header said so and was wrong. `runtime/c` has
+// `nts_promise_new`, `nts_promise_fulfill_reference` and `nts_promise_reject`,
+// and `zlib.c` already returns `NtsPromise *` from `nts_zlib_write`, declared in
+// TypeScript as `Promise<Uint8Array>`. A promise can be built; it just cannot be
+// built *here*, in TypeScript, by handing a resolver out of an executor.
 //
 // # Why this and not the other two spellings
 //

@@ -21331,6 +21331,39 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## Correction: C can build a promise, and `zlib` already does
+
+The entry below claims the compiled lane "has no `promises` at all". **That is
+wrong**, and the counter-example was in the tree the whole time.
+
+    runtime/c/nts_runtime.h     nts_promise_new(), nts_promise_fulfill_reference(),
+                                nts_promise_reject(), nts_promise_subscribe()
+    runtime/node/zlib/zlib.c    NtsPromise *nts_zlib_write(double handle, ...)
+    zlib/src/native.d.ts        declare function nts_zlib_write(...): Promise<Uint8Array>
+    zlib/bindings.node.mjs      a stand-in returning a real Promise
+
+So a binding can create a promise, hand it back to TypeScript, and settle it
+later. `zlib` does exactly that and `await`s it at `src/main.ts:436`.
+
+**The true statement is narrower and still worth having:** *TypeScript* cannot
+construct a promise that settles from a callback, because an executor cannot hand
+out its resolver. C can. The three probes below are all TypeScript-side, and I
+generalised from them to "the compiled lane" without checking whether the other
+side of the boundary could do it. The one place that already had the answer was a
+module I had spent the morning measuring.
+
+**What it changes.** `dns.promises` is not structurally impossible. It needs its
+`lookup` and `lookupService` to come back from C as promises, the way
+`nts_zlib_write` does, rather than being wrapped in TypeScript. That is work, and
+it is a different kind from "wait for a compiler capability".
+
+**What it does not change.** `fs.promises` is still sixteen declined members and
+`typeof exports.promises === "undefined"` in the addon; those are declined for
+their own reasons, not this one. And the fixture is still correct about what it
+tests -- storing a resolver in TypeScript is refused, and that is a real
+limitation with a real message. Its header is corrected to say so without the
+generalisation.
+
 ## The compiled lane cannot promisify a callback, and so has no `promises` at all
 
 Three routes to a promise that settles from a callback. Every one is refused, and
