@@ -107,6 +107,7 @@ meets them. This is the map; the row table below it is the current state.
   - `awfy-sieve`: two harnesses that should agree, differing by 40%, twice
   - Which other references are the unstable half: two, and four that are the machine
   - The control: the harnesses agree, and both halves of `awfy-sieve` are bimodal
+  - `erasure-stored-unknown` is a `long[]` where the JVM wants a `double[]`: 3.5x on ART, 0% here
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -4354,6 +4355,56 @@ class file is the shape of a layout or a JIT decision that is made once per
 process. Not chased. Named, with the measurement, because "the reference is the
 unstable half" is what I told the compiler lane an hour ago and it is half the
 story.
+
+### `erasure-stored-unknown` is a `long[]` where the JVM wants a `double[]`: 3.5x on ART, 0% here
+
+Second-largest ART regression, 2.33x and 2.38x across two sittings against 0.91x
+and 1.00x on HotSpot. **Not allocation** -- 16,384 B/op against the reference's
+40,016, so this lane allocates less than half what the reference does and is
+still slower. So it is the read path, and `javap` on the emitted `$whole` gives
+it per element:
+
+    laload; lstore; iconst_2; iconst_2; if_icmpeq   <- the typeof tag
+    lload; l2d; dadd                                <- the value
+
+Two candidates in one loop, and they had to be priced apart: an always-taken
+branch whose arms are two constants, and a `long[]` needing an `l2d` on every
+read. One process per shape, shapes checked with `javap` before running:
+
+    shape                                   HotSpot                        ART
+    A  as emitted                 70449.8 70442.1 70537.0   246750.1 234498.6 237253.9
+    B  no branch                  70462.1 70543.1 67440.9   235065.6 235524.4 246892.3
+    C  `double[]`, no conversion  70424.6 70470.9 70593.2    68733.7  66961.8  70507.6
+
+    the branch (A over B), minima        1.00x                       1.00x
+    the representation (B over C)        1.00x                    **3.51x**
+
+**On HotSpot all three are one number** -- 70,450 to within 0.1% -- so C2 makes a
+`long[]`, an `l2d` and a dead branch cost exactly what a `double[]` costs. That is
+the control, and it is why none of this was visible before Android.
+
+**On ART the branch is free and the representation is 3.51x.** The folded
+`2 == 2` with its dead arm, which is the thing that looks wrong in a listing,
+costs nothing at all; the element type costs three and a half times.
+
+**Where the `long[]` comes from.** The prepared IR carries both, one per
+specialisation:
+
+    %2 = array.new %1 : managed<[f64]>     the guard path
+    %2 = array.new %1 : managed<[i64]>     `$whole`
+    %33 = array.get unchecked %2[%27] : i64
+
+The narrowing is right for a machine with integer registers and wrong here for
+the reason `widen.rs` already states in its own header: *"Specialization narrows a
+counter to an `i32` because that is right for a machine with integer registers.
+**This one has none.**"* That pass exists to undo exactly this, it is priced at
+3.41x for the case it does cover, and it covers **values and fields**. It does not
+cover **array element representations**, and that is the whole of this row.
+
+Reach, before building: every bench case emitted, counting a `long[]` or `int[]`
+allocated in a class that also widens on load. **Two of sixty** -- `dispatch`,
+which is 1.02x on ART and does not need it, and `erasure-stored-unknown`, which is
+2.38x and is the reason to. One row moves, by up to 3.5x.
 
 ## Open, and whose
 
