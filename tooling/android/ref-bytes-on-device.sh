@@ -83,7 +83,16 @@ public final class RefBytes {
 }
 JAVA
 
-awfy=$root/third_party/are-we-fast-yet/benchmarks/Java
+# `NTS_AWFY`, for the reason `times-on-device.sh` carries the same variable:
+# `git worktree add` populates the tree and not the submodules, so a run pinned
+# to a hash finds this empty and every `awfy-*` reference fails inside `javac`
+# with `symbol: class Queens`.
+#
+# **This script was the second half of that bug and was fixed a run later.** The
+# sibling was corrected, this one was not, and eight rows came back `javac` --
+# which is the same shape as fixing one of two drivers in one heredoc, earlier
+# the same night. A fix belongs to the family, not to the file it was found in.
+awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
 printf "%-24s %14s\n" "case" "ref on ART"
 for case in "$@"; do
   ref=$root/benches/cases/$case/ref.java
@@ -95,7 +104,14 @@ for case in "$@"; do
   # The AWFY sources when they are there, for the eight `awfy-*` references
   # that construct one of their classes. Absent is fine and only those need it.
   sources=$(find "$out" -name '*.java')
-  [ -d "$awfy" ] && sources="$sources $(find "$awfy" -name '*.java' 2>/dev/null)"
+  theirs=$(find "$awfy" -name '*.java' 2>/dev/null)
+  # Report an absent dependency as one rather than as a broken reference.
+  case "$case" in
+    awfy-*)
+      [ -n "$theirs" ] || {
+        printf "%-24s %14s\n" "$case" "no awfy sources"; continue; } ;;
+  esac
+  [ -n "$theirs" ] && sources="$sources $theirs"
   # shellcheck disable=SC2086
   javac -nowarn -d "$out/classes" $sources 2> "$out/javac.log" \
     || { printf "%-24s %14s\n" "$case" "javac"; continue; }
