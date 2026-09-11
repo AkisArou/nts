@@ -2345,6 +2345,31 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
     found
 }
 
+/// Record why an exported function was not compiled, for the wrapper to say.
+///
+/// Written where the refusal happens rather than reconstructed afterwards: the
+/// name and the reason are decided in one place, so nothing can pair them
+/// wrongly. Only *declared* names are kept — an anonymous or synthetic function
+/// has no export to explain.
+///
+/// One entry per name. A generic with several copies can refuse more than once
+/// and the first reason is as good as the fifth; a list of five would read as
+/// five problems.
+fn note_uncompiled(
+    snapshot: &SemanticSnapshot,
+    program: &mut super::Program,
+    id: NodeId,
+    diagnostic: &Diagnostic,
+) {
+    let Some(name) = FuncBuilder::new(snapshot).declared_name(id) else {
+        return;
+    };
+    if program.uncompiled.iter().any(|(at, _)| *at == name) {
+        return;
+    }
+    program.uncompiled.push((name, diagnostic.message.clone()));
+}
+
 /// The copies of a function to lower.
 ///
 /// A generic function is lowered once per instantiation and not at all as
@@ -4024,6 +4049,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
             && let Some(diagnostic) = uninstantiated(snapshot, &shared.generics, id)
         {
             refused_functions.insert(id);
+            note_uncompiled(snapshot, &mut lowered.program, id, &diagnostic);
             lowered.diagnostics.push(diagnostic);
             continue;
         }
@@ -4049,6 +4075,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
                     // text rather than a cause: 38 sites carry it over at least
                     // three unlike shapes.
                     refused_functions.insert(id);
+                    note_uncompiled(snapshot, &mut lowered.program, id, &diagnostic);
                     lowered.diagnostics.push(diagnostic);
                 }
             }

@@ -1801,6 +1801,24 @@ pub struct Program {
     /// the Node session looking for a refusal that does not exist -- the same
     /// conflation as the message it replaced, pointing the other way.
     pub public_functions: Vec<String>,
+    /// Exported functions that were **not** compiled, and the refusal that took
+    /// each one.
+    ///
+    /// **The wrapper knew the effect and not the cause.** `is exported and no
+    /// function of that name was compiled` is true, says nothing about why, and
+    /// was 228 of the profile's declined exports — a reader is told a name is
+    /// absent and sent nowhere. The refusal exists; it is in `Lowered`, which a
+    /// backend does not receive.
+    ///
+    /// Carried here rather than looked up, because the two are decided in the
+    /// same place: `lower_with` refuses a declaration and records its name in
+    /// the same breath, so they cannot disagree about which refusal took which
+    /// function.
+    ///
+    /// The message is the refusal's own text. Where that is a cascade — `calls
+    /// X, which was refused above` — it names the callee rather than the root,
+    /// which is still a place to go and is what the cascade was built to say.
+    pub uncompiled: Vec<(String, String)>,
 }
 
 /// A variable that outlives every call.

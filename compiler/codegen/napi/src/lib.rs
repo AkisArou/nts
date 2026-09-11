@@ -3269,7 +3269,24 @@ fn report_unrepresentable_exports(
             reason: if program.funcs.iter().any(|func| func.name == *emitted) {
                 "is exported and its signature does not cross".to_owned()
             } else if program.public_functions.iter().any(|at| at == name) {
-                "is exported and no function of that name was compiled".to_owned()
+                // **The effect, and now the cause beside it.** This said only
+                // that no function of that name was compiled -- true, and 228
+                // of the profile's declined exports, each one telling a reader
+                // that a name is absent and sending them nowhere.
+                //
+                // The refusal that took it is carried on the program because
+                // the two are decided in one place. Where it is a cascade --
+                // `calls X, which was refused above` -- it names the callee
+                // rather than the root, which is still somewhere to go and is
+                // exactly what the cascade was built to say.
+                program
+                    .uncompiled
+                    .iter()
+                    .find(|(at, _)| at == emitted || at == name)
+                    .map_or_else(
+                        || "is exported and no function of that name was compiled".to_owned(),
+                        |(_, why)| format!("is exported and was not compiled: {why}"),
+                    )
             // **A value export whose type does not cross**, which the last arm
             // called "not a function" -- false for half the names it covered.
             //

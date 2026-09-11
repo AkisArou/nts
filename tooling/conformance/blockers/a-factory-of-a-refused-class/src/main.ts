@@ -46,12 +46,23 @@
 //
 //     main.ts:2:34  a `new` of unrepresentable type (`Map<any, any>`)
 //     main.ts:4:2   `createServer`, a declaration outside every walk
-//     no wrapper for createServer: is exported and no function of that name was compiled
+//     no wrapper for createServer: is exported and was not compiled:
+//                   a `new` of unrepresentable type (`Map<any, any>`)
 //
 // The first line is the cause. The second describes `createServer` as never
 // having been reached, which reads as a gap in the walk -- something to fix in
 // the traversal. It is not: the walk stopped because the class it would have
 // reached through was refused, and clearing the `Map` clears all three lines.
+//
+// **The third line said only `no function of that name was compiled` until
+// 2026-09-11** -- the effect, with the cause unsaid, and 228 of the profile's
+// declined exports carried it. The refusal existed the whole time; it lives in
+// `Lowered`, which a backend does not receive. `Program::uncompiled` carries it
+// now, recorded where the refusal happens so the two cannot be paired wrongly.
+//
+// `blockers/cascade-with-no-root` still gets the bare sentence, and correctly:
+// there is no refusal to name there, which is the whole of what that fixture
+// says.
 //
 // **A cascade with an NTS1001 code and no mention of what it cascaded from.**
 // `internal/errors.ts` has the same shape under a different message, and
