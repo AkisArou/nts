@@ -169,7 +169,7 @@ different problem from the four rows losing by a lot.
 | `array-predicates` | 1.73x | at its floor: every helper inlines; the wrapper is the row |
 | `absences` | 1.28x | blocked: **34%** is `uirem` over an `l2i` counter |
 | `optional-chain` | 1.27x | the same `uirem` residual |
-| `awfy-queens` | 1.23x | 20.6% is codegen and MINE -- ladder below |
+| `awfy-queens` | 1.23x; **ART 1.98x** | 20.6% is codegen and MINE -- ladder below. **The worst bar 1 row on ART.** One named cause found and priced at 9.1%: `queenRows` is `[f64]` where the reference is `int[]`, because `hir::runtime` has a `nts_array_fill_bool` and no `_i32`. The rest is still unfound |
 | `generic-classes` | 1.13x | **cause found**: monomorphisation, not codegen -- below |
 | `array-methods` | 1.17x, **ART 6288 -> 144 B/op** | helpers beat the reference by 18%; `toInt32` against the reference's `d2i` is **8.9%**, measured; the `NtsValue` from `at()` is scalar-replaced (144 B/op is the array literal, which the reference also pays) |
 | `number-format-double` | **1.15x**, **ART 12,464 -> 6,624 B/op** (0.95x its reference) | six runs inside 1.7% -- the *reference* was what varied. Worse than the 1.08x listed, and now the best-supported number here. The formatter is 54% of the profile and 1.7% of the gap |
@@ -177,7 +177,7 @@ different problem from the four rows losing by a lot.
 | `instanceof` | 1.09x | 60% of the profile is `uirem`; bounded at 8%. Reference is narrower than the program, priced at ~0 -- below |
 | `in-narrowing` | 1.01x / 1.02x | re-measured; was listed at 1.07x from a contaminated run |
 | `module-closures` | 1.10x | measured clean at last, identical checksums. Three mechanisms priced dead (ABI 0.1%, non-final global 0.1%, inline size 0%); **no cause found** -- below |
-| `awfy-sieve` | **0.94x** | six runs, five of them under 1.00x. The bimodality section below predates this and its two modes did not appear |
+| `awfy-sieve` | **0.94x**; ART 1.14x *uncertified* | six runs, five of them under 1.00x. The ART survey's own HotSpot control read 1.32x on this row -- the largest control disagreement in that run -- so its ART figure is not certified by anything and the bimodality is the likeliest reason |
 | `bytes` | 1.05x | the `uirem` residual |
 | `objects` | **0.99x** | six runs at two warmup lengths, all 0.99x. The variance note is spread *within* a run; the minimum does not move. **Not losing** |
 | `generator` | 1.01x | 1.01x twice against 0.99x from another sitting; this row moves 0.04x between them and the bytecode is identical |
@@ -186,11 +186,11 @@ different problem from the four rows losing by a lot.
 | `fib` | 1.04x / 1.03x | the reference is `int` against a `number`; correcting it per the rule would move this **against** us by 3-4%, measured -- below |
 | `upcast` | 1.03x / 1.05x | bytecode identical to the tree that measured 0.99x; a between-sitting difference, not a change |
 | `checksum` | 1.00x | parity, twice |
-| `closure-merge` | **1.01x** | six runs, all 1.01x. Losing by one percent, reproducibly |
+| `closure-merge` | **1.01x**; **ART 3.33x** | six runs, all 1.01x here. **The largest ART regression in the table**, and found: the `(D)D` closure ABI, five conversions a call, worth **2.6x on ART and 0% on HotSpot**. Not allocation (128 B/op each side, to the byte) and not the trampoline. Below |
 | `growth-grown` | **1.01x** | six runs, all 1.01x |
 | `substrings` | **0.40x** | was 0.95x. **The largest real movement in the table** and unflagged |
 | `map-and-set` | **0.79x** | was 0.86x |
-| `dispatch` | 0.67x-1.14x *not clean* | six runs land in two places. Neither P-core pinning nor 13x the warmup touches it. **Not a number** |
+| `dispatch` | 0.67x-1.14x *not clean*; **ART 1.03x** | six runs land in two places on HotSpot -- eight more make it *tri*modal, 17.8us to 34.0us, all of it in our half against a reference stable to 2.7%. **Not a number here and a number there**: eight ART runs span 0.6%. The bimorphic-inlining reason offered for it is retracted below -- `javap` says this case emits no virtual call at all |
 | `case-convert` | **0.955x** | six runs, 0.92x-1.01x. **Not losing** |
 | `awfy-permute` | **0.72x** | |
 | `awfy-mandelbrot` | **0.84x** | |
