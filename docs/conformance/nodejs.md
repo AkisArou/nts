@@ -21331,6 +21331,37 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## No parameter type carries an object inward, tested rather than argued
+
+The entry below says `tty`'s compiled lane closes on `isatty({})` throwing at the
+wrapper. That was reasoning from two signatures. Four were tested, in one addon:
+
+    unknown                   PUBLISHED   number: ok   object: THROW   string: ok
+    number | object           declined    a union that erases and whose members
+                                          the boundary cannot build
+    object | undefined        declined    the same
+    Record<string, unknown>   declined    takes Record<string, unknown>, which
+                                          crosses outward only
+
+So the only signature that publishes at all is `unknown`, and it throws on a
+reference. There is no declared type that accepts both a number and an object and
+crosses inward, which is what `tty.isatty` would need -- node's contract is that
+`isatty` answers `false` for anything.
+
+### Why this was worth the probe
+
+Two of today's five wrong answers came from reasoning about what a boundary or a
+lowering would accept instead of building it and looking. The conclusion here is
+the same one I had already written, and it is now a measurement: `unknown` is not
+one option among several that might work, it is the only one that publishes.
+
+The three declines are also useful on their own. `number | object` and
+`object | undefined` produce the **same** message as `dns.promises`'s
+`promiseLookup` -- "a union that erases and whose members the boundary cannot
+build" -- so the thing blocking `tty` and the thing blocking `dns.promises` are
+one mechanism seen at a parameter and at a return. That was three separate
+diagnoses this session before this probe put them together.
+
 ## Every route from `tty`'s compiled lane to a passing test, and why each closes
 
 Five `pseudo-tty` files, one pty harness, and an exhaustive walk.
