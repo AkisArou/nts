@@ -105,6 +105,7 @@ meets them. This is the map; the row table below it is the current state.
   - A second sitting: 36 of 43 reproduce, seven do not, and it is the ART half that moves
   - Bar 1 on ART, confirmed across two sittings: two of eight, twice
   - `awfy-sieve`: two harnesses that should agree, differing by 40%, twice
+  - Which other references are the unstable half: two, and four that are the machine
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -4259,6 +4260,43 @@ Worth keeping as the reason the two *sittings* are trustworthy where that run wa
 not: both sittings took the lock, and their HotSpot controls reproduced the
 published column on 35 of 40 rows. A number measured at load 33 reproduces
 nothing.
+
+### Which other references are the unstable half: two, and four that are the machine
+
+If `awfy-sieve`'s reference is bimodal out of one class file, the question is how
+many others are. Two sittings of this survey measured every reference on HotSpot
+twice, so the answer is already in the data rather than needing a run.
+
+Six of 51 references moved 8% or more between sittings. **Four of them moved
+together with their own program**, which is the machine and not the reference --
+and the ratio held, which is the ratio doing its job:
+
+    row                  reference   our side    ratio then / now
+    objects                  0.53x      0.52x    0.87x -> 0.85x
+    generator                1.11x      1.12x    1.00x -> 1.00x
+    growth-fixed             1.10x      1.08x    1.00x -> 0.98x
+    growth-grown             1.09x      1.13x    1.02x -> 1.06x
+
+`objects` is the striking one: **both halves ran nearly twice as fast on the
+second sitting**, out of identical class files, and the ratio moved by 0.02. A
+lane that published absolute times would have reported a 2x improvement.
+
+**Two moved independently of their own program, and those are the candidates:**
+
+    number-format-double     0.87x      1.01x    0.92x -> 1.07x
+    symbol-keyed-map         0.88x      1.00x    2.59x -> 2.94x
+
+The reference got 13% and 12% faster while our side did not move at all, which is
+the `awfy-sieve` shape: an unstable *reference* swinging the published ratio with
+nothing on our side changing. Neither is as large as `awfy-sieve`'s 1.27x and
+neither is confirmed bimodal -- two sittings show a move, not two modes -- but
+they are where to look, and `number-format-double` is a row this file has spent
+effort on at 1.15x and 0.95x, both of which are now suspect from this direction
+rather than from ours.
+
+`awfy-sieve` itself did **not** move between these two sittings: 4359.5 and
+4440.8, the fast mode twice. That is consistent with a harness that habitually
+lands in one mode rather than one that flips, and it is why the fork reproduced.
 
 ## Open, and whose
 
