@@ -4401,10 +4401,35 @@ counter to an `i32` because that is right for a machine with integer registers.
 3.41x for the case it does cover, and it covers **values and fields**. It does not
 cover **array element representations**, and that is the whole of this row.
 
-Reach, before building: every bench case emitted, counting a `long[]` or `int[]`
-allocated in a class that also widens on load. **Two of sixty** -- `dispatch`,
-which is 1.02x on ART and does not need it, and `erasure-stored-unknown`, which is
-2.38x and is the reason to. One row moves, by up to 3.5x.
+Reach, before building: every bench case **and every example** emitted, counting a
+`long[]` or `int[]` allocated in a class that also widens on load.
+
+    benches/cases    2 of 60    dispatch (1.02x on ART), erasure-stored-unknown (2.38x)
+    examples         1 of 187   exceptions (0.00x on ART)
+
+**Three of 247 programs, and exactly one of them needs it.** `dispatch` is at
+parity on ART and `exceptions` beats its reference by orders of magnitude; neither
+would notice.
+
+I expected the corpus to understate this -- an array of integers read as numbers
+is an ordinary thing to write, and 60 benchmark cases are not a population. **That
+was a hypothesis and the 187 examples refute it.** It is genuinely rare, because
+the narrowing needs specialization to prove every element integral *and* the reads
+to want a double, and a program that stores integers usually reads them as
+integers too.
+
+**So it is not built.** The prize is 3.5x on one row; the cost is extending a
+whole-program representation plan to array elements, where the array creation,
+every `array.get` and every `array.set` must agree or the verifier rejects the
+class at load. That is the same trade declined for the `(D)D` closure signature
+four hours earlier -- 2.6x on four rows of 51 -- and declining one and taking the
+other on a thinner reach would be choosing by how recently I measured it.
+
+What is bought instead is that the decision is revisitable with numbers rather
+than re-derived: **the mechanism is 3.51x on ART and 0% on HotSpot, the fix is an
+array-element dimension in `widen.rs`, and the reach is 1 of 247.** If a real
+Android program is ever profiled and this shape is in its hot path, all three of
+those are already here.
 
 ## Open, and whose
 
