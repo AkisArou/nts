@@ -59,17 +59,26 @@ util zlib"
 # reads 0 passed and `--sabotage` reads the same. A hollow lane, named here rather
 # than counted as a green zero.
 #
-# `cascade-reach.mjs dns` attributes every one of the three, and all three are
-# lowering gaps with a fixture already filed:
+# `cascade-reach.mjs dns` names the three, and the build's own NTS1001 lines say
+# why. All three are lowering gaps and **two of them are the same gap**:
 #
-#   lookup         `nextTick`, from `internal/tick.ts`, which imports
-#                  `internal/async-hooks.ts`, whose `externalAsyncIdentities` is a
-#                  module-scope `WeakMap`.
-#                  blockers/weak-collections-have-no-representation
-#   lookupService  `ERR_MISSING_ARGS#constructor`, which takes a rest parameter.
+#   lookup         `nextTick`, refused at `internal/tick.ts:57` --
+#                  `(...received: A) => callback(...received)`, a generic rest
+#                  parameter forwarded to a callback. That is
+#                  `blockers/a-generic-rest-forwarded-to-its-callback` exactly.
+#   lookupService  `ERR_MISSING_ARGS#constructor`, `constructor(...names)`.
+#                  A rest parameter again, without the generic.
 #   promises       `promiseLookup` and `promiseLookupService` capture a `Promise`
 #                  executor's `reject` inside a nested closure.
 #                  blockers/a-recursive-arrow-inside-a-function
+#
+# An earlier version of this comment blamed the module-scope `WeakMap` in
+# `internal/async-hooks.ts` for `lookup`. That was wrong, and the mistake is worth
+# recording: `cascade-reach.mjs` listed `trackPromise` (cone 11, and that one *is*
+# the WeakMap) and `nextTick` as two separate primary refusals, and I read the
+# larger cone as the cause of the smaller. The instrument said "could not attribute
+# a shape to this one by line range" for `nextTick` and I supplied a shape from the
+# neighbouring row instead of reading the build output, which names it in one line.
 #
 # A fourth was this module's own and is gone: `dnsException` built its error by
 # casting to `Record<string, unknown>` and assigning `errno`, `code`, `syscall`

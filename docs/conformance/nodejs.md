@@ -21289,6 +21289,64 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## I blamed the wrong refusal, and the right one is already being fixed
+
+`dns`'s three compiled-lane blockers, corrected. The build's own NTS1001 lines
+name them, and **two of the three are the same gap**:
+
+    lookup         internal/tick.ts:57
+                   `(...received: A) => callback(...received)`
+                   a generic rest parameter forwarded to a callback, which is
+                   blockers/a-generic-rest-forwarded-to-its-callback exactly
+    lookupService  ERR_MISSING_ARGS, `constructor(...names)`
+                   a rest parameter again, without the generic
+    promises       promiseLookup / promiseLookupService capture a Promise
+                   executor's `reject` in a nested closure
+
+### What I had written, and how the error was made
+
+That `lookup` was blocked by the module-scope `WeakMap` in
+`internal/async-hooks.ts`. It is not. I wrote it into this ledger, into
+`build-floor.sh`, and into a message asking MainClaude to prioritise the WeakMap
+on the strength of it.
+
+The mechanism of the mistake is the useful part. `cascade-reach.mjs` printed two
+primary refusals next to each other:
+
+    11  trackPromise
+        async-hooks.ts:568 a module-scope variable of unrepresentable type
+     2  nextTick<obj1260>
+        unblocks 1 missing export(s): lookup
+        (could not attribute a shape to this one by line range)
+
+The instrument said, in as many words, that it could not attribute a shape to
+`nextTick`. I supplied one from the row above it — the biggest cone in the module,
+sitting adjacent, in a file `tick.ts` genuinely imports. Every step of that is
+plausible and the conclusion is wrong.
+
+**The build output names it in one line**, and I had the file open:
+
+    tick.ts:57:6  NTS1001 a rest parameter whose element type has no representation
+
+### Why it matters beyond being wrong
+
+It inverts the outlook. The WeakMap's weakness is load-bearing — its own comment
+explains that the association *is* how a promise's lifetime is represented — so
+"blocked on the WeakMap" reads as blocked on a redesign. "Blocked on a generic
+rest forwarded to a callback" is the fixture MainClaude moved earlier the same
+day, which they described as "no longer the blocker, one link further along".
+
+Two of `dns`'s three are rest parameters. The goal's own list of what gates the
+axis opens with rest parameters, so this module is not waiting on something
+exotic; it is waiting in the same queue as everything else.
+
+### The rule this breaks, restated
+
+"Each blocker is a reproducing fixture or a labelled diagnosis." A label taken
+from an adjacent row is neither. When an instrument says it could not attribute
+something, that is the finding — the next step is a different instrument, not a
+neighbouring value.
+
 ## The one way to make `dns`'s compiled lane non-hollow, and why it is not taken
 
 Enumerating all eleven skips on the compiled lane, rather than assuming, showed
