@@ -183,8 +183,21 @@ printf "%s method(s) across them\n" "$methods"
 floor=${NTS_DEX_METHOD_FLOOR:-4382}
 if [ $# -eq 0 ] && [ "$methods" -lt "$floor" ]; then
   echo "only $methods method(s) dexed, against a floor of $floor" >&2
-  echo "a drop here is functions being pruned before the backend sees them," >&2
-  echo "which is what made this step green over a skeleton -- record 0295" >&2
+  # **Which of the two it is, said here rather than left to the reader.** This
+  # is a gate step three sessions run, and a count is sensitive to any target
+  # that did not get compiled -- a full disk, a frontend hiccup -- in a way a
+  # `refused` count is not. A peer meeting this failure on an unrelated change
+  # should not have to work out which kind it is.
+  if [ "$declined" -gt 1 ]; then
+    echo "and $declined target(s) were declined, against the 1 this expects" >&2
+    echo "(`a-class-stored-and-compared`) -- so the count is short because" >&2
+    echo "targets did not compile, which is a different fault from pruning" >&2
+  else
+    echo "with the expected $declined decline(s), so every target compiled and" >&2
+    echo "the programs themselves are smaller: functions are being pruned before" >&2
+    echo "the backend sees them, which is what made this step green over a" >&2
+    echo "skeleton -- record 0295" >&2
+  fi
   exit 1
 fi
 [ "$refused" -eq 0 ] || exit 1
