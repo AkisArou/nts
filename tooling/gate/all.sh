@@ -854,7 +854,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # So the two gaps are the same sentence one representation apart, and neither
   # is this lane being behind. Both swept one at a time rather than inferred
   # from a total.
-  backend_examples 167 "through the JVM backend" ); }
+  backend_examples 170 "through the JVM backend" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

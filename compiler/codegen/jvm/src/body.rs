@@ -96,6 +96,17 @@ fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
         OpKind::Unary { op: UnOp::Truthy, operand } => {
             !matches!(func.values[operand.0 as usize].ty, HirType::Bool)
         }
+        // The third, and the one that proves the list is the thing to keep
+        // current rather than the comment above it. `SharedFieldGet` is an
+        // `instanceof` chain: a label per arm and a join at the end, so a slot
+        // this walk leaves as `Top` is `Top` at the join and the verifier says
+        //
+        //     Type top (current frame, locals[1]) is not assignable to
+        //     reference type
+        //
+        // which is the same sentence `examples/async-catch` produced, from a
+        // different op, for the same reason.
+        OpKind::SharedFieldGet { .. } => true,
         _ => false,
     };
     let mut defined_at: Vec<Option<(usize, usize)>> = vec![None; func.values.len()];
@@ -109,6 +120,34 @@ fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
         // A block parameter is written by predecessors, so its slot is
         // always live across this block's own frame.
         crosses.extend(block.params.iter().copied());
+        // **A value written *inside* its own labels crosses them.** The walk
+        // below asks whether a label sits between a definition and a read, and
+        // a definition is never between its own -- which is right for a
+        // comparison, whose result is pushed after its labels, and wrong for a
+        // `SharedFieldGet`, which stores into the slot in each arm and joins
+        // afterwards. So the slot is live at the join and the read after it is
+        // `aload` of a `Top`:
+        //
+        //     Type top (current frame, locals[1]) is not assignable to
+        //     reference type
+        //
+        // Teaching `puts_label` about the op was necessary and not sufficient,
+        // and the second half is this: the op is the label *and* the write.
+        //
+        // **And its operand too**, which took a second reading of a second
+        // offset. The walk below asks whether a label sits between a definition
+        // and a read; a value read *by* the label-putting op is read at that
+        // op's own index, so no label is strictly between them. That is right
+        // for every other op, which reads its operands once and before its
+        // labels. This one reads the receiver **once per arm**, after each
+        // `next` -- so the receiver is live across the labels too and its slot
+        // was `Top` at the second arm's `aload`.
+        for &value in &block.ops {
+            if matches!(func.values[value.0 as usize].kind, OpKind::SharedFieldGet { .. }) {
+                crosses.insert(value);
+                crosses.extend(nts_core::hir::operands_of(&func.values[value.0 as usize].kind));
+            }
+        }
         // A branch that carries block arguments emits a label of its own --
         // the true arm gets one so its copies have somewhere to live -- and
         // the copies read their operands *after* it. Those reads need a frame,
@@ -516,6 +555,11 @@ impl<'a> Emitter<'a> {
                                     if !matches!(managed, ManagedType::String)
                             )
                     }
+                    // An `instanceof` chain with a join; see `crossing_values`.
+                    // It needs no scratch slot -- the result goes to the value's
+                    // own -- but it does put labels in a block, and this is the
+                    // question that decides whether the prologue runs at all.
+                    OpKind::SharedFieldGet { .. } => true,
                     _ => false,
                 }
             })

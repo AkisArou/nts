@@ -1171,6 +1171,9 @@ impl Emitter<'_> {
             // analysis is much weaker, honouring the hint may be worth
             // something -- and that is a measurement for when a DEX pipeline
             // exists, not a guess now.
+            OpKind::SharedFieldGet { value: receiver, arms, field } => {
+                self.shared_field_get(code, pool, value, *receiver, arms, *field)?
+            }
             OpKind::ObjectNew { .. } => self.object_new(code, pool, &op.ty, &origin)?,
             OpKind::FieldGet { object, field } => {
                 let (class, name, descriptor, _) = self.field_ref(*object, *field)?;
@@ -1636,6 +1639,88 @@ impl Emitter<'_> {
                 &want[1..want.len() - 1]
             ),
         ))
+    }
+
+    /// A field every arm of a union puts in the same place.
+    ///
+    /// **The C lane reads it with a pointer cast and this one cannot.** A cast
+    /// there is a reinterpretation against a coarse tag; here it is a
+    /// `CHECKCAST` and the class is checked, so `Unerase` to one arm and read
+    /// threw `ClassCastException` on every value that was a different arm. The
+    /// op states the fact instead -- these arms agree about this field -- and
+    /// each backend picks its own instruction from it.
+    ///
+    /// One `instanceof` per arm, in the union's order, each falling to the
+    /// next. Measured against the alternative before it was specified: a
+    /// synthesised interface with an accessor is **3.5x slower** -- 6,213ns
+    /// against 1,759ns over three arms -- because every read becomes a
+    /// megamorphic `invokeinterface` whose itable lookup defeats inline
+    /// caching, where a chain stays branch-predictable and the loads inline.
+    ///
+    /// The result goes to the value's own slot rather than through the scratch
+    /// one a comparison uses: a field has a type and the scratch slot is an
+    /// `int`. That also keeps the operand stack empty at every label, which is
+    /// what lets the stack map stay the universal frame.
+    ///
+    /// **The last arm is tested too, rather than falling through.** Falling
+    /// through would be a `CHECKCAST` that can fail, which is the exception
+    /// this op exists to delete. A value outside every arm is a program the
+    /// checker should have rejected, and it gets a named refusal.
+    fn shared_field_get(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        value: ValueId,
+        receiver: ValueId,
+        arms: &[nts_semantic_schema::TypeId],
+        field: u32,
+    ) -> Result<Placed, Diagnostic> {
+        // Taken from the value rather than passed: one argument over the limit,
+        // and this is the one the caller had only just read off the same op.
+        let origin = &self.func.values[value.0 as usize].origin.clone();
+        if arms.is_empty() {
+            return Err(refuse(self.func, "a shared field read over no arms at all"));
+        }
+        let Some(slot) = self.slot(value) else {
+            return Err(refuse(self.func, "a shared field read whose result has no slot"));
+        };
+        let kind = self.kind_of(value)?;
+        let erased =
+            *self.ty(receiver) == HirType::Erased && !self.unboxed.contains(&receiver);
+        let done = code.label();
+        for arm in arms {
+            let next = code.label();
+            let (owner, name, descriptor, _) = self.field_ref_of(*arm, field)?;
+            // The identity class for the test and the declaring class for the
+            // read: a class that shares a layout has an empty subclass, so
+            // `instanceof` names that and the field lives on the base.
+            let Some(layout) = self.program.layout(*arm) else {
+                return Err(refuse(self.func, "a shared field read over an arm with no layout"));
+            };
+            let tested = crate::hierarchy::identity_of(self.program, *arm)
+                .map_or_else(|| types::class_name(layout), |class| {
+                    types::identity_class_name(layout, class)
+                });
+            self.load(code, pool, receiver)?;
+            if erased {
+                code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+            }
+            code.instance_of(origin, pool, &tested);
+            code.branch_zero(origin, Compare::Eq, next);
+            self.load(code, pool, receiver)?;
+            if erased {
+                code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+            }
+            code.check_cast(origin, pool, &owner);
+            code.get_field(origin, pool, &owner, &name, &descriptor);
+            code.store(origin, kind, slot);
+            code.goto(origin, done);
+            code.bind(next);
+        }
+        code.invoke_static(origin, pool, RUNTIME, "unreachable", "()Ljava/lang/Error;");
+        code.athrow(origin);
+        code.bind(done);
+        Ok(Placed::Stored)
     }
 
     fn object_new(
@@ -2973,6 +3058,20 @@ impl Emitter<'_> {
         let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
             return Err(refuse(self.func, "a field of something that is not an object"));
         };
+        self.field_ref_of(id, field)
+    }
+
+    /// The same, for a type named directly rather than carried by a value.
+    ///
+    /// `SharedFieldGet` names its arms as `TypeId`s, and each arm's access is
+    /// resolved against that arm's own layout -- the field's *name* is per-arm
+    /// even where the precondition makes them equal, which is why the op
+    /// carries the index and not a name.
+    fn field_ref_of(
+        &self,
+        id: nts_semantic_schema::TypeId,
+        field: u32,
+    ) -> Result<(String, String, String, HirType), Diagnostic> {
         let Some(layout) = self.program.layout(id) else {
             return Err(refuse(self.func, "a field of an object with no layout"));
         };
