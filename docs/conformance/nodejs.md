@@ -21331,6 +21331,63 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## Five floor modules broken, and every instrument the gate has said green
+
+Going to re-run the forwarding sites against the landed generic-rest change, none
+of them got far enough to measure:
+
+    emit-c <module>/tsconfig.json --napi, against the pinned gate binary
+
+    fs        INVALID HIR      net       INVALID HIR
+    http      INVALID HIR      dgram     INVALID HIR
+    process   INVALID HIR      timers    ok        events    ok
+
+    invalid HIR: StoreType {
+      func: "defaultTriggerAsyncIdScope<[obj12236]x2,void>",
+      what: "an array element read",
+      expected: Erased, found: Managed(Object(TypeId(12237))) }
+
+Controlled both ways rather than reported from one side: the same five against a
+pre-landing pin are **ok, ok, ok, ok, ok**.
+
+### Two failures that look identical and are not
+
+The compiler session had seen a `StoreType` failure on the same change and A/B'd
+it to a pre-existing cause. Both name a generic copy, both mention `Erased`:
+
+    nextTick<obj24>                   what: "a field"               pre-existing
+    defaultTriggerAsyncIdScope<...>   what: "an array element read" new
+
+Different `what`, different cause. The A/B was sound about the one it tested and
+silent about the other, because the fixture it ran does not contain the second
+shape. "Not from this change" was true of the thing tested and false of the thing
+that broke.
+
+The cause, from the compiler side: a tuple whose positions represent differently
+is an array of `Erased`, and the spread-to-positional expansion typed the
+`ArrayGet` at what the *position* declares rather than at the *array's element
+type*. So a read claimed a concrete object came out of an erased slot, and every
+heterogeneous instantiation in the tree hit it.
+
+### Why `timers` passed, which was the question worth asking
+
+Not a different instantiation -- a **homogeneous** one. The defect needs the
+positions to disagree; when they agree the element type stays concrete and the
+read is accidentally correct. So the failing set is "modules with a heterogeneous
+generic-rest instantiation", which tracks `internal/async-hooks.ts` without being
+exactly its importers.
+
+### The part worth keeping
+
+**The corpus, the examples and 154 blocker fixtures all passed while five floor
+modules could not emit.** None of them exercised a generic rest with a
+heterogeneous instantiation. A green gate is not coverage of the change that just
+landed; it is coverage of the changes that landed before it, and a new capability
+arrives with no test that knows to look for it.
+
+It was found by a measurement aimed at something else entirely -- re-running
+`asRequest`'s dependents to see whether twenty-one exports had cleared.
+
 ## The 92 "not a function this backend can name" are four things, and a third are not work
 
 MainClaude asked whether that bucket -- the largest of the 128 the boundary
