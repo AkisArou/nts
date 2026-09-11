@@ -106,6 +106,7 @@ meets them. This is the map; the row table below it is the current state.
   - Bar 1 on ART, confirmed across two sittings: two of eight, twice
   - `awfy-sieve`: two harnesses that should agree, differing by 40%, twice
   - Which other references are the unstable half: two, and four that are the machine
+  - The control: the harnesses agree, and both halves of `awfy-sieve` are bimodal
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -187,7 +188,7 @@ different problem from the four rows losing by a lot.
 | `instanceof` | 1.09x | 60% of the profile is `uirem`; bounded at 8%. Reference is narrower than the program, priced at ~0 -- below |
 | `in-narrowing` | 1.01x / 1.02x | re-measured; was listed at 1.07x from a contaminated run |
 | `module-closures` | 1.10x | measured clean at last, identical checksums. Three mechanisms priced dead (ABI 0.1%, non-final global 0.1%, inline size 0%); **no cause found** -- below |
-| `awfy-sieve` | **0.94x-1.33x, and the reference is the bimodal half -- OPEN** | `tooling/bench` publishes 0.94x from six runs, five under 1.00x. `tooling/android/times-on-device.sh` reads **1.32x and 1.33x** on two separate sittings, with every other shared row agreeing. Two instruments that are meant to measure the same thing differ by 40% on this row, reproducibly, and neither is known to be the wrong one -- so **the published number is not corroborated** and the row's ART figure (1.14x / 1.15x) is uncertified with it. Not chased; named. Section below |
+| `awfy-sieve` | **0.79x-1.33x, and BOTH halves are bimodal -- OPEN** | `tooling/bench` publishes 0.94x from six runs, five under 1.00x. `tooling/android/times-on-device.sh` reads **1.32x and 1.33x** on two separate sittings, with every other shared row agreeing. Two instruments that are meant to measure the same thing differ by 40% on this row, reproducibly, and neither is known to be the wrong one -- so **the published number is not corroborated** and the row's ART figure (1.14x / 1.15x) is uncertified with it. Not chased; named. Section below |
 | `bytes` | 1.05x | the `uirem` residual |
 | `objects` | **0.99x** | six runs at two warmup lengths, all 0.99x. The variance note is spread *within* a run; the minimum does not move. **Not losing** |
 | `generator` | 1.01x | 1.01x twice against 0.99x from another sitting; this row moves 0.04x between them and the bytecode is identical |
@@ -4316,6 +4317,43 @@ rather than from ours.
 `awfy-sieve` itself did **not** move between these two sittings: 4359.5 and
 4440.8, the fast mode twice. That is consistent with a harness that habitually
 lands in one mode rather than one that flips, and it is why the fork reproduced.
+
+### The control: the harnesses agree, and both halves of `awfy-sieve` are bimodal
+
+`tooling/bench`'s own compiled artefact against this lane's harness, alternating,
+same byte-identical classes, same driver text, same flags, at load 2.03. **Both
+arms drive our side**, so this asks only whether the two harnesses measure the
+same program the same way:
+
+    bench  5444.1  5685.4  5547.1  4428.3     minimum 4428.3
+    mine   4564.2  5586.1  5589.2  5542.8     minimum 4564.2
+
+**The harnesses agree** -- minima within 3% -- so `benches/common/Bench.java` and
+this lane's transcription of its timing arm are not the fork, and nor is the
+classpath or the driver. That was the question and it is answered.
+
+**And they answer a question nobody asked.** Our own half swings **4428 to 5685
+out of one class file**, a 1.28x spread, and *both* harnesses see both ends of
+it. So it is not only the reference that is bimodal on this row. It is the
+program too, at what look like the same two levels -- roughly 4.4us and 5.6us --
+which is also where the compiler lane's recorded reference modes sit
+(4.49/4.44/4.48 against 5.74/5.74/5.38).
+
+That revises the account rather than confirming it. `awfy-sieve`'s ratio is the
+quotient of **two independently bimodal halves**, so it can land anywhere from
+about 0.79x to about 1.28x with neither harness doing anything wrong, and the
+three figures on record -- 0.94x, 1.32x, 1.33x -- sit inside that. My two
+sittings caught our side slow twice and the reference fast twice, which is why
+they agreed with each other at 1.32/1.33 and disagreed with the published 0.94x.
+
+**Two halves at the same two levels is the more interesting fact.** Two different
+programs -- our generated one and Are We Fast Yet's hand-written Java -- flipping
+between ~4.4us and ~5.6us on the same machine points at something neither program
+owns: the workload is a `boolean[5000]` sieve, and a flip that size out of one
+class file is the shape of a layout or a JIT decision that is made once per
+process. Not chased. Named, with the measurement, because "the reference is the
+unstable half" is what I told the compiler lane an hour ago and it is half the
+story.
 
 ## Open, and whose
 
