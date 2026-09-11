@@ -140,6 +140,41 @@
 // rather than a proportion, so they can be decided individually instead of
 // setting the representation for all of them.
 //
+// # And then the statistic above turned out to be the wrong one
+//
+// **The inline cache is attached to the call site, not to the type.** Measured
+// by the JVM lane with four implementors all live in one program:
+//
+//     a site that sees 1 of 4    1105 ns/pass    the direct-read row
+//     a site that sees all 4     6519 ns/pass
+//
+// So "how many classes implement this interface" decides nothing. "How many
+// concrete types arrive at *this site*" decides everything, and an interface
+// with four implementors is free at every site that sees one.
+//
+// Measured here, across `fs`, `http`, `net`, `stream`, `dgram` and `process`:
+//
+//     277 refusal lines
+//      63 distinct sites
+//      63 distinct (site, arriving type) pairs
+//
+// **Every site sees exactly one concrete type. Not one is polymorphic.**
+//
+// Which settles the design by removing the question: at every site in this
+// corpus an interface and a specialised copy are *both* on the monomorphic row,
+// so dispatch cost does not choose between them. Specialisation wins on the
+// other lane's terms instead -- C has no interface mechanism at all, and a
+// pointer read through a known layout needs no guard to elide.
+//
+// The first version of this count keyed sites on a path fragment a loose regex
+// captured, which would merge two files sharing a basename. It gave 60 sites and
+// the same conclusion; it is recorded because the conclusion being unchanged is
+// luck, not evidence, and a number that decides a design was worth re-taking
+// with full paths.
+//
+// # The implementor counts, kept because they are a lower bound and were the
+// # wrong question
+//
 // **This is a lower bound**, and the bound matters here. It counts distinct
 // `from` types per `to` in the refusal messages, so it sees implementors that
 // were assigned at a cast the compiler *refused*. A class satisfying an
