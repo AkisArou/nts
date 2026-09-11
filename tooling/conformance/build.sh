@@ -140,6 +140,16 @@ shared_c=()
 while IFS= read -r -d '' source; do
   shared_c+=("$source")
 done < <(find "$root/runtime/node/internal" -maxdepth 1 -name '*.c' -print0)
+# Where node's vendored compression headers live, for the sibling compile and the
+# link both. `zlib.c` includes <zlib.h>, <brotli/*.h>, <zstd.h> and <zstd_errors.h>
+# and would otherwise resolve every one of them against /usr/include.
+node_deps="$root/third_party/node/deps"
+vendored_includes=(
+  -I"$node_deps/zlib"
+  -I"$node_deps/brotli/c/include"
+  -I"$node_deps/zstd/lib"
+)
+
 
 # And every *other* module's C, because a module's TypeScript imports other
 # modules' TypeScript and inherits their `declare function`s with it.
@@ -173,7 +183,7 @@ while IFS= read -r -d '' source; do
   clang -std=c11 -O2 -D_GNU_SOURCE -fPIC "${binding_header_flags[@]}" \
     -I"$napi" -I"$uv_include" -I"$(dirname "$source")" \
     -I"$root/runtime/node/internal" -I"$root/runtime/c" \
-    -I"$root/third_party/node/deps/zlib" \
+    "${vendored_includes[@]}" \
     -c "$source" -o "$object" > /dev/null 2>&1 || true
 done < <(find "$root/runtime/node" -mindepth 2 -maxdepth 2 -name '*.c' -print0)
 sibling_archive=()
@@ -200,34 +210,74 @@ for header in "${binding_headers[@]}"; do
   binding_header_flags+=(-include "$header")
 done
 
-# **Node's own zlib, not the machine's.** `process.versions.zlib` is
-# `1.3.2.1-motley` -- Chromium's fork, which node vendors in `deps/zlib` -- and
-# this linked the system `-lz`, 1.3.2 on this machine. The `zlib` corpus compares
-# *compressed bytes* byte-for-byte against node's output, deliberately, because
-# two correct implementations can disagree on bytes. It reported 0 divergences,
-# so the two agreed at the settings exercised; that was incidental parity between
-# two versions, not a property of the build, and a system zlib bump would have
-# produced divergences that were nobody's defect.
+# **Node's compression libraries, not the machine's.** `process.versions` names
+# a zlib, a brotli and a zstd, and node vendors all three under `deps`. This
+# linked the system copies: zlib 1.3.2 against node's `1.3.2.1-motley` (Chromium's
+# fork), and whatever `-lbrotlienc`/`-lzstd` happened to be installed.
 #
-# Compiled from source rather than linked as a library: node ships no prebuilt
-# object, and the SIMD translation units are guarded by defines this build does
-# not set, so they compile to nothing. `deflate.c` calls `cpu_check_features()`
-# unconditionally, so `cpu_features.c` is not optional.
-node_zlib="$root/third_party/node/deps/zlib"
+# It matters here more than it usually would, because the `zlib` corpus compares
+# **compressed bytes** byte-for-byte against node's output, deliberately -- two
+# correct implementations can disagree on bytes. It reported 0 divergences, so
+# the versions agreed at the settings exercised; that was incidental parity
+# between two builds, not a property of this one, and a system package bump would
+# have produced divergences that were nobody's defect.
+#
+# Compiled from source rather than linked, because node ships no prebuilt object.
 module_libraries=()
 module_extra_c=()
+module_extra_flags=()
+
+# Relative `.c` paths from a gyp source list. Node maintains these lists as it
+# bumps each dependency, so deriving them beats copying them: `zstd.gyp` names 26
+# of the 40 `.c` files under `lib` -- `legacy`, `deprecated` and `dictBuilder`
+# are present in the tree and not built -- and `brotli.gyp` names 35 of 36,
+# leaving out `c/tools/brotli.c`, which is a command-line program with a `main`.
+# Both files quote their sources and quote nothing else ending in `.c`, so this
+# needs no gyp parser; a `.gyp` that grew one would show up as a link error
+# naming a symbol, not as silence.
+gyp_sources() { grep -oE "'[^']+\.c'" "$1" | tr -d "'"; }
+
+add_vendored() {
+  local dir="$1" rel
+  while IFS= read -r rel; do module_extra_c+=("$dir/$rel"); done \
+    < <(gyp_sources "$dir/$(basename "$dir").gyp")
+}
+
 case "$module" in
   zlib)
-    module_libraries=(-lbrotlienc -lbrotlidec -lzstd)
-    if [ -f "$node_zlib/deflate.c" ]; then
+    if [ -f "$node_deps/zlib/deflate.c" ] \
+      && [ -f "$node_deps/brotli/brotli.gyp" ] \
+      && [ -f "$node_deps/zstd/zstd.gyp" ]; then
+      # zlib has no gyp source list in the checkout; every `.c` at its top level
+      # is built. The SIMD translation units are guarded by defines this build
+      # does not set, so they compile to nothing, and `deflate.c` calls
+      # `cpu_check_features()` unconditionally, so `cpu_features.c` is required.
       while IFS= read -r -d '' zsrc; do module_extra_c+=("$zsrc"); done \
-        < <(find "$node_zlib" -maxdepth 1 -name '*.c' -print0)
+        < <(find "$node_deps/zlib" -maxdepth 1 -name '*.c' -print0)
+      add_vendored "$node_deps/brotli"
+      add_vendored "$node_deps/zstd"
+      # Node's own defines, from the two gyp files, carried across because node
+      # sets them rather than because each was shown to be required here.
+      # `XXH_NAMESPACE` was *tested*: node's zstd sources build and round-trip
+      # with it, without it, and with an unrelated define in its place, so it is
+      # symbol hygiene -- it keeps zstd's xxhash from colliding with another
+      # copy in the same binary -- and not a correctness requirement. A comment
+      # here first claimed the opposite. `ZSTD_DISABLE_ASM` is node's choice
+      # too, with a TODO beside it: `huf_decompress_amd64.S` is in the tree and
+      # node does not assemble it.
+      module_extra_flags=(
+        -DOS_LINUX
+        -DXXH_NAMESPACE=ZSTD_
+        -DZSTD_MULTITHREAD
+        -DZSTD_DISABLE_ASM
+      )
+      module_libraries=(-lm -pthread)
     else
       # Named rather than silently falling back: a missing vendored tree would
-      # otherwise link the system zlib again and the parity would go back to
-      # being about this machine.
-      echo "note: $node_zlib absent -- linking the system zlib instead" >&2
-      module_libraries=(-lz "${module_libraries[@]}")
+      # otherwise link the machine's libraries again and the parity would go
+      # back to being about this machine.
+      echo "note: $node_deps is missing a vendored tree -- linking the system compression libraries instead" >&2
+      module_libraries=(-lz -lbrotlienc -lbrotlidec -lzstd)
     fi
     ;;
 esac
@@ -278,7 +328,7 @@ clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared -fvisibility=hidden \
   "${rc_defines[@]}" \
   "${binding_header_flags[@]}" \
   -I"$work" -I"$napi" -I"$uv_include" -I"$src" -I"$root/runtime/node/internal" \
-  -I"$node_zlib" \
+  "${vendored_includes[@]}" "${module_extra_flags[@]}" \
   -o "$out/$module.node" \
   "${generated_c[@]}" \
   "${module_c[@]}" "${shared_c[@]}" "${sibling_archive[@]}" \

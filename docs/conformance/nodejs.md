@@ -21289,6 +21289,65 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## brotli and zstd join zlib on node's sources, and nothing observes it yet
+
+`build.sh` now compiles all three of node's vendored compression libraries into
+the `zlib` addon instead of linking the machine's. The source lists come from
+node's own `brotli.gyp` and `zstd.gyp` rather than a hand-copy, because node
+maintains them across dependency bumps: `zstd.gyp` names 26 of the 40 `.c` files
+under `lib` -- `legacy`, `deprecated` and `dictBuilder` are in the tree and not
+built -- and `brotli.gyp` names 35 of 36, leaving out `c/tools/brotli.c`, which
+is a program with a `main`.
+
+    ldd zlib.node   before: libz, libbrotlienc, libbrotlidec, libzstd
+                     after: libm, libuv, libc
+    nm              175 ZSTD_* and 130 Brotli* functions defined in the addon
+    ZSTD_versionNumber()  10507, which is node's 1.5.7
+
+### What it buys today is nothing, and the versions say why
+
+    node    zlib 1.3.2.1-motley-42c2f19   brotli 1.2.0   zstd 1.5.7
+    system  zlib 1.3.2                    brotli 1.2.0   zstd 1.5.7
+
+Only zlib differed. brotli and zstd already matched on this machine, so this
+change is **preventive**: it removes a dependence on package versions that happen
+to coincide today, which is the same "incidental parity" the zlib entry warned
+about, caught before it produced a divergence nobody owned.
+
+### And the engine is compared nowhere at all
+
+Worth stating plainly, because the vendoring reads like a fix and is not one.
+The `zlib` corpus compares compressed bytes byte-for-byte, and there are two
+lanes to run it on:
+
+- **interpreted** -- `bindings.node.mjs` imports `node:zlib`, so our TypeScript
+  drives node's engine. Node against node, for the bytes.
+- **compiled** -- the addon publishes `constants` and `codes`. Nothing else.
+
+`differential-addon.mjs` says so itself rather than reporting a green zero:
+
+    NOTHING WAS COMPARED. The addon publishes none of the names this
+    corpus calls, so "0 divergence(s)" above is a blank and not a result.
+
+The cause is depth, not the binding. `refusal-census.mjs zlib` reads **352
+distinct named things behind 656 sites, with 242 more refusing only because
+something they call was refused** -- led by field-layout differences across
+unions (22), per-instance method assignment (17), `.then` on a promise (15) and
+functions returning iterators (15). 66 exports the wrapper declined outright.
+
+So: node's zlib is in the addon, and the addon cannot yet call it. The vendoring
+is a precondition for the byte comparison meaning something, not the thing that
+makes it mean something.
+
+### A comment of mine that the control refuted
+
+The first version of this block asserted `XXH_NAMESPACE=ZSTD_` was load-bearing
+-- "zstd's sources are compiled expecting the renamed ones". Built node's 26
+zstd sources three ways -- with the define, without it, and with an unrelated
+define in its place -- and all three compress and decompress identically. It is
+symbol hygiene against a second xxhash in the same binary. The comment now says
+that, and says it was wrong.
+
 ## `node:dns` exists, and the module-count model of value does not
 
 The twenty-third module. `lookup`, `lookupService`, the result-order pair, the
