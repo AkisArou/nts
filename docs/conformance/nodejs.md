@@ -21331,6 +21331,66 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## `dns` is green on both lanes with 0 hollow
+
+    interpreted            1 passed, 0 failed, 10 skipped, 20 not applicable
+    interpreted sabotage   0 passed, 1 failed
+    compiled               1 passed, 0 failed, 10 skipped, 20 not applicable
+    compiled sabotage      0 passed, 1 failed
+
+The compiled lane read `0 passed` all day, identical under `--sabotage`, which is
+the definition of hollow. What changed is `shape.mjs`, and it is worth being
+precise about what that does and does not mean.
+
+### The shaping gap
+
+`dns.promises` is built by the TypeScript, so on the interpreted lane it is
+already there. On the compiled lane the backend declines the whole namespace --
+`promiseLookup` returns `Promise<an object>` and the wrapper cannot carry one out,
+which is now `blockers/a-promise-returned-across-the-wrapper`. So **26 names that
+did cross had nowhere to live**: the 24 constants and the two result-order
+functions, all present in the addon, with no `dns.promises` to reach them through.
+
+`shape.mjs` now assembles it when the backend could not, which is the same
+mechanism `path/shape.mjs` uses to build `path.posix` out of flat exports.
+
+### What it is not
+
+It is **shaping, not stubbing**. Every member is a value the lane actually
+produced. `lookup` and `lookupService` are deliberately *not* copied in -- the
+promises namespace is not the callback one, and a callback function reached
+through it would misreport its own signature. On the compiled lane
+`dns.promises.lookup` is `undefined`, which is truthful and is exactly what
+`dns.lookup` already is there.
+
+The passing file, `test-dns-promises-exists.js`, asserts `dnsPromises ===
+dns.promises` and then compares 24 constants across the two. On the compiled lane
+those constants come out of the addon. Blank the module and the test fails, which
+is what the sabotage row says.
+
+**What it does not prove:** that resolution works on the compiled lane. `lookup`
+does not compile there and nothing in this makes it. The honest reading of
+`1 passed` is "the constants crossed and the subpath exists", and the 10 skips and
+20 not-applicable rows are unchanged.
+
+### And a real defect, found on the way
+
+`surface-diff.mjs` had never been run against `dns`. It reads the **addon**, not
+the TypeScript, and it found:
+
+    DIFFERS  ADDRCONFIG: ours 1024, node 32
+    DIFFERS  ALL:        ours 256,  node 16
+
+Those are `AI_NUMERICSERV` and `AI_IDN`. `dns.c` assigns `hints` straight to
+`ai_flags`, so `lookup(host, { hints: dns.ADDRCONFIG })` was asking for a numeric
+service and `dns.ALL` for internationalised domain names. The platform's real
+values are 32 and 16, confirmed by compiling against `<netdb.h>` rather than
+trusting node's numbers. Fixed; `surface-diff` now reads **0 differing**.
+
+It also cost a confused minute: the first re-run still showed 1024, because the
+instrument loads `target/node/dns.node` and that addon was stale. A source fix is
+invisible to a compiled-lane instrument until the addon is rebuilt.
+
 ## `asRequest` is two links, and removing the first publishes nothing
 
 Continuing the probe rather than stopping at the first answer. Made `emitInit`

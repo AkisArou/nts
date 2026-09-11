@@ -367,8 +367,14 @@ export const ADDRGETNETWORKPARAMS = "EADDRGETNETWORKPARAMS";
 export const CANCELLED = "ECANCELLED";
 
 // `getaddrinfo` hint flags.
-export const ADDRCONFIG = 1024;
-export const ALL = 256;
+// The platform's own `AI_*`, because `dns.c` assigns `hints` straight to
+// `ai_flags`. These were 1024 and 256, which are `AI_NUMERICSERV` and `AI_IDN` --
+// so `lookup(host, { hints: dns.ADDRCONFIG })` asked for a numeric service and
+// `dns.ALL` asked for IDN. Found by `surface-diff.mjs`, which compares published
+// values against node and had never been run on this module; node publishes 32,
+// 16 and 8, and node is right because these are the host's numbers.
+export const ADDRCONFIG = 32;
+export const ALL = 16;
 export const V4MAPPED = 8;
 
 // # `dns.promises`
