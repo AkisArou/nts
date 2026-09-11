@@ -101,12 +101,28 @@ has two orders of magnitude spare.
 `blockers/a-structural-cast-that-is-not-a-prefix` keeps two shapes. An array of
 the interface type **refuses**, by name.
 
-A **field** of the interface type does not, and **segfaults**. `class Holder {
-held: Named }` storing a `Thing` lowers, emits, builds and dies with signal 11 —
-confirmed pre-existing under the pinned compiler at `a2a499b4`. `coerce` asks
-`laid_out_as_a_prefix` on the way into a parameter and the field store does not,
-so the guard that made one safe was never asked about the other. That wants the
-refusal first, which turns a crash into a message.
+A **field** of the interface type did not, and **segfaulted** — `class Holder {
+held: Named }` storing a `Thing` lowered, emitted, built and died with signal 11,
+confirmed pre-existing under the pinned compiler at `a2a499b4`.
+
+**The guard was there the whole time and one call discarded it.**
+`coerce_to_slot` ended in
+
+    self.coerce(value, &want, id).unwrap_or(value)
+
+and `coerce` answers `Err` for exactly this cast. Swallowing it wrote the
+*uncoerced* value into the slot. The identical cast into a **parameter** was
+refused by name all along, because `coerce_to_parameter` propagates what this one
+dropped — so the compiler knew, said so on one path, and was silent on the other
+for as long as both have existed.
+
+One `unwrap_or`, eight call sites made fallible, and a crash became a message.
+Nothing regressed: 54 lowered in the corpus, 179 of 179 examples, 24 of 24
+addons, 158 of 158 fixtures.
+
+`unwrap_or` on a `Result` whose `Err` is a *refusal* is the shape to look for.
+It reads as a default and it is a decision to emit something the compiler has
+just said it cannot represent.
 
 ## Not transitive, and what that does to the counts
 

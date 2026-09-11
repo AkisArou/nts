@@ -9180,7 +9180,7 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
         let absent = self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone());
-        self.write_place(id, &place, absent);
+        self.write_place(id, &place, absent)?;
         Ok(self.push(OpKind::ConstBool(true), HirType::Bool, origin))
     }
 
@@ -9390,7 +9390,7 @@ impl<'a> FuncBuilder<'a> {
             let want = self.module.types[global as usize].clone();
             let value = self.lower_expecting(initializer, &want)?;
             let value = self.coerce(value, &want, declaration)?;
-            self.write_place(declaration, &Place::Global(global), value);
+            self.write_place(declaration, &Place::Global(global), value)?;
         }
         Ok(())
     }
@@ -9432,7 +9432,7 @@ impl<'a> FuncBuilder<'a> {
             let want = self.module.types[global as usize].clone();
             let value = self.lower_expecting(initializer, &want)?;
             let value = self.coerce(value, &want, member)?;
-            self.write_place(member, &Place::Global(global), value);
+            self.write_place(member, &Place::Global(global), value)?;
         }
         Ok(())
     }
@@ -16488,7 +16488,7 @@ impl<'a> FuncBuilder<'a> {
         // then the index, then the value, and JavaScript says so.
         let place = self.place_of(target)?;
         let value = self.lower_expression(source)?;
-        self.write_place(id, &place, value);
+        self.write_place(id, &place, value)?;
         Ok(value)
     }
 
@@ -16613,7 +16613,7 @@ impl<'a> FuncBuilder<'a> {
             };
 
             let place = self.place_of(destination)?;
-            self.write_place(destination, &place, read);
+            self.write_place(destination, &place, read)?;
         }
         Ok(())
     }
@@ -17191,14 +17191,33 @@ impl<'a> FuncBuilder<'a> {
     /// the reasons merged, the next place to arrive would join a list instead
     /// of being decided about.
     #[allow(clippy::match_same_arms)]
-    fn coerce_to_slot(&mut self, id: NodeId, place: &Place, value: ValueId) -> ValueId {
+    /// The value a store writes, at the slot's width.
+    ///
+    /// **Fallible, and it was not.** This ended in
+    /// `self.coerce(value, &want, id).unwrap_or(value)`, which discarded the one
+    /// answer that matters: `coerce` returns `Err` when it cannot represent the
+    /// conversion, and swallowing that wrote the *uncoerced* value into the
+    /// slot.
+    ///
+    /// For a field of a structural type that is the segfault. `class Holder {
+    /// held: Named }` storing a `Thing` whose layout is not a prefix put a
+    /// `Thing *` in a `Named *` slot, every later read was at the wrong offset,
+    /// and the program died with signal 11 having refused nothing. The identical
+    /// cast *into a parameter* was refused by name the whole time, because
+    /// `coerce_to_parameter` propagates what this one dropped.
+    fn coerce_to_slot(
+        &mut self,
+        id: NodeId,
+        place: &Place,
+        value: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
         let want = match *place {
-            Place::Element { array, .. } => return self.coerce_element(id, array, value),
+            Place::Element { array, .. } => return Ok(self.coerce_element(id, array, value)),
             Place::Field { object, field } => {
                 let HirType::Managed(ManagedType::Object(ty)) =
                     self.values[object.0 as usize].ty.clone()
                 else {
-                    return value;
+                    return Ok(value);
                 };
                 match self.layout_of(id, ty) {
                     Ok(layout) => layout
@@ -17220,16 +17239,22 @@ impl<'a> FuncBuilder<'a> {
             Place::Setter { .. } => None,
         };
         let Some(want) = want else {
-            return value;
+            return Ok(value);
         };
         // Unchanged where there is nothing to do, which is every store in a
-        // program with no erased values in it.
-        self.coerce(value, &want, id).unwrap_or(value)
+        // program with no erased values in it -- `coerce` answers `Ok(value)`
+        // for that and an `Err` only where it genuinely cannot get there.
+        self.coerce(value, &want, id)
     }
 
-    fn write_place(&mut self, id: NodeId, place: &Place, value: ValueId) {
+    fn write_place(
+        &mut self,
+        id: NodeId,
+        place: &Place,
+        value: ValueId,
+    ) -> Result<(), Diagnostic> {
         let origin = self.origin(id);
-        let value = self.coerce_to_slot(id, place, value);
+        let value = self.coerce_to_slot(id, place, value)?;
         match *place {
             Place::Field { object, field } => {
                 self.push(
@@ -17304,6 +17329,7 @@ impl<'a> FuncBuilder<'a> {
                 }
             }
         }
+        Ok(())
     }
 
     fn push_bitwise(
@@ -17385,7 +17411,7 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin,
         );
-        self.write_place(id, &place, stepped);
+        self.write_place(id, &place, stepped)?;
         Ok((current, stepped))
     }
 
@@ -22367,7 +22393,7 @@ impl<'a> FuncBuilder<'a> {
                 // coerces to the type of the whole thing. Those are the same
                 // value at two representations, and conflating them would
                 // store a `double` into an erased field.
-                self.write_place(id, &place, value);
+                self.write_place(id, &place, value)?;
                 Ok(value)
             }
             Branch::Present(value) => self.narrowed(id, value),
@@ -22446,7 +22472,7 @@ impl<'a> FuncBuilder<'a> {
                 }
             }
         };
-        self.write_place(id, &place, updated);
+        self.write_place(id, &place, updated)?;
         Ok(updated)
     }
 

@@ -80,9 +80,8 @@ export function inAnArray(n: number): number {
 }
 
 /**
- * **Under test and unguarded: this lowers and segfaults.** See the header. It is
- * here so the construct is written down beside the one that refuses, not because
- * this file can assert what it does.
+ * Under test: the store into an interface-typed field. **Refused since the
+ * `unwrap_or` went**; it lowered, built and segfaulted before that.
  */
 class Holder {
   held: Named;
