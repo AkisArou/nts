@@ -21289,6 +21289,73 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## The compiled axis has no head: 265 of 290 chokepoints hold one export each
+
+`export-reach.mjs`, written to answer the question the goal turns on and the two
+existing instruments do not. `blocker-reach.mjs` counts how many **modules** a
+refusal shape stops; `cascade-reach.mjs` names, for **one** module, which export
+sits behind which refusal. Neither says which single fix would publish the most
+of the 432 names the compiled lane is missing.
+
+It runs `emit-c --napi` over all 23 modules, walks the `NTS1003` chain from each
+declined export back to the function refused on its own account, and sums.
+
+    23 module(s), 488 declined export(s)
+    360 attributed to a terminal function by chain, 128 not
+
+    top 1     20   6%     asRequest (fs)
+    top 5     48  13%
+    top 10    65  18%
+    top 25    95  26%
+
+    265 of 290 terminals hold exactly one export
+
+**There is no head.** Fixing the single largest chokepoint in the profile
+publishes twenty names. A quarter of the attributed total needs twenty-five
+separate fixes. This is the shape of the answer to "breadth against depth": the
+compiled axis is not one or two lowering fixes away from moving substantially,
+and any plan that assumes a small number of high-leverage fixes is planning
+against a distribution that does not exist.
+
+### The generic rest is worth 27, not the axis
+
+Checking every one of the 290 terminals' signatures rather than the printed top
+25: **27 exports sit behind a generic rest parameter**, across `asRequest` (20),
+`nextTick`, `once`, `write`, `setImmediate`, `setInterval`, `setTimeout` and
+`setUnrefTimeout`. Real, worth having, and 7% of the attributed total.
+
+### `asRequest` emits no diagnostic at all
+
+The largest chokepoint in the profile is named as refused by twenty `NTS1003`
+lines -- "`close` cannot be compiled because it calls `asRequest`" -- and there
+is **no `NTS1001` for `asRequest` anywhere in the output**. It is a generic
+function and the refusal of its instantiation is never located. Every census
+built by ranking diagnostic messages was blind to it, because it produces none.
+
+Its signature is `asRequest<Arguments extends unknown[]>(callback: ((...args:
+Arguments) => void) | undefined, ...)`, which is the same shape as `nextTick`'s
+and as `blockers/a-generic-rest-forwarded-to-its-callback`.
+
+### Three mistakes the instrument's own construction made
+
+Worth recording because each is a rule from the goal text, broken in a new place.
+
+**Attribution by adjacency.** The header now forbids it, and the reason is that I
+did it by hand a few hours earlier and told another session the wrong blocker.
+Only edges `NTS1003` states outright are used, and anything unfollowable is
+printed as unattributed.
+
+**An export with no outgoing edge is its own terminal, not a failure.** The first
+version counted those as unattributable and reported 39 of `zlib`'s 66 as
+unanswerable. That was the instrument describing its own bug.
+
+**A count over a population I had not looked at.** The pretty output stops at 25
+terminals, and my first signature analysis parsed that section -- reading the
+indented `N module(s): ...` continuation lines as data rows. It gave "20 exports
+behind a generic rest" over a population of roughly fifteen real terminals and as
+many pieces of nonsense. The real figure over all 290 is 27. The instrument now
+prints one machine-readable row per terminal, with no continuations.
+
 ## A stack fix that shipped without typechecking, and then cost five functions
 
 Two mistakes in one change, both caught by finally running the thing that asks.
