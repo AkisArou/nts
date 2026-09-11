@@ -2297,19 +2297,25 @@ fn emit_object_descriptors(
         } else {
             "NTS_KIND_OBJECT"
         };
-        writer.line(
-            origin,
-            format!(
-                "static const NtsDescriptor nts_desc_{name} = \
-                 {{ {kind}, sizeof({name}), {}u, {cyclic}u, {offsets}, {methods}, \"{}\", \
-                 {}u, {erased_offsets}, NTS_ARRAY_UNKNOWN }};",
-                references.len(),
-                layout.name,
-                erased.len()
-            ),
+        let shared = format!(
+            "{kind}, sizeof({name}), {}u, {cyclic}u, {offsets}, {methods}",
+            references.len()
         );
+        let tail = format!("{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN", erased.len());
+        emit_layout_descriptors(writer, origin, program, layout, &name, (&shared, &tail));
         if published.contains(&index) {
-            writer.line(origin, construction_hole(&name));
+            // **The published class's identity, not the shape's.** A layout is
+            // named after the class the wrapper publishes, so that class is the
+            // one this hole builds -- and where something shares the shape, the
+            // shape's descriptor would hand the wrapper an object that answers
+            // `instanceof` as whichever class was laid out first.
+            //
+            // The second place in this emitter that names a descriptor, and it
+            // was found because the JVM lane went looking for the same thing on
+            // their side after their multi-member `instanceof` arm turned out
+            // to have the defect their single-member arm had just lost.
+            let descriptor = published_descriptor(program, layout);
+            writer.line(origin, construction_hole(&name, &descriptor));
         }
 
         // A named function used as a value is one object, so it is emitted
@@ -2337,8 +2343,8 @@ fn emit_object_descriptors(
 /// and a caller holding one of these can allocate and nothing else. That keeps
 /// the rule which refuses object *parameters* at the boundary -- `program.c`
 /// keeps its own layouts -- while letting a wrapper build the one thing it must.
-fn construction_hole(name: &str) -> String {
-    format!("NtsHeader *nts_construct_{name}(void) {{ return nts_object_new(&nts_desc_{name}); }}")
+fn construction_hole(name: &str, descriptor: &str) -> String {
+    format!("NtsHeader *nts_construct_{name}(void) {{ return nts_object_new(&{descriptor}); }}")
 }
 
 /// Whether anything in the program refers to this layout's single instance.
@@ -2501,6 +2507,9 @@ fn instance_of(
     context: &Context<'_>,
 ) -> String {
     let subject = value_name(operand);
+    // The class is carried alongside its layout, because the descriptor now
+    // depends on *which* class is being asked about and not only on the shape
+    // it shares. See `descriptor_for`.
     let tests: Vec<String> = classes
         .iter()
         .filter_map(|class| {
@@ -2509,11 +2518,12 @@ fn instance_of(
                 .layouts
                 .iter()
                 .find(|layout| layout.types.contains(class))
+                .map(|layout| (layout, *class))
         })
-        .map(|layout| {
+        .map(|(layout, class)| {
             format!(
-                "nts_is_class({subject}, &nts_desc_{})",
-                object_type_name(layout)
+                "nts_is_class({subject}, &{})",
+                descriptor_for(context.program, layout, Some(class))
             )
         })
         .collect();
@@ -2521,6 +2531,175 @@ fn instance_of(
         return format!("{name} = false;");
     }
     format!("{name} = ({});", tests.join(" || "))
+}
+
+/// **One constant per class that shares this shape.**
+///
+/// Identical in every field a descriptor holds -- kind, size, references,
+/// offsets, cyclic, table -- and differing in their **address**, which is what
+/// `nts_is_class` compares, and in the name each reports as its own.
+///
+/// Emitted only where something actually shares, so a program of ordinary
+/// classes gains nothing and pays nothing. Twelve classes in five groups across
+/// all 22 `runtime/node` modules is the whole of it.
+fn emit_layout_descriptors(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    shape: &str,
+    body: (&str, &str),
+) {
+    let (shared, tail) = body;
+    // The shape's own, which every type in the layout that is not a class
+    // answers to.
+    writer.line(
+        origin,
+        format!(
+            "static const NtsDescriptor nts_desc_{shape} = {{ {shared}, \"{}\", {tail} }};",
+            layout.name
+        ),
+    );
+    let sharing = identities_sharing(program, layout);
+    if sharing.len() < 2 {
+        return;
+    }
+    for class in &sharing {
+        writer.line(
+            origin,
+            format!(
+                "static const NtsDescriptor nts_desc_{shape}__{} = {{ {shared}, \"{}\", {tail} }};",
+                identity_suffix(&sharing, class),
+                class.name,
+            ),
+        );
+    }
+}
+
+/// `new C(...)`, on the heap or in the frame.
+///
+/// **The descriptor is the class being constructed, not the shape it shares.**
+/// The two differ only where several classes have one layout, and there the
+/// shape's descriptor would make every one of them answer to the first class's
+/// name -- which is what made `new B() instanceof A` true.
+fn allocate_object(
+    writer: &mut CodeWriter,
+    op: &nts_core::hir::Op,
+    name: &str,
+    frame: bool,
+    context: &Context<'_>,
+) -> Result<String, Diagnostic> {
+    let layout = layout_of(context.program, &op.ty, &op.origin)?;
+    let type_name = object_type_name(layout);
+    let descriptor = match &op.ty {
+        HirType::Managed(ManagedType::Object(ty)) => {
+            descriptor_for(context.program, layout, Some(*ty))
+        }
+        _ => descriptor_for(context.program, layout, None),
+    };
+    if frame {
+        start_frame_object(writer, &op.origin, name, &descriptor, layout);
+        return Ok(format!("{name} = &{name}_frame;"));
+    }
+    Ok(format!(
+        "{name} = ({type_name} *)nts_object_new(&{descriptor});"
+    ))
+}
+
+/// The descriptor the napi wrapper's construction hole should allocate with.
+///
+/// A layout is named after the class the wrapper publishes, so that class is
+/// the one the hole builds -- and where something shares the shape, the shape's
+/// descriptor would hand the wrapper an object answering `instanceof` as
+/// whichever class was laid out first.
+fn published_descriptor(program: &Program, layout: &nts_core::hir::Layout) -> String {
+    // **Through `descriptor_for`, not beside it.** Spelling the name here
+    // instead named `nts_desc_NtsObj_Foo__Foo` for a layout nothing shares --
+    // where no such constant is emitted, because a lone class needs no identity
+    // of its own. Eight corpus cases stopped compiling with `use of undeclared
+    // identifier`, and the reference and the definition disagreeing is the
+    // third time tonight one fact had two derivations. This one I introduced
+    // while fixing the second.
+    let ty = identities_sharing(program, layout)
+        .iter()
+        .find(|class| class.name == layout.name)
+        .and_then(|class| class.types.first().copied());
+    descriptor_for(program, layout, ty)
+}
+
+/// The spelling of one class's descriptor within its shape.
+///
+/// The declared name, and the **symbol** as well when two classes of one name
+/// share a layout -- two modules may each declare a `ProtocolError`, and
+/// without this they emit one C symbol twice: `redefinition of
+/// 'nts_desc_NtsObj_RangeError__ProtocolError'`. The same rule
+/// `unshared_layout_name` uses for a layout, applied one level down.
+///
+/// Used by both the definition and every reference, so the two cannot drift.
+fn identity_suffix(
+    sharing: &[&nts_core::hir::ClassIdentity],
+    class: &nts_core::hir::ClassIdentity,
+) -> String {
+    let spelling = c_identifier(&class.name);
+    if sharing.iter().filter(|other| other.name == class.name).count() > 1 {
+        return format!("{spelling}_{}", class.symbol);
+    }
+    spelling
+}
+
+/// The classes that share one layout.
+///
+/// More than one means the layout is a *shape* several declarations have, which
+/// is required -- `readA(new B())` has to pass -- and which is why identity
+/// cannot be read off it. See `hir::Program::classes`.
+fn identities_sharing<'a>(
+    program: &'a Program,
+    layout: &nts_core::hir::Layout,
+) -> Vec<&'a nts_core::hir::ClassIdentity> {
+    let mut found: Vec<&nts_core::hir::ClassIdentity> = Vec::new();
+    for class in &program.classes {
+        if !class.types.iter().any(|ty| layout.types.contains(ty)) {
+            continue;
+        }
+        // One entry per class. A layout can be reached by more than one
+        // identity carrying the same symbol -- the same declaration laid out
+        // through two paths -- and emitting both is one C symbol defined twice.
+        if found.iter().any(|known| known.symbol == class.symbol) {
+            continue;
+        }
+        found.push(class);
+    }
+    found
+}
+
+/// The descriptor a value of this type carries.
+///
+/// The layout's own when nothing shares it, which is almost everything and
+/// costs nothing. Where two classes share the shape they get one constant each,
+/// pointing at the same struct and the same table and differing in the one
+/// thing `nts_is_class` reads: their **address**. That is the whole fix --
+/// `new B() instanceof A` compared one descriptor with itself and answered
+/// `true`.
+fn descriptor_for(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    ty: Option<nts_core::hir::ClassId>,
+) -> String {
+    let shape = object_type_name(layout);
+    let sharing = identities_sharing(program, layout);
+    if sharing.len() < 2 {
+        return format!("nts_desc_{shape}");
+    }
+    let Some(ty) = ty else {
+        return format!("nts_desc_{shape}");
+    };
+    match sharing.iter().find(|class| class.types.contains(&ty)) {
+        Some(class) => format!("nts_desc_{shape}__{}", identity_suffix(&sharing, class)),
+        // A type in a shared layout that is not one of the classes -- an
+        // interface or a literal's anonymous type. It has no identity of its
+        // own and the shape's descriptor is the honest answer.
+        None => format!("nts_desc_{shape}"),
+    }
 }
 
 fn object_type_name(layout: &nts_core::hir::Layout) -> String {
@@ -3596,12 +3775,12 @@ fn start_frame_object(
     writer: &mut CodeWriter,
     origin: &Origin,
     name: &str,
-    type_name: &str,
+    descriptor: &str,
     layout: &nts_core::hir::Layout,
 ) {
     writer.line(
         origin,
-        format!("{name}_frame.header.descriptor = &nts_desc_{type_name};"),
+        format!("{name}_frame.header.descriptor = &{descriptor};"),
     );
     writer.line(
         origin,
@@ -3677,14 +3856,7 @@ fn managed_op(
             format!("{name} = &{};", static_closure_name(layout))
         }
         OpKind::ObjectNew { frame } => {
-            let layout = layout_of(context.program, &op.ty, &op.origin)?;
-            let type_name = object_type_name(layout);
-            if *frame {
-                start_frame_object(writer, &op.origin, &name, &type_name, layout);
-                format!("{name} = &{name}_frame;")
-            } else {
-                format!("{name} = ({type_name} *)nts_object_new(&nts_desc_{type_name});")
-            }
+            allocate_object(writer, op, &name, *frame, context)?
         }
         OpKind::FieldGet { object, field } => {
             field_load(func, op, *object, *field, &name, context)?

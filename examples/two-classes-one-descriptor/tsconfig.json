@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.fixtures.json",
+  "files": [
+    "src/main.ts"
+  ]
+}

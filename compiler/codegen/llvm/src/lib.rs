@@ -478,6 +478,35 @@ const KIND_OBJECT: u32 = 2;
 /// compiler lays out as a struct.
 const KIND_TUPLE: u32 = 6;
 
+/// One global per class that shares a shape.
+///
+/// Identical in every field a descriptor holds and differing in its **address**,
+/// which is what `nts_is_class` compares, and in the name it reports as its own.
+/// See `descriptor_for`; the C backend emits the same pair and
+/// `examples/two-classes-one-descriptor` holds both lanes to it.
+fn class_descriptors(
+    out: &mut String,
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    tag: &str,
+    body: (&str, &str),
+) {
+    let (head, tail) = body;
+    let sharing = identities_sharing(program, layout);
+    if sharing.len() < 2 {
+        return;
+    }
+    for class in &sharing {
+        let spelling = format!("{tag}__{}", identity_suffix(&sharing, class));
+        name_constant(out, &spelling, &class.name);
+        let _ = writeln!(
+            out,
+            "@nts_desc_{spelling} = internal constant %NtsDescriptor \
+             {{ {head}, ptr @nts_name_{spelling}, {tail} }}"
+        );
+    }
+}
+
 /// A layout's name as a C string constant, terminator and all: the runtime
 /// prints it, so the NUL is part of the data rather than an artefact.
 fn name_constant(out: &mut String, tag: &str, name: &str) {
@@ -570,16 +599,21 @@ fn descriptors(program: &Program) -> String {
         }
         name_constant(&mut out, &tag, &layout.name);
         let is_cyclic = u32::from(cyclic.get(index).copied().unwrap_or(true));
-        let _ = writeln!(
-            out,
-            "@nts_desc_{tag} = internal constant %NtsDescriptor {{ i32 {}, \
-             i32 {}, i32 {}, i32 {is_cyclic}, {reference_table}, {methods}, \
-             ptr @nts_name_{tag}, i32 {}, {erased_table} }}",
+        // Everything that does not depend on *which* class, so the shape's
+        // global and the per-class ones cannot drift apart.
+        let head = format!(
+            "i32 {}, i32 {}, i32 {}, i32 {is_cyclic}, {reference_table}, {methods}",
             descriptor_kind(&layout.name),
             placed.size,
-            references.len(),
-            erased.len()
+            references.len()
         );
+        let tail = format!("i32 {}, {erased_table}", erased.len());
+        let _ = writeln!(
+            out,
+            "@nts_desc_{tag} = internal constant %NtsDescriptor \
+             {{ {head}, ptr @nts_name_{tag}, {tail} }}"
+        );
+        class_descriptors(&mut out, program, layout, &tag, (&head, &tail));
     }
     // One per scalar element type an array is made of. An array of references
     // uses the runtime's `nts_desc_ref`, declared above.
@@ -938,7 +972,7 @@ fn instance_of(
         let at = format!("{out}.c{}", answers.len());
         lines.push(format!(
             "{at} = call zeroext i1 @nts_is_class(i32 {out}.t, i64 {out}.p, ptr @nts_desc_{})",
-            descriptor_name(layout)
+            descriptor_for(program, layout, Some(*class))
         ));
         answers.push(at);
     }
@@ -954,6 +988,65 @@ fn instance_of(
     }
     lines.push(format!("{out} = add i1 {running}, 0"));
     lines.join("\n  ")
+}
+
+/// The classes that share one layout. See `hir::Program::classes`.
+fn identities_sharing<'a>(
+    program: &'a Program,
+    layout: &nts_core::hir::Layout,
+) -> Vec<&'a nts_core::hir::ClassIdentity> {
+    let mut found: Vec<&nts_core::hir::ClassIdentity> = Vec::new();
+    for class in &program.classes {
+        if !class.types.iter().any(|ty| layout.types.contains(ty)) {
+            continue;
+        }
+        if found.iter().any(|known| known.symbol == class.symbol) {
+            continue;
+        }
+        found.push(class);
+    }
+    found
+}
+
+/// One class's spelling within its shape, with the symbol where two classes of
+/// one name share a layout.
+fn identity_suffix(
+    sharing: &[&nts_core::hir::ClassIdentity],
+    class: &nts_core::hir::ClassIdentity,
+) -> String {
+    let spelling: String = class
+        .name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    if sharing.iter().filter(|other| other.name == class.name).count() > 1 {
+        return format!("{spelling}_{}", class.symbol);
+    }
+    spelling
+}
+
+/// The descriptor a value of this type carries.
+///
+/// The layout's own where nothing shares it. Where two classes share a shape
+/// they get one global each -- same size, same reference map, same table --
+/// differing in the **address**, which is what `nts_is_class` compares. The C
+/// backend does the same thing and `examples/two-classes-one-descriptor` holds
+/// both lanes to it.
+fn descriptor_for(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    ty: Option<nts_core::hir::ClassId>,
+) -> String {
+    let shape = descriptor_name(layout);
+    let sharing = identities_sharing(program, layout);
+    if sharing.len() < 2 {
+        return shape;
+    }
+    let Some(ty) = ty else { return shape };
+    match sharing.iter().find(|class| class.types.contains(&ty)) {
+        Some(class) => format!("{shape}__{}", identity_suffix(&sharing, class)),
+        None => shape,
+    }
 }
 
 fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
@@ -1848,7 +1941,8 @@ fn allocation(
                 .ok_or_else(|| refuse(func, "an allocation of a type with no layout"))?;
             let placed = nts_codegen_common::layout::place(&layout.fields)
                 .ok_or_else(|| refuse(func, "an object whose fields cannot be placed"))?;
-            let tag = descriptor_name(layout);
+            // The class being constructed, not the shape it shares.
+            let tag = descriptor_for(program, layout, Some(*id));
             if *frame {
                 frame_object(func, layout, &placed, &tag, &out)?
             } else {

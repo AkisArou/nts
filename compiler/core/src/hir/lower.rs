@@ -3767,6 +3767,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
 
     publish_surface(&mut lowered, snapshot, &shared.naming, &module, entry);
 
+    collect_class_identities(&mut lowered.program, snapshot);
     canonicalize_objects(&mut lowered.program);
     prune_class_tests(&mut lowered.program);
     // The conservation law, enforced rather than merely measured: every
@@ -3937,6 +3938,68 @@ fn prune_class_tests(program: &mut Program) {
             }
         }
     }
+}
+
+/// Record which classes each layout carries, once every layout is final.
+///
+/// **Per layout *and* symbol, not per symbol.** A generic class has one symbol
+/// and one instantiation per type argument, and those have genuinely different
+/// layouts -- `Fifo<A>` and `Fifo<B>` are different structs. Grouping by symbol
+/// alone put both in one identity, `canonicalize_objects` then rewrote both to
+/// the first one's type, and twelve modules stopped building with
+/// `incompatible pointer types assigning to 'NtsObj_Fifo_2538_ *' from
+/// 'NtsObj_Fifo_8539_ *'`.
+///
+/// So a symbol says *which class* and a layout says *which instantiation*, and
+/// an identity is both. Two ids of one instantiation still share an entry,
+/// which is the case it exists for.
+///
+/// After the merge rather than during it, because a type's final layout is not
+/// known until every builder has contributed -- a layout is discovered by
+/// whichever function first needs it.
+fn collect_class_identities(program: &mut Program, snapshot: &SemanticSnapshot) {
+    for layout in &program.layouts {
+        let mut here: Vec<super::ClassIdentity> = Vec::new();
+        for ty in &layout.types {
+            let Some(symbol) = class_symbol(snapshot, *ty) else {
+                continue;
+            };
+            match here.iter_mut().find(|class| class.symbol == symbol) {
+                Some(known) => known.types.push(*ty),
+                None => here.push(class_identity(snapshot, symbol, *ty)),
+            }
+        }
+        program.classes.extend(here);
+    }
+}
+
+/// One [`super::ClassIdentity`], named for the declaration rather than for the
+/// layout.
+///
+/// A layout's name is the *first* declared name to reach it, so a merged layout
+/// reports one class's name for all of them -- a second, quieter wrongness of
+/// the same merge, and this is where it stops.
+fn class_identity(snapshot: &SemanticSnapshot, symbol: u32, ty: TypeId) -> super::ClassIdentity {
+    let name = snapshot
+        .symbols
+        .get(symbol as usize)
+        .map_or_else(|| format!("Class{symbol}"), |declared| declared.name.clone());
+    super::ClassIdentity {
+        symbol,
+        name,
+        types: vec![ty],
+    }
+}
+
+/// The symbol of the class a type is the instance of, if it is one.
+fn class_symbol(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<u32> {
+    let record = snapshot.types.get(ty.0 as usize)?;
+    let symbol = record.symbol?;
+    let declared = snapshot.symbols.get(symbol.0 as usize)?;
+    declared
+        .flags
+        .contains(nts_semantic_schema::SymbolFlags::CLASS)
+        .then_some(symbol.0)
 }
 
 fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
@@ -4520,11 +4583,36 @@ fn relate_closures_to_signatures(
 /// Rewriting every object type to its layout's representative makes `HirType`
 /// equality mean what it should: *the same representation*.
 fn canonicalize_objects(program: &mut Program) {
-    let representatives: Vec<(Vec<TypeId>, TypeId)> = program
-        .layouts
+    // **A class is its own representative, and that is what keeps identity.**
+    //
+    // Rewriting to the *layout's* representative erased the one thing telling
+    // two same-shaped classes apart: `new B()` arrived at the backend as
+    // `Object(A)`, so it was allocated with A's descriptor and
+    // `new B() instanceof A` answered `true`. The checker had it right and this
+    // pass took it away -- `lower_new` pushes `Object(B)` and the printed HIR
+    // said `obj#1`.
+    //
+    // Per class rather than per layout costs nothing it was buying. Both ids
+    // resolve to the same layout and therefore the same C struct and the same
+    // JVM field table, so a value of one where the other is declared is a
+    // conversion between a type and itself, which `hir::simplify` drops. What
+    // it stops being is *equal*, and only `instanceof` and allocation ask that.
+    //
+    // Everything with no class -- an interface, a literal's anonymous type --
+    // still takes the layout's representative, which is the case the pass was
+    // written for: `return { x, y }` where `Point` is declared must not earn a
+    // conversion between two pointers to one struct.
+    let mut representatives: Vec<(Vec<TypeId>, TypeId)> = program
+        .classes
         .iter()
-        .filter_map(|layout| Some((layout.types.clone(), *layout.types.first()?)))
+        .filter_map(|class| Some((class.types.clone(), *class.types.first()?)))
         .collect();
+    representatives.extend(
+        program
+            .layouts
+            .iter()
+            .filter_map(|layout| Some((layout.types.clone(), *layout.types.first()?))),
+    );
 
     let canonical = |ty: &mut HirType| {
         if let HirType::Managed(ManagedType::Object(id)) = ty

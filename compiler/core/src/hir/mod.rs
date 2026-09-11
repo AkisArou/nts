@@ -1187,6 +1187,22 @@ pub struct Field {
     pub readonly: bool,
 }
 
+/// One declared class, and the schema types that are instances of it.
+///
+/// See [`Program::classes`] for why identity is recorded beside the layout
+/// rather than in it.
+#[derive(Debug, Clone)]
+pub struct ClassIdentity {
+    /// The declaring symbol. Two classes differ here and nowhere else that a
+    /// layout can see.
+    pub symbol: u32,
+    /// The declared name, for a descriptor's symbol and for what it reports
+    /// itself as.
+    pub name: String,
+    /// Every schema type that is an instance of this class.
+    pub types: Vec<TypeId>,
+}
+
 /// How one object type is laid out.
 ///
 /// The compiler's answer to "where is this field", decided once and consumed by
@@ -1575,6 +1591,29 @@ pub struct Program {
     pub funcs: Vec<Func>,
     /// Layouts for every object type the program uses.
     pub layouts: Vec<Layout>,
+    /// The distinct classes the program declares, and the types of each.
+    ///
+    /// **A layout is a shape and a class is an identity, and one field cannot
+    /// be both.** Two classes with identical fields share a layout, which is
+    /// required -- TypeScript is structurally typed, so `readA(new B())` has to
+    /// pass and `readonly.rs` asserts the sharing on purpose. But they then
+    /// shared a *descriptor*, `instance_of` compares descriptors, and
+    /// `new B() instanceof A` answered `true` with nothing refused.
+    ///
+    /// So the shape stays in [`Layout`] and the identity lives here. A backend
+    /// that needs "is this value an `A`" asks this; one that needs "how is it
+    /// laid out" asks the layout; and the two can disagree about how many there
+    /// are without either being wrong.
+    ///
+    /// Keyed by the declaring **symbol**, because that is the only thing that
+    /// separates two classes whose every other property is their shape. Two
+    /// type ids for one class share a symbol and are one entry -- that case is
+    /// what [`Layout::types`] being a list is for, and it is not this.
+    ///
+    /// Empty for a program with no classes, and an entry whose layout holds
+    /// only it needs no separate descriptor: the cost is one constant per class
+    /// that actually shares.
+    pub classes: Vec<ClassIdentity>,
     /// Variables declared at module scope, indexed by [`OpKind::GlobalGet`].
     pub globals: Vec<Global>,
     /// The memory discipline this program was lowered under.
