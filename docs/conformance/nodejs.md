@@ -21331,6 +21331,56 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## `tty` green with 0 hollow is unsatisfiable, and here is every file
+
+Not "low value" and not a judgment. Searched the **whole** of node's test tree,
+not `test/parallel`: twelve files mention `tty`, and none of them can pass here.
+
+    common/index.js                          the harness, not a test
+    parallel/test-net-access-byteswritten.js  excluded: language non-goal
+    parallel/test-util-styletext.js           excluded: the harness has no TTY fd
+    parallel/test-util-styletext-hex.js       PASSES ALREADY, in util's lane
+    parallel/test-tty-backwards-api.js        internalBinding('tty_wrap')
+    parallel/test-ttywrap-invalid-fd.js       internalBinding('uv')
+    sequential/test-util-debug.js             util's, and a different suite
+    pseudo-tty/test-tty-window-size.js        internalBinding('tty_wrap')
+    pseudo-tty/test-handle-wrap-hasref-tty.js needs a pty
+    pseudo-tty/test-tty-color-support.js      needs a pty
+    pseudo-tty/test-tty-stream-constructors.js needs a pty
+    pseudo-tty/test-tty-isatty.js             needs a pty
+
+### The seventeen-line one is the whole argument
+
+    const { isatty } = require('tty');
+    assert.ok(isatty(0), 'stdin reported to not be a tty, but it is');
+    assert.ok(isatty(1), ...);
+    assert.ok(isatty(2), ...);
+    assert.ok(!isatty(-1));  assert.ok(!isatty(55555));
+    assert.ok(!isatty(1.1)); assert.ok(!isatty('1'));
+
+The negative half would pass against a correct `isatty` today. The first three
+assert that the **test process's own stdio are a terminal**, and the conformance
+runner gives its children pipes. A perfect `tty` module fails this file, and
+correctly.
+
+### So the clause cannot be met by writing a module
+
+A module with zero passing tests reads `0 passed` on both lanes, and `0 passed`
+is identical to `0 passed` under `--sabotage`. **Hollow is the definition of a
+lane with nothing in it.** Building `tty` does not produce "green with 0 hollow";
+it produces a second hollow lane, which is the state `dns` was in all day and the
+thing the clause exists to prevent.
+
+What would change it is **a harness that allocates a pseudo-terminal** and runs a
+child with it on fds 0, 1 and 2. That is one capability in `run-one.mjs`, and it
+would make `test-tty-isatty.js`, `test-tty-color-support.js`,
+`test-tty-stream-constructors.js` and `test-handle-wrap-hasref-tty.js` reachable
+-- four files, and the only route by which `tty` is worth more than zero.
+
+That is a different piece of work from adding a module, it is the one the goal's
+`tty` clause actually requires, and naming it is the most useful thing that can be
+said about that half.
+
 ## `dns` is green on both lanes with 0 hollow
 
     interpreted            1 passed, 0 failed, 10 skipped, 20 not applicable
