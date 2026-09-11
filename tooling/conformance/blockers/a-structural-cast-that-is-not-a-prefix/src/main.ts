@@ -214,12 +214,21 @@
 // original.
 //
 // The fix is a general lookup at the top of `representation_of` -- *any* bound
-// type answers with what it is bound to. **Verified as a no-op today**: applied,
-// built, and the corpus is identical (54 lowered, 0 invalid HIR) because nothing
-// populates such a binding. It is not committed, because a one-line widening
-// with no user is dead weight and its blast radius -- every representation query
-// in the compiler -- should be reviewed against the pass that needs it, not
-// before.
+// type answers with what it is bound to. Applied, built, and the corpus is
+// identical: 54 lowered, 0 invalid HIR.
+//
+// **That measurement establishes nothing, and calling it "verified" was the
+// error.** A corpus identical afterwards is exactly what a *wrong* widening with
+// no user would also produce; the result cannot tell "correct and unused" from
+// "wrong and unused". All it shows is that nothing populates such a binding
+// today, which was known before running it. It is the agreeing-on-a-program-
+// that-was-not-the-benchmark shape, arriving as a green result rather than a red
+// one.
+//
+// It is not committed, because a one-line widening with no user is dead weight
+// and its blast radius -- every representation query in the compiler -- has to be
+// reviewed against the pass that needs it. The no-op run is not a substitute for
+// that review.
 //
 // # The pass-order obstacle, which is the other non-obvious part
 //
