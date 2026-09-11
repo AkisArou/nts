@@ -40,6 +40,56 @@
 // which is the worse of the two. The prefix case is genuinely a no-op and it is
 // the one that is admitted.
 //
+// # Measured on 2026-09-11, because "35 things" was a count of something else
+//
+// Per module, lines carrying this message:
+//
+//     fs 69    http 53    net 48    stream 46
+//
+// and in `fs` alone, **37 distinct `(from, to)` pairs over 35 distinct target
+// types**. The shape is uniform: a concrete class passed where a structural
+// interface is wanted --
+//
+//     a `Writable` where a `WritableImplementation` is wanted
+//     a `Readable` where an `ErrorOrDestroyStream` is wanted
+//     a `BigIntStats` where a `CpFileIdentity` is wanted
+//     a `UVExceptionError` where a `UVError` is wanted
+//
+// # The split that decides the design: 26 and 9
+//
+// Of the 35 target interfaces, **26 are only ever parameter types** and **9 are
+// also stored as a field** -- `WritableImplementation` is both, declared as a
+// parameter in four places and as `readonly stream: WritableImplementation` in
+// one.
+//
+// That matters because the two want different answers:
+//
+// **A parameter can be specialised.** `readName(v: Named)` called with a
+// `Thing` can be lowered as a copy of `readName` over `Thing`, reading `name`
+// at *Thing's* offset -- no cast, no indirection, and faster than either
+// alternative. The machinery exists: `Substitution` maps a `TypeId` to an
+// `HirType`, so binding `Named -> Object(Thing)` makes `represent(Named)`
+// answer Thing's layout inside that copy. It is what a generic function copy
+// already is, with the parameter's declared type standing in for a type
+// parameter. No backend changes at all.
+//
+// **A stored field cannot.** `readonly stream: WritableImplementation` has to
+// hold *some* representation, and which concrete class is in it is not a
+// property of the declaration. That needs an interface to have a
+// representation, which is the design step
+// `blockers/method-syntax-in-an-interface` names and which neither backend has
+// today.
+//
+// So the honest statement is that three quarters of this is a lowering change
+// and one quarter is a representation change, and they should not be attempted
+// as one thing. The specialisation half is also the half that can be measured
+// against node immediately, because it changes no ABI.
+//
+// Where specialisation cannot apply -- an argument whose concrete type is not
+// known at the call, which is exactly the case where the value came out of one
+// of those 9 fields -- the refusal stays, and it stays for a reason a reader
+// can act on rather than the same sentence for both halves.
+//
 // # What it does not cover
 //
 // The same question for an *erased* value reaching a concrete slot, which
