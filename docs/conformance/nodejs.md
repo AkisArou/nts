@@ -21331,6 +21331,41 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## The generic-rest fix landed and published nothing, which is now three for three
+
+Measured across all 23 modules, before and after, same instrument:
+
+    before (pre-landing pin)    23 module(s), 485 declined export(s)
+    after  (fix in the binary)  23 module(s), 485 declined export(s)
+
+`asRequest` -- the largest chokepoint in the profile and **exactly the shape the
+fix was aimed at**, a generic rest forwarded to a callback -- is still refused, by
+26 `NTS1003` lines, and `fs/src/request.ts` still holds **zero** `NTS1001`. It did
+not move and it still says nothing about why.
+
+### Three fixes, three zeroes, one three
+
+    net's two module-scope regexes   PUBLISHED isIP, isIPv4, isIPv6
+    validators' OCTAL regex          0   (nine dependents, all with another blocker)
+    the generic-rest lowering        0   (485 before, 485 after)
+
+The third is the one that settles the thesis, because it is not my fix and it is
+the highest-ranked shape my own instrument named. I told the compiler session
+`asRequest` was worth twenty-one exports, retracted that to "twenty-one cannot
+proceed until it is fixed", and the fix aimed at it has now landed without
+publishing any of them -- because `asRequest` itself is not what the fix cleared.
+
+### The counts went up, and that is my own fix showing through
+
+    asRequest        20 -> 23
+    displayBytePath   9 -> 14
+    uvException       5 -> 7
+
+Those are `parseFileMode`'s nine dependents arriving, measured earlier and visible
+here from the other side. A chokepoint's count rises when the chokepoint in front
+of it is removed, which is worth seeing once: the ranking is not a queue that
+drains, it is a queue that redistributes.
+
 ## Five floor modules broken, and every instrument the gate has said green
 
 Going to re-run the forwarding sites against the landed generic-rest change, none
