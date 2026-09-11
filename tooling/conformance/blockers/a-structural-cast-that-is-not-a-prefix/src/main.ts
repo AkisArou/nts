@@ -40,15 +40,35 @@
 // which is the worse of the two. The prefix case is genuinely a no-op and it is
 // the one that is admitted.
 //
-// # Measured on 2026-09-11, because "35 things" was a count of something else
+// # Measured on 2026-09-11, and then the unit was corrected
 //
-// Per module, lines carrying this message:
+// Four live units for one refusal, and a number travelling without one is the
+// problem rather than any of them being wrong:
 //
-//     fs 69    http 53    net 48    stream 46
+//     module   sites  distinct messages  files  census "things"
+//     fs         69           46           25        27
+//     http       53           39           21
+//     net        48           34           17
+//     stream     46           32           16
 //
-// and in `fs` alone, **37 distinct `(from, to)` pairs over 35 distinct target
-// types**. The shape is uniform: a concrete class passed where a structural
-// interface is wanted --
+// My first count was **sites**, and sites are the wrong unit to plan with. The
+// fix is bounded by the 27 named declarations; the 69 counts how often one of
+// them is called. Ranking lowering work by sites over-weights whatever is
+// called most, and a structural cast is called a lot *precisely because*
+// interfaces are everywhere -- so the unit that flatters this item is the one
+// that says least about the work.
+//
+// 27 declarations is still the largest lowering item either lane has counted.
+// "Biggest by sites" and "biggest by declarations" are different claims and only
+// the second is about effort.
+//
+// What nobody has measured is what it is worth in **published exports**, which
+// is the only unit that maps to the compiled axis and needs a compiler with the
+// cast fixed to answer. Recorded as a gap rather than estimated.
+//
+// In `fs`, **37 distinct `(from, to)` pairs over 35 distinct target types**. The
+// shape is uniform: a concrete class passed where a structural interface is
+// wanted --
 //
 //     a `Writable` where a `WritableImplementation` is wanted
 //     a `Readable` where an `ErrorOrDestroyStream` is wanted
