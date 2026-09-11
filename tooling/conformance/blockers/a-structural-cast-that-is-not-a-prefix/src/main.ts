@@ -110,6 +110,60 @@
 // of those 9 fields -- the refusal stays, and it stays for a reason a reader
 // can act on rather than the same sentence for both halves.
 //
+// # The implementor counts, and the threshold they are measured against
+//
+// The JVM lane priced a *nominal* interface -- known at compile time, varying
+// only how many classes implement it -- and the curve is HotSpot's inline cache
+// exactly:
+//
+//     direct field read       1092 ns/pass
+//     interface, 1 impl       1141 ns/pass    1.04x   free
+//     interface, 2 impls      1319 ns/pass    1.21x   cheap
+//     interface, 3 impls      3703 ns/pass    3.39x   the cliff
+//
+// Monomorphic is a guarded direct call, bimorphic is two guards, and at three
+// HotSpot gives up and every call walks a vtable and an itable. Their earlier
+// 6213-against-1759 figure was the *megamorphic* point measured as if it were
+// the whole story, and it does not transfer to this case.
+//
+// Counted across `fs`, `http`, `net`, `stream`, `dgram` and `process`:
+//
+//     implementors   interfaces
+//          1             26
+//          2              3
+//          3              2
+//          4              1
+//
+//     ErrorOrDestroyStream 4   HighWaterMarkOptions 3   DestroyableStream 3
+//
+// **29 of 32 sit at or below the bimorphic row.** The three exceptions are named
+// rather than a proportion, so they can be decided individually instead of
+// setting the representation for all of them.
+//
+// **This is a lower bound**, and the bound matters here. It counts distinct
+// `from` types per `to` in the refusal messages, so it sees implementors that
+// were assigned at a cast the compiler *refused*. A class satisfying an
+// interface that is only ever passed where the layouts happen to be a prefix
+// does not appear. `WritableImplementation` at 2 could be 3 in truth, and 3 is
+// exactly the cliff -- so it should not be decided on this number alone.
+//
+// # Why the two halves are one measurement
+//
+// Specialisation does not merely remove a cast: **it moves every site to the
+// 1.04x row by construction**, because a copy per concrete argument type means
+// each call sees one type. So "specialise the parameters" and "give the fields
+// an interface" are not two fixes for two populations -- they are this curve
+// read at two points.
+//
+// Which makes the rule simpler than parameter-versus-field: **specialise
+// wherever the concrete type is known, and use an interface only where it is
+// not.** The stored field is where the type genuinely is not known, which is the
+// same sentence arrived at from the other end.
+//
+// The unmeasured risk is copy count. This lane already emits a class per generic
+// instantiation and 14 of them is invisible; hundreds of copies of one function
+// is measured by nobody, and should be sized before building rather than after.
+//
 // # What it does not cover
 //
 // The same question for an *erased* value reaching a concrete slot, which
