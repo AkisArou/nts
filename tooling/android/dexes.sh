@@ -173,7 +173,14 @@ printf "%s method(s) across them\n" "$methods"
 # gate step three sessions run. Left as a word for four minutes while the count
 # was being measured, with a peer's gate running it. Inert is the only safe
 # unmeasured value.
-floor=${NTS_DEX_METHOD_FLOOR:-0}
+# **4382**, measured 2026-09-12 at `ca9f504d`: 247 dexed, 0 refused, 1 declined.
+# Under the skeleton bug it would have been roughly half.
+#
+# Exact rather than padded, which is this repository's rule for a floor. A
+# codegen change that prunes more and drops this is indistinguishable *here*
+# from the defect it guards, and that is the point: a drop owes an explanation
+# and then a new number, rather than fitting under a margin somebody chose.
+floor=${NTS_DEX_METHOD_FLOOR:-4382}
 if [ $# -eq 0 ] && [ "$methods" -lt "$floor" ]; then
   echo "only $methods method(s) dexed, against a floor of $floor" >&2
   echo "a drop here is functions being pruned before the backend sees them," >&2
