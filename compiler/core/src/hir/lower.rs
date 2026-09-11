@@ -7597,6 +7597,37 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// What a method's compiled form hands back.
+    ///
+    /// Three answers and the first is the one that is not obvious. A generator's
+    /// declared `Generator<T, …>` has no representation and is not what the
+    /// compiled method returns -- the **frame** is, exactly as in
+    /// `lower_function` -- and it is deliberately *not* materialized, because a
+    /// frame has no snapshot type to build a layout from and `hir::suspend` is
+    /// the only thing that can. Materializing it anyway answers `an object type
+    /// that is not in the snapshot`.
+    ///
+    /// Lifted out of `lower_method_of` for length, which is the honest reason;
+    /// it also puts the three next to each other, which reads better than a
+    /// chain in the middle of a longer function.
+    fn method_return_type(
+        &mut self,
+        member: NodeId,
+        is_constructor: bool,
+        generated: Option<&super::GeneratorFrame>,
+    ) -> Result<HirType, Diagnostic> {
+        if let Some(frame) = generated {
+            return Ok(HirType::Managed(ManagedType::Object(frame.ty)));
+        }
+        if is_constructor || self.kind_of(member) == Some(syntax::SET_ACCESSOR) {
+            self.materialize(member, &HirType::Void)?;
+            return Ok(HirType::Void);
+        }
+        let return_type = self.return_type_of(member)?;
+        self.materialize(member, &return_type)?;
+        Ok(return_type)
+    }
+
     fn lower_method_of(
         &mut self,
         class: NodeId,
@@ -7750,18 +7781,32 @@ impl<'a> FuncBuilder<'a> {
         // that honestly as a store followed by `__builtin_unreachable()` --
         // which the C compiler reads as a licence to compute anything at all
         // in the caller.
-        let return_type = if is_constructor || self.kind_of(member) == Some(syntax::SET_ACCESSOR) {
-            HirType::Void
-        } else {
-            self.return_type_of(member)?
-        };
-        self.materialize(member, &return_type)?;
+        // **A generator declared as a *method*.** `begin_generator` had one
+        // caller, `lower_function`, so a `*named()` or a `*[Symbol.iterator]()`
+        // reached its body with no frame reserved and every `yield` in it said
+        // "a `yield` outside a generator" -- true of the lowering and false of
+        // the source. Not about symbol keys: a plainly named one said it too.
+        //
+        // This half was written and thrown away once, because the *call* site
+        // could not name the frame and the method compiled unreachable. It is
+        // back with `PropertyRecord::declaration`, which is the other half.
+        let generated = self.begin_generator(member)?;
+        let return_type = self.method_return_type(member, is_constructor, generated.as_ref())?;
 
         let asynchronous = self.begin_async(member, &return_type)?;
         self.returns = return_type.clone();
         if let Some(body) = body {
             self.lower_block(body)?;
-            self.end_method_body(member, asynchronous.as_ref(), &return_type)?;
+            if generated.is_some() {
+                // Falling off the end is the end of the walk, and `return e` is
+                // the `TReturn` a `for...of` discards, so both are one exit.
+                // `end_method_body` settles a promise and a generator has none.
+                if !self.is_terminated() {
+                    self.terminate(Terminator::Return(None));
+                }
+            } else {
+                self.end_method_body(member, asynchronous.as_ref(), &return_type)?;
+            }
         }
 
         // A method is reachable from outside exactly when its class is, so the
@@ -13332,6 +13377,19 @@ impl<'a> FuncBuilder<'a> {
         Ok((step, answered))
     }
 
+    /// Whether a type is a generator frame, and what it yields.
+    ///
+    /// Named beside [`Self::generator_element`] rather than folded into it
+    /// because the question differs: that one is handed a frame's type id and
+    /// asks what it yields, and this one is handed *any* representation and asks
+    /// whether it is a frame at all.
+    fn generator_element_of(&self, ty: &HirType) -> Option<HirType> {
+        let HirType::Managed(ManagedType::Object(frame)) = ty else {
+            return None;
+        };
+        self.generator_element(*frame)
+    }
+
     /// A generator's frame, and what stepping it looks like.
     ///
     /// The frame is already here -- calling the generator made it, and calling
@@ -13417,7 +13475,21 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(sequence, "a `for...of` over a type with no iterator"));
         };
         let callee = self.callee_for(sequence, ty, &iterator_member)?;
-        let Some(iterator_ty) = self.member_returns(ty, &iterator_member) else {
+        // **A generator `[Symbol.iterator]()` hands back its frame**, and
+        // `member_returns` reads the declared `Generator<T, …>`, which has no
+        // representation because this compiler does not build that object. The
+        // frame is what the call produces, and it is found the way the explicit
+        // call finds it: through the member's declaration.
+        //
+        // Asked before `member_returns` rather than as a fallback after it,
+        // because the declared type is not *missing* here -- it is present and
+        // wrong, so a fallback would never run.
+        let iterator_ty = self
+            .member_declaration(ty, &iterator_member)
+            .and_then(|declaration| self.generators.get(&declaration).copied())
+            .map(|index| HirType::Managed(ManagedType::Object(super::generator_frame(index))))
+            .or_else(|| self.member_returns(ty, &iterator_member));
+        let Some(iterator_ty) = iterator_ty else {
             return Err(self.unsupported(
                 sequence,
                 "a `[Symbol.iterator]()` whose result has no representation",
@@ -13433,6 +13505,20 @@ impl<'a> FuncBuilder<'a> {
             iterator_ty.clone(),
             origin,
         );
+
+        // **A generator `[Symbol.iterator]()` is walked as a generator**, not as
+        // an iterator object. What came back is a frame, which is *resumed*; it
+        // has no `next` method, and asking the hierarchy for one answered `a
+        // method `next` with no declaration in the hierarchy` -- a true sentence
+        // about a question that should not have been asked.
+        //
+        // `generator_walk` derives the resumption's name from the call that made
+        // the frame, and the call it wants is the one pushed a line above. That
+        // is why this is here and not before the push: a generator has to be
+        // walked where it was made, and this is where it was made.
+        if self.generator_element_of(&iterator_ty).is_some() {
+            return self.generator_walk(sequence, iterator);
+        }
 
         let HirType::Managed(ManagedType::Object(iterator_id)) = iterator_ty else {
             return Err(self.unsupported(sequence, "an iterator that is not an object"));
@@ -27127,8 +27213,17 @@ impl<'a> FuncBuilder<'a> {
 
         let mut args = vec![receiver];
         args.extend(self.lower_arguments(id, arguments)?);
+        // Calling a generator produces its **frame**, not the `Generator<T, …>`
+        // the checker says -- that interface describes an object this compiler
+        // does not build. The plain-call path says the same thing three hundred
+        // lines away and reads the declaration out of `call_targets`; a method
+        // call has a receiver type and a member name, and
+        // `PropertyRecord::declaration` is what turns those into the same node.
         let ty = self
-            .type_of(id)
+            .member_declaration(type_id, &member_name)
+            .and_then(|declaration| self.generators.get(&declaration).copied())
+            .map(|index| HirType::Managed(ManagedType::Object(super::generator_frame(index))))
+            .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
         let origin = self.origin(id);
         Ok(self.push(
@@ -27140,6 +27235,23 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin,
         ))
+    }
+
+    /// The node that declares a member of a type, where one does.
+    ///
+    /// The checker's property list is flattened, so an inherited member is here
+    /// too and its declaration is the base's -- which is the answer wanted: the
+    /// frame is reserved on the node that carries the body.
+    fn member_declaration(&self, type_id: TypeId, member_name: &str) -> Option<NodeId> {
+        let TypeKind::Object { properties } =
+            &self.snapshot.types.get(type_id.0 as usize)?.kind
+        else {
+            return None;
+        };
+        properties
+            .iter()
+            .find(|property| property.name == member_name)?
+            .declaration
     }
 
     /// The callee a method name resolves to on a receiver's type.

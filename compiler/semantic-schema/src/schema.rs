@@ -471,6 +471,26 @@ pub struct PropertyRecord {
     /// slot, so it cannot share a representation with a required one.
     pub optional: bool,
     /// What the member is, which is what decides whether it has storage.
+    /// The node that declares this member, where one does.
+    ///
+    /// **The subject of "where was this declared" is the member**, which is what
+    /// this record is, so it goes here rather than in a `(TypeId, name) -> NodeId`
+    /// map beside it. That map would be a second structure keyed by what this one
+    /// is already keyed by, and it agrees until somebody adds a member through one
+    /// path and not the other.
+    ///
+    /// The distinction is not a rule: `declared_by` went on `Field` because the
+    /// subject of "which class declares this" is the field, and `ClassIdentity`
+    /// went *beside* the layout because a layout is a merge of several classes and
+    /// the subject there is the class. Ask what the fact is about.
+    ///
+    /// `None` for a member with no declaration to point at -- a computed one from
+    /// `Readonly<T>` or a mapped type, and anything the checker synthesised.
+    ///
+    /// What it is for: a generator *method* reserves a frame keyed by its
+    /// declaration node, and a call had a receiver type and a member name and no
+    /// way to reach one. See `blockers/a-generator-method`.
+    pub declaration: Option<NodeId>,
     pub kind: MemberKind,
     /// Declared on this type rather than inherited.
     ///

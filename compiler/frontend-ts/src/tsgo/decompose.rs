@@ -643,6 +643,15 @@ impl<'a> Decomposer<'a> {
                     // a call the dispatch table holds, and only a field has
                     // storage.
                     kind: member_kind(symbol.flags),
+                    // The first declaration, which is the one a lowering wants:
+                    // an overloaded member declares its signatures and then its
+                    // implementation, and the frame is reserved on whichever
+                    // node carries the body. `declared_readonly` above reaches
+                    // the same list for the same reason.
+                    declaration: symbol
+                        .declarations
+                        .iter()
+                        .find_map(|handle| declaration_node(handle, &self.file_bases)),
                     own: own.contains(written_name(&symbol.name)),
                     name: written_name(&symbol.name).to_owned(),
                     ty,
