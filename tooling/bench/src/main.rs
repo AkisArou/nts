@@ -541,7 +541,22 @@ fn spreads(rows: &[Row]) -> String {
     let mut lines = String::new();
     for row in rows {
         for (label, spread) in &row.varied {
-            let _ = writeln!(lines, "| {} | {label} | {spread:.2}x |", row.case);
+            let _ = writeln!(lines, "| {} | {label} | {spread:.2}x | this run |", row.case);
+        }
+        // **And the ones a lucky run does not see.** `varied` is what *this*
+        // sitting observed, so a row that flips one time in six publishes a bare
+        // number on the five sittings that did not catch it -- which is exactly
+        // the failure this section was written to prevent, arriving through the
+        // section itself.
+        //
+        // The JVM lane found it from outside: `tooling/bench` publishes
+        // `awfy-sieve` at 0.94x and their device harness reads 1.32x and 1.33x
+        // on two sittings, with every other shared row agreeing. Two instruments
+        // differing by 40% on one row, reproducibly.
+        for (case, label, spread, seen) in KNOWN_BIMODAL {
+            if row.case == *case && !row.varied.iter().any(|(at, _)| at == label) {
+                let _ = writeln!(lines, "| {case} | {label} | {spread:.2}x | {seen} |");
+            }
         }
     }
     if lines.is_empty() {
@@ -554,8 +569,8 @@ fn spreads(rows: &[Row]) -> String {
          and a rerun may land on another shape. They are listed because the table \
          cannot show it: a flipped row and a solid one are the same number on the \
          page.\n\n\
-         | case | column | spread across 5 runs |\n\
-         | --- | --- | ---: |\n{lines}"
+         | case | column | spread | observed |\n\
+         | --- | --- | ---: | --- |\n{lines}"
     )
 }
 
@@ -2160,6 +2175,27 @@ fn measure(command: &mut std::process::Command) -> Result<Measured> {
 /// allocation, and the hand-written Java reference for the same row on the same
 /// JVM is stable to 7.4% -- so they belong to the code this backend emits.
 const SPREAD_WORTH_SAYING: f64 = 1.10;
+
+/// Rows seen to flip on a *previous* sitting, carried whether or not this one
+/// sees it.
+///
+/// A row that flips one time in six is stable on five sittings, and on each of
+/// those the table prints a bare number. `spreads` was written because "a
+/// flipped row and a solid one are the same number on the page" — and it had
+/// exactly that hole, because it reported only what the publishing run happened
+/// to observe.
+///
+/// Entries are removed when a cause is found, not when a run comes back clean:
+/// a clean run is what this table exists to disbelieve.
+const KNOWN_BIMODAL: &[(&str, &str, f64, &str)] = &[
+    // 5.74, 5.74 and 5.38 us on one sitting against 4.49, 4.44 and 4.48 on
+    // another, out of one class file. And from outside: `tooling/bench`
+    // publishes 0.94x where `tooling/android/times-on-device.sh` reads 1.32x and
+    // 1.33x across two sittings on the same machine and the same HotSpot, with
+    // every other shared row agreeing. `benches/jvm-rows.md` carries it as an
+    // open discrepancy.
+    ("awfy-sieve", "Java", 1.27, "a previous sitting, and a second harness"),
+];
 
 fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
     let output = command.output().context("running a benchmark")?;
