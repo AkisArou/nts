@@ -21289,6 +21289,50 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## A stack fix that shipped without typechecking, and then cost five functions
+
+Two mistakes in one change, both caught by finally running the thing that asks.
+
+### It did not typecheck, and I committed it
+
+`captureStackTrace(this, DNSException)` inside the constructor. `typeof
+DNSException` is a class and the parameter is `CallableFunction`, so:
+
+    TS2345 Argument of type 'typeof DNSException' is not assignable to
+           parameter of type 'CallableFunction'.
+    Error: the program does not typecheck
+
+The interpreted lane read **1 passed, 0 failed** throughout, because it imports
+the TypeScript and runs it and never typechecks. This is written down as a lesson
+I have already learned once, and I repeated it exactly: edited a `.ts`, ran the
+lane, saw green, committed. The step that was missing is building the module.
+
+`dns` is in `BLOCKED` rather than `FLOOR`, so nothing went red for anyone else --
+which is luck, not process.
+
+### Moving it to the helper made it typecheck, and then the numbers said drop it
+
+    without captureStackTrace   59 refusal lines, `dnsException` not refused at all
+    with captureStackTrace      64 refusal lines, `dnsException` and four closures refused
+
+`captureStackTrace` is itself refused at `internal/errors.ts:247` -- a parameter
+of type `CallableFunction | undefined`. So calling it moved `dnsException` from
+*compiling* to *cascaded*, and took `Closure10`, `Closure11`, `Closure12` and
+`Closure47` with it.
+
+Dropped. One cosmetic stack frame against five functions on the lane the goal is
+about, with nothing live observing the frame -- `test-dns-memory-error.js` would
+and it is skipped. The site says so, with the numbers, and says to re-add it when
+the union-parameter refusal is fixed.
+
+### What survives is the part that was actually worth it
+
+The declared `DNSException` class. Before it, `dnsException` was refused on its
+own account for assigning through a `Record<string, unknown>` cast; after, it is
+not refused at all. That is what the 37-to-36 primary-refusal measurement was
+really showing, and I had attributed it to a change that also included the
+regression.
+
 ## I blamed the wrong refusal, and the right one is already being fixed
 
 `dns`'s three compiled-lane blockers, corrected. The build's own NTS1001 lines

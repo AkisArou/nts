@@ -30,7 +30,6 @@ import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
   ERR_MISSING_ARGS,
-  captureStackTrace,
 } from "../../internal/errors.ts";
 import { isIP } from "../../net/src/address.ts";
 
@@ -151,25 +150,29 @@ class DNSException extends Error {
     this.code = code;
     this.syscall = syscall;
     this.hostname = hostname;
-    // Node's `DNSException` hides its own frame, so the first line of the stack
-    // below the message is the caller's. Without this the user's first frame is
-    // `at new DNSException`, which is an implementation detail of ours appearing
-    // in the stack of an error they are meant to read.
-    captureStackTrace(this, DNSException);
   }
 }
 
 /**
- * The class hides its own frame, and this hides this one, so the first frame a
- * caller sees is their own. Both are needed: the constructor's capture is what
- * makes a direct `new DNSException` clean, and this one is what makes the helper
- * clean. Checked rather than assumed -- before the first, `stack[1]` read
- * `at new DNSException`; before the second, `at dnsException`.
+ * **No `captureStackTrace` here, and that is measured rather than forgotten.**
+ *
+ * Node's `DNSException` hides its own frame, so the first stack line below the
+ * message belongs to the caller; ours leaves one frame of plumbing there. Adding
+ * `captureStackTrace(error, dnsException)` fixes that and costs five functions on
+ * the compiled lane:
+ *
+ *     without   59 refusal lines, `dnsException` not refused at all
+ *     with      64 refusal lines, `dnsException` plus Closure10/11/12/47 refused
+ *
+ * because `captureStackTrace` is itself refused -- `internal/errors.ts:247`, a
+ * parameter of type `CallableFunction | undefined`. Nothing live observes the
+ * extra frame (`test-dns-memory-error.js` would, and it is skipped), so one
+ * cosmetic stack line loses to five functions on the lane the goal is about.
+ *
+ * Re-add it when that union-parameter refusal is fixed; it is free then.
  */
 function dnsException(errno: number, syscall: string, hostname: string): Error {
-  const error = new DNSException(errno, syscall, hostname);
-  captureStackTrace(error, dnsException);
-  return error;
+  return new DNSException(errno, syscall, hostname);
 }
 
 function orderOf(dnsOrder: string): number {
