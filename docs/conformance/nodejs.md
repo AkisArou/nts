@@ -22312,6 +22312,49 @@ lane is unchanged at 1 passed, 0 failed.
 Steps 2 and 4 are not this side's to fix, and 4 is not even the compiler's in the
 usual sense -- it is what the Node-API wrapper can construct.
 
+## Every child-spawning test was failing for a reason that was ours
+
+`third_party/node/test/parallel/test-child-process-spawn-argv0.js` spawns a child
+that prints `process.argv0`. The child printed nothing and exited 1. **Using
+node's own `child_process`, not this profile's.**
+
+    without third_party/node/package.json   status 1, stdout ""
+    with  { "type": "commonjs" }            status 0, stdout the execPath
+
+This repository's `package.json` declares `"type": "module"`, and **node's
+checkout has no top-level `package.json` at all** -- 0 of its 49 root entries.
+So the nearest one above every `.js` file in node's test tree is ours, and node
+reads them as ES modules: `require is not defined in ES module scope`, or a
+failure on a top-level `return`.
+
+In-process tests never notice, because the runner loads them itself. A test that
+**spawns a child** running a test file does.
+
+`run.mjs` now writes that file if it is absent, because `third_party/node` is
+untracked and a `git clean` there would take it. The full interpreted lane is
+**byte-identical** with and without -- 0 modules failing either way, no module's
+counts changed -- so it alters no existing result. It only stops child-spawning
+tests failing for a reason that belongs to this repository.
+
+### What it does to the `child_process` numbers
+
+Every measurement of that module in this session was taken with the leak in
+place, so an unknown share of its 93 failures were never about the module. The
+"93 individual behaviours" conclusion is suspect for exactly that reason and the
+module has to be re-measured before any of it is trusted.
+
+### And the guard hid its own failure
+
+The first version of the block called `writeFileSync` without importing it. The
+`ReferenceError` landed in a `try {} catch {}` I had written for read-only
+checkouts, so the runner reported a green lane and created nothing, and `dns`
+passed either way. A catch that swallows a programming error is worse than no
+catch; it now writes the failure to stderr.
+
+I found it only because I checked whether the file appeared, and the check I first
+wrote for *that* -- `ls … | sed … || echo NOT` -- could not have failed either,
+because a pipeline's status is the last command's.
+
 ## The 44 were a construct that lowers to nothing, and `assert` is most of it
 
 The compiler session isolated what I had been reporting as "44 functions the

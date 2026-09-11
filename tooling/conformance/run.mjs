@@ -27,7 +27,7 @@
 //   node run.mjs --module path [--addon target/node/path.node] [--only f.js]
 //                              [--verbose] [--json]
 
-import { readdirSync, existsSync, readFileSync } from "node:fs";
+import { readdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname, resolve as resolvePath } from "node:path";
 import { execFileSync } from "node:child_process";
 import process from "node:process";
@@ -243,6 +243,40 @@ const upstream = [
 // the named tests take the wrapped path. `script` is util-linux and is not
 // everywhere, so its absence is a **skip with a reason** rather than a failure --
 // a missing harness tool is not the profile's defect.
+// **node's test tree needs a `package.json` saying `commonjs`, and has none.**
+//
+// This repository's own `package.json` declares `"type": "module"`, and node's
+// checkout has no top-level `package.json` at all -- 0 of its 49 root entries.
+// So the nearest one above `third_party/node/test/parallel/*.js` is ours, and
+// node reads every one of those files as an ES module.
+//
+// In-process tests never notice, because the runner loads them itself. A test
+// that **spawns a child** running a `.js` test file does: the child gets
+// `require is not defined in ES module scope`, or fails on a top-level `return`,
+// and reports empty output with a non-zero status. Controlled both ways --
+// `spawnSync(execPath, [file, "child"])` gives status 1 and `""` without this
+// file and status 0 with it, using **node's own** `child_process` in both cases,
+// so it is not a defect in anything this profile wrote.
+//
+// Written here rather than left in the tree because `third_party/node` is
+// untracked and a `git clean` there would take it. Creating it is idempotent and
+// costs a `stat`. The full interpreted lane is byte-identical with and without
+// it -- 0 modules failing either way -- so it changes no existing result; it only
+// stops child-spawning tests failing for a reason that is ours.
+const nodePackageJson = join(ROOT, "third_party/node/package.json");
+if (!existsSync(nodePackageJson)) {
+  try {
+    writeFileSync(nodePackageJson, '{ "type": "commonjs" }\n');
+  } catch (error) {
+    // A read-only or absent checkout is not this runner's problem to solve, but
+    // it says so rather than passing silently. The first version of this block
+    // swallowed a `ReferenceError` -- `writeFileSync` was never imported -- and
+    // the runner reported a green lane while creating nothing. A catch that
+    // hides a programming error is worse than no catch.
+    process.stderr.write(`note: could not write ${nodePackageJson}: ${error.message}\n`);
+  }
+}
+
 const needsPtyPath = join(moduleDir, "needs-pty");
 const needsPty = new Set(
   existsSync(needsPtyPath)
