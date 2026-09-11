@@ -81,6 +81,7 @@ meets them. This is the map; the row table below it is the current state.
   - The published table against a fresh sweep: one of fifty-one rows is stale, and it is `array-from`
   - `loops.rs` exists, my rows are not waiting on it, and the row table said they were
   - A rule written for the only instance of a category is a rule about that instance
+  - `cargo test --release` is the gate's test with the assertions removed
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3185,6 +3186,48 @@ one line apart, for opposite reasons.
 `match` has one true arm and a `_ => false` is the same construction --
 `scalar_form`, `cursor_helper`, `object_key_form` each name exactly one helper
 today. None of them is wrong. Each is untested in the only way that matters.
+
+### `cargo test --release` is the gate's test with the assertions removed
+
+MainClaude shipped an `attempt to subtract with overflow` that four of their own
+tests caught -- **in my gate, not theirs**. They had been running
+`cargo test --release` all evening; the gate runs `cargo test --workspace`.
+Release turns overflow checks **off**, so the subtraction wrapped to a number no
+reservation matched, `find` answered `None`, and the answer was right by
+accident.
+
+**I had been running `--release` all session too**, for every one of these
+sections. So the same blind spot was live on this lane and nothing here had
+looked, which is the whole reason to write it down rather than note it.
+
+Checked, and this lane is clean on that axis:
+
+    cargo test, debug, my two crates          74 pass, 0 overflow
+    185 examples through a debug compiler      0 panics
+    60 bench cases emitted in debug            0 panics
+
+**And the economy the habit was for does not exist.** A debug `nts check` of one
+example is **0.5 seconds**; the whole example corpus through a debug compiler is
+about fifteen. There was no cost being avoided -- `--release` was a reflex from
+benchmarking, carried into a place where the only thing it removes is the
+assertions.
+
+The wider net is the point rather than the unit tests. Seventy-four tests cover
+what someone thought to write; 185 examples and 60 cases run the emitter over
+every construct the corpus has, with the checks live. That is the same argument
+as dexing generated classes rather than the runtime jar, and it costs fifteen
+seconds.
+
+**Their precondition sentence is the one to keep**, and it is this file's own
+lesson one level down: *a precondition nobody can violate is indistinguishable
+from no precondition* -- until a caller arrives whose job is to violate it.
+`generator_element` subtracted a frame base from a type id that every caller had
+already established was a frame. `generator_element_of` asks it of any object
+type, which is the whole point of it.
+
+That is the same shape as `puts_label` being right about comparisons and
+untested about everything else: a rule with one kind of caller has never been
+asked a second question.
 
 ## Open, and whose
 
