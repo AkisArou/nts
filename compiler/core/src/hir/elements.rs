@@ -193,25 +193,18 @@ pub(super) fn representations(
     let anchored = stored_into_a_global(program);
     facts
         .iter()
-        // **An erased element is never a candidate**, and that is a gap rather
-        // than a decision. This asks only about arrays already spelled `f64`, so
-        // an `unknown[]` whose every store is a number stays erased however
-        // completely that is proved.
+        // Only an `f64` element, and **that is not the restriction it looks
+        // like**. An `unknown[]` whose every store is a number is already
+        // `[f64]` by the time this runs — specialization proves it upstream —
+        // so this sees the narrowed element and not the erased one.
         //
-        // Measured by the JVM lane on 2026-09-12: `erasure-stored-unknown` is
-        // 2.33x on ART, allocation is *ruled out* — 16,384 bytes against the
-        // reference's 40,016, because an erased element is a `long[]` there
-        // rather than a boxed object — and the cost is in the read path, an
-        // `l2d` per element plus a tag comparison the middle end had already
-        // folded to `2 == 2`.
-        //
-        // The narrowing is `Erased -> Float { bits: 64 }`, after which the
-        // existing `f64 -> i32` rule applies on its own. What it needs beyond
-        // the facts below is that **no read wants the tag**: `typeof` on an
-        // element is answerable only while the element carries one, so a single
-        // tag read anywhere in the program has to keep the array erased. That is
-        // the condition to establish, and it is the reason this is a named gap
-        // rather than a missing `matches!` arm.
+        // Written down because the opposite was committed here for twenty
+        // minutes on 2026-09-12. `erasure-stored-unknown` emits
+        // `array.new : managed<[i64]>` today, which is only reachable through
+        // this filter, so "an erased element is never a candidate" was disproved
+        // by the output of the pass it was a comment on. Reading the code and
+        // reading the emitted IR are two measurements and only the second was
+        // right.
         .filter(|(element, _)| matches!(element, HirType::Float { .. }))
         .filter(|(element, _)| !converted.contains(*element))
         .filter(|(element, _)| !borrowed.contains(*element))
@@ -328,6 +321,21 @@ fn reaches_a_runtime_helper(program: &Program) -> rustc_hash::FxHashSet<HirType>
 /// Element types whose reads flow into a floating-point operation.
 ///
 /// Narrowing one of these buys a smaller load and pays for it at every use.
+///
+/// # One step, which is as far as it looks
+///
+/// The test is a float-typed op whose **direct** operand is an `ArrayGet`.
+/// Anything between them hides the use: an `Unerase`, a `Convert`, a `phi`. So
+/// an element read through a `typeof` guard and then added as a number is not
+/// seen here, and the array narrows anyway.
+///
+/// Whether that is costing anything is open, and the honest statement is that
+/// the one case suspected of it — `erasure-stored-unknown` — narrows its
+/// accumulator too, so its reads feed *integer* adds and the single `f64`
+/// conversion is at the return. That is the guard correctly not firing rather
+/// than the guard being fooled. A case where the intervening op is real and the
+/// arithmetic stays floating-point has not been found, and this note exists so
+/// the next person to suspect it starts from that rather than from the code.
 fn read_into_floating_point(program: &Program) -> rustc_hash::FxHashSet<HirType> {
     let mut converted = rustc_hash::FxHashSet::default();
     for func in &program.funcs {
