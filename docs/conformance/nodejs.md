@@ -21289,6 +21289,50 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## The provider decision is a `crypto` decision, and `tls` has no vote
+
+The goal asked for the other half of the mbedTLS question: beside "12% of tls and
+22% of crypto assert OpenSSL specifics" -- the cost of leaving OpenSSL -- how much
+would a smaller provider be unable to do at all. `provider-gap.mjs` answers it,
+and the answer is not shaped the way the ordering assumed.
+
+    a primitive mbedTLS does not ship          hard    surface-only    neither
+      test-tls-*.js        218 files        0    0%      7    3%     211   97%
+      test-crypto-*.js     128 files       33   26%     59   46%      36   28%
+      test-webcrypto-*.js   47 files       43   91%      0    0%       4    9%
+
+**`tls` is zero.** Not small -- zero. Of 218 files, none needs a JWK codec,
+WebCrypto, scrypt, EdDSA or a post-quantum algorithm. Seven touch something
+mbedTLS would have to be wrapped in rather than taught (`X509Certificate`, ECDH,
+ChaCha20-Poly1305) and 211 need neither. The module the provider question was
+*named* for is the module it does not turn on.
+
+It is `crypto` that decides, and the 33 break down as a JWK codec (18 files),
+WebCrypto (7), EdDSA (12), PQC (12) and scrypt (1), overlapping to 33. Then
+`test-webcrypto-*` -- 47 files that "crypto's 128" never included -- is 43.
+
+### The tiering was the measurement
+
+A first pass called 86 of 128 a gap, by counting `generateKeyPair`, `KeyObject`
+and `DiffieHellman` as things mbedTLS lacks. It does not lack them: it generates
+RSA and EC keys and writes PEM and DER through `pk_write`. Those are a surface to
+build, not a primitive to acquire, and the distinction moved the answer from 67%
+to 26%. Separating the two tiers is most of what this instrument does.
+
+### Two things the scopes said
+
+Dropping PQC from scope changes the count **not at all** -- 33 either way. Every
+one of the 12 PQC files already needs JWK, WebCrypto or EdDSA, so post-quantum is
+not a separable population and cannot be deferred for a discount. Dropping
+WebCrypto takes 33 to 26, and dropping EdDSA as well takes it to 19.
+
+### A claim of mine the control refuted, in the same hour
+
+The `build.sh` comment asserting `XXH_NAMESPACE=ZSTD_` was load-bearing was
+wrong, and testing it took one command. Worth noting beside this entry because
+the provider argument had been running on the same currency for two days: an
+impression of what a library does, stated with confidence, never once broken.
+
 ## brotli and zstd join zlib on node's sources, and nothing observes it yet
 
 `build.sh` now compiles all three of node's vendored compression libraries into
