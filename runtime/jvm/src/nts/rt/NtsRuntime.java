@@ -265,6 +265,89 @@ public final class NtsRuntime {
      * consumed for radix 16 as well as for an absent radix, so
      * {@code parseInt("0x1f", 16)} is 31.
      */
+    /**
+     * {@code parseFloat(text)}.
+     *
+     * <p>**The longest prefix the grammar admits, then a parse of that** -- not
+     * a parse of the whole string. {@code Double.parseDouble} on the input
+     * would read {@code "0x10"} as 16 where JavaScript answers 0, accept
+     * {@code "inf"} and {@code "NaN"}, take a {@code d} or {@code f} suffix
+     * Java allows and JavaScript does not, and reject a trailing {@code "abc"}
+     * that JavaScript simply stops before.
+     *
+     * <p>So the scan decides what is admitted and {@code parseDouble} only
+     * converts it. Every unit in the prefix is a digit, a sign, a dot or an
+     * {@code e} by construction, which is the subset the two agree about
+     * exactly.
+     *
+     * <p>Three rules a version written from the description gets wrong, all
+     * transcribed from `nts_parse_float`: {@code "Infinity"} is spelled out and
+     * is the only word form admitted, so it is checked before the digits; a
+     * lone {@code "."} with no digit on either side is {@code NaN} rather than
+     * zero; and an exponent counts **only if a digit follows it**, so
+     * {@code "1e"} is 1 and the scan backs up over the {@code e} rather than
+     * failing.
+     */
+    public static double parseFloat(String text) {
+        if (text == null) {
+            return Double.NaN;
+        }
+        int units = text.length();
+        int at = 0;
+        while (at < units) {
+            char unit = text.charAt(at);
+            if (unit != 0x20 && unit != 0x09 && unit != 0x0a && unit != 0x0d
+                    && unit != 0x0b && unit != 0x0c && unit != 0xa0 && unit != 0xfeff) {
+                break;
+            }
+            at++;
+        }
+        int start = at;
+        boolean negative = false;
+        if (at < units && (text.charAt(at) == '+' || text.charAt(at) == '-')) {
+            negative = text.charAt(at) == '-';
+            at++;
+        }
+        final String infinity = "Infinity";
+        int spelled = 0;
+        while (spelled < 8 && at + spelled < units
+                && text.charAt(at + spelled) == infinity.charAt(spelled)) {
+            spelled++;
+        }
+        if (spelled == 8) {
+            return negative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
+        }
+        int digits = at;
+        while (at < units && text.charAt(at) >= '0' && text.charAt(at) <= '9') {
+            at++;
+        }
+        boolean any = at > digits;
+        if (at < units && text.charAt(at) == '.') {
+            at++;
+            while (at < units && text.charAt(at) >= '0' && text.charAt(at) <= '9') {
+                at++;
+                any = true;
+            }
+        }
+        if (!any) {
+            return Double.NaN;
+        }
+        if (at < units && (text.charAt(at) == 'e' || text.charAt(at) == 'E')) {
+            int after = at + 1;
+            if (after < units && (text.charAt(after) == '+' || text.charAt(after) == '-')) {
+                after++;
+            }
+            int exponent = after;
+            while (after < units && text.charAt(after) >= '0' && text.charAt(after) <= '9') {
+                after++;
+            }
+            if (after > exponent) {
+                at = after;
+            }
+        }
+        return Double.parseDouble(text.substring(start, at));
+    }
+
     public static double parseInt(String text, double radix) {
         if (text == null) {
             return Double.NaN;

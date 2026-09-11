@@ -474,6 +474,9 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // answers `NaN`, refuses a trailing non-digit, and cannot exceed a
         // `long`. Transliterated; see the method.
         "nts_parse_int" => (RUNTIME, "parseInt", "(Ljava/lang/String;D)D"),
+        // The longest admitted prefix, then a parse of that -- `parseDouble` on
+        // the whole string reads `0x10` as 16 where JavaScript answers 0.
+        "nts_parse_float" => (RUNTIME, "parseFloat", "(Ljava/lang/String;)D"),
         // `Long.toString(long, int)` is not this: it handles integers, and the
         // fraction is the whole difficulty. See `numberToStringRadix`.
         "nts_number_to_string_radix" => {
