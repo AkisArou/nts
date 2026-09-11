@@ -21331,6 +21331,67 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## A binding is not an export, and that is where both my wrong answers came from
+
+Third statement of the same question, each narrower than the last, and this one
+is measured on both sides of the line.
+
+    "dns needs three compiler fixes"                  wrong
+    "the compiled lane has no promises at all"        wrong
+    "a promise of an object cannot cross the boundary"  measured
+
+### What the probe showed
+
+Rewriting `dns`'s promise wrappers to call bindings that **return** promises --
+the `nts_zlib_write` shape -- makes them **compile**. Both of them. Exporting them
+so `shape.mjs` could assemble `promises` from flat names, the way
+`path/shape.mjs` builds `path.posix`, then gives:
+
+    no wrapper for promiseLookup         takes or returns a union that erases
+    no wrapper for promiseLookupService  returns Promise<an object>
+
+The second is the one that settles it. `promiseLookupService` returns
+`Promise<LookupServiceResult>` -- a concrete type, no union -- and it still cannot
+cross.
+
+### The distinction I had been missing
+
+`nts_zlib_write` returns `NtsPromise *` and is a **binding**: C to compiled C,
+inside the program. It never passes through the N-API wrapper. An **export** has
+to reach JavaScript, and that is a different boundary with different rules.
+
+Both of my wrong answers were the same mistake. I generalised from what the
+*program* can represent to what can *cross*, twice, in opposite directions: first
+deciding a capability was absent because TypeScript could not express it, then
+deciding it was present because C could.
+
+### What crosses, counted
+
+    433  is a namespace member that is neither a wrapped function nor a value
+          this backend can carry
+     30  is a namespace member whose function was not compiled
+     24  returns Promise<void>
+     19  is exported and is not a function this backend can name
+     16  is a namespace member whose function has no wrapper
+      1  takes or returns a union that erases
+      1  returns Promise<an object>
+
+**No promise-returning export crosses anywhere in the profile.** `Promise<void>`
+is declined 24 times, `Promise<an object>` once because only one was ever tried.
+The runtime has promises and the compiled program uses them; the wrapper carries
+none of them outward.
+
+### So `dns.promises` is unreachable, and now for a reason that is checked
+
+Not "no deferred", which was wrong, and not "three compiler fixes", which was
+wrong. The public surface `node:dns` must present includes a function returning a
+promise of an object, and nothing in the profile has ever returned a promise
+across that boundary.
+
+`test-dns-promises-exists.js` is the only file between `dns`'s compiled lane and
+not being hollow, and it needs `dns/promises` to exist as an object whose members
+are those functions.
+
 ## Correction: C can build a promise, and `zlib` already does
 
 The entry below claims the compiled lane "has no `promises` at all". **That is
