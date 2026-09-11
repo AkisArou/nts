@@ -193,6 +193,25 @@ pub(super) fn representations(
     let anchored = stored_into_a_global(program);
     facts
         .iter()
+        // **An erased element is never a candidate**, and that is a gap rather
+        // than a decision. This asks only about arrays already spelled `f64`, so
+        // an `unknown[]` whose every store is a number stays erased however
+        // completely that is proved.
+        //
+        // Measured by the JVM lane on 2026-09-12: `erasure-stored-unknown` is
+        // 2.33x on ART, allocation is *ruled out* — 16,384 bytes against the
+        // reference's 40,016, because an erased element is a `long[]` there
+        // rather than a boxed object — and the cost is in the read path, an
+        // `l2d` per element plus a tag comparison the middle end had already
+        // folded to `2 == 2`.
+        //
+        // The narrowing is `Erased -> Float { bits: 64 }`, after which the
+        // existing `f64 -> i32` rule applies on its own. What it needs beyond
+        // the facts below is that **no read wants the tag**: `typeof` on an
+        // element is answerable only while the element carries one, so a single
+        // tag read anywhere in the program has to keep the array erased. That is
+        // the condition to establish, and it is the reason this is a named gap
+        // rather than a missing `matches!` arm.
         .filter(|(element, _)| matches!(element, HirType::Float { .. }))
         .filter(|(element, _)| !converted.contains(*element))
         .filter(|(element, _)| !borrowed.contains(*element))
