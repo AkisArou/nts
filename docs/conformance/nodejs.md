@@ -21289,6 +21289,58 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## Three names onto the compiled axis, by deleting two regular expressions
+
+`net/src/address.ts` held two module-scope `new RegExp`s built from template
+strings. A module-scope regular expression does not lower, so `isIPv4` and
+`isIPv6` were refused, and through `isIP` the refusal reached `dgram`, `dns` and
+`http`. Node does not use a regular expression here either -- its `isIP` is C++.
+
+Replaced with hand parsers.
+
+    net declined exports   14 -> 11
+    the addon now publishes isIP, isIPv4, isIPv6
+    isIP("1.2.3.4") = 4   isIP("::1") = 6   isIP("x") = 0
+
+Three names that did not exist in the compiled lane now do and answer correctly.
+Small, and it is the thing the goal says adding modules cannot do.
+
+### Differenced against two oracles before it went in
+
+600,042 inputs: a fixed list of boundary cases, 300,000 from an alphabet fuzzer,
+and 300,000 from a generator that builds a valid address and then makes one edit.
+Compared against **both** the regexes being replaced and `node:net`'s own
+`isIPv4`/`isIPv6`. Zero differences on either.
+
+The structured half is why the number means anything. The alphabet fuzzer accepts
+almost nothing, so on its own it exercises the rejecting branches and reports a
+confident zero about half the code. The structured corpus accepts 97,844 as IPv6
+and 106 as IPv4.
+
+It found one bug, and it is the kind only a corpus finds: the first version looked
+for a dot anywhere ahead of the cursor, so `::ffff:1.2.3.4` tried to parse
+`ffff:1.2.3.4` as IPv4. Four valid addresses rejected, all of them the embedded-
+IPv4 forms. The dot search is scoped to the current group now.
+
+### And a regression the corpus could not have found
+
+`net` went to **4 failed** on the first attempt, from 0. `RegExp.test` coerces its
+argument and the parser does not: node's `test-net-isip.js` passes numbers,
+`null`, `undefined`, objects and a `Buffer`, and `ip-validation-static.js` pins
+the Buffer holding `"1.2.3.4"` as a **valid** address -- `nonstring-buffer`,
+`"4,true,false"`.
+
+The parameter type said `string` and the regular expression had been covering for
+it for as long as the file existed. A 600,042-input differential over strings
+could not see it, because the inputs were all strings. The coercion is a
+`${input}` at the top of each function now, and the pinned fixture is the control:
+it failed before it and passes after.
+
+### Where this leaves `dns`
+
+`lookup` moved from `isIP` back to `nextTick` -- the generic rest, which MainClaude
+has in flight. The chain is one link shorter and still not bottomed out.
+
 ## A probe gave `nextTick` a sibling that lowers, and found a second blocker
 
 The goal wants `dns` green on both lanes, and `lookup` read "cannot be compiled
