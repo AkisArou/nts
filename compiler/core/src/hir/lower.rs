@@ -9857,23 +9857,11 @@ impl<'a> FuncBuilder<'a> {
                     .and_then(|ty| self.fixed_arity_positions(ty))
             {
                 let array = self.lower_expression(operand)?;
-                let origin = self.origin(*argument);
                 for (offset, position) in positions.iter().enumerate() {
-                    let element = self
+                    let want = self
                         .represent(*position)
                         .ok_or_else(|| self.unrepresentable(operand, "a spread position"))?;
-                    #[allow(clippy::cast_precision_loss)]
-                    let at = offset as f64;
-                    let index = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
-                    let value = self.push(
-                        OpKind::ArrayGet {
-                            array,
-                            index,
-                            checked: true,
-                        },
-                        element,
-                        origin.clone(),
-                    );
+                    let value = self.read_a_position(array, offset, &want, operand)?;
                     args.push(self.coerce_to_parameter(call, args.len(), value, operand)?);
                 }
                 continue;
@@ -21505,6 +21493,60 @@ impl<'a> FuncBuilder<'a> {
         self.narrowed(id, read)
     }
 
+    /// The arm to read a member through, when every arm of a union puts it in
+    /// the same place.
+    ///
+    /// Answers with a *representative arm*, not a synthesised prefix type. A
+    /// synthesised one would be a new layout, and `layout_of` is not a query --
+    /// materialising a layout changes the emitted program, which cost six
+    /// modules once already (see `laid_out_as_a_prefix`). Reading through an
+    /// arm needs nothing new to exist.
+    ///
+    /// Every arm has to be an object with a layout. An arm that is `null`,
+    /// `undefined` or a primitive has no field at any offset, and answering for
+    /// it would turn a refusal into a load from a tag.
+    fn union_prefix_holding(&mut self, id: NodeId, member_name: &str) -> Option<HirType> {
+        let object = self.children(id).first().copied()?;
+        let ty = *self.snapshot.node_types.get(&object)?;
+        let TypeKind::Union(members) = &self.snapshot.types.get(ty.0 as usize)?.kind else {
+            return None;
+        };
+        let members = members.clone();
+        if members.len() < 2 {
+            return None;
+        }
+
+        let mut arms = Vec::with_capacity(members.len());
+        for member in &members {
+            // A layout is required rather than looked for: `layout_of` fails
+            // for anything that is not an object type, which is the same test
+            // as asking whether the arm can hold a field at all.
+            arms.push(self.layout_of(id, *member).ok()?);
+        }
+        let (first, rest) = arms.split_first()?;
+
+        // How far the arms agree, by the same rule a prefix cast uses.
+        let mut shared = first.fields.len();
+        for other in rest {
+            shared = shared.min(other.fields.len());
+            let agreed = first
+                .fields
+                .iter()
+                .zip(other.fields.iter())
+                .take(shared)
+                .take_while(|(want, have)| same_slot(want, have))
+                .count();
+            shared = shared.min(agreed);
+            if shared == 0 {
+                return None;
+            }
+        }
+
+        let at = first.index_of(member_name)?;
+        (usize::try_from(at).ok()? < shared)
+            .then(|| HirType::Managed(ManagedType::Object(members[0])))
+    }
+
     fn member_of(
         &mut self,
         id: NodeId,
@@ -21638,6 +21680,31 @@ impl<'a> FuncBuilder<'a> {
             self.values[value.0 as usize].ty,
             HirType::Managed(ManagedType::Array(_) | ManagedType::String)
         );
+        // **A field every arm of a union puts in the same place.** A
+        // discriminated union is written with the discriminant declared first
+        // in every member, so `kind` is at offset zero in all of them even
+        // though the members disagree about everything after it. The union
+        // erases -- there is no single layout to represent it as -- and the
+        // read was refused for that, which is the right answer about the
+        // *union* and the wrong one about the *field*.
+        //
+        // The licence is the same one base-first layout gives a subclass, and
+        // the same one `laid_out_as_a_prefix` already states for a cast: where
+        // the fields agree in name, order and representation, the load is at
+        // the same offset whichever member is there. `Unerase` is a
+        // reinterpretation and the tag is coarse -- every object carries the
+        // same one -- so no discriminant has to be tested to do it.
+        //
+        // Refused as before when the field is past the agreement, which is
+        // `blockers/union-members-lay-fields-out-differently`'s second half.
+        if member_name != "length"
+            && self.values[value.0 as usize].ty == HirType::Erased
+            && let Some(prefix) = self.union_prefix_holding(id, member_name)
+        {
+            let origin = self.origin(id);
+            let value = self.push(OpKind::Unerase { value }, prefix, origin);
+            return self.member_of(id, value, member_name);
+        }
         if member_name != "length" {
             return Err(self.not_a_length(id, value, member_name, sequence));
         }
@@ -24742,27 +24809,57 @@ impl<'a> FuncBuilder<'a> {
         } else {
             let positions = positions.unwrap_or_default();
             let array = self.lower_expression(list)?;
-            let origin = self.origin(id);
             for (at, position) in positions.iter().enumerate() {
-                let element = self
+                let want = self
                     .represent(*position)
                     .ok_or_else(|| self.unrepresentable(list, "an `apply` list position"))?;
-                #[allow(clippy::cast_precision_loss)]
-                let index = at as f64;
-                let index = self.push(OpKind::ConstFloat(index), HirType::NUMBER, origin.clone());
-                let value = self.push(
-                    OpKind::ArrayGet {
-                        array,
-                        index,
-                        checked: true,
-                    },
-                    element,
-                    origin.clone(),
-                );
+                let value = self.read_a_position(array, at, &want, list)?;
                 args.push(self.coerce_to_parameter(id, at, value, list)?);
             }
         }
         self.finish_closure_call(id, function, callee, args)
+    }
+
+    /// One position of an array being read out to fill a positional argument.
+    ///
+    /// **The read is at the array's element type, not at the position's.** A
+    /// tuple whose positions disagree represents as an array of `Erased` --
+    /// record 0285 -- so an `ArrayGet` typed at what the position *declares*
+    /// claims a concrete object came out of an erased slot, and the verifier
+    /// says so: `an array element read, expected Erased, found
+    /// Managed(Object(..))`. Five addons stopped building on exactly that.
+    ///
+    /// The unerase afterwards is the same one `element_of` does for a tuple
+    /// index, licensed the same way: the position's declared type says what is
+    /// in that slot.
+    fn read_a_position(
+        &mut self,
+        array: ValueId,
+        at: usize,
+        want: &HirType,
+        node: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let HirType::Managed(ManagedType::Array(element)) = self.values[array.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(node, "a spread of something that is not an array"));
+        };
+        let origin = self.origin(node);
+        #[allow(clippy::cast_precision_loss)]
+        let index = at as f64;
+        let index = self.push(OpKind::ConstFloat(index), HirType::NUMBER, origin.clone());
+        let read = self.push(
+            OpKind::ArrayGet {
+                array,
+                index,
+                checked: true,
+            },
+            (*element).clone(),
+            origin.clone(),
+        );
+        if *element == HirType::Erased && *want != HirType::Erased {
+            return Ok(self.push(OpKind::Unerase { value: read }, want.clone(), origin));
+        }
+        Ok(read)
     }
 
     fn call_through_closure(

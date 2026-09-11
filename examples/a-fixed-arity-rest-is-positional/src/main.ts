@@ -110,3 +110,57 @@ export function variadicStaysAnArray(n: number): number {
 export function variadicIsNotFixed(n: number): number {
   return total(n) * 100 + total(n, n) * 10 + total(n, n, n);
 }
+
+// # Positions that do not agree, which is where this first went wrong
+//
+// A tuple whose positions represent differently is an array of `Erased` --
+// record 0285 -- so reading a position out to fill an argument must read at the
+// **array's** element type and unerase afterwards, not at the type the position
+// declares. Typing the read at the position instead claims a concrete object
+// came out of an erased slot, and the verifier says exactly that:
+//
+//     StoreType { func: "defaultTriggerAsyncIdScope<[obj10042]x2,void>",
+//                 what: "an array element read",
+//                 expected: Erased, found: Managed(Object(TypeId(10042))) }
+//
+// **Five addons stopped building on it and nothing here noticed.** The corpus,
+// the examples and the blockers all passed; `dgram`, `fs`, `http`, `net` and
+// `process` did not, because none of the first three exercises a generic rest
+// whose instantiation is heterogeneous. These two functions are that shape, so
+// the next version of this mistake fails here instead of four steps later.
+
+class Tagged {
+  id: number;
+  constructor(id: number) {
+    this.id = id;
+    }
+}
+
+class Named {
+  label: string;
+  constructor(label: string) {
+    this.label = label;
+  }
+}
+
+function withBoth<A extends unknown[]>(cb: (...args: A) => number, ...args: A): number {
+  return cb(...args);
+}
+
+/** Under test: two positions of different object types, so the element erases. */
+export function heterogeneousForward(n: number): number {
+  return withBoth(
+    (a: Tagged, b: Named): number => a.id * 100 + b.label.length,
+    new Tagged(n & 3),
+    new Named("abc"),
+  );
+}
+
+/** Under test: an object and a number, mixing a reference with a scalar. */
+export function mixedForward(n: number): number {
+  return withBoth(
+    (a: Tagged, b: number): number => a.id * 10 + b,
+    new Tagged(n & 3),
+    7,
+  );
+}
