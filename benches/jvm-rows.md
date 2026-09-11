@@ -98,6 +98,7 @@ meets them. This is the map; the row table below it is the current state.
   - Four mechanisms priced, four that are not it
   - `widen` does not invert on ART. It is worth more there, and I expected the opposite
   - The dex ratchet, made to fail on purpose
+  - The two worst bar 1 rows, method by method: over half of what we emit is slot traffic
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3936,6 +3937,50 @@ whole corpus against an impossible floor:
 
 The exit status, the count, and the right one of the two branches. This is the
 first thing in this lane that has been *shown* to fail rather than trusted to.
+
+### The two worst bar 1 rows, method by method: over half of what we emit is slot traffic
+
+Five mechanisms guessed and none of them the lever, so: stop guessing. The
+obvious instrument is a profile, and it is **not available here** -- `simpleperf`
+is on the device but the emulator exposes no PMU (`Event type 'cpu-cycles' is not
+supported`), only software events, and `cpu-clock` sampling of `dalvikvm`
+attributes every JIT frame to `unknown[+42a02435]` because the JIT code cache has
+no symbols. `dex2oat` would give symbolized AOT code and is not executable from
+the shell user. That is worth writing down rather than leaving as a gap somebody
+else re-attempts: **there is no method-level profile of this lane on this
+emulator.**
+
+What there is, is the bytecode, and a fair comparison is per method over the
+methods *both* sides have -- not the whole-class totals, which compare our
+flattened `Program` against two reference classes and said `awfy-nbody` has
+16.33x the instructions, which is scope mismatch rather than a finding.
+
+    awfy-queens   hot methods   ours 205 instructions   reference 125   1.64x
+                                58% load/store          36%
+    awfy-towers   hot methods   ours 212                reference  95   2.23x
+                                56% load/store          45%
+
+Per method, and the pattern is the same one twice:
+
+    getRowColumn    55 vs 25   2.20x    istore 13/0  iload 10/0
+                                        baload 3/3  getfield 3/3  iadd 2/2
+    pushDisk        93 vs 26   3.58x    istore 13/0  aload 12/0  iload 8/0  astore 8/0
+                                        aload_1 3/3  iload_2 2/2
+    placeQueen      66 vs 42   1.57x    istore 6/0  iload 5/0
+    popDiskFrom     61 vs 23   2.65x
+
+**The real work is identical and the difference is entirely the round trip.**
+`baload` three against three, `getfield` three against three, `iadd` two against
+two -- and then thirteen stores against none. `getRowColumn` is the innermost
+function of Queens, called for every row of every placement; `pushDisk` is called
+on every one of Towers' 8,191 moves.
+
+**And this is the fix I dismissed at 7.8% four hours ago.** That number was
+measured on a body whose real work was a multiply, a shift, an xor and an add --
+expensive operations, against which eighteen slot moves are a small share. Here
+the real work is three array loads and two adds. **A percentage measured on one
+body is not a property of the transformation**, and I treated it as one, which is
+the same error as pricing a fix by its reach on one row.
 
 ## Open, and whose
 
