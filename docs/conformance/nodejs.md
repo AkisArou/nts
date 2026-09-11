@@ -21331,6 +21331,49 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## `asRequest` is two links, and removing the first publishes nothing
+
+Continuing the probe rather than stopping at the first answer. Made `emitInit`
+compilable in a worktree -- the receiver-sacrificing extraction, unshippable but
+fine for a measurement -- and re-ran `fs`:
+
+    fs declined exports   123 before, 123 after
+    asRequest             still refused, 26 cascade lines
+
+Then the concrete twin again, in that same worktree:
+
+    asRequestProbe   0 mentions -- compiles, wraps, publishes
+    asRequest        26 -- still refused
+
+So with `emitInit` gone, the **only** difference between the two is the generic.
+
+    1  emitInit, a callable-valued field       in flight elsewhere
+    2  the returned closure carrying `A`       untouched by the rest-parameter fix
+
+### The order I had wrong, twice
+
+My first guess was the returned closure. The twin said `emitInit`, so I wrote that
+up and told the compiler session their queue item was worth more than they thought.
+Both true, and incomplete: it is `emitInit` **and then** the closure. The guess
+was right about the destination and wrong about the distance.
+
+This is the same error as the `WeakMap`, as "three fixes stand between `dns` and a
+compiled lane", and as "the compiled lane has no promises" -- **one link mistaken
+for the chain**, four times in one day. Each time the correction came from
+removing the link and looking at what appeared, and each time I had stopped one
+step earlier than the method allows.
+
+### The method, stated so it is not rediscovered a fifth time
+
+Give the refused thing a twin that differs in exactly one property, in a throwaway
+worktree, and read the new message. Then **remove the blocker it names** and do it
+again. Stopping at the first answer produces a true statement about link one and a
+false statement about the chain, and those are indistinguishable in a ledger
+entry unless the second step is taken.
+
+What it still cannot give: whether a third link waits behind the closure. Only
+links 1 and 2 are known, because only link 1 was removed.
+
 ## `asRequest` is blocked by `emitInit`, and the generic only made it silent
 
 The profile's largest chokepoint, diagnosed by giving it a twin. Same body, same
