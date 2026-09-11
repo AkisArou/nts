@@ -850,11 +850,12 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # distinction its own way. Landed 2026-09-10 as a coordinated pair, `18760619`
   # here and `f9ff1be6` on that lane, with `48707004` after it.
   #
-  # **Two gaps, and they are one cause.** `a-structural-cast-that-is-a-prefix`
-  # and `a-class-stored-and-compared` refuse with the same NTS4001:
+  # **Two gaps, one cause, and the compiler lane closed half of it.** They were
+  # `a-structural-cast-that-is-a-prefix` and `a-class-stored-and-compared`,
+  # refusing with the same NTS4001:
   #
-  #     storing a `Prefixed` where a `Counted` is declared
-  #     storing a `Ctor_Other` where a `Fn3__1` is declared
+  #     storing a `Prefixed` where a `Counted` is declared        -- CLOSED
+  #     storing a `Ctor_Message` where a `Fn3__1` is declared     -- open
   #
   # Two layouts TypeScript relates, unrelated in the class hierarchy this lane
   # emits -- structurally in the first, by function-type subtyping in the
@@ -862,6 +863,13 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # nothing: `getfield Counted.n` needs the object to *be* a `Counted`. A
   # conversion would be a copy and a copy is not the same object, which is the
   # trade the C lane refused for its own reasons.
+  #
+  # The first is closed by specialisation, `29994277` and `e6689b9a` on the
+  # compiler lane, and **prefixes are specialised because of this lane**: C and
+  # LLVM gain nothing from a copy there, and it is the only thing that lets a
+  # `Prefixed` reach a `Prefixed`-shaped parameter without a cast to relate.
+  # Verified here rather than taken: rebuilt at `e6689b9a`, the example emits
+  # five classes and `a-structural-cast-that-is-not-a-prefix` seven, both clean.
   #
   # It is **not** "a class token has no base". That edge was built and reverted
   # on 2026-09-10: a token's `typeof` names a different signature layout per
@@ -874,7 +882,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # So the two gaps are the same sentence one representation apart, and neither
   # is this lane being behind. Both swept one at a time rather than inferred
   # from a total.
-  backend_examples 174 "through the JVM backend" ); }
+  backend_examples 176 "through the JVM backend" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
