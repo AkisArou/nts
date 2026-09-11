@@ -21329,6 +21329,26 @@ they get the identical refusal at their own line. So it is not the intermediate
 binding -- it is capturing an executor's parameter in any nested closure, which is
 what `new Promise` is for.
 
+### The sweep that followed, and came back empty
+
+Having said the cast was a real TypeScript defect, the obvious next question is
+how many more there are. **None.** `as Record<string, unknown>` appears nowhere
+else in `runtime/node`, and `as unknown as` appears nowhere at all.
+
+Controlled, because a zero from a wrong pattern is not a zero: run against
+`fd11e2ff~1` the same expression finds the one it was written for.
+
+Widening to `any` produced two hits and both are **comments** -- "the same four
+pointer writes as any other append" in `timers/src/timeout.ts`, and "Node's native
+`GetOffset`: any value other than a safe integer" in `fs/src/vector-io.ts`. So the
+profile contains no `any` at all, and the two `[key: string]: unknown` signatures
+that remain are in `util/src/inspect.ts` and `stream/src/utils.ts`, where an
+arbitrary-keyed object is the subject rather than an escape from one.
+
+The defect was isolated. Worth knowing, because the alternative reading -- that a
+backend refusal had exposed a habit -- would have been a much larger piece of
+work, and it is not true.
+
 ### Why `dns` is worth keeping in `BLOCKED` rather than forgetting
 
 29 refused things behind 32 sites, against `zlib`'s 352. It is the smallest module
