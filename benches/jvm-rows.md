@@ -87,6 +87,7 @@ meets them. This is the map; the row table below it is the current state.
   - Every number in that exchange is HotSpot, in a goal about Android
   - ART has no cliff and no free case: the dispatch curve is flat at 2x
   - `invokevirtual` is the same story, and it is this lane's own closure path
+  - Bar 1 on ART: 51 rows, and the lane loses the bar by going to Android
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3355,20 +3356,41 @@ plan's reason for expecting a win there was "C2's profile-guided bimorphic
 inlining turns a two-implementation site into two guarded direct calls where the
 native lane emits a vtable indirect".
 
-Two modes is what that mechanism *looks like from outside*. A profile-guided
-optimisation either fires or does not, and the curve above says what each costs:
-a site C2 reads as bimorphic gets two guarded direct calls, and a site it gives
-up on gets the 4314 column. Nothing between them -- which is a bimodal row, not
-a noisy one, and it is the reason thirteen times the warmup did not help. The
-warmup makes the compile *happen*; it does not make the profile *clean*.
+I wrote here that two modes is what that mechanism looks like from outside, and
+made it falsifiable: **on ART there is no such fork, so `dispatch` should be
+unimodal there.** The consequence held and the mechanism did not.
 
-I am not claiming this is proven. It is a mechanism that predicts the exact shape
-the instrument reported, where "variance" predicts nothing, and it is checkable:
-**on ART there is no such fork**, so `dispatch` should be unimodal there. That is
-a falsifiable consequence and it is measured below rather than asserted here.
+The consequence, eight runs (`nts` half, then `ref` half):
 
-What is certain either way: whatever `dispatch` scores on HotSpot, the reason
-offered for it is a C2 reason, on a lane that exists for a runtime without C2.
+    HotSpot   17814  18086  28356  28447  28508  28809  31857  33958   spread 1.91x
+    ART       40443  40487  40512  40601  40616  40656  40666  40680   spread 1.006x
+    reference, HotSpot   28035 .. 28809                               spread 1.027x
+    reference, ART       38839 .. 39669                               spread 1.021x
+
+So the row is unimodal on ART to **0.6%**, and 1.02x-1.05x eight times, which
+makes it quotable there for the first time. On HotSpot it is not bimodal, it is
+**trimodal** -- two runs near 17.9us, four near 28.5us, two near 32.9us -- and
+the whole of that spread is in *our* half, against a reference stable to 2.7%
+in the same eight runs.
+
+**And the mechanism is refused by the artefact.** `javap -c -p nts.gen.Program`
+on this case reports **zero `invokevirtual` and zero `invokeinterface`**; the
+only `invoke` in the emitted program is the `<init>`'s `invokespecial`. There is
+no dispatch site in what this lane emits for `dispatch`, so nothing C2 could
+bimorphically inline, so profile-guided bimorphic inlining cannot be what varies.
+I had the instruction mix a `javap` away and reasoned from the case's *name* and
+from a curve I had measured an hour earlier, which fitted the evidence and was
+about a different program.
+
+What survives is the measurement and not the reason: the variance is C2's, it is
+entirely in this lane's half, and ART has none of it. What it actually is remains
+open -- `-XX:+PrintInlining` across repeated runs would name it, and the emitted
+switch is a branch chain rather than a `tableswitch`, which is worth pricing
+separately and is not a variance explanation.
+
+What is certain either way, and was the point: whatever `dispatch` scores on
+HotSpot, the reason this file offered for it is a C2 reason, on a lane that
+exists for a runtime without C2.
 
 The plan predicted exactly this, for a different property: "on ART, where escape
 analysis is much weaker, it simply loses that". It is the same sentence about
@@ -3380,6 +3402,161 @@ are not a phone's, and the row table is HotSpot by construction. What is now
 known is the *mechanism*, and a mechanism is enough to say which explanations
 travel: an allocation C2 removes, an inline cache C2 keeps, and a devirtualised
 static call. The first two are HotSpot's; the third is ours and survives.
+
+## Bar 1 on ART: 51 rows, and the lane loses the bar by going to Android
+
+`sh tooling/android/times-on-device.sh`, from a tree pinned at `ea3be8f5`
+(the eight `awfy-*` rows at `95599899`), against a compiler frozen by md5
+before and after. Every case with a `ref.java` -- 51 of the 60.
+
+**The instrument is its own control and the control is why this is worth
+reading.** Each case is measured four times: the compiled program and
+`ref.java`, each on HotSpot and on ART, through one harness. The HotSpot pair
+has an independently published value in the row table above, measured by
+`tooling/bench` through a different code path. It reproduces on **35 of the 40
+rows that have one, within 0.10, and 30 of those within 0.05.**
+
+Five do not, and their ART numbers are marked `*` below and are not certified
+by anything: `awfy-sieve` (+0.38, and the table already calls that row bimodal),
+`node-utf8` (-0.30), `symbol-keyed-map` (-0.28), `array-predicates` (-0.12),
+`objects` (-0.12). Four of the five moved *toward* 1.00, which is what a busy
+machine does to a ratio -- both halves slow and the fraction compresses -- and
+the machine was not quiet: a peer was building node addons throughout. I took
+the lock, which stops another *measurement*, and it does not stop a build.
+
+**Why an emulator's nanoseconds are allowed to mean anything.** They are not,
+and none are quoted as a time. Bar 1 is jvm over Java: two programs, one
+runtime, one harness, one process launch apart, so what the emulator adds it
+adds to both halves. The ART times below are uniformly smaller than the HotSpot
+ones -- `fib` at 362us against 505us -- which is not ART beating HotSpot at
+recursive arithmetic and is a virtualised clock. It cancels.
+
+### Bar 1 on ART: the eight rows the bar names
+
+| case | HotSpot | ART | moved |
+| --- | --- | --- | --- |
+| `awfy-list` | 0.94x | **0.82x** | -0.12 |
+| `awfy-mandelbrot` | 0.83x | **0.89x** | +0.06 |
+| `awfy-permute` | 0.71x | **1.04x** | +0.33 |
+| `awfy-sieve` * | 1.32x | **1.14x** | -0.18 |
+| `awfy-bounce` | 0.96x | **1.15x** | +0.19 |
+| `awfy-nbody` | 1.00x | **1.19x** | +0.19 |
+| `awfy-towers` | 1.03x | **1.64x** | +0.61 |
+| `awfy-queens` | 1.25x | **1.98x** | +0.73 |
+
+### Rows that got worse on ART
+
+| case | HotSpot | ART | moved |
+| --- | --- | --- | --- |
+| `closure-merge` | 1.02x | **3.33x** | +2.31 |
+| `erasure-stored-unknown` | 0.91x | **2.33x** | +1.42 |
+| `dispatch` | 0.62x | **1.03x** | +0.41 |
+| `bytes` | 1.10x | **1.50x** | +0.40 |
+| `map-and-set` | 0.82x | **1.15x** | +0.33 |
+| `erasure-typed` | 1.00x | **1.32x** | +0.32 |
+| `fib` | 1.03x | **1.34x** | +0.31 |
+| `loop` | 0.75x | **0.95x** | +0.20 |
+| `logical-assignment` | 0.93x | **1.12x** | +0.19 |
+| `optional-chain` | 1.26x | **1.45x** | +0.19 |
+| `closures` | 0.84x | **1.01x** | +0.17 |
+| `arrays` | 1.03x | **1.19x** | +0.16 |
+
+### Rows that got better on ART
+
+| case | HotSpot | ART | moved |
+| --- | --- | --- | --- |
+| `node-utf8` * | 6.23x | **2.82x** | -3.41 |
+| `generic-classes` | 1.13x | **0.12x** | -1.01 |
+| `objects` * | 0.87x | **0.15x** | -0.72 |
+| `erasure-unknown` | 1.00x | **0.43x** | -0.57 |
+| `symbol-keyed-map` * | 2.59x | **2.08x** | -0.51 |
+| `number-format-double` | 0.92x | **0.44x** | -0.48 |
+| `array-from` | 1.04x | **0.78x** | -0.26 |
+| `number-format` | 0.99x | **0.77x** | -0.22 |
+| `substrings` | 0.39x | **0.19x** | -0.20 |
+| `user-iterable` | 0.94x | **0.77x** | -0.17 |
+| `generator` | 1.00x | **0.84x** | -0.16 |
+
+### Rows ART did not move (20 of them, inside 0.15)
+
+    instanceof 0.97x  elementwise 0.87x  module-closures 0.96x  bigint 0.06x  symbol-keys 0.95x  case-convert 0.94x  in-narrowing 0.99x  strings 0.97x  erasure-stored-typed 0.97x
+    pipeline 0.99x  absences 1.25x  exceptions 0.00x  accumulate 1.00x  checksum 1.00x  growth-fixed 1.01x  array-mutations 0.69x  growth-grown 1.06x  array-methods 1.26x
+    upcast 1.12x  array-predicates 1.74x
+
+**The verdict on bar 1.** On HotSpot five of the eight are at or under 1.00x. On
+ART **two** are. `awfy-queens` goes 1.25x to 1.98x and `awfy-towers` 1.03x to
+1.64x -- both more than double their gap. The bar is not met on Android, and the
+honest way to say it is that *taking this lane to Android costs bar 1*, on the
+eight rows the bar is written about.
+
+### What the survey refuted, and it was two of the three
+
+Predictions were written before the numbers were read
+(`scratchpad/prediction.md`), which is the only reason this paragraph can be
+written at all.
+
+**Refuted: "a row whose gap is codegen is runtime-independent."** Four rows in
+the table above are attributed to the same residual, `uirem` over an `l2i`
+counter. They do not move together:
+
+    absences        1.26x -> 1.25x   -0.01
+    instanceof      1.10x -> 0.97x   -0.13
+    optional-chain  1.26x -> 1.45x   +0.19
+    bytes           1.10x -> 1.50x   +0.40
+
+A single named cause predicts a single behaviour, and these four span 0.41. So
+either the attribution is too coarse -- more than one thing is being called the
+`uirem` residual -- or an unsigned remainder costs differently on ART, which is
+checkable and has not been checked. Either way the four rows are not one row.
+
+**Refuted: "a row this lane wins because C2 does something loses it on ART."**
+Five rows obeyed it -- `dispatch` 0.62 to 1.03, `map-and-set` 0.82 to 1.15,
+`closures` 0.84 to 1.01, `loop` 0.75 to 0.95, `logical-assignment` 0.93 to 1.12.
+**`substrings` did the opposite**, 0.39x to **0.19x**: the win doubled. That win
+is therefore not C2's. It is `hir::substring::elide` declining to build a
+substring whose every use asks for its length or a character, plus
+`java.lang.String` being immutable so there is nothing to copy -- both of them
+ours, and both travel.
+
+**Held: "a row this lane wins because the *reference* allocates wins by more on
+ART."** `bigint` 0.16 to 0.06 against a `BigInteger`; `generic-classes` 1.13 to
+**0.12**; `objects` 0.87 to 0.15; `number-format-double` 0.92 to 0.44 against
+`Double.toString`; `array-from` 1.04 to 0.78. ART charges more for an allocation
+and has no escape analysis to take it back, so every reference that allocates
+pays, and this compiler's whole-program knowledge is worth more there than here.
+
+### The two rows that are ours, and they are one shape
+
+Everything above is the platform. Two rows are not:
+
+    closure-merge           1.02x -> 3.33x
+    erasure-stored-unknown  0.91x -> 2.33x
+
+`closure-merge` is the row this lane's own closure path is about. Every closure
+call this backend emits is `invokevirtual` on an abstract `Fn$` base, and this
+case is deliberately bimorphic -- two lambdas reaching one site. **But so is the
+reference**, whose `IntFn` lambdas d8 desugars into two classes reaching one
+`invokeinterface`. Both halves are bimorphic, so ART's flat 2x falls on both and
+cannot by itself be a 3.33x. Something else in our half costs 3x on a runtime
+without escape analysis, and the instrument that separates allocation from
+dispatch already exists: `bytes-on-device.sh` against `ref-bytes-on-device.sh`,
+which is how the three allocation fixes above were found. That is the next
+measurement and it is not yet made.
+
+`erasure-stored-unknown` is the plan's least-confident question arriving with a
+number. The four `erasure-*` rows split cleanly:
+
+    erasure-stored-typed    0.99x -> 0.97x
+    erasure-unknown         1.00x -> 0.43x
+    erasure-typed           1.00x -> 1.32x
+    erasure-stored-unknown  0.91x -> 2.33x
+
+Three of the four are fine or better and one is 2.33x, which is the shape of a
+representation that is free until it is *stored* and *unknown* at once. The plan
+predicted the reason before any of this existed -- an `NtsValue` merged at a
+control-flow join is not scalar-replaced even on HotSpot, and ART does not
+scalar-replace at all -- and named the answer, which is to decompose rather than
+box. This is the first number that argues for building it.
 
 ## Open, and whose
 
