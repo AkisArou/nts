@@ -21331,6 +21331,51 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## The blockers were parallel, not serial, and the twin cannot tell you which
+
+The silence fix landed and `asRequest` names its own cause for the first time:
+
+    fs/src/request.ts:15:70  NTS1001 a generic function no call pins down
+                             (the type parameter `Arguments`)
+
+    485 declined exports before, 485 after
+
+Zero published, which is correct -- adding a diagnostic does not change what
+compiles. What it bought is attribution, and four investigations of mine had
+ended at this function without it.
+
+### The correction
+
+I reported `asRequest` as "two links, `emitInit` first, then the closure". The
+count was right and the **sequencing was wrong**. Reading the three probes
+together:
+
+    concrete twin, emitInit not fixed   refused for emitInit
+    concrete twin, emitInit fixed       compiles
+    real asRequest, emitInit fixed      still refused, on the generic
+
+The concrete form has exactly one blocker. The generic form has **two
+independent** ones. Neither reveals the other; they were both there the whole
+time, and which appears in the output is only which the compiler reports first --
+which just changed, because `asRequest` now has its own `NTS1001` where it had
+none.
+
+### The failure mode this names
+
+The twin shows you **a** blocker. "The next one" is an assumption about ordering
+that nothing in the output supports. I had built a serial model -- link one, then
+link two -- out of results that were equally consistent with two blockers sitting
+side by side, and then used the serial model to forecast what a fix would clear.
+
+That is the third correction about this one function in a day: the returned
+closure, then `emitInit`, then both-independently. Each came from the twin, and
+each time the instrument was right and the story I put around it was not.
+
+**The method's statement needs one more clause**, and it is now in "The concrete
+twin": removing a blocker and finding another does not make them sequential. It
+makes them two. Whether either is *behind* the other is a question the probe does
+not answer.
+
 ## Two ways to make `tty` compiled green that were considered and refused
 
 Both would work. Recording them because "I could not" and "I would not" are
@@ -23132,7 +23177,10 @@ from doing step 4.
 
 ### What it cannot do
 
-It shows link N+1 and says nothing about N+2. `asRequest` is `emitInit` and then
+It shows link N+1 and says nothing about N+2. **And it does not tell you they are
+links at all** -- removing one blocker and finding another is equally consistent
+with two independent blockers, which is what `asRequest` turned out to have. A
+chain is an assumption; two is the measurement. `asRequest` is `emitInit` and then
 the closure, and whether a third waits behind the closure is unknown because only
 the first was removed. **Never report what a fix will publish** -- report what
 cannot proceed until it lands. The measured example: the generic-rest lowering
