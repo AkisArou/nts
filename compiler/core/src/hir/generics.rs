@@ -184,11 +184,20 @@ fn is_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     )
 }
 
+/// What each type parameter's *source* type was, beside its representation.
+///
+/// Only the types whose representation loses something the copy's identity
+/// needs are ever read back out of this -- today that is a tuple, whose arity
+/// an array representation does not carry.
+pub type Sources = FxHashMap<TypeId, TypeId>;
+
 /// One instantiation of one generic *function*.
 #[derive(Debug, Clone)]
 pub struct FunctionInstance {
     /// What each of the declaration's type parameters stands for here.
     pub substitution: Substitution,
+    /// The source types behind [`Self::substitution`]. See [`Sources`].
+    pub sources: Sources,
     /// What the copy's name carries, so two copies do not collide.
     pub suffix: String,
 }
@@ -240,14 +249,22 @@ pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions 
         }
 
         let mut substitution = Substitution::default();
+        let mut sources = Sources::default();
         for (parameter, argument) in generic.parameters.iter().zip(&actual.parameters) {
-            unify(snapshot, parameter.ty, argument.ty, &mut substitution);
+            unify(
+                snapshot,
+                parameter.ty,
+                argument.ty,
+                &mut substitution,
+                &mut sources,
+            );
         }
         unify(
             snapshot,
             generic.return_type,
             actual.return_type,
             &mut substitution,
+            &mut sources,
         );
 
         // Every type parameter has to have been pinned down, and to something
@@ -261,12 +278,13 @@ pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions 
         {
             continue;
         }
-        let suffix = suffix_of(&generic.type_parameters, &substitution);
+        let suffix = suffix_of(snapshot, &generic.type_parameters, &substitution, &sources);
         found.at_call.insert(*call, suffix.clone());
         let copies = found.copies.entry(declaration).or_default();
         if !copies.iter().any(|copy| copy.suffix == suffix) {
             copies.push(FunctionInstance {
                 substitution,
+                sources,
                 suffix,
             });
         }
@@ -311,13 +329,28 @@ fn declared_signature(
 /// stands opposite it, and an array matches an array. Anything else contributes
 /// nothing, which leaves the type parameter unbound and the call refused —
 /// wrong only in being conservative.
-fn unify(snapshot: &SemanticSnapshot, generic: TypeId, actual: TypeId, into: &mut Substitution) {
+fn unify(
+    snapshot: &SemanticSnapshot,
+    generic: TypeId,
+    actual: TypeId,
+    into: &mut Substitution,
+    sources: &mut Sources,
+) {
     if is_parameter(snapshot, generic) {
         let actual = concrete(snapshot, actual);
         if let Some(ty) = representation(snapshot, actual)
             && !is_parameter(snapshot, actual)
         {
             into.insert(generic, ty);
+            // **The representation is not enough to name the copy.** `[number]`
+            // and `[number, number]` both represent as an array of `f64` and so
+            // both spell `[f64]`, which put three arities of `pack` into one
+            // copy -- harmless while the parameter was an array, and a
+            // miscompile the moment the declaration became positional. The
+            // source type is kept beside the representation rather than
+            // replacing it: the representation is still what decides sharing
+            // for every type that has no arity.
+            sources.insert(generic, actual);
         }
         return;
     }
@@ -328,7 +361,7 @@ fn unify(snapshot: &SemanticSnapshot, generic: TypeId, actual: TypeId, into: &mu
         return;
     };
     if let (TypeKind::Array(inner), TypeKind::Array(against)) = (&generic.kind, &actual.kind) {
-        unify(snapshot, *inner, *against, into);
+        unify(snapshot, *inner, *against, into, sources);
     }
 }
 
@@ -387,13 +420,35 @@ pub(super) fn concrete(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
 /// copy rather than two identical ones. `<` and `>` cannot appear in a
 /// TypeScript identifier, so a copy's name cannot collide with a plain
 /// function's — the same trick the class version uses.
-fn suffix_of(parameters: &[TypeId], substitution: &Substitution) -> String {
+fn suffix_of(
+    snapshot: &SemanticSnapshot,
+    parameters: &[TypeId],
+    substitution: &Substitution,
+    sources: &Sources,
+) -> String {
     let spelled: Vec<String> = parameters
         .iter()
         .map(|parameter| {
             substitution
                 .get(parameter)
-                .map_or_else(|| "?".to_owned(), spell)
+                .map_or_else(|| "?".to_owned(), |ty| {
+                    let spelled = spell(ty);
+                    // A tuple's arity is part of what the copy is, because the
+                    // copy declares one parameter per position. Appended rather
+                    // than substituted so every existing copy keeps its name:
+                    // only a type parameter bound to a tuple gets the suffix,
+                    // and nothing else was sharing with it.
+                    match sources
+                        .get(parameter)
+                        .and_then(|source| snapshot.types.get(source.0 as usize))
+                        .map(|record| &record.kind)
+                    {
+                        Some(TypeKind::Tuple(positions)) => {
+                            format!("{spelled}x{}", positions.len())
+                        }
+                        _ => spelled,
+                    }
+                })
         })
         .collect();
     format!("<{}>", spelled.join(","))

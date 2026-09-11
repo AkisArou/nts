@@ -128,14 +128,41 @@
 // copy, so a map the caller built beforehand does not contain them. The first
 // version found zero seeds and looked like a no-op.
 //
-// # Where it stops now
+// # Where it stops now, as of 2026-09-11
 //
-// On the callback, and the reason is
-// `blockers/a-fixed-arity-rest-is-not-positional`: once `A = [number]`, the
-// parameter `cb: (...args: A) => void` becomes `(...args: [number]) => void`,
-// which is the same type as `(a: number) => void` and is *not* represented the
-// same way. That defect predates all of this -- it reproduces on `HEAD` with no
-// generics in the file -- and it is where this cone bottoms out.
+// **Not on the callback any more.** It used to stop there: once `A = [number]`,
+// `cb: (...args: A) => void` becomes `(...args: [number]) => void`, which is
+// the same type as `(a: number) => void` and was not represented the same way.
+// That is closed -- a fixed-arity rest is now one parameter per position at the
+// declaration, the call and the callback alike, and
+// `examples/a-fixed-arity-rest-is-positional` guards it including the shape
+// this file's `scheduleWithOneArgument` writes.
+//
+// What is left is the **capture**. `queue.push(() => callback(...args))` closes
+// over `args`, whose declared type is the type parameter `A`, and a capture is
+// typed from the declaration rather than from the instantiation:
+//
+//     tick.ts:9:32  a captured variable of unrepresentable type
+//                   (the type parameter `A`)
+//
+// So the cone moved one link again and this expectation moved with it. The
+// forwarding itself works; handing the binder to a closure does not.
+//
+// # A second defect here that nothing asserts
+//
+// The verifier rejects the copy this file *does* emit, and has since before any
+// of this work:
+//
+//     StoreType { func: "nextTick<obj24>", what: "a field",
+//                 expected: Managed(Array(Float { bits: 64 })),
+//                 found: Managed(Array(Erased)) }
+//
+// Checked against `HEAD` by disabling the positional expansion and the arity
+// suffix separately and rebuilding twice -- the message is byte-identical both
+// times, with only the copy's name changing as the suffix gained its arity. It
+// is recorded here rather than as its own fixture because this directory keys
+// on the *refusal*, and a `lowers` guard beside a refusing function would
+// assert nothing. Anyone closing the capture above should expect to meet it.
 //
 // # The line the compiler names is not the line of the construct
 //

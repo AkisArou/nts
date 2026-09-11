@@ -17,7 +17,7 @@
 //
 // `fn` here is `(x: number) => number`, which takes its argument **positionally**,
 // so the literal's arity would have to be spread across parameters. That is the
-// same question as `blockers/a-fixed-arity-rest-is-not-positional`, from the
+// same question as `examples/a-fixed-arity-rest-is-positional`, from the
 // other side: there a fixed-arity rest has to become positional parameters, and
 // here a literal has to become positional arguments. One answer will close both.
 //

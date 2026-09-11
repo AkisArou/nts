@@ -2092,14 +2092,24 @@ fn function_copies(
     snapshot: &SemanticSnapshot,
     generic: &super::generics::GenericFunctions,
     id: NodeId,
-) -> Vec<(Substitution, String)> {
+) -> Vec<(Substitution, super::generics::Sources, String)> {
     match generic.copies.get(&id) {
         Some(instances) => instances
             .iter()
-            .map(|instance| (instance.substitution.clone(), instance.suffix.clone()))
+            .map(|instance| {
+                (
+                    instance.substitution.clone(),
+                    instance.sources.clone(),
+                    instance.suffix.clone(),
+                )
+            })
             .collect(),
         None if is_generic_function(snapshot, id) => Vec::new(),
-        None => vec![(Substitution::default(), String::new())],
+        None => vec![(
+            Substitution::default(),
+            super::generics::Sources::default(),
+            String::new(),
+        )],
     }
 }
 
@@ -2160,7 +2170,7 @@ fn lower_class(
             if copy > 0 && is_static_member(snapshot, member) {
                 continue;
             }
-            let mut builder = shared.builder(snapshot, substitution.clone(), String::new());
+            let mut builder = shared.builder(snapshot, substitution.clone(), super::generics::Sources::default(), String::new());
             // An overload signature declares a call shape and has no body. The
             // implementation beside it is the one member emitted, and every
             // call resolving to a signature is built against that one -- so
@@ -2264,6 +2274,7 @@ impl Shared {
         &self,
         snapshot: &'a SemanticSnapshot,
         substitution: Substitution,
+        sources: super::generics::Sources,
         suffix: String,
     ) -> FuncBuilder<'a> {
         let mut builder = FuncBuilder::instantiating(
@@ -2274,6 +2285,7 @@ impl Shared {
             substitution,
             suffix,
         );
+        builder.sources = sources;
         builder.generic_calls.clone_from(&self.generics.at_call);
         wire_naming(&mut builder, &self.naming);
         builder
@@ -2672,7 +2684,7 @@ fn refused_initializers(
 ) -> rustc_hash::FxHashSet<u32> {
     let mut refused = rustc_hash::FxHashSet::default();
     for (symbol, initializer) in &shared.module.deferred {
-        let mut probe = shared.builder(snapshot, Substitution::default(), String::new());
+        let mut probe = shared.builder(snapshot, Substitution::default(), super::generics::Sources::default(), String::new());
         if let Err(diagnostic) = probe.lower_expression(*initializer) {
             lowered.diagnostics.push(diagnostic);
             refused.insert(*symbol);
@@ -2717,7 +2729,7 @@ fn lower_module_initializer(
         // that declares its own local also consumes it.
         let mut lost = Vec::new();
         statements.retain(|statement| {
-            let mut probe = shared.builder(snapshot, Substitution::default(), String::new());
+            let mut probe = shared.builder(snapshot, Substitution::default(), super::generics::Sources::default(), String::new());
             let attempt = if probe.kind_of(*statement) == Some(syntax::VARIABLE_STATEMENT) {
                 probe.lower_module_binding(*statement, refused)
             } else if probe.kind_of(*statement) == Some(syntax::CLASS_DECLARATION) {
@@ -2765,7 +2777,7 @@ fn lower_module_initializer(
             ));
         }
 
-        let mut builder = shared.builder(snapshot, Substitution::default(), String::new());
+        let mut builder = shared.builder(snapshot, Substitution::default(), super::generics::Sources::default(), String::new());
         match builder.lower_module_init(file, &statements, refused) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => {
@@ -3700,8 +3712,8 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
             continue;
         }
         let copies = function_copies(snapshot, &shared.generics, id);
-        for (substitution, suffix) in copies {
-            let mut builder = shared.builder(snapshot, substitution, suffix);
+        for (substitution, sources, suffix) in copies {
+            let mut builder = shared.builder(snapshot, substitution, sources, suffix);
             match builder.lower_function(id) {
                 Ok(func) => lowered.program.funcs.push(func),
                 Err(diagnostic) => {
@@ -6263,6 +6275,10 @@ struct FuncBuilder<'a> {
     /// a generic class. Empty everywhere else, which is every function that is
     /// not one of those copies.
     substitution: Substitution,
+    /// The *source* types behind `substitution`, for the one question a
+    /// representation cannot answer: how many positions a tuple has. See
+    /// [`super::generics::Sources`].
+    sources: super::generics::Sources,
     /// The type a bare `null` should take, where the caller knows it.
     ///
     /// `contextual_type` recovers this from the tree for the shapes the tree
@@ -6364,6 +6380,7 @@ impl<'a> FuncBuilder<'a> {
             written_order: rustc_hash::FxHashMap::default(),
             used_closures: Vec::new(),
             substitution: Substitution::default(),
+            sources: super::generics::Sources::default(),
         }
     }
 
@@ -7625,7 +7642,7 @@ impl<'a> FuncBuilder<'a> {
             if self.declares_a_field(child) {
                 declared.push((child, index));
             }
-            params.push(self.lower_param(child, index)?);
+            params.extend(self.lower_param(child, index)?);
         }
 
         self.store_parameter_properties(&declared)?;
@@ -8699,56 +8716,6 @@ impl<'a> FuncBuilder<'a> {
         self.represent(self.parameter_type_id(call, at)?)
     }
 
-    /// The checker's type for a call's `at`th parameter.
-    ///
-    /// Split out from [`Self::parameter_representation`] because the rest path
-    /// needs the type itself and not its representation: a union of tuples has
-    /// no representation as written, and [`Self::tuple_union_as_array`] is what
-    /// turns it into one. Reading it through `represent` first would have
-    /// thrown that away before the question could be asked.
-    ///
-    /// The fallback stays on the rest path rather than living here. A *non*-rest
-    /// parameter declared `[] | [string]` is a genuine union-of-tuples value and
-    /// not an array of anything, so converting it would answer a question nobody
-    /// asked -- and would do it silently, which is worse than the refusal.
-    fn parameter_type_id(&self, call: NodeId, at: usize) -> Option<TypeId> {
-        if let Some(signature) = self.overriding_signature(call) {
-            return Some(signature.parameters.get(at)?.ty);
-        }
-        let target = self.snapshot.call_targets.get(&call)?;
-        // **The implementation's parameter, where the checker resolved the call
-        // to an overload signature.**
-        //
-        // The emitted function is the implementation's, so its parameter is the
-        // slot an argument is going into. Reading the resolved signature gave
-        // two wrong answers on one program: `p.pick(n)` matched
-        // `pick(a: number)` and found no parameter at index 1 at all, so the
-        // omitted argument was refused as having "nowhere to put `undefined`";
-        // and `p.pick(n, 2)` matched `pick(a: number, b: number)` and coerced
-        // to an `f64` where the implementation's `b?: number` is erased --
-        // `CallArgumentType { at: 2, expected: Erased, found: Float }`.
-        //
-        // From the declaration's own node type rather than from a signature,
-        // because the checker gives the implementation's declaration the
-        // *overloaded* type: its call signatures are the overloads, so asking
-        // for it hands back one of the things being corrected for.
-        if let Some(callee) = target.callee {
-            let implementation = self.implementation_of(callee);
-            if implementation != callee
-                && let Some(parameter) = self
-                    .children(implementation)
-                    .into_iter()
-                    .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
-                    .nth(at)
-                && let Some(ty) = self.snapshot.node_types.get(&parameter)
-            {
-                return Some(*ty);
-            }
-        }
-        let signature = self.snapshot.signatures.get(target.signature.0 as usize)?;
-        Some(signature.parameters.get(at)?.ty)
-    }
-
     /// `delete o.x`, which TypeScript permits only where `x` is optional.
     ///
     /// `TS2790: The operand of a 'delete' operator must be optional` -- so the
@@ -9116,7 +9083,7 @@ impl<'a> FuncBuilder<'a> {
             if self.kind_of(*child) != Some(syntax::PARAMETER) {
                 continue;
             }
-            params.push(self.lower_param(*child, u32::try_from(params.len()).unwrap_or(0))?);
+            params.extend(self.lower_param(*child, u32::try_from(params.len()).unwrap_or(0))?);
         }
 
         // The return type comes from the annotation when there is one. Without it
@@ -9358,13 +9325,21 @@ impl<'a> FuncBuilder<'a> {
                 continue;
             }
             let at = u32::try_from(params.len()).unwrap_or(0);
-            params.push(self.lower_param(child, at)?);
+            let added = self.lower_param(child, at)?;
             // `lower_param` pushed the value and bound it by symbol. A wrapper
             // has no body to read that binding, so the value is kept here --
             // it is the only `Param(at)` this function will hold.
-            if let Some(value) = self.param_value(at) {
-                forwarded.push(value);
+            //
+            // A fixed-arity rest expands to several, so the range is what is
+            // forwarded rather than the single index. Forwarding only `at`
+            // would have dropped every position after the first, silently and
+            // at the one site with no body to notice.
+            for offset in 0..u32::try_from(added.len()).unwrap_or(1) {
+                if let Some(value) = self.param_value(at + offset) {
+                    forwarded.push(value);
+                }
             }
+            params.extend(added);
         }
 
         // The captures, read back and bound to the names the body writes. A
@@ -9856,6 +9831,53 @@ impl<'a> FuncBuilder<'a> {
                 args.push(gathered);
                 return Ok(args);
             }
+            // **A spread of a fixed-arity tuple is that many arguments.**
+            // `cb(...args)` inside a generic rest forwards to a callback whose
+            // `call` is positional -- a lambda written `(a, b) => …` has two
+            // parameters and never had a rest -- so leaving the spread as one
+            // array is an argument-count mismatch, which is invalid HIR and not
+            // a diagnostic.
+            //
+            // Only a *fixed* arity can be expanded. `...xs` for `xs: number[]`
+            // has no count until run time and keeps the refusal, which is now
+            // the only shape that message covers. The refusal is what made this
+            // visible at all: expanding the declaration turned the old invalid
+            // HIR into a named refusal here, and `agreed on every case` was
+            // still printed over the two functions that survived it.
+            if self.kind_of(*argument) == Some(syntax::SPREAD_ELEMENT)
+                && let Some(operand) = self
+                    .children(*argument)
+                    .into_iter()
+                    .find(|child| self.kind_of(*child) != Some(syntax::DOT_DOT_DOT_TOKEN))
+                && let Some(positions) = self
+                    .snapshot
+                    .node_types
+                    .get(&operand)
+                    .copied()
+                    .and_then(|ty| self.fixed_arity_positions(ty))
+            {
+                let array = self.lower_expression(operand)?;
+                let origin = self.origin(*argument);
+                for (offset, position) in positions.iter().enumerate() {
+                    let element = self
+                        .represent(*position)
+                        .ok_or_else(|| self.unrepresentable(operand, "a spread position"))?;
+                    #[allow(clippy::cast_precision_loss)]
+                    let at = offset as f64;
+                    let index = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
+                    let value = self.push(
+                        OpKind::ArrayGet {
+                            array,
+                            index,
+                            checked: true,
+                        },
+                        element,
+                        origin.clone(),
+                    );
+                    args.push(self.coerce_to_parameter(call, args.len(), value, operand)?);
+                }
+                continue;
+            }
             // **Lowered knowing the parameter's representation**, not merely
             // coerced into it afterwards. An array literal decides its own
             // element width when it is built, and `coerce` can only reject the
@@ -10241,20 +10263,91 @@ impl<'a> FuncBuilder<'a> {
         self.snapshot.signatures.get(signature.0 as usize)
     }
 
-    fn parameter_shapes(&self, call: NodeId) -> Vec<(bool, bool)> {
-        // See [`Self::callee_signature`]: for `f.call(receiver, ...)` the
-        // resolved target is `Function.prototype.call` and the arguments are
-        // `f`'s.
+    /// The parameters a call actually supplies, with a **fixed-arity rest
+    /// expanded into its positions**.
+    ///
+    /// One list, and that is the point. A rest parameter typed by a
+    /// fixed-length tuple is positional -- `(...args: [number]) => void` is the
+    /// same type as `(a: number) => void` -- so its arity is asked by two
+    /// questions this file used to answer separately: *is parameter `n` a rest*
+    /// and *what type does parameter `n` have*. Two derivations of one arity is
+    /// the shape that has produced three defects in as many days, and the JVM
+    /// lane named it before this was written: "if C or LLVM builds the argument
+    /// list from the callee's declaration while HIR builds it from the call,
+    /// that is a second place the arity lives".
+    ///
+    /// So the expansion happens here and nowhere else, and both readers below
+    /// are projections of it.
+    ///
+    /// A **union** of tuples is deliberately not expanded: `[] | [a, b?]` has no
+    /// single arity, so it cannot be positional and stays the array
+    /// `element_of_a_tuple_union` builds. The two readings meet at a question
+    /// with a yes-or-no answer.
+    fn effective_parameters(&self, call: NodeId) -> Vec<(Option<TypeId>, bool, bool)> {
+        let declared = self.declared_parameters(call);
+        let mut out: Vec<(Option<TypeId>, bool, bool)> = Vec::new();
+        for (ty, optional, rest) in declared {
+            let positions = rest
+                .then(|| ty.and_then(|ty| self.fixed_arity_positions(ty)))
+                .flatten();
+            match positions {
+                Some(positions) => {
+                    for position in positions {
+                        out.push((Some(position), false, false));
+                    }
+                }
+                None => out.push((ty, optional, rest)),
+            }
+        }
+        out
+    }
+
+    /// The positions of a fixed-length tuple, or nothing.
+    ///
+    /// After substitution, because in a generic's copy the node still reads `A`.
+    /// The positions of a fixed-arity tuple, or nothing for anything else.
+    ///
+    /// Three ways a tuple can be spelled at this point, and all three are here
+    /// because each was found separately by a probe that did not build:
+    ///
+    /// - written out, `...args: [number, string]`;
+    /// - a type parameter this copy substituted, `...args: A` with `A = [f64]`
+    ///   -- and the representation cannot answer it, because an array is what
+    ///   a tuple represents as and the arity is gone by then. That is what
+    ///   `sources` is for;
+    /// - an alias or constraint that resolves to one, which
+    ///   [`Self::after_substitution`] already handled for object types.
+    fn fixed_arity_positions(&self, ty: TypeId) -> Option<Vec<TypeId>> {
+        let ty = self
+            .sources
+            .get(&ty)
+            .copied()
+            .unwrap_or_else(|| self.after_substitution(ty));
+        let TypeKind::Tuple(positions) = &self.snapshot.types.get(ty.0 as usize)?.kind else {
+            return None;
+        };
+        Some(positions.clone())
+    }
+
+    /// The parameters as the callee declares them, before any expansion.
+    fn declared_parameters(&self, call: NodeId) -> Vec<(Option<TypeId>, bool, bool)> {
         if let Some(signature) = self.overriding_signature(call) {
             return signature
                 .parameters
                 .iter()
-                .map(|parameter| (parameter.optional, parameter.rest))
+                .map(|parameter| (Some(parameter.ty), parameter.optional, parameter.rest))
                 .collect();
         }
         let Some(target) = self.snapshot.call_targets.get(&call) else {
             return Vec::new();
         };
+        // **The implementation's parameters, where the call resolved to an
+        // overload signature.** The emitted function is the implementation's, so
+        // its parameter is the slot an argument is going into. Reading the
+        // resolved signature gave two wrong answers on one program: `p.pick(n)`
+        // matched `pick(a: number)` and found no parameter at index 1 at all,
+        // and `p.pick(n, 2)` coerced to an `f64` where the implementation's
+        // `b?: number` is erased.
         if let Some(callee) = target.callee {
             let implementation = self.implementation_of(callee);
             if implementation != callee {
@@ -10271,7 +10364,11 @@ impl<'a> FuncBuilder<'a> {
                             || children
                                 .iter()
                                 .any(|child| self.kind_of(*child) == Some(syntax::QUESTION_TOKEN));
-                        (optional, rest)
+                        (
+                            self.snapshot.node_types.get(&param).copied(),
+                            optional,
+                            rest,
+                        )
                     })
                     .collect();
             }
@@ -10283,10 +10380,21 @@ impl<'a> FuncBuilder<'a> {
                 signature
                     .parameters
                     .iter()
-                    .map(|parameter| (parameter.optional, parameter.rest))
+                    .map(|parameter| (Some(parameter.ty), parameter.optional, parameter.rest))
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    fn parameter_shapes(&self, call: NodeId) -> Vec<(bool, bool)> {
+        self.effective_parameters(call)
+            .into_iter()
+            .map(|(_, optional, rest)| (optional, rest))
+            .collect()
+    }
+
+    fn parameter_type_id(&self, call: NodeId, at: usize) -> Option<TypeId> {
+        self.effective_parameters(call).get(at)?.0
     }
 
     /// What a call has to supply for a parameter its argument list did not
@@ -10574,7 +10682,106 @@ impl<'a> FuncBuilder<'a> {
         element.or(Some(HirType::Erased))
     }
 
-    fn lower_param(&mut self, id: NodeId, index: u32) -> Result<Param, Diagnostic> {
+    /// A rest parameter of fixed arity, as one parameter per position.
+    ///
+    /// See the comment at the call in [`Self::lower_param`] for why the
+    /// declaration is the site that changed. This builds the array the name is
+    /// bound to as well, which is what lets every other read site stay as it
+    /// was.
+    fn lower_positional_rest(
+        &mut self,
+        name_node: NodeId,
+        index: u32,
+        positions: &[TypeId],
+    ) -> Result<Vec<Param>, Diagnostic> {
+        let origin = self.origin(name_node);
+        let name = self
+            .node(name_node)
+            .text
+            .clone()
+            .unwrap_or_else(|| format!("arg{index}"));
+
+        // **The array's element type is the declared one, not one derived from
+        // the positions.** Deriving it here was a second derivation of a fact
+        // that already had one, and it disagreed at the first shape that
+        // captures the binder: `A = []` has no position to infer from, so the
+        // invented rule said `Erased` while every other site -- the capture
+        // field among them -- had the declared `Array(f64)`. The verifier
+        // caught it as a `StoreType`, which is the good outcome of a bad
+        // reason.
+        let declared = match self.type_of(name_node) {
+            Some(HirType::Managed(ManagedType::Array(element))) => Some(*element),
+            _ => None,
+        };
+
+        let mut params = Vec::with_capacity(positions.len());
+        let mut values = Vec::with_capacity(positions.len());
+        let mut element: Option<HirType> = declared;
+        for (offset, position) in positions.iter().enumerate() {
+            let ty = self
+                .represent(*position)
+                .ok_or_else(|| self.unrepresentable(name_node, "a rest parameter position"))?;
+            self.materialize(name_node, &ty)?;
+            // Only where the declaration had nothing to say. Identical
+            // positions keep their own type -- `[number, number]` stays an
+            // array of numbers -- and anything else erases, which is the same
+            // rule `element_of_a_tuple_union` applies across arms.
+            element = Some(match element {
+                None => ty.clone(),
+                Some(seen) if seen == ty => seen,
+                Some(_) => HirType::Erased,
+            });
+            let at = index + u32::try_from(offset).unwrap_or(0);
+            values.push(self.push(OpKind::Param(at), ty.clone(), origin.clone()));
+            params.push(Param {
+                name: format!("{name}_{offset}"),
+                ty,
+                origin: origin.clone(),
+                // Positional, so *ordinary*. Calling it a rest here would put
+                // the arity back in dispute at the one place that now agrees.
+                shape: ParamShape::Ordinary,
+                known: Facts::TOP,
+            });
+        }
+
+        let element = element.unwrap_or(HirType::Erased);
+        let array_ty = HirType::Managed(ManagedType::Array(Box::new(element.clone())));
+        self.materialize(name_node, &array_ty)?;
+        #[allow(clippy::cast_precision_loss)]
+        let count = positions.len() as f64;
+        let length = self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin.clone());
+        let array = self.push(
+            OpKind::ArrayNew {
+                length,
+                zeroed: true,
+            },
+            array_ty,
+            origin.clone(),
+        );
+        for (offset, value) in values.into_iter().enumerate() {
+            let value = self.coerce(value, &element, name_node)?;
+            #[allow(clippy::cast_precision_loss)]
+            let at = offset as f64;
+            let at = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
+            self.push(
+                OpKind::ArraySet {
+                    array,
+                    index: at,
+                    value,
+                    checked: true,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        if let Some(symbol) = self.node(name_node).symbol {
+            let array = self.open_cell(symbol.0, array, name_node);
+            self.bindings.insert(symbol.0, array);
+        }
+        Ok(params)
+    }
+
+    fn lower_param(&mut self, id: NodeId, index: u32) -> Result<Vec<Param>, Diagnostic> {
         let children = self.children(id);
         // A name, or a pattern standing where one would be. `function f({ x }:
         // P)` is one parameter carrying one value, and the pattern is what the
@@ -10619,6 +10826,43 @@ impl<'a> FuncBuilder<'a> {
         let is_rest = children
             .iter()
             .any(|child| self.kind_of(*child) == Some(syntax::DOT_DOT_DOT_TOKEN));
+
+        // **A rest whose type is a fixed-length tuple is not variable-arity at
+        // all.** `(...args: [number, string])` takes exactly two arguments, and
+        // two of the three places that decide a signature's arity already said
+        // so: [`Self::effective_parameters`] expands the declaration a *call*
+        // resolves against, and a closure's synthesised `call` has expanded it
+        // since it was written. Only this site still built an array, so the
+        // three disagreed -- and because a parameter list mismatch is not a
+        // diagnostic, the result was invalid HIR reported against the callee.
+        //
+        // The A/B that settled the direction: with the call side left alone,
+        // the surviving error in both probes was `Closure#call` wanting a
+        // scalar and being handed an array. The declaration is the odd one out,
+        // and positional is also the representation worth having -- a
+        // fixed-arity rest should cost what the same parameters written out
+        // would, which is no allocation.
+        //
+        // The N parameters *are* the declaration. The array is then built from
+        // them and bound to the name, so every read in the body -- `args[0]`,
+        // `args.length`, `args.map(…)`, a capture, a reassignment -- goes
+        // through the ordinary binding and needs to know nothing about any of
+        // this. That is deliberate: a `positional_rests` side table consulted
+        // at the four sites I first listed would have been wrong at the ten
+        // others that read `bindings` directly. Where the uses are ones the
+        // escape analysis can see through, the array has no live use left and
+        // goes away; where the body genuinely needs an array, it gets one.
+        if is_rest
+            && let Some(positions) = self
+                .snapshot
+                .node_types
+                .get(&name_node)
+                .copied()
+                .and_then(|ty| self.fixed_arity_positions(ty))
+        {
+            return self.lower_positional_rest(name_node, index, &positions);
+        }
+
         let rest_array = if is_rest {
             match self.type_of(name_node) {
                 Some(array @ HirType::Managed(ManagedType::Array(_))) => Some(array),
@@ -10709,13 +10953,13 @@ impl<'a> FuncBuilder<'a> {
             ParamShape::Ordinary
         };
 
-        Ok(Param {
+        Ok(vec![Param {
             name,
             ty,
             origin,
             shape,
             known,
-        })
+        }])
     }
 
     fn lower_block(&mut self, id: NodeId) -> Result<(), Diagnostic> {
@@ -24345,7 +24589,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// What this does *not* do is the positional case: `f.apply(r, [a, b])`
     /// where the callee takes `(a, b)` rather than a rest needs the arity of a
-    /// literal, which is `blockers/a-fixed-arity-rest-is-not-positional`. At the
+    /// literal, which is `examples/a-fixed-arity-rest-is-positional`. At the
     /// twelve `.apply` sites in this tree the callee's parameter is a rest and
     /// the argument is the array that filled it -- `fn.apply(thisArg, args)`
     /// with `fn: (...args: A) => T` and `args: A` -- so this is the shape the
