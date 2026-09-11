@@ -3348,12 +3348,27 @@ per signature it devirtualises -- `invokestatic Closure0$call` rather than
 pays nothing on either runtime. The 2x is paid only where a site is genuinely
 polymorphic, which is where it cannot be avoided without specialising the caller.
 
-**And it puts a published row's explanation in doubt.** `dispatch` is **0.64x**
-jvm/Java, and this file's reason is "C2's profile-guided bimorphic inlining turns
-a two-implementation site into two guarded direct calls where the native lane
-emits a vtable indirect". That mechanism does not exist on ART. The row's number
-is not wrong -- it is a HotSpot number honestly measured -- but the *win* is a
-C2 win, and this lane exists for a runtime without C2.
+**And it explains a row this file has already given up on.** `dispatch` is the
+row whose six runs "land in two places", which neither P-core pinning nor 13x the
+warmup moved, and which the table records as **0.67x-1.14x, not a number**. The
+plan's reason for expecting a win there was "C2's profile-guided bimorphic
+inlining turns a two-implementation site into two guarded direct calls where the
+native lane emits a vtable indirect".
+
+Two modes is what that mechanism *looks like from outside*. A profile-guided
+optimisation either fires or does not, and the curve above says what each costs:
+a site C2 reads as bimorphic gets two guarded direct calls, and a site it gives
+up on gets the 4314 column. Nothing between them -- which is a bimodal row, not
+a noisy one, and it is the reason thirteen times the warmup did not help. The
+warmup makes the compile *happen*; it does not make the profile *clean*.
+
+I am not claiming this is proven. It is a mechanism that predicts the exact shape
+the instrument reported, where "variance" predicts nothing, and it is checkable:
+**on ART there is no such fork**, so `dispatch` should be unimodal there. That is
+a falsifiable consequence and it is measured below rather than asserted here.
+
+What is certain either way: whatever `dispatch` scores on HotSpot, the reason
+offered for it is a C2 reason, on a lane that exists for a runtime without C2.
 
 The plan predicted exactly this, for a different property: "on ART, where escape
 analysis is much weaker, it simply loses that". It is the same sentence about

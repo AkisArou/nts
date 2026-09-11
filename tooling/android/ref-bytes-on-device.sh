@@ -30,7 +30,12 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-work=${TMPDIR:-/tmp}/nts-refbytes.$$
+# On disk and deliberately not through `TMPDIR`, which is `/tmp` here and `/tmp`
+# is a 16G tmpfs. The trap below is `EXIT INT TERM`, which SIGKILL does not
+# fire, so a killed run leaves classes and a copy of the runtime jar per case.
+# Three of those filled the tmpfs until the shell could not start. This was the
+# last sibling still pointing at it.
+work=${NTS_ART_WORK:-$HOME/.cache/nts-android}/nts-refbytes.$$
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 runs=${NTS_ART_ITERATIONS:-2000}
 
