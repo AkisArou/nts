@@ -166,6 +166,7 @@ concurrently() {
   cmd_rc="./tooling/gate/rc.sh"
   cmd_bench_agree="./tooling/gate/bench-agree.sh"
   cmd_addons="./tooling/gate/addons.sh"
+  cmd_blockers="blockers"
   running=""
   chosen=""
   for name in "$@"; do
@@ -1005,10 +1006,48 @@ step "corpus"  corpus
 step "benches"  ./tooling/gate/benches.sh
 step "example-refusals" example_refusals
 
+# The 152 fixtures in `tooling/conformance/blockers`, which nothing ran.
+#
+# `blockers-check.mjs` sets `process.exitCode = 0` on purpose -- "a blocker being
+# fixed is the outcome this lane wants, and it should be loud rather than red" --
+# and that reasoning is right about a *fix* and wrong about the other two
+# outcomes. So the split is made here rather than there, on the same rule
+# `example_refusals` uses one step above: **progress prints a note and passes, a
+# change fails.**
+#
+#   FIXED       a fixture that no longer refuses. Someone should convert it to a
+#               guard, and until they do it is good news, not a red gate.
+#   CHANGED     it refuses, differently. The expectation names a message that is
+#               no longer the one, so the fixture is measuring something other
+#               than what it says.
+#   REGRESSED   a guard that stopped holding.
+#
+# Two fixtures were stale when this was written, both from changes made the same
+# evening, and **neither showed up anywhere**: `call-and-apply-on-a-function-value`
+# had become `apply`-only and `rest-parameter-of-unrepresentable-elements` had
+# stopped refusing at all. A hundred and fifty-two fixtures that nothing executes
+# are a hundred and fifty-two claims nobody is checking.
+blockers() {
+  out=$(node tooling/conformance/blockers-check.mjs 2>&1)
+  printf '%s\n' "$out" | tail -1
+  fixed=$(printf '%s\n' "$out" | grep -c '^  FIXED ' || true)
+  [ "$fixed" -gt 0 ] && {
+    printf '%s\n' "$out" | grep '^  FIXED '
+    echo "  ^ convert these to guards; not a failure"
+  }
+  changed=$(printf '%s\n' "$out" | grep -cE '^  (CHANGED|REGRESSED) ' || true)
+  [ "$changed" = "0" ] || {
+    printf '%s\n' "$out" | grep -E '^  (CHANGED|REGRESSED) ' -A 2
+    echo "  ^ a fixture measuring something other than what it says"
+    return 1
+  }
+  return 0
+}
+
 # Everything left, at once. `benches` is above because `bench-agree` runs the
 # cases it compiles; nothing else here depends on anything else here.
 jobs=$(( jobs > 4 ? 4 : jobs ))
-concurrently profile sweep llvm llvm-rc jvm dex bench-agree examples rc memory addons
+concurrently profile sweep llvm llvm-rc jvm dex bench-agree examples rc memory addons blockers
 # Every node module built as an addon and *loaded*, under eager binding.
 #
 # The gap this fills was open for the whole of 2026-09-09 and had a crash in it.

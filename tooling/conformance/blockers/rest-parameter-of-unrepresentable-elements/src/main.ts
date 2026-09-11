@@ -1,4 +1,14 @@
-// expect: a rest parameter whose element type has no representation
+// expect: lowers
+//
+// **Both shapes here lower as of 2026-09-11.** This was a refusal fixture and is
+// now a guard, because what it holds down is still worth holding: a rest
+// parameter whose arms agree on an element type is an array of it, and one
+// whose positions disagree is an array of *erased* values read back through the
+// tag. Records 0282 and 0285.
+//
+// Kept rather than deleted because the homogeneous case and the union-of-tuples
+// case took separate fixes, and a guard that runs both is the cheapest way to
+// notice if either comes undone.
 //
 // A rest parameter lowers when its elements have a representation and is
 // refused when they do not. `...parts: string[]` is fine; a rest parameter

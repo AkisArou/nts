@@ -1,4 +1,14 @@
-// expect: a method `call` with no declaration in the hierarchy
+// expect: a method `apply` with no declaration in the hierarchy
+//
+// **`call` closed on 2026-09-11 and `apply` did not**, which is why this
+// expectation moved rather than the fixture being deleted. `viaCall` now lowers
+// and agrees with node; `viaApply` is what is left, and it is a different
+// lowering rather than the same one under another name: `call` takes its
+// arguments positionally and `apply` takes them as an array, so the receiver
+// question they share is already answered and the argument question is not.
+//
+// `examples/a-call-with-an-explicit-receiver` is the guard for the half that
+// closed, and record 0284 is why the receiver can be dropped at all.
 //
 // `Function.prototype.call` and `.apply` on a function value. The same function
 // value called directly lowers, so it is the method and not the value:
