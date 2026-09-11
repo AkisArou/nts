@@ -228,8 +228,25 @@ export function validateAbortSignal(
   }
 }
 
-/** An octal string, and nothing else that `parseInt` would half-accept. */
-const OCTAL = /^[0-7]+$/;
+/**
+ * An octal string, and nothing else that `parseInt` would half-accept.
+ *
+ * Written out rather than `/^[0-7]+$/`, because a module-scope regular
+ * expression does not lower: it refused `parseFileMode`, and
+ * `export-reach.mjs` puts ten `fs` exports behind that one function. The same
+ * change to `net/src/address.ts` published `isIP`, `isIPv4` and `isIPv6`.
+ *
+ * The length check is the `+` in the pattern: the empty string matches
+ * `[0-7]*` and must not match this.
+ */
+function isOctalString(text: string): boolean {
+  if (text.length === 0) return false;
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    if (code < 48 || code > 55) return false;
+  }
+  return true;
+}
 
 /**
  * A file mode, given as a number or an octal string.
@@ -243,7 +260,7 @@ export function parseFileMode(value: unknown, name: string, byDefault?: number):
   const given = value ?? byDefault;
   let mode = given;
   if (typeof mode === "string") {
-    if (!OCTAL.test(mode)) {
+    if (!isOctalString(mode)) {
       throw new ERR_INVALID_ARG_VALUE(
         name,
         mode,

@@ -21289,6 +21289,56 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## A blocker removed, nine dependents freed, zero exports published
+
+`internal/validators.ts` held `const OCTAL = /^[0-7]+$/`, a module-scope regular
+expression, which refused `parseFileMode`. `export-reach.mjs` puts **ten `fs`
+exports** behind that one function -- second only to `asRequest` in the whole
+profile. The same change to `net/src/address.ts` had published three names an hour
+earlier, so this looked like the next ten.
+
+Replaced with a nine-line `isOctalString`. Controlled exhaustively rather than by
+sampling: **137,561 strings** -- every string up to length four over a 19-character
+alphabet of octal digits, non-octal digits, letters, signs, space, tab and
+newline. 4,680 accepted by the pattern, **0 differences**.
+
+`parseFileMode` is no longer refused. And:
+
+    fs declined exports   123 before, 123 after
+
+**Nothing was published.** All nine functions that had been refused for calling
+`parseFileMode` had another blocker waiting behind it:
+
+    4  now blocked by displayBytePath
+    3  now blocked by asRequest
+    1  now blocked by check
+    1  now blocked by uvException
+
+### This is the retraction, demonstrated
+
+Earlier today I sent another session a ranking with `asRequest`'s twenty at the
+top and said it "should turn twenty `fs` exports on at once", then retracted it on
+the strength of the `nextTickVoid` probe: a terminal is the head of a chain, and
+its count is what cannot proceed until it is fixed, not what fixing it publishes.
+
+That was an inference from one case. This is the measurement. The second-largest
+chokepoint in the profile was removed cleanly, with an exhaustive control, and the
+compiled lane published **zero** additional names. Nine dependents, nine chains,
+every one of them longer than one.
+
+It is still worth having -- the blocker is gone from nine chains and cannot come
+back -- and it is worth being exact about what "worth having" means here. It is
+not a name on the axis. It is one link.
+
+### And it says something about the ranking's shape
+
+`asRequest`, `displayBytePath`, `uvException` and `check` are all *also* in
+`export-reach.mjs`'s top terminals. So `parseFileMode`'s ten were double-counted
+against those rows all along: the same exports sit behind several heads at once,
+and the column sums to more than the set. The ordering survives -- these really
+are the chokepoints -- but the numbers overlap in a way the instrument does not
+show, and I had read them as disjoint.
+
 ## `dns.lookup` is not a lowering problem at the end, it is a boundary one
 
 Walking the last of `lookup`'s chain in a worktree -- remove `nextTick`, fix what
