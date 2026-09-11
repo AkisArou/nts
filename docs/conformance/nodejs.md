@@ -22312,6 +22312,50 @@ lane is unchanged at 1 passed, 0 failed.
 Steps 2 and 4 are not this side's to fix, and 4 is not even the compiler's in the
 usual sense -- it is what the Node-API wrapper can construct.
 
+## The 44 were a construct that lowers to nothing, and `assert` is most of it
+
+The compiler session isolated what I had been reporting as "44 functions the
+wrapper calls non-functions". It is not a message bug and their message fix does
+not touch it:
+
+    const held = new Holder(1);
+    export const add = held.add;
+
+    nts hir  ->  4 function(s), nothing refused
+
+**No global, no diagnostic, no wrapper.** The binding produces nothing at all, so
+the export falls to the catch-all because every list it could be classified into
+is empty. Filed as `blockers/a-method-exported-as-a-value`.
+
+### The population, counted
+
+    18  assert/src/main.ts
+     5  punycode/src/main.ts
+     3  http/src/main.ts
+     1  events/src/main.ts
+
+`assert`'s eighteen are its entire public surface -- `export const ok =
+looseAssertions.ok` and seventeen more -- and its own header says why: the module
+surface *is* the loose configuration's unbound method set, because `assert` and
+`assert.strict` are two configurations of one implementation. That is node's
+shape, so it is not something the module can be written out of.
+
+### The counting lesson, again, in the same paragraph
+
+The first pattern I ran for this returned **0 matches** against a line I had
+printed on the screen one command earlier. A `$` inside the character class.
+`grep -c` cannot tell zero occurrences from a wrong pattern is in the goal's rules
+and it caught me between two commits -- the zero looked exactly like an answer.
+
+### Why the silence matters more than the fix
+
+The compiler session put it better than I would: the message was the only evidence
+there was, so it was the only thing either of us could reason about, and it was
+false. I reported those 44 as a message bug **twice**, and built a ranking on top
+of the classification. A construct that lowers to nothing and reports nothing
+cannot be ranked by any census, which is now the third instance today --
+`asRequest`'s generic, `function_copies` on an empty vector, and this.
+
 ## The structural cast, counted four ways, because three of them are already in use
 
 The compiler session gave me their count and said the last number they kept in
