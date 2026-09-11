@@ -189,6 +189,69 @@ impl<'a> Decomposer<'a> {
         }
     }
 
+    /// Decompose the placeholder types that only **call resolution** can name.
+    ///
+    /// Every seed of the first pass comes from `node_types`, and a *generic*
+    /// call's instantiated parameter types are written on no node:
+    /// `nextTick<A extends unknown[]>(..., ...args: A)` called with one argument
+    /// has `A = [number]` in the resolved signature and nowhere else. Resolution
+    /// runs *after* decomposition, so those types were never walked and reached
+    /// the lowering as `Structured` placeholders.
+    ///
+    /// What that cost: an unpinned type parameter emits no copy and **no
+    /// diagnostic either**, so the only sign was a cascade saying "calls `tick`,
+    /// which was refused above" with no refusal above. One line found it --
+    /// writing `const x: [number] = [1]` in the same file makes the identical
+    /// type decompose and the refusal disappear.
+    ///
+    /// **Here rather than in the caller**, which was the first attempt and found
+    /// nothing: `interned` is moved into this type, and resolution interns new
+    /// slots into *this* copy, so a map the caller built beforehand does not
+    /// have them. The owner of the map is the only one that can ask.
+    ///
+    /// Only placeholders, so a program whose calls resolve to types already
+    /// walked pays one filter and no round trips.
+    pub fn resolve_signature_types(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        budget: Budget,
+    ) -> Result<DecomposeStats, TsgoError> {
+        let seeds: Vec<u32> = snapshot
+            .call_targets
+            .values()
+            .filter_map(|target| snapshot.signatures.get(target.signature.0 as usize))
+            .flat_map(|signature| {
+                signature
+                    .parameters
+                    .iter()
+                    .map(|parameter| parameter.ty)
+                    .chain(std::iter::once(signature.return_type))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|ty| {
+                matches!(
+                    snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+                    Some(TypeKind::Structured { .. })
+                )
+            })
+            .filter_map(|ty| {
+                self.interned
+                    .iter()
+                    .find(|(_, slot)| **slot == ty)
+                    .map(|(id, _)| *id)
+            })
+            .collect();
+        if seeds.is_empty() {
+            return Ok(DecomposeStats::default());
+        }
+        // The types were reached once already and left placeholders, so the
+        // walk has to be allowed to look at them again.
+        for seed in &seeds {
+            self.done.remove(seed);
+        }
+        self.run(snapshot, seeds, budget)
+    }
+
     /// Decompose the transitive closure of `seeds`.
     ///
     /// `seeds` are tsgo type ids. Returns what it cost; the snapshot is updated in

@@ -1,4 +1,10 @@
-// expect: a rest parameter of unrepresentable type
+// expect: a captured variable of unrepresentable type (the type parameter `A`)
+//
+// **The rest parameter itself is no longer the blocker.** As of 2026-09-11 the
+// frontend decomposes an instantiated tuple, so `A = []` and `A = [number]`
+// arrive as real tuples, `unify` pins them, and one copy per arity is emitted --
+// `tick<[f64]>` and `tick<obj24>` where there were none. The cone moved one link
+// and this expectation moved with it.
 //
 // A rest parameter typed by a type parameter, forwarded to a callback that
 // spreads it. `internal/tick.ts` declares `nextTick` this way:
@@ -109,20 +115,27 @@
 // copy still absent, which turns an honest `NTS1001` into a cascade with no
 // root. Strictly worse for a reader.
 //
-// # So the fix is in the frontend, and it is a decomposition and not a lowering
+// # The frontend half is done, and it was not the boundary
 //
-// Decompose an instantiated tuple even though its symbol is `lib.d.ts`'s, so
-// `A = []` and `A = [number]` arrive as `Tuple([])` and `Tuple([number])`. Then
-// `unify` pins them, `suffix_of` names one copy per arity, and each copy gets
-// the rest parameter this compiler already lowers -- the union-of-tuples and
-// bare-tuple work of records 0282 and 0285 is already waiting for it.
+// The boundary was never reached: the type was **never in the worklist**. Every
+// seed comes from `node_types`, an instantiated parameter type is written on no
+// node, and call resolution runs *after* decomposition -- so `call_targets` is
+// empty when the seeds are taken. A second pass, seeded from the resolved
+// signatures once resolution has run, decomposes them.
 //
-// What makes that a decision rather than a patch is the boundary itself: it
-// exists because `Promise<T>` and a class prototype pull the standard library's
-// whole type graph in, measured at 5,773 types from a 180-node file. A tuple is
-// cheap -- its arguments and nothing else -- so the narrow version is to let a
-// *tuple* through the boundary specifically, which is what `array_like` was
-// already trying to do and does not manage for an instantiation.
+// That pass has to live in the `Decomposer`, which was the second attempt: the
+// interning map is *moved* into it and resolution interns new slots into that
+// copy, so a map the caller built beforehand does not contain them. The first
+// version found zero seeds and looked like a no-op.
+//
+// # Where it stops now
+//
+// On the callback, and the reason is
+// `blockers/a-fixed-arity-rest-is-not-positional`: once `A = [number]`, the
+// parameter `cb: (...args: A) => void` becomes `(...args: [number]) => void`,
+// which is the same type as `(a: number) => void` and is *not* represented the
+// same way. That defect predates all of this -- it reproduces on `HEAD` with no
+// generics in the file -- and it is where this cone bottoms out.
 //
 // # The line the compiler names is not the line of the construct
 //

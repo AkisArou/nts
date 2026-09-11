@@ -964,6 +964,8 @@ fn absolute(path: &Utf8Path) -> Utf8PathBuf {
 struct DeepStats {
     decomposed: Option<decompose::DecomposeStats>,
     resolved: Option<decompose::DecomposeStats>,
+    /// The second decomposition, over types only call resolution could name.
+    followup: Option<decompose::DecomposeStats>,
     folded: Option<decompose::DecomposeStats>,
 }
 
@@ -1091,6 +1093,12 @@ impl TsgoApi {
         }
         if let Some(budget) = self.resolve_calls {
             stats.resolved = Some(deep.resolve_calls(snapshot, budget)?);
+            // See `Decomposer::resolve_signature_types`: a generic call's
+            // instantiated parameter types are on no node, and resolution runs
+            // after the seeds are taken.
+            if let Some(budget) = self.decompose {
+                stats.followup = Some(deep.resolve_signature_types(snapshot, budget)?);
+            }
         }
         if let Some(budget) = self.fold_constants {
             stats.folded = Some(deep.fold_constants(snapshot, budget)?);
@@ -1198,6 +1206,7 @@ impl SemanticSource for TsgoApi {
         let DeepStats {
             decomposed,
             resolved,
+            followup,
             folded,
         } = self.deepen(
             &mut client,
@@ -1222,9 +1231,15 @@ impl SemanticSource for TsgoApi {
             modules: symbols::module_count(&snapshot),
             calls_resolved: resolved.map_or(0, |r| r.decomposed),
             constants_folded: folded.map_or(0, |f| f.decomposed),
-            decomposed: decomposed.map_or(0, |d| d.decomposed),
-            decomposition_exhausted: decomposed.is_some_and(|d| d.exhausted),
-            types_unanswered: decomposed.map_or(0, |d| d.unanswered),
+            // Both passes, because the second is decomposition too and a
+            // number that counted only the first would go down when the work
+            // moved rather than when it stopped happening.
+            decomposed: decomposed.map_or(0, |d| d.decomposed)
+                + followup.map_or(0, |f| f.decomposed),
+            decomposition_exhausted: decomposed.is_some_and(|d| d.exhausted)
+                || followup.is_some_and(|f| f.exhausted),
+            types_unanswered: decomposed.map_or(0, |d| d.unanswered)
+                + followup.map_or(0, |f| f.unanswered),
         };
 
         snapshot.validate()?;

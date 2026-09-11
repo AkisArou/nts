@@ -10460,14 +10460,35 @@ impl<'a> FuncBuilder<'a> {
     /// reason it names. `blockers/a-rest-parameter-that-is-a-union-of-tuples`
     /// carries both halves and the controls that separate them.
     fn rest_element_of_a_tuple_union(&self, name_node: NodeId) -> Option<HirType> {
-        self.element_of_a_tuple_union(*self.snapshot.node_types.get(&name_node)?)
+        self.element_of_a_tuple_union(
+            self.after_substitution(*self.snapshot.node_types.get(&name_node)?),
+        )
+    }
+
+    /// What a type stands for in this copy, as a type id.
+    ///
+    /// **In a generic's copy the node still reads `A`.** What it stands for
+    /// lives in the builder's substitution, and `represent` is where that is
+    /// applied -- but it answers an `HirType`, so the id has to be read back out
+    /// of it. Asking `node_types` directly gets the type parameter, which is
+    /// neither a tuple nor a union.
+    ///
+    /// One helper because both halves need it and they have to agree: the copy
+    /// for `A = []` refused at its own *declaration* while `A = [number]`
+    /// compiled beside it, and once that was fixed the same copy refused again
+    /// at `cb(...args)` -- the identical mistake, one function along.
+    fn after_substitution(&self, ty: TypeId) -> TypeId {
+        match self.represent(ty) {
+            Some(HirType::Managed(ManagedType::Object(substituted))) => substituted,
+            _ => ty,
+        }
     }
 
     /// [`Self::rest_element_of_a_tuple_union`] as an array, which is what both
     /// the declaration and the call want.
     fn tuple_union_as_array(&self, declared: TypeId) -> Option<HirType> {
         Some(HirType::Managed(ManagedType::Array(Box::new(
-            self.element_of_a_tuple_union(declared)?,
+            self.element_of_a_tuple_union(self.after_substitution(declared))?,
         ))))
     }
 
@@ -10520,7 +10541,14 @@ impl<'a> FuncBuilder<'a> {
                 }
             }
         }
-        element
+        // **Every arm empty: the array is always empty, so any element serves.**
+        //
+        // `A = []` is what a generic rest binds to when the call passes no extra
+        // arguments, and it is the shape `nextTick(() => { … })` produces.
+        // Returning nothing here refused the instantiation and left the other
+        // one -- `A = [number]` -- compiling beside it, so one call site worked
+        // and its neighbour did not.
+        element.or(Some(HirType::Erased))
     }
 
     fn lower_param(&mut self, id: NodeId, index: u32) -> Result<Param, Diagnostic> {
