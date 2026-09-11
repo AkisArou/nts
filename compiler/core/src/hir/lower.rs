@@ -6098,6 +6098,21 @@ struct FuncBuilder<'a> {
     exits: Vec<Exit>,
     /// Layouts discovered while lowering this function.
     layouts: Vec<Layout>,
+    /// Whose signature a particular call's arguments answer to, where the call
+    /// node's own resolved target names something else.
+    ///
+    /// `f.call(receiver, ...rest)` resolves to `Function.prototype.call`, whose
+    /// own second parameter is a rest -- so the rest position and the rest's
+    /// element type both came back describing `call` rather than `f`, and
+    /// `...args` reached the ordinary argument path as ``a spread element``.
+    /// The arguments belong to `f`, and this is where that is said.
+    ///
+    /// **Keyed by the call node, which is what makes it safe.** An argument may
+    /// contain a call of its own, and that call asks these same two functions
+    /// with its *own* node; the key does not match, so it gets its own
+    /// signature. A bare `Option<TypeId>` would have been inherited by every
+    /// nested call in the argument list.
+    callee_signature: Option<(NodeId, TypeId)>,
     /// The receiver, in a method.
     this: Option<ValueId>,
     /// What this copy's name carries, for one instantiation of a generic
@@ -6240,6 +6255,7 @@ impl<'a> FuncBuilder<'a> {
             exits: Vec::new(),
             returns: HirType::Void,
             layouts: Vec::new(),
+            callee_signature: None,
             this: None,
             suffix: String::new(),
             qualified: rustc_hash::FxHashMap::default(),
@@ -8575,6 +8591,9 @@ impl<'a> FuncBuilder<'a> {
     /// not an array of anything, so converting it would answer a question nobody
     /// asked -- and would do it silently, which is worse than the refusal.
     fn parameter_type_id(&self, call: NodeId, at: usize) -> Option<TypeId> {
+        if let Some(signature) = self.overriding_signature(call) {
+            return Some(signature.parameters.get(at)?.ty);
+        }
         let target = self.snapshot.call_targets.get(&call)?;
         // **The implementation's parameter, where the checker resolved the call
         // to an overload signature.**
@@ -10048,7 +10067,30 @@ impl<'a> FuncBuilder<'a> {
     /// signatures are the overloads, so asking `node_types` for it hands back
     /// one of the things being corrected for. The implementation's own list
     /// exists in exactly one place that is not an overload: the declaration.
+    /// The signature this call's arguments answer to, when it is not the one
+    /// the call node resolved to. See [`Self::callee_signature`].
+    fn overriding_signature(&self, call: NodeId) -> Option<&nts_semantic_schema::SignatureRecord> {
+        let (node, ty) = self.callee_signature?;
+        if node != call {
+            return None;
+        }
+        let TypeKind::Function(signature) = self.snapshot.types.get(ty.0 as usize)?.kind else {
+            return None;
+        };
+        self.snapshot.signatures.get(signature.0 as usize)
+    }
+
     fn parameter_shapes(&self, call: NodeId) -> Vec<(bool, bool)> {
+        // See [`Self::callee_signature`]: for `f.call(receiver, ...)` the
+        // resolved target is `Function.prototype.call` and the arguments are
+        // `f`'s.
+        if let Some(signature) = self.overriding_signature(call) {
+            return signature
+                .parameters
+                .iter()
+                .map(|parameter| (parameter.optional, parameter.rest))
+                .collect();
+        }
         let Some(target) = self.snapshot.call_targets.get(&call) else {
             return Vec::new();
         };
@@ -23847,6 +23889,125 @@ impl<'a> FuncBuilder<'a> {
     /// name; `o.f(x)` where `f` is a *field* has already lowered `o` and loaded
     /// the field out of it, and lowering the property access again would
     /// evaluate the receiver twice.
+    /// Whether an expression can be skipped when only its effects are wanted.
+    ///
+    /// Deliberately a short list of forms that *cannot* run anything rather
+    /// than an analysis of which ones do: a name, `this`, and the literals. A
+    /// form missing from it is lowered, which costs nothing but a value nobody
+    /// reads, and a form wrongly added to it would silently drop a call.
+    fn cannot_have_effects(&self, id: NodeId) -> bool {
+        matches!(
+            self.kind_of(id),
+            Some(
+                syntax::IDENTIFIER
+                    | syntax::THIS_KEYWORD
+                    | syntax::NULL_KEYWORD
+                    | syntax::STRING_LITERAL
+                    | syntax::NUMERIC_LITERAL
+                    | syntax::TRUE_KEYWORD
+                    | syntax::FALSE_KEYWORD
+            )
+        )
+    }
+
+    /// The checker's function type for the receiver of a `.call`.
+    ///
+    /// **Not the value's own type.** A function made from a declaration or an
+    /// arrow is a *closure class* here, and its id is synthetic -- above
+    /// `SYNTHETIC_TYPE_FLOOR`, with no record in the snapshot at all -- so
+    /// asking it for a signature answers nothing. `const f = twoArgs; f.call(…)`
+    /// refused for that reason while `emit`'s `callback.call(…)` worked, because
+    /// `callback` is a field declared `Listener` and a declared type survives.
+    ///
+    /// The signature is a property of the source the receiver was read from, so
+    /// it comes from the object node of the property access rather than from
+    /// the lowered value.
+    fn function_type_of_receiver(&self, member: NodeId, type_id: TypeId) -> Option<TypeId> {
+        if signature_key(self.snapshot, type_id).is_some() {
+            return Some(type_id);
+        }
+        let access = self.node(member).parent?;
+        let object = self.children(access).first().copied()?;
+        let ty = *self.snapshot.node_types.get(&object)?;
+        signature_key(self.snapshot, ty).map(|_| ty)
+    }
+
+    /// `f.call(receiver, ...rest)` -- an explicit JavaScript receiver.
+    ///
+    /// ```text
+    /// const callback = handler.callback;
+    /// const result = callback.call(this, ...args);
+    /// ```
+    ///
+    /// That is `EventEmitter#emit`, and the comment above it says why the
+    /// receiver is written: calling `handler.callback(...)` would make the
+    /// private `ListenerRecord` the receiver and leak an implementation detail
+    /// as `this`. It refused as ``a method `call` with no declaration in the
+    /// hierarchy``, and under it sat `http.createServer` and every stream.
+    ///
+    /// # The receiver is dropped, and that is sound rather than convenient
+    ///
+    /// Not because listeners tend not to use `this`, which would be a guess
+    /// about a program. **A body that could observe `this` does not compile**,
+    /// so no value reaching here has one:
+    ///
+    /// - a `function` expression or declaration whose body reads `this` is
+    ///   refused -- ``a `function` expression that uses its own `this` `` and
+    ///   ``\`this\` outside a method``;
+    /// - an arrow has no `this` of its own by the language's rule, and the
+    ///   enclosing one is captured at the arrow rather than passed at the call;
+    /// - a *method*, whose `this` is a real parameter, cannot be taken as a
+    ///   value at all -- ``declared by `C` with a type that has no
+    ///   representation (a function type)``.
+    ///
+    /// Those three refusals are what makes dropping the receiver a
+    /// *substitution* rather than a narrowing: the alternative is unreachable.
+    /// Each is load-bearing here, so any of them becoming implemented is the
+    /// day this needs the receiver passed instead, and
+    /// `blockers/a-call-with-a-receiver-that-is-read` is the fixture that says
+    /// so.
+    ///
+    /// # What it is not
+    ///
+    /// `apply` is not this, and is not done: it takes its arguments as an array
+    /// and needs the spread that a rest parameter already has, which is a
+    /// different lowering rather than a second name for this one.
+    fn lower_call_with_receiver(
+        &mut self,
+        id: NodeId,
+        member: NodeId,
+        function: ValueId,
+        function_ty: TypeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let Some((given, rest)) = arguments.split_first() else {
+            // `f.call()` -- no receiver written and nothing to evaluate.
+            return self.call_through_closure(id, member, function, &[]);
+        };
+        // **Evaluated and discarded, not skipped.** `f.call(g(), x)` calls `g`,
+        // and a receiver expression is an ordinary expression: dropping the
+        // value is not dropping its effects.
+        //
+        // Except where it provably has none, and that exception is not an
+        // optimisation. The receiver written at these sites is `this` or
+        // `undefined`, and `undefined` has **no representation** here -- lowering
+        // it for its effects refused the whole call with ``null` or `undefined`
+        // where what it stands in for is not a reference``, which is a true
+        // sentence about a value nobody wanted. A name or a literal cannot run
+        // anything, so there is nothing to preserve; everything else is lowered
+        // and may refuse, which is the honest direction for this list to be
+        // wrong in.
+        if !self.cannot_have_effects(*given) {
+            self.lower_expression(*given)?;
+        }
+        // Set after the receiver is lowered and restored after the call, so it
+        // covers exactly this call's argument list.
+        let outer = self.callee_signature.replace((id, function_ty));
+        let called = self.call_through_closure(id, member, function, rest);
+        self.callee_signature = outer;
+        called
+    }
+
     fn call_through_closure(
         &mut self,
         id: NodeId,
@@ -25805,6 +25966,17 @@ impl<'a> FuncBuilder<'a> {
                 origin,
             );
             return self.call_through_closure(id, member, held, arguments);
+        }
+
+        // `f.call(receiver, ...rest)`, which is how this profile invokes a
+        // stored callback without making the holder the JavaScript receiver.
+        // Asked before the hierarchy for the same reason a field holding a
+        // closure is: `call` is not a member of anything here, and the
+        // hierarchy answering "no declaration" was the whole refusal.
+        if member_name == "call"
+            && let Some(function_ty) = self.function_type_of_receiver(member, type_id)
+        {
+            return self.lower_call_with_receiver(id, member, receiver, function_ty, arguments);
         }
 
         let callee = self.callee_for(id, type_id, &member_name)?;
