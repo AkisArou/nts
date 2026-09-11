@@ -86,6 +86,7 @@ meets them. This is the map; the row table below it is the current state.
   - And the cliff is per call site, not per interface
   - Every number in that exchange is HotSpot, in a goal about Android
   - ART has no cliff and no free case: the dispatch curve is flat at 2x
+  - `invokevirtual` is the same story, and it is this lane's own closure path
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3323,6 +3324,47 @@ might simply not be optimising, which would flatten everything. Against that: th
 direct field read is **1085 against HotSpot's 1092**, so the field loop is
 compiled and fast. It is the dispatch that costs, uniformly, which is what a
 vtable-and-itable walk with no caching looks like.
+
+### `invokevirtual` is the same story, and it is this lane's own closure path
+
+Every closure call this backend emits is `invokevirtual` on an abstract `Fn$`
+base. So the interface finding above is only interesting if it stops at
+interfaces -- it does not:
+
+    HotSpot                          ART (emulator, x86_64)
+    field read              1056     field read              1058
+    virtual, 1 subclass     1079     virtual, 1 subclass     2178   2.06x
+    virtual, 3 subclasses   4314     virtual, 3 subclasses   1985   1.88x
+    interface, 1 impl       1230     interface, 1 impl       2162   2.04x
+
+Same two shapes. On HotSpot a monomorphic virtual call is **free** (1.02x) and
+three subclasses is a **4.08x cliff**; on ART every dispatch costs about 2x and
+the count does not matter. `invokevirtual` and `invokeinterface` are one
+mechanism on each runtime, and a different mechanism between them.
+
+**What saves this lane is something the emitter already does.** With one closure
+per signature it devirtualises -- `invokestatic Closure0$call` rather than
+`invokevirtual Fn2__2.call` -- so a monomorphic closure site is a static call and
+pays nothing on either runtime. The 2x is paid only where a site is genuinely
+polymorphic, which is where it cannot be avoided without specialising the caller.
+
+**And it puts a published row's explanation in doubt.** `dispatch` is **0.64x**
+jvm/Java, and this file's reason is "C2's profile-guided bimorphic inlining turns
+a two-implementation site into two guarded direct calls where the native lane
+emits a vtable indirect". That mechanism does not exist on ART. The row's number
+is not wrong -- it is a HotSpot number honestly measured -- but the *win* is a
+C2 win, and this lane exists for a runtime without C2.
+
+The plan predicted exactly this, for a different property: "on ART, where escape
+analysis is much weaker, it simply loses that". It is the same sentence about
+inline caching rather than escape analysis, and it has now been measured rather
+than predicted.
+
+**I am not re-ranking any row on emulator timings.** Absolute nanoseconds here
+are not a phone's, and the row table is HotSpot by construction. What is now
+known is the *mechanism*, and a mechanism is enough to say which explanations
+travel: an allocation C2 removes, an inline cache C2 keeps, and a devirtualised
+static call. The first two are HotSpot's; the third is ours and survives.
 
 ## Open, and whose
 
