@@ -21331,6 +21331,61 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## Where the profile stands at 24 modules, and what each remaining one needs
+
+`dns` and `tty` are in. The profile is 24 modules, the floor builds 24 of 24, the
+interpreted lane has 0 failing files, and `blockers-check` reads 156 of 156. The
+two small modules the goal named are done, and there are no more small ones.
+
+     excl  clmd  goal  noreq  blkd  ADDR   total  module   what it needs first
+        0     0     9      6    18   244    277  http2    nghttp2, probe-built: 26
+                                                          sources, 1.3M, links and
+                                                          HPACK-encodes correctly
+        0     0     7     30    30   153    220  tls      a provider. Its hard gap
+                                                          against mbedTLS is 0/218
+        1     0     4      2    12   125    144  worker_threads  an architecture
+                                                          decision: a second isolate
+        1     0     2      4     9   113    129  crypto   a provider. 33 of 128 need
+                                                          something mbedTLS lacks
+        1     0     1      2     0   108    112  child_process  nothing blocks it, and
+                                                          it cannot land partially:
+                                                          88 of 112 need the async half
+        0     0     0      2     4    91     97  vm       an isolate question too
+        8     0     0      2     8    65     83  cluster  child_process first
+        0     0     0      0    20    47     67  https    tls first
+
+`ADDR` is an upper bound and, after today, one to read carefully: it is what
+cannot proceed until a module exists, not what writing it publishes. `dns`'s 30
+was really 1 and `tty`'s 3 was really 0.
+
+### The two that are ready to start and the two that are not
+
+**`child_process` is the only one with a zero in `blkd`**, and the work is on
+branch `nodejs/child-process-wip` with an `INCOMPLETE.md`: `spawnSync`, `execSync`
+and `execFileSync` over `uv_spawn`, reading 1 passed and 102 failed. It is off
+`main` because the directory's mere presence takes `audit.mjs` from 42 unclaimed
+candidates to 238, and 88 of its 112 files need `spawn`, `fork` and IPC.
+
+**`http2` is the largest at 244** and its third-party question is answered:
+`nghttp2` is 26 sources and 1.3M, and a probe links it and HPACK-encodes two
+static-table headers into the correct 2 bytes.
+
+**`tls` and `crypto` need a provider decision**, which is a person's call and is
+measured on both halves now -- 12%/22% OpenSSL-specific assertions against 0/218
+and 33/128 hard gaps. **`worker_threads` and `vm` need an isolate decision**, which
+the goal itself says to take separately.
+
+### What the compiled axis needs, which is not a module
+
+Today moved it by three names -- `isIP`, `isIPv4`, `isIPv6`, from deleting two
+module-scope regexes. Three fixes to real chokepoints published nothing else, and
+one of them was the compiler's own highest-ranked shape. The axis has no head: 265
+of 290 chokepoints hold one export each, and **97 of 457 declined exports are the
+wrapper rather than the lowering** -- a fifth that no queue of lowering work
+reaches, now reproduced from both directions as
+`a-promise-returned-across-the-wrapper` and
+`a-union-parameter-the-boundary-cannot-build`.
+
 ## The blockers were parallel, not serial, and the twin cannot tell you which
 
 The silence fix landed and `asRequest` names its own cause for the first time:
