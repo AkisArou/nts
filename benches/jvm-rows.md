@@ -93,7 +93,7 @@ meets them. This is the map; the row table below it is the current state.
   - The store/load round trip is 7.8% on ART and 0% here, which answers the plan and is not the lever
   - Three fixes priced tonight and none of them built
   - The eight AWFY rows on the allocation axis: bar 3 holds, and two rows stand out
-  - `queenRows` is `[f64]` because there is no `nts_array_fill_i32`
+  - `queenRows` is `[f64]` because the storage analysis gives up when an array crosses into the runtime
   - And the element type is worth 9.1% on ART, which is a fourth thing that is not the lever
   - Four mechanisms priced, four that are not it
   - `widen` does not invert on ART. It is worth more there, and I expected the opposite
@@ -3770,7 +3770,7 @@ A `double[8]` against an `int[8]` is the 1.2x, and `awfy-queens` is the worst ba
 1 row on ART at **1.98x**. The timing consequence is priced in the next section;
 the cause is below and it is one missing table row.
 
-### `queenRows` is `[f64]` because there is no `nts_array_fill_i32`
+### `queenRows` is `[f64]` because the storage analysis gives up when an array crosses into the runtime
 
 `benches/cases/awfy-queens/case.ts` declares `queenRows: number[] | null` and
 builds it with `new Array(8).fill(-1)`. AWFY's own Java declares
@@ -3794,9 +3794,36 @@ the contents". `hir::runtime`'s table has exactly **two** fill entry points:
     ("nts_array_fill_bool", &[None, Some(HirType::Bool)],               None)
 
 So the narrow variant exists for `bool` and the whole mechanism works there. It
-does not exist for `i32`, and an integer-filled `number[]` therefore keeps `f64`
-storage however obvious its contents -- which is the same shape as
-`intcall.rs`'s `arrayIndexOfI`, one level down.
+does not exist for `i32`.
+
+**And adding it would change nothing, which is a correction to the paragraph
+above rather than a footnote to it.** `elements.rs::representations` filters
+narrowable element types through `borrowed` -- **any array passed to any external
+call** -- so `queenRows` is not blocked because the fill helper takes an `f64`.
+It is blocked because it is handed to a helper *at all*. An `_i32` entry point
+leaves it in `borrowed` and leaves it `f64`.
+
+The file names the reason the obvious narrowing was refused, in advance:
+
+> The test is deliberately the crude one: *any* external call taking the array. A
+> narrower rule would have to say which helpers read elements and at what width,
+> **which is a second, unchecked copy of the runtime's signatures** -- and the
+> failure mode of getting it wrong is silently wrong output rather than a compile
+> error.
+
+There is a route and it is that hazard avoided rather than accepted: `hir::runtime`'s
+table *is* the compiler's single copy of those signatures --
+`("nts_array_fill", &[None, Some(Float{64})], None)` already states the width --
+so the narrower rule can **read** the table instead of restating it. A helper
+constrains an array's element width to what the table says it takes; a helper the
+table does not describe keeps today's blanket block. Every array-taking helper
+then needs its element expectation stated, and getting one wrong becomes a table
+mismatch rather than silent corruption.
+
+That is a change to the analysis every array in every program goes through, for
+9.1% on two of eight rows, and it is the compiler lane's. It is **open with a
+route**, not a missing table row -- I said "smaller and more local than I
+implied" when handing it over and the opposite is true.
 
 **This is not mine to land.** `hir::runtime` is the single answer about
 conversions and `runtime/c` is the other lane's. What is mine is the JVM half,
