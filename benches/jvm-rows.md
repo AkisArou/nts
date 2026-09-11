@@ -182,7 +182,7 @@ different problem from the four rows losing by a lot.
 | `awfy-queens` | 1.23x; **ART 1.98x** | 20.6% is codegen and MINE -- ladder below. **The worst bar 1 row on ART.** One named cause found and priced at 9.1%: `queenRows` is `[f64]` where the reference is `int[]`, because `hir::runtime` has a `nts_array_fill_bool` and no `_i32`. The rest is still unfound |
 | `generic-classes` | 1.13x | **cause found**: monomorphisation, not codegen -- below |
 | `array-methods` | 1.17x, **ART 6288 -> 144 B/op** | helpers beat the reference by 18%; `toInt32` against the reference's `d2i` is **8.9%**, measured; the `NtsValue` from `at()` is scalar-replaced (144 B/op is the array literal, which the reference also pays) |
-| `number-format-double` | **1.15x**, **ART 12,464 -> 6,624 B/op** (0.95x its reference) | six runs inside 1.7% -- the *reference* was what varied. Worse than the 1.08x listed, and now the best-supported number here. The formatter is 54% of the profile and 1.7% of the gap |
+| `number-format-double` | **0.92x-1.15x across three sittings -- the reference is the moving half**; ART 12,464 -> 6,624 B/op | was published 1.15x from six runs inside 1.7%, promoted *because* "the reference varied, not us" -- which is backwards for a ratio and is retracted below. Two later sittings read 0.92x and 1.07x with the reference moving 13% and our side not moving at all. The formatter is 54% of the profile |
 | `elementwise` | 1.05x / 1.02x | at its floor: both lanes vectorise |
 | `instanceof` | 1.09x | 60% of the profile is `uirem`; bounded at 8%. Reference is narrower than the program, priced at ~0 -- below |
 | `in-narrowing` | 1.01x / 1.02x | re-measured; was listed at 1.07x from a contaminated run |
@@ -2009,6 +2009,25 @@ flag was on the *Java* side -- the reference varied, not us -- and a note about
 the reference's instability was making our own stable number unquotable. It is
 **1.15x**, which is worse than the 1.08x it was listed at and is now the
 best-supported number in the table.
+
+> **RETRACTED 2026-09-12, and the reasoning above is backwards.** The bar is
+> jvm over Java. A *ratio* is unquotable when **either** half moves, so "the
+> reference varied, not us" is not a reason to promote the number -- it is the
+> reason not to. Six readings inside 1.7% are six readings taken while the
+> reference sat in one mode; nothing in them says how many modes there are.
+>
+> Measured since, on two sittings against an md5-frozen compiler: the reference
+> moved **13%** between them while our side did not move at all, and the ratio
+> read **0.92x** and then **1.07x**. With the 1.15x above that is three sittings
+> giving 0.92, 1.07 and 1.15 -- a spread of **1.25x**, entirely from the half
+> this paragraph dismissed.
+>
+> So `number-format-double` is not 1.15x and was never "the best-supported number
+> in the table". It is somewhere in 0.92x-1.15x depending on which mode its
+> reference lands in, and the compiler lane's spread table now carries it as
+> `Moved`, cause unknown. What this cost is not the row: **the effort spent
+> between 1.08x and 1.15x was spent on a movement that was possibly the
+> reference's**, and any conclusion drawn from that movement inherits the doubt.
 
 **So the flag was answering a different question from the one the table asks.**
 `nts-bench` reports a minimum and flags on the spread around it; a minimum can
