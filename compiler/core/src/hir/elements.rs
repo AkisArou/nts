@@ -253,8 +253,35 @@ fn stored_into_a_global(program: &Program) -> rustc_hash::FxHashSet<HirType> {
 /// array. A narrower rule would have to say which helpers read elements and at
 /// what width, which is a second, unchecked copy of the runtime's signatures —
 /// and the failure mode of getting it wrong is silently wrong output rather
-/// than a compile error. Nothing in the benchmark suite pays for the crudeness:
-/// an array used through helpers is one whose loop is inside the runtime.
+/// than a compile error.
+///
+/// # What the crudeness costs, measured 2026-09-11
+///
+/// "Nothing in the benchmark suite pays for it" is no longer true. `awfy-queens`
+/// fills `queenRows` and the array is `[f64]` for that reason alone — three of
+/// its four arrays narrow and this one does not. The JVM lane priced the
+/// `newarray double` against the reference's `newarray int` on AWFY's own
+/// Queens with that one field changed: **9.1% on ART, 3.5% on `HotSpot`**, and it
+/// is two of the eight AWFY rows.
+///
+/// `nts_array_fill_i32` on its own does **not** fix it, which is the thing to
+/// know before anyone writes one. The array is not blocked because the helper is
+/// `f64` — it is blocked because it reaches a helper at all, and a new entry
+/// point leaves it in this set.
+///
+/// # The route, which is the hazard avoided rather than accepted
+///
+/// [`super::runtime`]'s table **is** this compiler's single copy of the
+/// runtime's signatures: `("nts_array_fill", &[None, Some(Float { bits: 64 })],
+/// None)` already states that the value parameter is an `f64`. So the narrower
+/// rule can *read the table* rather than restate it — a helper constrains an
+/// array's element width to what the table says it takes, and a helper the table
+/// does not describe keeps this blanket block.
+///
+/// That is not a second copy, and getting it wrong becomes a table mismatch
+/// rather than silent corruption. It is still real work: every array-taking
+/// helper needs its element expectation stated, including the ones that take an
+/// array and do not touch elements at any particular width.
 fn reaches_a_runtime_helper(program: &Program) -> rustc_hash::FxHashSet<HirType> {
     let mut borrowed = rustc_hash::FxHashSet::default();
     for func in &program.funcs {
