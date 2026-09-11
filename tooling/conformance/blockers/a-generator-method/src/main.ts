@@ -47,18 +47,57 @@
 // is worse than the refusal: a reader would see a generator method compile and
 // conclude the feature works.
 //
-// # What it would take
+// # What it would take, which is now agreed rather than open
 //
 // A route from a member to its declaration, which is a **frontend** question
-// rather than a lowering one -- either a declaration node on `PropertyRecord`,
-// or a `(TypeId, member) -> NodeId` map built where the hierarchy is. Either is
-// a schema change, so it wants agreeing rather than adding.
+// rather than a lowering one. Two candidates, and the JVM lane settled it on
+// 2026-09-11 with an argument worth keeping because it is not a rule being
+// carried over:
+//
+//     a declaration node on `PropertyRecord`      agreed
+//     a `(TypeId, member) -> NodeId` map beside   rejected
+//
+// Both answers exist in this tree and they look contradictory until the subject
+// is named. `declared_by` went **on `Field`**, because the subject of "which
+// class declares this" is the field. `ClassIdentity` went **beside** the layout
+// in `Program::classes`, because the subject of "which class is this" is the
+// class, and a layout is a merge of several -- on `Layout` it would have been a
+// field that is sometimes one value and sometimes many.
+//
+// So the question is not "on the record or in a map" but *what is the fact
+// about*. "Where was this member declared" is about the member, and
+// `PropertyRecord` **is** the member: a declaration completes it rather than
+// extending it. A map keyed by `(TypeId, member)` is a second structure keyed
+// by what the first is already keyed by, and it agrees until someone adds a
+// member through one path and not the other.
+//
+// The map is cheaper to add, and that is the whole of its case.
+//
+// # The JVM backend needs nothing, which removes an unknown from the decision
+//
+// Measured by that lane rather than assumed. Generators already work there --
+// each becomes a `<name>$frame` class implementing `NtsResumable`, and a frame
+// captures its parameters as fields. A method's `this` is parameter zero, so it
+// becomes one more field, a reference one rather than a double, which frames
+// already hold. Once the declaration and the call resolve upstream it arrives
+// as an ordinary generator with one more parameter.
 //
 // Two things it is *not*, both tried and rejected: keying the generator map by
 // the lowered name `Owner#member` joins two strings that the symbol mangling
 // and generic suffixing each pull apart, and it fails by falling through to a
 // refusal, which is safe and untraceable. And resolving the class node from its
 // `TypeId` is the same missing map wearing a different name.
+//
+// # Why a half-landing is worse here than elsewhere
+//
+// A compiled-and-unreachable method **produces no event at all, in any lane,
+// ever**. There is no instrument that could catch it: it is not a refusal, not
+// a wrong answer, not a crash, and not a missing symbol -- the symbol is there.
+// The only observer is a reader, who sees a generator method compile and
+// concludes the feature works.
+//
+// That is a sharper reason than the one this directory usually runs on. A throw
+// absorbed by a floor at least happens at run time.
 //
 // # The other four, which this does not cover
 //
