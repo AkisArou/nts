@@ -289,6 +289,37 @@ const STRING_STRING_STRING_TO_STRING: &str =
 /// when `nts_array_element` landed, and `too_many_lines` there has blocked all
 /// three sessions' gates twice tonight already. Grouped by what they have in
 /// common rather than cut at an arbitrary line: every one of these is
+/// The global functions: `parseInt`, `parseFloat`, `encodeURI`, `decodeURI`.
+///
+/// Split from `core_external` when the two URI entries took it past the line
+/// limit, and they are a family rather than an arbitrary cut: each is a global
+/// the language defines, each takes a string, and **each exists because the
+/// JDK's nearest equivalent is a different function.** `Integer.parseInt`
+/// throws where `parseInt` answers `NaN`; `Double.parseDouble` reads `0x10` as
+/// 16; `URLDecoder` decodes `+` as a space and is lenient where `Decode`
+/// refuses. That is the whole reason this table has rows for them at all.
+fn global_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    Some(match name {
+        // `Integer.parseInt` is not this function -- it throws where this
+        // answers `NaN`, refuses a trailing non-digit, and cannot exceed a
+        // `long`. Transliterated; see the method.
+        "nts_parse_int" => (RUNTIME, "parseInt", "(Ljava/lang/String;D)D"),
+        // The longest admitted prefix, then a parse of that -- `parseDouble` on
+        // the whole string reads `0x10` as 16 where JavaScript answers 0.
+        "nts_parse_float" => (RUNTIME, "parseFloat", "(Ljava/lang/String;)D"),
+        // `component` is 1 for the `*URIComponent` pair and 0 for the bare one,
+        // a `double` because that is the argument shape the tables already
+        // carry. `null` is a `URIError` the lowering raises, so neither throws.
+        "nts_encode_uri" => {
+            (RUNTIME, "encodeURI", "(Ljava/lang/String;D)Ljava/lang/String;")
+        }
+        "nts_decode_uri" => {
+            (RUNTIME, "decodeURI", "(Ljava/lang/String;D)Ljava/lang/String;")
+        }
+        _ => return None,
+    })
+}
+
 /// `NtsValue` in, or `NtsValue` out, or both.
 fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
     Some(match name {
@@ -470,13 +501,6 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         "nts_to_uint32" => (RUNTIME, "toUint32", "(D)I"),
 
         "nts_number_to_string" => (RUNTIME, "numberToString", "(D)Ljava/lang/String;"),
-        // `Integer.parseInt` is not this function -- it throws where this
-        // answers `NaN`, refuses a trailing non-digit, and cannot exceed a
-        // `long`. Transliterated; see the method.
-        "nts_parse_int" => (RUNTIME, "parseInt", "(Ljava/lang/String;D)D"),
-        // The longest admitted prefix, then a parse of that -- `parseDouble` on
-        // the whole string reads `0x10` as 16 where JavaScript answers 0.
-        "nts_parse_float" => (RUNTIME, "parseFloat", "(Ljava/lang/String;)D"),
         // `Long.toString(long, int)` is not this: it handles integers, and the
         // fraction is the whole difficulty. See `numberToStringRadix`.
         "nts_number_to_string_radix" => {
@@ -986,6 +1010,7 @@ fn view_external(name: &str, class: &str) -> Option<(&'static str, &'static str,
 
 fn external(name: &str) -> Option<(&'static str, &'static str, String)> {
     let found = core_external(name)
+        .or_else(|| global_external(name))
         .or_else(|| math_external(name))
         .or_else(|| string_external(name))
         .or_else(|| collection_external(name))

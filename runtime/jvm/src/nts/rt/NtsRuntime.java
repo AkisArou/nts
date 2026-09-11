@@ -288,6 +288,156 @@ public final class NtsRuntime {
      * {@code "1e"} is 1 and the scan backs up over the {@code e} rather than
      * failing.
      */
+    /** `uriReserved`: kept as written by the bare pair, escaped by the component pair. */
+    private static final String URI_RESERVED = ";/?:@&=+$,#";
+
+    /** `uriUnescaped`: never escaped by either pair. */
+    private static boolean uriUnescaped(int point) {
+        return (point >= 'A' && point <= 'Z') || (point >= 'a' && point <= 'z')
+            || (point >= '0' && point <= '9')
+            || (point < 0x80 && "-_.!~*'()".indexOf(point) >= 0);
+    }
+
+    private static int uriHex(char unit) {
+        if (unit >= '0' && unit <= '9') { return unit - '0'; }
+        if (unit >= 'A' && unit <= 'F') { return unit - 'A' + 10; }
+        if (unit >= 'a' && unit <= 'f') { return unit - 'a' + 10; }
+        return -1;
+    }
+
+    /**
+     * {@code encodeURI} and {@code encodeURIComponent}, by the flag.
+     *
+     * <p>**`null` is a `URIError` and the lowering raises it** -- the HIR
+     * already carries the null test and the throw block, the same split
+     * `repeat` uses for its `RangeError`. Nothing here throws.
+     *
+     * <p>An unpaired surrogate is an error rather than a replacement
+     * character: a lead with nothing after it, a lead followed by a non-trail,
+     * or a trail with no lead. That is the one case `String.getBytes(UTF_8)`
+     * would silently answer for, writing `?` or `U+FFFD` where the
+     * specification refuses.
+     */
+    public static String encodeURI(String text, double component) {
+        if (text == null) { return null; }
+        final String digits = "0123456789ABCDEF";
+        int units = text.length();
+        StringBuilder out = new StringBuilder(units + 16);
+        int at = 0;
+        while (at < units) {
+            int point = text.charAt(at);
+            at++;
+            if (point >= 0xD800 && point <= 0xDBFF) {
+                if (at >= units) { return null; }
+                int trail = text.charAt(at);
+                if (trail < 0xDC00 || trail > 0xDFFF) { return null; }
+                point = 0x10000 + ((point - 0xD800) << 10) + (trail - 0xDC00);
+                at++;
+            } else if (point >= 0xDC00 && point <= 0xDFFF) {
+                return null;
+            }
+            if (uriUnescaped(point)
+                    || (component == 0.0 && point < 0x80 && URI_RESERVED.indexOf(point) >= 0)) {
+                out.append((char) point);
+                continue;
+            }
+            int[] bytes = new int[4];
+            int count;
+            if (point < 0x80) {
+                bytes[0] = point; count = 1;
+            } else if (point < 0x800) {
+                bytes[0] = 0xC0 | (point >> 6);
+                bytes[1] = 0x80 | (point & 0x3F); count = 2;
+            } else if (point < 0x10000) {
+                bytes[0] = 0xE0 | (point >> 12);
+                bytes[1] = 0x80 | ((point >> 6) & 0x3F);
+                bytes[2] = 0x80 | (point & 0x3F); count = 3;
+            } else {
+                bytes[0] = 0xF0 | (point >> 18);
+                bytes[1] = 0x80 | ((point >> 12) & 0x3F);
+                bytes[2] = 0x80 | ((point >> 6) & 0x3F);
+                bytes[3] = 0x80 | (point & 0x3F); count = 4;
+            }
+            for (int byteAt = 0; byteAt < count; byteAt++) {
+                out.append('%')
+                   .append(digits.charAt(bytes[byteAt] >> 4))
+                   .append(digits.charAt(bytes[byteAt] & 0x0F));
+            }
+        }
+        return out.toString();
+    }
+
+    /**
+     * {@code decodeURI} and {@code decodeURIComponent}, by the flag.
+     *
+     * <p>**`java.net.URLDecoder` is not this function.** It decodes `+` as a
+     * space, which this must not, and it is lenient about malformed input --
+     * so it passes every easy case and answers where the specification throws.
+     *
+     * <p>**Overlong, surrogate and out-of-range are all errors**, and that is
+     * not pedantry: an overlong encoding is a *second spelling* of a
+     * character, which is how a check on the decoded text gets bypassed.
+     * `%C0%80` is a second spelling of NUL, `%ED%A0%80` is a surrogate that
+     * UTF-8 excludes, and `%F4%90%80%80` is past `U+10FFFF`. Each is refused
+     * by name.
+     *
+     * <p>A reserved character stays **as the three units it arrived as** for
+     * the bare pair, not as itself: `decodeURI("%2F")` is `"%2F"`.
+     */
+    public static String decodeURI(String text, double component) {
+        if (text == null) { return null; }
+        int units = text.length();
+        StringBuilder out = new StringBuilder(units);
+        int at = 0;
+        while (at < units) {
+            char unit = text.charAt(at);
+            if (unit != '%') { out.append(unit); at++; continue; }
+            int start = at;
+            if (at + 2 >= units) { return null; }
+            int high = uriHex(text.charAt(at + 1));
+            int low = uriHex(text.charAt(at + 2));
+            if (high < 0 || low < 0) { return null; }
+            int leading = high * 16 + low;
+            at += 3;
+            if (leading < 0x80) {
+                if (component == 0.0 && URI_RESERVED.indexOf(leading) >= 0) {
+                    out.append(text, start, start + 3);
+                } else {
+                    out.append((char) leading);
+                }
+                continue;
+            }
+            int extra;
+            int point;
+            if ((leading & 0xE0) == 0xC0) { extra = 1; point = leading & 0x1F; }
+            else if ((leading & 0xF0) == 0xE0) { extra = 2; point = leading & 0x0F; }
+            else if ((leading & 0xF8) == 0xF0) { extra = 3; point = leading & 0x07; }
+            else { return null; }
+            for (int more = 0; more < extra; more++) {
+                if (at + 2 >= units || text.charAt(at) != '%') { return null; }
+                int h = uriHex(text.charAt(at + 1));
+                int l = uriHex(text.charAt(at + 2));
+                if (h < 0 || l < 0) { return null; }
+                int next = h * 16 + l;
+                if ((next & 0xC0) != 0x80) { return null; }
+                point = (point << 6) | (next & 0x3F);
+                at += 3;
+            }
+            int least = extra == 1 ? 0x80 : (extra == 2 ? 0x800 : 0x10000);
+            if (point < least || point > 0x10FFFF || (point >= 0xD800 && point <= 0xDFFF)) {
+                return null;
+            }
+            if (point > 0xFFFF) {
+                point -= 0x10000;
+                out.append((char) (0xD800 + (point >> 10)));
+                out.append((char) (0xDC00 + (point & 0x3FF)));
+            } else {
+                out.append((char) point);
+            }
+        }
+        return out.toString();
+    }
+
     public static double parseFloat(String text) {
         if (text == null) {
             return Double.NaN;
