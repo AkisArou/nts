@@ -186,7 +186,7 @@ different problem from the four rows losing by a lot.
 | `instanceof` | 1.09x | 60% of the profile is `uirem`; bounded at 8%. Reference is narrower than the program, priced at ~0 -- below |
 | `in-narrowing` | 1.01x / 1.02x | re-measured; was listed at 1.07x from a contaminated run |
 | `module-closures` | 1.10x | measured clean at last, identical checksums. Three mechanisms priced dead (ABI 0.1%, non-final global 0.1%, inline size 0%); **no cause found** -- below |
-| `awfy-sieve` | **0.94x published, 1.32x / 1.33x under a second harness -- OPEN DISCREPANCY** | `tooling/bench` publishes 0.94x from six runs, five under 1.00x. `tooling/android/times-on-device.sh` reads **1.32x and 1.33x** on two separate sittings, with every other shared row agreeing. Two instruments that are meant to measure the same thing differ by 40% on this row, reproducibly, and neither is known to be the wrong one -- so **the published number is not corroborated** and the row's ART figure (1.14x / 1.15x) is uncertified with it. Not chased; named. Section below |
+| `awfy-sieve` | **0.94x-1.33x, and the reference is the bimodal half -- OPEN** | `tooling/bench` publishes 0.94x from six runs, five under 1.00x. `tooling/android/times-on-device.sh` reads **1.32x and 1.33x** on two separate sittings, with every other shared row agreeing. Two instruments that are meant to measure the same thing differ by 40% on this row, reproducibly, and neither is known to be the wrong one -- so **the published number is not corroborated** and the row's ART figure (1.14x / 1.15x) is uncertified with it. Not chased; named. Section below |
 | `bytes` | 1.05x | the `uirem` residual |
 | `objects` | **0.99x** | six runs at two warmup lengths, all 0.99x. The variance note is spread *within* a run; the minimum does not move. **Not losing** |
 | `generator` | 1.01x | 1.01x twice against 0.99x from another sitting; this row moves 0.04x between them and the bytecode is identical |
@@ -4208,12 +4208,35 @@ HotSpot controls are 0.94/0.94, 0.83/0.84, 0.71/0.71, 0.96/0.99, 1.00/1.00,
 1.03/1.00, 1.25/1.25 across the two sittings. One row forks.
 
 **Two sittings agreeing with each other and disagreeing with the published column
-is what makes this an instrument difference rather than variance.** Something
-about how the two harnesses build or drive `awfy-sieve` differs -- candidates
-being the classpath (`tooling/bench` puts Are We Fast Yet's prebuilt classes ahead
-of the case directory; this one compiles their sources into the same output), the
-driver shape, or the warmup reaching a different tier on a 4.4us row. None is
-checked and I am not guessing between them here.
+is what makes this an instrument difference rather than variance.** I guessed at
+classpath ordering, driver shape and warmup tiering, and it is none of them.
+
+**It is the reference, and `tooling/bench` had already written it down.**
+`spreads`'s own header records `awfy-sieve`'s `ref.java` at **5.74, 5.74 and 5.38
+us on one sitting against 4.49, 4.44 and 4.48 on another, out of one class file**
+-- a 1.27x swing in the reference, and its own comment says "whichever the
+publishing run happens to get looks entirely plausible in a table".
+
+The arithmetic closes with the numbers already in this file. This harness measured
+the reference at **4359.5 and 4440.8 ns** across its two sittings -- squarely and
+repeatedly in the *fast* mode -- against our side at 5770.2 and 5887.8, giving
+1.32x and 1.33x. For the published 0.94x with our side at about 5.4us, the
+reference must have been near **5.74** -- the *slow* mode. Both harnesses are
+honest; they habitually catch different modes of a bimodal reference, and the
+whole 40% is that.
+
+So the row has no jvm/Java number at all until the reference's bimodality is
+understood, which is a stronger statement than "two harnesses disagree". Neither
+0.94x nor 1.32x is the row; the row is **0.94x-1.33x depending on which mode its
+own reference lands in**, and nothing in either figure says which one it got.
+
+*The defect that let this stand was the reporting, not the measurement.*
+`tooling/bench`'s spread table populated `row.varied` from the current run only,
+so a row that flips one sitting in six prints a bare number on the other five.
+Fixed on the compiler lane as `KNOWN_BIMODAL`, which carries a row's flip whether
+or not the current sitting sees it, with entries leaving only when a **cause** is
+found rather than when a run comes back clean -- because a clean run is what that
+table exists to disbelieve.
 
 **It is open and it is mine.** Both harnesses are: `tooling/bench/**` and
 `tooling/android/**` are this lane's, so there is no other session to hand a
