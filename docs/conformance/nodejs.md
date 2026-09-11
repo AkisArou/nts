@@ -21331,6 +21331,43 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## Two ways to make `tty` compiled green that were considered and refused
+
+Both would work. Recording them because "I could not" and "I would not" are
+different claims, and this is the second.
+
+### Catch the boundary's TypeError in `shape.mjs`
+
+    tty.isatty = (fd) => { try { return raw(fd); } catch { return false; } };
+
+Node's `isatty` never throws, so a shape that lets a `TypeError` escape is less
+faithful than one that does not -- which is a real argument and still wrong here.
+The two assertions would pass on a JavaScript `try`/`catch` rather than on
+compiled code, and the limitation it hides is the one thing about that lane worth
+knowing.
+
+### Move the argument guard into `shape.mjs`
+
+Stronger, because it is **node's own architecture**: `lib/tty.js` is
+`NumberIsInteger(fd) && fd >= 0 && fd <= 2147483647 &&` a native call, so the
+guard lives in JavaScript there too. Compile `isattyFd(fd: number)`, let the shape
+layer do the narrowing, and every assertion passes with the tty check itself still
+compiled.
+
+**Refused on a convention this codebase actually holds.** Every `shape.mjs` in the
+profile reshapes exports and **none implements behaviour** -- checked, zero of
+twenty-four. Validation lives in TypeScript so both lanes compile it, and moving
+it out to clear a harness result is the design bending around the test. The
+compiled lane would then publish an `isatty` whose argument handling no lowering
+pass had ever seen.
+
+### What that leaves
+
+`tty` compiled stays at `0 passed` until an `unknown` parameter can carry a
+reference inward. That is a capability in the wrapper generator, it is the same
+erasing-union mechanism as `dns.promises`'s return, and the smallest reproducing
+case is a seventeen-line test where seven of nine assertions already pass.
+
 ## No parameter type carries an object inward, tested rather than argued
 
 The entry below says `tty`'s compiled lane closes on `isatty({})` throwing at the
