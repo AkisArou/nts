@@ -31,9 +31,22 @@
 // # What a row means, and what it does not
 //
 // A row says: these exports are declined, and the chain from each ends at this
-// function. Fixing that function is necessary for them, not sufficient -- clearing
-// one refusal can reveal the next in the same body, which `cascade-reach.mjs` says
-// of itself too. A row sizes a queue.
+// function. Fixing that function is necessary for them, not sufficient. A row
+// sizes a queue.
+//
+// **How much of a queue was measured, and it is more than "can reveal".** The
+// compiler reports the *first* refused callee a function has and stops. `dns`'s
+// `lookup` read "cannot be compiled because it calls `nextTick`"; a throwaway
+// worktree gave `nextTick` a non-generic sibling that lowers, and `lookup` then
+// read "because it calls `isIP`" -- a second, independent blocker (a module-scope
+// `new RegExp` under `net/src/address.ts`) that no output had ever named while the
+// first one stood.
+//
+// So a terminal is the head of a chain whose length is unknown. Every count here
+// is an upper bound on what one fix publishes, and the bound is not tight: an
+// export attributed to a terminal may sit behind two more after it. Read a row as
+// "this many exports cannot proceed until X is fixed", never as "fixing X
+// publishes this many".
 //
 // The terminal function's *own* refusal message is not inferred here. Look it up
 // with `grep -n "NTS1001" ` over that module's build output, which names it on one

@@ -21289,6 +21289,56 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## A probe gave `nextTick` a sibling that lowers, and found a second blocker
+
+The goal wants `dns` green on both lanes, and `lookup` read "cannot be compiled
+because it calls `nextTick`". `nextTick`'s refusal is a generic rest forwarded to
+a callback. The obvious question is whether a non-generic sibling would do, since
+**79 of the profile's `nextTick` call sites pass no arguments at all** -- dns's
+four among them -- so such a sibling is additive and changes no existing caller.
+
+Built it in a throwaway worktree: `nextTickVoid(callback: () => void)`, same
+queue, same hooks, same context restore, `() => callback()` instead of
+`(...received: A) => callback(...received)`.
+
+**`lookup` still did not compile, and the new message is the finding:**
+
+    before   `lookup` cannot be compiled because it calls `nextTick`
+    after    `lookup` cannot be compiled because it calls `isIP`
+
+`isIP` reaches `isIPv4`, which tests a module-scope `new RegExp` built from a
+template string in `net/src/address.ts`. A second, independent blocker that no
+output had ever named while the first one stood.
+
+And `nextTickVoid` itself is refused -- it calls `emitInit`, from
+`internal/async-hooks.ts`. So the zero-argument form does not lower either, for a
+different reason than the variadic one.
+
+### What this does to the ranking I published an hour ago
+
+`export-reach.mjs` reports which terminal function the most declined exports sit
+behind, and I sent that ranking to another session as a way to order a queue. The
+header said a row "sizes a queue rather than a step", borrowing the phrase from
+`cascade-reach.mjs`. That was a caveat carried over rather than a measured one.
+It is measured now, and it is stronger than the phrase suggests:
+
+**The compiler reports the first refused callee and stops.** A terminal is the
+head of a chain of unknown length. So `asRequest`'s 21 is what cannot proceed
+until `asRequest` is fixed -- not what fixing it publishes. Both `dns` exports
+that the ranking attributed to a single terminal each need at least two fixes,
+and `lookup` needs at least three.
+
+The header now says this outright, and says how it was found. The ranking is
+still the right ordering -- a chokepoint with 21 behind it outranks one with 1 --
+but no row is a forecast.
+
+### The probe was worth more for failing
+
+It cost one worktree and produced no code that ships. It falsified a model I had
+already written into a ledger, a shared script and two messages to another
+session: that `dns`'s three exports were behind three nameable fixes. They are
+behind at least five, and the count is still not known.
+
 ## The compiled axis has no head: 265 of 290 chokepoints hold one export each
 
 `export-reach.mjs`, written to answer the question the goal turns on and the two
