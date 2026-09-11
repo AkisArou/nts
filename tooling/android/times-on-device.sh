@@ -53,7 +53,19 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 # of a sibling script filled it until the shell could not start.
 work=${NTS_ART_WORK:-$HOME/.cache/nts-android}/nts-times.$$
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
-awfy=$root/third_party/are-we-fast-yet/benchmarks/Java
+# Are We Fast Yet's own Java, which the eight `awfy-*` references construct.
+#
+# **`NTS_AWFY`, because `$root` is the wrong answer from a pinned worktree.**
+# `git worktree add` populates the tree and not the submodules, so a run pinned
+# to a hash finds `third_party/are-we-fast-yet` empty -- 79 source files in the
+# checkout beside it and 0 in the tree being measured. All eight `awfy-*` rows
+# came back `javac declined ref.java` with `symbol: class Queens`, which reads
+# as a broken reference rather than an absent dependency.
+#
+# That is the same trap as `NTS_BIN` and `NTS_TSGO`, which this lane already
+# passes as absolute paths into the checkout for exactly this reason, and it
+# was missed because those two are named in the note and this one is not.
+awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
 
 command -v adb > /dev/null 2>&1 || { echo "SKIP: no adb" >&2; exit 0; }
 adb get-state > /dev/null 2>&1 || { echo "SKIP: no device" >&2; exit 0; }
@@ -216,7 +228,18 @@ JAVA
   # references construct one of theirs and the class stays theirs. Compiled from
   # source rather than listed per case, as `tooling/bench` does.
   sources="$out/ref/Ref.java $out/ref/Bench.java $out/ref/Case.java"
-  [ -d "$awfy" ] && sources="$sources $(find "$awfy" -name '*.java' 2>/dev/null)"
+  theirs=$(find "$awfy" -name '*.java' 2>/dev/null)
+  # An absent dependency is reported as one. Without this the eight rows that
+  # need it fail inside `javac` with an unresolved symbol, which counts as the
+  # reference being broken -- and a row that is missing for a reason the survey
+  # can name is worth more than a row that is missing.
+  case "$case" in
+    awfy-*)
+      [ -n "$theirs" ] || {
+        printf "%-24s %s\n" "$case" "no are-we-fast-yet sources -- set NTS_AWFY"
+        continue; } ;;
+  esac
+  [ -n "$theirs" ] && sources="$sources $theirs"
   # shellcheck disable=SC2086
   if ! javac -nowarn -d "$refcp" $sources > "$out/ref/javac.log" 2>&1; then
     printf "%-24s %s\n" "$case" "javac declined ref.java"
