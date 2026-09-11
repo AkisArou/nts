@@ -238,6 +238,16 @@ pub fn emit(program: &Program) -> Emitted {
             Ok(None) => {}
             Err(diagnostic) => diagnostics.push(diagnostic),
         }
+        // One empty subclass per class sharing this layout; see
+        // `hierarchy::identities`. The fields stay on the layout's own class,
+        // so an object is not a byte larger and a parameter declared as either
+        // class still takes the base -- only `new` and `instanceof` name these.
+        for class in hierarchy::identities(program, layout) {
+            match identity_class(program, layout, class) {
+                Ok(emitted) => classes.push(emitted),
+                Err(diagnostic) => diagnostics.push(diagnostic),
+            }
+        }
     }
 
     match builder.build(pool) {
@@ -353,6 +363,39 @@ fn declare_fields(
         builder.field(access::PUBLIC, body::method_name(&field.name), descriptor);
     }
     Ok(())
+}
+
+/// The empty subclass that gives one class its own identity.
+///
+/// It declares nothing: the layout's class holds every field, and this exists
+/// so that `instanceof` has something to distinguish. `final`, because nothing
+/// extends a class token, and the JVM resolves a superclass field statically so
+/// reaching `x` through it costs what reaching it through the base costs.
+fn identity_class(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    class: &nts_core::hir::ClassIdentity,
+) -> Result<Class, Diagnostic> {
+    let mut pool = Pool::new();
+    let base = types::class_name(layout);
+    let mut builder = ClassBuilder::new(types::identity_class_name(layout, class), base);
+    builder.access = access::PUBLIC | access::SUPER | access::FINAL;
+    builder.source_file = Some("nts".to_owned());
+    let origin = program_origin(program);
+    builder.default_constructor(&origin, &mut pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4003",
+            format!("the constructor for `{}` could not be written: {error}", class.name),
+            origin.location,
+        )
+    })?;
+    builder.build(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4004",
+            format!("the class for `{}` could not be written: {error}", class.name),
+            origin.location,
+        )
+    })
 }
 
 fn object_class(

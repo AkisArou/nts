@@ -92,10 +92,49 @@ pub fn declares_field<'a>(program: &'a Program, layout: &'a Layout, field: usize
         .unwrap_or(layout)
 }
 
+/// The declared classes sharing one layout, when more than one does.
+///
+/// **Two classes with identical fields are one `Layout` on purpose** --
+/// structural typing requires it, so `readA(new B())` passes -- and that gave
+/// them one JVM class and therefore one identity: `new B() instanceof A`
+/// answered true where node says false, with nothing refused and nothing
+/// printed.
+///
+/// The layout's class stays and holds the fields; each class sharing it gets an
+/// empty subclass, and `new` and `instanceof` name that while parameters and
+/// fields keep the base. So identity separates and assignability does not move.
+/// The C lane does the same thing with a descriptor per class over one struct --
+/// `nts_desc_NtsObj_A__A` beside `nts_desc_NtsObj_A__B` -- and this is that
+/// with the JVM's own spelling.
+///
+/// Empty when one class owns the layout, which is nearly always: five groups
+/// and twelve classes across the twenty-two `runtime/node` modules.
+#[must_use]
+pub fn identities<'a>(program: &'a Program, layout: &Layout) -> Vec<&'a nts_core::hir::ClassIdentity> {
+    let sharing: Vec<&nts_core::hir::ClassIdentity> = program
+        .classes
+        .iter()
+        .filter(|class| class.types.iter().any(|at| layout.types.contains(at)))
+        .collect();
+    if sharing.len() < 2 { Vec::new() } else { sharing }
+}
+
+/// The class a type id names, when its layout is shared by more than one.
+#[must_use]
+pub fn identity_of(program: &Program, id: TypeId) -> Option<&nts_core::hir::ClassIdentity> {
+    let layout = program.layout(id)?;
+    identities(program, layout).into_iter().find(|class| class.types.contains(&id))
+}
+
 /// Whether anything extends this layout, which is the whole of what decides
 /// `ACC_FINAL`.
 #[must_use]
 pub fn extended(program: &Program, layout: &Layout) -> bool {
+    // A layout whose classes have their own subclasses is extended by them, so
+    // it cannot be `final`. Asked first because it is the cheaper question.
+    if !identities(program, layout).is_empty() {
+        return true;
+    }
     let Some(mine) = program.layouts.iter().position(|c| std::ptr::eq(c, layout)) else {
         return true;
     };

@@ -1272,7 +1272,16 @@ impl Emitter<'_> {
                         "Ljava/lang/Object;",
                     );
                 }
-                code.instance_of(&origin, pool, &types::class_name(layout));
+                // The class this test *names*, which is not always the
+                // layout's: see `hierarchy::identities`. Testing the layout's
+                // class asks "does it have this shape", and `instanceof` asks
+                // "is it this class" -- the same question only while one class
+                // owns the layout.
+                let wanted = crate::hierarchy::identity_of(self.program, *only)
+                    .map_or_else(|| types::class_name(layout), |class| {
+                        types::identity_class_name(layout, class)
+                    });
+                code.instance_of(&origin, pool, &wanted);
                 Placed::OnStack
             }
 
@@ -1783,7 +1792,16 @@ impl Emitter<'_> {
             if *self.ty(value) == HirType::Erased && !self.unboxed.contains(&value) {
                 code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
             }
-            code.instance_of(origin, pool, &types::class_name(layout));
+            // The identity class, as in the single-class arm: a shared layout
+            // cannot tell two classes apart, and a set member is a class rather
+            // than a shape. Checked rather than assumed -- this arm resolved the
+            // layout's class and would have kept answering `true` for a sibling
+            // while the single-class arm was already right.
+            let wanted = crate::hierarchy::identity_of(self.program, *class)
+                .map_or_else(|| types::class_name(layout), |owner| {
+                    types::identity_class_name(layout, owner)
+                });
+            code.instance_of(origin, pool, &wanted);
             if at > 0 {
                 code.bitwise(origin, insn::OR, Kind::Int);
             }
@@ -2918,7 +2936,17 @@ impl Emitter<'_> {
         let Some(layout) = self.program.layout(*id) else {
             return Err(refuse(self.func, "an object whose layout this program does not carry"));
         };
-        Ok(types::class_name(layout))
+        // **The class this type *is*, which is not always the layout's.** Two
+        // classes with identical fields share a layout on purpose, so the
+        // layout's class cannot tell them apart -- `new B() instanceof A`
+        // answered true where node says false. Where a layout is shared, each
+        // class has an empty subclass and this is the one `new` allocates and
+        // `instanceof` tests. A parameter or field keeps the base, which is
+        // what leaves `readA(new B())` passing.
+        Ok(crate::hierarchy::identity_of(self.program, *id)
+            .map_or_else(|| types::class_name(layout), |class| {
+                types::identity_class_name(layout, class)
+            }))
     }
 
     /// The owning class, member name and descriptor of one field.

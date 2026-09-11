@@ -68,6 +68,16 @@ pub fn class_name(layout: &Layout) -> String {
     jvm_class_name(&layout.name)
 }
 
+/// The binary name of the empty subclass one class gets when it shares a
+/// layout with another.
+///
+/// `A__B` beside `A__A` under the layout's own `A`, which is the C lane's
+/// `NtsObj_A__B` convention so the two artifacts name the same thing.
+#[must_use]
+pub fn identity_class_name(layout: &Layout, class: &nts_core::hir::ClassIdentity) -> String {
+    jvm_class_name(&format!("{}__{}", layout.name, class.name))
+}
+
 /// A promise: a settled-or-not value and the frames waiting on it.
 pub const PROMISE: &str = "nts/rt/NtsPromise";
 
