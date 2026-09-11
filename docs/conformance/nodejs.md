@@ -21289,6 +21289,53 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## The `EOF` fix landed, and `dns` moved from one blocker to a different one
+
+MainClaude namespaced emitted identifiers the same afternoon. The addon builds --
+385184 bytes, zero errors -- and publishes all 24 c-ares constants, `EOF` and
+`FILE` among them. The struct-member half of the report was carried too; the
+object-literal spelling that failed earlier is no longer a hazard.
+
+**And the compiled lane is hollow.**
+
+    compiled   31 file(s): 0 passed, 0 failed, 11 skipped, 20 not applicable
+    sabotaged  31 file(s): 0 passed, 0 failed, 11 skipped, 20 not applicable
+
+Identical, which is the definition. The addon publishes the 24 constants and the
+two result-order functions; `lookup`, `lookupService` and `promises` are not
+compiled, so the one file that passes interpreted --
+`test-dns-promises-exists.js` -- skips for want of the `dns/promises` subpath.
+
+### Following the chain, not the census
+
+`refusal-census.mjs dns` reads 29 things behind 32 sites, and its largest root is
+"a conversion to string from this type" at 7. That root has nothing to do with
+this. `cascade-reach.mjs dns` names it in one line:
+
+    2  nextTick<obj1260>
+       unblocks 1 missing export(s): lookup
+
+`nextTick` comes from `internal/tick.ts`, which imports `internal/async-hooks.ts`,
+whose `externalAsyncIdentities` is a module-scope `WeakMap` --
+`blockers/weak-collections-have-no-representation`, filed long ago. Its cone is
+the largest in the module at 11 functions.
+
+The census ranked by message would have sent me to template interpolation. The
+cascade named the export. That is the third time the two have disagreed and the
+cascade has been right each time.
+
+### The reach is twelve modules, not one
+
+`internal/tick.ts` is imported by **dgram, diagnostics_channel, dns, events, fs,
+http, net, process, readline, stream, util and zlib**. `dns` is simply the module
+small enough that the blocker is the *only* thing standing between it and a
+working compiled lane -- everywhere else it is one of many, which is exactly why
+it has been easy to leave.
+
+`dns` stays in `BLOCKED`, with the reason rewritten. It has now been blocked by
+two different defects in one day, and the entry records both so the next reader
+does not re-derive the first one.
+
 ## `dns`'s compiled lane is one fix away, and the fix is wider than it looked
 
 The module is green on the interpreted lane and does not build as an addon. Both

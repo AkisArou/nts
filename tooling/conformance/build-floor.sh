@@ -49,23 +49,25 @@ util zlib"
 # an undeclared identifier. When that fixture is fixed most of this list moves,
 # and the run will say so by name.
 #
-# `dns` is here for one reason and it is *one compiler fix away*, which is the
-# opposite of what this list usually holds. `node:dns` publishes 24 c-ares error
-# constants and two of them are named `EOF` and `FILE`. They emit as unqualified
-# C identifiers, and `addon.c` includes `node_api.h` and so `<stdio.h>`, where
-# `FILE` is a type and `EOF` is `#define EOF (-1)`. See
-# `blockers/an-export-named-like-a-c-keyword`.
+# `dns` is here, and the reason moved once already. It was the `EOF`/`FILE`
+# collision -- `node:dns` publishes 24 c-ares error constants and two are named
+# after a `<stdio.h>` type and a `<stdio.h>` macro. That is **fixed**: the addon
+# now builds, 385184 bytes, and publishes all 24 including `EOF` and `FILE`.
 #
-# It was measured rather than assumed: renaming those two names in a throwaway
-# worktree builds the whole module clean, 384920 bytes and zero errors. Nothing
-# else in `dns` is blocked.
+# What it publishes is the 24 constants and the two result-order functions.
+# `lookup`, `lookupService` and `promises` are not compiled, so the compiled lane
+# reads 0 passed and `--sabotage` reads the same -- a hollow lane, and named here
+# rather than counted as a green zero.
 #
-# The obvious workaround does not work, and the reason is worth keeping. Moving
-# the 24 constants into an object literal -- same published names, installed by
-# `shape.mjs` -- emits a C struct whose *member* is `NtsString * EOF;`, and the
-# macro substitutes there too. So the fix has to cover emitted struct members and
-# not only module-scope globals, and there is no way to route around it from this
-# side that still publishes the names node publishes.
+# `cascade-reach.mjs dns` attributes it: `nextTick` is refused, and `lookup` is
+# the export behind it. `nextTick` comes from `internal/tick.ts`, which imports
+# `internal/async-hooks.ts`, whose `externalAsyncIdentities` is a module-scope
+# `WeakMap` -- `blockers/weak-collections-have-no-representation`, already filed.
+# That one refusal has the largest cone in the module at 11 functions.
+#
+# It is not a `dns` problem. Twelve modules import `internal/tick.ts`: dgram,
+# diagnostics_channel, dns, events, fs, http, net, process, readline, stream,
+# util and zlib.
 BLOCKED="dns"
 
 # **Empty, and it held `fs` and `process` an hour ago.**
