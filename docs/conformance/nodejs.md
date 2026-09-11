@@ -22312,6 +22312,47 @@ lane is unchanged at 1 passed, 0 failed.
 Steps 2 and 4 are not this side's to fix, and 4 is not even the compiler's in the
 usual sense -- it is what the Node-API wrapper can construct.
 
+## The structural cast, counted four ways, because three of them are already in use
+
+The compiler session gave me their count and said the last number they kept in
+their own head was one I ended up measuring. Measured, at their pin `bfe5a07d`:
+
+    module   sites  distinct messages  files  census "things"
+    fs         69           46           25        27
+    http       53           39           21
+    net        48           34           17
+    stream     46           32           16
+
+**Sites agree exactly** -- 69, 53, 48, 46 -- so their number is right and its unit
+is *site*. Their goal text carries "35 things", which is a different unit again:
+`refusal-census.mjs` reports `fs` as **27 things behind 55 sites** for this
+refusal, and neither of those is 35 either.
+
+So there are at least four live units for one refusal:
+
+    a site              one `file:line:col` the compiler refused
+    a distinct message  one refusal text, which several sites can share
+    a file              one source file containing any of them
+    a "thing"           the census's named declaration behind the sites
+
+Nothing is wrong with any of them. What is wrong is a number travelling without
+one, which is how "35" and "69" came to describe the same refusal in two
+documents. **Name a number's population in the same breath** is in the goal's own
+rules, and a unit is half of a population.
+
+### Why the site count is the wrong one to plan with
+
+A site is a place the compiler stopped, not a thing to fix. `fs`'s 69 sites are 27
+named declarations in 25 files -- so the fix is bounded by 27, and the 69 counts
+how often one shows up. Ranking work by sites over-weights whatever is called
+most.
+
+I have not measured what any of this is worth in **published exports**, which is
+the unit `export-reach.mjs` speaks and the only one that maps to the axis. That
+needs a compiler with the cast fixed, which does not exist, and I am not going to
+estimate it -- five estimates today were wrong and the sixth was caught only
+because it was checked.
+
 ## A delta with two causes in it, caught before it was reported
 
 The compiler session predicted that landing generator methods would not move the
