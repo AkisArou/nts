@@ -21289,6 +21289,53 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## Which blockers are this side's to fix, after trying seven of them
+
+Seven chokepoints examined by changing the program and recompiling. The split is
+not where I expected it, and it is the useful output of the day.
+
+**Reformulable, and fixed:**
+
+    dnsException        a `Record<string, unknown>` cast -> a declared class
+    isIPv4 / isIPv6     two module-scope `new RegExp` -> parsers   PUBLISHED 3 NAMES
+    parseFileMode       `/^[0-7]+$/` -> a parser                   published 0
+    lookup's `[]`       an array literal in a union argument -> an annotated const
+
+**Not reformulable, and why each is load-bearing:**
+
+    emitInit            five formulations tried; a user-supplied optional callback
+                        invoked from a registry is what `async_hooks` *is*
+    uvException         `const error: UVError = new UVExceptionError(...)` is a
+                        structural annotation, and dropping it fails to typecheck
+                        on `error.dest = dest`. `dest` is deliberately undeclared:
+                        a declared field is an own enumerable property whether or
+                        not it holds anything, and node's single-path errors have
+                        exactly `code`, `errno`, `path`, `syscall`. The structural
+                        type is how an optional field stays absent.
+    displayBytePath     takes `string | number[]`, which is what an `fs` path is
+
+`asRequest` is untried and looks like the same shape as the last: a generic rest
+because a callback's arguments vary.
+
+### The pattern
+
+Every one that was fixable was **an implementation detail wearing a type that
+happened not to lower** -- a cast, a regex, an unannotated literal. Every one that
+is not is **a type doing work the profile needs**: optional callbacks, absent
+optional fields, unions that are genuinely two things.
+
+That is a more useful boundary than "lowering gap" versus "not", because it says
+where to look. It also predicts that the remaining easy wins are thin: three
+regexes replaced, one cast, one literal, and the next four all bottom out in
+something node's own API requires.
+
+### And only one of the five published anything
+
+`isIP`, `isIPv4`, `isIPv6`. The other four removed a link from a chain and moved
+the count not at all -- `parseFileMode` measurably so, 123 declined exports before
+and after. A day's worth of correct fixes to the runtime's TypeScript is worth
+three names on an axis of 505, and that is the honest exchange rate.
+
 ## Two of the profile's top chokepoints emit no diagnostic at all
 
 `asRequest` was the first: named as refused by twenty `NTS1003` lines, and
