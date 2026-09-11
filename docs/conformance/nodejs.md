@@ -21331,6 +21331,52 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## The 92 "not a function this backend can name" are four things, and a third are not work
+
+MainClaude asked whether that bucket -- the largest of the 128 the boundary
+declines -- is one mechanism or five. `export-reach.mjs` now answers it by loading
+each module and looking at the value.
+
+        44  a function the wrapper declined anyway
+            assert.deepEqual, .deepStrictEqual, .doesNotMatch, .equal, .fail,
+            .ifError, .match ... +34
+        31  NOT PUBLISHED BY NODE -- not a gap
+            async_hooks.AsyncHook, buffer.default, console.Console_,
+            console.globalConsole, events.kWatermarkData, process.Process ... +21
+        14  a class
+            buffer.Buffer, events.EventEmitter, dgram.Socket, fs.Dirent,
+            http.Server, http.OutgoingMessage ... +4
+         3  one mixed object each, plus a symbol
+            dns.promises, http.globalAgent, events.captureRejectionSymbol
+
+### The message is wrong for half of them
+
+**44 of the 92 are functions.** `assert.deepStrictEqual` is a function, and the
+wrapper says "is not a function this backend can name". Whatever stops them, it is
+not that -- the diagnostic is the wrapper's fallback and it names a cause that is
+false for nearly half the bucket.
+
+### And 31 are not work at all
+
+They are names **node does not publish**. Our TypeScript exports internals that
+`shape.mjs` deletes on the way to the public object -- `default`, `Console_`,
+`globalConsole`, `kWatermarkData`, `RunScope` -- and the wrapper complains about
+each one as it passes. Checked against `require("node:<m>")` rather than assumed:
+none of the six spot-checked is in node, and the instrument now tests all 31.
+
+So the bucket is **61 real**, not 92, and it splits three ways: 44 functions
+declined for an unstated reason, 14 classes, 3 objects and a symbol.
+
+### What that does to the boundary number
+
+The earlier figure was "128 of 488 declined exports are the boundary, 26%".
+Subtracting the 31 gives **97 of 457, 21%**. Still the largest single category
+that no lowering work reaches, and a fifth rather than a quarter.
+
+It also means the instrument was counting our own internals as missing API, which
+is the same error as a name-prefix test count: a population that looks like the
+question and is not.
+
 ## A binding is not an export, and that is where both my wrong answers came from
 
 Third statement of the same question, each narrower than the last, and this one
