@@ -56,6 +56,7 @@ a backlog.
 | ✅ | comparison, equality | `< > <= >= === !==`, and `==`/`!=` where nothing coerces |
 | ◐ | `==` that **coerces** | refused — see below |
 | ✅ | logical | `&& \|\| !` |
+| ✅ | `in` with a **private name** — `#list in value` | the brand check, and the one key a compiler can see completely: it cannot be computed, cannot be forged, and is scoped by the language to the class body that declares it. It refused as "a key the compiler cannot see", which was exactly backwards. Restricted to the enclosing class and its subclasses, because two classes may each write `#list` and those are different names — a fixture without that decoy would have passed while every brand check in the tree accepted the wrong receiver. `this` as the receiver works too: inside a class body `this` is a *type parameter*, so one idiom had two spellings and only the spelling decided whether it lowered. Record 0283 |
 | ✅ | `in` with a literal key | the set of types declaring the property comes from the static type, so it is `instanceof` with a different question: a constant where every arm or no arm declares it, a class test where some do |
 | ✗ | `in` naming an **optional** property, or with a computed key | two reasons, both about the *key* rather than the operator. An optional property's slot exists here whether or not it was written, and JavaScript distinguishes `{}` from `{ x: undefined }` — a presence bit separate from the tag would answer it. A computed key leaves no set to test against, which needs the descriptor property table this design exists to avoid. Both refuse by name, so `"y" in o` on the same object is unaffected |
 | ✅ | `in` over **`object`** — `value !== null && typeof value === "object" && "k" in value`, which is how a program duck-types an `unknown` and is **67 sites in `runtime/node`**, the most of any refusal there. The candidate set is every object *type* the program has, by the same closed-world argument the union arms get; the `typeof` guard in front is what makes it sound, and an unguarded `unknown` is still refused because the type says so. Not every *class* — an object literal typed by an interface has a layout and no hierarchy entry, and asking the hierarchy answered `false` for `"label" in { label: "l" }`. Record 0164 |
@@ -115,8 +116,10 @@ counter, not by reading the emitted C.
 | ✗ | `void`, comma |
 | ✅ | `instanceof` | against a class this program declares — **including one reached through an `import`** — or one of the four provided error classes. The set of classes that satisfy it is closed when the program is built, so it is a comparison and not a walk. The import case was refused for as long as this row has existed: a reference to an imported name resolves to a symbol declared at the *import site* and a class's type is filed under the declaration's, so the lookup found nothing and said the compiler had no class for it. **18 sites in `runtime/node`**, `chunk instanceof Buffer` among them. Record 0157 |
 | ✅ | `instanceof` between a class and an **empty subclass of it** | `class Circle extends Shape {}` has `Shape`'s fields and dispatch table, so layouts merged them and `s instanceof Circle` was true of a `Shape`. `Layout.base` tells them apart, compared *inside* `same_shape` so neither of its two callers can forget it |
-| ✗ | `instanceof` between two **empty siblings** | `Circle` and `Square` both extending `Shape` and adding nothing share fields, dispatch table *and* base, so they still merge — nts answers 7 where node answers 6. A base separates a child from its parent and cannot separate two children that differ only in name; that question is nominal, which is what the four provided error classes needed and got a nominal guard for. Found by writing the hostile case, not by reasoning |
+| ✅ | `instanceof` between **any two declared classes**, however alike | two empty siblings of one parent, two unrelated classes with identical fields, two classes extending `TypeError` with the same `code` — all four shapes answered `true` where node answers `false`, with nothing refused. The merge is required and stayed: TypeScript is structurally typed, so `readA(new B())` must pass and `readonly.rs` asserts the sharing on purpose. What moved is that **identity now lives beside the layout rather than in it** — `Program::classes`, keyed by the declaring symbol — and each class gets its own descriptor over the shared struct. `canonicalize_objects` was the eraser, not the merge: it rewrote every object type to its *layout's* representative, so `lower_new` pushed `Object(B)` and the backend received `Object(A)`. One representative per class. Record 0286, `examples/two-classes-one-descriptor`, all three backends |
 | ✗ | `instanceof` against a **natively-represented** type — 55 sites in `runtime/node`, 25 of them `Uint8Array`. Three separate reasons, and naming them together would hide all three: `Map` and `Set` are one `NtsMap` here, so a runtime test cannot tell them apart; `Uint8Array` and `number[]` are one `Managed(Array(..))`, which §16 records; and `RegExp` and `WeakSet` have no representation at all. `ArrayBuffer` has one since it became `ManagedType::Buffer`, so its half of this is now a lowering that nothing wired rather than a representation that does not exist |
+| ✅ | `f.call(receiver, ...rest)` | the receiver is **dropped**, and that is a substitution rather than a narrowing: the set of function values that could observe one is empty. A `function` reading its own `this` is refused, a declaration doing so is refused, and a *method* — whose `this` is a real parameter — cannot be taken as a value at all. Three refusals argued separately, together making a fourth thing correct; `blockers/a-call-with-a-receiver-that-is-read` holds them, because the day any is implemented this becomes silently wrong. 17 sites across 7 modules, `EventEmitter#emit` among them. A receiver parameter in the closure calling convention was measured first and rejected at ~0.13 ns per indirect call. Record 0284 |
+| ✗ | `f.apply(receiver, args)` | not the same lowering: it takes its arguments as an array where `call` takes them positionally |
 | ✗ | tagged templates | |
 
 ## 2. Statements and control flow
@@ -156,6 +159,7 @@ counter, not by reading the emitted C.
 | ✅ | a **`finally` that spans an `await`**, with a `catch` beside it or without. With one it already worked once un-refused: the rejection reaches the handler and the handler's normal exit runs the `finally`. Without one there was nowhere to go, so a handler is **synthesised where the source wrote none** — `try { … } finally { F }` becomes `try { … } catch (e) { F; throw e } finally { F }`, which is what explicit cleanup means. Built only where a rejection recorded itself, because a block with no predecessors is one the verifier rejects. **29 occurrences across 6 sites**, evenly split between the two shapes, and it was a wrong answer: node runs the `finally` and this did not. Record 0171 |
 | ✅ | type predicates (`x is T`) and `asserts x is T` |
 | ✅ | rest parameters | the call gathers its trailing arguments into the array |
+| ✅ | a rest parameter written as a **union of tuples** — `...given: [] \| [a: string, b?: URL]` | how this tree asks "was I called with no arguments at all", and what makes `given.length === 0` a type the checker can narrow. 13 sites across 4 modules. Positions that agree keep a concrete element and pay no tag test; positions that **disagree** are *erased*, and a read at a constant index comes back through the tag, licensed by that position's declared type. The count stays exact because a rest is gathered into a real array — `URLSearchParams#set("a")` throws where `set("a", undefined)` does not, and six sites compare `given.length < 2`. Records 0282 and 0285 |
 | ✅ | `function` expressions that do not bind their own `this` — the same closure an arrow is, with the same captures. One that *does* use `this` is still refused, and that is the whole of the difference |
 | ✅ | closures over a variable something **assigns to** — the variable moves into a cell |
 | ✗ | a closure over a `for` loop's own variable, which JavaScript rebinds per iteration |
@@ -2191,6 +2195,39 @@ to become the authority. The C backend has no reason to stop using `offsetof`;
 the one that comes next has no way to start.
 
 ## 15. What to do next, ordered by evidence
+
+### Rebaselined 2026-09-11
+
+The numbered rows further down were measured on 2026-09-08 and are kept for
+their reasoning, not their counts. `tooling/conformance/refusal-census.mjs` over
+all 22 modules now reports:
+
+    812 distinct named things behind 1379 sites, 158 distinct root messages
+    1284 further things refuse only because something they call was refused
+    479 exports the wrapper declined, which emit no diagnostic at all
+
+**Do not read that against the 1,097 below as a direction.** They are different
+units counted by different instruments over a corpus the Node lane has been
+growing all week, and comparing them would be this file's own §14 mistake.
+
+The ten largest roots, by *things* rather than by sites:
+
+| things | sites | mods | root |
+|---|---|---|---|
+| 39 | 42 | 21 | a member on a union whose arms lay their fields out differently |
+| 36 | 36 | 13 | a rest parameter that is not an array — now a **generic** `...args: A`, the tuple-union shape having closed |
+| 35 | 60 | 18 | a structural cast that is not a prefix |
+| 27 | 35 | 21 | a method with no declaration in the hierarchy — `.apply` and the tail, `.call` having closed |
+| 25 | 25 | 10 | a generic rest forwarded to its callback |
+| 24 | 41 | 15 | `in` on an object with an optional declarer |
+| 24 | 30 | 7 | a method assigned per instance |
+| 23 | 27 | 11 | a member a type does not declare |
+| 22 | 22 | 21 | `then` on a promise |
+| 19 | 32 | 15 | a name from an enclosing scope |
+
+The 479 declined exports are the half this table cannot see, and **228 of them
+say only "no function of that name was compiled"** — the effect, with the cause
+left unsaid.
 
 ### First, by whether anything can check it
 
