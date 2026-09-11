@@ -327,6 +327,44 @@
 // exactly the ones that produce no layout evidence, so whatever instrument
 // settles the complete implementor set will not be an emitter.
 //
+// # And then the curve was measured on the runtime that matters
+//
+// Every figure above is HotSpot. The JVM lane's reason to exist is Android, and
+// they measured ART:
+//
+//     HotSpot                        ART (emulator, x86_64)
+//     field read  1092               field read  1085
+//     1 impl      1141   1.04x       1 impl      2134   1.97x
+//     2 impls     1319   1.21x       2 impls     2116   1.95x
+//     3 impls     3703   3.39x       3 impls     2045   1.89x
+//
+// **Both halves fail to transfer.** There is no cliff at three -- the curve is
+// flat -- and the case called *free* costs **1.97x**.
+//
+// That is this project's premise in its cleanest form. An inline cache makes the
+// common case free and the uncommon case expensive; with no inline cache every
+// case costs the same, and **the case that was free is the one that loses most
+// by the change**. C2 does not hide this cost, it *inverts* the shape of the
+// curve -- the cheapest point on one is the most expensive relative to the
+// other.
+//
+// So "all 63 sites are monomorphic, so both designs sit on the top row" was a
+// HotSpot statement. On ART there is no top row: each of those 63 sites would pay
+// about 2x through an interface. **Specialisation does not make dispatch
+// predictable, it removes it** -- worth nothing on HotSpot at a monomorphic site
+// and worth about half the call here.
+//
+// What this is: a *mechanism* measurement -- flat against cliffed, and whether
+// monomorphic is special -- and a mechanism survives emulation in a way a figure
+// does not. What it is not: a phone's numbers. x86_64 emulator, arm64 phone,
+// different AOT profile.
+//
+// The alternative reading, named rather than left out: a profile-less dex under
+// `dalvikvm` might simply not be optimising, which would flatten everything.
+// Against it, the **direct field read is 1085 against HotSpot's 1092** -- that
+// loop is compiled and fast. It is the dispatch that costs, uniformly, which is
+// what an itable walk with no caching looks like.
+//
 // # What it does not cover
 //
 // The same question for an *erased* value reaching a concrete slot, which
