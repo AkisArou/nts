@@ -435,6 +435,13 @@ profile() {
   # So this number counts *named* refusals, and a fix that makes one speak
   # raises it while a fix that makes one compile lowers it. Read the direction
   # against what landed rather than on its own.
+  #
+  # **A third cause, 2026-09-11: a copy is a body, and a body is sites.**
+  # Structural specialisation emits a copy of a callee per concrete argument
+  # type, so every refusal inside that callee is counted once more per copy --
+  # 18694 to 19065 with nothing new refused. The count that did not move is the
+  # one the work is about: `fs` emits 1615 functions before and after, because a
+  # copy replaces the plain version wherever every call to it was specialised.
   ceiling=19200
   if [ "$refusals" -gt "$ceiling" ]; then
     printf '  ^ above the ceiling of %s -- reach went backwards\n' "$ceiling"
@@ -699,7 +706,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 176 "through the LLVM backend, counting" ); }
+  backend_examples 177 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -710,7 +717,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 176 "through the LLVM backend" ); }
+  backend_examples 177 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform

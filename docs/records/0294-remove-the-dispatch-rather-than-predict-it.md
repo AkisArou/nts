@@ -81,6 +81,13 @@ callback got a copy and its prototype stopped being `void
 nts_take_callback(NtsHeader *)`. The test has to be its own, where the question
 is asked.
 
+Record `0295` is that defect from both ends — a ratchet whose rejecting branch
+was unreachable, and this guard whose negative outcome could not occur because
+the only caller had already answered it. The shape is that **a check that cannot
+fail is indistinguishable from one that keeps passing**, and neither instance was
+found by looking at the check. Mine degraded when a second pass was written
+*correctly*, which is the part that makes it hard to anticipate.
+
 ## Prefixes are specialised too, which is not obvious
 
 On C and LLVM a prefix cast is already a no-op, so a copy buys nothing. It is
