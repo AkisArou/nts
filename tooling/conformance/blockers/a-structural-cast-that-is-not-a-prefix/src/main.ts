@@ -243,6 +243,46 @@
 // class-loading and code-cache question bites. Their lane already emits a class
 // per generic instantiation and 14 of those is invisible.
 //
+// # A third obstacle, and then a simpler design that avoids all three
+//
+// The specialisation route has one more non-obvious step. The **caller** coerces
+// each argument to the parameter's representation, and it computes that from the
+// callee's *declared* signature -- `parameter_type_id` answers `Named`, whose
+// representation in the caller is `Object(Named)`. So a call to a specialised
+// copy would still meet the prefix check and still refuse, unless
+// `coerce_to_parameter` is also taught to read this call's substitution. Three
+// obstacles found in twenty minutes of design, each solvable, which is itself
+// information about how much more there is.
+//
+// # The alternative: lay the interface out like its implementor
+//
+// **If an interface has exactly one implementing class in the program, give it
+// that class's field order.** Then `Thing -> Named` *is* a prefix, the existing
+// cast is correct, and nothing else changes -- no copies, no suffixes, no
+// widening of `representation_of`, no call-site coercion change. One mechanism
+// in one place.
+//
+// The measurement says this covers most of it: **26 of 32 interfaces have one
+// implementor**, and every one of the 63 sites sees exactly one concrete type.
+//
+// **The open question, and it is the whole of whether this works.** The
+// implementor counts above are a *lower bound* -- they come from refusal sites,
+// so they see a class assigned to an interface only where the cast was refused.
+// A second implementor whose layout happens to be a prefix already **works
+// today** and is invisible to this count. Ordering the interface to match
+// implementor A would break it: `laid_out_as_a_prefix` would refuse a cast that
+// currently succeeds, which is a regression rather than a safe degradation.
+//
+// So this design needs the *complete* set of classes satisfying each interface,
+// which is a question for the checker rather than for the refusals, and the
+// snapshot does not carry structural assignability today.
+//
+// **Neither design is chosen.** The specialisation has three known obstacles and
+// no unknown ones; this has one obstacle that decides whether it works at all.
+// That is the comparison worth having before either is built, and it is recorded
+// rather than resolved because resolving it means asking the frontend a question
+// it is not currently asked.
+//
 // # What it does not cover
 //
 // The same question for an *erased* value reaching a concrete slot, which
