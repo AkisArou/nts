@@ -100,6 +100,8 @@ meets them. This is the map; the row table below it is the current state.
   - The dex ratchet, made to fail on purpose
   - The two worst bar 1 rows, method by method: over half of what we emit is slot traffic
   - What a stack peephole would actually reach: 19% and 8%, not the 58%
+  - Slot traffic is 1.4% on ART, the 7.8% was conflated, and instruction count is not the currency
+  - The night's ledger, and what it rules out
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3711,9 +3713,12 @@ One shape per process from the first line, three runs each:
 size of the noise. C2 removes the whole of it, as the plan says and as record
 0004 measured for the C lane.
 
-**ART: 7.8%.** So the profile disagrees, and it disagrees by 7.8% on a body with
-eighteen redundant slot operations in it. That is a real number and it is the
-answer to a question this project has had open since the backend was designed.
+**ART: 7.8%.** So the profile disagrees -- but **not by this much, and not for
+this reason**. This arm carried a duplicated `d2i` as well as its extra slots, so
+it did more work and not merely more slot moves. Re-measured below with the
+conversion held equal, slot traffic alone is **1.4%**, and the duplicated
+conversion alone is the 2.5% measured separately. Read the 1.4%; this number is
+two things added together.
 
 **And it is not the lever.** `awfy-queens` is 1.98x on ART. Nothing that buys
 7.8% closes that, and the 7.8% is measured on a body chosen for being unusually
@@ -4049,6 +4054,62 @@ That is a much larger change and a different one.
 Two numbers, then, not one: what the traffic costs, and what each fix reaches.
 The second is measured above; the first is the probe, and the first attempt at it
 compared control-flow shapes instead.
+
+### Slot traffic is 1.4% on ART, the 7.8% was conflated, and instruction count is not the currency
+
+Control flow held equal, both arms exiting early three times, checked with `javap`
+before the run this time:
+
+    shape                                  HotSpot                    ART
+    A  25 slot-ops (as emitted)   0.964 0.956 0.963    1.473 1.557 1.503
+    B   5 slot-ops (reference)    0.956 0.951 0.961    1.463 1.452 1.458
+
+    A over B, minima                      1.005x                   1.014x
+
+**Twenty extra slot operations on a 42-instruction method cost 1.4% on ART and
+0.5% on HotSpot.** ART's optimizing JIT does its own register allocation and
+removes the round trip, exactly as C2 does. The store and the load are in the
+bytecode and are not in the executed code.
+
+**And the 7.8% I published earlier for the same thing is withdrawn as a figure
+for slot traffic.** That probe's wide arm carried a duplicated `d2i` -- it was
+transcribed from `Closure0$call`, which computes the same conversion twice -- so
+it did strictly more *work* than its tight arm, not merely more slot moves. 7.8%
+was slot traffic plus a redundant conversion; the conversion alone was separately
+measured at 2.5%, and the traffic alone is this 1.4%. Two probes of one
+transformation disagreeing by 5.6x is what made it worth separating.
+
+**So the instruction-count thread is dead, and that is the useful part.** Our hot
+methods in the two worst rows are 1.64x and 2.23x the reference's instruction
+count with 58% and 56% of it load/store -- all true, all measured, and **none of
+it is where the time goes**, because the JIT removes precisely that. Bytecode
+instruction count is not the currency on a runtime that compiles.
+
+A peephole reaching 19% of those instructions, at 1.4% for the whole of them,
+would be worth about a quarter of a percent. It is not built and should not be.
+
+### The night's ledger, and what it rules out
+
+    mechanism                        ART        HotSpot     reach
+    the duplicated `d2i`             2.5%        0%
+    slot traffic                     1.4%        0.5%
+    the `[f64]` element type         9.1%        3.5%       2 of 8 AWFY rows
+    the `(D)D` closure signature     2.6x        0%         0 of 8 AWFY rows
+    `widen`                          helps       --         2 of 8 AWFY rows
+    the trampoline                   0%          0%
+    allocation                       flat across both runtimes on all 8
+
+`awfy-queens` is 1.98x on ART and `awfy-towers` 1.64x. Everything above that
+touches them comes to roughly ten percent. **The gap is not any of the things
+that look like it, and it is not their sum.**
+
+What has not been tried is the one instrument that would answer it directly, and
+it is unavailable here rather than unconsidered: a method-level profile. The
+emulator exposes no PMU, `cpu-clock` sampling cannot symbolize ART JIT frames,
+and `dex2oat` -- which would give symbolized AOT code, and is also what a real
+Android app actually runs -- is not executable from the shell user. **That is the
+next thing, and it needs a real device or a symbolizable AOT build rather than
+another hypothesis.**
 
 ## Open, and whose
 
