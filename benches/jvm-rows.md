@@ -92,6 +92,10 @@ meets them. This is the map; the row table below it is the current state.
   - And it reaches four rows, none of them a bar 1 row, so it is not next
   - The store/load round trip is 7.8% on ART and 0% here, which answers the plan and is not the lever
   - Three fixes priced tonight and none of them built
+  - The eight AWFY rows on the allocation axis: bar 3 holds, and two rows stand out
+  - `queenRows` is `[f64]` because there is no `nts_array_fill_i32`
+  - And the element type is worth 9.1% on ART, which is a fourth thing that is not the lever
+  - Four mechanisms priced, four that are not it
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3724,6 +3728,126 @@ across the two runtimes on all eight -- and not to be slot traffic, and their
 cause is unfound, which is where `awfy-queens` already stood on HotSpot after six
 hypotheses. What is new is that ART doubles it, so whatever it is has become
 twice as visible.
+
+### The eight AWFY rows on the allocation axis: bar 3 holds, and two rows stand out
+
+| case | ours, HotSpot | ours, ART | reference, ART | ours/ref |
+| --- | --- | --- | --- | --- |
+| `awfy-queens` | 1712 | 1704 | 1384 | **1.23x** |
+| `awfy-towers` | 392 | 272 | 280 | 0.97x |
+| `awfy-nbody` | 504 | 424 | 376 | 1.13x |
+| `awfy-bounce` | 3616 | 2840 | 2856 | 0.99x |
+| `awfy-permute` | 88 | 88 | 72 | **1.22x** |
+| `awfy-list` | 760 | 504 | 504 | 1.00x |
+| `awfy-mandelbrot` | 16 | 8 | -- | -- |
+| `awfy-sieve` | 5016 | 5024 | -- | -- |
+
+**Bar 3 holds on all eight**: bytes/op on ART is never worse than on HotSpot, and
+on five of them it is lower. Nothing here is a regression going to Android.
+
+The two references not measured were **stopped rather than failed**, and it is
+worth saying which: `awfy-mandelbrot` is 22 ms an operation, so `RefBytes`'s
+twenty-thousand-iteration warmup is about nine minutes on ART *per attempt*, and
+the counter's halve-and-retry repeats the warmup each time. Our own figure for it
+is 8 bytes an operation against 16 on HotSpot, so there was no question there
+worth half an hour of emulator.
+
+**And the two rows that allocate more are the same two rows, by the same cause.**
+`awfy-queens` and `awfy-permute` are the only AWFY cases whose emitted program
+contains `newarray double` where the reference has `newarray int`:
+
+    case              ours                      reference
+    awfy-queens       3 boolean, 1 double       3 boolean, 1 int
+    awfy-permute      1 double                  1 int
+    awfy-towers       1 TowersDisk              1 anewarray
+    awfy-bounce       1 Ball                    1 anewarray
+    awfy-sieve        1 boolean                 1 boolean
+
+A `double[8]` against an `int[8]` is the 1.2x, and `awfy-queens` is the worst bar
+1 row on ART at **1.98x**. The timing consequence is priced in the next section;
+the cause is below and it is one missing table row.
+
+### `queenRows` is `[f64]` because there is no `nts_array_fill_i32`
+
+`benches/cases/awfy-queens/case.ts` declares `queenRows: number[] | null` and
+builds it with `new Array(8).fill(-1)`. AWFY's own Java declares
+`private int[] queenRows`. The prepared IR:
+
+    %2  = array.new %1 : managed<[bool]>
+    %4  = call.extern nts_array_fill_bool(%2, %3) : managed<[bool]>
+    %7  = array.new %6 : managed<[bool]>
+    %9  = call.extern nts_array_fill_bool(%7, %8) : managed<[bool]>
+    %12 = array.new %11 : managed<[bool]>
+    %14 = call.extern nts_array_fill_bool(%12, %13) : managed<[bool]>
+    %17 = array.new %16 : managed<[f64]>
+    %20 = call.extern nts_array_fill(%17, %19) : managed<[f64]>     <-- queenRows
+
+Three of the four arrays narrow and the fourth does not, and `elements.rs` says
+why in its own words: an array "handed to a runtime helper is stored the way that
+helper was compiled to expect", which is "a limit on the storage rather than on
+the contents". `hir::runtime`'s table has exactly **two** fill entry points:
+
+    ("nts_array_fill",      &[None, Some(HirType::Float { bits: 64 })], None)
+    ("nts_array_fill_bool", &[None, Some(HirType::Bool)],               None)
+
+So the narrow variant exists for `bool` and the whole mechanism works there. It
+does not exist for `i32`, and an integer-filled `number[]` therefore keeps `f64`
+storage however obvious its contents -- which is the same shape as
+`intcall.rs`'s `arrayIndexOfI`, one level down.
+
+**This is not mine to land.** `hir::runtime` is the single answer about
+conversions and `runtime/c` is the other lane's. What is mine is the JVM half,
+which is one line beside the two that are already there:
+
+    public static int[] arrayFillInt(int[] a, int v) { Arrays.fill(a, v); return a; }
+    public static boolean[] arrayFillBool(boolean[] a, boolean v) { ... }   // exists
+    public static Object[] arrayFillRef(Object[] a, Object v) { ... }       // exists
+
+Reach: **two of the eight AWFY rows**, and one of them is the worst.
+
+### And the element type is worth 9.1% on ART, which is a fourth thing that is not the lever
+
+Priced on AWFY's own `Queens`, with `queenRows` changed from `int[]` to
+`double[]` and **nothing else** -- the conversions a `managed<[f64]>` forces,
+around their own algorithm. `javap` diff of the two classes: `[I` becomes `[D`,
+`Arrays.fill(int[],int)` becomes `Arrays.fill(double[],double)`, the store gains
+its widening, and there is no other difference. One shape per process.
+
+    shape                        HotSpot                    ART
+    I  AWFY's int[]      8898.0 8894.2 8933.7    10001.8 9928.2 9876.9
+    D  the same, double[] 9250.1 9228.6 9190.4    10820.3 10869.1 10826.8
+
+    D over I                     1.035x                   1.091x
+
+**9.1% on ART and 3.5% on HotSpot.** The row is **1.98x** on ART and 1.23x on
+HotSpot, so the element type is about a tenth of the ART gap and about a seventh
+of the HotSpot one. It is the largest single named cause this row has, it is
+real on both runtimes, and it is not what `awfy-queens` is.
+
+*What this probe is not.* It drops `Benchmark`'s `Object benchmark()` for a
+`boolean` one in **both** arms, which removes an autobox per call that the real
+reference pays. So the absolute nanoseconds here are not `ref.java`'s -- ours read
+~9.9us against a measured reference of 26.1us -- and nothing but the I-over-D
+ratio is claimed from them. Both arms carry the identical modification, which is
+what makes that ratio the element type and not the harness.
+
+### Four mechanisms priced, four that are not it
+
+    the duplicated `d2i`             2.5% on ART,  0% on HotSpot
+    slot coalescing                  7.8% on ART,  0% on HotSpot
+    the `[f64]` element type          9.1% on ART, 3.5% on HotSpot -- 2 of 8 AWFY rows
+    the `(D)D` closure signature      2.6x        , 0% on HotSpot -- 0 of 8 AWFY rows
+
+Every one of these was reached for as the explanation of a row, every one is a
+real number on the runtime this lane is being taken to, and not one of them is
+what the bar is failing on. Compounded and assuming they do not overlap, the
+three that touch `awfy-queens` are about 20%, against a gap of 98%.
+
+That is worth stating plainly rather than filing as four small wins: **the ART
+bar 1 gap is not the sum of the things that look like it.** `awfy-queens` had no
+cause found on HotSpot after six hypotheses and it still has none; what ART
+bought is that the gap is now twice as large while the four candidates are still
+small, which is evidence about them rather than about it.
 
 ## Open, and whose
 
