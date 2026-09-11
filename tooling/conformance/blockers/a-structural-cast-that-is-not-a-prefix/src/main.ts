@@ -64,6 +64,15 @@ export function atACall(n: number): number {
   return readName(new Thing(n)) + n * 0;
 }
 
+/** Under test: a copy's own body needs a copy. Refused -- specialisation is not transitive. */
+function describe(v: Named): number {
+  return readName(v) * 2;
+}
+
+export function throughTwoCalls(n: number): number {
+  return describe(new Thing(n)) + n * 0;
+}
+
 /** Under test: an array of the interface type. Refused by name. */
 export function inAnArray(n: number): number {
   const xs: Named[] = [new Thing(n)];

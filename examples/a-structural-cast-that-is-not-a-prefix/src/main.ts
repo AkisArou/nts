@@ -47,6 +47,23 @@
 // `twoImplementors` calls one function with two different classes, so the two
 // copies must read *different* offsets. One copy serving both would answer one of
 // them wrongly, and with a single implementor that mistake is invisible.
+//
+// # What is not here: specialisation is not transitive
+//
+// `describe(v: Named) { readName(v) }` called with a `Thing` gets a copy, and
+// **inside that copy the call to `readName` is a new mismatch** -- `v` is a
+// `Thing` there and `readName` still declares `Named`. The pass reads argument
+// types from the source, where `v` is declared `Named`, so it never sees it.
+// That case refuses, and it lives in
+// `blockers/a-structural-cast-that-is-not-a-prefix` rather than here: a refused
+// function leaves the differential silently, so this file would report agreement
+// over the functions that lowered and go green having stopped testing it.
+//
+// It is also why the profile's *site* count for this refusal went up rather than
+// down -- copies add bodies, and a body that needs a copy of its own is a new
+// site. The count that matters did not move: `fs` emits 1615 functions before
+// and after, because a copy replaces the plain version wherever every call to it
+// was specialised.
 
 interface Named {
   name: string;
@@ -134,11 +151,3 @@ export function twoImplementors(n: number): number {
   return readSize(new Small(n)) * 100 + readSize(new Large(n));
 }
 
-/** Under test: the interface reached through a second call, so the copy is chosen twice. */
-function describe(v: Named): number {
-  return readName(v) * 2;
-}
-
-export function throughTwoCalls(n: number): number {
-  return describe(new Thing(n)) + n * 0;
-}

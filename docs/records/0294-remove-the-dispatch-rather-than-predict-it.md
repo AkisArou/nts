@@ -100,3 +100,33 @@ confirmed pre-existing under the pinned compiler at `a2a499b4`. `coerce` asks
 `laid_out_as_a_prefix` on the way into a parameter and the field store does not,
 so the guard that made one safe was never asked about the other. That wants the
 refusal first, which turns a crash into a message.
+
+## Not transitive, and what that does to the counts
+
+A copy's own body can create a mismatch the pass never saw:
+
+    function describe(v: Named) { return readName(v) * 2 }
+    describe(new Thing(n))
+
+`describe` is specialised over `Thing`. Inside that copy, `v` **is** a `Thing`
+and `readName` still declares `Named` — a new site, created by the copy, that the
+pass could not have read from the source, where `v` is declared `Named`.
+
+Closing it is a fixpoint: a copy that re-types parameter `i` makes every call
+inside the callee that forwards that parameter want a copy too, until nothing new
+appears. Not attempted; the direct case is what the profile's 63 sites are.
+
+**And it is why the site count for this refusal went up.**
+
+    sites      fs 69 -> 83   http 53 -> 56   net 48 -> 46   stream 46 -> 48
+    functions  fs 1615 -> 1615               net 1385 -> 1385
+
+Copies add bodies, and a body that needs a copy of its own is a new site — so the
+count rose while the thing it is a proxy for did not move at all. `fs` gains 111
+copies and emits exactly as many functions as before, because a copy **replaces**
+the plain version wherever every call to it was specialised.
+
+That is the unit trap from `0289`'s neighbourhood arriving inside a single
+change: the number that was easy to read moved the wrong way, and the number the
+work is about did not move. Twenty-four of twenty-four addons build with none
+regressed, which is the measurement that settles it.
