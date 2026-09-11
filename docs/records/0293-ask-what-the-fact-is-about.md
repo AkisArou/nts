@@ -96,3 +96,27 @@ known.
 and `return` by hand, `yield*`, and spreading one — and says why three of them
 are one decision rather than three lookups: what a generator **value** is when a
 program holds one rather than walks it.
+
+## A local check weaker than the gate's
+
+The walk handoff shipped a real panic and four of my own tests caught it — in the
+**gate**, not locally. `generator_element` subtracts the frame base from a type
+id, which every previous caller had already established was a frame.
+`generator_element_of` asks the question of *any* object type, which is the point
+of it, and an ordinary object's id is below the base.
+
+    release   wraps to a number no reservation matches, `find` answers None,
+              and the answer is right by accident
+    debug     attempt to subtract with overflow
+
+I had run `cargo test --release`. The gate runs `cargo test --workspace`, which
+is a debug profile with overflow checks on. **My local check was the gate's check
+with the assertions removed**, and it had been all evening.
+
+The fix is `checked_sub`, which makes the function total rather than
+preconditioned — and the precondition is the interesting part. It was never
+written down anywhere, because every caller happened to satisfy it by
+construction. That is the JVM lane's *a rule written for the only instance of a
+category is a rule about that instance*, in a function's argument rather than in
+a pass: a precondition no caller can violate is indistinguishable from no
+precondition, until a caller arrives whose whole job is to violate it.

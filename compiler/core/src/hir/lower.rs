@@ -13432,8 +13432,17 @@ impl<'a> FuncBuilder<'a> {
     /// The frames are handed out in source order, so the id says which
     /// generator this is; asking the frame's *layout* would not work, because
     /// [`super::suspend`] has not built one yet.
+    /// **Total, and it was not.** The subtraction assumed the argument *is* a
+    /// frame, which every caller satisfied by having matched on one first --
+    /// until `generator_element_of` asked the question of any object type at
+    /// all, which is the whole point of that helper. An ordinary object's id is
+    /// below the frame range, so it underflowed.
+    ///
+    /// In release it wrapped to a number no reservation matches and the `find`
+    /// answered `None`, which is the right answer by accident. The gate's
+    /// overflow-checked build said so; `cargo test --release` cannot.
     fn generator_element(&self, frame: TypeId) -> Option<HirType> {
-        let which = (frame.0 - super::SYNTHETIC_GENERATOR_FRAMES) as usize;
+        let which = frame.0.checked_sub(super::SYNTHETIC_GENERATOR_FRAMES)? as usize;
         let node = self
             .generators
             .iter()
