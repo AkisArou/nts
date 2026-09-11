@@ -553,9 +553,13 @@ fn spreads(rows: &[Row]) -> String {
         // `awfy-sieve` at 0.94x and their device harness reads 1.32x and 1.33x
         // on two sittings, with every other shared row agreeing. Two instruments
         // differing by 40% on one row, reproducibly.
-        for (case, label, spread, seen) in KNOWN_BIMODAL {
+        for (case, label, spread, seen, basis) in KNOWN_BIMODAL {
             if row.case == *case && !row.varied.iter().any(|(at, _)| at == label) {
-                let _ = writeln!(lines, "| {case} | {label} | {spread:.2}x | {seen} |");
+                let _ = writeln!(
+                    lines,
+                    "| {case} | {label} | {spread:.2}x | {seen} — {} |",
+                    basis.shown()
+                );
             }
         }
     }
@@ -2176,8 +2180,35 @@ fn measure(command: &mut std::process::Command) -> Result<Measured> {
 /// JVM is stable to 7.4% -- so they belong to the code this backend emits.
 const SPREAD_WORTH_SAYING: f64 = 1.10;
 
-/// Rows seen to flip on a *previous* sitting, carried whether or not this one
-/// sees it.
+/// What is known about a row's instability, beyond what this sitting saw.
+///
+/// **Two modes and one move are different claims** and the table must not
+/// render them the same way. A confirmed flip says the figure is a draw from a
+/// distribution; a single observed move says only that two sittings disagreed,
+/// which the machine can cause on its own — four rows moved 8% or more in one
+/// survey *together with their own programs*, and their ratios held to 0.02.
+#[derive(Clone, Copy)]
+enum Basis {
+    /// Two modes seen out of one binary, repeatedly. The published figure says
+    /// which mode the run landed in.
+    Bimodal,
+    /// Two sittings disagreed about this column and the other half of the row
+    /// did not move with it. Suggestive, and not two modes until a third
+    /// sitting says so.
+    Moved,
+}
+
+impl Basis {
+    fn shown(self) -> &'static str {
+        match self {
+            Self::Bimodal => "confirmed: two modes out of one binary",
+            Self::Moved => "observed to move; cause unknown",
+        }
+    }
+}
+
+/// Rows whose instability is known from *previous* sittings, carried whether or
+/// not this one sees it.
 ///
 /// A row that flips one time in six is stable on five sittings, and on each of
 /// those the table prints a bare number. `spreads` was written because "a
@@ -2185,16 +2216,27 @@ const SPREAD_WORTH_SAYING: f64 = 1.10;
 /// exactly that hole, because it reported only what the publishing run happened
 /// to observe.
 ///
-/// Entries are removed when a cause is found, not when a run comes back clean:
-/// a clean run is what this table exists to disbelieve.
-const KNOWN_BIMODAL: &[(&str, &str, f64, &str)] = &[
+/// Entries are removed when a **cause** is found, not when a run comes back
+/// clean: a clean run is what this table exists to disbelieve.
+const KNOWN_BIMODAL: &[(&str, &str, f64, &str, Basis)] = &[
     // 5.74, 5.74 and 5.38 us on one sitting against 4.49, 4.44 and 4.48 on
-    // another, out of one class file. And from outside: `tooling/bench`
-    // publishes 0.94x where `tooling/android/times-on-device.sh` reads 1.32x and
-    // 1.33x across two sittings on the same machine and the same HotSpot, with
-    // every other shared row agreeing. `benches/jvm-rows.md` carries it as an
-    // open discrepancy.
-    ("awfy-sieve", "Java", 1.27, "a previous sitting, and a second harness"),
+    // another, out of one class file — and the *reference* is the bimodal half,
+    // not us. From outside: this file publishes 0.94x where
+    // `tooling/android/times-on-device.sh` reads 1.32x and 1.33x across two
+    // sittings on the same machine and the same HotSpot, every other shared row
+    // agreeing. The arithmetic closes on the reference's mode alone: that
+    // harness measured the reference at 4359 and 4441 ns, squarely the fast
+    // mode, where 0.94x needs it near 5740. Both harnesses honest, habitually
+    // landing in different modes. `benches/jvm-rows.md` carries the row as a
+    // range rather than a number.
+    ("awfy-sieve", "Java", 1.27, "a previous sitting, and a second harness", Basis::Bimodal),
+    // The reference got 13% and 12% faster across two sittings while our side
+    // did not move — which is the `awfy-sieve` shape and smaller, and two
+    // sittings are a move rather than two modes. `number-format-double` is a row
+    // real effort has gone into at 1.15x and then 0.95x, and both are suspect
+    // from the reference's side rather than from ours.
+    ("number-format-double", "Java", 1.13, "two sittings, reference only", Basis::Moved),
+    ("symbol-keyed-map", "Java", 1.12, "two sittings, reference only", Basis::Moved),
 ];
 
 fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
