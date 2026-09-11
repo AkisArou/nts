@@ -22312,6 +22312,42 @@ lane is unchanged at 1 passed, 0 failed.
 Steps 2 and 4 are not this side's to fix, and 4 is not even the compiler's in the
 usual sense -- it is what the Node-API wrapper can construct.
 
+## A delta with two causes in it, caught before it was reported
+
+The compiler session predicted that landing generator methods would not move the
+export count, and asked for it to be checked rather than taken. Checked:
+
+    before  485 declined export(s)
+    now     484
+
+Which reads as the prediction being off by one, and is not. The export that moved
+is `async_hooks.emitInit`, published by **their `emitInit` fix** -- a different
+commit, which landed between the pin I used as a baseline and the pin I measured
+with. The delta carries two changes and can attribute a name to neither.
+
+So the generator prediction is **untested**, not wrong. On its own terms it still
+looks right: 11 files in the node tree carry a `Symbol.iterator` and none of their
+exports is in the declined list before or after, so there was nothing for it to
+move.
+
+### The error, and that it was caught
+
+A confident single number over a population of two changes. That is the same
+mistake as every other count corrected today -- `dns`'s 30, `tty`'s 3,
+`asRequest`'s 21, the 92 unnameable, the 14 forkable -- and it is the first time
+it was caught before being reported rather than after.
+
+The fix is procedural and cheap: **re-baseline before each measurement and name
+the commit each pin is**, so a delta has one cause in it. A pinned binary gives
+stability, and stability is not provenance.
+
+### And one real gain to record
+
+`async_hooks` went 13 declined exports to 12. Besides `net`'s three from deleting
+two regexes, `emitInit` is the only export added to the compiled lane today by
+either session -- against a generic-rest fix, a silence fix, a
+`parseFileMode` fix and a `dnsException` fix that each published nothing.
+
 ## Correction: it was the `?`, and my own workaround was the tell
 
 The entry below concludes "method syntax is what counts as a declaration" from
