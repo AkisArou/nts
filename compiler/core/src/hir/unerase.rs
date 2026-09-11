@@ -97,6 +97,68 @@ fn single_representation(func: &Func, array: ValueId) -> Option<HirType> {
         }
     }
 
+    // **A use of the array itself, not of a read.**
+    //
+    // Narrowing rewrites the array's *type*, so every consumer of it has to be
+    // one `rewrite` fixes up. A call argument is not: the callee's parameter is
+    // declared `[erased]` and cannot be renegotiated from here, so a narrowed
+    // array reached it as
+    // `CallArgumentType { expected: Array(Erased), found: Array(Managed(String)) }`
+    // -- invalid HIR rather than a wrong answer, and caught only because the
+    // verifier looks.
+    //
+    // Escape analysis did not stop it and should not have: an array a callee
+    // only reads *is* frame-local, which is a true statement about aliasing and
+    // says nothing about a signature. The two questions are different and this
+    // pass was asking only the first.
+    //
+    // Uses `as` the array are counted and allowed -- a store, a read, a length.
+    // Anything mentioning it beyond those slots wants the declared type.
+    for index in 0..func.values.len() {
+        let id = ValueId(u32::try_from(index).unwrap_or(0));
+        let kind = &func.value(id).kind;
+        let as_the_array = match kind {
+            OpKind::ArraySet {
+                array: target,
+                index: at,
+                value,
+                ..
+            } if *target == array => {
+                // The array stored into itself, or used as its own index, is
+                // not a use `rewrite` can fix.
+                if *at == array || *value == array {
+                    return None;
+                }
+                1
+            }
+            OpKind::ArrayGet {
+                array: target,
+                index: at,
+                ..
+            } if *target == array => {
+                if *at == array {
+                    return None;
+                }
+                1
+            }
+            OpKind::Length(target) if *target == array => 1,
+            _ => 0,
+        };
+        let mentions = super::verify::operands(kind)
+            .iter()
+            .filter(|operand| **operand == array)
+            .count();
+        if mentions > as_the_array {
+            return None;
+        }
+    }
+    // And through a terminator, for the same reason a read is.
+    for block in &func.blocks {
+        if super::verify::terminator_operands(&block.terminator).contains(&array) {
+            return None;
+        }
+    }
+
     // Every read has to be consumed by something that would have unwrapped it
     // anyway.
     for index in 0..func.values.len() {

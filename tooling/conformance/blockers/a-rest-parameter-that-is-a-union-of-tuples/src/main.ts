@@ -1,4 +1,4 @@
-// expect: a rest parameter whose element type has no representation
+// expect: lowers
 //
 // `constructor(...given: [] | [input: string, base?: string | URL])` is how
 // this tree writes "and tell me whether I was called with no arguments at all".
@@ -42,7 +42,14 @@
 // the call site into a real array, so `given.length` is the number of arguments
 // actually supplied.
 //
-// What is left is the heterogeneous case, which is the one `URL` needs.
+// **Both halves are now fixed**, and this file is a `lowers` guard rather than a
+// refusal. Positions that disagree are *erased* -- the general representation is
+// what a tagged value is for -- and a read at a constant index comes back
+// through the tag, licensed by the position's declared type.
+// `examples/a-rest-parameter-whose-positions-disagree` is that guard, and
+// record 0285 is what it cost: a latent invalid-HIR bug in `hir::unerase`, a
+// property test that asked the checker rather than the value, and an existing
+// tuple branch that was a pointer cast against `NtsValue` slots.
 //
 // # Why the count has to be exact
 //

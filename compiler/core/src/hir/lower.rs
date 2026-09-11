@@ -8196,6 +8196,25 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// Whether this expression is a name already bound to an array value.
+    ///
+    /// Only a plain identifier, and only when the binding is in hand: this is
+    /// asked *before* the receiver is lowered, so it answers for the case where
+    /// the representation is already decided and says nothing otherwise.
+    fn holds_an_array(&self, object: NodeId) -> bool {
+        self.kind_of(object) == Some(syntax::IDENTIFIER)
+            && self
+                .node(object)
+                .symbol
+                .and_then(|symbol| self.bindings.get(&symbol.0))
+                .is_some_and(|value| {
+                    matches!(
+                        self.values[value.0 as usize].ty,
+                        HirType::Managed(ManagedType::Array(_))
+                    )
+                })
+    }
+
     fn names_a_property(&self, id: NodeId) -> bool {
         match self.kind_of(id) {
             // A module's member is not one: there is no receiver, so a call
@@ -8227,10 +8246,24 @@ impl<'a> FuncBuilder<'a> {
             // which has no own-source refusal of its own.
             Some(syntax::ELEMENT_ACCESS_EXPRESSION) => match self.children(id).as_slice() {
                 [object, index] => {
-                    matches!(
-                        self.type_of(*object),
-                        Some(HirType::Managed(ManagedType::Object(_)))
-                    ) && self.names_one_member(*index)
+                    // **What the receiver is, not what the checker narrowed it
+                    // to.** A rest parameter written as a union of tuples is
+                    // represented here as an *array*, and after
+                    // `given.length === 0` returns the checker narrows `given`
+                    // to the remaining tuple -- an object type. So `given[0]`
+                    // asked for a member named `0` and got ``\`0\`, where an
+                    // array has only `length` ``: a true sentence about the
+                    // value, produced by consulting the type.
+                    //
+                    // Where the value is already in hand, it decides. An index
+                    // into something held as an array is an element, and no
+                    // narrowing of the source type changes that.
+                    !self.holds_an_array(*object)
+                        && matches!(
+                            self.type_of(*object),
+                            Some(HirType::Managed(ManagedType::Object(_)))
+                        )
+                        && self.names_one_member(*index)
                         && self.literal_name(*index).is_some()
                 }
                 _ => false,
@@ -10349,11 +10382,28 @@ impl<'a> FuncBuilder<'a> {
                 _ => return None,
             };
             for position in positions {
+                // A position with no representation at all still refuses. What
+                // follows is about positions that *have* one and disagree.
                 let represented = self.represent(position)?;
                 match &element {
                     None => element = Some(represented),
                     Some(seen) if *seen == represented => {}
-                    Some(_) => return None,
+                    // **Positions that disagree are erased, not refused.**
+                    //
+                    // `URL`'s `[] | [input: string, base?: string | URL]` holds
+                    // `string` at one position and `string | URL | undefined`
+                    // at the other, and no single concrete element is both. An
+                    // erased element is: the general representation is what a
+                    // tagged value is for, the call site erases each argument
+                    // into the array, and a read comes back through the tag the
+                    // checker already proved.
+                    //
+                    // Agreeing positions keep their concrete element rather
+                    // than falling in here, which is not a nicety -- an erased
+                    // array costs about 11% against a typed one, all of it the
+                    // per-element tag test (`hir::unerase`). So the common case
+                    // pays nothing and only the mixed one pays.
+                    Some(_) => return Some(HirType::Erased),
                 }
             }
         }
@@ -20055,6 +20105,54 @@ impl<'a> FuncBuilder<'a> {
         self.element_of(id, array, index)
     }
 
+    /// What every arm of a tuple union declares at the index this access reads.
+    fn tuple_position_representation(&self, id: NodeId) -> Option<HirType> {
+        let [object, index] = self.children(id)[..] else {
+            return None;
+        };
+        // A constant index, so the position is known. `given[i]` is not this.
+        let TypeKind::Literal(LiteralValue::Number(written)) = &self
+            .snapshot
+            .types
+            .get(self.snapshot.node_types.get(&index)?.0 as usize)?
+            .kind
+        else {
+            return None;
+        };
+        // A tuple position is a small whole number and nothing else is one, so
+        // the guard is what makes the conversion exact rather than the cast.
+        if !written.is_finite() || *written < 0.0 || written.fract() != 0.0 {
+            return None;
+        }
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let at = *written as usize;
+        let declared = *self.snapshot.node_types.get(&object)?;
+        let record = self.snapshot.types.get(declared.0 as usize)?;
+        // The checker narrows the union away once a length test has run, so a
+        // single tuple arrives here as often as the union does.
+        let arms: Vec<TypeId> = match &record.kind {
+            TypeKind::Union(arms) => arms.clone(),
+            TypeKind::Tuple(_) => vec![declared],
+            _ => return None,
+        };
+        let mut found: Option<HirType> = None;
+        for arm in arms {
+            let TypeKind::Tuple(positions) = &self.snapshot.types.get(arm.0 as usize)?.kind else {
+                return None;
+            };
+            let Some(position) = positions.get(at) else {
+                continue;
+            };
+            let represented = self.represent(*position)?;
+            match &found {
+                None => found = Some(represented),
+                Some(seen) if *seen == represented => {}
+                Some(_) => return None,
+            }
+        }
+        found
+    }
+
     /// `xs[i]` with both halves already lowered.
     ///
     /// Split out so that `xs?.[i]` can share it: the optional form lowers its
@@ -20245,6 +20343,27 @@ impl<'a> FuncBuilder<'a> {
         // nothing. Where it does represent, a homogeneous array's access type
         // equals its element type and this is the identity, which
         // `hir::simplify` drops.
+        // **An erased slot is read back through its tag, not cast.** The
+        // paragraph above is right about a tuple whose slots are references --
+        // they agree on width, so restoring the declared type is a cast. A
+        // tuple-union rest parameter whose positions disagree is an array of
+        // *erased* values instead, and its slots are `NtsValue`, so the same
+        // `Convert` emitted `v17 = (NtsString *)v16;` against a struct:
+        // ``operand of type 'NtsValue' where arithmetic or pointer type is
+        // required``. One branch, two storage shapes, and only one of them is a
+        // cast.
+        //
+        // Asked before the `Convert` and of the *position* rather than of the
+        // access node, because under `noUncheckedIndexedAccess` the access type
+        // is `T | undefined` and represents to nothing -- which is exactly the
+        // guard the branch below carries, and why a scalar position fell
+        // through it entirely.
+        if ty == HirType::Erased
+            && let Some(want) = self.tuple_position_representation(id)
+            && want != HirType::Erased
+        {
+            return Ok(self.push(OpKind::Unerase { value: read }, want, origin));
+        }
         if self.reads_a_tuple(id)
             && let Some(declared @ HirType::Managed(_)) = self.type_of(id)
             && declared != ty
