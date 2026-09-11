@@ -90,6 +90,8 @@ meets them. This is the map; the row table below it is the current state.
   - Bar 1 on ART: 51 rows, and the lane loses the bar by going to Android
   - `closure-merge` is the `(D)D` closure ABI, and it is 2.6x on ART and free here
   - And it reaches four rows, none of them a bar 1 row, so it is not next
+  - The store/load round trip is 7.8% on ART and 0% here, which answers the plan and is not the lever
+  - Three fixes priced tonight and none of them built
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3662,6 +3664,66 @@ measurement that justified it is right and the change is still real: one row is
 badly broken and the fix is known and priced. It goes in the queue below its
 size, not at the top of it, and the thing bar 1 is actually about is the eight
 rows that have no closures in them.
+
+### The store/load round trip is 7.8% on ART and 0% here, which answers the plan and is not the lever
+
+The plan says of slot traffic: this backend gives every HIR value its own slot
+and routes every result through it, C2 removes it exactly as `mem2reg` does for
+the C lane, and coalescing is **"justified only if a profile disagrees"**. That
+was decided on HotSpot. ART is a profile that might disagree, and it is worth
+knowing by how much before believing either answer.
+
+What is actually emitted, for `closure-merge`'s `Closure0$call` -- twelve slots
+for a three-value computation:
+
+    d2i; istore 4          the parameter, narrowed
+    iload 4; imul; istore 5
+    dload_1; d2i; istore 6     <-- the SAME d2i again, on the same dload_1
+    iload 6; iushr; istore 7
+    iload 5; istore 8          <-- a pure copy
+    iload 8; iload 7; ixor; istore 9
+    iload 9; iload_3; iadd; istore 10
+    iload 10; istore 11        <-- a pure copy
+    iload 11; i2d; dstore 12; dload 12; dreturn
+
+Transcribed to Java -- **and checked rather than assumed**, because a previous
+attempt at exactly this priced javac's compilation of a transcription instead of
+the bytecode it claimed to be. `javap` on the transcription: 18 `iload`/`istore`
+against the tight form's none, the duplicated `d2i` present, both pure copies
+present. javac does not optimise, which is what makes a source transcription
+usable here; one declared local is one slot.
+
+One shape per process from the first line, three runs each:
+
+    shape                                    HotSpot                ART
+    A  one slot per intermediate    0.488 0.490 0.492     1.057 1.056 1.057
+    B  nothing redundant            0.498 0.507 0.496     0.969 0.971 1.002
+
+**HotSpot: nothing**, and A is marginally the faster of the two, which is the
+size of the noise. C2 removes the whole of it, as the plan says and as record
+0004 measured for the C lane.
+
+**ART: 7.8%.** So the profile disagrees, and it disagrees by 7.8% on a body with
+eighteen redundant slot operations in it. That is a real number and it is the
+answer to a question this project has had open since the backend was designed.
+
+**And it is not the lever.** `awfy-queens` is 1.98x on ART. Nothing that buys
+7.8% closes that, and the 7.8% is measured on a body chosen for being unusually
+redundant. It goes in the same place as the duplicated `d2i` it contains.
+
+### Three fixes priced tonight and none of them built
+
+    the duplicated `d2i`                2.5% on ART, 0% on HotSpot
+    the `(D)D` closure signature        2.6x -- on four rows of 51, none of them a bar 1 row
+    slot coalescing                     7.8% on ART, 0% on HotSpot
+
+Each was reached for as *the* explanation of a row, and each is real. None of
+them is what `awfy-queens` and `awfy-towers` are, and those are what the bar is
+about. The AWFY gaps are now known not to be allocation -- our bytes/op are flat
+across the two runtimes on all eight -- and not to be slot traffic, and their
+cause is unfound, which is where `awfy-queens` already stood on HotSpot after six
+hypotheses. What is new is that ART doubles it, so whatever it is has become
+twice as visible.
 
 ## Open, and whose
 
