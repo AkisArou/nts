@@ -85,6 +85,7 @@ meets them. This is the map; the row table below it is the current state.
   - The interface cliff is at three, it is per call site, and my first number was the cliff quoted as the function
   - And the cliff is per call site, not per interface
   - Every number in that exchange is HotSpot, in a goal about Android
+  - ART has no cliff and no free case: the dispatch curve is flat at 2x
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3281,6 +3282,47 @@ produced four figures resting on one without saying so until the end.
 The half that survives any runtime is specialisation, because a monomorphic call
 needs no cache to be fast. The interface figures are unmeasured on the runtime
 this lane exists for, and should not be quoted as 1.04x until they are.
+
+### ART has no cliff and no free case: the dispatch curve is flat at 2x
+
+I said the interface figures were unmeasured on the runtime this lane exists for
+and should not be quoted until they were. Measured:
+
+    HotSpot                        ART (emulator, x86_64)
+    direct field read   1092       direct field read   1085
+    interface, 1 impl   1141  1.04x   interface, 1 impl   2134  1.97x
+    interface, 2 impls  1319  1.21x   interface, 2 impls  2116  1.95x
+    interface, 3 impls  3703  3.39x   interface, 3 impls  2045  1.89x
+
+**Two different shapes, and both halves of the HotSpot result fail to transfer.**
+There is no cliff at three -- the ART curve is flat -- and, more importantly,
+**monomorphic dispatch is not free**: the case I called 1.04x and described as
+"free" costs 1.97x here.
+
+That is the inversion this goal exists to catch, in the cleanest form it has
+taken. An inline cache makes the common case free and the uncommon case
+expensive; with no inline cache every case costs the same, and the one that was
+free is the one that loses most.
+
+**So the reasoning behind a decision made this evening was HotSpot-only, even
+though the decision was right.** "All 63 sites are monomorphic, so an interface
+and a specialised copy are both on the top row" holds on HotSpot and not here: on
+ART those 63 sites would each pay ~2x, because there is no top row to be on.
+Specialisation removes the dispatch rather than making it predictable, which is
+worth nothing on HotSpot at a monomorphic site and worth about half the call on
+ART.
+
+**What this is and is not.** It is a *mechanism* measurement -- flat against
+cliffed, and whether the monomorphic case is special -- and a mechanism survives
+emulation in a way a figure does not. It is **not** a phone's numbers: this is an
+x86_64 emulator, the absolute nanoseconds are this machine's, and a phone is
+arm64 with a different AOT profile.
+
+The alternative reading worth stating is that `dalvikvm` on a profile-less dex
+might simply not be optimising, which would flatten everything. Against that: the
+direct field read is **1085 against HotSpot's 1092**, so the field loop is
+compiled and fast. It is the dispatch that costs, uniformly, which is what a
+vtable-and-itable walk with no caching looks like.
 
 ## Open, and whose
 
