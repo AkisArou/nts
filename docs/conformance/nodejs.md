@@ -21289,6 +21289,56 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## `emitInit` needs two things, and one of them is three characters of TypeScript
+
+Pulling `dns`'s chain one more link. `emitInit` is refused at
+`async-hooks.ts:451` -- "a method `init` with no declaration in the hierarchy" --
+and two probes separate what that message is carrying.
+
+**Probe one: extract the call to a local.**
+
+    const init = hook.init;
+    if (typeof init !== "function") continue;
+    init(asyncId, type, triggerId, resource);
+
+`emitInit` compiles. And it is **not the fix**: `hook.init(...)` calls with the
+hook as receiver and `init(...)` calls with none, and node passes the hook object
+-- a user's `createHook({ init() { this.x } })` would see `undefined`. Trading a
+receiver for a lowering is a fidelity loss with no test obliged to notice, which
+is the kind of change that is worth catching in a probe rather than a commit.
+
+**Probe two: declare it as a method rather than a property holding a function.**
+
+    init?: ((asyncId: number, ...) => void) | undefined;     // before
+    init?(asyncId: number, ...): void;                       // after
+
+Purely a syntax change in TypeScript -- the two differ only in variance checking
+-- so the receiver is untouched. The refusal **changes**:
+
+    before  a method `init` with no declaration in the hierarchy
+    after   `init`, declared by `RegisteredHook` with a type that has no
+            representation (a union of a function type | undefined)
+
+So the original message was two problems wearing one diagnostic. Method syntax
+answers the first outright. What is left is the `?`: an optional callback is a
+union with `undefined`, and that union has no representation.
+
+### Neither half is landed, and why
+
+The method-syntax half is safe and free and publishes nothing on its own -- the
+refusal moves one step and no export appears. Landing a change to a file six
+modules import, for a refusal that then stops one line later, is churn.
+
+The second half is a registry restructure: keep hooks that have an `init` in a
+list typed with `init` **required**, so the call site sees no union. That is
+forty lines in a shared file with a 155-file test suite behind it, to prepare for
+a compiler fix that has not landed, in service of a chain whose remaining length
+is still unknown. The expected value does not carry the risk.
+
+Recorded as a labelled diagnosis instead, which is what the rules ask for when
+there is no fixture: **`hook.init` needs method syntax and a representable
+optional**, and the first is three characters.
+
 ## The rest-parameter fix will not publish `nextTick`, and the probe already said so
 
 `internal/tick.ts:57` is refused for a generic rest forwarded to a callback, and
