@@ -21469,7 +21469,15 @@ file hand an object to an `unknown` parameter.
 ## `tty` green with 0 hollow is unsatisfiable, and here is every file
 
 Not "low value" and not a judgment. Searched the **whole** of node's test tree,
-not `test/parallel`: twelve files mention `tty`, and none of them can pass here.
+not `test/parallel`. The population, since a number needs one: node ships **39
+test directories** -- `abort`, `addons`, `async-hooks`, `benchmark`, `cctest`,
+`doctool`, `embedding`, `es-module`, `ffi`, `fixtures`, `fuzzers`, `internet`,
+`js-native-api`, `known_issues`, `message`, `module-hooks`, `node-api`,
+`overlapped-checker`, `parallel`, `pseudo-tty`, `pummel`, `report`, `sea`,
+`sequential`, `sqlite`, `system-ca`, `test-runner`, `test426`, `tick-processor`,
+`tools`, `v8-updates`, `wasi`, `wpt` and others -- and `tty` is required in four
+of them: one file in `common` (the harness), five in `parallel`, five in
+`pseudo-tty`, one in `sequential`. Twelve files, and none of them can pass here.
 
     common/index.js                          the harness, not a test
     parallel/test-net-access-byteswritten.js  excluded: language non-goal
