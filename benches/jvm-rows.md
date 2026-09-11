@@ -96,6 +96,7 @@ meets them. This is the map; the row table below it is the current state.
   - `queenRows` is `[f64]` because there is no `nts_array_fill_i32`
   - And the element type is worth 9.1% on ART, which is a fourth thing that is not the lever
   - Four mechanisms priced, four that are not it
+  - `widen` does not invert on ART. It is worth more there, and I expected the opposite
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3848,6 +3849,54 @@ bar 1 gap is not the sum of the things that look like it.** `awfy-queens` had no
 cause found on HotSpot after six hypotheses and it still has none; what ART
 bought is that the gap is now twice as large while the four candidates are still
 small, which is evidence about them rather than about it.
+
+### `widen` does not invert on ART. It is worth more there, and I expected the opposite
+
+`awfy-towers` emits `movesDone` as a `double` where AWFY's Java declares
+`private int movesDone`, and it is the counter incremented once per disk move --
+the innermost operation of the benchmark. `getfield D; dconst_1; dadd; putfield D`
+against the reference's `getfield I; iconst_1; iadd; putfield I`.
+
+That reads as a defect and is a **decision of this backend**. `widen.rs` holds an
+integer field as a double on purpose: a JVM local is a slot, `dadd` and `iadd`
+cost the same, and the only thing an `i32` buys is an `i2d` at every use that
+wants a number. Its own doc prices it at **3.41x in its favour** on `generator`.
+
+On HotSpot. ART has no C2 and much weaker floating point relative to integer, so
+the obvious question is whether a pass built and priced on one runtime survives
+the other. AWFY's own Towers with `movesDone` the only thing changed:
+
+    shape                     HotSpot                        ART
+    I  int movesDone    19023.8 19475.1 21642.9    29514.3 28979.9 28705.5
+    D  double           20325.7 20390.0 20243.8    25659.5 25718.6 25549.2
+
+**On ART the double is 11.0% faster**, comparing minima. Both arms are tight
+there -- 2.8% and 0.7% -- so that is outside either one's spread and is the
+answer: `widen` is not merely safe on Android, it is worth more there than here.
+
+**The HotSpot column is not claimed.** Minima give the double 6.4% worse, which
+would be a small argument against the pass on this field -- but the `I` arm's own
+three runs span **13.8%** while the `D` arm's span 0.7%, so a 6.4% gap between
+them is inside the noisier arm and I am not reading it. What can be said is that
+the pass is not *helping* here, and its doc does not claim it would: `generator`'s
+counter feeds a loop whose bound and product are doubles, and `movesDone` feeds
+one `i2d` at the `return`, once per 8,191 increments.
+
+That is `widen` behaving exactly as designed -- the equivalence class is real,
+`benchmark()` returns `number`, so the field is genuinely read as a double -- on
+a program where the trade it makes is worth almost nothing. Being worth almost
+nothing and being wrong are different, and only the first is measured.
+
+**So this is a fifth mechanism examined and the first whose answer is "change
+nothing".** I went looking for a decision of my own that Android would reverse,
+because that is the kind of thing this goal exists to find, and the measurement
+said the decision is better on Android than on the runtime it was made for. The
+hypothesis is retired rather than pending.
+
+`awfy-towers` at 1.64x is therefore still unexplained, and the remaining
+representation difference it has is `TowersDisk.size`: `Float { bits: 64 }` in
+the IR against `private final int size` in the reference, which is a field the
+analysis never narrowed rather than one this backend widened.
 
 ## Open, and whose
 
