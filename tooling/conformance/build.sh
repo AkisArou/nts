@@ -173,6 +173,7 @@ while IFS= read -r -d '' source; do
   clang -std=c11 -O2 -D_GNU_SOURCE -fPIC "${binding_header_flags[@]}" \
     -I"$napi" -I"$uv_include" -I"$(dirname "$source")" \
     -I"$root/runtime/node/internal" -I"$root/runtime/c" \
+    -I"$root/third_party/node/deps/zlib" \
     -c "$source" -o "$object" > /dev/null 2>&1 || true
 done < <(find "$root/runtime/node" -mindepth 2 -maxdepth 2 -name '*.c' -print0)
 sibling_archive=()
@@ -199,10 +200,35 @@ for header in "${binding_headers[@]}"; do
   binding_header_flags+=(-include "$header")
 done
 
+# **Node's own zlib, not the machine's.** `process.versions.zlib` is
+# `1.3.2.1-motley` -- Chromium's fork, which node vendors in `deps/zlib` -- and
+# this linked the system `-lz`, 1.3.2 on this machine. The `zlib` corpus compares
+# *compressed bytes* byte-for-byte against node's output, deliberately, because
+# two correct implementations can disagree on bytes. It reported 0 divergences,
+# so the two agreed at the settings exercised; that was incidental parity between
+# two versions, not a property of the build, and a system zlib bump would have
+# produced divergences that were nobody's defect.
+#
+# Compiled from source rather than linked as a library: node ships no prebuilt
+# object, and the SIMD translation units are guarded by defines this build does
+# not set, so they compile to nothing. `deflate.c` calls `cpu_check_features()`
+# unconditionally, so `cpu_features.c` is not optional.
+node_zlib="$root/third_party/node/deps/zlib"
 module_libraries=()
+module_extra_c=()
 case "$module" in
   zlib)
-    module_libraries=(-lz -lbrotlienc -lbrotlidec -lzstd)
+    module_libraries=(-lbrotlienc -lbrotlidec -lzstd)
+    if [ -f "$node_zlib/deflate.c" ]; then
+      while IFS= read -r -d '' zsrc; do module_extra_c+=("$zsrc"); done \
+        < <(find "$node_zlib" -maxdepth 1 -name '*.c' -print0)
+    else
+      # Named rather than silently falling back: a missing vendored tree would
+      # otherwise link the system zlib again and the parity would go back to
+      # being about this machine.
+      echo "note: $node_zlib absent -- linking the system zlib instead" >&2
+      module_libraries=(-lz "${module_libraries[@]}")
+    fi
     ;;
 esac
 
@@ -252,9 +278,11 @@ clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared -fvisibility=hidden \
   "${rc_defines[@]}" \
   "${binding_header_flags[@]}" \
   -I"$work" -I"$napi" -I"$uv_include" -I"$src" -I"$root/runtime/node/internal" \
+  -I"$node_zlib" \
   -o "$out/$module.node" \
   "${generated_c[@]}" \
   "${module_c[@]}" "${shared_c[@]}" "${sibling_archive[@]}" \
+  "${module_extra_c[@]}" \
   "${module_libraries[@]}" -luv -lm
 
 echo "$out/$module.node: $(stat -c%s "$out/$module.node") bytes"
