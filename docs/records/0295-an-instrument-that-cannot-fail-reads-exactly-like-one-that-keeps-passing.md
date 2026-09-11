@@ -95,6 +95,33 @@ regressing three hours after the change that hollowed it.
 - **Ask what would make this red**, before trusting a green. If the answer is
   "nothing in the corpus", the step is documentation.
 
+## The sibling: a check that failed and was ignored
+
+The two above are checks whose negative outcome could not occur. The compiler
+lane found the mirror of that the same night, and it belongs here because the
+remedy is the same sentence read from the other end.
+
+`coerce_to_slot` ended in
+
+    self.coerce(value, &want, id).unwrap_or(value)
+
+and `coerce` answers `Err` for a structural cast whose layout is not a prefix.
+Swallowing that wrote the **uncoerced** value into the slot, and the emitted C
+died with signal 11. The identical cast into a *parameter* had been refused by
+name for as long as both paths existed, because `coerce_to_parameter` propagates
+what this one dropped -- so the compiler knew, said so on one path, and was
+silent on the other. Eight call sites made fallible; nothing regressed.
+
+**`unwrap_or` on a `Result` whose `Err` is a refusal reads as a default and is a
+decision to emit something the compiler has just said it cannot represent.** The
+check ran, answered correctly, and had its answer thrown away -- which is the same
+outcome as a check that cannot fail, reached by the opposite route.
+
+So the pair is worth holding together: one check could not go red, the other went
+red into a `unwrap_or`. Neither was visible in the output of the thing it
+guarded, and both were found by something downstream breaking rather than by
+reading the guard.
+
 ## The adjacent failure that is not this one
 
 Worth separating, because it was tempting to file together. A probe timing two
