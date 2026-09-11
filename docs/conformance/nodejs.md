@@ -21289,6 +21289,58 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## The compiled lane cannot promisify a callback, and so has no `promises` at all
+
+Three routes to a promise that settles from a callback. Every one is refused, and
+each with a different message, so no single census would group them.
+
+    new Promise((resolve, reject) => { ...nested closure using reject... })
+      `reject`, captured above its own declaration, where it has no value yet
+
+    Promise.withResolvers<T>()
+      `Promise.withResolvers`, a global member with no definition here
+
+    class Deferred<T> { constructor() { new Promise((res, rej) => {
+        this.resolve = res; this.reject = rej; }) } }
+      `resolve` used as a value rather than called, which needs the executor to
+      be a real closure over the promise
+
+The third is the most informative: the executor is supported when `resolve` and
+`reject` are **called** inside it, and not when either is stored. Which rules out
+every deferred, and a deferred is what promisifying a callback API needs.
+
+### It is the whole `promises` surface, not `dns`'s
+
+    dns   no wrapper for promises: is not a function this backend can name
+    fs    no wrapper for promises.open, .readFile, .stat, .writeFile, .rm,
+          .opendir, .appendFile, .cp, .lstat, .mkdtemp, .glob, .rmdir, .statfs,
+          .watch, .mkdtempDisposable ... 16 of them
+    fs addon in target/node:  typeof exports.promises === "undefined"
+
+Node's `promises` namespaces are exactly this shape -- `fs.promises`,
+`dns.promises`, `timers/promises`, `stream/promises` -- so none of them can exist
+on the compiled lane until an executor can hand its resolver out.
+
+### What this does to "73 of 505"
+
+`fs.promises` alone is about sixty published names in node. The ceiling on the
+compiled lane is not 505 minus some lowering backlog; it is 505 minus every
+promise-returning API, minus the 128 the boundary cannot build. Those overlap, and
+neither is a lowering gap in the sense the goal's list means -- rest parameters,
+inbound references, `.call` rebinding, `URL#constructor`.
+
+It also explains `zlib` without needing `gzipSync` to be special. Every `*Sync`
+sibling is a plain function and every async one returns a promise or takes a
+callback that must be promisified somewhere.
+
+### How it was found, and why not sooner
+
+By trying to make one test pass. `test-dns-promises-exists.js` is the single file
+standing between `dns`'s compiled lane and not being hollow, and it needs
+`dns/promises`. Chasing that required a promise from a callback, and three
+attempts at it produced three different diagnostics -- none of which says
+"promises do not work here", which is what they add up to.
+
 ## Which blockers are this side's to fix, after trying seven of them
 
 Seven chokepoints examined by changing the program and recompiling. The split is
