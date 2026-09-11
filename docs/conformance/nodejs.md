@@ -22312,6 +22312,50 @@ lane is unchanged at 1 passed, 0 failed.
 Steps 2 and 4 are not this side's to fix, and 4 is not even the compiler's in the
 usual sense -- it is what the Node-API wrapper can construct.
 
+## Correction: it was the `?`, and my own workaround was the tell
+
+The entry below concludes "method syntax is what counts as a declaration" from
+five probes. **That general form is wrong.** The compiler session wrote six shapes
+without a hypothesis, four lowered on the first run -- a property on an object
+literal, a property read into a local, a function-typed class field, an interface
+method -- and what separated them was the **`?`**:
+
+    run:  ((n: number) => number) | undefined     lowers      managed<obj#4>
+    run?: (n: number) => number                   refused     erased
+
+The same type to a reader, and TypeScript assigns either to the other. Not the
+same slot. A nullable reference is a pointer, and the spare pointer value is
+exactly what `T | undefined` costs nothing to represent. An **optional property**
+has a third state -- *absent*, as against present-and-`undefined` -- which a
+pointer cannot hold. So the call asked for a closure object, did not get one, and
+fell through to a method lookup with nothing to find.
+
+### The tell was in my own results and I filed it under the wrong heading
+
+`const init = hook.init; init(...)` compiled for me. I reported it as
+**"COMPILES -- wrong receiver"** and reasoned about the receiver, because that is
+what the change visibly did. It is also the shape that lowers, for the reason
+above: extracting to a local **narrows**, and a narrowed local is a pointer.
+
+My five probes varied the **call site** -- a cast, an extraction, a method-syntax
+rewrite -- and never the **modifier**. There was no reason to vary it from where I
+was standing; the two slots have to be printed side by side before the `?` looks
+like anything. But the answer was in my own table, mislabelled.
+
+### What this does to the method
+
+"The concrete twin" says vary exactly one property. It does not say **which**
+properties are worth varying, and a set of five that all vary the same axis reads
+like coverage. Five call-site shapes agreeing is one observation, not five.
+
+The general form I should have written was "these five call sites do not change
+it", which is true, rather than "method syntax is what counts", which was an
+explanation invented to cover the observation. That is the same error as reading
+serial structure into parallel blockers, twelve hours apart.
+
+`emitInit` compiles now. `async_hooks` has no `no declaration in the hierarchy`
+refusals left and publishes 17 names against 16.
+
 ## Five formulations of a hook call, and none of them lowers
 
 The `emitInit` diagnosis, finished. Every arrangement of `hook.init(...)` a
