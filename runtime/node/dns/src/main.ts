@@ -128,16 +128,32 @@ function validateStringWithoutNullBytes(value: unknown, name: string): void {
 /**
  * Node's `DNSException`: an `Error` carrying `errno`, `code`, `syscall` and
  * `hostname`, with the code spelled as libuv spells it.
+ *
+ * Declared fields rather than four assignments through a
+ * `Record<string, unknown>` cast. The cast version was correct on the
+ * interpreted lane and refused on the compiled one -- "`errno`, which `Error`
+ * does not declare" -- and `cascade-reach.mjs` put three functions behind it.
+ * An object with a fixed layout is what the backend can carry, and it is the
+ * better TypeScript either way: the cast erased every one of these names from
+ * the checker.
  */
+class DNSException extends Error {
+  errno: number;
+  code: string;
+  syscall: string;
+  hostname: string;
+
+  constructor(errno: number, code: string, syscall: string, hostname: string) {
+    super(`${syscall} ${code} ${hostname}`);
+    this.errno = errno;
+    this.code = code;
+    this.syscall = syscall;
+    this.hostname = hostname;
+  }
+}
+
 function dnsException(errno: number, syscall: string, hostname: string): Error {
-  const code = nts_dns_errname(errno);
-  const error = new Error(`${syscall} ${code} ${hostname}`);
-  const carrier = error as unknown as Record<string, unknown>;
-  carrier.errno = errno;
-  carrier.code = code;
-  carrier.syscall = syscall;
-  carrier.hostname = hostname;
-  return error;
+  return new DNSException(errno, nts_dns_errname(errno), syscall, hostname);
 }
 
 function orderOf(dnsOrder: string): number {

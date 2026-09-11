@@ -21289,6 +21289,53 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## Three fixes stand between `dns` and a compiled lane, and one of them was mine
+
+Following the cascade rather than the census names all of them, and separates the
+one I could act on from the two I could not.
+
+    lookup         nextTick -> internal/tick.ts -> internal/async-hooks.ts, whose
+                   externalAsyncIdentities is a module-scope WeakMap
+                   blockers/weak-collections-have-no-representation
+    lookupService  ERR_MISSING_ARGS#constructor, a rest parameter
+    promises       promiseLookup and promiseLookupService capture a Promise
+                   executor's `reject` inside a nested closure
+                   blockers/a-recursive-arrow-inside-a-function
+
+### The one that was mine
+
+`dnsException` built node's `DNSException` by casting the error to
+`Record<string, unknown>` and assigning `errno`, `code`, `syscall` and
+`hostname`. Correct on the interpreted lane, refused on the compiled one --
+"`errno`, which `Error` does not declare" -- with three functions behind it.
+
+A declared class carries the same four fields with a fixed layout. The module
+went from **37 primary refusals and 26 cascaded functions to 36 and 23**, and the
+interpreted lane still reads 1 passed, 0 failed.
+
+It is also the better TypeScript, which is the part worth keeping: the cast
+erased all four names from the checker, so nothing would have caught a typo in
+any of them. The lowering refusal was the only thing that objected.
+
+### The two that were not, and why restructuring will not help
+
+`ERR_MISSING_ARGS` takes `...names`, which is the rest-parameter gap the goal
+itself names as gating the axis.
+
+The `Promise` one deserves a note, because the obvious reaction is to rewrite it.
+`promiseLookup` assigns a `const done` arrow and passes it to `lookup`;
+`promiseLookupService` passes an **inline** arrow directly. Different shapes, and
+they get the identical refusal at their own line. So it is not the intermediate
+binding -- it is capturing an executor's parameter in any nested closure, which is
+what `new Promise` is for.
+
+### Why `dns` is worth keeping in `BLOCKED` rather than forgetting
+
+29 refused things behind 32 sites, against `zlib`'s 352. It is the smallest module
+in the profile whose compiled lane is blocked *only* by these three, which makes
+it the cheapest available proof that any one of them has been fixed. `build-floor.sh`
+prints `dns NOW BUILDS` without anyone checking.
+
 ## The `EOF` fix landed, and `dns` moved from one blocker to a different one
 
 MainClaude namespaced emitted identifiers the same afternoon. The addon builds --

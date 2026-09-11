@@ -49,25 +49,39 @@ util zlib"
 # an undeclared identifier. When that fixture is fixed most of this list moves,
 # and the run will say so by name.
 #
-# `dns` is here, and the reason moved once already. It was the `EOF`/`FILE`
-# collision -- `node:dns` publishes 24 c-ares error constants and two are named
-# after a `<stdio.h>` type and a `<stdio.h>` macro. That is **fixed**: the addon
-# now builds, 385184 bytes, and publishes all 24 including `EOF` and `FILE`.
+# `dns` is here, and the reason has moved twice in one day. It was the
+# `EOF`/`FILE` collision -- `node:dns` publishes 24 c-ares error constants and two
+# are named after a `<stdio.h>` type and a `<stdio.h>` macro. That is **fixed**:
+# the addon builds, 385184 bytes, and publishes all 24.
 #
-# What it publishes is the 24 constants and the two result-order functions.
+# What it publishes now is the 24 constants and the two result-order functions.
 # `lookup`, `lookupService` and `promises` are not compiled, so the compiled lane
-# reads 0 passed and `--sabotage` reads the same -- a hollow lane, and named here
-# rather than counted as a green zero.
+# reads 0 passed and `--sabotage` reads the same. A hollow lane, named here rather
+# than counted as a green zero.
 #
-# `cascade-reach.mjs dns` attributes it: `nextTick` is refused, and `lookup` is
-# the export behind it. `nextTick` comes from `internal/tick.ts`, which imports
-# `internal/async-hooks.ts`, whose `externalAsyncIdentities` is a module-scope
-# `WeakMap` -- `blockers/weak-collections-have-no-representation`, already filed.
-# That one refusal has the largest cone in the module at 11 functions.
+# `cascade-reach.mjs dns` attributes every one of the three, and all three are
+# lowering gaps with a fixture already filed:
 #
-# It is not a `dns` problem. Twelve modules import `internal/tick.ts`: dgram,
-# diagnostics_channel, dns, events, fs, http, net, process, readline, stream,
-# util and zlib.
+#   lookup         `nextTick`, from `internal/tick.ts`, which imports
+#                  `internal/async-hooks.ts`, whose `externalAsyncIdentities` is a
+#                  module-scope `WeakMap`.
+#                  blockers/weak-collections-have-no-representation
+#   lookupService  `ERR_MISSING_ARGS#constructor`, which takes a rest parameter.
+#   promises       `promiseLookup` and `promiseLookupService` capture a `Promise`
+#                  executor's `reject` inside a nested closure.
+#                  blockers/a-recursive-arrow-inside-a-function
+#
+# A fourth was this module's own and is gone: `dnsException` built its error by
+# casting to `Record<string, unknown>` and assigning `errno`, `code`, `syscall`
+# and `hostname`. A declared class carries them instead, which took the module
+# from 37 primary refusals and 26 cascaded functions to 36 and 23.
+#
+# None of the three is a `dns` problem. Twelve modules import `internal/tick.ts`:
+# dgram, diagnostics_channel, dns, events, fs, http, net, process, readline,
+# stream, util and zlib. `dns` is simply the module small enough -- 29 things
+# behind 32 sites, against `zlib`'s 352 -- that these are the *only* things
+# between it and a working compiled lane, which makes it the cheapest proof in the
+# profile that any of the three fixes worked.
 BLOCKED="dns"
 
 # **Empty, and it held `fs` and `process` an hour ago.**
