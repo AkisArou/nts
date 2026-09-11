@@ -235,7 +235,16 @@ module_extra_flags=()
 # Both files quote their sources and quote nothing else ending in `.c`, so this
 # needs no gyp parser; a `.gyp` that grew one would show up as a link error
 # naming a symbol, not as silence.
-gyp_sources() { grep -oE "'[^']+\.c'" "$1" | tr -d "'"; }
+#
+# `sort -u` is not tidiness. A `.gyp` declares several *targets*, and this reads
+# the file rather than a target, so a file listed by two of them arrives twice.
+# `nghttp2.gyp` is exactly that -- `lib/sfparse.c` belongs to both the `nghttp2`
+# target and an `sfparse` target -- and without the dedup the link fails with
+# `multiple definition of sfparse_parser_init` and eleven more like it. Found by
+# probe-building nghttp2, not by anything zlib does: brotli and zstd each declare
+# one target, so this line changes nothing for them and would have waited to fail
+# until the next dependency was vendored.
+gyp_sources() { grep -oE "'[^']+\.c'" "$1" | tr -d "'" | sort -u; }
 
 add_vendored() {
   local dir="$1" rel

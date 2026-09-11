@@ -21289,6 +21289,45 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## `http2` is the largest prize, and nghttp2 vendors in 26 files
+
+The yield table puts `http2` first at 244 addressable files -- more than `tls`
+and `crypto` together -- and only 18 of them wait on `tls`. That makes the
+third-party question worth answering now rather than after `crypto`.
+
+Node uses **nghttp2**, and it is far smaller than its reputation:
+
+    deps/nghttp2    26 .c files, 29 headers, 1.3M
+    deps/zstd       26 .c files                      (for scale)
+
+Pulled into the sparse checkout with `/deps/nghttp2/` and probe-built against
+node's own `nghttp2.gyp` -- `BUILDING_NGHTTP2`, `NGHTTP2_STATICLIB`,
+`HAVE_CONFIG_H`, `_U_=`, and `lib/includes` on the path. It links and runs:
+
+    nghttp2 version: 1.70.0
+    HPACK encoded 2 headers into 2 byte(s)
+
+Two bytes is the right answer and worth stating, because it is the check that the
+probe did something. `:method GET` is index 2 of HPACK's static table and
+`:path /index.html` is index 5, so both encode as one indexed byte. A probe that
+merely linked would have printed a plausible number. HPACK is the half a
+hand-written `http2` would otherwise have to reimplement, including the Huffman
+table, so this is the piece worth not writing.
+
+### The probe found a bug in code committed an hour earlier
+
+`gyp_sources()` in `build.sh` read every quoted `.c` in a `.gyp`. A `.gyp` declares
+several **targets**, and `nghttp2.gyp` lists `lib/sfparse.c` under both its
+`nghttp2` target and a separate `sfparse` target, so the naive read returned 27
+paths for 26 files and the link died on `multiple definition of
+sfparse_parser_init` and eleven more.
+
+`sort -u` fixes it. The point is where it was found: `brotli.gyp` and `zstd.gyp`
+each declare one target, so the defect was invisible in the module that motivated
+the function and would have surfaced only when the next dependency was vendored.
+Rebuilding `zlib` afterwards gives a byte-identical addon -- 2596544 both ways --
+which is the control that the fix changed nothing it should not have.
+
 ## What the nine blocked modules would actually buy
 
 `module-yield.mjs`, written because the name-prefix count was wrong by 3x for
