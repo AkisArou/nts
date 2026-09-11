@@ -102,6 +102,8 @@ meets them. This is the map; the row table below it is the current state.
   - What a stack peephole would actually reach: 19% and 8%, not the 58%
   - Slot traffic is 1.4% on ART, the 7.8% was conflated, and instruction count is not the currency
   - The night's ledger, and what it rules out
+  - A second sitting: 36 of 43 reproduce, seven do not, and it is the ART half that moves
+  - Bar 1 on ART, confirmed across two sittings: two of eight, twice
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -4110,6 +4112,86 @@ and `dex2oat` -- which would give symbolized AOT code, and is also what a real
 Android app actually runs -- is not executable from the shell user. **That is the
 next thing, and it needs a real device or a symbolizable AOT build rather than
 another hypothesis.**
+
+### A second sitting: 36 of 43 reproduce, seven do not, and it is the ART half that moves
+
+The bar 1 measurement above is one sitting, and this file's own rule is that a
+row is not a number until its minima agree across sittings. Re-run identically --
+**same pinned tree `ea3be8f5`, same md5-frozen binary `4254f24c`, same 51 cases**
+-- so the only thing varying is the sitting.
+
+**36 of the 43 comparable rows land within 0.10**, most of them within 0.02:
+`closure-merge` 3.33 and 3.35, `bytes` 1.50 twice, `substrings` 0.19 twice,
+`bigint` 0.06 twice, `generic-classes` 0.12 and 0.11, `objects` 0.15 and 0.13,
+`dispatch` 1.03 and 1.02. The headline rows hold.
+
+Seven do not, and four of those badly:
+
+    row                   ART 1   ART 2    move      HotSpot control
+    instanceof             0.97    1.85   +0.88      1.10 -> 1.11
+    growth-fixed           1.01    0.62   -0.39      1.00 -> 0.98
+    generator              0.84    0.53   -0.31      1.00 -> 1.00
+    number-format          0.77    1.07   +0.30      0.99 -> 1.02
+    erasure-unknown        0.43    0.19   -0.24      1.00 -> 1.00
+    node-utf8              2.82    2.68   -0.14      6.23 -> 6.10
+    in-narrowing           0.99    1.11   +0.12      1.03 -> 1.04
+
+**The HotSpot control on every one of them is stable to 0.03.** Same programs,
+same harness, same process shape -- so this is not the machine being loaded and
+not the instrument drifting. It is the ART half, and only on some rows.
+
+That is a limit on the ART column that was not visible from one sitting, and it
+is worth more than the seven rows it costs: `instanceof` moving 0.88 with its
+control moving 0.01 means **a single ART timing is not a row**, and any ART figure
+in this file quoted from one run should be read as provisional unless it is one of
+the 36. The four large movers are all rows whose ART times are short enough that
+`dalvikvm` startup and JIT tier-up are a larger share -- which is a hypothesis and
+not measured, and is the kind of thing this file has been wrong about twice
+tonight.
+
+**What survives unchanged**: every conclusion drawn above rests on a row in the
+stable 36 -- `closure-merge` at 3.33/3.35 for the closure ABI, `dispatch` at
+1.03/1.02, `substrings` at 0.19 twice, `objects`, `generic-classes`, `bigint` for
+the reference-allocates family. Nothing was concluded from `instanceof`,
+`growth-fixed`, `generator` or `number-format`.
+
+### Bar 1 on ART, confirmed across two sittings: two of eight, twice
+
+The eight rows the bar is written about, measured twice against the same
+md5-frozen compiler:
+
+| case | ART sitting 1 | ART sitting 2 | move | HotSpot 1 / 2 |
+| --- | --- | --- | --- | --- |
+| `awfy-list` | 0.82x | 0.75x | -0.07 | 0.94x / 0.94x |
+| `awfy-mandelbrot` | 0.89x | 0.89x | +0.00 | 0.83x / 0.84x |
+| `awfy-permute` | 1.04x | 1.04x | +0.00 | 0.71x / 0.71x |
+| `awfy-sieve` | 1.14x | 1.15x | +0.01 | 1.32x / 1.33x |
+| `awfy-bounce` | 1.15x | 1.16x | +0.01 | 0.96x / 0.99x |
+| `awfy-nbody` | 1.19x | 1.19x | +0.00 | 1.00x / 1.00x |
+| `awfy-towers` | 1.64x | 1.60x | -0.04 | 1.03x / 1.00x |
+| `awfy-queens` | 1.98x | 1.95x | -0.03 | 1.25x / 1.25x |
+
+**All eight reproduce, seven of them within 0.04 and the worst at 0.07.**
+The count is the same both times: **2 of 8 at or under 1.00x on ART**, against five
+of eight on HotSpot. Bar 1 is not met on Android and that is now a result rather
+than a reading.
+
+The HotSpot controls reproduce too, each within 0.03 -- and one of them
+reproduces a *disagreement*. `awfy-sieve` reads **1.32x and 1.33x** here against
+the 0.94x `tooling/bench` publishes. Two sittings agreeing with each other and
+disagreeing with the published column means the difference is the **instrument**
+rather than the sitting, so this harness and `tooling/bench` do not measure that
+row the same way, reproducibly, and its ART figure stays marked uncertified. That
+is one row of forty and it is named rather than averaged away.
+
+**The pin held the instrument as well as the corpus, and that cost the first
+attempt.** Sitting two was run from the tree pinned at `ea3be8f5` -- which
+predates this lane's own `NTS_AWFY` fix, so all eight came back
+`javac declined ref.java` exactly as sitting one had, for the same reason and
+with the same misleading message. A sitting comparison must hold the **compiler**
+constant, which is what the md5 is for; the instrument should be the fixed one.
+Re-run from the newer worktree with the identical binary, which is the table
+above.
 
 ## Open, and whose
 
