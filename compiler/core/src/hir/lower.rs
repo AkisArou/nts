@@ -10074,8 +10074,34 @@ impl<'a> FuncBuilder<'a> {
         call: NodeId,
         element: &HirType,
         ty: &HirType,
-        mut array: ValueId,
+        array: ValueId,
         spreads: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let sources: Vec<NodeId> = spreads
+            .iter()
+            .map(|spread| {
+                self.children(*spread)
+                    .first()
+                    .copied()
+                    .ok_or_else(|| self.unsupported(*spread, "a spread of nothing"))
+            })
+            .collect::<Result<_, _>>()?;
+        self.concat_onto(call, element, ty, array, &sources)
+    }
+
+    /// Concatenate each source array onto `array`, at the parameter's element
+    /// width.
+    ///
+    /// Takes the *expressions* rather than the spread nodes around them, because
+    /// `apply` supplies its array directly and a spread supplies one wrapped.
+    /// One copy of the width rule, which is the part worth not having twice.
+    fn concat_onto(
+        &mut self,
+        call: NodeId,
+        element: &HirType,
+        ty: &HirType,
+        mut array: ValueId,
+        sources: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
         // `concat` reads its elements as doubles or as pointers, and a narrower
         // one is neither -- the same line `slice` and the array methods draw,
@@ -10091,16 +10117,13 @@ impl<'a> FuncBuilder<'a> {
             // form would retain a payload that may be a number.
             HirType::Erased => "nts_array_concat_value",
             // A narrower element is a typed array, whose storage is neither a
-            // double nor a pointer nor a tagged value. The same line `slice`
-            // and the array methods draw.
+            // double nor a pointer nor a tagged value.
             _ => {
                 return Err(self.unsupported(call, "a spread into a typed array's rest parameter"));
             }
         };
-        for spread in spreads {
-            let Some(inner) = self.children(*spread).first().copied() else {
-                return Err(self.unsupported(*spread, "a spread of nothing"));
-            };
+        for inner in sources {
+            let inner = *inner;
             let source = self.lower_expression(inner)?;
             // The spread's own element type has to be the parameter's, because
             // the result is read at the parameter's width. Two arrays of one
@@ -10112,7 +10135,7 @@ impl<'a> FuncBuilder<'a> {
                     "a spread of an array whose elements are not the parameter's",
                 ));
             }
-            let origin = self.origin(*spread);
+            let origin = self.origin(inner);
             array = self.push(
                 OpKind::Call {
                     callee: Callee::External(helper.to_owned()),
@@ -24268,13 +24291,16 @@ impl<'a> FuncBuilder<'a> {
         called
     }
 
-    fn call_through_closure(
+    /// Which body a call of a function value reaches.
+    ///
+    /// Split out because `apply` needs the same answer and supplies its
+    /// arguments differently.
+    fn closure_callee(
         &mut self,
         id: NodeId,
         callee_node: NodeId,
         receiver: ValueId,
-        arguments: &[NodeId],
-    ) -> Result<ValueId, Diagnostic> {
+    ) -> Result<Callee, Diagnostic> {
         let HirType::Managed(ManagedType::Object(receiver_ty)) =
             self.values[receiver.0 as usize].ty
         else {
@@ -24300,9 +24326,122 @@ impl<'a> FuncBuilder<'a> {
                 "a call of a function value in a program with no closures",
             ));
         };
+        Ok(callee)
+    }
 
+    /// `f.apply(receiver, list)` -- the arguments as one array.
+    ///
+    /// The receiver is dropped for the reason [`Self::lower_call_with_receiver`]
+    /// gives, which is the half these two share. What they do not share is the
+    /// arguments: `call` takes them positionally and `apply` takes them as an
+    /// array, so this is a different lowering rather than the same one under
+    /// another name.
+    ///
+    /// **The array is copied, not passed through.** A rest parameter is fresh on
+    /// every call in JavaScript, so handing the caller's array to the callee
+    /// would alias it -- `function f(...xs) { xs.push(1) }` would reach back
+    /// into `args`. Concatenating onto an empty one is what `gather_rest` does
+    /// for a spread and for the same reason.
+    ///
+    /// What this does *not* do is the positional case: `f.apply(r, [a, b])`
+    /// where the callee takes `(a, b)` rather than a rest needs the arity of a
+    /// literal, which is `blockers/a-fixed-arity-rest-is-not-positional`. At the
+    /// twelve `.apply` sites in this tree the callee's parameter is a rest and
+    /// the argument is the array that filled it -- `fn.apply(thisArg, args)`
+    /// with `fn: (...args: A) => T` and `args: A` -- so this is the shape the
+    /// corpus has.
+    fn lower_apply_with_receiver(
+        &mut self,
+        id: NodeId,
+        member: NodeId,
+        function: ValueId,
+        function_ty: TypeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let [given, list] = arguments else {
+            return Err(self.unsupported(id, "an `apply` that is not a receiver and a list"));
+        };
+        if !self.cannot_have_effects(*given) {
+            self.lower_expression(*given)?;
+        }
+        // The callee's signature, not `Function.prototype.apply`'s. See
+        // `Self::callee_signature`.
+        let outer = self.callee_signature.replace((id, function_ty));
+        let built = self.apply_through_closure(id, member, function, *list);
+        self.callee_signature = outer;
+        built
+    }
+
+    fn apply_through_closure(
+        &mut self,
+        id: NodeId,
+        member: NodeId,
+        function: ValueId,
+        list: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let shapes = self.parameter_shapes(id);
+        let Some(at) = shapes.iter().position(|(_, rest)| *rest) else {
+            return Err(self.unsupported(id, "an `apply` whose callee has no rest parameter"));
+        };
+        if at != 0 {
+            return Err(self.unsupported(
+                id,
+                "an `apply` whose callee takes arguments before its rest",
+            ));
+        }
+        let ty = self
+            .parameter_type_id(id, at)
+            .and_then(|ty| match self.represent(ty) {
+                Some(array @ HirType::Managed(ManagedType::Array(_))) => Some(array),
+                _ => self.tuple_union_as_array(ty),
+            })
+            .ok_or_else(|| self.unsupported(id, "an `apply` whose rest has no representation"))?;
+        let HirType::Managed(ManagedType::Array(element)) = ty.clone() else {
+            return Err(self.unsupported(id, "an `apply` whose rest is not an array"));
+        };
+        let callee = self.closure_callee(id, member, function)?;
+        let origin = self.origin(id);
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let empty = self.push(
+            OpKind::ArrayNew {
+                length: zero,
+                zeroed: true,
+            },
+            ty.clone(),
+            origin,
+        );
+        let gathered = self.concat_onto(id, &element, &ty, empty, &[list])?;
+        self.finish_closure_call(id, function, callee, vec![function, gathered])
+    }
+
+    fn call_through_closure(
+        &mut self,
+        id: NodeId,
+        callee_node: NodeId,
+        receiver: ValueId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let callee = self.closure_callee(id, callee_node, receiver)?;
         let mut args = vec![receiver];
         args.extend(self.lower_arguments(id, arguments)?);
+        self.finish_closure_call(id, receiver, callee, args)
+    }
+
+    /// The tail every call of a function value shares, once its arguments are
+    /// in hand.
+    ///
+    /// Split out because `apply` supplies its arguments as one already-built
+    /// array rather than as a list of expressions, and the *rest* of a closure
+    /// call -- the return type, the layout it needs, the op -- is the same
+    /// either way. Two spellings of this would be two places to get
+    /// `returned_by` wrong.
+    fn finish_closure_call(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        callee: Callee,
+        args: Vec<ValueId>,
+    ) -> Result<ValueId, Diagnostic> {
         // The callee's return where it has one. See `returned_by`: for `f?.(x)`
         // the expression's type carries an `undefined` the call cannot produce.
         let ty = self
@@ -26237,6 +26376,11 @@ impl<'a> FuncBuilder<'a> {
             && let Some(function_ty) = self.function_type_of_receiver(member, type_id)
         {
             return self.lower_call_with_receiver(id, member, receiver, function_ty, arguments);
+        }
+        if member_name == "apply"
+            && let Some(function_ty) = self.function_type_of_receiver(member, type_id)
+        {
+            return self.lower_apply_with_receiver(id, member, receiver, function_ty, arguments);
         }
 
         let callee = self.callee_for(id, type_id, &member_name)?;

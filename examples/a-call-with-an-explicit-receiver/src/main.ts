@@ -80,6 +80,35 @@ export function receiverIsEvaluated(n: number): string {
   return seen;
 }
 
+function sumParts(...parts: number[]): number {
+  let total = 0;
+  for (let i = 0; i < parts.length; i++) total += parts[i]! * (i + 1);
+  return total;
+}
+
+/**
+ * `f.apply(receiver, list)` -- the arguments as one array.
+ *
+ * The receiver is dropped for the same reason and by the same argument. What
+ * differs is the arguments, which is why this is a separate lowering and not
+ * the same one under another name.
+ *
+ * **The array is copied, not passed through.** A rest parameter is fresh on
+ * every call, so handing the caller's array to the callee would alias it.
+ */
+export function applyWithAList(n: number): number {
+  const f = sumParts;
+  const list = [n & 3, 2, 5];
+  return f.apply(undefined, list);
+}
+
+/** The empty list, which is where an off-by-one in the copy would show. */
+export function applyWithNothing(n: number): number {
+  const f = sumParts;
+  const list: number[] = [];
+  return f.apply(undefined, list) + (n & 0);
+}
+
 /** An arrow, whose `this` is the enclosing one and not the call's. */
 export function anArrowIgnoresTheReceiver(n: number): number {
   const f = (k: number): number => k + 1;

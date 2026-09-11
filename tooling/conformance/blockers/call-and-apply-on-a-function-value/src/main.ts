@@ -1,11 +1,25 @@
-// expect: a method `apply` with no declaration in the hierarchy
+// expect: an `apply` whose callee has no rest parameter
 //
-// **`call` closed on 2026-09-11 and `apply` did not**, which is why this
-// expectation moved rather than the fixture being deleted. `viaCall` now lowers
-// and agrees with node; `viaApply` is what is left, and it is a different
-// lowering rather than the same one under another name: `call` takes its
-// arguments positionally and `apply` takes them as an array, so the receiver
-// question they share is already answered and the argument question is not.
+// **`call` closed, `apply` closed for the shape the corpus writes, and this
+// fixture holds the shape it does not.** The expectation has moved through this
+// file three times in one day, which is the file working rather than the file
+// churning: each move is a smaller claim than the last.
+//
+//     viaCall    fn.call(undefined, x)              lowers, agrees with node
+//     viaApply   fn.apply(undefined, [x])           this refusal
+//
+// The two share exactly one thing -- the receiver, dropped by the argument
+// record 0284 makes -- and differ in the only other thing there is. `call` takes
+// its arguments positionally; `apply` takes them as an array. Where the callee's
+// parameter *is* a rest, the array is that parameter and `apply` copies it into
+// place; all twelve `.apply` sites in `runtime/node` are that shape --
+// `fn.apply(thisArg, args)` with `fn: (...args: A) => T` and `args: A`.
+//
+// `fn` here is `(x: number) => number`, which takes its argument **positionally**,
+// so the literal's arity would have to be spread across parameters. That is the
+// same question as `blockers/a-fixed-arity-rest-is-not-positional`, from the
+// other side: there a fixed-arity rest has to become positional parameters, and
+// here a literal has to become positional arguments. One answer will close both.
 //
 // `examples/a-call-with-an-explicit-receiver` is the guard for the half that
 // closed, and record 0284 is why the receiver can be dropped at all.
