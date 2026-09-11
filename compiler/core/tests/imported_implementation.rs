@@ -58,7 +58,7 @@ fn fixture(name: &str) -> Utf8PathBuf {
          }\n\
          \n\
          export function fromLib(n: number): number {\n\
-         \x20 return parseFloat(String(n)) + n;\n\
+         \x20 return decodeURIComponent(String(n)).length + n;\n\
          }\n",
     );
     write(
@@ -121,6 +121,14 @@ fn an_imported_name_is_not_reported_as_a_missing_builtin() {
 /// a `lib.d.ts` global this compiler has not implemented keeps saying so.
 ///
 /// Without this, "never say builtin" would pass by never saying it.
+///
+/// **The global has to be swapped as they are implemented**, which is the cost
+/// of testing a negative and is worth paying rather than weakening the
+/// assertion. This was `parseFloat` until it was provided on 2026-09-11, and
+/// the test failing that day is the test working: it is pinned to a name that
+/// is genuinely absent, not to a shape that resembles absence.
+/// `decodeURIComponent` is the current one, and
+/// `blockers/missing-builtin` is where its own cone is recorded.
 #[test]
 fn a_library_global_is_still_reported_as_a_builtin() {
     let root = fixture("library-global");
@@ -130,11 +138,11 @@ fn a_library_global_is_still_reported_as_a_builtin() {
 
     let library: Vec<&String> = refusals
         .iter()
-        .filter(|line| line.contains("`parseFloat`"))
+        .filter(|line| line.contains("`decodeURIComponent`"))
         .collect();
     assert!(
         !library.is_empty(),
-        "`parseFloat` is not provided and must be refused; got {refusals:#?}"
+        "`decodeURIComponent` is not provided and must be refused; got {refusals:#?}"
     );
     for line in &library {
         assert!(

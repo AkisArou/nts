@@ -21579,6 +21579,69 @@ impl<'a> FuncBuilder<'a> {
         self.narrowed(id, read)
     }
 
+    /// A member every arm of a union places identically: the arms, its index,
+    /// and what it reads as.
+    ///
+    /// The precondition `OpKind::SharedFieldGet` documents is established here
+    /// and nowhere else, so it is worth stating in the same words: **every arm
+    /// agrees about that field's name, index and representation.**
+    ///
+    /// `same_slot` -- names *and* representations -- because a rule matching
+    /// names alone passes `{ at: number }` against `{ at: string }` and emits a
+    /// load that reads a `double` out of a slot holding a pointer, with nothing
+    /// refusing and nothing crashing.
+    ///
+    /// The agreement is a **prefix and not a set**. A field behind a
+    /// disagreement has no known offset even where it agrees itself, because
+    /// the fields before it decide where it starts. That is what makes the C
+    /// pointer read sound and equally what makes the JVM's per-arm `getfield`
+    /// sound.
+    ///
+    /// Every arm must have a layout, which is also the test for whether an arm
+    /// can hold a field at all: an arm that is `null`, `undefined` or a
+    /// primitive answers `None` and the read stays refused rather than becoming
+    /// a load from a tag.
+    fn shared_field(&mut self, id: NodeId, member_name: &str) -> Option<(Vec<TypeId>, u32, HirType)> {
+        let object = self.children(id).first().copied()?;
+        let ty = *self.snapshot.node_types.get(&object)?;
+        let TypeKind::Union(members) = &self.snapshot.types.get(ty.0 as usize)?.kind else {
+            return None;
+        };
+        let members = members.clone();
+        if members.len() < 2 {
+            return None;
+        }
+
+        let mut arms = Vec::with_capacity(members.len());
+        for member in &members {
+            arms.push(self.layout_of(id, *member).ok()?);
+        }
+        let (first, rest) = arms.split_first()?;
+
+        let mut shared = first.fields.len();
+        for other in rest {
+            shared = shared.min(other.fields.len());
+            let agreed = first
+                .fields
+                .iter()
+                .zip(other.fields.iter())
+                .take(shared)
+                .take_while(|(want, have)| same_slot(want, have))
+                .count();
+            shared = shared.min(agreed);
+            if shared == 0 {
+                return None;
+            }
+        }
+
+        let at = first.index_of(member_name)?;
+        if usize::try_from(at).ok()? >= shared {
+            return None;
+        }
+        let read = first.fields.get(at as usize)?.ty.clone();
+        Some((members, at, read))
+    }
+
     fn member_of(
         &mut self,
         id: NodeId,
@@ -21712,6 +21775,26 @@ impl<'a> FuncBuilder<'a> {
             self.values[value.0 as usize].ty,
             HirType::Managed(ManagedType::Array(_) | ManagedType::String)
         );
+        // **A field every arm of a union puts in the same place.** A
+        // discriminated union is written with the discriminant declared first
+        // in every member -- that is what makes it discriminated -- so `kind`
+        // is at offset zero in all of them however much they differ afterwards.
+        // The union erases, because there is no single layout to represent it
+        // as; the field is at one offset regardless.
+        //
+        // `OpKind::SharedFieldGet` carries the arms and the index rather than
+        // an `Unerase` naming one of them, because the two backends need
+        // different instructions and only one of them can reinterpret a
+        // pointer. The first spelling of this was the unerase, and it threw
+        // `ClassCastException` on the JVM seventeen times in one example --
+        // record 0289.
+        if member_name != "length"
+            && self.values[value.0 as usize].ty == HirType::Erased
+            && let Some((arms, field, ty)) = self.shared_field(id, member_name)
+        {
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::SharedFieldGet { value, arms, field }, ty, origin));
+        }
         if member_name != "length" {
             return Err(self.not_a_length(id, value, member_name, sequence));
         }

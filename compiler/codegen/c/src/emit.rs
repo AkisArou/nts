@@ -1418,6 +1418,62 @@ fn null_comparison(
 /// question and is not answered here** -- a `FieldGet` typed from its use
 /// rather than from its slot is a disagreement the emitter can only paper over,
 /// and this papers over it in the one direction that is sound today.
+/// A field every arm of an erased union puts in the same place.
+///
+/// **The pointer read, unchanged**, which is the whole reason this backend
+/// wanted the op to exist rather than the op being a cost to it. A cast between
+/// two structs with a common initial sequence lands at the same offset whichever
+/// arm is there -- the same fact base-first layout relies on for every subclass
+/// -- so no arm is tested and nothing branches.
+///
+/// The first arm is the one the cast names, and any arm would do: the op's
+/// precondition is that they agree about this field's name, index and
+/// representation, so the offset and the load are the same through any of them.
+/// A backend that *cannot* do this reads `arms` and emits a test chain; see
+/// [`nts_core::hir::OpKind::SharedFieldGet`].
+fn shared_field_load(
+    op: &nts_core::hir::Op,
+    value: ValueId,
+    arms: &[nts_semantic_schema::TypeId],
+    field: u32,
+    name: &str,
+    context: &Context<'_>,
+) -> Result<String, Diagnostic> {
+    let first = arms.first().ok_or_else(|| {
+        Diagnostic::error(
+            "NTS2006",
+            "a shared field read over no arms",
+            op.origin.location,
+        )
+    })?;
+    let ty = HirType::Managed(nts_core::hir::ManagedType::Object(*first));
+    let layout = layout_of(context.program, &ty, &op.origin)?;
+    let declared = layout.fields.get(field as usize).ok_or_else(|| {
+        Diagnostic::error(
+            "NTS2006",
+            "a shared field index outside its layout",
+            op.origin.location,
+        )
+    })?;
+    // The op's precondition says the arms agree about this field's
+    // representation, so the read's type is the slot's. Checked rather than
+    // assumed: a disagreement here means lowering established the precondition
+    // wrongly, and the alternative to saying so is a load at the wrong width.
+    if declared.ty != op.ty {
+        return Err(Diagnostic::error(
+            "NTS2006",
+            "a shared field read at a type its arms do not declare",
+            op.origin.location,
+        ));
+    }
+    let cast = c_type_of(context.program, &ty, &op.origin)?;
+    Ok(format!(
+        "{name} = (({cast})nts_value_reference({}))->{};",
+        value_name(value),
+        c_member_at(layout, field as usize)
+    ))
+}
+
 fn field_load(
     func: &Func,
     op: &nts_core::hir::Op,
@@ -3861,6 +3917,9 @@ fn managed_op(
         OpKind::FieldGet { object, field } => {
             field_load(func, op, *object, *field, &name, context)?
         }
+        OpKind::SharedFieldGet { value, arms, field } => {
+            shared_field_load(op, *value, arms, *field, &name, context)?
+        }
         OpKind::FieldSet {
             object,
             field,
@@ -4096,6 +4155,7 @@ fn emit_op(
         | OpKind::ClosureStatic
         | OpKind::CellReady { .. }
         | OpKind::FieldGet { .. }
+        | OpKind::SharedFieldGet { .. }
         | OpKind::FieldSet { .. }
         | OpKind::ArrayNew { .. }
         | OpKind::Length(_)

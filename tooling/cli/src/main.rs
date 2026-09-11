@@ -1342,6 +1342,27 @@ fn suspension(index: usize, op: &nts_core::hir::Op) -> String {
     }
 }
 
+/// A shared field read, with its arms spelled out.
+///
+/// The arms are printed because they are the op's content: a reader checking
+/// that the lowering established the precondition needs to see *which* types it
+/// claimed agree, and a backend that emits a test chain walks exactly this list
+/// in exactly this order.
+fn render_shared_field(
+    index: usize,
+    value: nts_core::hir::ValueId,
+    arms: &[nts_semantic_schema::TypeId],
+    field: u32,
+    ty: &str,
+) -> String {
+    let arms = arms
+        .iter()
+        .map(|arm| format!("obj{}", arm.0))
+        .collect::<Vec<_>>()
+        .join(" | ");
+    format!("%{index} = field.get.shared %{}.{field} over {arms} : {ty}", value.0)
+}
+
 fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
     let ty = render(&op.ty);
     match &op.kind {
@@ -1399,6 +1420,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::Retain(object) | OpKind::Release(object) => render_refcount(&op.kind, *object),
         OpKind::FieldGet { object, field } => {
             format!("%{index} = field.get %{}.{field} : {ty}", object.0)
+        }
+        OpKind::SharedFieldGet { value, arms, field } => {
+            render_shared_field(index, *value, arms, *field, &ty)
         }
         OpKind::FieldSet {
             object,

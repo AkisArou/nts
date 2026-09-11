@@ -2731,6 +2731,40 @@ fn memory_operation(
                 tbaa(ty)
             )
         }
+        // A field every arm of an erased union puts in the same place.
+        //
+        // **The same load `FieldGet` emits**, with two instructions in front of
+        // it to get the pointer out of the erased pair. No arm is tested: the
+        // op's precondition is that the arms agree about this field's name,
+        // index and representation, so the offset is the same through any of
+        // them and the first is as good as the rest. A backend that cannot
+        // reinterpret a pointer reads `arms` and emits a test chain instead;
+        // see `hir::OpKind::SharedFieldGet`.
+        OpKind::SharedFieldGet { value, arms, field } => {
+            let first = arms
+                .first()
+                .ok_or_else(|| refuse(func, "a shared field read over no arms"))?;
+            let layout = program
+                .layouts
+                .iter()
+                .find(|layout| layout.types.contains(first))
+                .ok_or_else(|| refuse(func, "a shared field read over a type with no layout"))?;
+            let placed = nts_codegen_common::layout::place(&layout.fields)
+                .ok_or_else(|| refuse(func, "an object whose fields cannot be placed"))?;
+            let offset = *placed
+                .offsets
+                .get(*field as usize)
+                .ok_or_else(|| refuse(func, "a shared field index outside its layout"))?;
+            let ty = ty_of(&op.ty, func)?;
+            format!(
+                "{out}.p = extractvalue {ERASED_TYPE} {0}, 1\n  \
+                 {out}.ref = inttoptr i64 {out}.p to ptr\n  \
+                 {out}.at = getelementptr i8, ptr {out}.ref, i64 {offset}\n  \
+                 {out} = load {ty}, ptr {out}.at{1}",
+                name(*value),
+                tbaa(ty)
+            )
+        }
         OpKind::FieldSet {
             object,
             field,

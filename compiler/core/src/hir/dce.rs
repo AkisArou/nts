@@ -109,6 +109,11 @@ fn has_effects(kind: &OpKind) -> bool {
         // Asking what class a value is reads one word and compares it. A dead
         // `instanceof` is a dead comparison.
         OpKind::InstanceOf { .. } => false,
+        // A field read, and a field read has no effects whichever arm it goes
+        // through. The per-arm test a backend may emit for it is a comparison,
+        // and the trap on the no-match path is unreachable by the op's own
+        // precondition -- so a dead one is a dead load and goes like any other.
+        OpKind::SharedFieldGet { .. } => false,
         // Named runtime functions that compute and do nothing else. A call is
         // assumed to have effects because it may, and these provably do not:
         // `nts_tag_name` allocates a string and returns it, so a dead one is a

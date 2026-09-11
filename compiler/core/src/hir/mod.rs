@@ -911,6 +911,61 @@ pub enum OpKind {
         object: ValueId,
         field: u32,
     },
+    /// `value.field`, where `value` is an **erased** union and every arm puts
+    /// that field in the same place.
+    ///
+    /// # Why this is not `Unerase` followed by `FieldGet`
+    ///
+    /// That is what it was, for one evening. It says *reinterpret the pointer
+    /// as this arm*, which is an instruction rather than a fact: on C and LLVM
+    /// it is free -- a cast between two structs with a common initial sequence
+    /// is what base-first layout already relies on -- and on the JVM it is a
+    /// `CHECKCAST` against one named class, which throws
+    /// `ClassCastException: Right cannot be cast to Left` on every other arm.
+    ///
+    /// Worse than throwing, it is **inexpressible** there: the unerase names
+    /// one arm, so a backend cannot learn the others from it, and the failing
+    /// cast is the only instruction the IR licenses. So the op states the fact
+    /// and each backend picks its own instruction:
+    ///
+    /// ```text
+    /// C, LLVM   the pointer read, unchanged
+    /// JVM       one `instanceof`, `checkcast` and `getfield` per arm
+    /// ```
+    ///
+    /// The JVM lane measured the alternative -- a synthesised interface with an
+    /// accessor -- at 6213 ns/pass against 1759 for the chain, because an
+    /// interface makes every read a megamorphic `invokeinterface` whose itable
+    /// lookup defeats inline caching. Record 0289.
+    ///
+    /// # The precondition, which is the whole contract
+    ///
+    /// **Every arm agrees about that field's name, index and representation.**
+    /// Lowering establishes it with `same_slot` -- names *and* representations,
+    /// because a rule matching names alone emits a load that reads a `double`
+    /// out of a slot holding a pointer and nothing refuses.
+    ///
+    /// The agreement is a **prefix and not a set**: a field behind a
+    /// disagreement has no known offset even where it agrees itself, so `field`
+    /// is always less than the length of the arms' common prefix. That is what
+    /// makes the pointer read sound *and* what makes the per-arm `getfield`
+    /// sound.
+    ///
+    /// A value matching no arm is a program the checker should have rejected.
+    /// The last arm still takes its test rather than being a fallthrough, so
+    /// what happens there is a named refusal and not a cast nobody chose.
+    SharedFieldGet {
+        value: ValueId,
+        /// Every arm, in the union's own order -- stable across runs, and the
+        /// order a backend's test chain should follow.
+        ///
+        /// `arms` rather than `classes`, which is what [`OpKind::InstanceOf`]
+        /// calls the same shape: these are union members and only incidentally
+        /// classes, and a reader arriving from that variant should notice.
+        arms: Vec<TypeId>,
+        /// The index, equal in every arm by the precondition above.
+        field: u32,
+    },
     /// `object.field = value`. Produces nothing.
     FieldSet {
         object: ValueId,

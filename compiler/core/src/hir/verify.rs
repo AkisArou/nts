@@ -922,7 +922,8 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         OpKind::Erase { value }
         | OpKind::TagOf { value }
         | OpKind::Unerase { value }
-        | OpKind::InstanceOf { value, .. } => {
+        | OpKind::InstanceOf { value, .. }
+        | OpKind::SharedFieldGet { value, .. } => {
             vec![*value]
         }
         OpKind::Await { promise, rejects_to } => {

@@ -185,7 +185,8 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         OpKind::Erase { value }
         | OpKind::TagOf { value }
         | OpKind::Unerase { value }
-        | OpKind::InstanceOf { value, .. } => {
+        | OpKind::InstanceOf { value, .. }
+        | OpKind::SharedFieldGet { value, .. } => {
             *value = of(*value);
         }
         OpKind::Await { promise, rejects_to } => {

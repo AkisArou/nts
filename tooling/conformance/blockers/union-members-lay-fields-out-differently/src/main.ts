@@ -1,6 +1,9 @@
-// expect: `kind` on a union, whose members lay their fields out differently
+// expect: `at` on a union, whose members lay their fields out differently
 //
-// **Landed and reverted on 2026-09-11, and the reversion is the finding.**
+// **Landed, reverted and landed again on 2026-09-11**, and the middle step is
+// the finding. The discriminant case now lowers through `OpKind::SharedFieldGet`
+// and lives in `examples/a-member-every-arm-puts-in-the-same-place`; what is
+// below it here is what must go on refusing.
 //
 // Where every arm puts a field at the same index with the same name and
 // representation, the read is sound and on C and LLVM it is free -- a pointer
@@ -102,8 +105,10 @@ class Right {
 }
 
 /**
- * Under test: the discriminant, which every arm declares first. This is the
- * shape the op is for, and the one that lowered for an evening.
+ * Control: the discriminant, which every arm declares first. This **lowers**,
+ * through the op described above, and is here so the contrast with the two
+ * refusals below is in one file: same union, same kind of read, and the only
+ * difference is whether the arms agree about the slot.
  */
 export function unionField(n: number): number {
   const v: Left | Right = (n & 1) === 1 ? new Left() : new Right();

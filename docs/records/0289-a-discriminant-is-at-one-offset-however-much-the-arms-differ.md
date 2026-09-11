@@ -14,8 +14,8 @@ The refusal is the right answer about the **union** and the wrong one about the
 **field**. The union genuinely has no single representation and erases; the
 field genuinely is at one offset.
 
-This was built, measured, landed, and **reverted the same evening**. The
-reversion is the useful half of the record.
+This was built, landed, **reverted the same evening**, and landed again in a
+different shape. The reversion is the useful half of the record.
 
 ## What worked, and on which machines
 
@@ -57,7 +57,7 @@ sessions on a construct none of us is working on today.
 whoever runs it next.** That is the whole reason "I wrote it down" was not
 enough here.
 
-## The shape it is waiting for, which is decided rather than open
+## The shape it came back in
 
 The HIR said *reinterpret*, which is an instruction. One machine can execute it
 and one cannot. So the op has to state the **fact** — these arms agree about
@@ -102,6 +102,34 @@ The agreement is a **prefix and not a set**. `tail` above agrees in both arms
 and must still be refused, because field 0 does not agree and nothing after a
 disagreement sits at a known offset.
 
-Both shapes, and the discriminant that will lower, are in
-`blockers/union-members-lay-fields-out-differently`. There is no example,
-because there is nothing landed to guard.
+## What it is
+
+    OpKind::SharedFieldGet { value: ValueId, arms: Vec<TypeId>, field: u32 }
+
+    %14 = field.get.shared %11.0 over obj1 | obj7 : managed<str>
+
+C and LLVM emit the pointer read they already would. The JVM emits its chain,
+and until that half lands it **declines the op by name** — which is the entire
+difference from the first attempt. A decline is a refusal a reader can see; a
+`ClassCastException` inside a floor that absorbs it is not, and that was the
+whole of the JVM lane's objection.
+
+The last arm still takes its own test rather than being a fallthrough. A value
+matching none of them is a program the checker should have rejected, and what
+happens there is a named refusal — `NtsRuntime.unreachable()`, four bytes on the
+JVM — rather than a cast nobody chose.
+
+`examples/a-member-every-arm-puts-in-the-same-place` guards the positive cases
+and `blockers/union-members-lay-fields-out-differently` holds the two that must
+go on refusing. The split is forced rather than stylistic: a refused function
+leaves the differential silently, so an example holding both would report
+agreement over whatever lowered and go green having stopped testing the two it
+was written for.
+
+## The rule the two lanes agreed on, which outlives this construct
+
+**The lane that makes a construct work is the lane that moves its own floor.**
+Not the lane that adds the example. That is the only arrangement in which the
+number means something to the person who moves it — and it is the inverse of
+what happened here the first time, where I added an example and left another
+lane to discover it throwing.
