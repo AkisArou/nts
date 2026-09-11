@@ -21289,6 +21289,48 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## The rest-parameter fix will not publish `nextTick`, and the probe already said so
+
+`internal/tick.ts:57` is refused for a generic rest forwarded to a callback, and
+that refusal is being fixed. It is not the only thing wrong with `nextTick`, and
+the `nextTickVoid` probe is the experiment that shows it.
+
+`nextTickVoid` was `nextTick` **minus the rest parameter** and nothing else --
+same queue, same context restore, same four hook calls. It had no `NTS1001` of
+its own, so the compiler moved on to its first refused callee and named it:
+
+    tick.ts:45  `nextTickVoid` cannot be compiled because it calls `emitInit`
+
+`emitInit` is refused at `async-hooks.ts:451`: `hook.init(asyncId, type,
+triggerId, resource)` -- "a method `init` with no declaration in the hierarchy".
+Hooks are user-registered objects with optional callbacks, iterated out of a
+`Map`, so the call is dynamic dispatch on a property the type does not declare.
+The registry has two more refusals of its own at 338 and 356, both "`init`, where
+a `Map` or a `Set` has only `size`".
+
+**The variadic `nextTick` calls `emitInit` on the same line 54.** So clearing the
+rest parameter moves `nextTick` from one refusal to the next rather than
+publishing it, and every module that imports `internal/tick.ts` -- twelve of them
+-- stays where it is.
+
+This is not an inference from adjacency, which is the error this ledger already
+records once. It is the reading of a program that was changed on purpose: remove
+the first refusal, compile, and read the message that appears. That is the only
+way the second one can be seen at all, because the compiler reports the first
+refused callee and stops.
+
+### What it means for ordering
+
+The generic rest is still the most valuable single shape measured -- 27 exports
+across eight functions, twenty of them `fs`'s `asRequest`. `asRequest` does **not**
+call the async-hooks emitters in its own body the way `nextTick` does, so that
+twenty is not subject to this particular objection. But `nextTick` itself is, and
+`nextTick` was the reason the shape looked like it reached twelve modules.
+
+The honest statement is that the rest fix buys `asRequest`'s dependents and does
+not buy `nextTick`'s, and nobody could have known that without changing the
+program and recompiling.
+
 ## Three names onto the compiled axis, by deleting two regular expressions
 
 `net/src/address.ts` held two module-scope `new RegExp`s built from template
