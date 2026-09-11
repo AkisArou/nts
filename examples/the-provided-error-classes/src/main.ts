@@ -100,26 +100,56 @@ export function nameLength(pick: number): number {
   }
 }
 
-/** Used as a *value* rather than constructed -- one object per class, by address. */
-export function asValues(pick: number): number {
-  const at = (((pick | 0) % 7) + 7) % 7;
-  const classes = [
-    Error,
-    TypeError,
-    RangeError,
-    URIError,
-    SyntaxError,
-    EvalError,
-    ReferenceError,
-  ];
-  const chosen = classes[at]!;
-  let same = 0;
-  for (let i = 0; i < classes.length; i++) {
-    if (classes[i]! === chosen) same++;
-  }
-  // Exactly one, which is what "one immortal object per class" means. Two
-  // classes sharing an object would answer 2 here.
-  return same;
+/**
+ * Used as a *value* rather than constructed -- one object per class, compared
+ * by address.
+ *
+ * **Written without an array on purpose.** The obvious spelling collects the
+ * seven into a literal and counts matches, and on the JVM that array takes its
+ * element type from the first entry, so storing a `Ctor_TypeError` into a
+ * `Ctor_Error[]` throws `ArrayStoreException`. That is Java array covariance
+ * and it is a real gap, but it is not *this* file's subject: an example that
+ * failed for it would report the error classes as broken on one backend when
+ * what is broken is arrays of unlike references.
+ *
+ * Counting distinct pairs instead asks exactly the question -- are these seven
+ * names seven objects -- and asks nothing else. Two classes sharing an object
+ * would answer fewer than 21.
+ */
+export function asValues(n: number): number {
+  const a = Error;
+  const b = TypeError;
+  const c = RangeError;
+  const d = URIError;
+  const e = SyntaxError;
+  const f = EvalError;
+  const g = ReferenceError;
+  let distinct = 0;
+  if (a !== b) distinct++;
+  if (a !== c) distinct++;
+  if (a !== d) distinct++;
+  if (a !== e) distinct++;
+  if (a !== f) distinct++;
+  if (a !== g) distinct++;
+  if (b !== c) distinct++;
+  if (b !== d) distinct++;
+  if (b !== e) distinct++;
+  if (b !== f) distinct++;
+  if (b !== g) distinct++;
+  if (c !== d) distinct++;
+  if (c !== e) distinct++;
+  if (c !== f) distinct++;
+  if (c !== g) distinct++;
+  if (d !== e) distinct++;
+  if (d !== f) distinct++;
+  if (d !== g) distinct++;
+  if (e !== f) distinct++;
+  if (e !== g) distinct++;
+  if (f !== g) distinct++;
+  // And the same name twice is the same object, which is the other half of
+  // "one immortal object per class" and the half a distinctness count alone
+  // would not catch.
+  return distinct + (Error === Error ? 100 : 0) + n * 0;
 }
 
 /** Returned rather than thrown, which is how a helper hands one back. */

@@ -70,9 +70,29 @@ done
 # thirty other names beside it. Three of these, and the nested ones are the ones
 # that get missed -- the workspace links inside resolve by absolute path.
 for modules in node_modules examples/library/node_modules runtime/node/node_modules; do
-  if [ -d "$root/$modules" ]; then
-    ln -sfn "$root/$modules" "$tree/$modules"
-  fi
+  [ -d "$root/$modules" ] || continue
+  # **Copied rather than linked where a workspace link lives inside it.**
+  #
+  # `examples/library/node_modules/@native-typescript/config` is a *relative*
+  # symlink, `../../../../tooling/config`. A symlink to the whole directory
+  # makes that relative path resolve from its physical location -- the main
+  # tree -- so the worktree compiled `$root/tooling/config/src/*.ts`, which is
+  # outside its own `rootDir`, and tsgo answered `TS6059 ... is not under
+  # rootDir`. The example then failed to *typecheck*, which reads as "refuses
+  # nothing" in `example-refusals` and as one more non-agreement in `llvm` and
+  # `jvm` -- three symptoms, none of them naming the cause.
+  #
+  # `cp -a` keeps a relative link relative, so it resolves inside the tree and
+  # the pin means what it says. Only the small ones: the top-level tree is 32M
+  # of pnpm store with no workspace link in it and is still shared.
+  case $modules in
+    node_modules) ln -sfn "$root/$modules" "$tree/$modules" ;;
+    *)
+      rm -rf "$tree/$modules"
+      mkdir -p "$(dirname "$tree/$modules")"
+      cp -a "$root/$modules" "$tree/$modules"
+      ;;
+  esac
 done
 
 echo "gate: $sha in $tree"

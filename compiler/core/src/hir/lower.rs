@@ -26892,6 +26892,25 @@ impl<'a> FuncBuilder<'a> {
         Ok(symbols)
     }
 
+    /// Whether a type still admits `null` or `undefined`.
+    ///
+    /// Asked of the **type** rather than the representation, because the two
+    /// disagree exactly where it matters: `F` and `F | undefined` are both a
+    /// pointer, since a nullable reference is what the one spare pointer value
+    /// is for. A caller that needs to know whether the checker *narrowed* an
+    /// absence away cannot read that off the width.
+    fn admits_absence(&self, ty: TypeId) -> bool {
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return true;
+        };
+        match &record.kind {
+            TypeKind::Union(members) => members
+                .iter()
+                .any(|member| absence_of_member(self.snapshot, *member).is_some()),
+            _ => absence_of_member(self.snapshot, ty).is_some(),
+        }
+    }
+
     fn lower_object_method(
         &mut self,
         id: NodeId,
@@ -26934,6 +26953,68 @@ impl<'a> FuncBuilder<'a> {
                 field_ty,
                 origin,
             );
+            return self.call_through_closure(id, member, held, arguments);
+        }
+
+        // **An optional property holding a function**, which is not the same
+        // slot as a union with `undefined` in it and was refused while that one
+        // lowered.
+        //
+        //     run:  ((n: number) => number) | undefined     managed<obj#4>
+        //     run?: (n: number) => number                   erased
+        //
+        // An optional property has a third state -- *absent*, as against
+        // present-and-undefined -- so it cannot be a nullable pointer and lays
+        // out erased. The branch above asks for a closure object and does not
+        // fire, and the hierarchy has nothing to declare, so the refusal read
+        // `a method `run` with no declaration in the hierarchy` -- which names
+        // neither the optionality nor the field.
+        //
+        // The licence to unerase is the checker's own: `o.run(x)` only
+        // typechecks where `o.run` has been narrowed to the function, so the
+        // narrowed type is on the name being read. Where it has not been
+        // narrowed this asks for a closure object, does not get one, and falls
+        // through to the refusal as before.
+        //
+        // 42 sites in `runtime/node` report this message across at least three
+        // unlike causes, so this closes one of them rather than the count.
+        // `async_hooks`'s `emitInit` is the one that was walked to: `hook.init`
+        // is declared `init?: (...) => void`, and it is the first link under
+        // `asRequest` and every `nextTick` caller.
+        if let Ok(layout) = self.layout_of(id, type_id)
+            && let Some(field) = layout.index_of(&member_name)
+            && let Some(declared) = layout.fields.get(field as usize)
+            && declared.ty == HirType::Erased
+            && let Some(narrowed) = self.type_of(member)
+            && matches!(narrowed, HirType::Managed(ManagedType::Object(_)))
+            // **And the checker must have narrowed the absence away.** The
+            // representation cannot say so on its own: `F` and `F | undefined`
+            // are both a pointer, because a nullable reference is what the one
+            // spare pointer value is for. So the *type* is asked, not its
+            // width.
+            //
+            // Without this, `o.run!(x)` on an absent property would unerase a
+            // tag that says absent and call through whatever the payload bits
+            // are. Node throws `TypeError: o.run is not a function` there; a
+            // null call is not that, and it is the one outcome worse than the
+            // refusal this branch replaces.
+            && self
+                .snapshot
+                .node_types
+                .get(&member)
+                .copied()
+                .is_some_and(|ty| !self.admits_absence(ty))
+        {
+            let origin = self.origin(member);
+            let held = self.push(
+                OpKind::FieldGet {
+                    object: receiver,
+                    field,
+                },
+                HirType::Erased,
+                origin.clone(),
+            );
+            let held = self.push(OpKind::Unerase { value: held }, narrowed, origin);
             return self.call_through_closure(id, member, held, arguments);
         }
 

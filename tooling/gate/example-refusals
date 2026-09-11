@@ -36,6 +36,11 @@ mathops-unsupported 1 the constructs the name promises
 # Incidental: an example written for something else that happens to contain a
 # construct the compiler refuses. Each is a real gap and each is somebody's next
 # item; the number is what stops a second one arriving unnoticed.
+# Two exported generics nothing in the file instantiates. They were never
+# compiled and the export could never have been filled; what changed on
+# 2026-09-11 is that the compiler says so instead of emitting nothing and
+# leaving the napi wrapper to report the effect with the cause unsaid.
+advanced 2 an exported generic function this program never instantiates
 library 1 a parameter of intersection type
 module-evaluation 1 a regular expression literal
 calls 1 an erased value where a concrete representation is wanted
