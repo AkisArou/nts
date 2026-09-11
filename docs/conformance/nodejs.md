@@ -21289,6 +21289,48 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## libuv is the last instance of the standing rule, and the largest
+
+The rule is "link node's vendored dependency, not the machine's". `zlib` was done,
+then `brotli` and `zstd`. **`libuv` is still the machine's**, and every addon links
+it -- `-luv` on the link line, `ldd` shows `/usr/lib/libuv.so.1`.
+
+    node's libuv    1.52.1
+    system libuv    1.52.1
+    deps/uv         87 `.c` files in the tree, 93 named by `uv.gyp` across all
+                    platforms, 17 per-OS conditionals, 2.4M
+
+Matching versions again, so the same preventive argument as `brotli` and `zstd`
+and the same honest caveat: it buys nothing today.
+
+### Why it is not done here
+
+`zlib`, `brotli` and `zstd` were each one source list and a handful of defines.
+`uv.gyp` has **17 per-OS conditionals** and names 93 sources of which only a
+subset build on any one platform, so `gyp_sources()` -- which reads every quoted
+`.c` in a file -- would collect every platform's at once. The Windows and Solaris
+files would go to the compiler together with the Linux ones.
+
+That is a real extension of the helper, not an oversight in it, and the helper's
+own comment already says what it assumes. Doing it needs the conditionals read,
+which is a gyp parser rather than a `grep`.
+
+It is also the one where the risk runs the other way. `libuv` is not a codec at
+the edge of one module; it is under `net`, `dgram`, `fs`, `dns`, `process` and
+`timers`. Swapping it is a change every module observes, and the versions agree
+today.
+
+### Recorded rather than done
+
+`deps/uv/src` is now in the sparse checkout so the sources are there when someone
+takes it. The pattern list needed one correction on the way: `/deps/uv/uv.gyp` is
+a **file** pattern, which cone mode rejects -- it printed "unrecognized pattern"
+and "disabling cone pattern matching" on a checkout three sessions share. It was
+also redundant, because `/deps/uv/` already carries that directory's top-level
+files. Removed, reapplied clean, cone mode verified still `true`, and every shared
+path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
+`deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
+
 ## The compiled lane cannot promisify a callback, and so has no `promises` at all
 
 Three routes to a promise that settles from a callback. Every one is refused, and
