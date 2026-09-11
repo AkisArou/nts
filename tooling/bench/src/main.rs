@@ -620,20 +620,39 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
             row.llvm.map_or_else(|| "--".to_owned(), human),
             row.java.map_or_else(|| "--".to_owned(), human),
             human(row.node),
-            row.against(row.cpp),
-            row.against(Some(row.node)),
-            row.jvm_against_java(),
+            row.quotable(row.against(row.cpp), ["nts (C)", "C++"]),
+            row.quotable(row.against(Some(row.node)), ["nts (C)", "node"]),
+            row.quotable(row.jvm_against_java(), ["nts (JVM)", "Java"]),
         );
     }
 
     let legend = legend(root);
     let spreads = spreads(rows);
+    // The dagger is only worth printing where one was, and a legend line that
+    // explains a mark nothing carries reads as a warning about the whole table.
+    let daggered = rows.iter().any(|row| {
+        ["nts (C)", "C++", "node", "nts (JVM)", "Java"]
+            .iter()
+            .any(|label| row.unstable(label))
+    });
     let path = root.join("README.md");
     let text = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
     let (Some(from), Some(to)) = (text.find(START), text.find(END)) else {
         bail!("README.md has no benchmark markers");
     };
-    let updated = format!("{}{START}\n{table}{legend}{spreads}{}", &text[..from], &text[to..]);
+    // The mark travels with the number. `spreads` below says *what* moved and
+    // by how much; this says which ratios one may not quote, in the cell a
+    // reader copies.
+    let mark = if daggered {
+        "\n\u{2020} one half of this ratio is known to move — see the table below.          **A ratio is unquotable when either half moves**, whichever half it is:          the bar is ours over theirs, so a moving denominator moves the bar.\n"
+    } else {
+        ""
+    };
+    let updated = format!(
+        "{}{START}\n{table}{mark}{legend}{spreads}{}",
+        &text[..from],
+        &text[to..]
+    );
     std::fs::write(&path, updated).with_context(|| format!("writing {path}"))?;
     Ok(())
 }
@@ -709,6 +728,35 @@ impl Row {
             (Some(ours), Some(theirs)) => format!("{ours_over:.2}x", ours_over = ours / theirs),
             _ => "--".to_owned(),
         }
+    }
+
+    /// Whether a named column is known to be unstable — this sitting, or a
+    /// previous one.
+    fn unstable(&self, label: &str) -> bool {
+        self.varied.iter().any(|(at, _)| at == label)
+            || KNOWN_BIMODAL
+                .iter()
+                .any(|(case, at, ..)| *case == self.case && *at == label)
+    }
+
+    /// A ratio, marked where **either half** of it is known to move.
+    ///
+    /// The JVM lane's sentence, and it took a retraction to arrive at: *a ratio
+    /// is unquotable when either half moves*. `number-format-double` was
+    /// promoted to "the best-supported number in the table" on the reasoning
+    /// that its flag was on the *Java* side — the reference varied, not us — so
+    /// a note about the reference was making our own stable number unquotable.
+    /// That identifies the unstable half correctly and draws the opposite
+    /// conclusion: the bar is ours **over** theirs, so a moving denominator
+    /// moves the bar.
+    ///
+    /// Marked where the number is read, not in a section below it. `spreads`
+    /// already exists and was not enough — a reader quotes the cell.
+    fn quotable(&self, ratio: String, halves: [&str; 2]) -> String {
+        if ratio == "--" || !halves.iter().any(|label| self.unstable(label)) {
+            return ratio;
+        }
+        format!("{ratio}\u{2020}")
     }
 
     /// The JVM lane against hand-written Java, which is the one ratio in this
@@ -2229,7 +2277,25 @@ const KNOWN_BIMODAL: &[(&str, &str, f64, &str, Basis)] = &[
     // mode, where 0.94x needs it near 5740. Both harnesses honest, habitually
     // landing in different modes. `benches/jvm-rows.md` carries the row as a
     // range rather than a number.
+    // **Both halves, which took a control to find.** The reference's two modes
+    // were recorded first and looked like the whole story. Then the JVM lane
+    // drove *our* artefact through both harnesses, alternating, on a quiet
+    // machine: they agree within 3%, so neither the timing arm nor the
+    // classpath nor the driver is the fork — and our own side swings 4428 to
+    // 5685 ns out of one class file, 1.28x, at what look like the same two
+    // levels the reference sits at.
+    //
+    // So the ratio is the quotient of two independently bimodal halves and can
+    // land anywhere from about 0.79x to about 1.28x with nothing wrong
+    // anywhere. 0.94, 1.32 and 1.33 are all inside it.
+    //
+    // Two *different* programs — this compiler's output and Are We Fast Yet's
+    // hand-written Java — flipping between the same two levels on one machine is
+    // not about either program. The workload is a `boolean[5000]` sieve and a
+    // flip that size out of one class file is the shape of a decision made once
+    // per process. Named with the measurement rather than chased.
     ("awfy-sieve", "Java", 1.27, "a previous sitting, and a second harness", Basis::Bimodal),
+    ("awfy-sieve", "nts (JVM)", 1.28, "a control run, both harnesses", Basis::Bimodal),
     // The reference got 13% and 12% faster across two sittings while our side
     // did not move — which is the `awfy-sieve` shape and smaller, and two
     // sittings are a move rather than two modes. `number-format-double` is a row
