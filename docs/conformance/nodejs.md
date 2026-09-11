@@ -21289,6 +21289,51 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## The one way to make `dns`'s compiled lane non-hollow, and why it is not taken
+
+Enumerating all eleven skips on the compiled lane, rather than assuming, showed
+that nine are `internalBinding('cares_wrap')` -- an RFC non-goal -- and one is
+`dns/promises`, blocked by the `Promise` executor gap. The eleventh is different,
+and it is reachable:
+
+    test-dns-memory-error.js   needs internal/errors
+
+It builds `new errors.DNSException(UV_EAI_MEMORY, 'fhqwhgads')` and asserts
+`.code === 'EAI_MEMORY'` and that `stack[1]` matches `/^ {4}at Object/`. Both
+hooks it needs already exist and are in use: `shape.mjs` can declare `internals()`
+-- `assert` supplies `internal/assert/myers_diff` that way -- and `testBindings()`
+-- `timers` supplies `internalBinding('timers').getLibuvNow`. The constant is a
+**read**, not a substitution, which is the distinction that makes nine of its
+neighbours unreachable and this one not. `uv_err_name(-3006)` is our own binding
+and answers `EAI_MEMORY`, so even the value would not be borrowed from node.
+
+**It would have made the compiled lane read 1 passed against 0 sabotaged.**
+
+It is not taken. The module's own functions -- `lookup`, `lookupService` -- still
+do not compile. A lane reporting `1 passed` on the strength of an internal error
+class, reached through two declaration hooks and a one-entry stand-in for node's
+libuv constant table, would be a number that does not mean what it appears to
+mean. That is the hazard the goal names, arriving by the one route left open
+after the honest ones closed. The lane stays at 0 passed and is labelled hollow.
+
+### What the investigation was worth anyway
+
+Reading node's `DNSException` to see what the test wanted found a real
+divergence. Node's constructor takes `(err, syscall)` and derives the code; ours
+took the code pre-derived, and more importantly node's **hides its own frame** so
+the first line of the stack below the message belongs to the caller.
+
+Ours did not. Fixed, and controlled at each step rather than assumed:
+
+    before anything          stack[1] = at new DNSException
+    captureStackTrace in the constructor    stack[1] = at dnsException
+    captureStackTrace in the helper too     stack[1] = the caller
+
+Both captures are needed and neither is redundant: the constructor's is what
+makes a direct `new DNSException` clean, the helper's is what makes
+`dnsException()` clean. A user reading a failed `dns.lookup` was seeing two
+frames of our plumbing before their own.
+
 ## Three fixes stand between `dns` and a compiled lane, and one of them was mine
 
 Following the cascade rather than the census names all of them, and separates the

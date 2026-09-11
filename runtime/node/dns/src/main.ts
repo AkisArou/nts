@@ -30,6 +30,7 @@ import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
   ERR_MISSING_ARGS,
+  captureStackTrace,
 } from "../../internal/errors.ts";
 import { isIP } from "../../net/src/address.ts";
 
@@ -143,17 +144,32 @@ class DNSException extends Error {
   syscall: string;
   hostname: string;
 
-  constructor(errno: number, code: string, syscall: string, hostname: string) {
+  constructor(errno: number, syscall: string, hostname: string) {
+    const code = nts_dns_errname(errno);
     super(`${syscall} ${code} ${hostname}`);
     this.errno = errno;
     this.code = code;
     this.syscall = syscall;
     this.hostname = hostname;
+    // Node's `DNSException` hides its own frame, so the first line of the stack
+    // below the message is the caller's. Without this the user's first frame is
+    // `at new DNSException`, which is an implementation detail of ours appearing
+    // in the stack of an error they are meant to read.
+    captureStackTrace(this, DNSException);
   }
 }
 
+/**
+ * The class hides its own frame, and this hides this one, so the first frame a
+ * caller sees is their own. Both are needed: the constructor's capture is what
+ * makes a direct `new DNSException` clean, and this one is what makes the helper
+ * clean. Checked rather than assumed -- before the first, `stack[1]` read
+ * `at new DNSException`; before the second, `at dnsException`.
+ */
 function dnsException(errno: number, syscall: string, hostname: string): Error {
-  return new DNSException(errno, nts_dns_errname(errno), syscall, hostname);
+  const error = new DNSException(errno, syscall, hostname);
+  captureStackTrace(error, dnsException);
+  return error;
 }
 
 function orderOf(dnsOrder: string): number {
