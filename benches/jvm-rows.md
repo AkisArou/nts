@@ -97,6 +97,7 @@ meets them. This is the map; the row table below it is the current state.
   - And the element type is worth 9.1% on ART, which is a fourth thing that is not the lever
   - Four mechanisms priced, four that are not it
   - `widen` does not invert on ART. It is worth more there, and I expected the opposite
+  - The dex ratchet, made to fail on purpose
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3893,10 +3894,48 @@ because that is the kind of thing this goal exists to find, and the measurement
 said the decision is better on Android than on the runtime it was made for. The
 hypothesis is retired rather than pending.
 
-`awfy-towers` at 1.64x is therefore still unexplained, and the remaining
-representation difference it has is `TowersDisk.size`: `Float { bits: 64 }` in
-the IR against `private final int size` in the reference, which is a field the
-analysis never narrowed rather than one this backend widened.
+`awfy-towers` at 1.64x is therefore still unexplained.
+
+**And the candidate I reached for next was an instrument reading the wrong
+program.** I said its remaining difference was `TowersDisk.size` --
+`Float { bits: 64 }` against the reference's `private final int size` -- from
+`nts layouts`. The emitted class declares **`public int size;`**. `nts layouts`
+prints the *declared* layout type; this backend narrows a field from its uses,
+and the prepared IR agrees with the class file rather than with the layout
+print: `func TowersDisk#constructor(this, size: i32)`, storing an `i32`.
+
+Checked on the other two rows the same survey flagged: `awfy-list`'s
+`Element.val` is `Float { bits: 64 }` in the layout and **`public int val;`** in
+the class, so that one was wrong too. `awfy-nbody`'s `Body.x`, `.y`, `.z`, `.vx`
+are `Float { bits: 64 }` in both, correctly -- they are physics doubles. Two of
+three flagged rows were the instrument.
+
+So the "never narrowed" half of that survey is withdrawn and only the "widened"
+half stands, which was checked against the class file rather than the layout.
+**The class file is the artefact; `nts layouts` is a different question wearing
+similar words.** Read against it rather than through it -- which is the rule I
+had already applied to `dispatch` tonight and did not apply here.
+
+One thing worth keeping from being wrong: this backend **does** already narrow a
+field from its uses. The machinery I was about to propose exists, which changes
+what `queenRows` needs -- that one is blocked on the *storage* following a
+runtime helper's signature, not on the analysis being absent.
+
+### The dex ratchet, made to fail on purpose
+
+0295 says a ratchet owes itself a way to go red, so `dexes.sh` was run over the
+whole corpus against an impossible floor:
+
+    sabotage worked, exit 1 -- the ratchet goes red. It said:
+    4382 method(s) across them
+    only 4382 method(s) dexed, against a floor of 999999
+    with the expected 1 decline(s), so every target compiled and
+    the programs themselves are smaller: functions are being pruned before
+    the backend sees them, which is what made this step green over a
+    skeleton -- record 0295
+
+The exit status, the count, and the right one of the two branches. This is the
+first thing in this lane that has been *shown* to fail rather than trusted to.
 
 ## Open, and whose
 
