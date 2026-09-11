@@ -36,7 +36,7 @@
 //
 // Its other two items are `stringify: takes an object`
 // (`blockers/object-parameter-at-the-wrapper`) and `decodeURIComponent`
-// (`blockers/missing-builtin`), and neither of them is reachable while this one
+// (provided since 2026-09-11), and neither of them is reachable while this one
 // stands.
 
 function one(): number {

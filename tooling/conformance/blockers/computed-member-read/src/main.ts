@@ -33,7 +33,7 @@
 //     const current = Object.hasOwn(obj, key) ? obj[key] : undefined;
 //
 // on a `ParsedUrlQuery`, an interface whose whole purpose is an index
-// signature. The other three are `decodeURIComponent` (`missing-builtin`), an
+// signature. The other three are `decodeURIComponent` (provided since 2026-09-11, `examples/uri-encoding`), an
 // `unknown` narrowed to BigInt (`narrowed-bigint`), and an object shorthand
 // that is a cascade from the first.
 

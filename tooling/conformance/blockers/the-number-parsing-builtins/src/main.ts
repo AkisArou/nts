@@ -38,7 +38,7 @@
 //
 // `parseInt` is the one that matters: six modules is a wide enough spread that
 // it will be in front of something in most of them, and it is the same shape as
-// `decodeURIComponent` in `missing-builtin` -- closed by writing it, not by
+// `decodeURIComponent`, which was closed on 2026-09-11 by writing it rather than by
 // deciding anything.
 //
 // # How they were found, and what agreed around them

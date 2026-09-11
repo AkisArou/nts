@@ -422,7 +422,20 @@ profile() {
   # eighty on, which is under ten minutes of the Node lane committing. The
   # ceiling is raised because the corpus earned it and the run that says so is
   # in this comment rather than in a memory of it.
-  ceiling=19500
+  # 2026-09-11, 24 modules (`tty` joined): 18792 at a green gate, so 19200.
+  #
+  # **The count went up before it went down and neither was reach moving.** The
+  # `uninstantiated` diagnostic added a line for every generic a call could not
+  # pin down and every exported one nothing instantiates -- `asRequest` among
+  # them, which had been the profile's largest chokepoint while emitting nothing
+  # at all. Those functions were not compiled before and are not compiled now;
+  # what changed is that they say so, and a census that reads diagnostics can
+  # see them for the first time.
+  #
+  # So this number counts *named* refusals, and a fix that makes one speak
+  # raises it while a fix that makes one compile lowers it. Read the direction
+  # against what landed rather than on its own.
+  ceiling=19200
   if [ "$refusals" -gt "$ceiling" ]; then
     printf '  ^ above the ceiling of %s -- reach went backwards\n' "$ceiling"
     return 1
@@ -686,7 +699,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 169 "through the LLVM backend, counting" ); }
+  backend_examples 174 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -697,7 +710,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 169 "through the LLVM backend" ); }
+  backend_examples 174 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform

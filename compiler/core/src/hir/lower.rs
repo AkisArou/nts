@@ -25114,6 +25114,79 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.runtime_call("nts_parse_float", vec![value], HirType::NUMBER, origin))
     }
 
+    /// `encodeURI`, `encodeURIComponent`, `decodeURI` and `decodeURIComponent`.
+    ///
+    /// The runtime does the transcoding and answers `NULL` for input the other
+    /// direction could not have produced -- a truncated escape, an overlong
+    /// encoding, an unpaired surrogate. **A runtime function here cannot
+    /// throw**, so the `URIError` is raised from this side, which is the same
+    /// split `lower_repeat` makes for its `RangeError`.
+    ///
+    /// The message is node's, character for character. `querystring.parse`
+    /// catches this by class and not by text, but a message that differs from
+    /// node's is a difference a test can see and there is no reason to have
+    /// one.
+    fn lower_uri(
+        &mut self,
+        id: NodeId,
+        arguments: &[NodeId],
+        encode: bool,
+        component: bool,
+    ) -> Result<ValueId, Diagnostic> {
+        let Some(text) = arguments.first() else {
+            return Err(self.unsupported(id, "a URI builtin with no argument"));
+        };
+        let value = self.lower_expression(*text)?;
+        let value = self.coerce(value, &HirType::Managed(ManagedType::String), *text)?;
+        let origin = self.origin(id);
+        let flag = self.push(
+            OpKind::ConstFloat(if component { 1.0 } else { 0.0 }),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let callee = if encode {
+            "nts_encode_uri"
+        } else {
+            "nts_decode_uri"
+        };
+        let string = HirType::Managed(ManagedType::String);
+        let built = self.runtime_call(callee, vec![value, flag], string.clone(), origin.clone());
+
+        // `NULL` is the refusal, and it is tested here rather than left to the
+        // caller: every use of the result reads a length or a unit through it,
+        // so an untested `NULL` is a load from address zero rather than the
+        // `URIError` the language specifies.
+        let nothing = self.push(OpKind::ConstNull, string, origin.clone());
+        let failed = self.push(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: built,
+                rhs: nothing,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let throwing = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: failed,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: Vec::new(),
+        });
+        self.switch_to(throwing);
+        self.throw_provided_error(id, "URIError", "URI malformed")?;
+        if !self.is_terminated() {
+            self.terminate(Terminator::Jump {
+                target: carry_on,
+                args: Vec::new(),
+            });
+        }
+        self.switch_to(carry_on);
+        Ok(built)
+    }
+
     /// `setTimeout(fn, ms)` and `setInterval(fn, ms)`.
     ///
     /// A *capability* over the host's `post_delayed` rather than part of the
@@ -25235,6 +25308,22 @@ impl<'a> FuncBuilder<'a> {
         // lines apart.
         if name == "parseFloat" {
             return Some(self.lower_parse_float(id, arguments));
+        }
+        // The four URI builtins, as one lowering with two flags. They are a
+        // pair of pairs and the members of each pair differ only in a character
+        // set, so four entry points would be four copies of the `URIError`
+        // half -- which is the part with the edges in it.
+        //
+        // `decodeURIComponent` gates `querystring.parse`, and `parse` is what
+        // six of `querystring`'s seven failing test files stop at.
+        if let Some((encode, component)) = match name {
+            "encodeURI" => Some((true, false)),
+            "encodeURIComponent" => Some((true, true)),
+            "decodeURI" => Some((false, false)),
+            "decodeURIComponent" => Some((false, true)),
+            _ => None,
+        } {
+            return Some(self.lower_uri(id, arguments, encode, component));
         }
         // The `timers` capability, which takes two arguments and so has to be
         // read before the single-argument builtins below.

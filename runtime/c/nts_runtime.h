@@ -1335,6 +1335,10 @@ double nts_str_to_number(const NtsString *s);
  * base-36 number. Named rather than hidden. */
 double nts_parse_int(const NtsString *s, double radix);
 double nts_parse_float(const NtsString *s);
+/* `NULL` is a `URIError`; a runtime function here cannot throw, so the
+ * lowering raises it. `component` picks between the pair. */
+NtsString *nts_decode_uri(const NtsString *s, double component);
+NtsString *nts_encode_uri(const NtsString *s, double component);
 
 /* `Number(v)` on an erased value: ToNumber over the tags a value carries.
  *

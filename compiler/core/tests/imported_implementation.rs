@@ -58,7 +58,7 @@ fn fixture(name: &str) -> Utf8PathBuf {
          }\n\
          \n\
          export function fromLib(n: number): number {\n\
-         \x20 return decodeURIComponent(String(n)).length + n;\n\
+         \x20 return escape(String(n)).length + n;\n\
          }\n",
     );
     write(
@@ -124,11 +124,16 @@ fn an_imported_name_is_not_reported_as_a_missing_builtin() {
 ///
 /// **The global has to be swapped as they are implemented**, which is the cost
 /// of testing a negative and is worth paying rather than weakening the
-/// assertion. This was `parseFloat` until it was provided on 2026-09-11, and
-/// the test failing that day is the test working: it is pinned to a name that
-/// is genuinely absent, not to a shape that resembles absence.
-/// `decodeURIComponent` is the current one, and
-/// `blockers/missing-builtin` is where its own cone is recorded.
+/// assertion. The test failing on the day a builtin arrives is the test
+/// working: it is pinned to a name that is genuinely absent, not to a shape
+/// that resembles absence.
+///
+/// It was `parseFloat` until 2026-09-11 and then `decodeURIComponent` for about
+/// an hour, which is how long it took to write that one too. `escape` is the
+/// current one and should last: it is deprecated in Annex B, `encodeURIComponent`
+/// is what anything in this tree would call instead, and nothing in the node
+/// profile reaches it -- so it is absent because nobody wants it rather than
+/// because nobody has got to it, which is the property this test actually needs.
 #[test]
 fn a_library_global_is_still_reported_as_a_builtin() {
     let root = fixture("library-global");
@@ -138,11 +143,11 @@ fn a_library_global_is_still_reported_as_a_builtin() {
 
     let library: Vec<&String> = refusals
         .iter()
-        .filter(|line| line.contains("`decodeURIComponent`"))
+        .filter(|line| line.contains("`escape`"))
         .collect();
     assert!(
         !library.is_empty(),
-        "`decodeURIComponent` is not provided and must be refused; got {refusals:#?}"
+        "`escape` is not provided and must be refused; got {refusals:#?}"
     );
     for line in &library {
         assert!(

@@ -4064,6 +4064,278 @@ double nts_value_to_number(NtsValue value) {
  * The digits themselves are handed to `strtod` rather than accumulated, because
  * correctly rounding a decimal string to the nearest double is exactly what it
  * is for, and doing it by multiplication loses the last bit. */
+/* The four URI builtins, as two functions with a set each.
+ *
+ * `encodeURI` and `encodeURIComponent` differ only in which characters they
+ * leave alone, and `decodeURI` and `decodeURIComponent` only in which escapes
+ * they leave *escaped*. Writing them as four would be four copies of the UTF-8
+ * half, which is the part with the edges in it.
+ *
+ * # Why these cannot be `strtod`'s kind of shortcut
+ *
+ * The escaped form is UTF-8 and the string is UTF-16, so both directions
+ * transcode, and both are specified to **throw `URIError`** on input the other
+ * direction could not have produced. That is the whole difficulty:
+ * `decodeURIComponent("%E0%A4%A")` is a `URIError` and not a best effort, and
+ * `nts_string_from_utf8` substitutes `U+FFFD` for malformed input, so it cannot
+ * be reused here.
+ *
+ * A runtime function here cannot throw, so these answer `NULL` and the lowering
+ * emits the `URIError` -- the same split `nts_string_repeat` uses for its
+ * `RangeError`.
+ *
+ * `component` is a `double` rather than an `int` because that is the one
+ * argument shape the backends already carry for a runtime call --
+ * `nts_parse_int(s, radix)` is the same pair -- and a second convention for a
+ * flag would be a signature table entry to get wrong in two backends. */
+
+/* One hex digit's value, or -1. Deliberately not `isxdigit`: that is
+ * locale-dependent in principle and takes an `int` that a `uint16_t` would
+ * widen into the negative range on a signed char platform. */
+static int nts_uri_hex(uint16_t unit) {
+  if (unit >= '0' && unit <= '9') {
+    return (int)(unit - '0');
+  }
+  if (unit >= 'A' && unit <= 'F') {
+    return (int)(unit - 'A') + 10;
+  }
+  if (unit >= 'a' && unit <= 'f') {
+    return (int)(unit - 'a') + 10;
+  }
+  return -1;
+}
+
+/* `uriReserved` plus `#`, which is the set `decodeURI` leaves escaped and
+ * `encodeURI` leaves alone. `decodeURIComponent` and `encodeURIComponent` use
+ * the empty set and the smaller set respectively, which is the whole of the
+ * difference between the pairs. */
+static const char NTS_URI_RESERVED[] = ";/?:@&=+$,#";
+
+/* `uriUnescaped`: the alphanumerics and `uriMark`. */
+static int nts_uri_unescaped(uint32_t point) {
+  if ((point >= 'A' && point <= 'Z') || (point >= 'a' && point <= 'z') ||
+      (point >= '0' && point <= '9')) {
+    return 1;
+  }
+  return point < 0x80u && strchr("-_.!~*'()", (int)point) != NULL;
+}
+
+/* A string of UTF-16 units, narrow where every one of them fits in a byte.
+ *
+ * The narrow form is not an optimisation that can be skipped: `nts_unit` reads
+ * one or two bytes according to the flag, so a string built wide and compared
+ * against a literal built narrow is a different object with the same
+ * characters. */
+static NtsString *nts_uri_string(const uint16_t *units, uint32_t length) {
+  int wide = 0;
+  for (uint32_t at = 0; at < length; at++) {
+    if (units[at] > 0xFFu) {
+      wide = 1;
+      break;
+    }
+  }
+  NtsString *out = nts_str_build(NULL, length, wide);
+  if (wide) {
+    uint16_t *into = NTS_ELEMENTS(out, uint16_t);
+    for (uint32_t at = 0; at < length; at++) {
+      into[at] = units[at];
+    }
+    into[length] = 0;
+  } else {
+    unsigned char *into = NTS_ELEMENTS(out, unsigned char);
+    for (uint32_t at = 0; at < length; at++) {
+      into[at] = (unsigned char)units[at];
+    }
+    into[length] = 0;
+  }
+  return out;
+}
+
+/* `decodeURI` and `decodeURIComponent`. `NULL` is a `URIError`.
+ *
+ * `component` decides whether a reserved character that arrives escaped stays
+ * escaped: `decodeURI("%2F")` is `"%2F"` and `decodeURIComponent("%2F")` is
+ * `"/"`. That is not a nicety -- `decodeURI` exists to leave a URI's structure
+ * intact, so decoding its separators would change what the string means. */
+NtsString *nts_decode_uri(const NtsString *s, double component) {
+  if (!s) {
+    return NULL;
+  }
+  uint32_t units = s->length;
+  /* At most one output unit per input unit: an escape is three units in and at
+   * most two out, and everything else is one for one. */
+  uint16_t *out = (uint16_t *)malloc(((size_t)units + 1u) * sizeof(uint16_t));
+  if (!out) {
+    return NULL;
+  }
+  uint32_t written = 0;
+  uint32_t at = 0;
+  while (at < units) {
+    uint16_t unit = nts_unit(s, at);
+    if (unit != '%') {
+      out[written++] = unit;
+      at++;
+      continue;
+    }
+    uint32_t start = at;
+    if (at + 2u >= units) {
+      free(out);
+      return NULL;
+    }
+    int high = nts_uri_hex(nts_unit(s, at + 1u));
+    int low = nts_uri_hex(nts_unit(s, at + 2u));
+    if (high < 0 || low < 0) {
+      free(out);
+      return NULL;
+    }
+    uint32_t byte = (uint32_t)(high * 16 + low);
+    at += 3u;
+    if (byte < 0x80u) {
+      if (component == 0.0 && byte < 0x80u &&
+          strchr(NTS_URI_RESERVED, (int)byte) != NULL) {
+        /* Kept as written, which means the three units it arrived as. */
+        out[written++] = nts_unit(s, start);
+        out[written++] = nts_unit(s, start + 1u);
+        out[written++] = nts_unit(s, start + 2u);
+      } else {
+        out[written++] = (uint16_t)byte;
+      }
+      continue;
+    }
+    /* A continuation byte where a lead was wanted, or a lead claiming more than
+     * four bytes. Both are input no encoder produced. */
+    uint32_t extra;
+    uint32_t point;
+    if ((byte & 0xE0u) == 0xC0u) {
+      extra = 1;
+      point = byte & 0x1Fu;
+    } else if ((byte & 0xF0u) == 0xE0u) {
+      extra = 2;
+      point = byte & 0x0Fu;
+    } else if ((byte & 0xF8u) == 0xF0u) {
+      extra = 3;
+      point = byte & 0x07u;
+    } else {
+      free(out);
+      return NULL;
+    }
+    for (uint32_t more = 0; more < extra; more++) {
+      if (at + 2u >= units || nts_unit(s, at) != '%') {
+        free(out);
+        return NULL;
+      }
+      int h = nts_uri_hex(nts_unit(s, at + 1u));
+      int l = nts_uri_hex(nts_unit(s, at + 2u));
+      if (h < 0 || l < 0) {
+        free(out);
+        return NULL;
+      }
+      uint32_t next = (uint32_t)(h * 16 + l);
+      if ((next & 0xC0u) != 0x80u) {
+        free(out);
+        return NULL;
+      }
+      point = (point << 6) | (next & 0x3Fu);
+      at += 3u;
+    }
+    /* **Overlong, surrogate and out-of-range are all errors**, and checking
+     * them is not pedantry: an overlong encoding is a second spelling of a
+     * character, which is how a check on the decoded text gets bypassed. The
+     * specification's `Decode` rejects each by name. */
+    uint32_t least = extra == 1 ? 0x80u : (extra == 2 ? 0x800u : 0x10000u);
+    if (point < least || point > 0x10FFFFu ||
+        (point >= 0xD800u && point <= 0xDFFFu)) {
+      free(out);
+      return NULL;
+    }
+    if (point > 0xFFFFu) {
+      point -= 0x10000u;
+      out[written++] = (uint16_t)(0xD800u + (point >> 10));
+      out[written++] = (uint16_t)(0xDC00u + (point & 0x3FFu));
+    } else {
+      out[written++] = (uint16_t)point;
+    }
+  }
+  NtsString *built = nts_uri_string(out, written);
+  free(out);
+  return built;
+}
+
+/* `encodeURI` and `encodeURIComponent`. `NULL` is a `URIError`, which here
+ * means an unpaired surrogate: there is no UTF-8 for half a character. */
+NtsString *nts_encode_uri(const NtsString *s, double component) {
+  if (!s) {
+    return NULL;
+  }
+  uint32_t units = s->length;
+  /* Three output units per byte, four bytes per code point, and a code point
+   * is at least one input unit. */
+  uint16_t *out =
+      (uint16_t *)malloc(((size_t)units * 12u + 1u) * sizeof(uint16_t));
+  if (!out) {
+    return NULL;
+  }
+  static const char digits[] = "0123456789ABCDEF";
+  uint32_t written = 0;
+  uint32_t at = 0;
+  while (at < units) {
+    uint32_t point = nts_unit(s, at);
+    at++;
+    if (point >= 0xD800u && point <= 0xDBFFu) {
+      if (at >= units) {
+        free(out);
+        return NULL;
+      }
+      uint32_t trail = nts_unit(s, at);
+      if (trail < 0xDC00u || trail > 0xDFFFu) {
+        free(out);
+        return NULL;
+      }
+      point = 0x10000u + ((point - 0xD800u) << 10) + (trail - 0xDC00u);
+      at++;
+    } else if (point >= 0xDC00u && point <= 0xDFFFu) {
+      /* A trail with no lead in front of it. */
+      free(out);
+      return NULL;
+    }
+    if (nts_uri_unescaped(point) ||
+        (component == 0.0 && point < 0x80u &&
+         strchr(NTS_URI_RESERVED, (int)point) != NULL)) {
+      out[written++] = (uint16_t)point;
+      continue;
+    }
+    unsigned char bytes[4];
+    uint32_t count;
+    if (point < 0x80u) {
+      bytes[0] = (unsigned char)point;
+      count = 1;
+    } else if (point < 0x800u) {
+      bytes[0] = (unsigned char)(0xC0u | (point >> 6));
+      bytes[1] = (unsigned char)(0x80u | (point & 0x3Fu));
+      count = 2;
+    } else if (point < 0x10000u) {
+      bytes[0] = (unsigned char)(0xE0u | (point >> 12));
+      bytes[1] = (unsigned char)(0x80u | ((point >> 6) & 0x3Fu));
+      bytes[2] = (unsigned char)(0x80u | (point & 0x3Fu));
+      count = 3;
+    } else {
+      bytes[0] = (unsigned char)(0xF0u | (point >> 18));
+      bytes[1] = (unsigned char)(0x80u | ((point >> 12) & 0x3Fu));
+      bytes[2] = (unsigned char)(0x80u | ((point >> 6) & 0x3Fu));
+      bytes[3] = (unsigned char)(0x80u | (point & 0x3Fu));
+      count = 4;
+    }
+    for (uint32_t byte = 0; byte < count; byte++) {
+      out[written++] = '%';
+      out[written++] = (uint16_t)digits[bytes[byte] >> 4];
+      out[written++] = (uint16_t)digits[bytes[byte] & 0x0Fu];
+    }
+  }
+  NtsString *built = nts_uri_string(out, written);
+  free(out);
+  return built;
+}
+
 double nts_parse_float(const NtsString *s) {
   if (!s) {
     return (double)NAN;
