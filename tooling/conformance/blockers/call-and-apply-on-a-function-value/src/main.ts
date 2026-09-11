@@ -1,35 +1,40 @@
-// expect: an `apply` whose callee has no rest parameter
+// expect: an `apply` whose list has no arity the compiler can see
 //
-// **`call` closed, `apply` closed for the shape the corpus writes, and this
-// fixture holds the shape it does not.** The expectation has moved through this
-// file three times in one day, which is the file working rather than the file
-// churning: each move is a smaller claim than the last.
+// **Narrowed on 2026-09-11, and this is the fourth time the expectation has
+// moved through this file — each move a smaller claim than the last.**
 //
-//     viaCall    fn.call(undefined, x)              lowers, agrees with node
-//     viaApply   fn.apply(undefined, [x])           this refusal
+//     fn(x)                        lowers
+//     fn.call(undefined, x)        lowers            record 0284
+//     fn.apply(undefined, args)    lowers, callee has a rest parameter
+//     fn.apply(undefined, [x])     lowers            record 0288
+//     fn.apply(undefined, xs)      this refusal, `xs: number[]`
 //
-// The two share exactly one thing -- the receiver, dropped by the argument
-// record 0284 makes -- and differ in the only other thing there is. `call` takes
-// its arguments positionally; `apply` takes them as an array. Where the callee's
-// parameter *is* a rest, the array is that parameter and `apply` copies it into
-// place; all twelve `.apply` sites in `runtime/node` are that shape --
-// `fn.apply(thisArg, args)` with `fn: (...args: A) => T` and `args: A`.
+// The previous version of this file held `fn.apply(undefined, [x])` against a
+// positional callee and said it was "the same question as
+// `examples/a-fixed-arity-rest-is-positional`, from the other side: there a
+// fixed-arity rest has to become positional parameters, and here a literal has
+// to become positional arguments. One answer will close both." That was right.
+// The literal's arity is syntactic, a tuple value's arity is in its type, and
+// with either in hand the call is built positionally and no array exists --
+// `examples/an-apply-whose-list-has-an-arity` is the guard.
 //
-// `fn` here is `(x: number) => number`, which takes its argument **positionally**,
-// so the literal's arity would have to be spread across parameters. That is the
-// same question as `examples/a-fixed-arity-rest-is-positional`, from the
-// other side: there a fixed-arity rest has to become positional parameters, and
-// here a literal has to become positional arguments. One answer will close both.
+// # What is left, and why it is not the same shape
 //
-// `examples/a-call-with-an-explicit-receiver` is the guard for the half that
-// closed, and record 0284 is why the receiver can be dropped at all.
+// An array with **no arity anywhere**. `xs: number[]` has a length only at run
+// time, and the callee has a fixed parameter list, so there is nothing to build
+// the argument list from. This is the same remainder
+// `blockers/a-spread-into-a-call` now holds, reached from the other direction,
+// and it has the same two non-answers: a calling convention with a run-time
+// argument count, which no backend here has, or a length check and a throw on a
+// path that TypeScript has not proved unsafe.
 //
-// `Function.prototype.call` and `.apply` on a function value. The same function
-// value called directly lowers, so it is the method and not the value:
+// **TypeScript rejects this too**, which is the strongest argument that the
+// refusal is the right behaviour rather than a gap: `@ts-expect-error` below is
+// satisfied, so no correct program is being turned away. It is filed because
+// the *message* should stay accurate and because a future looser call
+// convention would change the answer.
 //
-//     fn(x)                  -> lowers
-//     fn.call(undefined, x)  -> REFUSED
-//     fn.apply(undefined, x) -> REFUSED
+// # What did not move
 //
 // `makeAdder` is a **precondition, not a subject**. Without a closure anywhere
 // in the program, `fn(x)` is refused as `a call of a function value in a
@@ -37,16 +42,11 @@
 // with nothing to do with `.call` -- a control that suppresses the defect. The
 // first draft of this fixture had exactly that and read as "all three refuse".
 //
-// 10 of the 42 sites reporting `a method X with no declaration in the
-// hierarchy` are this one: `call` 8, `apply` 2, counted as distinct sites and
-// not summed over module cones. They are `http/src/parser.ts` (five, at 520,
-// 531, 543, 553 and 564), `events/src/main.ts:919`,
-// `url/src/searchparams.ts:475`, `web-platform/src/forms/form-data.ts:204`,
-// `diagnostics_channel/src/main.ts:475` and `timers/src/timeout.ts:186`.
-// `http`'s five are one `callback.call(this, info)` shape repeated per parser
-// hook, which is how upstream dispatches to a user callback with the parser as
-// the receiver -- the receiver identity is the point, so it cannot become a
-// direct call without changing behaviour.
+// The 10 sites that used to be counted here -- `call` 8, `apply` 2, in
+// `http/src/parser.ts`, `events`, `url/src/searchparams.ts`,
+// `web-platform/src/forms/form-data.ts`, `diagnostics_channel` and
+// `timers/src/timeout.ts` -- are all the literal or rest shapes and are no
+// longer behind this.
 //
 // **Ruled out on the way**: that this shares a cause with
 // `method-on-a-structural-type`, which asserts the same message. That one's
@@ -61,14 +61,29 @@ export function makeAdder(n: number): (x: number) => number {
   return (x: number): number => x + n;
 }
 
+/** Control: the same function value called directly. */
 export function direct(fn: (x: number) => number, x: number): number {
   return fn(x);
 }
 
+/** Control: `.call`, positional to begin with. Record 0284. */
 export function viaCall(fn: (x: number) => number, x: number): number {
   return fn.call(undefined, x);
 }
 
-export function viaApply(fn: (x: number) => number, x: number): number {
+/** Control: the half that closed -- a literal carries its own arity. */
+export function viaApplyLiteral(fn: (x: number) => number, x: number): number {
   return fn.apply(undefined, [x]);
+}
+
+/** Control: a rest callee, where the list *is* the parameter. */
+export function viaApplyRest(fn: (...xs: number[]) => number, x: number): number {
+  return fn.apply(undefined, [x, 2]);
+}
+
+/** Under test: an array with no arity. Nothing can say how many arguments this is. */
+export function viaApplyUnknown(fn: (a: number, b: number) => number, x: number): number {
+  const xs: number[] = [x, 2];
+  // @ts-expect-error a number[] cannot fill a two-parameter list
+  return fn.apply(undefined, xs);
 }

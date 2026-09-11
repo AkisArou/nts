@@ -64,11 +64,23 @@ for shared in third_party/typescript-go third_party/test262 third_party/are-we-f
   fi
 done
 
+# `node_modules` is not in any commit either, and its absence does not look
+# like its absence: `examples/library` imports a workspace package, so it fails
+# to *typecheck*, and `backend_examples` counts that as a plain failure with
+# thirty other names beside it. Three of these, and the nested ones are the ones
+# that get missed -- the workspace links inside resolve by absolute path.
+for modules in node_modules examples/library/node_modules runtime/node/node_modules; do
+  if [ -d "$root/$modules" ]; then
+    ln -sfn "$root/$modules" "$tree/$modules"
+  fi
+done
+
 echo "gate: $sha in $tree"
 cd "$tree"
 CARGO_TARGET_DIR="$target" cargo build --release -q
 NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} \
 NTS_BIN="$target/release/nts" \
+NTS_SUITE_BIN="$target/release/nts-suite" \
 CARGO_TARGET_DIR="$target" \
   sh tooling/gate/all.sh "$@"
 status=$?

@@ -24625,7 +24625,18 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let shapes = self.parameter_shapes(id);
         let Some(at) = shapes.iter().position(|(_, rest)| *rest) else {
-            return Err(self.unsupported(id, "an `apply` whose callee has no rest parameter"));
+            // **The positional case, which the fixture predicted would close
+            // with the other one.** `f.apply(r, [a, b])` where the callee takes
+            // `(a, b)` needs the *arity of the list*, which is the same thing a
+            // fixed-arity rest needed from the other side -- there a tuple
+            // becomes parameters, here it becomes arguments.
+            //
+            // This path also became load-bearing for a shape that used to take
+            // the branch above: a rest typed by a fixed-length tuple is no
+            // longer a rest by the time `parameter_shapes` is asked, so
+            // `fn.apply(thisArg, args)` with `fn: (...args: [number]) => T`
+            // arrives here now. Both readings want the same code.
+            return self.apply_positionally(id, member, function, list, shapes.len());
         };
         if at != 0 {
             return Err(self.unsupported(
@@ -24656,6 +24667,102 @@ impl<'a> FuncBuilder<'a> {
         );
         let gathered = self.concat_onto(id, &element, &ty, empty, &[list])?;
         self.finish_closure_call(id, function, callee, vec![function, gathered])
+    }
+
+    /// `f.apply(receiver, list)` onto a callee that takes its arguments
+    /// positionally.
+    ///
+    /// Two ways the arity can be known, and both are needed. A literal written
+    /// at the call site carries it syntactically -- `[a, b]` is two arguments
+    /// whatever the checker widened its type to, and `fn.apply(undefined, [x])`
+    /// against `(x: number) => number` widens to `number[]`, so asking the type
+    /// alone answers nothing. A *value* carries it only when its type is a
+    /// tuple, which is the `(...args: A) => T` shape once `A` is pinned.
+    ///
+    /// Anything else is refused by name. An array of unknown length cannot fill
+    /// a fixed parameter list, and the alternative -- a run-time length check
+    /// and a throw -- puts a failure on a path TypeScript proved safe.
+    fn apply_positionally(
+        &mut self,
+        id: NodeId,
+        member: NodeId,
+        function: ValueId,
+        list: NodeId,
+        wanted: usize,
+    ) -> Result<ValueId, Diagnostic> {
+        let spread = self
+            .children(list)
+            .into_iter()
+            .any(|child| self.kind_of(child) == Some(syntax::SPREAD_ELEMENT));
+        let literal = self.kind_of(list) == Some(syntax::ARRAY_LITERAL_EXPRESSION) && !spread;
+
+        let elements: Vec<NodeId> = if literal {
+            self.children(list)
+        } else {
+            Vec::new()
+        };
+        let positions = self
+            .snapshot
+            .node_types
+            .get(&list)
+            .copied()
+            .and_then(|ty| self.fixed_arity_positions(ty));
+
+        // The count has to match the parameter list exactly. TypeScript checks
+        // this, so a mismatch here means the arity was read from the wrong
+        // place -- which is a refusal rather than an argument list built to the
+        // wrong length and handed to the verifier.
+        let found = if literal {
+            elements.len()
+        } else {
+            match &positions {
+                Some(positions) => positions.len(),
+                None => {
+                    return Err(self.unsupported(
+                        id,
+                        "an `apply` whose list has no arity the compiler can see",
+                    ));
+                }
+            }
+        };
+        if found != wanted {
+            return Err(self.unsupported(id, "an `apply` whose list is not the callee's arity"));
+        }
+
+        let callee = self.closure_callee(id, member, function)?;
+        let mut args = vec![function];
+        if literal {
+            for (at, element) in elements.iter().enumerate() {
+                let value = match self.parameter_representation(id, at) {
+                    Some(want) => self.lower_expecting(*element, &want)?,
+                    None => self.lower_expression(*element)?,
+                };
+                args.push(self.coerce_to_parameter(id, at, value, *element)?);
+            }
+        } else {
+            let positions = positions.unwrap_or_default();
+            let array = self.lower_expression(list)?;
+            let origin = self.origin(id);
+            for (at, position) in positions.iter().enumerate() {
+                let element = self
+                    .represent(*position)
+                    .ok_or_else(|| self.unrepresentable(list, "an `apply` list position"))?;
+                #[allow(clippy::cast_precision_loss)]
+                let index = at as f64;
+                let index = self.push(OpKind::ConstFloat(index), HirType::NUMBER, origin.clone());
+                let value = self.push(
+                    OpKind::ArrayGet {
+                        array,
+                        index,
+                        checked: true,
+                    },
+                    element,
+                    origin.clone(),
+                );
+                args.push(self.coerce_to_parameter(id, at, value, list)?);
+            }
+        }
+        self.finish_closure_call(id, function, callee, args)
     }
 
     fn call_through_closure(

@@ -856,7 +856,14 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # from a total.
   backend_examples 167 "through the JVM backend" ); }
 corpus() {
-  ./target/release/nts-suite --root "$root" > "$root/target/suite-report.txt" 2>&1
+  # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
+  # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
+  # `$root/target`, and a hardcoded path finds nothing there. The failure does
+  # not look like a missing file -- the report is one line of shell error, the
+  # grep below matches none of it, and the step reports `invalid HIR must be
+  # zero` over a suite that never ran.
+  mkdir -p "$root/target"
+  "${NTS_SUITE_BIN:-./target/release/nts-suite}" --root "$root" > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C|unverifiable class" \
     "$root/target/suite-report.txt"
   # `invalid HIR` must be zero: a rejected SSA form on arbitrary input is a bug
