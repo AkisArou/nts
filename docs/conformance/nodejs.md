@@ -21331,6 +21331,43 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## `asRequest` is blocked by `emitInit`, and the generic only made it silent
+
+The profile's largest chokepoint, diagnosed by giving it a twin. Same body, same
+file, same calls, the generic replaced by one concrete arity, every call site
+untouched. One run:
+
+    `asRequest`       0 lines about it; 26 saying "calls asRequest, refused above"
+    `asRequestProbe`  request.ts:56 NTS1003 cannot be compiled because it calls
+                      `emitInit`, which was refused above
+
+**It is `emitInit`.** Not the returned closure carrying `Arguments`, which was my
+hypothesis and the compiler session's. The generic is not what refuses
+`asRequest`; the generic is what makes the refusal **unreportable**. With no
+concrete instantiation there is no copy, with no copy nothing writes a diagnostic,
+and the cascade then says "calls X, which was refused above" with nothing above.
+
+So `asRequest`'s 23 `fs` exports and every `nextTick` caller have the **same
+root** -- `hook.init(asyncId, type, triggerId, resource)`, a call to a
+callable-valued field in `internal/async-hooks.ts`. Which is already taken by the
+compiler session, and is now worth considerably more than when they took it.
+
+### What the silence cost
+
+Four separate investigations today ended at `asRequest` without naming its cause:
+the `export-reach.mjs` ranking put it first and could not say why; the
+"two chokepoints emit no diagnostic" entry recorded the silence as a property;
+the generic-rest measurement found it unmoved; and this probe. One accurate
+diagnostic line would have replaced all four. That is the argument for fixing the
+message before the lowering, and it is now concrete rather than a preference.
+
+### What this does not say
+
+Whether `asRequest` publishes when `emitInit` lands. The probe shows the first
+link and nothing past it -- the returned-closure hypothesis may still be true as
+the second. Stated because the same discipline produced 485→485, and guessing
+here would undo it.
+
 ## The generic-rest fix landed and published nothing, which is now three for three
 
 Measured across all 23 modules, before and after, same instrument:
