@@ -111,6 +111,38 @@ if [ -z "${NTS_SKIP_CLIPPY-}" ] && command -v cargo > /dev/null 2>&1; then
   rm -f /tmp/nts-commit-clippy.$$
 fi
 
+# clang-format, on the C being committed and nothing else.
+#
+# The same argument the clippy block above makes, and it cost a gate slot to
+# learn that the argument applies to a second formatter. `format` is step three
+# of the gate, so an unformatted `runtime/c` file fails before `tests`,
+# `corpus`, `profile` and everything the run was actually for -- twenty minutes
+# of a resource three sessions queue on, spent finding out that a helper's
+# continuation line was wrapped one column short.
+#
+# Scoped to the paths named here for the same reason clippy is: another
+# session's unformatted file is the gate's business and not this commit's.
+# `--dry-run -Werror` asks without writing, so a refusal never leaves the tree
+# in a state the author did not choose.
+if command -v clang-format > /dev/null 2>&1; then
+  unformatted=""
+  for path in "$@"; do
+    case $path in
+      *.c|*.h) [ -f "$path" ] || continue ;;
+      *) continue ;;
+    esac
+    if ! clang-format --style=file --dry-run -Werror "$path" > /dev/null 2>&1; then
+      unformatted="$unformatted $path"
+    fi
+  done
+  if [ -n "$unformatted" ]; then
+    echo "commit-mine: REFUSING -- clang-format would change files in this commit:" >&2
+    for path in $unformatted; do echo "  $path" >&2; done
+    echo "  run: clang-format --style=file -i$unformatted" >&2
+    exit 1
+  fi
+fi
+
 before=$(git ls-tree -r HEAD --name-only | wc -l)
 
 # shellcheck disable=SC2086

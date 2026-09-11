@@ -4116,11 +4116,13 @@ double nts_parse_float(const NtsString *s) {
    * 1 and not NaN, so the scan backs up rather than failing. */
   if (at < units && (nts_unit(s, at) == 'e' || nts_unit(s, at) == 'E')) {
     uint32_t after = at + 1u;
-    if (after < units && (nts_unit(s, after) == '+' || nts_unit(s, after) == '-')) {
+    if (after < units &&
+        (nts_unit(s, after) == '+' || nts_unit(s, after) == '-')) {
       after++;
     }
     uint32_t exponent = after;
-    while (after < units && nts_unit(s, after) >= '0' && nts_unit(s, after) <= '9') {
+    while (after < units && nts_unit(s, after) >= '0' &&
+           nts_unit(s, after) <= '9') {
       after++;
     }
     if (after > exponent) {
