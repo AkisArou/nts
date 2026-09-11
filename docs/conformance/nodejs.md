@@ -21336,6 +21336,29 @@ Its signature is `asRequest<Arguments extends unknown[]>(callback: ((...args:
 Arguments) => void) | undefined, ...)`, which is the same shape as `nextTick`'s
 and as `blockers/a-generic-rest-forwarded-to-its-callback`.
 
+### Testing the headline number, since a terminal sizes a queue
+
+"Fixing `asRequest` publishes 20 names" is a claim, so it gets a check. Of the
+functions `fs` refuses for calling `asRequest`:
+
+    23 refused for calling asRequest
+    23 blocked by asRequest alone -- none calls another refused function
+     0 also call something else refused
+    21 of the 23 are among fs's 123 declined exports
+
+So **no cascade stands behind it**: clearing `asRequest` leaves none of the 23
+waiting on a second refused callee. What cannot be read off the output is whether
+a fresh `NTS1001` appears in each body once it compiles -- the compiler stops at
+the first reason it finds. That is exactly the "sizes a queue rather than a step"
+caveat, and it is why 21 is an upper bound and not a forecast.
+
+A first attempt at this counted in shell, and every iteration hit
+`bad math expression: operand expected` while still printing
+"23 blocked ONLY by asRequest, 0 also call something else". The arithmetic had
+failed twenty-three times and the fallthrough produced exactly the answer I was
+hoping for. Redone in Python, it happens to be the same number -- which is luck,
+and the reason to redo it was that the first one was not a measurement at all.
+
 ### Three mistakes the instrument's own construction made
 
 Worth recording because each is a rule from the goal text, broken in a new place.
