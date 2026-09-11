@@ -3270,6 +3270,29 @@ fn report_unrepresentable_exports(
                 "is exported and its signature does not cross".to_owned()
             } else if program.public_functions.iter().any(|at| at == name) {
                 "is exported and no function of that name was compiled".to_owned()
+            // **A value export whose type does not cross**, which the last arm
+            // called "not a function" -- false for half the names it covered.
+            //
+            // `export const deepStrictEqual = looseAssertions.deepStrictEqual`
+            // *is* a function, read off an instance as a value. It is a global,
+            // it is exported, `value_exports` finds it and `cross` declines its
+            // type, so it fell to a sentence that sends a reader to look at
+            // export *shapes* when what is wanted is a crossing for the type.
+            //
+            // 44 of `assert`'s declined exports are this, and the Node lane
+            // reported the message as wrong twice before it was. Saying which
+            // type is the whole of the fix: "a closure" and "an object" go to
+            // different places.
+            } else if let Some(global) = program
+                .globals
+                .iter()
+                .find(|global| global.name == *emitted && global.exported)
+                && cross(&global.ty, &program.layouts, &class_names(program)).is_none()
+            {
+                format!(
+                    "is exported as a value of type `{}`, which does not cross",
+                    spell(&global.ty)
+                )
             } else {
                 "is exported and is not a function this backend can name".to_owned()
             },

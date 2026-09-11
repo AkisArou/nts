@@ -1,5 +1,11 @@
-// expect: emit-c --napi -> no wrapper for ucs2: is exported and is not a
-//         function this backend can name
+// expect: emit-c --napi -> no wrapper for ucs2: is exported as a value of type
+//         `an object`, which does not cross
+//
+// **The message changed on 2026-09-11**, from `is exported and is not a function
+// this backend can name`. That sentence was true of the export *shape* and sent
+// a reader there, when what is wanted is a crossing for an object type -- and it
+// was outright false for the 44 `assert` exports that also carried it, every one
+// of which is a function.
 //
 // Shorthand property syntax makes an exported object literal unpublishable.
 // Spelling the same object with explicit keys publishes it. The two differ by

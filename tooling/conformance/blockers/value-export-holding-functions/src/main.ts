@@ -1,4 +1,11 @@
-// expect: emit-c --napi -> no wrapper for holderOfFunctions: is exported and is not a function this backend can name
+// expect: emit-c --napi -> no wrapper for holderOfFunctions: is exported as a value of type `an object`, which does not cross
+//
+// **The message changed on 2026-09-11 and the fixture is why it could.** It read
+// `is exported and is not a function this backend can name`, which is true of
+// the *export shape* and sends a reader to look at export shapes -- when the
+// thing to look at is a crossing for an object type. The Node lane reported it
+// as wrong twice: 44 of `assert`'s declined exports carried it, and
+// `assert.deepStrictEqual` is a function.
 //
 // A value export whose properties are **functions** does not cross. One whose
 // properties are scalars does, and the same functions exported directly do.
