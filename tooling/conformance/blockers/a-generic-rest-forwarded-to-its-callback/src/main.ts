@@ -76,6 +76,54 @@
 // whatever is done about the generic rest parameter has to close both, and only
 // one of them will show up as having been closed.
 //
+// # Where it actually stops, found 2026-09-11
+//
+// Localised much further than the notes above, and two attempted fixes thrown
+// away for it. The chain, in order:
+//
+//   1. The checker instantiates `A` correctly -- two calls give two distinct
+//      type ids, and the resolved signature carries them.
+//   2. **The frontend leaves those instantiations as `Structured { flags }`
+//      placeholders.** An instantiated tuple's symbol comes from `lib.d.ts`, so
+//      `decompose.rs`'s walk stops at the library boundary -- `is_ours` is false
+//      and `array_like` did not save it. Writing `const forceOne: [number] = [1]`
+//      in the same file decomposes the very same type, and the whole refusal
+//      disappears. That one line is the proof, and it took one probe.
+//   3. `unify` then pins nothing, `function_instantiations` drops the call, and
+//      `function_copies` answers with an **empty vector** for a generic with no
+//      instantiations -- so no copy is emitted and **no diagnostic is written
+//      anywhere**. The cascade says "calls `tick`, which was refused above" with
+//      no refusal above, which is `blockers/cascade-with-no-root`.
+//
+// # Two fixes that do not work, so nobody repeats them
+//
+// **Binding the unpinned parameter to its constraint.** `A extends unknown[]`
+// gives `Array(Erased)`, every instantiation collapses to one copy, and the copy
+// is wrong: `cb(...args)` then calls a closure that takes no parameters with one
+// erased array. The verifier says so --
+// `CallArgumentCount { func: "tick<[erased]>#Closure0", expected: 1, found: 2 }`
+// -- and it is right. **The arity is the thing being instantiated**, so a
+// substitution that erases it cannot serve the callback.
+//
+// **The same fallback at the call site only.** It makes the call lower and the
+// copy still absent, which turns an honest `NTS1001` into a cascade with no
+// root. Strictly worse for a reader.
+//
+// # So the fix is in the frontend, and it is a decomposition and not a lowering
+//
+// Decompose an instantiated tuple even though its symbol is `lib.d.ts`'s, so
+// `A = []` and `A = [number]` arrive as `Tuple([])` and `Tuple([number])`. Then
+// `unify` pins them, `suffix_of` names one copy per arity, and each copy gets
+// the rest parameter this compiler already lowers -- the union-of-tuples and
+// bare-tuple work of records 0282 and 0285 is already waiting for it.
+//
+// What makes that a decision rather than a patch is the boundary itself: it
+// exists because `Promise<T>` and a class prototype pull the standard library's
+// whole type graph in, measured at 5,773 types from a 180-node file. A tuple is
+// cheap -- its arguments and nothing else -- so the narrow version is to let a
+// *tuple* through the boundary specifically, which is what `array_like` was
+// already trying to do and does not manage for an instantiation.
+//
 // # The line the compiler names is not the line of the construct
 //
 // This cost a wrong reduction before it produced a right one. `fs/src/async.ts`

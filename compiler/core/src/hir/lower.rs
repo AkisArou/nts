@@ -9969,9 +9969,26 @@ impl<'a> FuncBuilder<'a> {
         // Found by making the refusal print what it had rather than by reading
         // the code again: `ty=Erased kind=Union([...])` said in one line what
         // two readings of `representation_within` had not.
+        // **The same rule `lower_param` uses, written the same way.** An array
+        // answer is taken; anything else falls back to the tuple derivation.
+        //
+        // Two earlier spellings of this were each wrong in one direction.
+        // `represent(ty).or_else(fallback)` never fell back, because `represent`
+        // answers `Erased` for a union of tuples rather than `None`. Reordering
+        // it to try the tuple first then broke the other case: a bare tuple of
+        // all-*managed* positions already represents as `Array(first)` on
+        // purpose -- `element_of` restores the declared type on the way out --
+        // so the declaration kept `Array(string)` while the call built
+        // `Array(erased)`, and the verifier caught `CallArgumentType`.
+        //
+        // Falling back on "not an array" rather than on `None` covers both, and
+        // is the one phrasing where the two sides cannot disagree.
         let ty = self
             .parameter_type_id(call, at)
-            .and_then(|ty| self.tuple_union_as_array(ty).or_else(|| self.represent(ty)))
+            .and_then(|ty| match self.represent(ty) {
+                Some(array @ HirType::Managed(ManagedType::Array(_))) => Some(array),
+                _ => self.tuple_union_as_array(ty),
+            })
             .ok_or_else(|| self.unsupported(call, "a rest parameter of unrepresentable type"))?;
         let HirType::Managed(ManagedType::Array(element)) = ty.clone() else {
             return Err(self.unsupported(call, "a rest parameter that is not an array"));
@@ -10458,11 +10475,19 @@ impl<'a> FuncBuilder<'a> {
     /// nothing.
     fn element_of_a_tuple_union(&self, declared: TypeId) -> Option<HirType> {
         let record = self.snapshot.types.get(declared.0 as usize)?;
-        let TypeKind::Union(arms) = &record.kind else {
-            return None;
+        // **A bare tuple is the same question with one arm.** `...args: [number,
+        // string]` has no union to look at and was refused for it, while
+        // `[] | [number, string]` lowered -- one construct, and the *presence of
+        // an alternative* deciding whether it worked. A homogeneous bare tuple
+        // never reaches here, because `type_of` already answers `Array` for it
+        // and the caller takes that branch first.
+        let arms: Vec<TypeId> = match &record.kind {
+            TypeKind::Union(arms) => arms.clone(),
+            TypeKind::Tuple(_) => vec![declared],
+            _ => return None,
         };
         let mut element: Option<HirType> = None;
-        for arm in arms {
+        for arm in &arms {
             let arm = self.snapshot.types.get(arm.0 as usize)?;
             let positions = match &arm.kind {
                 TypeKind::Tuple(positions) => positions.clone(),

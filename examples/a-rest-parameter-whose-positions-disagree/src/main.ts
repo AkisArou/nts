@@ -38,6 +38,25 @@ function stringAndObject(...given: [] | [a: string, b?: Tag]): number {
   return given[0].length + given[1]!.x;
 }
 
+/**
+ * **A bare tuple, with no union around it.**
+ *
+ * `[a: number, b: string]` is the same question with one arm, and it was
+ * refused for not being a union while `[] | [a: number, b: string]` lowered —
+ * one construct, and the *presence of an alternative* deciding whether it
+ * worked.
+ *
+ * A *scalar beside a reference* on purpose. Two other bare tuples never reach
+ * this path at all: a homogeneous one, because the checker already answers
+ * `Array` for it, and one whose positions are **all managed** — `[string, Tag]`
+ * — because those represent as `Array(first)` deliberately, with `element_of`
+ * restoring the declared type on the way out. Writing this case with an object
+ * position instead tested that older rule and not this one.
+ */
+function bareTuple(...given: [a: number, b: string]): number {
+  return given[0] + given[1].length;
+}
+
 /** Control: positions that agree keep a concrete element. */
 function homogeneous(...given: [] | [a: number] | [a: number, b: number]): number {
   if (given.length === 0) return -1;
@@ -63,6 +82,10 @@ export function controlHomogeneous(n: number): number {
  * `undefined` -- which is what `URLSearchParams#delete` distinguishes with
  * `given.length < 2`.
  */
+export function bareTuplePositions(n: number): number {
+  return bareTuple(n & 3, (n & 1) === 0 ? "ab" : "cde");
+}
+
 export function countIsArity(n: number): number {
   return mixed(n & 1) + 100 * (mixed(n & 1, new Tag(0)) - (n & 1));
 }
