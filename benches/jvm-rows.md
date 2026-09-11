@@ -88,6 +88,7 @@ meets them. This is the map; the row table below it is the current state.
   - ART has no cliff and no free case: the dispatch curve is flat at 2x
   - `invokevirtual` is the same story, and it is this lane's own closure path
   - Bar 1 on ART: 51 rows, and the lane loses the bar by going to Android
+  - `closure-merge` is the `(D)D` closure ABI, and it is 2.6x on ART and free here
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3557,6 +3558,76 @@ predicted the reason before any of this existed -- an `NtsValue` merged at a
 control-flow join is not scalar-replaced even on HotSpot, and ART does not
 scalar-replace at all -- and named the answer, which is to decompose rather than
 box. This is the first number that argues for building it.
+
+### `closure-merge` is the `(D)D` closure ABI, and it is 2.6x on ART and free here
+
+Three things it is not, each killed by an instrument rather than by argument.
+
+**Not allocation.** `bytes-on-device.sh` against `ref-bytes-on-device.sh`:
+
+    closure-merge           ours 128 B/op    reference 128 B/op    on ART
+    erasure-stored-unknown  ours 16,384      reference 40,016
+
+To the byte on the first, and on the second this lane allocates **less than half**
+what the reference does and is still 2.33x slower. The allocation axis is closed
+on both rows and it was the first thing I reached for.
+
+**Not the trampoline.** `javap` says every closure call is two hops: the
+`invokevirtual Fn3__3.call` lands on a subclass whose entire body is
+`invokestatic Program.Closure0$call`. A six-byte method C2 inlines for free and
+ART might not, which is a good hypothesis and is wrong. Same shape both ways, one
+process each: HotSpot 0.301/0.317/0.500 against 0.301/0.509/0.493, ART
+0.585/0.652/0.609 against 0.604/0.662/0.608. Nothing, on either.
+
+*(The first version of that probe measured both shapes in one JVM and reported
+the trampoline as three times **faster**, which is not a thing a trampoline can
+be. `drive` is one call site; by the time it reached the second shape it had seen
+four implementations and was megamorphic, while the first was measured at two. It
+was comparing inline-cache states and calling it a trampoline. One process per
+shape makes that unavailable rather than remembered.)*
+
+**It is the signature.** `Closure0$call` is `(Lnts/gen/Closure0;D)D` and its body
+is entirely `int`: `d2i`, the arithmetic, `i2d`. The call site does `i2d` before
+and `d2i` after. **Five conversions a call around an int computation the
+hand-written Java does with none** -- and `d2i` is computed *twice* on the same
+`dload_1`, at offsets 6 and 17.
+
+Priced apart, because "the conversions" would have said which to build without
+saying which is worth it. One process per shape, three runs:
+
+    shape                              HotSpot                ART
+    A  ours: (D)D, d2i twice      0.302 0.287 0.293     1.535 1.545 1.535
+    C  (D)D, d2i once             0.298 0.291 0.296     1.472 1.475 1.541
+    B  reference: (I)I            0.291 0.285 0.310     0.589 0.568 0.578
+
+**On HotSpot the three are one number.** That is the control, and this file
+independently says so two hundred lines up: the `(D)D` closure ABI is "real in the
+bytecode and free at runtime". It still is -- here.
+
+On ART, A over B is **2.66x**. And the split is not where the bytecode's ugliness
+is: removing the duplicated `d2i` is worth **2.5%**, and the signature is worth
+**2.59x**. The redundancy I would have fixed first, because it is visibly wrong in
+a listing, is a rounding error; the thing that reads as a type-system necessity is
+the whole cost.
+
+That accounts for `closure-merge`'s 1.02x to 3.33x almost exactly, and it is the
+same cause under `closures` (0.84x to 1.01x), which is smaller only because a
+monomorphic closure devirtualises to `invokestatic` -- and still converts, because
+devirtualising changes who is called and not what the signature is.
+
+**The fix is a design this lane already has, one level away.** `specialize_numbers`
+proves int-exactness whole-program and emits `work$whole:(I)I` in this very
+program. Closures are excluded structurally rather than deliberately: every
+closure of a TypeScript function type extends one `Fn$` base, and that base
+declares `call(D)D`, so no single closure can narrow without the base narrowing.
+A per-specialisation base -- `Fn3__3$I` with `call(I)I`, chosen when every closure
+merged at a site and every call site are int-exact -- is the shape, and it is
+entirely inside `compiler/codegen/jvm`.
+
+It is not built and it is not free: it is a second base class per specialised
+descriptor, and `same_shape` merging function-type layouts is the reason one base
+exists at all. What is now known is what it is worth, on the runtime this lane is
+being taken to, and that the obvious cheaper fix beside it is worth 2.5%.
 
 ## Open, and whose
 
