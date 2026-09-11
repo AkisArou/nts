@@ -89,6 +89,7 @@ meets them. This is the map; the row table below it is the current state.
   - `invokevirtual` is the same story, and it is this lane's own closure path
   - Bar 1 on ART: 51 rows, and the lane loses the bar by going to Android
   - `closure-merge` is the `(D)D` closure ABI, and it is 2.6x on ART and free here
+  - And it reaches four rows, none of them a bar 1 row, so it is not next
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3628,6 +3629,39 @@ It is not built and it is not free: it is a second base class per specialised
 descriptor, and `same_shape` merging function-type layouts is the reason one base
 exists at all. What is now known is what it is worth, on the runtime this lane is
 being taken to, and that the obvious cheaper fix beside it is worth 2.5%.
+
+### And it reaches four rows, none of them a bar 1 row, so it is not next
+
+The fix above is worth 2.6x on the calls it touches. Before building it, how many
+calls are there? Every case in the corpus, emitted, counting `Fn*` bases whose
+`call` is `abstract double call(double)` and closure bodies that narrow their
+parameter and widen their result:
+
+    case               Fn$ bases   int-exact closure bodies
+    closure-merge              1                          2
+    closures                   0                          1
+    module-closures            0                          2
+    optional-chain             0                          1
+    json-stringify-doc         0                          0
+    -- and 55 cases with no closure at all
+
+**One case in sixty emits a closure base.** The other three have int-exact
+closure bodies and no base, because a monomorphic closure devirtualises to
+`invokestatic Closure0$call` -- which still carries the `(D)D` and still converts,
+so the signature cost is theirs too, but the *base class* half of the fix has
+nothing to do there.
+
+So the reach is four rows of fifty-one: `closure-merge` 3.33x, `optional-chain`
+1.45x, `closures` 1.01x, `module-closures` 0.96x. **And none of the eight
+`awfy-*` rows emits a closure at all**, so the entire change moves bar 1 by
+nothing.
+
+That is the rule this file keeps relearning -- rank by what clears, not by
+reach -- arriving one step before a multi-hour change rather than after. The
+measurement that justified it is right and the change is still real: one row is
+badly broken and the fix is known and priced. It goes in the queue below its
+size, not at the top of it, and the thing bar 1 is actually about is the eight
+rows that have no closures in them.
 
 ## Open, and whose
 
