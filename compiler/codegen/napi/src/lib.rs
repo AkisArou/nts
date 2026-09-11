@@ -3032,7 +3032,19 @@ fn namespace_value(program: &hir::Program, emitted: &str, property: &str) -> Opt
     if matches!(crossing, Cross::Object(_) | Cross::Void) {
         return None;
     }
-    let symbol = format!("{}()", value_reader(&c_global(&global.name, std::iter::empty())));
+    // From `program` rather than from an empty iterator, which is what stood
+    // here. A global colliding with one of the program's own functions is
+    // spelled with a trailing underscore at the other four call sites and was
+    // spelled without one here -- the two would have disagreed about the same
+    // global, and the reader generated for it would have named a symbol that
+    // does not exist.
+    let symbol = format!(
+        "{}()",
+        value_reader(&c_global(
+            &global.name,
+            program.funcs.iter().map(|func| func.name.as_str())
+        ))
+    );
     let key = c_string_literal(property);
     let make = match crossing {
         Cross::Bool => format!("napi_get_boolean(env, {symbol}, &value)"),
@@ -3451,8 +3463,8 @@ fn conversion(crossing: &Cross, symbol: &str, layouts: &[hir::Layout]) -> Option
 /// default.
 fn publish_value_exports(
     values: &[(&hir::Global, &str, Cross)],
-    functions: &[String],
     layouts: &[hir::Layout],
+    functions: &[String],
 ) -> String {
     let mut out = String::new();
     for (global, publish, crossing) in values {
@@ -3517,7 +3529,7 @@ fn value_export_text(program: &hir::Program) -> (String, String) {
         program.funcs.iter().map(|func| func.name.clone()).collect();
     let mut declarations = declare_value_exports(&values, &program.layouts, &functions);
     declarations.push_str(&declare_namespace_values(program, &values, &functions));
-    let publishing = publish_value_exports(&values, &functions, &program.layouts);
+    let publishing = publish_value_exports(&values, &program.layouts, &functions);
     (declarations, publishing)
 }
 

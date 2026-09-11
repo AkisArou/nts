@@ -32,7 +32,7 @@ cd "$(dirname "$0")/../.."
 # loads are 20 of 22 with and without it, which is what the refusal counts
 # predicted. A stale floor does not just miss a regression, it manufactures
 # progress, and the second failure is louder than the first.
-FLOOR="assert async_hooks buffer console dgram diagnostics_channel events fs http
+FLOOR="assert async_hooks buffer console dgram diagnostics_channel dns events fs http
 net os path process punycode querystring readline stream string_decoder timers url
 util zlib"
 
@@ -91,7 +91,20 @@ util zlib"
 # behind 32 sites, against `zlib`'s 352 -- that these are the *only* things
 # between it and a working compiled lane, which makes it the cheapest proof in the
 # profile that any of the three fixes worked.
-BLOCKED="dns"
+# `dns` moved into `FLOOR` on 2026-09-11 and this is empty again.
+#
+# It was here for one reason and one fix cleared it: `node:dns` publishes `EOF`
+# and `FILE` as documented public API, and `<stdio.h>` has already claimed those
+# as a macro and a type. `program.c` compiled in both spellings -- it includes
+# nothing that defines either -- so only the wrapper failed, which is why the
+# defect could sit. `HEADER_MACROS` now suffixes them the way C keywords and
+# `<math.h>` names were already suffixed, and it reaches struct members and the
+# `offsetof` in a descriptor's reference map too, because all three take the name
+# from the same JavaScript identifier.
+#
+# Putting it here rather than leaving it out is what made the fix announce
+# itself: the run printed `dns NOW BUILDS` without either lane going to look.
+BLOCKED=""
 
 # **Empty, and it held `fs` and `process` an hour ago.**
 #

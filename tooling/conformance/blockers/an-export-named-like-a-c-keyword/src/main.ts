@@ -1,4 +1,8 @@
-// expect: emit-c --napi -> emits-c NtsString * FILE = 0;
+// expect: emit-c --napi -> addon-compiles
+//
+// **Fixed 2026-09-11**, and the expectation moved from reproducing the defect to
+// guarding against it. What follows is why the fix is a namespace and not a
+// list.
 // control: exports.plain === "ordinary"
 //
 // An exported name that is a C standard identifier, emitted verbatim as a C
@@ -14,6 +18,25 @@
 // and `<stdio.h>` has already defined `FILE` as a type and `EOF` as
 // `#define EOF (-1)`. clang reports `redefinition of 'FILE' as different kind of
 // symbol` and, for the macro, `unexpected type name` at the substituted text.
+//
+// # The fix: the header names, where every namespace already looks
+//
+// `EOF_` and `FILE_`, through the suffix rule `c_identifier` already applies to
+// C keywords and to the `<math.h>`, `<string.h>` and POSIX names.
+// `HEADER_MACROS` adds the object-like macros and type names from the headers
+// the emitted C actually includes, and it is bounded by those includes rather
+// than by all of C.
+//
+// **A namespace on globals was tried first and was the weaker answer.** Prefixing
+// every module-scope global with `nts_g_` closes this collision and only this
+// one: the same `EOF` reaches a **struct member** and the `offsetof` in a
+// descriptor's reference map by the same route, and a prefix on globals covers
+// neither. One rule in `c_identifier` covers all three, because all three take
+// the name from the same JavaScript identifier.
+//
+// That was found by the Node lane trying the workaround -- moving the constants
+// into an object literal -- and hitting `result->EOF` instead. A fix verified
+// only against the global would have looked complete.
 //
 // # It is the *wrapper* that fails to compile, not the program
 //

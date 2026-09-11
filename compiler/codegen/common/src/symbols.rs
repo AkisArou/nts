@@ -256,6 +256,48 @@ const STRING: &[&str] = &[
 /// confuse. A TypeScript program is entitled to export `open`, and appending an
 /// underscore is what it has always cost to say so -- the same rule `div` and
 /// `strlen` already live under, reversible by inspection.
+/// Object-like macros and type names from the headers the emitted C actually
+/// includes.
+///
+/// **The macros are the dangerous half, and they are dangerous differently.**
+/// A colliding *function* name is a redefinition the compiler points at; a
+/// colliding macro substitutes before any declaration is seen, so the error
+/// lands on a token nobody wrote:
+///
+/// ```text
+/// NtsString * EOF = 0;          ->  NtsString * (-1) = 0;
+/// result->EOF                   ->  result->(-1)
+/// offsetof(NtsObj_Codes, EOF)   ->  offsetof(NtsObj_Codes, (-1))
+/// ```
+///
+/// `node:dns` publishes `EOF` and `FILE` as *documented public API*, beside
+/// `NODATA` and twenty more, so this is not a hypothetical name nobody would
+/// write. And it reaches **every** namespace: a module-scope global, a struct
+/// member, and the `offsetof` in a descriptor's reference map all take the name
+/// from the same JavaScript identifier.
+///
+/// Bounded by what is included rather than by all of C: `program.c` includes
+/// `nts_runtime.h`, and `addon.c` adds `node_api.h` and with it `<stdio.h>`,
+/// `<stdlib.h>`, `<string.h>`, `<stdint.h>`, `<stddef.h>` and `<errno.h>`. That
+/// is why `program.c` compiles in both spellings and only the wrapper fails --
+/// a fix verified against `program.c` alone looks like it worked.
+const HEADER_MACROS: &[&str] = &[
+    // <stdio.h>
+    "EOF", "FILE", "BUFSIZ", "FILENAME_MAX", "FOPEN_MAX", "L_tmpnam", "TMP_MAX",
+    "SEEK_CUR", "SEEK_END", "SEEK_SET", "stdin", "stdout", "stderr",
+    // <stddef.h>, <stdlib.h>
+    "NULL", "offsetof", "EXIT_FAILURE", "EXIT_SUCCESS", "RAND_MAX", "MB_CUR_MAX",
+    // <errno.h>. The `E*` family is long; these are the ones a JavaScript
+    // program is likely to publish, and node's own `os.constants.errno` names
+    // every one of them.
+    "errno", "EACCES", "EADDRINUSE", "EAGAIN", "EBADF", "EBUSY", "ECONNREFUSED",
+    "ECONNRESET", "EEXIST", "EINTR", "EINVAL", "EIO", "EISDIR", "EMFILE",
+    "ENOENT", "ENOMEM", "ENOSPC", "ENOTDIR", "ENOTEMPTY", "EPERM", "EPIPE",
+    "ERANGE", "EROFS", "ETIMEDOUT", "EWOULDBLOCK",
+    // <assert.h>
+    "assert", "static_assert",
+];
+
 const POSIX: &[&str] = &[
     // <unistd.h>
     "access", "alarm", "chdir", "chown", "close", "dup", "dup2", "execl", "execv", "execve",
@@ -277,7 +319,11 @@ const POSIX: &[&str] = &[
 ];
 
 fn collides_with_a_header(name: &str) -> bool {
-    if MATH.contains(&name) || TYPES.contains(&name) || STRING.contains(&name) || POSIX.contains(&name)
+    if MATH.contains(&name)
+        || TYPES.contains(&name)
+        || STRING.contains(&name)
+        || POSIX.contains(&name)
+        || HEADER_MACROS.contains(&name)
     {
         return true;
     }
@@ -406,27 +452,27 @@ pub fn c_member(name: &str) -> String {
 /// The C spelling of a module-scope *global*, given the function names the
 /// program also emits.
 ///
-/// A third namespace, and the third time this has come up. `c_identifier`
-/// answers the linker's question and `c_member` answers a struct's; this one
+/// A third namespace, and the third time this has come up. [`c_identifier`]
+/// answers the linker's question and [`c_member`] answers a struct's; this one
 /// answers C's file scope, where a program's own functions and its own globals
 /// share one space that TypeScript keeps apart. `process` declares a function
-/// `version()` and a module-scope `const version`, which is ordinary and which
-/// C reads as:
-///
-/// ```text
-/// NtsString * version(void);            /* the function */
-/// static NtsString * version = 0;       /* the global   */
-/// error: redefinition of 'version' as different kind of symbol
-/// ```
-///
-/// Three of them in that module -- `version`, `platform`, `environment` -- and
-/// the same underscore rule as the other two, for the same reason: reversible
-/// by inspection.
+/// `version()` and a module-scope `const version`, which C reads as
+/// `redefinition of 'version' as different kind of symbol`.
 ///
 /// The *function* keeps the plain name rather than the global, because a
 /// function name can be an exported linkage symbol that something outside links
 /// against, and a global is reached through the wrapper this compiler generates.
 /// Renaming the half that has no external contract is the cheaper half.
+///
+/// # Not a namespace, and that was tried
+///
+/// Prefixing every global with `nts_g_` closes this *and* the header-macro
+/// collision that `node:dns` hit -- but only for globals, and the same
+/// `EOF` reaches a **struct member** and the `offsetof` in a descriptor's
+/// reference map by the same route. A guarantee that covers one of the three
+/// namespaces is the weaker half of two mechanisms for one hazard, so the
+/// header names live in [`HEADER_MACROS`] where `c_identifier` applies them to
+/// all three, and this stays the small rule it was.
 #[must_use]
 pub fn c_global<'a>(name: &str, mut functions: impl Iterator<Item = &'a str>) -> String {
     let spelled = c_identifier(name);
