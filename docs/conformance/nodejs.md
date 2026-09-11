@@ -21331,6 +21331,41 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## The last route: there is no lane-specific applicability, and there should not be
+
+`tty`'s `pseudo-tty/test-tty-isatty.js` **passes interpreted and fails compiled**.
+The obvious way to close the clause is to mark it not applicable, and the profile
+gives a module exactly one `not-applicable` file, read by both lanes. Checked
+rather than assumed: no `not-applicable-compiled`, no `addonOnly` on the module
+side, no per-lane switch anywhere in `run.mjs`.
+
+So excluding it to clear the compiled lane would **delete a real pass from the
+interpreted one**. That is the trade, and it is not close.
+
+### The failing row is the harness working
+
+A test that passes on one lane and fails on the other is the two-lane design
+reporting a genuine difference between them: our TypeScript over node's
+primitives answers `isatty({})` correctly, and our TypeScript through the Node-API
+wrapper cannot be handed the argument. Suppressing that would remove the profile's
+only signal about a boundary gap that touches 97 of 457 declined exports.
+
+Precedent exists for excluding on a compiler gap -- `util` sets aside
+`pseudo-tty/test-start-trace-sigint.js` as a "compiler/runtime integration gap" --
+and it does not apply, because that test passes on **neither** lane. Nothing is
+lost by writing it down. Here something is.
+
+### So the clause's remaining half is not a thing to be worked around
+
+`tty` compiled reaches `0 passed` because one assertion out of nine hands an
+object to an `unknown` parameter, the wrapper refuses it, and every route around
+that -- a different test, a different signature, a different suite, a catch in the
+shape layer, a guard in the shape layer, a lane-specific exclusion -- has been
+tried and written down with what it would cost.
+
+What closes it is `blockers/a-union-parameter-the-boundary-cannot-build`, which is
+filed, reproducing, and owned elsewhere.
+
 ## Where the profile stands at 24 modules, and what each remaining one needs
 
 `dns` and `tty` are in. The profile is 24 modules, the floor builds 24 of 24, the
