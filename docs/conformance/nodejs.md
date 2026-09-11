@@ -21289,6 +21289,63 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## `node:dns` exists, and the module-count model of value does not
+
+The twenty-third module. `lookup`, `lookupService`, the result-order pair, the
+promises surface and the twenty-four error constants; `resolve*`, `Resolver`,
+`setServers` and `getServers` absent, because those speak the DNS wire protocol
+through c-ares and this profile resolves through the platform's `getaddrinfo`.
+Two capabilities behind one module name, and only one of them is present.
+
+    interpreted   1 passed, 0 failed, 10 skipped, 20 not applicable
+    sabotaged     0 passed              -- 0 hollow
+    compiled      does not build; see below
+
+### The yield model was wrong, and the ledger said so all along
+
+The table above this one gives per-module test counts, and its own sentence reads
+"the count is `test/parallel` files named for that module". I read those as an
+estimate of what each module would *buy*, and they are not one.
+
+**`tty` would have bought nothing.** Of its three files, one does
+`process.stdin.emit('end')` and never requires `tty`; one uses `readline` and
+`Reflect.apply`; the third is the only one that requires `tty`, and it
+monkey-patches `internalBinding('tty_wrap')`, which is an RFC non-goal. The one
+currently-running test that requires `tty` -- `test-net-access-byteswritten.js`
+-- is **already excluded** on other grounds.
+
+**`dns` bought one file of thirty-one**, and the reason is the same shape one
+level in. Twenty need c-ares. Nine of the remaining ten stub
+`internalBinding('cares_wrap')` to test `lookup`'s validation deterministically:
+`cares.getaddrinfo = () => UV_ENOMEM`. The runner *does* let a module supply test
+bindings, and `timers` does -- but that is a **read**, and this is a
+**substitution**: for it to reach us, `lookup` would have to dispatch through a
+mutable table at call time, which is a dynamic receiver and would not lower.
+
+So the addressable count was never 3 and 30. It was 0 and 1.
+
+### What it bought instead
+
+A real `getaddrinfo` binding (`dns.c`, 226 lines over `uv_getaddrinfo` and
+`uv_getnameinfo`), the result-order pass that node does in JavaScript and this
+does in C, and a compiler defect nobody had hit:
+
+**`blockers/an-export-named-like-a-c-keyword`.** `dns.EOF` and `dns.FILE` are two
+of node's twenty-four published error constants, and they lower to
+`NtsString * EOF = 0;` and `NtsString * FILE = 0;` at module scope. `addon.c`
+includes `node_api.h` and so `<stdio.h>`, where `FILE` is a type and `EOF` is
+`#define EOF (-1)`. The macro is the worse half: the substitution happens before
+the compiler sees a declaration, so the error is `expected identifier or '('` at
+a token nobody wrote. **`dns` cannot build as an addon until emitted module-scope
+globals carry a namespace**, and the names are not ours to rename.
+
+Three expectations were wrong before that fixture was right. `compiles` passed --
+it compiles `program.c`, which includes nothing that defines `FILE`.
+`addon-compiles` reproduced but is a *guard* form, so a live defect read as
+`REGRESSED`. `fails-to-compile` reported FIXED, for the first reason again. The
+defect is the **emission**; whether it bites depends on which headers the
+translation unit pulls in, and `emits-c` is what says that.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
