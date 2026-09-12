@@ -23812,3 +23812,54 @@ source locations. Ranking by message would have said there was one kind of failu
 here, and there are two.
 
 `typescript.md` belongs to the compiler lane, so the row itself is theirs to amend.
+
+## What a cross-call-throw refusal would cost this axis: 25 of 49 files cannot be touched
+
+The compiler lane found that a `throw` crossing a call reaches no ancestor handler on
+any backend -- it aborts where node's `catch` runs -- and asked whether to refuse the
+construct, since refusing would cost every `try`-with-a-call its reach and this axis is
+what would move. The number that decides it, measured rather than estimated:
+
+    module         axis files   try-with-call in that module
+    path                   15                              0
+    os                      5                              0
+    punycode                3                              0
+    dns                     1                              0
+    tty                     1                              0
+    fs                      4                             38
+    net                     4                              6
+    http                    3                             13
+    async_hooks             2                              3
+    buffer                  2                              3
+    timers                  2                              9
+    util                    2                              6
+    stream                  1                             51
+    zlib                    1                              5
+    (the rest)              5                              5
+    TOTAL                  49                            139
+
+**25 of the 49 cannot be affected at all**, because their modules contain no
+`try`-with-a-call. The remaining 24 are an upper bound rather than a cost: "the module
+contains one" is not "this file's path reaches one". And the sites concentrate exactly
+where the axis is thinnest -- `stream`, `fs`, `http` and `timers` hold 111 of the 139
+and carry 10 axis files between them.
+
+My count of the corpus is **178 `try` blocks, 173 containing a call** by the loosest
+reading (any call-shaped expression in the body) and 139 excluding `new X(...)`. The
+compiler lane's is 119. All three are defensible and they measure different things,
+which is worth saying rather than reconciling: mine walks braces from each `try` and
+asks whether the body contains a call at all, so it counts `JSON.parse` and a method on
+a local. Whichever is used, the distribution above is the same.
+
+### The bug is masked by the boundary, which argues for refusing now
+
+`assert` is the most throw-heavy module in the profile and its compiled lane fails 13
+of 13 for a different reason: `exports.ok is not a function`,
+`assert.strictEqual is not a function`. A module has to **publish** a function before a
+caught throw inside it can be observed at all, so this defect is invisible today and
+becomes visible exactly as publishing improves. The refusal is therefore cheapest now
+and gets more expensive the longer it waits -- the opposite of the usual shape.
+
+So: I would take the refusal. This project's rule is that a wrong answer which runs is
+worse than a missing feature, and an abort where node catches is a wrong answer that
+runs *and* cannot be seen in a refusal count -- which is how it sat behind a ✅ row.
