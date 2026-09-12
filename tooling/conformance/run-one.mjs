@@ -1383,6 +1383,12 @@ function revealLoadTimeWarnings() {
  * publishes. Nothing is hidden from the code under test: `declare function
  * nts_x` resolves exactly as before, the property stays writable and
  * configurable, and only `for...in` and `Object.keys` stop listing it.
+ *
+ * Which is also the limit of it, and worth knowing before reading a module for a
+ * cause: the names are still **there**. Anything walking
+ * `Object.getOwnPropertyNames(globalThis)` or `Reflect.ownKeys` sees all 350 of
+ * them, and would fail the same way node's `common` used to, one layer from
+ * anything the module did. This makes them invisible to enumeration, not absent.
  */
 function hideBindingGlobals() {
   for (const key of Object.getOwnPropertyNames(globalThis)) {
