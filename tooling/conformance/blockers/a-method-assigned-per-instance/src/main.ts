@@ -18,10 +18,39 @@
 //
 //     no wrapper for Readable: is a class whose constructor was not compiled
 //
-// **129 failing test files** across the first three, by the Node lane's ranking:
-// 80 for `Readable`, 36 for `Writable`, 13 for `Transform`. The same shape is
-// `_write`, `_writev`, `_final`, `_destroy`, `_construct`, `_transform` and
-// `_flush` — the hooks are the API.
+// **The reach figure here was 129 and it is not reproducible.** It read "80 for
+// `Readable`, 36 for `Writable`, 13 for `Transform`, by the Node lane's ranking" and
+// recorded no rule. Re-derived 2026-09-12 over `stream`'s 251 compiled-lane failures,
+// three defensible rules give 189 (names one of the three), 189 disjoint with
+// first-match precedence, and **166** (constructs or extends one) — the last being the
+// measure closest to what this blocker gates, since a constructor that does not compile
+// is a class you cannot construct. `Writable` and `Transform` land within a few files
+// of the old buckets; `Readable` reads 123 against 80, so whatever produced 80 was
+// neither. Quote a number with its rule beside it.
+//
+// The same shape is `_write`, `_writev`, `_final`, `_destroy`, `_construct`,
+// `_transform` and `_flush` — the hooks are the API.
+//
+// # Clearing this does NOT publish the classes, measured
+//
+// In an isolated worktree at HEAD, removing exactly this blocker — the three
+// assignments at `readable.ts:311-313` — and rebuilding:
+//
+//     control                        6 function-type refusals, Readable unpublished
+//     the three assignments removed  5 function-type refusals, Readable UNPUBLISHED
+//
+// `no wrapper for Readable: is a class whose constructor was not compiled` came back
+// byte-identical. Of the six function-type refusals only two are assignments; the other
+// four are **reads of a method as a value** — `typeof emitter.prependListener ===
+// "function"` at `legacy.ts:72`, `stream.destroy !== undefined` at `destroy.ts:266`,
+// and two in `events/src/main.ts`. `Readable extends Stream`, so `legacy.ts:72` is on
+// the constructor's path, and it is `blockers/method-syntax-in-an-interface` rather
+// than this one.
+//
+// Whether the two together are *sufficient* is not established: neutralising the four
+// reads removes the type narrowing they exist for and the program stops typechecking
+// (TS2722), so that arm produced no number. The pair wants doing together and is a
+// bigger promise than either.
 //
 // Counted per module, function-typed field refusals: `http` 7, `fs` 6,
 // `process` 6, `net` 5, `stream` 4. Not all of them are this shape; the two in
