@@ -46,4 +46,3 @@ module-evaluation 1 a regular expression literal
 calls 1 an erased value where a concrete representation is wanted
 jsx 2 a jsx self closing element
 object-literal-through-a-union 1 a void expression
-accessors 1 an assignment that reads through an accessor

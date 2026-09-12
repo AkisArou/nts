@@ -12671,6 +12671,7 @@ impl<'a> FuncBuilder<'a> {
             // and `undefined` for one that was not registered.
             ("Symbol", "keyFor", [argument]) => Some(self.lower_symbol_key_for(id, *argument)),
             ("Object", "keys", [argument]) => Some(self.decide_object_keys(id, *argument)),
+            ("Object", "is", [left, right]) => Some(self.decide_object_is(id, *left, *right)),
             ("Object", "hasOwn", [argument, key]) => Some(self.decide_has_own(id, *argument, *key)),
             // `BigInt.asIntN(64, v)`, which is how the profile reads a signed
             // 64-bit quantity back out of an unsigned one. A width and a value,
@@ -13115,6 +13116,134 @@ impl<'a> FuncBuilder<'a> {
     /// are laid out base-first and in the order the class declares them, and
     /// that is the order `Object.keys` is specified to produce for string keys
     /// that are not array indices.
+    /// `Object.is(a, b)` — `SameValue`, which is `===` with two corrections.
+    ///
+    /// `===` says `NaN !== NaN` and `0 === -0`; `SameValue` says the opposite of
+    /// both. Everything else it agrees with, which is why this is `===` plus two
+    /// tests rather than a comparison of its own.
+    ///
+    /// The specification's own phrasing is the implementation:
+    ///
+    /// ```text
+    /// if (x === y) return x !== 0 || 1/x === 1/y;
+    /// return x !== x && y !== y;
+    /// ```
+    ///
+    /// `1/x === 1/y` is how the two zeroes are told apart without a sign test:
+    /// `1/0` is `Infinity` and `1/-0` is `-Infinity`, and those are not equal.
+    /// `x !== x` is true only of `NaN`.
+    ///
+    /// **Only where both sides are numbers.** A string, a boolean and a
+    /// reference have neither a `NaN` nor a signed zero, so `SameValue` *is*
+    /// `===` for them and the extra tests would be dead arms — and every arm
+    /// here is a value rather than an expression, so they are evaluated
+    /// eagerly and emitting them for a string would be emitting arithmetic on
+    /// one.
+    ///
+    /// Both sides are coerced to a double first. An `i32` can hold neither of
+    /// the two special cases, so the dance answers the same thing it would have
+    /// without them — and narrowing decides the width afterwards, which is where
+    /// that decision belongs.
+    fn decide_object_is(
+        &mut self,
+        id: NodeId,
+        left: NodeId,
+        right: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let a = self.lower_expression(left)?;
+        let b = self.lower_expression(right)?;
+        let origin = self.origin(id);
+        let numeric = |ty: &HirType| matches!(ty, HirType::Float { .. } | HirType::Int { .. });
+        if !numeric(&self.values[a.0 as usize].ty) || !numeric(&self.values[b.0 as usize].ty) {
+            return Ok(self.push(
+                OpKind::Binary {
+                    op: BinOp::Eq,
+                    lhs: a,
+                    rhs: b,
+                },
+                HirType::Bool,
+                origin,
+            ));
+        }
+        let a = self.coerce(a, &HirType::NUMBER, left)?;
+        let b = self.coerce(b, &HirType::NUMBER, right)?;
+        let mut binary = |op, lhs, rhs, ty: HirType, origin: &Origin| {
+            self.push(OpKind::Binary { op, lhs, rhs }, ty, origin.clone())
+        };
+        let equal = binary(BinOp::Eq, a, b, HirType::Bool, &origin);
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+        // `x !== 0`, which is the cheap answer for every number but the zeroes.
+        let nonzero = self.push(
+            OpKind::Binary {
+                op: BinOp::Ne,
+                lhs: a,
+                rhs: zero,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        // `1/x === 1/y`, which separates `+0` from `-0` by their infinities.
+        let over_a = self.push(
+            OpKind::Binary {
+                op: BinOp::Div,
+                lhs: one,
+                rhs: a,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let over_b = self.push(
+            OpKind::Binary {
+                op: BinOp::Div,
+                lhs: one,
+                rhs: b,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let same_sign = self.push(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: over_a,
+                rhs: over_b,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let yes = self.push(OpKind::ConstBool(true), HirType::Bool, origin.clone());
+        let no = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
+        let when_equal =
+            self.lower_branching_value(id, nonzero, Branch::Value(yes), Branch::Value(same_sign))?;
+        // `x !== x`, true of `NaN` and nothing else.
+        let a_nan = self.push(
+            OpKind::Binary {
+                op: BinOp::Ne,
+                lhs: a,
+                rhs: a,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let b_nan = self.push(
+            OpKind::Binary {
+                op: BinOp::Ne,
+                lhs: b,
+                rhs: b,
+            },
+            HirType::Bool,
+            origin,
+        );
+        let both_nan =
+            self.lower_branching_value(id, a_nan, Branch::Value(b_nan), Branch::Value(no))?;
+        self.lower_branching_value(
+            id,
+            equal,
+            Branch::Value(when_equal),
+            Branch::Value(both_nan),
+        )
+    }
+
     fn decide_object_keys(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
         // Lowered for its effects even though the answer does not depend on it:
         // `Object.keys(f())` calls `f`.
