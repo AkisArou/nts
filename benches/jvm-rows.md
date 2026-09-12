@@ -6475,3 +6475,40 @@ mismeasurement.
 So the two habits that have actually worked are both about not summarising:
 print the matches rather than the count, and send the artefact rather than the
 account.
+
+### `awfy-permute` is over the bar by 0.3% with strictly better code, and that closes it as a codegen target
+
+The smallest remaining gap in the AOT column, and the one never examined.
+Six sittings now, every one at or above 1.0029, so it is one-sided rather than
+straddling -- it is over. By 0.3%.
+
+`oatdump` over `permute`, the recursive hot method:
+
+                           ours     reference
+    AOT code size        6,348 B     6,388 B
+    inlined frames           391         388
+    total calls              154         166
+      pThrowArrayBounds       68          76
+      virtual dispatch         8          29
+      direct recursive        22           0
+
+**Smaller, more inlined, fewer bounds throws, and 8 virtual dispatches against
+29.** Every countable dimension is at parity or in this lane's favour, including
+the two that explained `awfy-list` and `awfy-nbody` -- dispatch and bounds
+checks. There is nothing structural left to attribute 0.3% to.
+
+So the honest reading is that **`awfy-permute` is not a codegen target.** It is
+a row where this backend emits equal-or-better code and loses by less than the
+band of every other row in the table. Ruling it out is worth as much as closing
+it: the AOT column's three failures are now one row with a known mechanism
+(`awfy-towers`, the inliner budget), one with five dead hypotheses
+(`awfy-bounce`), and one with better code than the program it loses to.
+
+**And the direct-versus-virtual split is worth keeping beyond this row.** Ours
+makes 22 direct recursive calls where the reference makes none and 29 indirect;
+that is this lane's static methods against their instance methods, and under a
+profile-free AOT compiler it is a structural advantage -- the same one
+`awfy-list` showed at 3.8x. Here it buys parity rather than a win, because the
+reference's dispatches are monomorphic and cheap. Two rows, one mechanism,
+opposite magnitudes: the advantage is real and its size depends entirely on what
+the reference does with the calls it keeps.
