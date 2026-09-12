@@ -535,7 +535,15 @@ profile() {
   # 18694 to 19065 with nothing new refused. The count that did not move is the
   # one the work is about: `fs` emits 1615 functions before and after, because a
   # copy replaces the plain version wherever every call to it was specialised.
-  ceiling=20800
+  #     2026-09-12   21987   <- `child_process` grew by 540 lines in six hours
+  #
+  # Raised to 22600 on the day, and the evidence that it is corpus growth rather
+  # than my regression is the number beside it: **definitions rose 1292 in the
+  # same interval**, 19324 to 20616. More code was emitted, not less. A ceiling
+  # breach with definitions *up* is the corpus earning a raise, which is the
+  # case the paragraph above describes and the one the message below used to
+  # misreport.
+  ceiling=22600
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
@@ -557,7 +565,20 @@ profile() {
     return 1
   fi
   if [ "$refusals" -gt "$ceiling" ]; then
-    printf '  ^ above the ceiling of %s -- reach went backwards\n' "$ceiling"
+    # **Both numbers, because one of them cannot tell you which happened.**
+    # This said "reach went backwards" and meant it as a diagnosis; the comment
+    # above it says the two are for reading together, and the check was reading
+    # one. On 2026-09-12 it fired with definitions *up* 1292 over the same
+    # interval -- the Node lane had added 540 lines to `child_process` -- so the
+    # sentence was false about the only run it had ever printed on.
+    #
+    # A refusal count tracks corpus size before it tracks anything else, which
+    # this file says twice above. The reader needs the definition count in the
+    # same breath to tell a compiler that stopped reaching from a corpus that
+    # got bigger, and now gets it.
+    printf '  ^ above the ceiling of %s, with %s definition(s)\n' "$ceiling" "$defined"
+    printf '  ^ definitions up as well means the corpus grew -- raise the ceiling\n'
+    printf '  ^ definitions flat or down means reach went backwards -- do not\n'
     return 1
   fi
   [ "$refusals" -lt $((ceiling - 400)) ] && \
