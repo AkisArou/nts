@@ -405,6 +405,121 @@ public final class RuntimeRegression {
         NtsEnv.drain(NtsEnv.current()); equal(out.toString(), "AmBC", "timer reentrancy and checkpoints");
         check(!NtsEnv.step(NtsEnv.current()), "empty loop");
     }
+    /** A generated class that declares its own `toString`; see `NtsStringable`. */
+    private static final class Labelled implements NtsStringable {
+        private final int n;
+        Labelled(int n) { this.n = n; }
+        @Override public String toString() { return "L" + n; }
+    }
+
+    /** A generated class that does not. `String()` of one is `[object Object]`. */
+    private static final class Plain {
+        @SuppressWarnings("unused") private final int n;
+        Plain(int n) { this.n = n; }
+    }
+
+    /** A tuple: laid out as a struct, called an Array by the language. */
+    private static final class Pair implements NtsTuple {
+    }
+
+    /**
+     * `String(v)` over every tag, and over every array storage the element
+     * analysis can choose.
+     *
+     * <p>**This suite is why the object arm may stay while nothing reaches it.**
+     * `spells_itself` refuses `Unknown` again as of `81c5200e`, so no compiled
+     * program erases an object into `String()` today -- and an arm that nothing
+     * exercises is an arm that rots without anybody hearing, which is the defect
+     * `docs/records/0295` is about. These call the runtime directly, so the
+     * behaviour is pinned whether or not a lowering can reach it.
+     *
+     * <p>Every expectation here was taken from node rather than from reasoning:
+     * `["L7","[object Object]","1,2,3","a,b","true,false"]` and the rest were
+     * printed by `node` and copied.
+     */
+    private static void testValueToString() {
+        equal(NtsValue.valueToString(NtsValue.UNDEFINED_VALUE), "undefined", "undefined");
+        equal(NtsValue.valueToString(NtsValue.NULL_VALUE), "null", "null");
+        equal(NtsValue.valueToString(NtsValue.ofBoolean(true)), "true", "true");
+        equal(NtsValue.valueToString(NtsValue.ofBoolean(false)), "false", "false");
+        equal(NtsValue.valueToString(NtsValue.ofString("hi")), "hi", "string");
+
+        // The number goes through the same converter the typed path uses. `%g`
+        // spelled the first of these `1.50000` until 2026-09-12.
+        equal(NtsValue.valueToString(NtsValue.ofNumber(1.5)), "1.5", "1.5");
+        equal(NtsValue.valueToString(NtsValue.ofNumber(2)), "2", "2");
+        equal(NtsValue.valueToString(NtsValue.ofNumber(0.1)), "0.1", "0.1");
+        equal(NtsValue.valueToString(NtsValue.ofNumber(1e21)), "1e+21", "1e21");
+        equal(NtsValue.valueToString(NtsValue.ofNumber(-0.0)), "0", "negative zero");
+        equal(NtsValue.valueToString(NtsValue.ofNumber(1.0 / 3)), "0.3333333333333333", "third");
+        equal(NtsValue.valueToString(NtsValue.ofNumber(Double.NaN)), "NaN", "NaN");
+
+        // An object that declares `toString`, and one that does not. The second
+        // is the case a JVM class cannot answer for itself: `Object.toString`
+        // would give an identity hash where node gives `[object Object]`.
+        equal(NtsValue.valueToString(NtsValue.ofObject(new Labelled(7))), "L7", "declared toString");
+        equal(NtsValue.valueToString(NtsValue.ofObject(new Plain(7))), "[object Object]", "no toString");
+
+        // Every array storage the element analysis can pick, because a chain
+        // that covers the ones existing today goes stale on the first new one.
+        equal(NtsValue.valueToString(NtsValue.ofObject(new double[] {1, 2, 3})), "1,2,3", "double[]");
+        equal(NtsValue.valueToString(NtsValue.ofObject(new int[] {1, 2, 3})), "1,2,3", "int[]");
+        equal(NtsValue.valueToString(NtsValue.ofObject(new long[] {1, 2, 3})), "1,2,3", "long[]");
+        equal(NtsValue.valueToString(NtsValue.ofObject(new boolean[] {true, false})),
+            "true,false", "boolean[]");
+        equal(NtsValue.valueToString(NtsValue.ofObject(new Object[] {"a", "b"})), "a,b", "Object[]");
+        equal(NtsValue.valueToString(NtsValue.ofObject(new double[] {})), "", "empty array");
+        equal(NtsValue.valueToString(NtsValue.ofObject(new double[] {1.5})), "1.5", "fractional element");
+
+        // `join` renders an absent element as the empty string, which is the one
+        // place it differs from `String()` of the same value.
+        equal(NtsValue.valueToString(NtsValue.ofObject(
+            new Object[] {NtsValue.NULL_VALUE, "x", NtsValue.UNDEFINED_VALUE})), ",x,", "absences join empty");
+        equal(NtsValue.valueToString(NtsValue.ofObject(
+            new Object[] {new double[] {2, 3}, "z"})), "2,3,z", "nested array recurses");
+
+        // A tuple answers true to `Array.isArray` and has named fields rather
+        // than a run of elements, so it refuses rather than being joined.
+        boolean refusedTuple = false;
+        try { NtsValue.valueToString(NtsValue.ofObject(new Pair())); }
+        catch (NtsRefusal expected) { refusedTuple = true; }
+        check(refusedTuple, "a tuple refuses rather than answering");
+
+        // Node answers with a function's source text and this compiler keeps
+        // none, so the tag refuses rather than inventing one.
+        boolean refusedFunction = false;
+        try {
+            NtsValue.valueToString(NtsValue.ofTagged(NtsValue.FUNCTION, new Plain(1)));
+        } catch (NtsRefusal expected) { refusedFunction = true; }
+        check(refusedFunction, "a function refuses rather than answering");
+    }
+
+    /**
+     * A map key held by reference is the same key whichever reference tag it
+     * carries.
+     *
+     * <p>The fast path tested `tag == OBJECT` where `sameKey`'s own default arm
+     * covers `OBJECT`, `FUNCTION` and `SYMBOL` alike, so a `SYMBOL`-tagged key
+     * stopped being found by a lookup that had stored it. That became reachable
+     * when `hir::tags::of_reference` gained its `Symbol` arm; before it, only
+     * one of the three tags could occur.
+     */
+    private static void testReferenceKeyedTags() {
+        for (int tag : new int[] {NtsValue.OBJECT, NtsValue.SYMBOL, NtsValue.FUNCTION}) {
+            NtsMap map = NtsMap.newMap(0);
+            Object first = new Plain(1);
+            Object second = new Plain(2);
+            NtsMap.set(map, NtsValue.ofTagged(tag, first), NtsValue.ofNumber(10));
+            NtsMap.set(map, NtsValue.ofTagged(tag, second), NtsValue.ofNumber(20));
+            check(NtsMap.size(map) == 2, "two references are two keys, tag " + tag);
+            // Boxed, and unboxed: the same key found by both routes.
+            number(NtsMap.get(map, NtsValue.ofTagged(tag, first)).num, 10, "boxed get, tag " + tag);
+            number(NtsMap.getObject(map, first).num, 10, "unboxed get, tag " + tag);
+            check(NtsMap.hasObject(map, second), "unboxed has, tag " + tag);
+            check(!NtsMap.hasObject(map, new Plain(3)), "a third reference is absent, tag " + tag);
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         testBigInt(); System.out.println("bigint randomized tests passed");
         testMap(); System.out.println("map randomized and cursor tests passed");
@@ -412,6 +527,8 @@ public final class RuntimeRegression {
         testArraysAndStrings(); System.out.println("array and string tests passed");
         testPromises(); System.out.println("promise and queue tests passed");
         testTimers(); System.out.println("timer heap tests passed");
+        testValueToString(); System.out.println("String() of every tag passed");
+        testReferenceKeyedTags(); System.out.println("reference-keyed map tags passed");
         System.out.println("PASS " + checks + " assertions");
     }
 }
