@@ -864,6 +864,20 @@ static inline bool nts_presence_has(const NtsHeader *object, uint32_t index) {
   return (object->flags & (1u << (NTS_PRESENCE_SHIFT + index))) != 0u;
 }
 
+/* The same question about an **erased** value, which is what `"k" in v` asks
+ * when `v` is typed `object`: the receiver may be any object at all, or not
+ * one.
+ *
+ * Answers false for anything that is not a reference rather than refusing to
+ * look, because the caller has already narrowed with `instanceof` and this is
+ * the second half of a conjunction -- a value that failed the first half must
+ * not fault in the second, and a tag test is cheaper than a branch the compiler
+ * would have to emit around it.
+ *
+ * Not `static inline`: it is behind a tag test, so a call is the honest shape
+ * and both backends want the same one. */
+bool nts_presence_has_value(NtsValue value, uint32_t index);
+
 /* Linkable companions, the arrangement `nts_to_int32_fn` documents: the four
  * above are `static inline` because C should pay nothing for a bit test, and a
  * backend that cannot read a C header has no symbol to call. Reproducing the

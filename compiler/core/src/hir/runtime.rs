@@ -146,6 +146,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_presence_clear_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
     ("nts_presence_has", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Bool)),
     ("nts_presence_has_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Bool)),
+    ("nts_presence_has_value", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Bool)),
     ("nts_presence_init", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
     ("nts_presence_init_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
     ("nts_presence_set", &[None, Some(HirType::Int { bits: 32, signed: false })], None),

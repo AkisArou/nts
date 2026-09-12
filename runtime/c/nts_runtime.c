@@ -2777,6 +2777,17 @@ int32_t nts_to_int32_fn(double x) { return nts_to_int32(x); }
 /* The presence bits, for exactly the same reason: two instructions in C and a
  * symbol everywhere else. The shift they apply is defined once, in the header,
  * and these are what stop a backend from needing to know it. */
+/* `"k" in v` where `v` is `object` and some type declares `k` optionally. The
+ * caller pairs this with an `instanceof`, so a non-reference reaching here is
+ * the arm that already answered false. */
+bool nts_presence_has_value(NtsValue value, uint32_t index) {
+  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+    return false;
+  }
+  const NtsHeader *object = nts_value_reference(value);
+  return object && nts_presence_has(object, index);
+}
+
 void nts_presence_init_fn(NtsHeader *object, uint32_t mask) {
   nts_presence_init(object, mask);
 }

@@ -15796,6 +15796,10 @@ impl<'a> FuncBuilder<'a> {
         // a layout and drops the ones that have none, so an object type nothing
         // ever built contributes no comparison.
         let mut declaring: Vec<TypeId> = Vec::new();
+        // Types that declare it *optionally*, which the presence bit makes
+        // answerable: each contributes `is it a C` and `is C's bit set` rather
+        // than making the whole question unanswerable.
+        let mut optional: Vec<TypeId> = Vec::new();
         let candidates: Vec<TypeId> = (0..self.snapshot.types.len())
             .filter_map(|at| u32::try_from(at).ok().map(TypeId))
             .collect();
@@ -15812,34 +15816,25 @@ impl<'a> FuncBuilder<'a> {
                     // exists for, and it is what stood under `Buffer.from`.
                 }
                 Declares::Optionally => {
-                    // Sound, and the honest cost of the whole-program answer:
-                    // with the value typed `object`, an instance of *any* type
-                    // can reach here, so one that declares the key optionally
-                    // makes the question unanswerable -- including it answers
-                    // true for a property that was never written and excluding
-                    // it answers false for one that was.
+                    // Answerable now, and it was the honest cost of the
+                    // whole-program answer until it was not. The refusal here
+                    // read: with the value typed `object` an instance of *any*
+                    // type can reach the test, so one that declares the key
+                    // optionally makes the question unanswerable -- including
+                    // it answers true for a property never written and
+                    // excluding it answers false for one that was.
                     //
-                    // 208 sites in `runtime/node`, and the type is named
-                    // because that is what makes it actionable: the fix is at
-                    // the declaration, and "some class" points at nothing.
+                    // Both halves are true and the conclusion no longer
+                    // follows: the object header records whether an optional
+                    // property was written, so the arm is `is it a C` **and**
+                    // `is C's bit set`. The class test was already being
+                    // emitted for the arms that declare it always; this is the
+                    // same test with a second conjunct.
                     //
-                    // **"an anonymous type" pointed at nothing either**, and it
-                    // is what stands under `Buffer.from`: `hasArrayLikeShape`
-                    // refuses `"length" in value` by a type with no name, which
-                    // told a reader that somewhere in forty thousand lines a
-                    // declaration had written `length?` and nothing more. A
-                    // type with no name still has a *declaration*, and where it
-                    // is written is the whole of what the reader needs.
-                    let who = named(self.snapshot, class)
-                        .map_or_else(|| self.declared_at(class), |name| format!("`{name}`"));
-                    return Err(self.unsupported(
-                        rhs,
-                        &format!(
-                            "an `in` naming `{key}` on an `object`, which {who} declares \
-                             optionally -- its slot exists here whether or not it was \
-                             written, so no test of the value can say which"
-                        ),
-                    ));
+                    // Collected rather than answered here, because a bit is a
+                    // position in one layout and the caller has to see all the
+                    // candidates before it can emit anything.
+                    optional.push(class);
                 }
                 Declares::Never | Declares::NotAnObject => {}
             }
@@ -15912,7 +15907,98 @@ impl<'a> FuncBuilder<'a> {
             let test = self.native_test(*native, value, &origin);
             answer = self.bool_join(test, answer, true, &origin);
         }
+        // And one arm per type that declares it optionally: the class test it
+        // would have had, and the bit its writes recorded.
+        //
+        // A plain `and` rather than a branch. `nts_presence_has_value` answers
+        // false for anything that is not a reference, so the arm that failed
+        // the class test cannot fault in the second conjunct -- which is what
+        // makes this a conjunction of two tests rather than a short circuit
+        // the backend would have to build blocks for.
+        for class in optional {
+            let Some(bit) = self.presence_bit_named(id, class, key)? else {
+                continue;
+            };
+            let is_a = self.push(
+                OpKind::InstanceOf {
+                    value,
+                    classes: vec![class],
+                },
+                HirType::Bool,
+                origin.clone(),
+            );
+            let index = self.push(
+                OpKind::ConstInt(i128::from(bit)),
+                PRESENCE_INDEX,
+                origin.clone(),
+            );
+            let written = self.call_runtime(
+                "nts_presence_has_value",
+                vec![value, index],
+                HirType::Bool,
+                &origin,
+            );
+            let both = self.push(
+                OpKind::Binary {
+                    op: BinOp::BitAnd,
+                    lhs: is_a,
+                    rhs: written,
+                },
+                HirType::Bool,
+                origin.clone(),
+            );
+            answer = self.bool_join(both, answer, true, &origin);
+        }
         Ok(answer)
+    }
+
+    /// The presence bit for a named key on a type, for the whole-program `in`.
+    ///
+    /// **Builds the layout first, and the version that did not was silently
+    /// wrong.** The comment here used to say `Ok(None)` for a type with no
+    /// layout "costs nothing, because such a type contributes no comparison to
+    /// the class test either" -- which is false: the class test calls
+    /// `layout_of`, and `layout_of` *creates*. So the arms disagreed about
+    /// which types exist, and an `Opts` whose layout had not been built when
+    /// `has(given: object)` was lowered lost its arm entirely. `"port" in
+    /// given` answered **false for an object that had one**, with nothing
+    /// emitted to say so.
+    ///
+    /// The same trap `in_by_presence` hit an hour earlier, for the same reason
+    /// and with the same fix. A non-creating lookup is right where the question
+    /// is "does the program carry this layout" and wrong where the caller is
+    /// about to emit something that needs one.
+    ///
+    /// `TooMany` is refused by name rather than dropped, because dropping it
+    /// would answer `false` for a property that is there -- which is the defect
+    /// above, arrived at deliberately.
+    fn presence_bit_named(
+        &mut self,
+        at: NodeId,
+        class: TypeId,
+        key: &str,
+    ) -> Result<Option<u32>, Diagnostic> {
+        self.layout_of(at, class)?;
+        match self.presence_of_key(class, key) {
+            Some(super::presence::Presence::Bit(bit)) => Ok(Some(bit)),
+            Some(super::presence::Presence::TooMany { optional }) => {
+                // Named, because the fix is at the declaration and "a type"
+                // points at nothing. `declared_at` is what answers for an
+                // anonymous one -- an inline `{ k?: T }`, a `Partial<T>` -- and
+                // it is the helper the refusal this replaced was built around.
+                let who = named(self.snapshot, class)
+                    .map_or_else(|| self.declared_at(class), |name| format!("`{name}`"));
+                Err(self.unsupported(
+                    at,
+                    &format!(
+                        "an `in` naming `{key}` on {who}, which declares {optional} optional \
+                         properties -- an object header records {}",
+                        super::presence::BITS
+                    ),
+                ))
+            }
+            _ => Ok(None),
+        }
     }
 
     /// A private name used as an `in` key, which is a key this compiler can see

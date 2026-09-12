@@ -234,6 +234,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_post_task", returns: "void", params: &["ptr byval(%struct.NtsTask) align 8"], attributes: &[] },
     Signature { name: "nts_presence_clear_fn", returns: "void", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_presence_has_fn", returns: "zeroext i1", params: &["ptr", "i32"], attributes: &[] },
+    Signature { name: "nts_presence_has_value", returns: "zeroext i1", params: &["i32", "i64", "i32"], attributes: &[] },
     Signature { name: "nts_presence_init_fn", returns: "void", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_presence_set_fn", returns: "void", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_promise_all", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },

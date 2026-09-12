@@ -1,14 +1,30 @@
-// expect: an `in` naming `timeout` on an `object`, which `Opts` declares
-//   optionally -- its slot exists here whether or not it was written, so no
-//   test of the value can say which
+// expect: nothing refused
 //
-// The whole message, not its first clause, so a reworded tail is visible.
+// **FIXED on 2026-09-12, and kept as a guard.** It filed this:
 //
-// `"port" in given` where `given` is typed `object`, in a program where some
-// type declares `port` **optionally**. The refusal is correct in what it says --
-// an optional slot exists whether or not it was written, so `in` cannot
-// distinguish `{}` from `{ port: undefined }` by reading the value -- but the
-// trigger is not local to the expression.
+//     an `in` naming `timeout` on an `object`, which `Opts` declares
+//     optionally -- its slot exists here whether or not it was written, so no
+//     test of the value can say which
+//
+// Every word of that is still true about the *slot*. What changed is that the
+// object header now records whether an optional property was **written**, so a
+// type declaring it optionally contributes `is it a C` *and* `is C's bit set`
+// rather than making the question unanswerable. The class test was already
+// being emitted for the types that declare it always; this is that test with a
+// second conjunct.
+//
+// The refusal was not wrong and did not become wrong. It rested on a fact --
+// that nothing recorded the write -- and said which conclusion followed without
+// saying which fact it followed from. When the fact changed, the sentence
+// stayed true and the conclusion stopped following.
+//
+// `hasWithRequiredDeclarer` below is now the more important half: it asserts
+// that a *required* declarer is still answered by the class test alone, with no
+// bit and no runtime call. A version that answered every `in` at run time would
+// be correct and would give back what the closed world buys.
+//
+// Everything below this line is the original filing, kept because its reach
+// measurement is what ranked the work.
 //
 //     class Opts { port: number }   ... "port" in given  -> lowers
 //     class Opts { port?: number }  ... "port" in given  -> REFUSED
