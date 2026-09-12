@@ -135,7 +135,7 @@ counter, not by reading the emitted C.
 | ✅ | labelled `break`/`continue`, on a loop or a `switch`. A label on a *block* is refused: its `break` is a forward jump, which wants an exit with no latch |
 | ✅ | `for...of` over a string — by code point, so a surrogate pair is one element |
 | ✅ | a default inside a destructuring pattern, including renamed and nested. `{ a: b }` and `{ a = b }` encode identically, and are told apart by which name the binding element *declares* |
-| ✗ | `for...in` — zero uses in the node profile, so it is ordered behind everything that has one |
+| ◐ | `for...in` | **over an object**, which is the same loop `for...of` uses over a different sequence: the keys rather than the elements. One `lower_for_of` taking which it wants, because everything after the sequence — the cursor, the latch, `break`, `continue`, the loop-carried names — is identical, and a second loop would drift from the first. The keys are the layout's field names in the order the program wrote them, which is the list `Object.keys` already answers. **Both of JavaScript's differences from `Object.keys` vanish here**: a compiled class keeps its methods on the descriptor rather than as own properties, so there is no prototype chain to walk and nothing enumerable to inherit. Over an **array** it is refused — node answers the indices *as strings*, which is neither the field names nor anything this builds, so it declines rather than answering the wrong list. Still zero uses in the node profile. `examples/a-for-in-over-an-object`, C, LLVM and JVM |
 
 ## 3. Functions
 

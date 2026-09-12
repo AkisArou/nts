@@ -14771,7 +14771,7 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    fn lower_for_of(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+    fn lower_for_of(&mut self, id: NodeId, over: Over) -> Result<(), Diagnostic> {
         let children = self.children(id);
         let [initializer, sequence, body] = children.as_slice() else {
             // An `await` modifier makes four. `for await` needs the async
@@ -14805,8 +14805,37 @@ impl<'a> FuncBuilder<'a> {
         // call would build an iterator object, step it once per element and
         // throw it away, to arrive at this same walk with an indirection in
         // it -- so the method is recognized here and never lowered.
-        let (sequence, forced) = self.table_source(sequence);
-        let sequence_value = self.lower_expression(sequence)?;
+        // **`for...in` is this loop over the keys**, which is what it means for
+        // a compiled object: the layout's field names in the order the program
+        // wrote them, which is the same list `Object.keys` answers and the same
+        // order the specification asks for. A class's methods live on the
+        // descriptor rather than as own properties, so there is no prototype
+        // chain to walk and nothing enumerable to inherit -- the two questions
+        // that make `for...in` differ from `Object.keys` in JavaScript both have
+        // the answer "none" here.
+        //
+        // Built as the *same* walk rather than a second one, because a second
+        // would be a counted loop over an array written twice.
+        let (sequence, forced) = match over {
+            Over::Elements => self.table_source(sequence),
+            Over::Keys => (sequence, None),
+        };
+        let sequence_value = match over {
+            Over::Elements => self.lower_expression(sequence)?,
+            // Named for the loop the source wrote rather than for the helper
+            // this shares. `decide_object_keys` refuses an array as "an
+            // `Object` static over something that is not an object", which is a
+            // true sentence about a call the program did not make.
+            //
+            // An array is the case it refuses, and `for...in` over one is a
+            // real thing: node answers its indices **as strings**, `"0"` and
+            // `"1"`. That is a different list from the layout's field names and
+            // is not built here, so it is refused rather than answered with the
+            // wrong list.
+            Over::Keys => self
+                .decide_object_keys(id, sequence)
+                .map_err(|_| self.unsupported(id, "a `for...in` over something without named fields"))?,
+        };
         let walk = self.walk_of(sequence, sequence_value, forced, wanted)?;
 
         let origin = self.origin(id);
@@ -17994,7 +18023,8 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::DO_STATEMENT) => self.lower_do_while(id),
             Some(syntax::SWITCH_STATEMENT) => self.lower_switch(id),
             Some(syntax::FOR_STATEMENT) => self.lower_for(id),
-            Some(syntax::FOR_OF_STATEMENT) => self.lower_for_of(id),
+            Some(syntax::FOR_OF_STATEMENT) => self.lower_for_of(id, Over::Elements),
+            Some(syntax::FOR_IN_STATEMENT) => self.lower_for_of(id, Over::Keys),
             Some(syntax::BREAK_STATEMENT) => self.lower_break(id),
             Some(syntax::CONTINUE_STATEMENT) => self.lower_continue(id),
             // Two kinds with nothing to run, for two different reasons.
@@ -29684,6 +29714,18 @@ enum Place {
 ///
 /// The array case still emits exactly the counted loop it emitted before this
 /// existed, which is the whole of what "typed code pays nothing" means here.
+/// Which of a value's two sequences a `for` loop walks.
+///
+/// `for...of` walks the elements and `for...in` walks the keys, and for a
+/// compiled object the second is the layout's field names. One loop serves both
+/// because everything after the sequence is identical -- the cursor, the latch,
+/// `break` and `continue`, and the loop-carried names.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Over {
+    Elements,
+    Keys,
+}
+
 #[derive(Clone)]
 enum Walk {
     /// `xs[i]` while `i < xs.length`, stepping by one.

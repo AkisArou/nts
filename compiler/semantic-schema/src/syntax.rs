@@ -125,6 +125,11 @@ pub const CASE_CLAUSE: u16 = 297;
 pub const DEFAULT_CLAUSE: u16 = 298;
 pub const EMPTY_STATEMENT: u16 = 243;
 pub const FOR_STATEMENT: u16 = 249;
+/// `for (const k in o)`. Between the other two in TypeScript's own numbering,
+/// which is why it is written here rather than left out: the gap between 249
+/// and 251 is this, and a reader checking the list would otherwise have to go
+/// and find out what fills it.
+pub const FOR_IN_STATEMENT: u16 = 250;
 pub const FOR_OF_STATEMENT: u16 = 251;
 pub const TRY_STATEMENT: u16 = 259;
 pub const AWAIT_EXPRESSION: u16 = 224;
