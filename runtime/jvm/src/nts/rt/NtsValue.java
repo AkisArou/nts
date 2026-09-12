@@ -73,6 +73,43 @@ public final class NtsValue {
     }
 
     /**
+     * `Number(v)` on a value carrying its own tag, and `+v` since unary plus
+     * became the same operation.
+     *
+     * <p>The five arms `runtime/c`'s `nts_value_to_number` has, in the same
+     * order and with the same answers, because `hir::runtime` is one table and
+     * a conversion with two implementations has two answers -- which this
+     * runtime learned from `numberText` spelling `1.5` as `1.50000` beside a
+     * `numberToString` that did not.
+     *
+     * <p>The `default` is `NaN` and is unreachable by construction, for the
+     * reason the C arm states: `ToNumber` of an object is `ToPrimitive` first,
+     * which runs `valueOf` and `toString` off a prototype chain -- `Number([])`
+     * is 0 and `Number([5])` is 5, and neither is producible here. So the
+     * lowering emits this only where the checker's type admits no object. The
+     * arm exists because a tag switch with a hole is worse than one with an
+     * answer that cannot be reached, and `NaN` is what the specification gives
+     * for a plain `{}` anyway.
+     */
+    public static double valueToNumber(NtsValue value) {
+        if (value == null) {
+            throw new NtsRefusal("Number() on a value that is not there");
+        }
+        switch (value.tag) {
+            case NUMBER:
+                return value.num;
+            case BOOLEAN:
+                return value.num != 0.0 ? 1.0 : 0.0;
+            case STRING:
+                return NtsRuntime.strToNumber((String) value.ref);
+            case NULL:
+                return 0.0;
+            default:
+                return Double.NaN;
+        }
+    }
+
+    /**
      * `String(v)` on a value carrying its own tag.
      *
      * <p>Exact for every tag the table defines except `FUNCTION`, which aborts

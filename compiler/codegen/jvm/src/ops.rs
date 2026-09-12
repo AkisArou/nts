@@ -326,6 +326,12 @@ fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static st
         "nts_value_to_string" => {
             (types::VALUE, "valueToString", "(Lnts/rt/NtsValue;)Ljava/lang/String;")
         }
+        // `Number(v)` on an erased union of primitives, and `+v` since unary
+        // plus became the same operation. The helper has existed for as long as
+        // `Number` has; no example on this lane reached it until
+        // `a-unary-plus-is-a-conversion` asked, so the missing row was an old
+        // question newly asked rather than a regression.
+        "nts_value_to_number" => (types::VALUE, "valueToNumber", "(Lnts/rt/NtsValue;)D"),
         "nts_is_buffer" => (types::VALUE, "isBuffer", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_data_view" => (types::VALUE, "isDataView", "(Lnts/rt/NtsValue;)Z"),
         // `ArrayBuffer.isView(x)`, which is a typed array *or* a `DataView`.

@@ -520,6 +520,35 @@ public final class RuntimeRegression {
         }
     }
 
+    /**
+     * `Number(v)` over every tag, against node's answers.
+     *
+     * <p>The helper is five arms and four of them are one line, which is
+     * exactly the shape that gets written from the specification in someone's
+     * head. Every expectation below was printed by `node` and copied:
+     * `Number("0x10")` is 16 and `Number("")` is 0 are the two that a reading
+     * of the rules gets wrong most often.
+     */
+    private static void testValueToNumber() {
+        number(NtsValue.valueToNumber(NtsValue.ofNumber(1.5)), 1.5, "number passes through");
+        number(NtsValue.valueToNumber(NtsValue.ofNumber(-0.0)), -0.0, "negative zero is preserved");
+        check(Double.isNaN(NtsValue.valueToNumber(NtsValue.ofNumber(Double.NaN))), "NaN passes through");
+        number(NtsValue.valueToNumber(NtsValue.ofBoolean(true)), 1.0, "true");
+        number(NtsValue.valueToNumber(NtsValue.ofBoolean(false)), 0.0, "false");
+        number(NtsValue.valueToNumber(NtsValue.NULL_VALUE), 0.0, "null");
+        check(Double.isNaN(NtsValue.valueToNumber(NtsValue.UNDEFINED_VALUE)), "undefined is NaN");
+        number(NtsValue.valueToNumber(NtsValue.ofString("17")), 17.0, "decimal string");
+        number(NtsValue.valueToNumber(NtsValue.ofString("")), 0.0, "empty string is zero");
+        number(NtsValue.valueToNumber(NtsValue.ofString("  12  ")), 12.0, "surrounding space");
+        number(NtsValue.valueToNumber(NtsValue.ofString("0x10")), 16.0, "hexadecimal");
+        number(NtsValue.valueToNumber(NtsValue.ofString("1e3")), 1000.0, "exponent");
+        check(Double.isNaN(NtsValue.valueToNumber(NtsValue.ofString("abc"))), "unparsable string is NaN");
+        // Unreachable by construction -- the lowering emits the call only where
+        // the checker's type admits no object -- and pinned so the hole stays
+        // an answer rather than becoming one.
+        check(Double.isNaN(NtsValue.valueToNumber(NtsValue.ofObject(new Plain(1)))), "an object is NaN");
+    }
+
     public static void main(String[] args) throws Exception {
         testBigInt(); System.out.println("bigint randomized tests passed");
         testMap(); System.out.println("map randomized and cursor tests passed");
@@ -528,6 +557,7 @@ public final class RuntimeRegression {
         testPromises(); System.out.println("promise and queue tests passed");
         testTimers(); System.out.println("timer heap tests passed");
         testValueToString(); System.out.println("String() of every tag passed");
+        testValueToNumber(); System.out.println("Number() of every tag passed");
         testReferenceKeyedTags(); System.out.println("reference-keyed map tags passed");
         System.out.println("PASS " + checks + " assertions");
     }
