@@ -5002,7 +5002,7 @@ C lane does neither either -- `emit-c` puts `nts_array_new` inside `convolve`
 for the first -- so they are middle-end opportunities that all three backends
 would get, and they are reported upstream rather than built here. Reach is
 modest and measured rather than assumed: the syntactic shape is in 5 of 61 bench
-case files, 19 of 228 example files and 4 of 312 `runtime/node` files, and two of the five
+case files (four after `const copy = [...xs]` is excluded as a spread rather than a literal), 19 of 228 example files and 4 of 312 `runtime/node` files, and two of the remaining
 bench cases mutate the array and so are ineligible.
 
 ### What the sweep could not measure, and why it was the instrument
@@ -6235,3 +6235,36 @@ supporting detail was wrong, which is the more dangerous arrangement.
 $declared` does not split a variable in zsh -- the loop ran once with the whole
 list as a single string. Third time today, with a memory note about it open.
 The tell was the same as always: a uniform result across every item.
+
+### One bench case is binary to `grep`, and it broke an audit of this file's own numbers
+
+Auditing the const-array-literal census -- applying MainClaude's asymmetry to
+the rest of this file's counts rather than only the one it had already caught --
+two instruments over the same corpus disagreed, 5 files against 4.
+
+`benches/cases/json-serialize/case.ts` contains **99 NUL bytes** and `file`
+reports it as `data`. They are deliberate: the JSON serializer's fixture holds
+literal control characters -- `control \0 \a \037 and tab` -- because escaping
+them is what it tests.
+
+The consequence is general and affects any census over `benches/cases`:
+
+    grep -l   counts it                       (a match is a match)
+    grep      prints "binary file matches"    to *stderr*, not the line
+    grep -a   prints the lines
+
+**And `2>/dev/null` hides the sentence that explains the difference.** Every
+census in this file's history redirects stderr to keep `find` quiet, so the one
+message that would have named the discrepancy was suppressed by a habit adopted
+for an unrelated reason. The two counts differed by one and nothing said why.
+
+**The count itself, corrected.** Of the five bench-case files matching
+`^\s+const [A-Za-z_]+ = \[`, one is `const copy = [...xs]` -- a spread of an
+existing array, not a literal of constants, and so not the shape the hoisting
+claim is about. **Four, not five**, and the claim already discounted two others
+as mutated, so the candidate set was three and is now three by a different
+route. The conclusion did not move; a supporting number did, which is the same
+arrangement as `Bounce` and the accessor count an hour earlier.
+
+Use `grep -a` for any count over `benches/cases`, or the number is short by one
+and says nothing about which.
