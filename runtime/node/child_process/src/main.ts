@@ -1262,7 +1262,16 @@ export function execFile(
 
   const classify = (value: unknown, position: string, allowArray: boolean): string => {
     if (value === undefined || value === null) return "none";
-    if (allowArray && Array.isArray(value)) return "array";
+    if (Array.isArray(value)) {
+      if (allowArray) return "array";
+      // `typeof [] === "object"`, so without this an array in the options
+      // position was classified as options and rejected only by whatever later
+      // check happened to look at it. That was an accident, and it stopped
+      // working the moment the options were copied onto a null prototype before
+      // that check: the copy of an array is a plain object and passes.
+      // test-child-process-spawn-typeerror asserts `execFile(cmd, [], [])` throws.
+      throw new ERR_INVALID_ARG_TYPE(position, ["Object", "Function"], value);
+    }
     if (typeof value === "function") return "callback";
     if (typeof value === "object") return "options";
     throw new ERR_INVALID_ARG_TYPE(position, allowArray ? ["Array", "Object", "Function"] : ["Object", "Function"], value);

@@ -8,7 +8,10 @@ What is not deliberate is a failure nobody wrote down, so they are all below.
 
 ## Where it is
 
-    119 file(s): 71 passed, 39 failed, 9 skipped, 0 not applicable
+    119 file(s): 81 passed, 29 failed, 9 skipped, 0 not applicable
+
+Measured with `run.mjs --module child_process`, not added up: the same batch read 80
+on its first full run, because ten individual passes came with one regression.
 
 114 by `test-pattern`, 4 claimed in `extra-tests`, 1 local fixture. Up from 42
 passed of 114 when this session started, and from 1 passed when the branch was
@@ -26,33 +29,33 @@ there. Same lesson as the one below -- the tree is part of the number.
                             passing, advanced serialization, `process.send` in the
                             child, and disconnect. test-cluster-net-send.js is
                             claimed here and belongs to it.
-    14  the rest            enumerated below, because "assorted" is how a list stops
-                            being read
+     4  two named features  no longer "assorted" -- both are below, and neither is
+                            a small fix
 
-### The fourteen, each with what it actually wants
+### A stream as a stdio entry -- three files
 
-    constructor.js                     the `ChildProcess.spawn(options)` method, which
-                                       node's own bootstrap uses and we do not expose
-    stdio.js                           ERR_IPC_ONE_PIPE: two `'ipc'` entries in stdio
-                                       must throw, and `stdioMode` ignores `'ipc'`
-                                       entirely -- the error class is not in
-                                       internal/errors.ts either
-    stdio-merge-stdouts-into-cat.js    passing one child's stdout as another's stdio
-    stdio-reuse-readable-stdio.js      the same, reusing a readable
-    pipe-dataflow.js                   `readStart` on an undefined handle
-    spawn-shell.js                     a `length` read on undefined
-    spawnsync-input.js                 a Buffer half the expected length
-    env.js                             an env assertion; unexamined
-    exec-stdout-stderr-data-string.js  unexamined
-    execfile.js                        unexamined
-    prototype-tampering.mjs            unexamined
-    spawn-error.js                     unexamined
-    stdin.js                           unexamined
-    uid-gid.js                         a missing exception; unexamined
+    pipe-dataflow.js                   stdio: [cat.stdout, 'pipe', 'pipe']
+    stdio-merge-stdouts-into-cat.js    stdio: ['pipe', p3.stdin, 'inherit']
+    stdio-reuse-readable-stdio.js      stdio: [p1.stdout, 'pipe', 'inherit']
 
-"Unexamined" means exactly that: the message was read and the cause was not chased.
-It is not a claim that the cause is small. Seven of the fourteen have a named want
-because they were looked at; the other seven do not.
+The binding carries stdio as a **packed 6-bit mode** -- two bits per slot for
+`'pipe'`, `'inherit'`, `'ignore'` -- so a descriptor cannot cross it at all. Passing
+one child's stream as another's stdio needs the mode replaced by a per-slot
+descriptor list and `UV_INHERIT_FD` in the C, which is a binding change rather than a
+module one.
+
+`pipe-dataflow` fails on `cat.stdout._handle` for the same reason and not a missing
+property: it asserts the **parent never reads** a stream it handed to another child,
+which is a thing this shape cannot express either way.
+
+### `ChildProcess.prototype.spawn(options)` -- one file
+
+    constructor.js
+
+node's own bootstrap calls it on a bare `new ChildProcess()`, and
+test-child-process-constructor asserts its argument validation. Exposing it means
+publishing the internal spawn surface, which is a decision rather than an omission:
+the class currently cannot exist without a handle.
 
 ## The three I called unfixable, which pass here
 
