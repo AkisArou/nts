@@ -6342,3 +6342,42 @@ for exactly this, arriving in this lane's own diagnostics.
 The closure arm is the interesting one: `relate_closures_to_signatures` exists
 to give a closure the base its signature layout needs, and four sites say it did
 not. That is a `hir` question and it is handed over rather than guessed at.
+
+### The four closure refusals are an async arrow that captures, and it needed two features at once
+
+MainClaude fixed `lower_closure` never calling `begin_async` and expected it to
+clear the four `Closure<N> -> Fn<...>` refusals this lane reported. Measured
+after the fix: **`fs` 89, `stream` 42, `timers` 14 -- identical**, and all four
+closure refusals still there.
+
+Checked before reporting that, because the reverse had already happened once
+today: the fix *is* in the binary -- `lower.rs` at 00:56:15, the build at
+00:59:06 -- and a bare `async (a) => a + 1` now compiles, five classes, no
+refusal. **The fix works and these four are something else.**
+
+Two of the four are in `tap`, which is the function MainClaude had been probing.
+Reduced from it rather than reasoned about:
+
+    async arrow, returned into a declared signature, no capture     0 refusals
+    sync arrow,  returned into a declared signature, captures       0 refusals
+    async arrow, returned into a declared signature, **captures**   1 refusal
+
+        storing a `Closure1` where a `Fn2__3` is declared
+
+**Either feature alone compiles; together they refuse.** The minimal shape is an
+`async` arrow that captures a value and is returned where a signature type is
+declared -- twelve lines, no optional parameter, no inline signature, no type
+alias.
+
+**And that is why three careful probes missed it.** MainClaude varied one
+feature of `tap` at a time from a working baseline -- named type alias, inline
+signature, optional parameter -- and all three passed, because the answer needs
+*two* features simultaneously and no single-variable walk from a working case
+can reach it. My own first reduction repeated the mistake in miniature: I
+suspected the optional parameter, built the arm with and without it, and **both
+refused**, which would have blamed it had I not built the control.
+
+The working method was the opposite direction: **reduce from the failing case,
+do not build up from a working one.** A reduction that still fails has the cause
+in it by construction; an augmentation that passes has proved nothing about the
+feature it added.
