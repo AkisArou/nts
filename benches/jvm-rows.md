@@ -6974,3 +6974,122 @@ version is an exception table plus one frame encoding, against a row worth
 1.80x -> ~1.01x. That is the first thing this lane has met that asks for the
 avoided machinery **with a number attached**, which is the condition the plan
 set for reconsidering it.
+
+## A handler body counts against the budget, so the obvious shape is worse than the guard
+
+The emitter can write exception tables now (`5b865f62`), and the first thing to
+do with it was price the shape rather than build it. Four arms of the same
+transcription, dexed `--release`:
+
+    arm                                   popDiskFrom   pushDisk
+    guarded    two `bounds` calls               27 u       30 u
+    bare       no check at all                  17 u       20 u
+    caught     one handler per access           29 u       32 u
+    shared     one handler per method           23 u       26 u
+
+**`caught` is bigger than `guarded`.** A try/catch costs nothing on the
+straight-line path, which is the whole reason to want it -- but the *handler
+body* is code in the method, and ART's inliner budget is on the method's total
+size. Two accesses means two handler blocks (`move-exception`, `invoke-static`,
+`move-result-object`, `throw`), and that is more than the ten units the two
+guards cost. The shape that reads as free is a net loss.
+
+**`shared` saves four units per method, not ten.** One handler body, many
+exception-table ranges pointing at it -- which javac cannot express and this
+backend can, since the table is a list of ranges and nothing requires their
+targets to differ. That is the shape to emit, and it is worth 27 -> 23 rather
+than 27 -> 17.
+
+Applied to the real method: 51 units, 34 after outlining the cold block, and
+**30** after replacing the two guards with one shared handler. Not 24. The
+earlier arithmetic in this file subtracted the guards and forgot that something
+has to catch.
+
+### And the threshold is higher than this file has been saying
+
+Recorded as "between 25 and 34" from the `control`/`outlined2` arms. The
+`oatdump` of the guarded transcription puts it **above 30**, and the proof is
+structural rather than a count: that dump contains an inline at **depth 1**, and
+depth 1 is by definition a frame inlined into an already-inlined frame. So
+`popDiskFrom` at 27 units and `pushDisk` at 30 were themselves inlined, with
+`bounds` inlined inside them.
+
+Which is the good news the size arithmetic took away: **30 units is under the
+budget**, so the shared-handler shape keeps the inlining term even though it
+saves less than hoped. What decides it now is whether a try/catch costs anything
+at *runtime* when nothing throws -- measuring, and the answer goes below.
+
+## "Zero cost on the straight-line path" was true twice and irrelevant twice
+
+The try/catch shape is **dead**, and the arm that killed it took twenty minutes.
+AOT minima over two sittings each, same transcription, `ours` constant at
+40,874-41,540 across all six runs as the control:
+
+    arm       AOT min      against the next
+    guarded   37849.5
+    shared    30260.8      guarded / shared = 1.251
+    bare      22988.7      shared  / bare   = 1.316
+                           guarded / bare   = 1.646   (1.251 x 1.316 = 1.646)
+
+**A try/catch adds no instruction and costs 1.32x.** The shared arm executes
+exactly the array access the bare arm does -- the handler never runs, nothing is
+thrown -- and it is a third slower. Being inside a try region costs optimisation
+freedom: the compiler has to keep the handler's view of the locals consistent,
+and that is not free even when the handler is unreachable in practice.
+
+So the phrase I built the design on was wrong in two different ways, and I said
+it twice:
+
+- against **ART's inliner budget**, because the budget measures the whole
+  method and a handler body is part of it -- which is why `caught` came out
+  bigger than `guarded`;
+- against **the clock**, because runtime cost is not proportional to code units
+  at all, which is the one I had no excuse for after the first.
+
+### What the fix is worth, and it does not clear the row
+
+    towers today                                          1.80x
+    with the shared handler, and the inlining it regains   ~1.34x
+    with no check at all                                   ~1.02x
+
+`40874.1 / (1.251 x 1.080) = 30257` against a reference near 22645. A real move
+and nowhere near the bar, against exception tables in every method with a
+checked subscript. **Priced and refused**, which is the third fix on this row to
+be priced and refused and the first one I had already built half of.
+
+The emitter half stays: `5b865f62` is verified, and step 7 of the plan needs
+exception tables for real `throw` crossing a call whatever happens here. It was
+not wasted, it was early.
+
+### And the arm nobody was going to run is the one at the bar
+
+`bare` is **22988.7 against the reference's ~22645** -- 1.015x, inside the
+marginal band. Removing the check entirely is the only thing measured today that
+puts `awfy-towers` at the bar, and MainClaude's contract answer permits it:
+`checked: true` promises the program terminates, and ART's own mandatory check
+terminates it.
+
+What forbids it is not the contract and not ART. It is `stopped_with` reading
+any stack frame as a defect, and the property that rule protects -- an AIOOBE
+from a `checked: false` site is a compiler bug, loudly. **So the whole row now
+turns on a harness question rather than a codegen one**, which is not where it
+looked like it was this morning, and the three options have prices:
+
+- **Accept AIOOBE as declined.** One line, clears the row, and silences the
+  proof-violation alarm everywhere. Refused: that alarm is this lane's one
+  bug-finding advantage over C and LLVM.
+- **Two builds** -- guards under the gate, none under the bench. Refused
+  outright: it measures a program the gate does not check, which is the mistake
+  this repository has a memory about.
+- **Tell the harness which sites are checked.** The compiler knows every
+  `(class, method, offset)` that is a `checked: true` subscript and already
+  writes a `.ntsdbg` sidecar keyed on exactly that. An AIOOBE whose top frame is
+  a listed site is a refusal; anywhere else it is a defect. Zero runtime cost,
+  real machinery, and it is the only one of the three that keeps both the
+  number and the alarm.
+
+The third is the one worth pricing next. Not started, and not started
+deliberately: two projections died today between "this obviously works" and the
+device, and the sidecar's top-frame matching has at least one unexamined
+assumption in it -- that the throwing frame is the top frame, which inlining on
+ART may well make false.
