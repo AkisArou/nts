@@ -158,7 +158,19 @@ for case in "$@"; do
   # shellcheck disable=SC2086
   javac -nowarn -d "$out/classes" $sources 2> "$out/javac.log" \
     || { printf "%-24s %14s %14s\n" "$case" "javac" "javac"; continue; }
-  "$tools/d8" --min-api 29 --output "$out/dex" $(find "$out/classes" -name '*.class') \
+  # `--release`, matching `bytes-on-device.sh`, and **not because it changes
+  # this number**. Measured 2026-09-12 on four cases: `objects` 0/0,
+  # `array-methods` 144/144, `symbol-keyed-map` 368/304, `pipeline`
+  # 533520/533520 -- identical either way, which is what one would expect since
+  # a `nop` does not allocate. So the bar-3 survey taken before this flag
+  # changed stands and needs no re-run.
+  #
+  # It is here for symmetry. This script and its sibling are the two halves of
+  # one comparison, and a flag set on one half and not the other is a
+  # difference between ours and the reference that no column would show --
+  # which is the same shape as the missing fourth cell this script was just
+  # given, and as `d8`'s debug default itself.
+  "$tools/d8" ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/dex" $(find "$out/classes" -name '*.class') \
     > /dev/null 2>&1 || { printf "%-24s %14s %14s\n" "$case" "d8" "d8"; continue; }
   adb push "$out/dex/classes.dex" "/data/local/tmp/rb-$case.dex" > /dev/null 2>&1
   # `getGlobalAllocSize` is 32-bit and wraps, and there is no HotSpot figure to

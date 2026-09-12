@@ -5319,3 +5319,44 @@ would have been a change to `body.rs`, a new class-file shape, tests for it,
 and a row that did not move -- and the row not moving would then have needed
 explaining, on top of the six mechanisms already in the ledger that did not
 move it either.
+
+### `--release` is now the default, and what it does and does not move
+
+Landed in `times-on-device.sh`, `bytes-on-device.sh` and
+`ref-bytes-on-device.sh`, with `NTS_D8_DEBUG=1` to go back for a run being
+compared against an older figure.
+
+**It does not move allocation at all.** Measured on four cases before changing
+anything, because the bar-3 survey two sections up would have needed re-running
+if it did:
+
+    case                release      debug
+    objects                 0/0        0/0
+    array-methods       144/144    144/144
+    symbol-keyed-map    368/304    368/304
+    pipeline        533520/533520  533520/533520
+
+Identical, which is what a `nop` not allocating predicts. So that survey stands.
+
+**It moves the timing by about 0.07 and no more.** `awfy-towers`, two runs each:
+
+    dexing      JIT ratio      AOT ratio
+    debug       1.61  1.64     1.91  1.84
+    release     1.58  1.54     1.81  1.81
+
+A 27.5% code-size reduction buying 4% of the ratio reads as a disappointment
+and is the opposite: it is the threshold story being consistent with itself.
+Size pays where it crosses ART's inliner budget and nowhere else. `moveDisks`
+crosses -- 49 code units to 21, level with the reference -- and that is where
+the 0.07 comes from. `popDiskFrom` goes 67 to 51 and stays over, and
+contributes nothing.
+
+**Every ART timing in this file taken before 2026-09-12 is debug-dexed** and is
+pessimistic by roughly that much. Allocation figures are unaffected and need no
+asterisk.
+
+`ref-bytes-on-device.sh` got the flag for symmetry rather than for its number:
+it and `bytes-on-device.sh` are the two halves of one comparison, and a flag
+set on one half is a difference between ours and the reference that no column
+would show. Which is the third time today that shape has cost something -- the
+missing fourth cell, `d8`'s debug default, and now nearly this.

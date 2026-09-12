@@ -210,8 +210,23 @@ JAVA
     printf "%-24s %s\n" "$case" "javac declined the generated driver"
     continue
   fi
+  # **`--release` by default: a shipped application is dexed that way.** `d8`
+  # defaults to *debug*, which keeps local-variable scopes alive and pads with
+  # `nop // spacer` -- and it is not symmetric, because this backend emits
+  # `LineNumberTable` and `LocalVariableTable` per instruction for the
+  # provenance chain and `javac` output carries far less. Measured 2026-09-12:
+  # debug inflates `nts/gen/*` by **27.5%** and the hand-written side by 2.8%.
+  #
+  # Worth 0.07 on `awfy-towers`'s ratio and no more, which is consistent rather
+  # than disappointing: size pays only where it crosses ART's inliner budget.
+  # `moveDisks` crosses (49 code units to 21, level with the reference) and
+  # `popDiskFrom` does not (67 to 51, still over).
+  #
+  # `NTS_D8_DEBUG=1` goes back, for a run compared against a figure taken
+  # before this changed. **Every ART number in `benches/jvm-rows.md` older than
+  # 2026-09-12 is debug-dexed** and is pessimistic by about that much.
   # shellcheck disable=SC2046
-  if ! "$tools/d8" --min-api 29 --output "$out/nts/dex" \
+  if ! "$tools/d8" ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/nts/dex" \
        $(find "$out/nts/classes" -name '*.class') \
        "$out/nts/classes/nts-runtime.jar" > "$out/nts/d8.log" 2>&1; then
     printf "%-24s %s\n" "$case" "d8 refused it"
@@ -246,7 +261,7 @@ JAVA
     continue
   fi
   # shellcheck disable=SC2046
-  if ! "$tools/d8" --min-api 29 --output "$out/ref/dex" \
+  if ! "$tools/d8" ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/ref/dex" \
        $(find "$refcp" -name '*.class') > "$out/ref/d8.log" 2>&1; then
     printf "%-24s %s\n" "$case" "d8 refused ref.java"
     continue

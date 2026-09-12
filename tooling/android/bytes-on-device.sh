@@ -220,7 +220,22 @@ JAVA
       fi
       ;;
   esac
-  "$tools/d8" --min-api 29 --output "$out/dex" $(find "$out/classes" -name '*.class') \
+  # **`--release` by default: a shipped application is dexed that way.** `d8`
+  # defaults to *debug*, which keeps local-variable scopes alive and pads with
+  # `nop // spacer` -- and it is not symmetric, because this backend emits
+  # `LineNumberTable` and `LocalVariableTable` per instruction for the provenance
+  # chain and `javac` output carries far less. Measured 2026-09-12: debug
+  # inflates `nts/gen/*` by **27.5%** and the hand-written side by **2.8%**.
+  #
+  # Worth 0.07 on `awfy-towers`'s ratio and no more, which is consistent rather
+  # than disappointing: size pays only where it crosses ART's inliner budget.
+  # `moveDisks` crosses (49 code units to 21, level with the reference) and
+  # `popDiskFrom` does not (67 to 51, still over).
+  #
+  # `NTS_D8_DEBUG=1` goes back, for a run being compared against a figure taken
+  # before this changed. Every ART number in `benches/jvm-rows.md` older than
+  # 2026-09-12 is a debug-dexed one and is pessimistic by about that much.
+  "$tools/d8" ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/dex" $(find "$out/classes" -name '*.class') \
     "$out/classes/nts-runtime.jar" > /dev/null 2>&1 \
     || { printf "%-24s %12s %12s\n" "$case" "$hotspot" "d8"; continue; }
   adb push "$out/dex/classes.dex" "/data/local/tmp/ab-$case.dex" > /dev/null 2>&1
