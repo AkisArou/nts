@@ -46,7 +46,7 @@ pub fn simplify(func: &mut Func) -> usize {
             replacement.insert(id, target);
         }
     }
-    let folded = fold_conversions(func);
+    let folded = fold_conversions(func) + forward_stores(func);
     if replacement.is_empty() {
         return folded;
     }
@@ -287,6 +287,162 @@ pub fn substitute_terminator(terminator: &mut super::Terminator, of: impl Fn(Val
             }
         }
     }
+}
+
+/// A field read whose answer was just written, replaced by what was written.
+///
+/// ```text
+///   field.set %1.3 = %7
+///   %9 = field.get %1.3     ->   %9 is %7
+/// ```
+///
+/// # Why this is worth a pass when clang would do it
+///
+/// Because two of the three backends are not clang, and the one that is does
+/// not see this shape. The JVM lane found it in `benches/common/awfy-som.ts`,
+/// which is the same source as `som/Random.java` and compiles to more dex:
+///
+/// ```text
+///   ours  15 units                    reference  13 units
+///     iput v0, Random.seed:I            iput v0, Random.seed:I
+///     iget v2, v2, Random.seed:I        return v0
+///     return v2
+/// ```
+///
+/// `this.seed = …; return this.seed;` goes back to memory for a value computed
+/// two instructions earlier, where javac kept it in a register. Two units, and
+/// **it is not a benchmark row** -- that lane counted the pattern across the
+/// whole program and found two sites. It is here because a load that has to
+/// exist is a value liveness tracks, escape analysis follows and reference
+/// counting places, which is this module's own argument for existing.
+///
+/// # What invalidates a record, and why the list is a whitelist
+///
+/// Two SSA values can name one object, so a store to field *n* of anything
+/// drops every record for field *n* -- the pair is keyed by value and the
+/// invalidation is keyed by field, deliberately, because it is the aliasing
+/// that is unknown rather than the field.
+///
+/// Everything that is not provably incapable of writing a field clears the
+/// whole map: a call can write anything, and so can whatever a `Release` frees.
+/// Stated as a whitelist so that a variant added later invalidates by default
+/// rather than being silently assumed pure -- the failure of the other
+/// direction is a wrong answer that runs.
+///
+/// Within one block only. A dominating store in another block is the same fact
+/// and needs the dominator tree to establish that nothing between them wrote;
+/// the single-block form is what the two known sites are.
+///
+/// Runs **before** `rc::insert`, which is what makes it safe under reference
+/// counting: the counts are placed on the program this leaves behind rather
+/// than on the loads it removed.
+fn forward_stores(func: &mut Func) -> usize {
+    let mut replacement: FxHashMap<ValueId, ValueId> = FxHashMap::default();
+    for block in &func.blocks {
+        let mut stored: FxHashMap<(ValueId, u32), ValueId> = FxHashMap::default();
+        for op in &block.ops {
+            match &func.values[op.0 as usize].kind {
+                OpKind::FieldSet {
+                    object,
+                    field,
+                    value,
+                } => {
+                    let (object, field, value) = (*object, *field, *value);
+                    stored.retain(|(_, at), _| *at != field);
+                    stored.insert((object, field), value);
+                }
+                OpKind::FieldGet { object, field } => {
+                    let Some(value) = stored.get(&(*object, *field)).copied() else {
+                        continue;
+                    };
+                    // **The store and the load must agree on machine type**, and
+                    // often they do not. This pass runs after specialization,
+                    // which narrows a *load* to the field's specialized type
+                    // while the stored value can still be the `f64` a literal
+                    // was lowered as: `field.set %1.0 = <f64 5>` followed by
+                    // `%11 = field.get %1.0 : i32` is the common shape, and it
+                    // is declined. Forwarding across it would hand the reader a
+                    // double where an integer was wanted.
+                    //
+                    // Measured rather than assumed -- it is why
+                    // `examples/a-field-read-after-its-own-write` has arms that
+                    // keep their load for a reason other than aliasing, and
+                    // that example says which. Inserting the conversion instead
+                    // is a larger change with a smaller motivating case.
+                    // **Scalars only, and a managed reference is the case this
+                    // exists to stay out of.** A load of a reference is not
+                    // merely a load: `tooling/memory/cases/subclass-field` says
+                    // in its own comment that the read of `b.left` *takes* --
+                    // the slot is overwritten before anything else reaches it,
+                    // so the reference moves out rather than being copied and
+                    // the overwriting store owes nothing.
+                    //
+                    // Forwarding it is **correct and costs allocations**. `got`
+                    // becomes a second live reference at the moment of the
+                    // overwrite, so the store now owes a release and the object
+                    // can no longer live in the frame: that case went from 0
+                    // allocations to 17, having agreed with node throughout.
+                    // The answer never moved, which is why the `memory` step is
+                    // what caught it and no differential could have.
+                    //
+                    // The motivating site is `seed: number`. Ownership belongs
+                    // to `own.rs` and `rc`, and a redundant-load rule has no
+                    // business reasoning about it.
+                    if !matches!(func.values[op.0 as usize].ty, HirType::Managed(_))
+                        && func.values[op.0 as usize].ty == func.values[value.0 as usize].ty
+                    {
+                        let target = replacement.get(&value).copied().unwrap_or(value);
+                        replacement.insert(*op, target);
+                    }
+                }
+                kind if leaves_fields_alone(kind) => {}
+                _ => stored.clear(),
+            }
+        }
+    }
+    if replacement.is_empty() {
+        return 0;
+    }
+    let of = |value: ValueId| replacement.get(&value).copied().unwrap_or(value);
+    for index in 0..func.values.len() {
+        let mut kind = func.values[index].kind.clone();
+        substitute(&mut kind, of);
+        func.values[index].kind = kind;
+    }
+    for block in &mut func.blocks {
+        substitute_terminator(&mut block.terminator, of);
+    }
+    replacement.len()
+}
+
+/// Whether an operation is incapable of writing any object field.
+///
+/// A whitelist, and the default is "it can". See [`forward_stores`].
+const fn leaves_fields_alone(kind: &OpKind) -> bool {
+    matches!(
+        kind,
+        OpKind::Param(_)
+            | OpKind::BlockParam(_)
+            | OpKind::ConstInt(_)
+            | OpKind::ConstFloat(_)
+            | OpKind::ConstBool(_)
+            | OpKind::ConstString(_)
+            | OpKind::ConstNull
+            | OpKind::ConstUndefined
+            | OpKind::Binary { .. }
+            | OpKind::Unary { .. }
+            | OpKind::Convert(_)
+            | OpKind::TagOf { .. }
+            | OpKind::InstanceOf { .. }
+            | OpKind::Length(_)
+            | OpKind::Erase { .. }
+            | OpKind::Unerase { .. }
+            | OpKind::FieldGet { .. }
+            | OpKind::SharedFieldGet { .. }
+            | OpKind::ArrayGet { .. }
+            | OpKind::StringUnitAt { .. }
+            | OpKind::GlobalGet(_)
+    )
 }
 
 #[cfg(test)]
