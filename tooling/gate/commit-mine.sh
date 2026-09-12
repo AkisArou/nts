@@ -33,6 +33,28 @@
 # mechanism cannot see the difference between your line and theirs, because
 # they are in one file and git commits files.
 #
+# **And by staging time it can already be too late, because the loss happens
+# at the edit.** A read-patch-write through a temp file and `os.replace` is
+# atomic against a *reader* -- which is why this repository adopted it -- and
+# blind to a concurrent *writer*. Later the same day: two sessions edited
+# `tooling/bench/src/main.rs` minutes apart, the second read before the first
+# had finished, and the write landed over it. `git diff` then showed one
+# author's change against HEAD and looked clean, because the other author's
+# work was no longer in the tree to differ.
+#
+# **The overwrite was partial, which is worse than total.** What survived was
+# the half of their edit two hundred lines from anything the second author
+# touched; the half inside the shared function was gone. The file then carried
+# two checks for one thing, one of them unreachable -- and its author ran the
+# failing case, saw a correct error, and concluded theirs was live. It was the
+# other one. A total loss announces itself the first time somebody tests; a
+# partial one hands you working behaviour with a dead duplicate behind it.
+#
+# Neither a diff nor a run separates those. What does: **say you are about to
+# edit a shared file before you edit it** -- which is what the floor lines above
+# have always had and why none has ever been lost -- and when a change of yours
+# appears to work, check the file for it being there twice.
+#
 # Usage: tooling/gate/commit-mine.sh -F <message-file> -- <path>...
 #        tooling/gate/commit-mine.sh -m <message>      -- <path>...
 set -eu
