@@ -5360,3 +5360,77 @@ it and `bytes-on-device.sh` are the two halves of one comparison, and a flag
 set on one half is a difference between ours and the reference that no column
 would show. Which is the third time today that shape has cost something -- the
 missing fourth cell, `d8`'s debug default, and now nearly this.
+
+## Bar 1 on ART, re-measured: four of eight, twice
+
+The recorded table was **2 of 8 at or under 1.00x on ART**, taken with binary
+`4254f24c` and debug dexing. Re-measured with binary `4e896f92` frozen by md5
+across both sittings and `--release` dexing:
+
+| case | ART sitting 1 | ART sitting 2 | move | HotSpot 1 / 2 |
+| --- | --- | --- | --- | --- |
+| `awfy-list` | **0.74x** | **0.76x** | +0.02 | 0.94x / 0.95x |
+| `awfy-bounce` | **0.87x** | **0.86x** | -0.01 | 1.15x / 1.01x |
+| `awfy-mandelbrot` | **0.89x** | **0.89x** | 0.00 | 0.83x / 0.84x |
+| `awfy-permute` | **0.97x** | **1.00x** | +0.03 | 0.72x / 0.74x |
+| `awfy-sieve` | 1.02x | 1.06x | +0.04 | 1.06x / 1.27x |
+| `awfy-nbody` | 1.19x | 1.19x | 0.00 | 1.00x / 1.25x |
+| `awfy-queens` | 1.16x | 1.20x | +0.04 | 1.24x / 1.20x |
+| `awfy-towers` | 1.57x | 1.60x | +0.03 | 1.00x / 1.02x |
+
+**Four of eight, both times, and every ART row reproduces within 0.04.**
+
+**And the HotSpot column is the noisier half here**, which inverts what this file
+found before: `awfy-nbody` moves 0.25 between sittings, `awfy-sieve` 0.21 and
+`awfy-bounce` 0.14, while no ART row moves more than 0.04. Worth saying because
+the earlier note -- "it is the ART half that moves" -- was about a wider set of
+rows and is not a licence to trust a HotSpot figure from one sitting.
+
+### Two things changed at once, so they were separated rather than attributed
+
+The old table is a different binary *and* a different dexing. A third sitting
+with the same frozen binary and `NTS_D8_DEBUG=` isolates the flag:
+
+    case              rel s1  rel s2     dbg    the flag
+    awfy-list           0.74    0.76    0.75        ~0
+    awfy-permute        0.97    1.00    0.97        ~0
+    awfy-towers         1.57    1.60    1.57        ~0
+    awfy-sieve          1.06    1.02    1.05        ~0
+    awfy-bounce         0.87    0.86    0.89      0.02
+    awfy-mandelbrot     0.89    0.89    0.86     -0.03
+    awfy-queens         1.16    1.20    1.12     -0.06
+    awfy-nbody          1.19    1.19    2.54      1.35
+
+**Seven rows of eight: the flag is worth nothing.** One row: 1.35, which is
+2.3x on our absolute time -- 21.6 ms an operation against 9.3 ms.
+
+So the move from two of eight to four of eight is **the compiler and not the
+flag**: `list`, `bounce`, `mandelbrot` and `permute` are at or under 1.00x in
+*both* dexings, and the row the flag transforms stays above 1.00x either way.
+Two changes, two separate effects, and neither borrowed the other's credit.
+
+### `awfy-nbody` is not the `awfy-towers` mechanism, and the difference matters
+
+It is tempting to read 2.3x as the inliner threshold again. The method sizes say
+otherwise:
+
+    method                    debug   release
+    Body$constructor             55        29   crosses 32
+    Body$offsetMomentum          46        22   crosses 32
+    NBody$benchmark              38        30   crosses 32
+    NBodySystem$advance         313       167   over, both ways
+    NBodySystem$energy          190        94   over, both ways
+    NBodySystem$createBodies    382       294   over, both ways
+
+The three that cross the budget are **setup** -- constructing bodies and
+offsetting momentum, which run once. The hot loop is `advance` and `energy`, and
+both are far over the budget in either dexing, so neither is inlined in either
+and inlining cannot be what moved. What did change is that both halved in size.
+
+**So this row says code size costs on ART beyond the inliner's threshold**,
+which the `awfy-towers` experiment does not show and could not have. Stated as
+the reading rather than as the finding: what is measured is that halving two hot
+methods is worth 2.3x on this row, and *which* property of halving pays --
+instruction cache, register pressure, the JIT's own compile budget -- is not
+established by anything here. It is the first row in this file where size
+matters without a threshold being crossed, and it is one row.
