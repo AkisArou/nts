@@ -5947,11 +5947,24 @@ So a count is not transferable between them and neither is a row. "Bar 1 is N of
 8" needs the mode in the sentence, and a row that passes in one column is not a
 row that passes.
 
-**Three rows sit at 1.00-1.01 in AOT** -- `nbody`, `sieve`, `permute` -- which is
-inside the reproducibility of the measurement and not adjudicated here. Counting
-them either way would be picking a side of a coin the instrument cannot see.
-What is not marginal: `list`, `mandelbrot` and `queens` are clearly under in
-AOT, and `bounce` and `towers` are clearly over.
+**Three rows sit at 1.00-1.01 in AOT** -- `nbody`, `sieve`, `permute` -- and
+they are not adjudicated. What is not marginal: `list`, `mandelbrot` and
+`queens` are clearly under in AOT, and `bounce` and `towers` are clearly over.
+
+**This is a policy rather than a judgement made row by row**, and it is stated
+so the next person does not adjudicate them one at a time:
+
+> **The instrument's reproducibility is 0.03 and the distance from the bar is
+> 0.01. A verdict on a row inside that band is a report about rounding, not
+> about the program.**
+
+Which is the `awfy-sieve` discipline generalised -- a row the harness cannot
+place is a *result*, not a gap -- with the difference that sieve is unplaceable
+because both halves of its ratio flip by 1.24x and 1.27x, and these three are
+unplaceable because the bar happens to fall inside the noise. Same policy, two
+causes, and neither is a row to be filed under whichever column flatters it.
+
+A row leaves the band by the instrument improving, not by being counted.
 
 ### `awfy-bounce` is the one row in the AOT column with no mechanism
 
@@ -5967,6 +5980,34 @@ ruled out without the device:
 - **Not the dex.** Scoped by class, `Ball.bounce` and `Bounce.benchmark` are at
   parity on both sides: 3 move, 3 const, 3 add-int, 2 new-instance each.
 
-Which leaves it entirely in what `dex2oat` makes of equivalent input, and that
-is the next thing to point `oatdump` at. Recorded now because three dead
-hypotheses are worth more to the next attempt than an untested fourth.
+Which leaves it entirely in what `dex2oat` makes of equivalent input.
+
+**`oatdump` went there and did not find it, which is itself worth recording.**
+The regression reproduces three times -- ours 8,996 -> 11,978, 9,201 -> 11,791,
+both about +30%, while the reference moves +3% and +5%:
+
+                            ours        reference
+    JIT                  8,995.6         10,290.8
+    AOT                 11,977.7         10,620.5
+
+**It is the mirror of `awfy-list`.** There the reference collapsed 3.8x under
+`dex2oat` and we were unchanged; here we collapse 30% and the reference is
+unchanged. Same instrument, opposite sign, and having both is what stops the
+AOT column reading as a lane that only finds the favourable direction.
+
+And the two candidate methods are at parity:
+
+    method                 ours   frames    reference   frames
+    Ball.bounce           204 B      0        188 B        0
+    Bounce.benchmark      580 B      0        552 B        0
+
+Equal inlining on both sides in both methods -- which is the check that
+isolated `awfy-list` and here excludes that mechanism instead. The call
+profiles differ by one `pTestSuspend`. **Neither method explains 30%.**
+
+So `awfy-bounce` is: reproducing, mirror-signed, four hypotheses dead -- not
+accessors, not `widen`, not the dex, not the two methods' AOT code -- and
+unexplained. The remaining suspects are the ones neither dump covers, because
+a `--method-filter` shows only what it matched: the `som.Random` port, and the
+hundred allocations a round. Written down at the point it stopped rather than
+carried forward as an intuition.
