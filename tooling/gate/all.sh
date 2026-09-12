@@ -365,12 +365,26 @@ profile() {
             --out "'"$work"'/$name" --napi 2>&1)
     printf "%s" "$out" | grep -c "NTS1001" > "'"$work"'/$name.refusals"
     printf "%s" "$out" | grep -q "panicked at" && echo "$name" > "'"$work"'/$name.crashed"
+    # **The second number, which moves differently.** A refusal count cannot
+    # tell a fix that makes one *speak* from a regression that *removes* code:
+    # both raise it. Definitions emitted answer the other half -- a fix that
+    # gives a silent construct a message leaves this unchanged, and code that
+    # stops being emitted lowers it.
+    #
+    # Counted from the artefact rather than asked of the compiler, because a
+    # second `nts hir` per module would double the step. Generated C indents
+    # every control-flow keyword, so a line starting at column zero and ending
+    # in `) {` is a definition; `grep -c "^(if|for|while|switch|else|do)"` over
+    # `fs` is 0, which is the check that says so.
+    grep -cE "^[A-Za-z_].*\) \{$" "'"$work"'/$name/program.c" 2>/dev/null \
+      > "'"$work"'/$name.defined" || echo 0 > "'"$work"'/$name.defined"
     exit 0
   ' _
   refusals=$(cat "$work"/*.refusals 2>/dev/null | awk '{s+=$1} END {print s+0}')
+  defined=$(cat "$work"/*.defined 2>/dev/null | awk '{s+=$1} END {print s+0}')
   crashed=$(cat "$work"/*.crashed 2>/dev/null)
-  printf '  %s modules emitted, %s refusal(s)\n' \
-    "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)" "$refusals"
+  printf '  %s modules emitted, %s refusal(s), %s definition(s)\n' \
+    "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)" "$refusals" "$defined"
   # The ceiling. Lower it when a feature earns it -- and raise it when the
   # CORPUS earns it, which is new and is now the faster of the two.
   #
