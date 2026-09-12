@@ -376,6 +376,18 @@ profile() {
     # every control-flow keyword, so a line starting at column zero and ending
     # in `) {` is a definition; `grep -c "^(if|for|while|switch|else|do)"` over
     # `fs` is 0, which is the check that says so.
+    #
+    # **One line of `fs` disagrees between this pattern and a stricter one that
+    # also demands a return type: 1495 against 1496, and I could not explain
+    # it.** The line is `void History__constructor(...) {`, 105 bytes, pure
+    # ASCII, a real definition — and it matches this pattern in isolation while
+    # the whole-file scan does not report it. Not a locale effect (`LC_ALL=C`
+    # gives 1495 too) and not a binary-file effect.
+    #
+    # Recorded unresolved rather than left implied-understood. It is one line in
+    # 1495 and the band below has a margin of 382, so it cannot decide anything
+    # this step reports — which is a reason the band is a band, not a reason the
+    # ambiguity is fine.
     grep -cE "^[A-Za-z_].*\) \{$" "'"$work"'/$name/program.c" 2>/dev/null \
       > "'"$work"'/$name.defined" || echo 0 > "'"$work"'/$name.defined"
     exit 0
