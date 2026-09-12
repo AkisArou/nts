@@ -377,18 +377,34 @@ profile() {
     # in `) {` is a definition; `grep -c "^(if|for|while|switch|else|do)"` over
     # `fs` is 0, which is the check that says so.
     #
-    # **One line of `fs` disagrees between this pattern and a stricter one that
-    # also demands a return type: 1495 against 1496, and I could not explain
-    # it.** The line is `void History__constructor(...) {`, 105 bytes, pure
-    # ASCII, a real definition — and it matches this pattern in isolation while
-    # the whole-file scan does not report it. Not a locale effect (`LC_ALL=C`
-    # gives 1495 too) and not a binary-file effect.
+    # **`awk` and not `grep`, and the reason is the measuring tool rather than
+    # the pattern.** Counting `fs` by hand gave 1495 where a stricter pattern
+    # gave 1496, which read as a blind spot in this heuristic. It is not:
     #
-    # Recorded unresolved rather than left implied-understood. It is one line in
-    # 1495 and the band below has a margin of 382, so it cannot decide anything
-    # this step reports — which is a reason the band is a band, not a reason the
-    # ambiguity is fine.
-    grep -cE "^[A-Za-z_].*\) \{$" "'"$work"'/$name/program.c" 2>/dev/null \
+    #     shell `grep`     1495   <- a function from the Claude shell snapshot,
+    #                                resolving to ugrep 7.8.4
+    #     /usr/bin/grep    1496   GNU grep 3.12
+    #     awk              1496
+    #
+    # ugrep silently misses one line -- `double History__get_size(...) {` -- and
+    # finds it when the same file is fed from line 25000, so it is input-size
+    # dependent and looks like a chunk boundary. Both structurally identical
+    # neighbours match.
+    #
+    # A script gets GNU grep, because a zsh function does not survive into
+    # `sh -c`, so this step was never affected. But a number a floor sits on
+    # should not depend on which `grep` answered, and `awk` is the same cost and
+    # agrees with GNU grep and with `rg`.
+    #
+    # The general form, worth more than this count: **`grep -c` cannot tell you
+    # which `grep` answered**, and an interactive check and a scripted one are
+    # different programs.
+    #
+    # (No apostrophes in this block: it is inside a single-quoted `sh -c`
+    # string, so one would end the script. That cost a syntax error at the
+    # `printf` twenty lines below, which is where the shell noticed.)
+    awk '"'"'/^[A-Za-z_].*\) \{$/ {n++} END {print n+0}'"'"' \
+      "'"$work"'/$name/program.c" 2>/dev/null \
       > "'"$work"'/$name.defined" || echo 0 > "'"$work"'/$name.defined"
     exit 0
   ' _
