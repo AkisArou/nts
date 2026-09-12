@@ -466,6 +466,17 @@ profile() {
   # in this comment rather than in a memory of it.
   # 2026-09-11, 24 modules (`tty` joined): 18792 at a green gate, so 19200.
   #
+  # 2026-09-12, 25 modules (`child_process` joined): 20558, so 21000. Corpus
+  # again, and measured the same way rather than assumed. A census of all 25
+  # modules taken with the binary at `85ecff21` -- before any of the generator
+  # work in this landing -- reads **20558**, which is what the gate reads after
+  # it. Per module across that landing, no module went up and three went down
+  # by one each: zlib 1780 -> 1779, stream 1669 -> 1668, http 1916 -> 1915,
+  # which is `yield*` no longer being refused at three sites per module. The
+  # three the totals do not account for arrived from the two `runtime/node`
+  # commits that landed mid-session; the tree moved under both readings and
+  # that is the honest reading of the difference rather than a compiler change.
+  #
   # **The count went up before it went down and neither was reach moving.** The
   # `uninstantiated` diagnostic added a line for every generic a call could not
   # pin down and every exported one nothing instantiates -- `asRequest` among
@@ -505,7 +516,7 @@ profile() {
   # 18694 to 19065 with nothing new refused. The count that did not move is the
   # one the work is about: `fs` emits 1615 functions before and after, because a
   # copy replaces the plain version wherever every call to it was specialised.
-  ceiling=19200
+  ceiling=21000
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
@@ -735,6 +746,28 @@ backend_examples() {
       *"disagree between the compiled program and node"*) echo "no $n" ;;
       *"the backend declined"*)                           echo "no $n" ;;
       *"the compiled program aborted"*)                   echo "no $n" ;;
+      # **A workspace dependency that will not resolve is not a disagreement.**
+      # `examples/library` is the only example with a `node_modules`; it is
+      # hidden by `.gitignore` and its `@native-typescript/config` is a symlink
+      # into `tooling/config`. So it cannot be built in a `git worktree` -- and
+      # symlinking the ignored directory back does not rescue it, it turns
+      # TS2307 into TS6059 because the resolved file is then outside `rootDir`.
+      #
+      # Without this the case lands in the arm below and reads as a backend
+      # disagreement, which cost three lanes an evening: a worktree run said
+      # `not agreeing: library`, a session attributed it to two commits from
+      # another lane, and it had never been measurable there at all. A gate run
+      # from a pinned worktree would report it forever.
+      #
+      # (No apostrophes in this block: it sits inside a single-quoted `sh -c`
+      # string, so one would end the script -- which is how this comment was
+      # written the first time, and the syntax error landed nine lines below.)
+      #
+      # Keyed on the two resolution codes rather than on "does not typecheck",
+      # so a *real* typecheck regression in that example still counts against
+      # the floor instead of being filed as unmeasured for good.
+      *TS2307*|*TS6059*)
+        printf "unmeasured %s\t%s\n" "$n" "needs an installed workspace; cannot resolve here" ;;
       *"does not typecheck"*)                             echo "no $n" ;;
       *"refusing to proceed"*)                            echo "no $n" ;;
       *"invalid HIR"*)                                    echo "no $n" ;;
@@ -789,7 +822,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 177 "through the LLVM backend, counting" ); }
+  backend_examples 179 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -800,7 +833,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 177 "through the LLVM backend" ); }
+  backend_examples 179 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform

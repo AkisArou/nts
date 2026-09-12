@@ -377,17 +377,25 @@ fn a_walk_of_any_length_allocates_once() {
 /// Every one of them is a wrong answer rather than a missing convenience, which
 /// is why they are refusals and not approximations:
 ///
-/// - `yield*` is an unbounded number of inner steps behind one outer `next`.
 /// - the **value** of a `yield` is what the caller passed to `next(v)`, and a
 ///   `for...of` passes nothing — answering `undefined` to a program that
 ///   expects a conversation is not the same as not having one.
-/// - a generator reaching a loop as a **parameter** has no call behind it to
-///   take the resumption's name from. It is refused one step earlier than that,
-///   at the parameter, because a `Generator<T, ...>` has no representation to
-///   be a parameter *of* — the frame is what a call produces, and a signature
-///   written in the source cannot name one. Both refusals are right and the
-///   earlier one is better: it names the declaration rather than the loop.
 /// - an `async` generator speaks both protocols at once.
+/// - a generator that yields **nothing** -- `Generator<void, void, string>`,
+///   driven entirely by what the caller passes to `next(v)`. There is no
+///   element, so the frame's `yielded` slot has no type and the abstract
+///   generator cannot be laid out: C answers `field has incomplete type 'void'`.
+///
+/// `yield*` was another, and is not one either: it is a walk with a `yield`
+/// where the body would be, and the nested cursor it was said to need is what
+/// spilling already does for any value live across a suspension. See
+/// `a-yield-star`.
+///
+/// A generator reaching a loop as a **parameter** was the fifth, and is not one
+/// any more. `Generator<T, …>` is represented now — as the prefix every frame
+/// already begins with — so a signature can name one, and a walk that cannot see
+/// which body to resume dispatches through the slot the abstract generator
+/// declares. See `a-generator-walked-elsewhere`.
 #[test]
 fn what_a_generator_is_refused_for() {
     let Some(lowered) = lowered("generator-unsupported") else {
@@ -399,10 +407,8 @@ fn what_a_generator_is_refused_for() {
         .map(|diagnostic| diagnostic.message.as_str())
         .collect();
     for wanted in [
-        "a `yield*` is not supported by this lowering yet",
         "the value of a `yield` is not supported by this lowering yet",
-        "a parameter of unrepresentable type (`Generator`) is not supported by this \
-         lowering yet",
+        "a generator that yields nothing is not supported by this lowering yet",
         "a `finally` that spans a `yield`, which is iterator closing is not supported by \
          this lowering yet",
     ] {

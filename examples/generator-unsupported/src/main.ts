@@ -1,4 +1,4 @@
-// Generators, and the three things a `function*` is refused for.
+// Generators, and the three things a `function*` is still refused for.
 //
 // Its own fixture rather than a corner of `examples/unsupported`, because that
 // one asserts every export in it is refused *by the lowering*. These are
@@ -8,24 +8,6 @@
 // and a fixture that conflates them is one that stops meaning what it says.
 //
 // `examples/async-unsupported` is the same split for the same reason.
-
-// `yield*`, which delegates to another iterable.
-//
-// One `next` on the outer generator is an unbounded number of steps on the
-// inner one, so the state machine would need a nested cursor in the frame
-// rather than a state number -- and the inner iterable may be anything with an
-// iterator, including another generator, so the nesting has no fixed depth.
-function* delegating(n: number): Generator<number, void, unknown> {
-  yield* [n, n + 1];
-}
-
-export function yieldStar(n: number): number {
-  let total = 0;
-  for (const value of delegating(n)) {
-    total = total + value;
-  }
-  return total;
-}
 
 // The **value** of a `yield`, which is what the caller passed to `next(v)`.
 //
@@ -44,33 +26,6 @@ export function yieldValue(n: number): number {
     total = total + value;
   }
   return total;
-}
-
-// A generator walked somewhere other than where it was made.
-//
-// The resumption does not exist when the `for...of` is lowered -- `hir::suspend`
-// splits the generator long afterwards -- so the loop names it from the call
-// that produced the frame. A parameter has no call behind it, and the frame's
-// *type* says which generator it is but not which function to call, because two
-// generators may share a frame shape.
-function* plainCount(n: number): Generator<number, void, unknown> {
-  let i = 0;
-  while (i < n) {
-    yield i;
-    i = i + 1;
-  }
-}
-
-function sumOf(walk: Generator<number, void, unknown>): number {
-  let total = 0;
-  for (const value of walk) {
-    total = total + value;
-  }
-  return total;
-}
-
-export function generatorAsAnArgument(n: number): number {
-  return sumOf(plainCount(n));
 }
 
 // A `finally` that spans a `yield`, which is **iterator closing**.
@@ -100,4 +55,32 @@ export function abandonedWalk(n: number): number {
     break;
   }
   return total * 1000 + closedTimes;
+}
+
+// A generator that yields **nothing**.
+//
+// `Generator<void, void, string>` is driven entirely by what the caller passes
+// to `next(v)`: the elements go *in*, not out. So there is no element, the
+// frame's `yielded` slot has no type, and the abstract generator every frame
+// extends cannot be laid out -- C says it exactly, `field has incomplete type
+// 'void'`.
+//
+// This is the shape `runtime/node/readline`'s `emitKeys` has, and it is why it
+// is refused by name here rather than left to fail at the layout: the honest
+// sentence is about the generator, and the layout's would be about a struct the
+// source never wrote. It cost the `fs` and `readline` addons their build for an
+// hour, with the refusal counts saying nothing -- the cascade was identical to
+// the byte and only the emitted C differed.
+function* driven(): Generator<void, void, string> {
+  yield;
+  yield;
+}
+
+// Not walked with `for...of`: the checker rejects that outright, because
+// `next` expects a `string` and a `for...of` always sends `undefined`. Which is
+// the language agreeing that the elements of this generator go in rather than
+// out.
+export function yieldsNothing(n: number): number {
+  driven();
+  return n;
 }

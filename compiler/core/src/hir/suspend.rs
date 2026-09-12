@@ -241,7 +241,7 @@ pub fn transform(program: &mut Program) -> Vec<Diagnostic> {
         if !suspends(&program.funcs[index]) {
             continue;
         }
-        match rewrite(&program.funcs[index], index) {
+        match rewrite(&program.funcs[index], index, &program.layouts) {
             Ok(Rewritten {
                 entry,
                 resume,
@@ -266,7 +266,88 @@ pub fn transform(program: &mut Program) -> Vec<Diagnostic> {
     }
     program.funcs.extend(added);
     program.layouts.extend(layouts);
+    declare_resumptions(program);
     refusals
+}
+
+/// Give every abstract generator a resumption to dispatch through.
+///
+/// A walk over a generator that arrived from elsewhere is a virtual call, and
+/// the callee it names is `Generator0#resume` — which nothing defines, because
+/// an abstract generator has no body. Without this the call reaches a name the
+/// program does not declare, and the C backend answers "NTS2006 no declaration
+/// for `Generator0#resume` to take a signature from" -- declining the *caller*
+/// for a reason that names the callee.
+///
+/// This is [`super::Func::abstract_declaration`], and it is the same shape as
+/// `declare_interface_methods` one pass earlier — including where the signature
+/// comes from. **An implementer's, not a synthesized one.** Every resumption
+/// must agree with the others about the descriptor or dispatching through the
+/// slot is meaningless, and taking the signature from one of them makes that
+/// agreement checkable: a backend comparing an override against what it
+/// overrides sees a real disagreement, where a signature invented here would be
+/// a third opinion none of them held.
+///
+/// Here, after the resumptions exist. There is nothing to copy from before.
+fn declare_resumptions(program: &mut Program) {
+    let mut declare: Vec<Func> = Vec::new();
+    for at in 0..program.layouts.len() {
+        let layout = &program.layouts[at];
+        // An abstract generator is a layout some frame names as its base. The
+        // frames themselves have a base of their own and are skipped by it.
+        let Some(&declared) = layout.types.first() else {
+            continue;
+        };
+        let Some(name) = layout
+            .methods
+            .iter()
+            .find_map(Clone::clone)
+            .filter(|_| layout.base.is_none())
+        else {
+            continue;
+        };
+        if program.funcs.iter().any(|func| func.name == name) {
+            continue;
+        }
+        // A frame that extends this layout, and the resumption it overrode
+        // with. Whichever the walk reaches first: they agree about the
+        // signature or nothing could dispatch through the slot.
+        let Some(body) = program
+            .layouts
+            .iter()
+            .filter(|frame| frame.base == Some(declared))
+            .find_map(|frame| {
+                let overrode = frame.methods.iter().find_map(|method| method.as_ref())?;
+                program.funcs.iter().find(|func| func.name == *overrode)
+            })
+        else {
+            continue;
+        };
+        let mut shell = body.clone();
+        shell.name = name;
+        // The receiver is the abstract generator rather than any one frame,
+        // which is the whole of what makes this a declaration for the slot.
+        if let Some(receiver) = shell.params.first_mut() {
+            receiver.ty = HirType::Managed(ManagedType::Object(declared));
+        }
+        // A declaration is its signature. The parameters keep their value ops
+        // because those *are* the signature in this IR; everything the body
+        // computed goes, and the single block says so. Never reached: every
+        // receiver that exists is a frame whose override filled the slot.
+        shell.values.truncate(shell.params.len());
+        shell.blocks = vec![super::Block {
+            params: Vec::new(),
+            ops: Vec::new(),
+            terminator: Terminator::Unreachable,
+        }];
+        shell.exported = false;
+        shell.initializes_receiver = false;
+        shell.async_result = None;
+        shell.frame = None;
+        shell.abstract_declaration = true;
+        declare.push(shell);
+    }
+    program.funcs.extend(declare);
 }
 
 struct Rewritten {
@@ -301,7 +382,7 @@ fn suspensions(func: &Func) -> Vec<(usize, usize, ValueId)> {
     found
 }
 
-fn rewrite(func: &Func, index: usize) -> Result<Rewritten, Diagnostic> {
+fn rewrite(func: &Func, index: usize, layouts: &[Layout]) -> Result<Rewritten, Diagnostic> {
     let points = suspensions(func);
     if points.is_empty() {
         return Err(refuse(func, "an `await`"));
@@ -365,14 +446,33 @@ fn rewrite(func: &Func, index: usize) -> Result<Rewritten, Diagnostic> {
     let frame_id = generator.map_or_else(|| frame_type(index), |frame| frame.ty);
     let frame_ty = HirType::Managed(ManagedType::Object(frame_id));
     let (frame_name, resume_name) = frame_names(&func.name);
+    // An `async` frame extends nothing and dispatches nothing: it is resumed by
+    // the promise that owns it, which knows its type.
+    //
+    // A **generator** frame extends the abstract generator for its element and
+    // overrides the resumption it declares. That is what lets a generator be
+    // walked where it was not made: the caller has only a `Generator<T, …>`, and
+    // the slot answers which body to resume. The slot is read from the abstract
+    // layout rather than recomputed here, because it is numbered against the
+    // class that declared it and two numberings would have to agree.
+    let (base, methods) = generator.map_or_else(
+        || (None, Vec::new()),
+        |frame| {
+            let (size, slot) = resume_slot(layouts, frame.declared);
+            let mut methods = vec![None; size];
+            if let Some(slot) = slot {
+                methods[slot] = Some(resume_name.clone());
+            }
+            (Some(frame.declared), methods)
+        },
+    );
     let layout = Layout {
         types: vec![frame_id],
         name: frame_name,
         interfaces: Vec::new(),
         fields: frame_fields(func, &spilled, mode, generator.map(|frame| &frame.yields)),
-        methods: Vec::new(),
-        // A suspended frame extends nothing.
-        base: None,
+        methods,
+        base,
     };
     let entry = entry_function(func, &frame_ty, &resume_name, &slot_of, mode);
     let resume = resume_function(func, &frame_ty, &resume_name, &slot_of, &points, mode);
@@ -601,6 +701,72 @@ fn find_param(func: &Func, name: &str) -> ValueId {
     ValueId(0)
 }
 
+/// Where the abstract generator declares its resumption, and how long a frame's
+/// dispatch table has to be to override it.
+///
+/// Asked of the layout rather than of the hierarchy that numbered it, because
+/// this pass runs after lowering and the hierarchy is gone by then — and because
+/// the answer is a property of the class that declared the method, which is
+/// exactly what a layout is. A generator whose abstract layout is missing gets
+/// an empty table and no override, which leaves the frame dispatching nothing
+/// and the walk falling back to the direct call it would have made anyway.
+fn resume_slot(layouts: &[Layout], declared: super::TypeId) -> (usize, Option<usize>) {
+    layouts
+        .iter()
+        .find(|layout| layout.types.contains(&declared))
+        .map_or((0, None), |layout| {
+            (
+                layout.methods.len(),
+                layout.methods.iter().position(Option::is_some),
+            )
+        })
+}
+
+/// Which resumption point the body left off at.
+///
+/// The first field of every suspended frame, async and generator alike, so that
+/// the two cannot drift into disagreeing about its width or its name.
+fn state_field() -> Field {
+    Field {
+        name: "state".to_owned(),
+        ty: HirType::Int {
+            bits: 32,
+            signed: true,
+        },
+        readonly: false,
+        declared_by: None,
+    }
+}
+
+/// The fields every generator frame begins with — and the whole of the
+/// **abstract generator**'s layout.
+///
+/// Two, and the second is the element. There is no `done` field: the resumption
+/// *returns* done, to a caller that is still there to read it, so storing it as
+/// well would be a second copy of one fact.
+///
+/// Public, and the reason is the whole of why a generator can be a parameter.
+/// `Generator<T, …>` is laid out as exactly this, and a frame is laid out as
+/// this **followed by** its parameters and spills — so every frame that yields
+/// `T` begins with the class it extends, and reaching a parameter declared as
+/// one needs no cast to relate. That only holds while one function builds both,
+/// which is why the abstract layout does not build its own copy of these two
+/// fields: [`super::Layout::same_shape`] compares a base and would let two
+/// layouts that disagree merge, and the disagreement would be invisible until a
+/// `getfield` resolved against the wrong one.
+#[must_use]
+pub fn generator_prefix(yields: &HirType) -> Vec<Field> {
+    vec![
+        state_field(),
+        Field {
+            name: "yielded".to_owned(),
+            ty: yields.clone(),
+            readonly: false,
+            declared_by: None,
+        },
+    ]
+}
+
 /// The frame's fields: the fixed three, then one per parameter, then one for
 /// every value that has to survive a suspension.
 ///
@@ -614,18 +780,9 @@ fn frame_fields(
     mode: Mode,
     yields: Option<&HirType>,
 ) -> Vec<Field> {
-    let state = Field {
-        name: "state".to_owned(),
-        ty: HirType::Int {
-            bits: 32,
-            signed: true,
-        },
-        readonly: false,
-        declared_by: None,
-    };
     let mut fields = match mode {
         Mode::Async => vec![
-            state,
+            state_field(),
             Field {
                 name: "result".to_owned(),
                 ty: func.return_type.clone(),
@@ -642,18 +799,7 @@ fn frame_fields(
                 declared_by: None,
             },
         ],
-        // Two, and the second is the element. There is no `done` field: the
-        // resumption *returns* done, to a caller that is still there to read
-        // it, so storing it as well would be a second copy of one fact.
-        Mode::Generator => vec![
-            state,
-            Field {
-                name: "yielded".to_owned(),
-                ty: yields.cloned().unwrap_or(HirType::Void),
-                readonly: false,
-                declared_by: None,
-            },
-        ],
+        Mode::Generator => generator_prefix(yields.unwrap_or(&HirType::Void)),
     };
     for param in &func.params {
         fields.push(Field {

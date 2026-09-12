@@ -493,6 +493,20 @@ pub struct GeneratorFrame {
     pub ty: TypeId,
     /// What `yield` produces, at the representation the field holds.
     pub yields: HirType,
+    /// The checker's own id for the declared `Generator<T, TReturn, TNext>`.
+    ///
+    /// The **abstract generator**: the class every frame that yields this
+    /// element extends, and what a signature names when it takes or returns one.
+    /// Its layout is the prefix every frame already has — `state` and `yielded`,
+    /// at 24 and 28 in the emitted C — so a frame reaches a parameter declared
+    /// as one without a cast to relate.
+    ///
+    /// The checker's id rather than a synthetic band of its own, because the
+    /// checker has already decided that `Generator<number>` written in two files
+    /// is one type. Inventing a second identity for it would be a second
+    /// derivation of a fact that already has one, and the two would have to be
+    /// kept agreeing.
+    pub declared: TypeId,
 }
 
 impl Func {
