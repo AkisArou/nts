@@ -5830,3 +5830,63 @@ because nothing stopped it. It is faster here and it is the kind of number that
 bounds a method somewhere else -- `awfy-towers` lost its inlining at 34 code
 units of *dex*, and a 13,960-byte AOT method is the same compiler with the
 brakes off.
+
+## What the `Java` column is, and what that does to the AOT half of every row
+
+This belongs at the head of the comparison rather than on the one row where it
+became visible, which is MainClaude's point and a correct one: a scope line on a
+single row is dropped by the second reader.
+
+**The `Java` column is Are We Fast Yet's own code, ported from SOM, and it
+reaches fields through accessors.** Counted rather than asserted, over all 79
+Java files in the vendored suite:
+
+    files declaring `getX`/`setX` accessors    Body 13, Variable 11,
+                                              SimpleLoop 8, Packet 8,
+                                              Pair/List/Dictionary/... 4 each
+    files that *call* an accessor             21 of 79
+
+Including the hot classes of `awfy-list`, `awfy-nbody`, `awfy-towers` and
+`awfy-queens` -- which is to say, the rows the bar is written about.
+
+**So every AOT figure in the `Java` column depends on a compiler being able to
+see through those calls, and `dex2oat` without a profile cannot.** That is not a
+defect in the reference and not a trick in our favour; it is a property of the
+comparison that has to be stated wherever the AOT column is read:
+
+    awfy-list    JIT 0.75x   AOT 0.20x    reference 3 frames inlined, 5 dispatches
+    awfy-nbody   JIT 1.00x   AOT 1.00x    JIT inlines the same pattern to nothing
+
+One mechanism, two signs, selected by which compiler is looking. **This says
+nothing about Java written with direct field access**, and a `Java` column
+written that way would move -- in the reference's favour on the AOT half and
+not at all on the JIT half.
+
+### And the code size, recorded rather than celebrated
+
+MainClaude asked for this louder than I had it, and the reason is the sharper
+half: **this harness is structurally unable to see what a 14KB method costs.**
+`Bench.measure` warms 20,000 iterations bounded by 300ms, calibrates, and takes
+the best of five, with JVM startup outside the timed region. A method that is
+slow on *first touch* -- instruction cache, a cold page, the one-off cost of
+having been unrolled 918 frames deep -- is exactly what that arrangement is
+built to exclude.
+
+Which is the same shape as the JIT column being unable to observe that tier-up
+has not finished: a measurement that cannot see the thing it would be harmed by.
+The warm number is still the right one for the table. The size is a fact in its
+own right, so that if something later comes in slow on first touch there is a
+written suspect rather than a mystery:
+
+    row           method             ours          reference    ratio
+    awfy-list     List.tail       13,960 bytes      363 bytes     38x
+    awfy-nbody    advance            647 bytes      647 bytes    1.00x
+    awfy-queens   getRowColumn       226 bytes      250 bytes    0.90x
+    awfy-towers   moveTopDisk        116 bytes      344 bytes    0.34x
+
+`awfy-list` is the outlier by two orders of magnitude and the only row where
+this is worth watching. Nothing in the lowering asks for 918 frames --
+`dex2oat` chose that because our code gave it nothing to stop at -- so if it
+ever becomes a problem the lever is a size budget in this emitter rather than
+anything in the HIR. **There is no measurement saying it is a problem and one
+is not being invented.**
