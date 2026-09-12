@@ -11,12 +11,28 @@
 // that failed to build at all would satisfy "takesAUnion is undefined" and the
 // fixture would pass while testing nothing.
 //
-// **One mechanism, seen at a parameter and at a return, behind two whole
-// namespaces.** The Node lane diagnosed these hours apart as unrelated and they
-// are the same thing: an erasing union the boundary cannot build.
+// **One mechanism, seen at a parameter and at a return.** The Node lane
+// diagnosed two symptoms hours apart as unrelated and they are the same thing:
+// an erasing union, or `unknown`, that the boundary cannot build.
 //
-//     dns.promises      the return half   -- and with it every `promises` namespace
-//     tty compiled      the parameter half -- `isatty({})`, which node answers false
+//     dns.promises      the return half -- and with it every `promises` namespace
+//
+// # `tty` was the parameter half and it is withdrawn
+//
+// This fixture said `tty`'s compiled lane was the parameter half, needing a
+// `napi_ref` and a lifetime in the runtime. **It was neither, and it was never
+// a compiler problem.** `isatty` was exported as `isatty(fd: unknown)`, so the
+// first call answered `an argument of this type has no representation in the
+// compiled runtime` — and node's contract is that it accepts anything and
+// answers `false`, which means **the type test cannot sit behind the boundary at
+// all**. Moving it to `shape.mjs`, the one file that runs on both lanes, closes
+// it: `tty` reads 1 passed 0 failed on both lanes and 0 passed 1 failed under
+// sabotage.
+//
+// A union is no better than `unknown` there, which is why it read as the same
+// mechanism. What made it look like one was checking it against nine successive
+// compilers and reading a *stationary* message each time as evidence the runtime
+// had not caught up — the wrong direction to read a message that never moved.
 //
 // # The two shapes, which fail differently
 //

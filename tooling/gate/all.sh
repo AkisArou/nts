@@ -436,6 +436,17 @@ profile() {
   # raises it while a fix that makes one compile lowers it. Read the direction
   # against what landed rather than on its own.
   #
+  # **Reproducible at a commit, measured rather than assumed.** Two full runs at
+  # `d265780c` both read 19078. So a regression of any size is visible and this
+  # ceiling is worth having.
+  #
+  # What is *not* explained: 19065 at `e38f0237` against 19078 at `d265780c`,
+  # whose whole diff is `benches/jvm-rows.md` and two `tooling/conformance/*.mjs`
+  # files, none of which this step reads — it runs `emit-c` per module directly.
+  # Thirteen refusals moved across a diff that cannot have moved them. Named
+  # rather than chased; if it recurs, the thing to suspect is an input the pin
+  # does not cover rather than the compiler.
+  #
   # **A third cause, 2026-09-11: a copy is a body, and a body is sites.**
   # Structural specialisation emits a copy of a callee per concrete argument
   # type, so every refusal inside that callee is counted once more per copy --
