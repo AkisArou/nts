@@ -211,9 +211,55 @@ impl ClassBuilder {
         Ok(())
     }
 
+    /// No two members share a name *and* a descriptor.
+    ///
+    /// JVMS 4.6 forbids it and the JVM enforces it at **load**, as
+    /// `ClassFormatError: Duplicate method name "m" with signature "()V"` --
+    /// which names the member and not the reason, arriving long after whatever
+    /// added the second one.
+    ///
+    /// This emitter has several independent reasons to add a member and none
+    /// of them can see the others: a dispatch forwarder from `Layout::methods`,
+    /// an `nts.rt` interface's method, the presence reader, the default
+    /// constructor. On 2026-09-12 an async generator frame got `resume()V`
+    /// from both `NtsResumable` and its own dispatch slot and it cost
+    /// seventeen aborts to find.
+    ///
+    /// **Fields and methods are separate member tables**, so a field and a
+    /// method of one name are legal and deliberately not checked against each
+    /// other -- which is why the two loops below do not share one set.
+    fn no_duplicate_members(&self) -> Result<(), Error> {
+        let mut seen: Vec<(&str, &str)> = Vec::with_capacity(self.methods.len());
+        for method in &self.methods {
+            let key = (method.name.as_str(), method.descriptor.as_str());
+            if seen.contains(&key) {
+                return Err(Error::DuplicateMember {
+                    kind: "method",
+                    name: method.name.clone(),
+                    descriptor: method.descriptor.clone(),
+                });
+            }
+            seen.push(key);
+        }
+        let mut seen: Vec<(&str, &str)> = Vec::with_capacity(self.fields.len());
+        for field in &self.fields {
+            let key = (field.name.as_str(), field.descriptor.as_str());
+            if seen.contains(&key) {
+                return Err(Error::DuplicateMember {
+                    kind: "field",
+                    name: field.name.clone(),
+                    descriptor: field.descriptor.clone(),
+                });
+            }
+            seen.push(key);
+        }
+        Ok(())
+    }
+
     /// Serialize. The pool is consumed because the indices it hands out are
     /// only meaningful inside the bytes this returns.
     pub fn build(self, mut pool: Pool) -> Result<Class, Error> {
+        self.no_duplicate_members()?;
         let mut tail = Vec::new();
         let this_index = pool.class(&self.name);
         let super_index = pool.class(&self.super_name);
@@ -358,4 +404,57 @@ fn code_attribute(pool: &mut Pool, body: &Body) -> (Vec<u8>, Vec<Origin>) {
     out.extend_from_slice(&u32::try_from(inner.len()).unwrap_or(u32::MAX).to_be_bytes());
     out.extend_from_slice(&inner);
     (out, origins)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The check exists because the JVM's own version of it runs at load and
+    /// names the member rather than the cause. So it is proved to fire here,
+    /// rather than trusted: a class this emitter would happily have written is
+    /// refused before any of it reaches a class file.
+    #[test]
+    fn two_methods_of_one_name_and_descriptor_are_refused() {
+        let mut builder = ClassBuilder::new("nts/gen/Frame", "java/lang/Object");
+        builder.method(access::PUBLIC, "resume", "()V", None);
+        builder.method(access::PUBLIC, "resume", "()V", None);
+        let error = builder.build(Pool::default()).expect_err("a duplicate must not build");
+        assert!(
+            matches!(&error, Error::DuplicateMember { kind: "method", name, descriptor }
+                if name == "resume" && descriptor == "()V"),
+            "wrong error: {error}"
+        );
+    }
+
+    /// **The descriptor is half the key**, which is what makes this a check on
+    /// members rather than on names. `resume()V` and `resume(I)V` are two
+    /// methods to the JVM and overloading is ordinary.
+    #[test]
+    fn one_name_with_two_descriptors_is_ordinary_overloading() {
+        let mut builder = ClassBuilder::new("nts/gen/Frame", "java/lang/Object");
+        builder.method(access::PUBLIC, "resume", "()V", None);
+        builder.method(access::PUBLIC, "resume", "(I)V", None);
+        assert!(builder.build(Pool::default()).is_ok(), "overloads must build");
+    }
+
+    /// **Fields and methods are separate member tables**, so a field and a
+    /// method of one name are legal -- and the check must not reach across
+    /// them, which a single shared set would have done.
+    #[test]
+    fn a_field_and_a_method_may_share_a_name() {
+        let mut builder = ClassBuilder::new("nts/gen/Thing", "java/lang/Object");
+        builder.field(access::PUBLIC, "size", "I");
+        builder.method(access::PUBLIC, "size", "()I", None);
+        assert!(builder.build(Pool::default()).is_ok(), "separate tables must build");
+    }
+
+    #[test]
+    fn two_fields_of_one_name_and_descriptor_are_refused() {
+        let mut builder = ClassBuilder::new("nts/gen/Thing", "java/lang/Object");
+        builder.field(access::PUBLIC, "$presence", "I");
+        builder.field(access::PUBLIC, "$presence", "I");
+        let error = builder.build(Pool::default()).expect_err("a duplicate must not build");
+        assert!(matches!(&error, Error::DuplicateMember { kind: "field", .. }), "wrong: {error}");
+    }
 }

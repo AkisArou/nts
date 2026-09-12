@@ -5649,3 +5649,138 @@ Before this row is worked on again it needs a harness that can measure it:
 report the spread beside the ratio, or take the minimum of enough runs that the
 fast mode is reached on both sides. Optimising against a number with 1.57x of
 play in it is how six mechanisms get refuted.
+
+### `awfy-queens` passes the bar in the mode Android ships and fails the one we measure
+
+Four runs, `--release` dexed, ours against the hand-written reference:
+
+    run     JIT      AOT
+      0    1.15x    0.97x
+      1    1.06x    0.97x
+      2    1.16x    0.95x
+      3    1.19x    0.95x
+
+**The AOT figure is the stable one** -- 0.95 to 0.97, a spread of 0.02, every
+run under 1.00x -- and the JIT figure is the noisy one at 1.06 to 1.19. That is
+the same ordering the `awfy-towers` work found and for the same reason: taking
+tier-up out of the measurement takes the variance with it.
+
+**And the hot method was already at parity.** `oatdump` over `getRowColumn`:
+
+    code size      ours 226 bytes    reference 250 bytes
+    pTestSuspend            1                1
+    pThrowArrayBounds       3                3
+    pReadBarrierMarkReg00   3                3
+
+Identical call profile, ours the smaller program. So the six mechanisms this
+file ruled out for `awfy-queens` were being ruled out against a 1.17x that the
+shipping mode does not report.
+
+**Unlike `awfy-nbody`, the three bounds throws are ART failing to prove it for
+*both* sides rather than us duplicating a check.** Six of the eight array
+accesses in that program are still `checked` in the HIR.
+
+**And they are not `advance`'s shape, which I guessed and MainClaude
+disproved by asking where each one sits.** Their census:
+
+    placeQueen      array.set unchecked   x2
+    getRowColumn    array.get             x3
+    setRowColumn    array.set             x3
+
+The two already proved are the ones in `placeQueen`, where `r` is the loop
+variable and `r < 8` is three lines above -- the case the prover handles. **All
+six checked ones are in `getRowColumn`/`setRowColumn`, where `r` and `c` are
+parameters**: nothing in either function bounds them and neither reads a
+`length` at all, and the two are separate `export func`s rather than inlined.
+
+`advance` was two `field.get`s of one field *in one function*, with the length
+read and the index in the same place; `same_array` relating them is the whole
+fix. Here the bound is in the caller and the use is in the callee, and closing
+it needs **two** things rather than one: interprocedural range information for
+the parameters (or inlining those methods into `placeQueen`), *and* knowing
+`this.freeRows` holds an array of constant length -- the source never reads
+`.length`, so even inlined there is no length for a prover to relate `r < 8`
+to. So this is not a flag waiting to flip and the harness should not be held
+for it.
+
+What keeps it interesting rather than academic is the `oatdump` line above: ART
+proves it for neither side, so if those six ever go it is an advantage ART
+cannot hand the reference.
+
+### Which mode bar 1 is measured in is a decision, and it has never been made
+
+`times-on-device.sh` runs `dalvikvm -cp x.dex`, which is ART's interpreter and
+JIT. Every bar-1 number in this file is from that. **A shipped Android
+application runs `dex2oat` output**, and the goal this lane was set is to take
+it to Android.
+
+The mode is not a constant offset. It moves rows in **both** directions and by
+different amounts:
+
+    awfy-queens    JIT 1.17   AOT 0.96    the bar is met only in AOT
+    awfy-towers    JIT 1.55   AOT 1.94    the bar is missed worse in AOT
+    awfy-nbody     JIT 1.00   AOT 1.00    unchanged
+
+So "5 of 8" is a statement about `dalvikvm`, and the number for an Android claim
+is a different one that has never been taken. All eight rows are being measured
+in both modes now rather than argued about; the result belongs in this file as
+two columns, not one, because a single column would have to pick a mode and
+neither pick is defensible without the other beside it.
+
+### Bar 1 in both modes, and why AOT is the measurement rather than a second opinion
+
+One sitting of all eight, `--release` dexed, binary `ab5cb694`:
+
+| case | JIT | AOT |
+| --- | --- | --- |
+| `awfy-list` | **0.75x** | **0.20x** — see below |
+| `awfy-bounce` | **0.88x** | 1.15x |
+| `awfy-mandelbrot` | **0.89x** | **0.88x** |
+| `awfy-permute` | **0.98x** | 1.01x |
+| `awfy-nbody` | **1.00x** | **1.00x** |
+| `awfy-sieve` | 1.21x | **1.00x** — undecidable either way |
+| `awfy-queens` | 1.18x | **0.92x** (0.95–0.97 over four dedicated runs) |
+| `awfy-towers` | 1.59x | 1.81x |
+
+**MainClaude's argument for which column is the measurement is better than
+mine, and it is not "Android runs AOT".** `tooling/bench` warms every other
+column to steady state on purpose and says why: a timed run happens after
+20,000 iterations bounded by 300ms, then calibration, then best-of-five,
+because *"a JIT's first iterations measure the compiler rather than the
+program."* node gets that, bun gets it, the compiled lane gets it, the Java
+reference gets it.
+
+So the table is already committed to a rule -- exclude the compiler from the
+measurement -- and `dalvikvm` is the one column where that warmup demonstrably
+does not arrive. `awfy-queens` is the evidence: **1.06/1.15/1.16/1.19 against
+AOT's 0.95/0.96/0.97/0.97**, same binary, same box. A spread of 0.13 against
+0.02. That is not the row being noisy, it is tier-up still running.
+
+**So AOT is the first column here that obeys the rule the others were built
+on, and the JIT column is the artefact.** Both are kept, because this file is a
+year of figures that mean the JIT number and silently redefining a column is
+worse than carrying two -- but they are not two equally weighted opinions, and
+the next reader must not average them. The average of a measurement and an
+artefact is an artefact.
+
+**And a row is only comparable to a row in its own column.** "Bar 1 is 5 of 8"
+has to become two sentences with the mode in each. A row that meets the bar in
+one column and misses in the other is a result *about the mode*, not a row to
+be filed under whichever column flatters it.
+
+### `awfy-list`'s 0.20x is real arithmetic about the reference, not about us
+
+    awfy-list        ours      reference
+    JIT          11,195.2       15,049.6
+    AOT          11,234.9       56,988.5
+
+**Our time is unchanged between the modes -- 0.4% -- and the reference is 3.8x
+slower under `dex2oat`.** Reproduced three times at 0.20x, 0.19x, 0.20x, so it
+is not a perturbed run like `awfy-permute`'s 0.51x was; `dex2oat` genuinely
+compiles that hand-written Java much worse than ART's JIT does.
+
+It is under 1.00x in both columns and the count is safe either way, but **it
+must not be read as this compiler being five times faster**. It is the fourth
+ratio today whose movement belongs to its denominator, and the first one that
+reproduces -- which is what makes stating the absolutes beside it necessary
+rather than merely careful.

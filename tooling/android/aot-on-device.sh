@@ -4,6 +4,20 @@
 #     sh tooling/android/aot-on-device.sh              # a default case
 #     sh tooling/android/aot-on-device.sh awfy-queens  # named
 #
+# Four knobs, each documented where it is read:
+#
+#     NTS_D8_RELEASE=1   dex the way a shipped app is dexed; `d8` defaults to
+#                        debug and that is not symmetric between the lanes
+#     NTS_AOT_METHOD=m   which method `oatdump` prints, defaulting to the
+#                        entry point -- usually the wrong one, since the two
+#                        lanes spell the entry differently and the hot method
+#                        is commonly named the same on both
+#     NTS_AOT_REF=f.java substitute a reference, to price a *shape* by writing
+#                        it into hand-written Java and checking in `javap`
+#                        that the intended bytecode came out
+#     NTS_AOT_KEEP=1     leave the package installed and dump its AOT code
+#                        rather than uninstalling
+#
 # # Why this is a question about the whole ART column
 #
 # `times-on-device.sh` and `bytes-on-device.sh` both run `dalvikvm -cp x.dex`.

@@ -66,6 +66,20 @@ pub enum Error {
     StackUnderflow { at: u16 },
     /// A descriptor the emitter built and cannot read back.
     BadDescriptor(String),
+    /// Two members of one class share a name *and* a descriptor, which JVMS
+    /// 4.6 forbids and the JVM reports as `ClassFormatError: Duplicate method
+    /// name "m" with signature "()V"` at **load**, far from whatever built it.
+    ///
+    /// Checked here because this emitter has several independent reasons to
+    /// add a member -- a dispatch forwarder, an `nts.rt` interface's method, a
+    /// presence reader, a constructor -- and none of them can see the others.
+    /// On 2026-09-12 an async generator frame got `resume()V` twice, once from
+    /// `NtsResumable` and once from its own dispatch slot, and it surfaced as
+    /// seventeen aborts rather than a diagnostic.
+    ///
+    /// Fields and methods are separate member tables, so a field and a method
+    /// of one name are legal and are not this.
+    DuplicateMember { kind: &'static str, name: String, descriptor: String },
 }
 
 impl std::fmt::Display for Error {
@@ -79,6 +93,11 @@ impl std::fmt::Display for Error {
                 write!(f, "a branch at {at} reaches {distance} bytes, past a 16-bit offset")
             }
             Self::UnboundLabel => write!(f, "a branch names a block that was never emitted"),
+            Self::DuplicateMember { kind, name, descriptor } => write!(
+                f,
+                "this class declares the {kind} `{name}{descriptor}` twice, which the JVM \
+                 refuses at load as a duplicate member"
+            ),
             Self::TooManyLocals(slots) => {
                 write!(f, "{slots} local slots exceeds the 65,535 the format allows")
             }
