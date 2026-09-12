@@ -17,6 +17,8 @@ pub const REGULAR_EXPRESSION_LITERAL: u16 = 13;
 pub const STRING_LITERAL: u16 = 10;
 
 // Operator tokens. Note 42 is absent: it is `**`, not `*`.
+/// `a, b` — the operand sequencing operator, not a separator.
+pub const COMMA_TOKEN: u16 = 27;
 pub const LESS_THAN_TOKEN: u16 = 29;
 pub const LESS_THAN_EQUALS_TOKEN: u16 = 32;
 pub const GREATER_THAN_EQUALS_TOKEN: u16 = 33;
@@ -148,6 +150,8 @@ pub const YIELD_EXPRESSION: u16 = 230;
 /// reclassify every type test as something else.
 pub const DELETE_EXPRESSION: u16 = 221;
 pub const TYPE_OF_EXPRESSION: u16 = 222;
+/// `void e`, which evaluates its operand and answers `undefined`.
+pub const VOID_EXPRESSION: u16 = 223;
 pub const IN_KEYWORD: u16 = 102;
 /// 103, not 104. 104 is `new`.
 ///

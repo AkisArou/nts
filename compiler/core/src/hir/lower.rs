@@ -18175,6 +18175,7 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::TEMPLATE_EXPRESSION) => self.lower_template(id),
             Some(syntax::DELETE_EXPRESSION) => self.lower_delete(id),
             Some(syntax::TYPE_OF_EXPRESSION) => self.lower_typeof(id),
+            Some(syntax::VOID_EXPRESSION) => self.lower_void(id),
             // Named rather than left to the fallthrough below, for the reason
             // `yield` is: an unlabelled refusal cannot be grouped, ranked or
             // counted, so a construct that lands there is invisible to anyone
@@ -28888,11 +28889,40 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(OpKind::ConstFloat(value), HirType::NUMBER, origin))
     }
 
+    /// `void e`, which evaluates its operand and answers `undefined`.
+    ///
+    /// The operand is lowered for its effects and dropped: `void f()` calls `f`.
+    /// Not folded away even where it cannot have any, because deciding that is
+    /// dead-code elimination's job and it already does it -- this lowering
+    /// stating "the value is discarded" is the whole of what `void` means.
+    ///
+    /// `void 0` is the idiom this exists for, and it is `undefined` rather than
+    /// a number: the operand's *type* does not reach the result.
+    fn lower_void(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let operand = *self
+            .children(id)
+            .first()
+            .ok_or_else(|| self.unsupported(id, "a `void` with no operand"))?;
+        self.lower_expression(operand)?;
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::ConstUndefined, HirType::Void, origin))
+    }
+
     fn lower_binary(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let children = self.children(id);
         let [lhs_node, operator, rhs_node] = children.as_slice() else {
             return Err(self.unsupported(id, "a binary expression of unexpected shape"));
         };
+
+        // `a, b` sequences rather than combines: evaluate the left for its
+        // effects, discard it, and answer the right. Handled before the operator
+        // table below because it is not an operator over two values at all --
+        // there is no result of `a` for anything to be applied to, which is why
+        // it has no `BinOp` and could not have had one.
+        if self.kind_of(*operator) == Some(syntax::COMMA_TOKEN) {
+            self.lower_expression(*lhs_node)?;
+            return self.lower_expression(*rhs_node);
+        }
 
         // Assignment is not arithmetic on a location: it rebinds a name to a
         // value. With the name bound directly there is no slot to store into and
