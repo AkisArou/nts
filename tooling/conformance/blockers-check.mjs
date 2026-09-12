@@ -126,6 +126,15 @@ for (const name of names) {
   const fileForm = /^(?:emit-c\b[^>]*->\s*)?(emits-c|emits-addon|lacks-c|duplicates-c|compiles|once-c)\b/
     .test(expected);
   const viaEmit = expected.includes("emit-c") || fileForm;
+  // **A defect only one backend can see needs a command only that backend
+  // runs.** `relate_closures_to_signatures` giving a closure no base is
+  // invisible to `hir` and to `emit-c` alike: C reaches a closure through a
+  // slot and a pointer and does not care what it extends, and the JVM will not
+  // load a class whose field is declared with a base it does not have. Written
+  // without this, such a fixture runs `hir --prepared`, finds nothing refused,
+  // and reports **FIXED** -- the false all-clear this file's own comment above
+  // says gets a fixture deleted.
+  const viaJvm = /^emit-jvm\b[^>]*->/.test(expected);
   // Flags written into the expectation's command prefix, beyond the `--napi`
   // every file-form fixture gets. `--rc` is the one that motivated this: a
   // defect can exist only under reference counting, and until now there was no
@@ -148,7 +157,9 @@ for (const name of names) {
   // refused", and a construct that regressed into a cascade would have kept the
   // guard green. `cascade-with-no-root` itself escaped only because it carries
   // the `emit-c --napi ->` prefix and never took this path.
-  const output = viaEmit
+  const output = viaJvm
+    ? run(["emit-jvm", tsconfig, "--out", workspace("fixture-")])
+    : viaEmit
     ? run(["emit-c", tsconfig, "--out", workspace("fixture-"), "--napi", ...extraFlags])
     : run(["hir", "--prepared", tsconfig]);
 
@@ -171,6 +182,7 @@ for (const name of names) {
   // like the ` -- ` that introduces a comment and the first version of this ate
   // the flag and compared against the string "emit-c".
   const wanted = expected
+    .replace(/^emit-jvm\b[^>]*->\s*/, "")
     .replace(/^emit-c\b[^>]*->\s*/, "")
     .replace(/\s+--\s.*$/, "")
     .trim();
@@ -552,7 +564,11 @@ for (const name of names) {
   // that does not exist yet" -- and the first time it ever fired, it was wrong.
   // That is the argument for writing down which checks have never run: the note
   // is what made this take a minute to diagnose instead of an hour.
-  if (holds && !viaEmit && !expectsClean && !lowersOnly) {
+  // `viaJvm` is excluded on the same terms as `viaEmit`: a backend decline
+  // names the *function* it could not emit -- `(in make)` -- and carries no
+  // source path, so there is nothing here to attribute to a file and the check
+  // would report every such fixture as holding on somebody else's diagnostic.
+  if (holds && !viaEmit && !viaJvm && !expectsClean && !lowersOnly) {
     const carrying = output.split("\n").filter((l) => l.includes(wanted));
     const own = carrying.filter((l) => l.includes(`blockers/${name}/src`));
     if (carrying.length > 0 && own.length === 0) {
