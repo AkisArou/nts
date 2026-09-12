@@ -6132,3 +6132,25 @@ It also mirrors what MainClaude measured on their side. Forwarding everything
 removed 216 loads across three modules, of which **214 were references it must
 not touch**; the real figure was two in `util` and none in the other two. Two
 here, two there, and the number that had been believed was a percentage.
+
+**And with the second insertion point landed, the whole feature is worth two
+loads on this lane.** A/B against the pre-change compiler `ab5cb694`, ten bench
+cases, counting `getfield` in the emitted classes:
+
+    total getfield        61 -> 59     removed 2
+    awfy-bounce           16 -> 14     all of it
+
+The literal shape now forwards and does better than a reload, because the
+forwarded value is a constant:
+
+    before   putfield ; aload_0 ; getfield ; istore_1 ; iload_1 ; ireturn
+    after    putfield ; iconst_5 ; ireturn
+
+**Three independent measurements agree on two**: the dex-pattern count that
+first reported the site, this `getfield` A/B, and MainClaude's `util` figure.
+That is a small optimisation measured honestly rather than a large one measured
+by percentage, and the two are only distinguishable by having counted.
+
+It does not touch `awfy-bounce`'s 30% AOT regression, which is the same
+program. Two `getfield`s cannot be 30%, and saying so here saves the next
+reader the connection.
