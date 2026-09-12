@@ -4822,3 +4822,69 @@ meets it: an attribute belongs to whatever declaration follows it, and "insert a
 function before `fn call`" and "insert a function before `fn call`'s attributes"
 are different edits that look identical in a diff. Anchor an insertion on the
 attribute when there is one.
+
+## The `newarray double` finding does not generalise: 2 of 52, and both were already known
+
+The two AWFY rows that allocate more than their reference on ART are
+`awfy-queens` (1.23x) and `awfy-permute` (1.22x), and both are `newarray
+double` where the reference writes `newarray int` -- `widen` holding integers
+as doubles. The obvious next question is how much of the corpus has that shape,
+and it is a question about class files rather than about a device, so it needs
+`javac` and `javap` and no emulator at all. 52 bench cases carry a `ref.java`.
+
+**Answer: those two and nothing else.** 34 of 52 rows emit exactly the array
+kinds their reference does. Of the 18 that differ, only `awfy-queens` and
+`awfy-permute` differ *in element type* the way the finding describes. So
+un-widening integer arrays buys two rows in the whole corpus, and the price of
+that work should be read against two rows rather than against fifty-two.
+
+The other 16 are three different things, and separating them is most of the
+value here:
+
+**Six are the specialisation pair, counted twice.** `pipeline` reads `double:4`
+against the reference's `double:2`, `arrays` and `array-methods` and
+`growth-fixed` and `erasure-stored-typed` read `double:2` against `double:1`,
+and `dispatch` reads `int:2` against `int:1`. Every one is exactly 2x, and
+`javap` says why: the allocation appears once in `work(double)` and once in
+`work$whole(int)`, which are the general and specialised forms of one function.
+One of the two runs. **A static count of `newarray` instructions is not a count
+of allocations**, and on this lane it is inflated by a constant factor wherever
+specialisation fires. Halved, all six match their reference exactly.
+
+**Eight read `(none)` and that is a blind spot rather than a zero.**
+`array-from`, `array-mutations`, `array-predicates`, `bytes`, `case-convert`,
+`elementwise`, `growth-grown` and `node-utf8` emit no array instruction at all.
+For the growable ones the reason is in the call list: `growth-grown` and
+`array-from` call `nts/rt/NtsArrayD`, so the array is allocated **inside the
+runtime jar**, which this instrument does not read. `elementwise` calls
+`scale$whole:([DI)D` and receives its array from its own driver. So `(none)`
+means "not in the emitted classes", and for an `arrays_can_grow` program the
+emitted classes are precisely where the array is not.
+
+That is the limit worth stating rather than discovering later: **this instrument
+can answer the element-type question completely and cannot answer the volume
+question at all.** `bytes-on-device.sh` answers volume, because it counts what
+the platform actually allocated at run time, and it is the one that has to run
+on the device.
+
+**Two are neither.** `awfy-nbody` emits one reference array where the reference
+emits none, and `erasure-stored-unknown` emits `double:1 long:1` where the
+reference emits `obj:1` -- ours is the decomposed erased representation against
+their `Object[]`, which is a fair trade and not obviously a loss. Both are
+single rows and neither is the shape this survey went looking for.
+
+**What refuted me on the way.** The first run of this reported forty-four of
+fifty-two references carrying one identical signature, `10:1 112:1 12:5 ... 7:3
+boolean:5 int:8`. Two defects, both mine: every reference was compiled with the
+whole are-we-fast-yet suite on its source list rather than only the `awfy-*`
+ones, so the suite's own arrays were counted as each reference's; and
+`anewarray` names a constant-pool index with the class in a trailing comment, so
+reading the next token gave `#62` and printed types like `62:1` and `77:1`. **A
+column that is constant across forty-four rows is the instrument, every time.**
+
+The control that settled it is the one this file already had: the five rows
+whose answers are written down above. `awfy-queens` at `boolean:3 double:1`
+against `boolean:3 int:1`, `awfy-permute` at `double:1` against `int:1`,
+`awfy-sieve` matching, and `awfy-towers` and `awfy-bounce` both at one reference
+array each. An instrument that cannot reproduce the numbers you already have is
+not ready to produce ones you do not.
