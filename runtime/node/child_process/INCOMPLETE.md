@@ -8,7 +8,7 @@ What is not deliberate is a failure nobody wrote down, so they are all below.
 
 ## Where it is
 
-    interpreted   120 file(s): 101 passed, 9 failed, 9 skipped, 1 not applicable
+    interpreted   120 file(s): 104 passed, 6 failed, 9 skipped, 1 not applicable
     compiled      120 file(s):  0 passed, 110 failed, 9 skipped, 1 not applicable
 
 114 by `test-pattern`, 4 claimed in `extra-tests`, 2 local fixtures. 1 passed when the
@@ -18,16 +18,15 @@ Measured with `run.mjs --module child_process`, not added up: an earlier batch r
 where ten individual passes had predicted 81, because one of them came with a
 regression.
 
-## What is left: 9 files, each with a cause
+## What is left: 6 files, each with a cause
 
 The IPC channel works -- fork, `send` each way, the child's `process.send`, `disconnect`,
 exit 0, held by `local/ipc-roundtrip-local.js`. Handle passing works: a socket crosses to a
-worker. What remains is nine files, and the causes are separated below into **diagnosed**
--- a mechanism was found and checked -- and **observed**, where only the failing assertion
-is known. Calling the second kind a cause would be the thing this directory keeps warning
-about.
-
-### Diagnosed
+worker. What remains is six files. Three others sat here an hour ago under **observed, not
+diagnosed** -- a located assertion and no found mechanism -- and probing each one turned all
+three into fixes rather than causes, so that section is gone. The lesson is worth more than
+the section was: two of the three were bugs in this module that a plausible-sounding
+narrative had already explained away.
 
     advanced-serialization.js             a Buffer comes back as a Uint8Array
     advanced-serialization-host-objects.js  the same
@@ -77,73 +76,32 @@ about.
   a killed child's stdout still reaches `end`; the two pull opposite ways and the answer is
   a decision about who owns the read, not a line of code.
 
-### Observed, not diagnosed
+## The three that were "observed" and were bugs
 
-    send-returns-boolean.js               the fourth of five `send`s never settles
-    send-keep-open.js                     the child's exit assertion never runs
-    test-cluster-net-send.js  (claimed)   a net handle over the channel, with cluster's
-                                          worker half in play
+  Kept because each one had a story attached that was wrong.
 
-  Each has a located assertion and no found mechanism. `send`'s callback *was* being
-  dropped -- located by the argument shuffle and never invoked -- and fixing that moved
-  neither, so whatever these are, it is not that. Written here as observations so the next
-  person does not inherit a guess dressed as a cause.
+    send-returns-boolean.js   fixed -- and the first fix caused it
+    send-keep-open.js         fixed -- `options` was validated and discarded
+    test-cluster-net-send.js  fixed -- the received handle was dropped
 
-## The three I called unfixable, which pass here
+  `send-keep-open`: `send(message, handle, options, callback)` validated `options` and then
+  never passed it on. Silent for every caller except the one that means it --
+  `keepOpen: true` tells node not to close the parent's copy of a sent socket, and the test
+  then writes to that socket from the parent. Dropped, the parent's half was already gone.
 
-`exec-timeout-expire`, `exec-timeout-kill` and `exec-timeout-not-expired` are the
-three files in this module that require `common/child_process`, whose line 5 is
-`require('./')` -- node's real `common/index.js`, which walks
-`for (const val in globalThis)` at exit and fails the file with
-`Unexpected global(s) found`.
+  `send-returns-boolean`: the story was "no backlog of our own". Measured against node,
+  rv1..rv4 read **[true, true, false, false] on both** -- forwarding to the host's `send`
+  forwards the host's queue, and the backlog needed nothing. The actual fault was the
+  callback fix made an hour earlier: `send` returns false for **backpressure**, not failure,
+  and node still delivers the message and still calls back with null once the queue drains.
+  Synthesising `ERR_IPC_CHANNEL_CLOSED` whenever the return was false turned every backed-up
+  send into an error. The callback is now forwarded to the host, which is the only side that
+  knows when a message has gone.
 
-The `nts_*` half of that leak is fixed harness-side (`d265780c`). I then wrote that
-the `atob`/`btoa` half **could not** be fixed on this lane, reasoning that node's
-`common` takes them from `require('buffer')` and compares *identities*, that
-`run-one.mjs` substitutes bare specifiers, and that `buffer` is in this module's
-`uses` -- so `common` would hold our `atob` while `globalThis.atob` was node's, and
-no implementation makes those the same object.
-
-**All three pass on `main`.** The reasoning was sound and the conclusion was drawn
-from the wrong tree: `buffer/shape.mjs` has an `installGlobals` that sets
-`globalThis.atob = underTest.atob`, and `run-one.mjs:631` calls it for siblings as
-well as for the module under test, so the identity can hold. Both trees have that
-mechanism; only the branch fails, and it is 136 commits behind.
-
-So this is not a labelled blocker. It is a claim of unfixability made from one tree
-and refuted by the other, left here because the next person to see
-`Unexpected global(s) found: atob, btoa` on a branch should know it is a stale
-checkout rather than a wall.
-
-## Two things found while writing it, both worth keeping
-
-**`on_exit` is libc's.** A `static void on_exit(...)` in `child_process.c` is a
-redeclaration of `on_exit(3)` from `<stdlib.h>` with a different type, and clang
-says so. Renamed to `on_sync_exit`.
-
-**`validateArray` widens.** `Array.isArray(args)` narrows to `readonly string[]`;
-`validateArray(args, "args")` asserts `unknown[]` and therefore widens it back, so
-slicing the asserted binding is `unknown[]` and TS2322. The interpreted lane never
-saw it, because it does not typecheck.
-
-## What the compiled lane says, and the hollow pass it was hiding
-
-**0 passed, 109 failed.** Against 80 on the interpreted lane, on the same corpus and
-the same source -- the shape `stream` already shows at 252/0 against 1/251, and the
-reason the goal text calls the compiled lane the axis.
-
-The compiled lane first read **1 passed**, and `--sabotage` said that pass was hollow:
-emptying the module left the count at 1 on both lanes. The file is
-`test-child-process-fork-closed-channel-segfault.js`, its subject is `cluster`, and
-because `cluster` is not in this module's `uses` the runner hands it node's own -- so
-it forks through node's cluster, never reaches this module, and asserts the absence of
-a segfault, which an absent module satisfies for free. It is in `not-applicable` now
-with that reason.
-
-Removing it takes the interpreted lane from 81 to 80 and the compiled lane from 1 to
-0. Both are the honest direction, and the second is the point: **the compiled lane has
-no non-hollow pass in this module at all**, and the 1 it reported was this file.
-
-So the compiled axis is unchanged by adding this module -- 49 across 25 modules rather
-than 24. The earlier note in the ledger asking whoever quotes the axis to add this
-module has its answer: it adds nothing.
+  `test-cluster-net-send`: `process.send(msg, socket)` in a child arrives as two values and
+  the stand-in forwarded one, at all four of its message sites -- so `assert.ok(handle)`
+  failed on a message that had otherwise arrived intact. Sending a handle *to* a child had
+  worked all along, which is why nothing pointed here. What the parent now receives is the
+  **host's** socket: the descriptor is real and its data flows, but `instanceof net.Socket`
+  answers false against our `net`, because adopting it needs a host-to-ours direction `net`
+  does not expose. Fifth instance of the realm seam.

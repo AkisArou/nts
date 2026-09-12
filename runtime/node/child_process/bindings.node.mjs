@@ -210,8 +210,8 @@ globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached,
   // A spawned child with an `'ipc'` slot has a channel, and its messages reach the
   // caller the same way a forked child's do. Only `fork` wired this.
   if (typeof onMessage === "function") {
-    child.on("message", (message) => onMessage(message));
-    child.on("internalMessage", (message) => onMessage(message));
+    child.on("message", (message, sent) => onMessage(message, sent));
+    child.on("internalMessage", (message, sent) => onMessage(message, sent));
     // The channel closing from the child's own end, which nothing here called.
     if (typeof onDisconnect === "function") child.on("disconnect", () => onDisconnect());
   }
@@ -290,13 +290,13 @@ globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, serializa
   // The value, not text: the host channel already serialised it, with structured
   // clone under `serialization: "advanced"`, and re-encoding it as JSON here would
   // undo exactly what that option is for.
-  child.on("message", (message) => onMessage(message));
+  child.on("message", (message, sent) => onMessage(message, sent));
   // **Both events, because the host already split them.** A message whose `cmd` begins
   // with `NODE_` never reaches the host's `message` event -- it is kept for
   // `internalMessage` -- so listening to one of the two loses every internal message,
   // which is the whole of cluster's handshake. The module re-applies the same test to
   // decide which of *its* events to emit.
-  child.on("internalMessage", (message) => onMessage(message));
+  child.on("internalMessage", (message, sent) => onMessage(message, sent));
   // The channel closing from the child's own end, which nothing here called.
   if (typeof onDisconnect === "function") child.on("disconnect", () => onDisconnect());
   child.on("exit", (code, signal) => {
@@ -305,7 +305,7 @@ globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, serializa
   return handle;
 };
 
-globalThis.nts_child_process_send = (handle, message, sent) => {
+globalThis.nts_child_process_send = (handle, message, sent, options, callback) => {
   const entry = live.get(handle);
   if (entry === undefined) return -32;
   try {
@@ -314,9 +314,19 @@ globalThis.nts_child_process_send = (handle, message, sent) => {
     // with SCM_RIGHTS and not something this stand-in should reimplement. It is also
     // the one argument here that has no representation in the compiled runtime, and
     // that is written down in the module beside the declaration rather than here.
-    if (sent !== undefined && sent !== null) {
-      return entry.child.send(message, hostHandle(sent)) ? 0 : -32;
+    // `options` and `callback` are node's own -- `keepOpen` decides whether the host
+    // closes its copy of a sent socket, and the callback fires when the host's queue
+    // drains, which is knowledge only the host has. Both are forwarded rather than
+    // interpreted here. Argument count matters: node reads a present third argument as
+    // the options object, so the call is built from what is actually there.
+    const rest = [];
+    if (sent !== undefined && sent !== null) rest.push(hostHandle(sent));
+    if (options !== undefined && options !== null) {
+      if (rest.length === 0) rest.push(undefined);
+      rest.push(options);
     }
+    if (typeof callback === "function") rest.push(callback);
+    if (rest.length > 0) return entry.child.send(message, ...rest) ? 0 : -32;
     return entry.child.send(message) ? 0 : -32;
   } catch {
     return -32;

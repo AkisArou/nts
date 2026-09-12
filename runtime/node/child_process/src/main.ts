@@ -97,7 +97,7 @@ declare function nts_child_process_spawn(
    */
   stdioSpec: readonly unknown[] | null,
   serialization: string,
-  onMessage: (message: unknown) => void,
+  onMessage: (message: unknown, sent?: unknown) => void,
   onDisconnect: () => void,
   onExit: (status: number, signal: number) => void,
   onError: (code: number) => void,
@@ -131,7 +131,7 @@ declare function nts_child_process_fork(
   silent: number,
   serialization: string,
   onExit: (status: number, signal: number) => void,
-  onMessage: (message: unknown) => void,
+  onMessage: (message: unknown, sent?: unknown) => void,
   onDisconnect: () => void,
 ): number;
 /**
@@ -149,6 +149,8 @@ declare function nts_child_process_send(
   handle: number,
   message: unknown,
   sent?: unknown,
+  options?: unknown,
+  callback?: unknown,
 ): number;
 declare function nts_child_process_disconnect(handle: number): void;
 
@@ -871,21 +873,23 @@ function attachChannel(child: ChildProcess, channel: number): void {
       }
       return false;
     }
+    // `options` and the callback both reach the host, for the same reason `sent` does:
+    // node owns the channel's queue and only it knows when a message has gone.
+    //
+    // Synthesising the callback here instead was wrong in a way worth keeping written
+    // down. `send` returns false for **backpressure**, not failure -- node still
+    // delivers the message and still calls back with null once the queue drains -- so
+    // calling back with ERR_IPC_CHANNEL_CLOSED whenever the return was false turned
+    // every backed-up send into an error. test-child-process-send-returns-boolean
+    // drives `send` until it returns false on purpose and then waits for that exact
+    // callback; it got an AssertionError from `mustSucceed` instead.
+    //
+    // The backlog itself needed nothing: measured against node, rv1..rv4 read
+    // [true, true, false, false] on both, because forwarding to the host's `send`
+    // forwards the host's queue.
     const written = nts_child_process_send(
-      channel, message, sending ? handle : undefined,
+      channel, message, sending ? handle : undefined, options, callback,
     ) === 0;
-    // **The callback is node's acknowledgement that the message went**, and it was being
-    // located by the argument shuffle and then dropped. `send('x', handle, cb)` is a
-    // three-argument form whose whole point is the callback, and
-    // test-child-process-send-returns-boolean drives five of them expecting each to
-    // settle. On a next tick because node's is asynchronous even when the write was not:
-    // a caller that gets its callback synchronously would see it before its own `send`
-    // returned.
-    if (callback !== undefined) {
-      nextTick((): void => {
-        (callback as (error: Error | null) => void)(written ? null : new ERR_IPC_CHANNEL_CLOSED());
-      });
-    }
     return written;
   };
   child.disconnect = (): void => {
@@ -1129,13 +1133,28 @@ export class ChildProcess extends EventEmitter {
     this.emit("disconnect");
   }
   
-  _handleMessage(message: unknown): void {
+  _handleMessage(message: unknown, sent?: unknown): void {
     // A message whose `cmd` begins with `NODE_` is node's *internal* channel traffic
     // and reaches `internalMessage` instead of `message`. That is not a curiosity: it
     // is the whole of `cluster`'s protocol -- the worker announces itself with
     // `{ cmd: 'NODE_CLUSTER', act: 'online' }` -- and a module that delivered it as an
     // ordinary `message` would hand every cluster handshake to the application.
-    this.emit(isInternalMessage(message) ? "internalMessage" : "message", message);
+    // **The handle, when one came with it.** `process.send(msg, socket)` in a child
+    // arrives here as two values and the second was being dropped at the stand-in, so
+    // a parent that asked for a descriptor got `undefined` and
+    // test-cluster-net-send's `assert.ok(handle)` failed on a message that had
+    // otherwise arrived intact. Passing a socket *to* a child already worked; this is
+    // the other direction.
+    //
+    // What arrives is the **host's** socket, not one of this profile's: the descriptor
+    // is real and its data flows, but `handle instanceof net.Socket` answers false
+    // against our `net`. Adopting it would need a host-socket-to-ours direction that
+    // `net` does not expose yet -- it exposes only the reverse, which is what sending
+    // one uses. The same realm seam as `atob`, `URL` and the advanced-serialization
+    // Buffer, and written here so a caller reading `handle` knows whose it is.
+    this.emit(
+      isInternalMessage(message) ? "internalMessage" : "message", message, sent,
+    );
   }
 }
 
@@ -1194,8 +1213,8 @@ export function spawn(
       // `message` events a forked one does. Only `fork` wired this, so
       // `spawn(file, args, { stdio: ['ipc', ...] })` had a channel the caller could not
       // hear -- which is four of the advanced-serialization files and stdout-ipc.
-      (message: unknown): void => {
-        if (child !== null) child._handleMessage(message);
+        (message: unknown, sent?: unknown): void => {
+          if (child !== null) child._handleMessage(message, sent);
       },
       (): void => {
         if (child !== null) child._handleDisconnect();
@@ -1712,8 +1731,8 @@ export function fork(
     (status: number, signal: number): void => {
       if (child !== null) child._handleExit(status, signal);
     },
-    (message: unknown): void => {
-      if (child !== null) child._handleMessage(message);
+    (message: unknown, sent?: unknown): void => {
+      if (child !== null) child._handleMessage(message, sent);
     },
     (): void => {
       if (child !== null) child._handleDisconnect();
