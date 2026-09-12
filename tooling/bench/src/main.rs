@@ -260,13 +260,60 @@ fn quiet_enough(when: &str) -> Option<String> {
     if busy.is_empty() {
         return None;
     }
-    let pids: Vec<String> = busy.iter().map(u32::to_string).collect();
+    // **With its age, which is the difference between a note and an alarm.**
+    // On 2026-09-12 an `emit-jvm` of `examples/library` blocked in
+    // `anon_pipe_read` waiting on a `tsgo` reply that never came -- zero CPU
+    // ticks in eleven hours and forty-three minutes -- and this check did its
+    // job perfectly: it declined every timed run on the machine for half a day
+    // rather than measure against it.
+    //
+    // That is the failure. A check that refuses correctly makes a hung process
+    // **silent** rather than loud, and `wait-idle.sh` waits forever on one that
+    // never exits. `another compiler is running (1542606)` reads as "somebody is
+    // working"; `another compiler is running (1542606 11h43m)` reads as
+    // "something is wrong", and they are one field apart.
+    let pids: Vec<String> = busy
+        .iter()
+        .map(|pid| match age_of(*pid) {
+            Some(age) => format!("{pid} {age}"),
+            None => pid.to_string(),
+        })
+        .collect();
     Some(format!(
         "another compiler is running ({}) {when}; a timed run wants the machine \
          to itself -- `tooling/gate/wait-idle.sh`, or `NTS_BENCH_ALONE=0` to \
          measure anyway",
         pids.join(", ")
     ))
+}
+
+/// How long a process has been alive, as a person reads it.
+///
+/// From `/proc`, because `ps` would be a second process to spawn per pid inside
+/// a check that runs before every case. `starttime` is field 22 of
+/// `/proc/<pid>/stat`, and the fields are counted from after the **last** `)`
+/// rather than by splitting the whole line: the command name sits in
+/// parentheses and may itself contain spaces and parentheses, which is the
+/// documented reason `/proc` parsers go wrong.
+fn age_of(pid: u32) -> Option<String> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let fields: Vec<&str> = stat[stat.rfind(')')? + 1..].split_whitespace().collect();
+    // Index 0 here is `state`, which is field 3, so field 22 is index 19.
+    let started: u64 = fields.get(19)?.parse().ok()?;
+    let uptime = std::fs::read_to_string("/proc/uptime").ok()?;
+    // Whole seconds on both sides, so there is no float and no cast: `/proc`
+    // gives uptime as `12345.67` and `starttime` in clock ticks, and a second
+    // of granularity is more than a message measured in hours needs.
+    //
+    // `_SC_CLK_TCK`, which is 100 on every Linux this runs on. A wrong constant
+    // here misreports an age and cannot misreport whether there is one.
+    let up: u64 = uptime.split_whitespace().next()?.split('.').next()?.parse().ok()?;
+    let seconds = up.saturating_sub(started / 100);
+    Some(match seconds {
+        s if s >= 3600 => format!("{}h{:02}m", s / 3600, (s % 3600) / 60),
+        s if s >= 60 => format!("{}m{:02}s", s / 60, s % 60),
+        s => format!("{s}s"),
+    })
 }
 
 /// The tree this run measures and publishes into.
