@@ -23533,6 +23533,95 @@ impl<'a> FuncBuilder<'a> {
     /// without lowering `a` twice: the optional form has to test the receiver
     /// *and* read through it, and once is the difference between `a?.b` and
     /// something that calls a getter on the way in and again on the way out.
+    /// Why [`Self::shared_field`] declined, in the words that are true of it.
+    ///
+    /// **The sentence this replaces asserted a cause it never tested.** Any
+    /// member read on an erased receiver was reported as a union "whose members
+    /// lay their fields out differently", and `present_of`'s own doc already
+    /// records that being said of a union with exactly one object in it. A
+    /// probe separating the shapes found the claim false for two more: a getter
+    /// every arm declares is not a field anywhere, and a method call on a union
+    /// does not reach this at all -- it reports `a method call on something
+    /// without methods`, which is a different census row.
+    ///
+    /// That matters beyond the wording. This message is the refusal census's
+    /// **number one row** -- 57 distinct things across all 23 modules -- and a
+    /// row that names one cause while covering four cannot be ranked, because
+    /// only one of the four is something to build. `shared_field` already
+    /// distinguishes them and threw the distinction away; this asks it the same
+    /// questions in the same order and keeps the answer.
+    fn why_not_shared(&mut self, id: NodeId, member_name: &str) -> Option<String> {
+        let object = self.children(id).first().copied()?;
+        let ty = *self.snapshot.node_types.get(&object)?;
+        let kind = &self.snapshot.types.get(ty.0 as usize)?.kind;
+        let TypeKind::Union(members) = kind else {
+            // **Three quarters of this message's instances land here**, so it
+            // has to say what the receiver *is* rather than what it is not. The
+            // row was ranked first in the refusal census -- 57 distinct things
+            // across all 23 modules -- while naming a disagreement between
+            // union arms that 97 of its 133 sites in five modules did not have,
+            // because they were not unions.
+            let what = match kind {
+                TypeKind::Any => "`any`",
+                TypeKind::Unknown => "`unknown`",
+                TypeKind::Intersection(_) => "an intersection",
+                TypeKind::TypeParameter { .. } => "an uninstantiated type parameter",
+                TypeKind::Object { .. } => "an object whose layout was erased",
+                TypeKind::Function(_) => "a function type",
+                _ => "a type with no layout",
+            };
+            return Some(format!("`{member_name}` on {what}, which is erased here"));
+        };
+        let members = members.clone();
+        if members.len() < 2 {
+            return Some(format!(
+                "`{member_name}` on an erased value whose type has one member"
+            ));
+        }
+        let mut arms = Vec::with_capacity(members.len());
+        for member in &members {
+            let Ok(layout) = self.layout_of(id, *member) else {
+                return Some(format!(
+                    "`{member_name}` on a union one of whose members has no layout"
+                ));
+            };
+            arms.push(layout);
+        }
+        let (first, rest) = arms.split_first()?;
+        let mut shared = first.fields.len();
+        for other in rest {
+            shared = shared.min(other.fields.len());
+            let agreed = first
+                .fields
+                .iter()
+                .zip(other.fields.iter())
+                .take(shared)
+                .take_while(|(want, have)| same_slot(want, have))
+                .count();
+            shared = shared.min(agreed);
+        }
+        // Declared by every arm and stored by none of them: an accessor or a
+        // method. There is no offset to read and the arms do not disagree about
+        // one -- what it needs is a *call*, through the slot each arm's
+        // dispatch table already has.
+        let Some(at) = first.index_of(member_name) else {
+            return Some(format!(
+                "`{member_name}` on a union, which no member stores as a field"
+            ));
+        };
+        if shared == 0 {
+            return Some(format!(
+                "`{member_name}` on a union whose members share no leading field"
+            ));
+        }
+        if usize::try_from(at).ok()? >= shared {
+            return Some(format!(
+                "`{member_name}` on a union, past the fields its members agree about"
+            ));
+        }
+        None
+    }
+
     /// Why a member other than `length` is not readable here, in the words that
     /// send a reader to the right place.
     ///
@@ -23549,26 +23638,29 @@ impl<'a> FuncBuilder<'a> {
         // `buffer`, `byteLength` and `byteOffset` land here: a typed array
         // is an array of a known width and not a view onto storage
         // something else can also see, so it has a length and nothing else.
-        self.unsupported(
-            id,
-            &if sequence {
-                format!("`{member_name}`, where an array has only `length`")
-            } else if self.values[value.0 as usize].ty == HirType::Erased {
-                // A union of object types. Every member is a pointer, so
-                // the value is representable -- what is missing is that a
-                // field lives at a different offset in each member, so
-                // reading one needs the layouts reconciled or the
-                // discriminant tested first. Saying "a value with no
-                // fields" of something that has several sets of them is
-                // the wrong sentence entirely.
-                format!(
-                    "`{member_name}` on a union, whose members lay their fields out \
-                         differently"
-                )
-            } else {
-                format!("`{member_name}`, a property of a value with no fields")
-            },
-        )
+        // Computed before the call rather than inside it: `why_not_shared` lays
+        // out the arms it is asked about, so it needs `&mut self` where
+        // `unsupported` is holding `&self`.
+        let erased = self.values[value.0 as usize].ty == HirType::Erased;
+        let asked = if sequence || !erased {
+            None
+        } else {
+            self.why_not_shared(id, member_name)
+        };
+        let message = if sequence {
+            format!("`{member_name}`, where an array has only `length`")
+        } else if let Some(why) = asked {
+            why
+        } else if erased {
+            // Erased, and `why_not_shared` could not say why -- it declined
+            // rather than answered, which means the receiver's node carried no
+            // union type to ask about. The old sentence, kept for exactly the
+            // case it was ever true of.
+            format!("`{member_name}` on a union, whose members lay their fields out differently")
+        } else {
+            format!("`{member_name}`, a property of a value with no fields")
+        };
+        self.unsupported(id, &message)
     }
 
     /// Whether this `.length` reads an erased value the checker has proved is

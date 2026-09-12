@@ -1,4 +1,17 @@
-// expect: `at` on a union, whose members lay their fields out differently
+// expect: `at` on a union whose members share no leading field
+//
+// **The message changed on 2026-09-12 and the fixture did not.** It used to
+// read "whose members lay their fields out differently", which is a claim about
+// the arms that nothing had tested: every member read on an erased receiver got
+// that sentence, including a getter that is not a field in any arm and a union
+// with exactly one object in it. `shared_field` already distinguishes four
+// reasons for declining and was throwing the distinction away.
+//
+// This matters for ranking rather than for wording. The old text is the refusal
+// census's **number one row** -- 57 distinct things across all 23 modules -- and
+// one of its four causes is something to build while the others are correct
+// refusals or a different row entirely. A row that cannot be split cannot be
+// ranked.
 //
 // **Landed, reverted and landed again on 2026-09-11**, and the middle step is
 // the finding. The discriminant case now lowers through `OpKind::SharedFieldGet`
