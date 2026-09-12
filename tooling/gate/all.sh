@@ -499,6 +499,15 @@ profile() {
   # raises it while a fix that makes one compile lowers it. Read the direction
   # against what landed rather than on its own.
   #
+  # 2026-09-12, same 25 modules: **20553**, so 20800. Five below the number the
+  # ceiling was set from, across a landing that *added* a refusal -- a call
+  # inside a `try` whose `throw` would not reach the handler, which a census
+  # either side reads as +19 sites over +6 distinct causes. The direction is the
+  # clause above in both halves at once: the new refusal speaks, and refusing a
+  # function at its own `try` stops it dragging its callees into the cascade, so
+  # 36 things that were counted behind something else are not counted at all
+  # now. Net -5, from two movements an order of magnitude larger.
+  #
   # **Reproducible at a commit, measured rather than assumed.** Two full runs at
   # `d265780c` both read 19078. So a regression of any size is visible and this
   # ceiling is worth having.
@@ -526,7 +535,7 @@ profile() {
   # 18694 to 19065 with nothing new refused. The count that did not move is the
   # one the work is about: `fs` emits 1615 functions before and after, because a
   # copy replaces the plain version wherever every call to it was specialised.
-  ceiling=21000
+  ceiling=20800
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
@@ -832,7 +841,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 179 "through the LLVM backend, counting" ); }
+  backend_examples 186 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -843,7 +852,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 179 "through the LLVM backend" ); }
+  backend_examples 186 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1035,7 +1044,24 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # So the two gaps are the same sentence one representation apart, and neither
   # is this lane being behind. Both swept one at a time rather than inferred
   # from a total.
-  backend_examples 179 "through the JVM backend" ); }
+  #
+  # **179 to 184 on 2026-09-12**, LLVM to 186 over the same run. The two this
+  # lane does not have are named rather than counted, because a floor that only
+  # says 184 cannot tell a gap from a regression:
+  #
+  #   a-class-stored-and-compared      the covariant-constructor-return gap
+  #                                    two paragraphs up, unchanged
+  #   a-unary-plus-is-a-conversion     `nts_value_to_number` has no name in
+  #                                    `codegen/jvm`'s table and no
+  #                                    `NtsRuntime` method behind it
+  #
+  # The second is new here and is not new in the compiler: `Number(v)` on an
+  # erased union of primitives has emitted that helper for as long as it has
+  # existed, and no example reached it on this lane until unary `+` became the
+  # same operation. So the arm stays in the example rather than being trimmed to
+  # make three backends agree -- trimming it would take the only thing that asks
+  # the question.
+  backend_examples 184 "through the JVM backend" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

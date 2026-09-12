@@ -1338,6 +1338,20 @@ impl FuncBuilder<'_> {
 /// What each function declaration is emitted as, and which cannot be.
 #[derive(Default)]
 struct Naming {
+    /// Symbols whose functions can raise a `throw`, directly or through a call.
+    ///
+    /// What a `try` needs to know about a call it contains: a `throw` reaches
+    /// only a handler in its *own* function, so a call that can raise one is a
+    /// call whose exception this handler will not catch. A call that cannot is
+    /// no worse inside a `try` than outside it.
+    ///
+    /// Seeded from the declarations whose own body writes `throw` -- not
+    /// entering nested functions, because an arrow written inside one is called
+    /// somewhere else -- and closed over direct calls. An **indirect** call is
+    /// in the set: `fns[0]()` reaches what cannot be known here, and the
+    /// alternative is to assume the very thing this exists because the compiler
+    /// cannot establish.
+    throwing: rustc_hash::FxHashSet<u32>,
     /// The emitted name, for a declaration whose plain name is taken.
     qualified: rustc_hash::FxHashMap<NodeId, String>,
     /// Declarations that cannot be told apart by anything this compiler has.
@@ -1505,6 +1519,133 @@ fn abstract_generator_names(index: usize) -> (String, String) {
     (class, method)
 }
 
+/// Every symbol whose function can raise a `throw`.
+///
+/// Two passes and a fixpoint. The seed is the symbols whose declarations
+/// *write* a `throw`; the closure adds any symbol that calls one already in the
+/// set. A call with no symbol to resolve -- `fns[0]()`, `this.handler()` --
+/// puts its caller in the set unconditionally, because what it reaches is
+/// exactly what cannot be decided here.
+///
+/// # Keyed by symbol, and walked from one
+///
+/// [`FuncBuilder::calls_compiled_code`] asks this about the symbol it read off
+/// the *callee identifier*, so the set has to hold those ids and nothing else.
+/// The first version walked nodes instead and read `node.symbol` on each
+/// `FunctionDeclaration`, which is `None` there -- the whole set came back
+/// empty and the refusal it gates stopped firing without a single diagnostic
+/// changing. Walking `snapshot.symbols` makes the key a property of the
+/// iteration rather than a hope about the node.
+///
+/// Nested functions are not entered when looking for a `throw` or for a call.
+/// An arrow written inside a declaration is a *value*, and where it runs is a
+/// different question from where it was written -- attributing its `throw` to
+/// the enclosing function would put half the program in the set for throws that
+/// happen somewhere else entirely.
+fn throwing_symbols(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+) -> rustc_hash::FxHashSet<u32> {
+    let nested = |kind: Option<u16>| {
+        matches!(
+            kind,
+            Some(
+                syntax::FUNCTION_DECLARATION
+                    | syntax::FUNCTION_EXPRESSION
+                    | syntax::ARROW_FUNCTION
+                    | syntax::METHOD_DECLARATION
+            )
+        )
+    };
+    // What each symbol's declarations write: whether one throws, and which
+    // symbols they call. One walk, because both are the same descent.
+    let mut throws: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
+    let mut calls: rustc_hash::FxHashMap<u32, Vec<Option<u32>>> = rustc_hash::FxHashMap::default();
+    for (index, record) in snapshot.symbols.iter().enumerate() {
+        let symbol = u32::try_from(index).unwrap_or(u32::MAX);
+        // Every symbol is walked and only the callable ones get an entry. The
+        // snapshot holds a symbol for every type, parameter and binding as
+        // well, and giving each an empty vector made the fixpoint below iterate
+        // tens of thousands of symbols that can never be in the set.
+        let mut reached: Vec<Option<u32>> = Vec::new();
+        for declaration in &record.declarations {
+            if !nested(probe.kind_of(*declaration)) {
+                continue;
+            }
+            // An `async` function never raises *synchronously*: a `throw` in
+            // one rejects the promise it already returned. That rejection is a
+            // real edge into the enclosing handler and `lower_unguarded`
+            // already routes it -- `examples/async-catch` is eight functions
+            // of exactly this and every one of them works -- so admitting an
+            // async callee here would refuse a shape that is not broken.
+            if probe
+                .node(*declaration)
+                .modifiers
+                .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+            {
+                continue;
+            }
+            let mut pending: Vec<NodeId> = probe.children(*declaration);
+            while let Some(at) = pending.pop() {
+                let kind = probe.kind_of(at);
+                if nested(kind) {
+                    continue;
+                }
+                if kind == Some(syntax::THROW_STATEMENT) {
+                    throws.insert(symbol);
+                }
+                if matches!(kind, Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)) {
+                    let callee = probe.children(at).first().copied();
+                    reached.push(
+                        callee
+                            .and_then(|callee| probe.node(callee).symbol)
+                            .map(|called| called.0),
+                    );
+                }
+                pending.extend(probe.children(at));
+            }
+        }
+        if !reached.is_empty() {
+            calls.insert(symbol, reached);
+        }
+    }
+    let mut set = throws;
+    // An unresolved callee is unbounded, so its caller joins the set at once.
+    for (symbol, reached) in &calls {
+        if reached.iter().any(Option::is_none) {
+            set.insert(*symbol);
+        }
+    }
+    // Fixpoint. Bounded by the number of symbols, and it converges in a handful
+    // of rounds on this corpus because the call graph is shallow.
+    loop {
+        let mut grew = false;
+        for (symbol, reached) in &calls {
+            if set.contains(symbol) {
+                continue;
+            }
+            if reached.iter().flatten().any(|called| set.contains(called)) {
+                set.insert(*symbol);
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    // An imported name is its own symbol pointing at the declaring module's, and
+    // the caller asks about the *local* one. Following the alias here keeps
+    // `calls_compiled_code` a single lookup.
+    for (index, record) in snapshot.symbols.iter().enumerate() {
+        if let Some(to) = record.aliased
+            && set.contains(&to.0)
+        {
+            set.insert(u32::try_from(index).unwrap_or(u32::MAX));
+        }
+    }
+    set
+}
+
 /// A token index for every class the program declares. See
 /// [`Naming::class_tokens`].
 ///
@@ -1642,6 +1783,7 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
             naming.qualified.insert(*id, format!("{name}@{module}"));
         }
     }
+    naming.throwing = throwing_symbols(snapshot, &probe);
     naming.generators = generators;
     naming.written_order = written_order;
     naming
@@ -2681,6 +2823,7 @@ impl Shared {
 fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
     builder.qualified.clone_from(&naming.qualified);
     builder.generators.clone_from(&naming.generators);
+    builder.throwing.clone_from(&naming.throwing);
     builder.written_order.clone_from(&naming.written_order);
     builder.class_tokens.clone_from(&naming.class_tokens);
 }
@@ -6767,6 +6910,8 @@ struct FuncBuilder<'a> {
     generator: Option<super::GeneratorFrame>,
     /// Which generator each `function*` is, decided once by [`naming`].
     generators: rustc_hash::FxHashMap<NodeId, usize>,
+    /// Which functions can raise a `throw`. See [`Naming::throwing`].
+    throwing: rustc_hash::FxHashSet<u32>,
     /// The order the program writes each field-name set; see
     /// [`Naming::written_order`], which computes it once for the whole program.
     written_order: rustc_hash::FxHashMap<Vec<String>, Vec<String>>,
@@ -6821,6 +6966,7 @@ impl<'a> FuncBuilder<'a> {
             async_result: None,
             generator: None,
             generators: rustc_hash::FxHashMap::default(),
+            throwing: rustc_hash::FxHashSet::default(),
             class_tokens: rustc_hash::FxHashMap::default(),
             written_order: rustc_hash::FxHashMap::default(),
             used_closures: Vec::new(),
@@ -16463,6 +16609,35 @@ impl<'a> FuncBuilder<'a> {
         let Some(&body) = parts.first() else {
             return Err(self.unsupported(id, "a `try` with nothing in it"));
         };
+        // **A `throw` that crosses a call reaches no handler here.** A `throw`
+        // lowers to a jump to the enclosing handler *block*, which is a branch
+        // inside one function; a callee has no edge back to its caller's
+        // handler, so a throw raised inside a call abandons the program where
+        // node's `catch` would run.
+        //
+        // Measured on all three backends before this was written: `try { return
+        // deep(n) } catch { return -1 }` with `deep` throwing gives
+        // `10 case(s) the compiled program declined` against node's -1, and the
+        // JVM emits no exception table at all. The uncaught case is *right* --
+        // an abort is what node does when nobody catches -- so the divergence
+        // is exactly a handler existing, which is what this refuses.
+        //
+        // Any call, rather than only one that can reach a `throw`. The precise
+        // rule wants a transitive "can throw" over the call graph and would
+        // refuse fewer; this is the version the node lane priced against its own
+        // axis and accepted, and the argument that decided it is worth keeping:
+        // **the defect is masked by the boundary today.** A module has to
+        // publish a function before a caught throw inside it can be reached, and
+        // `assert` -- the most throw-heavy module in the profile -- fails 13 of
+        // 13 on names that do not exist. So this is cheapest to refuse now and
+        // grows more expensive as publishing improves, which is the opposite of
+        // the usual shape.
+        if let Some(call) = self.call_within(body) {
+            return Err(self.unsupported(
+                call,
+                "a call inside a `try`, whose `throw` would not reach this handler",
+            ));
+        }
         // The children are the block, an optional catch clause, and an optional
         // `finally` block. Which is which is read off the shape rather than off
         // a `CatchClause` kind number: every constant in `syntax` was read from
@@ -23411,6 +23586,150 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// `ToNumber(v)`, which `Number(x)` and unary `+` are both spellings of.
+    ///
+    /// One function because they are one operation. Unary `+` used to be
+    /// *dropped* -- correct on something already typed `number`, where it is
+    /// the identity including on `-0`, and wrong on everything else: `+s` on a
+    /// string returned the string, and the C backend then emitted
+    /// `(double)v1` on a pointer. A conversion that is the identity for one
+    /// type is not the identity, and writing it once is what keeps the other
+    /// arms from being missing in one of the two places.
+    ///
+    /// The two spellings *do* differ in one place and the typechecker is what
+    /// separates them: `Number(1n)` is 1 and `+1n` is a `TypeError`. TypeScript
+    /// refuses the second as TS2736 before lowering sees it, so the `BigInt`
+    /// arm below is reachable only through the spelling it is right for. Shared
+    /// on that fact rather than on the hope that nobody writes it.
+    fn coerce_to_number(
+        &mut self,
+        id: NodeId,
+        argument: NodeId,
+        value: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        match self.values[value.0 as usize].ty {
+                HirType::Float { .. } | HirType::Int { .. } => Ok(value),
+                // One conversion, two reasons. A boolean is `ToNumber`, which
+                // the specification gives as 1 and 0. A `bigint` rounds to the
+                // nearest double -- lossy above 2^53 in node and here alike,
+                // deliberately, because that is what asking for a `number`
+                // means. C's own conversion is both of those.
+                HirType::Bool | HirType::BigInt => {
+                    Ok(self.push(OpKind::Convert(value), HirType::NUMBER, origin))
+                }
+                // An erased value whose type admits no object, which is
+                // `typeof v === "string" || typeof v === "boolean"` -- a union
+                // of two primitives, so the value keeps its tag and the tag is
+                // what decides. `nts_value_to_number` is ToNumber over the tags
+                // and reuses the string parse below rather than repeating it.
+                //
+                // Guarded on the *type* rather than emitted for any erased
+                // value, because ToNumber of an object is ToPrimitive: it runs
+                // `valueOf` and `toString` off a prototype chain, and
+                // `Number([5])` is 5. Nothing here can produce that, so a value
+                // that might be one is refused instead of answered wrongly.
+                HirType::Erased if self.only_primitives(argument) => Ok(self.call_runtime(
+                    "nts_value_to_number",
+                    vec![value],
+                    HirType::NUMBER,
+                    &origin,
+                )),
+                // A string, which is a *parse* and not a conversion: the
+                // specification's StringToNumber trims, accepts three radix
+                // prefixes C does not and rejects three spellings C does, and
+                // answers NaN for anything that is not a complete literal.
+                // `nts_str_to_number` is that grammar; `strtod` is asked only
+                // about a span it has already decided is decimal.
+                //
+                // The whole JSON parser is behind this one arm: `numberValueOf`
+                // reads `Number(source.slice(start, end))`, and `readValue` and
+                // `parseJsonText` are behind that.
+                HirType::Managed(ManagedType::String) => Ok(self.call_runtime(
+                    "nts_str_to_number",
+                    vec![value],
+                    HirType::NUMBER,
+                    &origin,
+                )),
+                _ => Err(self.unsupported(id, "a conversion to number from this type")),
+        }
+    }
+
+    /// The first call anywhere inside `node`, if there is one.
+    ///
+    /// Returns the *call* rather than a bool so the refusal can point at it: a
+    /// diagnostic on the `try` sends a reader looking at the wrong line, and
+    /// the whole point of the refusal is which call it is.
+    ///
+    /// A `new` counts. It runs a constructor, and a constructor throws as
+    /// readily as anything else -- `new ERR_INVALID_ARG_TYPE(...)` is how this
+    /// corpus raises most of its errors.
+    ///
+    /// Only a call into code **this program compiles**, which is the difference
+    /// between a refusal and a regression. `try { throw new RangeError(m) }
+    /// catch { }` is the commonest shape there is and it *works*: the throw and
+    /// the handler are in one function, and a provided error's constructor is
+    /// emitted inline by this compiler and cannot throw. A runtime helper
+    /// cannot either -- it aborts where it refuses, which is not a `throw` and
+    /// reaches no handler by design. Refusing those would have cost the working
+    /// half to fix the broken one.
+    fn call_within(&self, node: NodeId) -> Option<NodeId> {
+        if matches!(
+            self.kind_of(node),
+            Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)
+        ) && self.calls_compiled_code(node)
+        {
+            return Some(node);
+        }
+        // Not into a nested function: a closure written inside a `try` is not
+        // *called* by it, and refusing on one would refuse every `try` holding
+        // a callback that runs somewhere else entirely.
+        if matches!(
+            self.kind_of(node),
+            Some(
+                syntax::FUNCTION_DECLARATION
+                    | syntax::FUNCTION_EXPRESSION
+                    | syntax::ARROW_FUNCTION
+            )
+        ) {
+            return None;
+        }
+        self.children(node)
+            .into_iter()
+            .find_map(|child| self.call_within(child))
+    }
+
+    /// Whether a call or `new` reaches a function this program compiles.
+    ///
+    /// The question behind it is "could this raise a `throw`", and only compiled
+    /// code can: a runtime helper aborts rather than throwing, and a provided
+    /// error's constructor is emitted inline. A callee with no declarations in
+    /// the snapshot is the host's, and a `new` of a provided error is this
+    /// compiler's own.
+    fn calls_compiled_code(&self, call: NodeId) -> bool {
+        let Some(callee) = self.children(call).first().copied() else {
+            return false;
+        };
+        // An indirect callee -- `fns[0]()`, `this.handler()` -- has no symbol to
+        // ask, and what it reaches is exactly what cannot be known here. Treated
+        // as compiled, because the alternative is to assume the one thing this
+        // refusal exists because the compiler cannot establish.
+        let Some(symbol) = self.node(callee).symbol else {
+            return true;
+        };
+        let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else {
+            return true;
+        };
+        if super::builtin::is_error(&record.name) {
+            return false;
+        }
+        // Not merely "compiled", but **can raise**. `bounded(n)` inside a `try`
+        // is a compiled call and a pure one, and refusing it would take a
+        // working example away to fix a defect it does not have --
+        // `examples/array-buffer` is exactly that shape and caught this.
+        !record.declarations.is_empty() && self.throwing.contains(&symbol.0)
+    }
+
     /// `-x`, `+x`, `!x`.
     ///
     /// # The operator is not a child
@@ -23423,9 +23742,8 @@ impl<'a> FuncBuilder<'a> {
     /// however firmly the encoder's documentation says it is. The only child is
     /// the operand.
     ///
-    /// Unary `+` is `ToNumber`, which on something already typed `number` is the
-    /// identity — including on `-0`, so it is dropped rather than lowered to an
-    /// operation that would then have to preserve the sign of zero.
+    /// Unary `+` is `ToNumber`, which [`Self::coerce_to_number`] answers for
+    /// every type rather than only for the one where it is the identity.
     fn lower_prefix_unary(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let NodeData::Children { small, .. } = self.node(id).data else {
             return Err(self.unsupported(id, "a unary expression without operator data"));
@@ -23471,7 +23789,15 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let value = self.lower_expression(*operand)?;
-        let Some(op) = op else { return Ok(value) };
+        // Unary `+` is `ToNumber`, and `ToNumber` of a `number` is the identity
+        // -- including on `-0`, which is why it is returned rather than lowered
+        // to an operation that would have to preserve the sign of zero. That
+        // identity is one arm of the conversion and not the whole of it:
+        // returning the operand for *every* type answered a string with the
+        // string, and the backend then emitted `(double)v1` on a pointer.
+        let Some(op) = op else {
+            return self.coerce_to_number(id, *operand, value);
+        };
         // `!x` is `ToBoolean(x)` negated, and `ToBoolean` is a *rule* rather
         // than a representation change: `""`, `0`, `NaN`, `null` and
         // `undefined` are false and every other value is true.
@@ -26444,53 +26770,9 @@ impl<'a> FuncBuilder<'a> {
                 Ok(value) => value,
                 Err(problem) => return Some(Err(problem)),
             };
-            let origin = self.origin(id);
-            return Some(match self.values[value.0 as usize].ty {
-                HirType::Float { .. } | HirType::Int { .. } => Ok(value),
-                // One conversion, two reasons. A boolean is `ToNumber`, which
-                // the specification gives as 1 and 0. A `bigint` rounds to the
-                // nearest double -- lossy above 2^53 in node and here alike,
-                // deliberately, because that is what asking for a `number`
-                // means. C's own conversion is both of those.
-                HirType::Bool | HirType::BigInt => {
-                    Ok(self.push(OpKind::Convert(value), HirType::NUMBER, origin))
-                }
-                // An erased value whose type admits no object, which is
-                // `typeof v === "string" || typeof v === "boolean"` -- a union
-                // of two primitives, so the value keeps its tag and the tag is
-                // what decides. `nts_value_to_number` is ToNumber over the tags
-                // and reuses the string parse below rather than repeating it.
-                //
-                // Guarded on the *type* rather than emitted for any erased
-                // value, because ToNumber of an object is ToPrimitive: it runs
-                // `valueOf` and `toString` off a prototype chain, and
-                // `Number([5])` is 5. Nothing here can produce that, so a value
-                // that might be one is refused instead of answered wrongly.
-                HirType::Erased if self.only_primitives(*argument) => Ok(self.call_runtime(
-                    "nts_value_to_number",
-                    vec![value],
-                    HirType::NUMBER,
-                    &origin,
-                )),
-                // A string, which is a *parse* and not a conversion: the
-                // specification's StringToNumber trims, accepts three radix
-                // prefixes C does not and rejects three spellings C does, and
-                // answers NaN for anything that is not a complete literal.
-                // `nts_str_to_number` is that grammar; `strtod` is asked only
-                // about a span it has already decided is decimal.
-                //
-                // The whole JSON parser is behind this one arm: `numberValueOf`
-                // reads `Number(source.slice(start, end))`, and `readValue` and
-                // `parseJsonText` are behind that.
-                HirType::Managed(ManagedType::String) => Ok(self.call_runtime(
-                    "nts_str_to_number",
-                    vec![value],
-                    HirType::NUMBER,
-                    &origin,
-                )),
-                _ => Err(self.unsupported(id, "a conversion to number from this type")),
-            });
+            return Some(self.coerce_to_number(id, *argument, value));
         }
+
         // `BigInt(x)`, the mirror of `Number(x)` and not quite its twin.
         //
         // The identity on a bigint, and `0n`/`1n` on a boolean, both of which a
