@@ -6146,11 +6146,62 @@ forwarded value is a constant:
     before   putfield ; aload_0 ; getfield ; istore_1 ; iload_1 ; ireturn
     after    putfield ; iconst_5 ; ireturn
 
-**Three independent measurements agree on two**: the dex-pattern count that
-first reported the site, this `getfield` A/B, and MainClaude's `util` figure.
-That is a small optimisation measured honestly rather than a large one measured
-by percentage, and the two are only distinguishable by having counted.
+~~**Three independent measurements agree on two.**~~ **They do not, and the
+agreement was an artefact of an under-sampled third.** MainClaude's `util`
+figure was the module they happened to have run; the corpus number is **twelve
+loads across four modules**, ten of them in `stream`:
+
+    field.get, prepared HIR      before    scalar-only    + second pass
+    util                           1066          1064            1064
+    stream                         1606          1596            1596
+    buffer                          124           124             124
+    timers                          167           167             167
+
+So what actually agree are two measurements of the **bench** corpus -- the
+dex-pattern count and the `getfield` A/B, both saying two -- and `runtime/node`
+is a different corpus with a different answer. A coincidence that looked like
+corroboration, which is worse than either number alone, and it held for about
+an hour because three sources saying the same thing is exactly the shape that
+stops one looking.
+
+**And the second insertion point adds zero corpus loads.** `c.seed = 5; return
+c.seed` does not occur in `runtime/node` at all. It fires in the fixture and on
+this lane's `iconst_5 ; ireturn`, and finds nothing in the corpus -- and it is
+kept anyway, because the limitation it removes had **no evidence reachable from
+any dump**. That is the cost it buys down, not a load count.
+
+The honest ledger for the whole feature: twelve loads in four `runtime/node`
+modules, two `getfield` in ten bench cases, one dex site, and zero from the
+follow-up that made it comprehensible.
 
 It does not touch `awfy-bounce`'s 30% AOT regression, which is the same
 program. Two `getfield`s cannot be 30%, and saying so here saves the next
 reader the connection.
+
+### A comment claiming a mechanism is an unverified hypothesis, and one arm cannot test it
+
+The sharpest thing to come out of a day of these, and it is MainClaude's
+framing rather than mine.
+
+A fixture arm passing is consistent with **every** rule that would also make it
+pass. So a comment saying *this arm demonstrates invalidation through an alias*
+is a hypothesis about which rule is load-bearing, and the arm is not evidence
+for it -- the arm would pass if some entirely different rule were doing the
+work, which is what happened to `throughAnAlias` when the aliasing it tested
+started being erased before either pass saw it.
+
+**The sibling makes it a controlled experiment**: two arms differing in one
+thing, so the pair fails when that thing stops being the difference. Both of
+today's came out that way independently -- MainClaude's `& 255` arm beside the
+literal one, separating the type condition from the aliasing condition, and
+this lane's `resume()V` beside `resume(I)V`, separating "same name" from "same
+member". Which is the probe-arm discipline this file already keeps for
+measurements, applied to a fixture's *explanation* rather than its subject.
+
+**Where it stops, stated rather than papered over.** Prose about a whole pass
+has nothing that differs by one thing, so no sibling exists. The only check
+that caught either of today's was reading the artefact per function and
+confirming the arm passes for the stated reason -- expensive, and neither lane
+will do it routinely. So the honest position is **a technique for arms and a
+habit for passes**, and claiming the technique covers both would be the same
+kind of overstatement the technique exists to catch.
