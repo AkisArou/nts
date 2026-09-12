@@ -30,7 +30,27 @@
 // control, and it was measured rather than argued: with the guard reverted,
 // 85 cases disagree.
 //
-// # This fixture also constructs through one, and that half is narrower
+// # The construction half moved out on 2026-09-12
+//
+// This fixture used to end `return new Ctor("x").message`, and that line is now
+// `blockers/a-new-through-a-class-value` instead. Not because it stopped
+// mattering -- because it turned out to be a **different claim**, and one this
+// fixture could not have caught going wrong.
+//
+// `new C(n)` resolves the constructor from the *declared* type of the callee, so
+// a site reached by two assignable classes builds both as the first. This
+// registry holds exactly one class, so the correct program and the broken one
+// construct the same thing and `expect: lowers` was true either way. Two classes
+// through one site disagreed with node on 18 of 29 cases.
+//
+// It is refused now, which costs this monomorphic case. That is the trade the
+// `yield` value row already makes: a wrong answer that runs is worse than a
+// missing feature, and nothing here could tell the two apart.
+//
+// What remains below is the half this fixture was built for and which still
+// works: a class stored in an array, read back out, and compared.
+//
+// # The original note on constructing through one
 //
 // `new Ctor("x")` where `Ctor` came out of an array lowers **because
 // `RangeErrorLike extends Error`**, so the token is a provided error's and
@@ -78,5 +98,8 @@ const registry: Array<typeof RangeErrorLike> = [RangeErrorLike];
 export function make(): string {
   const Ctor = registry[0];
   if (Ctor === undefined) return "";
-  return new Ctor("x").message;
+  // Reading the token out of the array, and proving it is the class it should
+  // be. What this fixture guards is the class reaching a *value position* at
+  // all, which is what was fixed on 2026-09-10.
+  return Ctor === RangeErrorLike ? "x" : "";
 }

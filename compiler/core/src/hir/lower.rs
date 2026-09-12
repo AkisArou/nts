@@ -7400,11 +7400,24 @@ impl<'a> FuncBuilder<'a> {
 
     /// Refuse, naming the type that could not be represented.
     fn unrepresentable(&self, id: NodeId, what: &str) -> Diagnostic {
-        let named = self.snapshot.node_types.get(&id).map_or_else(
+        let named = self.describe_node(id);
+        self.unsupported(id, &format!("{what} of unrepresentable type ({named})"))
+    }
+
+    /// What the checker called the type at a node, for a diagnostic to name.
+    ///
+    /// One function because a refusal that does *not* name its type cannot be
+    /// counted by kind. `a conversion to string from this type` was 178 sites in
+    /// `runtime/node` and no census could say whether they were objects wanting
+    /// `ToPrimitive`, arrays wanting `join`, or erased values wanting a tag
+    /// dispatch -- three different features behind one sentence. A message is an
+    /// instrument, and one that cannot distinguish its own causes has the same
+    /// defect as a `grep -c` that cannot tell zero from a wrong pattern.
+    fn describe_node(&self, id: NodeId) -> String {
+        self.snapshot.node_types.get(&id).map_or_else(
             || "an untyped node".to_owned(),
             |ty| describe(self.snapshot, *ty),
-        );
-        self.unsupported(id, &format!("{what} of unrepresentable type ({named})"))
+        )
     }
 
     /// The same, for a type that is not the node's own.
@@ -10150,6 +10163,68 @@ impl<'a> FuncBuilder<'a> {
         let bound = self.bindings.get(&symbol).copied()?;
         let wanted = HirType::Managed(ManagedType::Object(cell_type(index)));
         (self.values[bound.0 as usize].ty == wanted).then_some(bound)
+    }
+
+    /// Refuse a `new` whose callee is a **value holding a class** rather than a
+    /// class the compiler can see.
+    ///
+    /// `new Thing(n)` and `new C(n)` are the same syntax and not the same
+    /// operation: the first names a class, the second reads a binding whose
+    /// contents this compiler cannot know. The difference is exactly whether the
+    /// callee's symbol is bound to a value here, which is what
+    /// [`Self::bindings`] holds and a class declaration is not.
+    ///
+    /// # It was a wrong answer that ran
+    ///
+    /// The constructed type came from the *expression's* type, which the checker
+    /// takes from the callee's declared type. For `function make(C: typeof
+    /// Thing)`, `new C(n)` is typed `Thing` — so it built a `Thing`, called
+    /// `Thing__constructor`, and discarded the class argument outright:
+    ///
+    /// ```text
+    /// static int32_t make(NtsObj_Fn2__1 * v0, int32_t v1) {
+    ///     (void)v0;
+    ///     v2_frame.header.descriptor = &nts_desc_NtsObj_Thing__Thing;
+    ///     Thing__constructor(v2, v1);
+    /// ```
+    ///
+    /// One class reaching the site is correct, which is why it was invisible. A
+    /// second assignable class is built **as the first**, at the first's size,
+    /// running the first's constructor; `Other`'s was never emitted and its
+    /// descriptor read `sizeof(NtsObj_Thing)` under the name `"Other"`. Two
+    /// classes through one site disagreed with node on **18 of 58 cases** and
+    /// produced a number for every one.
+    ///
+    /// # It was already the intent
+    ///
+    /// The class-token lowering says so: "`new` through such a value is a
+    /// separate feature and still refuses, as `a computed constructor`". It did
+    /// refuse a *computed* callee — `new things[0]()` has no identifier text. A
+    /// **named** binding has text, so it was resolved by name instead and slipped
+    /// past. This makes the behaviour match the sentence.
+    ///
+    /// Building it needs the token to carry the instance descriptor and the
+    /// constructor, which is the generator's resumption slot with a different
+    /// member. 29 sites in `runtime/node`, and no addon depends on them.
+    fn constructed_from_a_value(
+        &self,
+        id: NodeId,
+        callee: NodeId,
+        class: &str,
+    ) -> Result<(), Diagnostic> {
+        let Some(symbol) = self.node(callee).symbol else {
+            return Ok(());
+        };
+        if !self.bindings.contains_key(&symbol.0) {
+            return Ok(());
+        }
+        Err(self.unsupported(
+            id,
+            &format!(
+                "a `new` through `{class}`, which holds a class rather than naming one -- the \
+                 constructor would be chosen from the declared type and not from the value"
+            ),
+        ))
     }
 
     /// Open a cell in the *entry* block, for a name read above its declaration.
@@ -17395,7 +17470,10 @@ impl<'a> FuncBuilder<'a> {
                     origin,
                 ))
             }
-            _ => Err(self.unsupported(from, "a conversion to string from this type")),
+            _ => {
+                let named = self.describe_node(from);
+                Err(self.unsupported(from, &format!("a conversion to string from {named}")))
+            }
         }
     }
 
@@ -20545,6 +20623,14 @@ impl<'a> FuncBuilder<'a> {
             }
             return Ok(object);
         };
+        // Past this point the construction is **class-specific**: a declared
+        // constructor is about to be named from the type the checker gave the
+        // expression. Everything above is uniform across the classes a token
+        // could hold -- a provided error is built inline by this compiler, and a
+        // class with no constructor anywhere in its chain has only the field
+        // initializers that already ran -- which is why `class-as-value` can
+        // construct through a token whose class `extends Error` and be right.
+        self.constructed_from_a_value(id, callee, &class)?;
         // The same qualification the *definition* side already applies.
         // `class_name_for` names a member `Frame@a#constructor` whenever the
         // class name is declared in more than one file -- its own comment says

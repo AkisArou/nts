@@ -1,4 +1,4 @@
-// expect: a conversion to string from this type
+// expect: a conversion to string from unknown
 //
 // An `unknown` interpolated into a template literal.
 //
@@ -34,6 +34,23 @@
 // the wrapper outward, and it cannot be turned into a string either. Whether one
 // representation answers both is the compiler lane's question --
 // `blockers/an-erased-reference-cannot-cross-outward` is the boundary half.
+//
+// # The census this fixture could not have supported until 2026-09-12
+//
+// The refusal used to read `a conversion to string from this type` and **never
+// named the type**, so its 178 sites in `runtime/node` could not be counted by
+// kind: an object wanting `ToPrimitive`, an array wanting `join` and an erased
+// value wanting a tag dispatch are three different features behind one sentence.
+// Naming it answered the question in one pass:
+//
+//     176  unknown
+//       2  a union of an object | null
+//       1  a union of an array | number | string
+//
+// and 161 of the 176 are in `internal/errors.ts`. So this fixture is not one of
+// several roughly equal causes -- it is **almost the whole row**, and the work
+// behind it is `ToString` of an erased value rather than `valueOf`/`toString`
+// dispatch on a typed object, which is what the ledger row had suggested.
 
 /** Control: a string interpolates. */
 export function fromString(value: string): string {
