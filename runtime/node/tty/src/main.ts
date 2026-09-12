@@ -28,20 +28,29 @@
 declare function nts_tty_isatty(fd: number): boolean;
 
 /**
- * The integer guard, in TypeScript rather than in the binding.
+ * The integer guard, and why it is split across two files.
  *
  * It was in the C, and that was wrong for a reason only the compiled lane could
  * show: a parameter declared `fd: number` makes the Node-API wrapper *reject* a
- * string, so `isatty('1')` threw `The "fd" argument must be of type number`
- * where node answers `false`. The interpreted lane could not see it, because its
- * stand-in hands the value to node's own `isatty`, which accepts anything.
+ * string, so `isatty('1')` threw `The "fd" argument must be of type number` where
+ * node answers `false`. The interpreted lane could not see it, because its stand-in
+ * hands the value to node's own `isatty`, which accepts anything.
  *
- * Node's `lib/tty.js` is `NumberIsInteger(fd) && fd >= 0 && fd <= 2147483647 &&`
- * the binding, so accepting `unknown` and narrowing here is what node does, not a
- * workaround.
+ * Declaring the parameter `unknown` instead does not work either, and that is the
+ * measured boundary rather than a preference: the compiled lane answered
+ * `an argument of this type has no representation in the compiled runtime` on the
+ * first call. A union does not help -- an erasing union cannot be built at a
+ * parameter any more than `unknown` can -- and
+ * `pseudo-tty/test-tty-isatty.js` passes a number, a string, an object and a
+ * function to the same name.
+ *
+ * So the **type** test has to happen before the call reaches the boundary, and
+ * `shape.mjs` is the only file that runs on both lanes. What stays here is
+ * everything that survives once the argument is known to be a number, which is
+ * node's own rule from `lib/tty.js`: `NumberIsInteger(fd) && fd >= 0 &&
+ * fd <= 2147483647 &&` the binding.
  */
-function usableFd(fd: unknown): number {
-  if (typeof fd !== "number") return -1;
+function usableFd(fd: number): number {
   if (!Number.isInteger(fd)) return -1;
   if (fd < 0 || fd > 2147483647) return -1;
   return fd;
@@ -50,11 +59,12 @@ function usableFd(fd: unknown): number {
 /**
  * Whether `fd` refers to a terminal.
  *
- * Node answers `false` rather than throwing for a negative, a non-integer, an
- * out-of-range or a non-numeric argument, and the pinned test asserts all four.
- * The check lives in the binding so both lanes answer alike.
+ * Node answers `false` rather than throwing for a negative, a non-integer and an
+ * out-of-range fd, and the pinned test asserts all three here. The fourth case --
+ * an argument that is not a number at all -- is in `shape.mjs`, because a
+ * non-numeric argument cannot cross the Node-API boundary to be inspected.
  */
-export function isatty(fd: unknown): boolean {
+export function isatty(fd: number): boolean {
   const usable = usableFd(fd);
   return usable < 0 ? false : nts_tty_isatty(usable);
 }
