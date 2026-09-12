@@ -1368,8 +1368,9 @@ function revealLoadTimeWarnings() {
 /**
  * The binding surface, reachable and not enumerable.
  *
- * A stand-in installs its bindings with `globalThis.nts_x = ...` -- 350 such
- * assignments across 11 `bindings.node.mjs` files -- and a plain assignment makes
+ * A stand-in installs its bindings with `globalThis.nts_x = ...` -- 339 such
+ * assignments across 11 `bindings.node.mjs` files on `main`, counted with `awk`
+ * rather than an interactive `grep -c` -- and a plain assignment makes
  * an **enumerable** own property. node's own `test/common/index.js` walks
  * `for (const val in globalThis)` at exit and fails the file with
  * `Unexpected global(s) found: nts_write_stdout, ...`, so any test that reaches
@@ -1386,9 +1387,16 @@ function revealLoadTimeWarnings() {
  *
  * Which is also the limit of it, and worth knowing before reading a module for a
  * cause: the names are still **there**. Anything walking
- * `Object.getOwnPropertyNames(globalThis)` or `Reflect.ownKeys` sees all 350 of
+ * `Object.getOwnPropertyNames(globalThis)` or `Reflect.ownKeys` sees every one of
  * them, and would fail the same way node's `common` used to, one layer from
  * anything the module did. This makes them invisible to enumeration, not absent.
+ *
+ * The count was first written here as 350, which is the number in the
+ * `nodejs/child-process-wip` worktree: that tree has `child_process`'s 12 and its
+ * `tty` stand-in has none, so both trees happen to show 11 files and the totals
+ * differ by 11. A number measured in one tree and published in a commit to another
+ * is the error, not the arithmetic -- and it is the same shape as the entry in this
+ * directory about measuring the wrong tree.
  */
 function hideBindingGlobals() {
   for (const key of Object.getOwnPropertyNames(globalThis)) {

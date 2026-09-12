@@ -23701,3 +23701,20 @@ runs on both lanes, and node's numeric rule from `lib/tty.js` stays in
 
 Both modules, both lanes, and sabotage flips all four arms: 0 hollow, shown by
 breaking the subject.
+
+### A correction to the entry above: 350 was the other tree
+
+`d265780c` and the comment in `run-one.mjs` said "350 such assignments across 11
+`bindings.node.mjs` files". 350 is the count in the `nodejs/child-process-wip`
+worktree. On `main` it is **339 across 11 files**, and both trees show 11 because
+`cp-work` has `child_process`'s 12 while its `tty` stand-in has none and `main`'s
+has one.
+
+The tool is innocent here, and checking that was the point: ugrep and GNU grep both
+answer 339 on `main` and both answer 350 in `cp-work`. So this is not the
+[[the-grep-we-type-is-not-gnu-grep]] failure from the same hour — it is a number
+measured in one tree and published in a commit to another, which is the older entry
+in this directory about measuring the wrong tree.
+
+Neither number changes the finding or the controlled result: fs 101 -> 12,
+http 33 -> 1, process 10 -> 1, dgram 3 -> 2, async_hooks 35 -> 35.
