@@ -1045,23 +1045,23 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # is this lane being behind. Both swept one at a time rather than inferred
   # from a total.
   #
-  # **179 to 184 on 2026-09-12**, LLVM to 186 over the same run. The two this
-  # lane does not have are named rather than counted, because a floor that only
-  # says 184 cannot tell a gap from a regression:
+  # **179 to 184 on 2026-09-12**, LLVM to 186 over the same run, and **184 to
+  # 185** when the second of the two below was closed. The ones this lane does
+  # not have are named rather than counted, because a floor that only says a
+  # number cannot tell a gap from a regression:
   #
   #   a-class-stored-and-compared      the covariant-constructor-return gap
   #                                    two paragraphs up, unchanged
-  #   a-unary-plus-is-a-conversion     `nts_value_to_number` has no name in
-  #                                    `codegen/jvm`'s table and no
-  #                                    `NtsRuntime` method behind it
   #
-  # The second is new here and is not new in the compiler: `Number(v)` on an
+  # `a-unary-plus-is-a-conversion` was the second and is closed: it wanted
+  # `nts_value_to_number`, which had no row in `codegen/jvm`'s table and no
+  # `NtsRuntime` method behind it. Not new in the compiler -- `Number(v)` on an
   # erased union of primitives has emitted that helper for as long as it has
   # existed, and no example reached it on this lane until unary `+` became the
-  # same operation. So the arm stays in the example rather than being trimmed to
-  # make three backends agree -- trimming it would take the only thing that asks
-  # the question.
-  backend_examples 184 "through the JVM backend" ); }
+  # same operation. The arm stayed in the example rather than being trimmed to
+  # make three backends agree, which is what made it findable: trimming it would
+  # have taken the only thing that asks the question.
+  backend_examples 185 "through the JVM backend" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
