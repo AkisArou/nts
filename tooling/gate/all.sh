@@ -987,6 +987,15 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # Verified here rather than taken: rebuilt at `e6689b9a`, the example emits
   # five classes and `a-structural-cast-that-is-not-a-prefix` seven, both clean.
   #
+  # **176 to 178 with the generator work, `9b86de96`.** A generator can now be a
+  # parameter, so `a-generator-walked-elsewhere` and `a-yield-star` arrived and
+  # both agree. Two defects here had to go first and neither was in the
+  # generator code: a dispatch forwarder named after the function that *fills* a
+  # slot rather than the class that *declares* it, which is an
+  # `AbstractMethodError` the verifier cannot catch; and two derivations of
+  # "which class owns this field slot" that had never been asked about the same
+  # field until a frame gained a base.
+  #
   # It is **not** "a class token has no base". That edge was built and reverted
   # on 2026-09-10: a token's `typeof` names a different signature layout per
   # return type, so `Ctor_Other extends Fn3__6` against a slot declared
@@ -998,7 +1007,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # So the two gaps are the same sentence one representation apart, and neither
   # is this lane being behind. Both swept one at a time rather than inferred
   # from a total.
-  backend_examples 176 "through the JVM backend" ); }
+  backend_examples 178 "through the JVM backend" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
