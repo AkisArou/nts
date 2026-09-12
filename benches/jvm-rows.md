@@ -6381,3 +6381,32 @@ The working method was the opposite direction: **reduce from the failing case,
 do not build up from a working one.** A reduction that still fails has the cause
 in it by construction; an augmentation that passes has proved nothing about the
 feature it added.
+
+### This lane's refusal counts are conditioned on what got past the frontend
+
+MainClaude measured the async-arrow fix at **three roots cleared and no total
+movement in any module**, having predicted in writing that it would be the
+largest thing of the day. Their reconciliation is the part that lands here:
+
+> a zero in the corpus cannot distinguish "nobody needs this" from "nobody
+> could use it" -- async arrows were refused, so no site that wanted one
+> survived to be counted
+
+**Which qualifies the numbers this file published two sections up.** `fs` 89,
+`stream` 42, `timers` 14 `NTS4xxx` refusals are counts of what **reached this
+backend**. A construct the lowering refuses never arrives, so those figures are
+measured on a corpus already routed around by every `NTS1001` in front of them
+-- and `fs` alone carries 2082 of those.
+
+So the five-cause split of the `storing a X where a Y is declared` row is
+accurate about what it saw and silent about proportion. If a lowering gap ahead
+of it clears, this lane's counts can rise without anything here changing, which
+is the same shape as MainClaude's row growing because their own commit made six
+sites reachable. **A backend's refusal census is a measurement of the frontier,
+not of the backend.**
+
+The practical form: rank this lane's work by these counts only against other
+work *in this lane*, and never read a small number here as "few programs want
+it". The 62 missing-helper refusals are the ones that survived to be counted;
+what sits behind 2082 frontend refusals in `fs` is not measured by anything
+here.
