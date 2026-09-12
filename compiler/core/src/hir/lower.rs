@@ -10271,6 +10271,33 @@ impl<'a> FuncBuilder<'a> {
         let return_type = self.return_type_of(id)?;
         self.materialize(id, &return_type)?;
 
+        // **An `async` arrow allocates its promise before its body runs**, for
+        // the two reasons an `async` function does: every `return` needs one to
+        // settle, and the allocation belongs on the one path in rather than on
+        // each path out.
+        //
+        // This was never called here, and the whole of `async (a) => a + 1` was
+        // the consequence. The body was lowered against a `returns` of
+        // `Promise<f64>` with nothing to settle it, so `return a + 1` reported
+        // `a value of type Float { bits: 64 } where Managed(Promise(Float {
+        // bits: 64 })) is wanted`, and an `await` *inside* one reported `a
+        // top-level await` -- because `async_result` was `None`, which is what
+        // module scope looks like from here. The same two sentences an async
+        // generator produced before `begin_async` learned about it, in a third
+        // place.
+        //
+        // Found from the other end: the JVM lane reported four closures stored
+        // where a signature layout was declared, and `relate_closures_to_signatures`
+        // was innocent. An async arrow's `call` answered `f64` where the
+        // declared signature said `Promise<f64>`, so the two signatures did not
+        // match, so no layout claimed it and it got no base. `stream`'s `tap`
+        // is the corpus instance.
+        //
+        // No state is saved around this: closures get a builder each, so an
+        // `async` arrow inside a synchronous function cannot leak its result
+        // into the function around it.
+        let asynchronous = self.begin_async(id, &return_type)?;
+
         // A wrapper has no body of its own. It forwards to the function it
         // stands for, which keeps that function's one definition the only one:
         // re-lowering the declaration's body here would compile it twice and
@@ -10334,14 +10361,34 @@ impl<'a> FuncBuilder<'a> {
         let lowered = if self.kind_of(body) == Some(syntax::BLOCK) {
             let outcome = self.lower_block(body);
             if outcome.is_ok() {
-                // `close_body` rather than an unconditional `Return(None)`: a
-                // block reaching its end returns nothing only when nothing is
-                // what it owes, and `FellThrough` is what says the difference
-                // has not been proven. The unconditional form built closures
-                // that promised an array and returned none.
-                self.close_body(&return_type);
+                if let Some(result) = &asynchronous {
+                    // Falling off the end of an `async` arrow resolves it with
+                    // `undefined`, which is what `return;` does -- so the two
+                    // are one path rather than the second being a special case.
+                    if !self.is_terminated() {
+                        let result = result.clone();
+                        self.settle_and_return(id, &result, None)?;
+                    }
+                } else {
+                    // `close_body` rather than an unconditional `Return(None)`:
+                    // a block reaching its end returns nothing only when
+                    // nothing is what it owes, and `FellThrough` is what says
+                    // the difference has not been proven. The unconditional
+                    // form built closures that promised an array and returned
+                    // none.
+                    self.close_body(&return_type);
+                }
             }
             outcome
+        } else if let Some(result) = asynchronous.clone() {
+            // `async x => x + 1`. The expression is what the promise settles
+            // with, not what the function returns: an `async` arrow returns its
+            // promise on every path, and the value is the argument to the
+            // settlement.
+            match self.lower_expression(body) {
+                Ok(value) => self.settle_and_return(id, &result, Some(value)),
+                Err(error) => Err(error),
+            }
         } else {
             self.lower_expression(body).map(|value| {
                 // `x => f(x)` where `f` returns nothing. The call happens and
