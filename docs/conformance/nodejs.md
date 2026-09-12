@@ -23718,3 +23718,61 @@ in this directory about measuring the wrong tree.
 
 Neither number changes the finding or the controlled result: fs 101 -> 12,
 http 33 -> 1, process 10 -> 1, dgram 3 -> 2, async_hooks 35 -> 35.
+
+## `child_process` lands: 25 modules, and what an unclaimed test costs
+
+`f0352ea8`. The profile is 25 modules, not 24: the 22 the goal text counts, plus
+`tty`, `dns` and now this. That commit's message calls it "the 23rd", which is
+wrong -- 25 directories carry a `tsconfig.json` and `child_process` is the last of
+them.
+
+    119 file(s): 71 passed, 39 failed, 9 skipped, 0 not applicable
+
+114 by `test-pattern`, 4 claimed in `extra-tests`, 1 local fixture. 1 passed when the
+branch was parked, 42 when this session started.
+
+### The bar I was holding it to does not exist
+
+"Cannot land until 0 failed" was written in my own notes and no module here meets it
+on the interpreted lane: `async_hooks` 35, `fs` 12, `dgram` 2, `http` 1, `process` 1.
+It was a standard applied to one module and not to the others, and it had kept a
+21-file gain on a branch. What landing actually requires is that nothing fails
+*unrecorded*: `INCOMPLETE.md` names all 39 -- 25 fork/IPC, and the other 14 one at a
+time, with "unexamined" written as exactly that for the seven where it is true.
+
+### 103 applicable tests were in no denominator, and none of them is ours
+
+The unclaimed audit goes **42 -> 149 candidates** the moment this module exists, and
+not one of the 103 new ones is a `child_process` test. They are `test-runner-*`,
+`test-repl-*`, `test-cli-*`, `test-inspector-*`, `test-module-*`: tests of
+subsystems this profile does not implement, which reach for `child_process` only to
+spawn node, and which satisfy "imports only what this profile implements" as soon as
+it is there.
+
+96 are reviewed with per-category reasons. A single blanket reason would have been
+weakening an applicability rule, and seven of the 103 are **claimed** because their
+subject is ours -- three `test-listen-fd-*` to `net`, beside the
+`test-listen-fd-ebadf.js` line already in its `extra-tests`, and `test-pipe-head`,
+`test-cluster-net-send`, `test-stdio-closed`, `test-stdio-undestroy` here. Three of
+those four already passed.
+
+The audit now reads 142 candidates, 178 reviewed, **0 new**.
+
+**`net` goes 0 -> 3 failed**, at 185 files rather than 182. Three applicable tests
+entering a denominator, not three behaviours breaking -- and `net` is no longer a
+zero-failure module, which is better read here than found in a gate.
+
+### A claim refuted by the landing itself
+
+`INCOMPLETE.md` said the `atob`/`btoa` half of node's global-leak check "cannot be
+fixed on this lane", with a mechanism: `common` compares identities, `run-one`
+substitutes bare specifiers, `buffer` is in this module's `uses`. Every part of that
+is true. All three affected files **pass on `main`** -- `buffer/shape.mjs` has an
+`installGlobals` setting `globalThis.atob`, and `run-one.mjs:631` calls it for
+siblings as well as the module under test.
+
+The conclusion came from the branch, which is 136 commits behind and reads 67 passed
+/ 43 failed on byte-identical module sources. Second time in one day that a number
+was right about the tree it was taken in and wrong about the tree it was published
+for; the first was 350 against 339. **A tree is part of a number's population**, and
+so is a claim's.
