@@ -165,14 +165,22 @@ fn a_source_of_unknown_length_appends() {
     }
 }
 
-/// The two-argument form is refused by name, and it is two features.
+/// The two-argument form is two features, and **only the array-like half is
+/// still refused**.
 ///
-/// With an iterable it is `map` fused into the walk; with `{ length: n }` it is
-/// not an iteration at all — an array-like is read by index, and
-/// `Array.from({ length: 4 })` builds four `undefined`s from an object with no
-/// elements. Both are in `runtime/node` and neither is this.
+/// With an iterable the second argument is a mapping callback, which lowers as
+/// of 2026-09-13 — the walk, then `map`'s callback inlining over what it built.
+/// With `{ length: n }` it is not an iteration at all: an array-like is read by
+/// index, and `Array.from({ length: 4 })` builds four `undefined`s from an
+/// object with no elements.
+///
+/// This test asserted the *combined* message and so could not tell the two
+/// apart; it failed the moment one of them landed, which is the right failure
+/// and is why the fixture keeps both arms. The message it looks for now is the
+/// array-like arm's own — a `for...of` over an object type, which is what that
+/// arm is.
 #[test]
-fn the_two_argument_form_is_refused_by_name() {
+fn the_array_like_form_is_refused_by_name() {
     let Some(lowered) = lowered("array-from-unsupported") else {
         return;
     };
@@ -182,10 +190,13 @@ fn the_two_argument_form_is_refused_by_name() {
         .map(|diagnostic| diagnostic.message.as_str())
         .collect();
     assert!(
-        said.contains(
-            &"an `Array.from` with a mapping callback, or over an array-like is not supported \
-              by this lowering yet"
-        ),
+        said.contains(&"a `for...of` over an object type is not supported by this lowering yet"),
         "{said:#?}",
+    );
+    assert!(
+        !said
+            .iter()
+            .any(|message| message.contains("with a mapping callback")),
+        "the mapping-callback half lowers now: {said:#?}",
     );
 }

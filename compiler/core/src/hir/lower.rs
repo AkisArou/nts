@@ -13056,10 +13056,9 @@ impl<'a> FuncBuilder<'a> {
             // is read by index, and `Array.from({ length: 4 })` builds four
             // `undefined`s from an object that has no elements. Both are in
             // `runtime/node`, and neither is this.
-            ("Array", "from", [_, _]) => Some(Err(self.unsupported(
-                id,
-                "an `Array.from` with a mapping callback, or over an array-like",
-            ))),
+            ("Array", "from", [argument, callback]) => {
+                Some(self.lower_array_from_mapped(id, *argument, *callback))
+            }
             // `Symbol.for(key)`: the one symbol for this key in this runtime.
             //
             // The registry is a *strong* reference and that is the
@@ -13118,7 +13117,73 @@ impl<'a> FuncBuilder<'a> {
     /// where it *is* known would size the allocation exactly and cost a second
     /// path through this function to be wrong in; the growth strategy record
     /// 0029 describes is what makes appending the right answer for all five.
+    /// `Array.from(xs, f)`: the walk, then the callback over what it built.
+    ///
+    /// **Two features wear this name and only one of them is here.** With an
+    /// iterable the second argument is a mapping callback; with `{ length: n }`
+    /// it is not an iteration at all -- an array-like is read by index, and
+    /// `Array.from({ length: 4 })` builds four `undefined`s out of an object
+    /// with no elements. That second one refuses, and refuses as itself: a
+    /// `for...of` over an object type, which is what it is.
+    ///
+    /// # Built and then mapped, rather than fused
+    ///
+    /// `Array.from(xs, f)` is specified as `f` applied to each element with its
+    /// index, and `Array.from(xs).map(f)` calls `f` with the same two arguments
+    /// in the same order over the same elements. `map`'s third argument is the
+    /// array, which the specification gives it and this compiler does not pass
+    /// to either. `Array.from` produces no holes, so the one thing `map` does
+    /// differently -- skipping them -- cannot arise.
+    ///
+    /// So this is two proven paths composed rather than a third written: the
+    /// walk that `Array.from` already does over every shape `for...of` knows,
+    /// and the callback inlining `map` already does, which allocates nothing
+    /// and calls nothing indirectly.
+    ///
+    /// **The cost is one intermediate array, and it is stated rather than
+    /// hidden.** Fusing the callback into the walk removes it and is what the
+    /// ledger row asks for; it needs the delivery machinery to write into a
+    /// destination that is being grown rather than indexed, which is a third
+    /// shape of `iteration_delivery`. Nothing regresses by composing first --
+    /// the construct was refused outright -- and the fused version has a
+    /// measurement to beat rather than an argument to win.
+    fn lower_array_from_mapped(
+        &mut self,
+        id: NodeId,
+        argument: NodeId,
+        callback: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let built = self.build_array_from(id, argument, true)?;
+        let HirType::Managed(ManagedType::Array(element_ty)) =
+            self.values[built.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(id, "an `Array.from` that does not build an array"));
+        };
+        self.lower_iteration(id, built, &element_ty, callback, Iteration::Map, None)
+    }
+
     fn lower_array_from(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
+        self.build_array_from(id, argument, false)
+    }
+
+    /// The walk that builds the array, whose element type has two sources.
+    ///
+    /// Without a callback it is the *expression's* type: `Array.from(xs)` is
+    /// declared to produce exactly what it walks. With one it cannot be, and
+    /// that is the whole of `mapped`: `Array.from("abc", (c) => c.length)` has
+    /// expression type `number[]` while the walk produces strings, so taking
+    /// the element from the expression coerced a string into a double and said
+    /// so -- `a value of type Managed(String) where Float { bits: 64 } is
+    /// wanted`, from the one arm of four that changed the element's type.
+    ///
+    /// So where a callback follows, the element comes from the **walk**, which
+    /// is what is actually going into the array this builds.
+    fn build_array_from(
+        &mut self,
+        id: NodeId,
+        argument: NodeId,
+        mapped: bool,
+    ) -> Result<ValueId, Diagnostic> {
         // An array source keeps its `slice`, and the reason is measured rather
         // than assumed. 256 elements copied two thousand times, against a C++
         // reference at 41.65 us:
@@ -13159,9 +13224,7 @@ impl<'a> FuncBuilder<'a> {
         let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
 
         let origin = self.origin(id);
-        let ty = self
-            .type_of(id)
-            .ok_or_else(|| self.unrepresentable(id, "what `Array.from` builds"))?;
+        let ty = self.array_from_type(id, &walk, mapped)?;
         let HirType::Managed(ManagedType::Array(element_ty)) = ty.clone() else {
             return Err(self.unsupported(id, "an `Array.from` that does not build an array"));
         };
@@ -14643,6 +14706,47 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         Ok((step, answered))
+    }
+
+    /// The array `Array.from` builds, whose element type has two sources.
+    ///
+    /// Without a callback it is the *expression's* type: `Array.from(xs)` is
+    /// declared to produce exactly what it walks. With one it cannot be, and
+    /// that is the whole of `mapped`: `Array.from("abc", (c) => c.length)` has
+    /// expression type `number[]` while the walk produces strings, so taking
+    /// the element from the expression coerced a string into a double and said
+    /// so -- `a value of type Managed(String) where Float { bits: 64 } is
+    /// wanted`, from the one arm of four that changes the element's type.
+    fn array_from_type(
+        &mut self,
+        id: NodeId,
+        walk: &Walk,
+        mapped: bool,
+    ) -> Result<HirType, Diagnostic> {
+        if !mapped {
+            return self
+                .type_of(id)
+                .ok_or_else(|| self.unrepresentable(id, "what `Array.from` builds"));
+        }
+        let element = Self::walk_element_type(walk)
+            .ok_or_else(|| self.unsupported(id, "an `Array.from` whose walk has no element"))?;
+        Ok(HirType::Managed(ManagedType::Array(Box::new(element))))
+    }
+
+    /// What a walk produces per iteration, as a representation.
+    ///
+    /// Every walk already carries it; this is the one place that asks all six at
+    /// once. `Entries` has two and answers `None`, because a walk binding a pair
+    /// is not one this can hand a single element to.
+    fn walk_element_type(walk: &Walk) -> Option<HirType> {
+        Some(match walk {
+            Walk::Counted(element)
+            | Walk::Table { element, .. }
+            | Walk::Protocol { element, .. }
+            | Walk::Generator { element, .. } => element.clone(),
+            Walk::Text => HirType::Managed(ManagedType::String),
+            Walk::Entries { .. } => return None,
+        })
     }
 
     /// Whether a type is a generator frame, and what it yields.

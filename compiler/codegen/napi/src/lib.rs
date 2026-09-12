@@ -2833,11 +2833,36 @@ fn published<'a>(program: &'a hir::Program, func: &hir::Func) -> Vec<&'a str> {
 /// The addon is a separate translation unit from `program.c`, so it declares
 /// everything it calls -- `wrapper` emits one per wrapped function and this is
 /// the one function the addon calls that nothing wraps.
-fn emit_module_init_prototype(program: &hir::Program, out: &mut String) -> bool {
+///
+/// **`refused` is consulted for the same reason every wrapper consults it, and
+/// this one did not.** A refused body leaves the `Func` in the program, so
+/// asking `program.funcs` answers *the program has top-level code*, which is a
+/// different question from *the C file defines a function to call*. When the
+/// two disagreed the addon declared `module__init`, called it from
+/// `NAPI_MODULE_INIT`, and nothing defined it.
+///
+/// That artefact **links**: a shared object resolves undefined symbols at load,
+/// so `clang` is content and `node` is not --
+/// `undefined symbol: module__init`, at `require` time, with `emit-c` having
+/// exited 0 and printed `wrote program.c`. The whole pipeline green and the
+/// artefact unloadable.
+///
+/// It cost a real number quietly. `process` read **92 failed** in the compiled
+/// axis and the truth was one load failure counted 92 times; the Node lane
+/// bracketed it between two pinned compilers and handed it over, because from
+/// their end it is a module that fails every test.
+fn emit_module_init_prototype(
+    program: &hir::Program,
+    refused: &[String],
+    out: &mut String,
+) -> bool {
     let runs = program
         .funcs
         .iter()
-        .any(|func| func.name == nts_core::hir::lower::MODULE_INIT);
+        .any(|func| func.name == nts_core::hir::lower::MODULE_INIT)
+        && !refused
+            .iter()
+            .any(|name| name == nts_core::hir::lower::MODULE_INIT);
     if runs {
         let _ = writeln!(
             out,
@@ -3750,7 +3775,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
         .collect();
     emit_layouts(&mut out, program, needed, &class_layouts);
 
-    let runs_module_init = emit_module_init_prototype(program, &mut out);
+    let runs_module_init = emit_module_init_prototype(program, refused, &mut out);
 
     let mut skipped = Vec::new();
     // The emitted symbol and the name it goes out under, which differ wherever

@@ -318,9 +318,26 @@ impl Emitted {
 /// whose body is gone, and refuses the one case where null is reachable, which
 /// is a closure. So the table agrees with the bodies, and the case that would
 /// have been a silent crash is a diagnostic instead.
+///
+/// **What it drops goes into `refused`**, and that omission is what made this
+/// comment's own story happen a second time. `Emitted::refused` is what the
+/// napi wrapper consults before writing a call, and it held only the *direct*
+/// declines -- so a body dropped here as a cascade was invisible to it. The
+/// addon then declared `module__init`, called it from `NAPI_MODULE_INIT`, and
+/// nothing defined it.
+///
+/// That artefact **links**: a shared object resolves undefined symbols at load,
+/// so `clang` is content, `emit-c` exits 0 and prints `wrote program.c`, and
+/// `node` fails at `require` with `undefined symbol: module__init`. The whole
+/// pipeline green and the artefact unloadable.
+///
+/// `process` read **92 failed** in the compiled axis on one load failure
+/// counted 92 times, and it was the Node lane bracketing two pinned compilers
+/// that found it -- from their end it is a module that fails every test.
 fn drop_orphaned_bodies(
     bodies: &mut Vec<(String, CodeWriter, &Func)>,
     diagnostics: &mut Vec<Diagnostic>,
+    refused: &mut Vec<String>,
 ) {
     loop {
         let defined: rustc_hash::FxHashSet<&str> =
@@ -364,6 +381,7 @@ fn drop_orphaned_bodies(
             ),
             origin.location,
         ));
+        refused.push(orphaned);
         bodies.remove(at);
     }
 }
@@ -430,7 +448,7 @@ pub fn emit(program: &Program) -> Emitted {
     }
 
     let mut bodies = emit_bodies(program, &literals, &mut diagnostics, &mut refused);
-    drop_orphaned_bodies(&mut bodies, &mut diagnostics);
+    drop_orphaned_bodies(&mut bodies, &mut diagnostics, &mut refused);
     // The C names of the functions this translation unit will actually define,
     // after the backend's own refusals have taken their callers with them.
     // `program.funcs` is the wrong list: it still holds the bodies dropped just
