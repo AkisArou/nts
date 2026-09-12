@@ -6242,10 +6242,22 @@ Auditing the const-array-literal census -- applying MainClaude's asymmetry to
 the rest of this file's counts rather than only the one it had already caught --
 two instruments over the same corpus disagreed, 5 files against 4.
 
-`benches/cases/json-serialize/case.ts` contains **99 NUL bytes** and `file`
-reports it as `data`. They are deliberate: the JSON serializer's fixture holds
+`benches/cases/json-serialize/case.ts` contains **one NUL byte** and `file`
+reports it as `data`. It is deliberate: the JSON serializer's fixture holds
 literal control characters -- `control \0 \a \037 and tab` -- because escaping
-them is what it tests.
+them is what it tests. One byte is enough; `grep` needs no more than that.
+
+**This line first said "99 NUL bytes", and the way that number was produced is
+the better lesson.** It came from `grep -c $'\x00'`, and **the shell cannot
+carry a NUL through argv** -- a C string ends at the first one -- so `$'\x00'`
+arrives as the *empty string* and `grep -c ''` matches every line in the file.
+99 was a line count wearing a byte count's name. The same command on
+`runtime/jvm/src/nts/rt/NtsStore.java` reported 591, which is that file's 590
+lines plus one.
+
+A pattern that matches too much, in the most complete form available: the empty
+pattern matches everything, and nothing in the output says the pattern was
+empty. `tr -dc '\000' < file | wc -c` is the count that is about bytes.
 
 The consequence is general and affects any census over `benches/cases`:
 
@@ -6268,3 +6280,23 @@ arrangement as `Bounce` and the accessor count an hour earlier.
 
 Use `grep -a` for any count over `benches/cases`, or the number is short by one
 and says nothing about which.
+
+### Four tracked source files are binary to `grep`, and one is in this lane
+
+Asked as a number rather than left as a worry, since MainClaude's concern was
+that every census either lane ran over `benches/cases` might be short by one:
+
+    benches/cases/json-serialize/case.ts          control chars, by design
+    runtime/jvm/src/nts/rt/NtsStore.java          a NUL key separator
+    runtime/web-platform/test/durable-cache.test.ts
+    runtime/web-platform/test/utf8-differential.test.ts
+
+Four across the whole tracked tree, one NUL byte each. **`NtsStore.java` is this
+lane's**, and its NUL is `namespace + "\0"` -- a separator between namespace and
+key in a composite key, written as a raw byte where the Java escape `\0` would
+compile to the same string and keep the file text.
+
+That is worth knowing rather than fixing on sight: `javac` reads it correctly,
+the jar-drift test compiles it and compares bytes, and nothing in the build
+cares. What it costs is that any text census over `runtime/jvm` silently omits
+it -- the same failure as the bench case, in this lane's own sources.
