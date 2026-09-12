@@ -6428,3 +6428,34 @@ work *in this lane*, and never read a small number here as "few programs want
 it". The 62 missing-helper refusals are the ones that survived to be counted;
 what sits behind 2082 frontend refusals in `fs` is not measured by anything
 here.
+
+### Today's errors concentrated in summaries, not in measurements
+
+MainClaude's observation, and it holds across both lanes. Two sentences have
+been struck in this file today:
+
+    "three independent measurements agree on two"
+    "an async arrow that captures a value"
+
+**Neither was a measurement that turned out wrong.** The first was a summary of
+three correct numbers that did not describe the same corpus. The second was a
+summary of a correct reduction that lost the one word carrying the cause --
+"captures" was true of a captured `number` and of a captured function type, and
+load-bearing only in the second, so a careful reconstruction from it failed.
+
+Their generalisation of the second is the sharper one: **a description of a
+reduction is a hypothesis about which of its features matters, and the reduction
+itself is the only thing that carries all of them.** Which is the fixture-prose
+problem one layer out -- an arm's comment names a mechanism and the arm carries
+every mechanism it has.
+
+The pattern across the day, on both sides: the numbers were usually right and
+the sentences about them were where the errors lived. `16 refusals across eight
+modules` was a true sentence about the wrong unit. `99 NUL bytes` was a true
+line count. `2515 tagged templates` was a true match count. **Every one is a
+summary that dropped the qualifier that made it true**, and none was a
+mismeasurement.
+
+So the two habits that have actually worked are both about not summarising:
+print the matches rather than the count, and send the artefact rather than the
+account.
