@@ -181,16 +181,70 @@ fn same_array(func: &Func, a: ValueId, b: ValueId) -> bool {
     if a == b {
         return true;
     }
-    let (OpKind::GlobalGet(one), OpKind::GlobalGet(two)) = (
+    match (
         &func.values[a.0 as usize].kind,
         &func.values[b.0 as usize].kind,
-    ) else {
-        return false;
-    };
-    one == two
-        && !func.values.iter().any(|op| {
-            matches!(op.kind, OpKind::GlobalSet { global, .. } if global == *one)
-        })
+    ) {
+        (OpKind::GlobalGet(one), OpKind::GlobalGet(two)) => {
+            one == two
+                && !func.values.iter().any(|op| {
+                    matches!(op.kind, OpKind::GlobalSet { global, .. } if global == *one)
+                })
+        }
+        // And two reads of one **field**, which is the same sentence the
+        // paragraph above writes about a global and which this function
+        // implemented for only one of them.
+        //
+        //     for (let i = 0; i < this.bodies.length; i += 1) {
+        //       const b = this.bodies[i];
+        //
+        // `this.bodies` is read twice -- once for the bound, once for the
+        // element -- so the ids differ and every check stood, while the
+        // identical loop through `const items = this.bodies` had none. The JVM
+        // lane found it in `awfy-nbody`'s AOT code: 982 bytes against the
+        // reference's 647 on identical arithmetic, with 3 `invoke-static` to
+        // `NtsRuntime.bounds` and 2 `pThrowArrayBounds` in the innermost loop,
+        // and the `unchecked` read beside them proving the prover works when it
+        // can see.
+        (
+            OpKind::FieldGet {
+                object: one,
+                field: first,
+            },
+            OpKind::FieldGet {
+                object: two,
+                field: second,
+            },
+        ) => {
+            if one != two || first != second {
+                return false;
+            }
+            let held = func.values[one.0 as usize].ty.clone();
+            // Sound while nothing writes that field. Asked of the whole
+            // function rather than of the span between the reads -- coarser,
+            // and needs no order, which is the choice the global arm already
+            // made.
+            //
+            // Narrowed by the holder's *type* as well as the field index,
+            // because a slot number means nothing on its own: `body.vx = ...`
+            // writes field 0 of a `Body` and would otherwise veto a proof about
+            // field 0 of an `NBodySystem`, which is every interesting loop.
+            let written = func.values.iter().any(|op| {
+                matches!(&op.kind, OpKind::FieldSet { object, field, .. }
+                    if field == first && func.values[object.0 as usize].ty == held)
+            });
+            // And while the object does not reach a call, which could write the
+            // field from the other side. The global arm does not ask this and
+            // is exposed to the same thing through a callee; this one asks
+            // because the shape it exists for -- a receiver in a loop -- calls
+            // more often than a module global is assigned.
+            let escapes = func.values.iter().any(|op| {
+                matches!(&op.kind, OpKind::Call { args, .. } if args.contains(one))
+            });
+            !written && !escapes
+        }
+        _ => false,
+    }
 }
 
 fn names_the_length_of(func: &Func, growable: bool, array: ValueId, candidate: ValueId) -> bool {

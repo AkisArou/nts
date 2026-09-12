@@ -52,6 +52,13 @@
 // (TS2722), so that arm produced no number. The pair wants doing together and is a
 // bigger promise than either.
 //
+// **Neither fixture states the connection**, and that is what made two people
+// miss it: this one separates itself from `method-syntax-in-an-interface` in its
+// own text — "an *interface* declaring methods in method syntax, a different
+// one" — which is true about the *shape* and silent about the fact that both sit
+// on one constructor's path. A fixture that names its neighbour as different
+// should say whether they are also *both in the way of the same thing*.
+//
 // Counted per module, function-typed field refusals: `http` 7, `fs` 6,
 // `process` 6, `net` 5, `stream` 4. Not all of them are this shape; the two in
 // `stream` that are not are `EventTargetLike`'s `addEventListener` and
