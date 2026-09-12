@@ -23581,3 +23581,123 @@ rule for the TypeScript and for the C. A binding lands there when a *second*
 module declares it: `nts_process_env` is read by `console`, `path` and `util`,
 so it is not `path`'s to own, and it moves into `node:process` when that
 exists.
+
+## The axis is 49 across 24 modules, and what moved it was not a module
+
+`tooling/conformance/compiled-axis.sh` -- every module with a `tsconfig.json`
+built from one pin (`target/release/nts` of 09-12 00:47) and run against the
+artifact. Against this ledger's own baseline table above (45 across 22 modules):
+
+    path 15   os 5   punycode 3   async_hooks 2   buffer 2   fs 4
+    net 2 -> 4   timers 2   util 2   http 3   process 1   querystring 1
+    readline 1   stream 1   zlib 1              dns 0 -> 1   tty 0 -> 1
+    zero, and still zero: assert, console, dgram, diagnostics_channel,
+                          events, string_decoder, url
+
+**Nineteen of the twenty-one existing modules reproduce file-for-file**, including
+all seven zeros. 45 -> 49 is exactly three places, and the decomposition is the
+answer to the goal's "name which is being bought":
+
+  - **`net` 2 -> 4.** Two module-scope `new RegExp` in `net/src/address.ts`
+    replaced by hand parsers, which published `isIP`, `isIPv4` and `isIPv6`. A
+    lowering blocker removed on an existing module: this is **depth**, and it is
+    the only thing in the session that moved the axis for the reason the goal says
+    the axis moves.
+  - **`tty` 0 -> 1** and **`dns` 0 -> 1**, the two new modules -- one file each,
+    which is the contribution the goal predicts for adding a module.
+
+So the prediction holds in the form it was written. New modules grew the
+interpreted lane by a lot and the axis by one file each; the two files that came
+from lowering came from deleting a regex.
+
+### `stream` is the row that settles which lane is the axis
+
+    stream    interpreted   252 passed,   0 failed
+              compiled        1 passed, 251 failed
+
+One module, the same corpus, the same source. Six of the first eight modules in
+the run pass nothing compiled while several are green interpreted. Any sentence
+about "the profile passes N files" has to say which lane or it is not a number.
+
+### What the interpreted lane bought, with both ends measured
+
+`child_process`, not on `main`: **42 -> 61 of 114**, nine causes, each measured on
+its own file before the lane was measured whole, and nothing regressed at any step.
+The two that were not in the module's TypeScript at all are the ones worth keeping:
+
+  - **The stand-in could not report a failed spawn.** It returned a handle and left
+    the failure to arrive as an event, so the whole failed-child shape was
+    unreachable on the interpreted lane while the compiled lane's `uv_spawn`
+    reported it directly. That shape is four separate facts and each was measured
+    against node rather than assumed: `pid` undefined, `exitCode` the errno,
+    `error` then `close(-2, null)` with no `exit`, and `stdout`/`stderr`/`stdin` as
+    real objects. Ours built the failed child with `0x2a` -- three `ignore` slots --
+    so `test-child-process-cwd` found `child.stdout` null.
+  - **131 files across four modules were failing on the scaffolding.** Covered in
+    its own entry below.
+
+### Three findings about our own instruments, each with a one-command control
+
+**`?? "utf8"` cannot express a spread default.** `{ encoding: "utf8", ...options }`
+means a key that is *present* holding `undefined` overrides it, and only an absent
+key gets the default. `test-child-process-exec-encoding` asserts a Buffer for
+`undefined`, `null`, `"buffer"` and `"invalid"` alike. The test is
+`"encoding" in opts`. I had written the coalesce, measured two files passing, and
+read the test afterwards.
+
+**A pass that rested on a directory an earlier run had left behind.** A test that
+forks gets a plain `node <file>` child, and no substitution reaches a fresh
+process, so the child loads node's **real** `test/common`, whose `PIPE` lives in
+node's own tmpdir. Only the parent calls `refresh()` and the parent's tmpdir is
+ours, so nothing created the directory the child binds in:
+
+    mkdir third_party/node/test/.tmp.0   -> pass
+    rmdir third_party/node/test/.tmp.0   -> FAIL, same build
+
+It presented as a regression from the commit before it. A bisect would have landed
+on an innocent commit. 33 parallel tests use `common.PIPE`, 19 in `child_process`,
+`net`, `http` and `dgram`.
+
+**A signal table that was 11 of 33.** Three copies in the stand-in and one in the
+module, each holding 11 of the names `os.constants.signals` publishes and reporting
+every other signal as 0. Replaced by the platform's own table. The control that
+mattered ran first: the 11 that were there all agreed with node's numbers.
+
+### A control refuted the reasoning before it became a change
+
+`SIGABRT` and `SIGIOT` share signal 6, `SIGIO` and `SIGPOLL` share 29, and node
+builds its number-to-name map with what reads as a last-wins `for...in`. I was
+about to reverse our first-match lookup to match. Node reports `"SIGABRT"` and
+`"SIGIO"`:
+
+    node -e 'console.log(require("child_process").spawnSync(process.execPath,
+      ["-e","process.kill(process.pid,\"SIGABRT\")"]).signal)'      # SIGABRT
+
+The existing lookup was already right, and the table's order is what preserves it.
+
+### And one where the artefact said what nine compilers had been saying
+
+`tty`'s compiled lane was filed as `an-object-at-the-boundary`, a `napi_ref`
+lifetime question in the runtime and somebody else's to fix. It was not about
+references. `isatty` was exported as `isatty(fd: unknown)`, and the boundary has no
+parameter representation for that. I checked it against nine successive compilers
+and each time read the failure as the runtime not having caught up yet.
+
+**A message that does not move across nine compilers is a statement about the
+program.** Each individual check was reasonable and none of them says so.
+
+The fix follows from what the test demands: ten assertions passing a number, a
+string, an object and a function to one name, wanting `false` rather than a throw
+for the last four. A union is no better than `unknown` at a parameter, so the type
+test cannot sit behind the boundary at all -- `shape.mjs` is the only file that
+runs on both lanes, and node's numeric rule from `lib/tty.js` stays in
+`src/main.ts`.
+
+                      interpreted          compiled
+    tty               1 passed 0 failed    1 passed 0 failed
+    tty --sabotage    0 passed 1 failed    0 passed 1 failed
+    dns               1 passed 0 failed    1 passed 0 failed
+    dns --sabotage    0 passed 1 failed    0 passed 1 failed
+
+Both modules, both lanes, and sabotage flips all four arms: 0 hollow, shown by
+breaking the subject.
