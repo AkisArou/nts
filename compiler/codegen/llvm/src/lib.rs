@@ -1989,6 +1989,16 @@ fn frame_object(
             nts_codegen_common::layout::IMMORTAL,
             tbaa("i64")
         ),
+        // And the flags word, at 16, for the same reason as the zeroes below:
+        // `nts_object_new` `memset`s and an `alloca` is whatever the last frame
+        // left there. It held nothing anybody read until optional-property
+        // presence put a bit in it, and then `"other" in o` answered **true**
+        // for a property never written -- 16 of 29 cases, on this backend only,
+        // because the C emitter had been given the same store and this one had
+        // not. Two emitters, one invariant, and the one that was not told is the
+        // one that was wrong.
+        format!("{out}.flags = getelementptr i8, ptr {out}, i64 16"),
+        format!("store i32 0, ptr {out}.flags{}", tbaa("i32")),
     ];
     for (at, field) in layout.fields.iter().enumerate() {
         if !field.ty.may_hold_a_reference() {

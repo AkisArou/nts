@@ -142,6 +142,14 @@ static SIGNATURES: &[Declared] = &[
     ("nts_number_to_string_into", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_number_to_string_radix", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
     ("nts_post_delayed", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Bool)], None),
+    ("nts_presence_clear", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
+    ("nts_presence_clear_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
+    ("nts_presence_has", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Bool)),
+    ("nts_presence_has_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Bool)),
+    ("nts_presence_init", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
+    ("nts_presence_init_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
+    ("nts_presence_set", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
+    ("nts_presence_set_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
     ("nts_promise_fulfill_number", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_promise_fulfill_tagged", &[None, None, Some(HirType::Int { bits: 32, signed: false })], None),
     ("nts_promise_is_rejected", &[None], Some(HirType::Bool)),
@@ -276,6 +284,16 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         // The left is consumed and the result may *be* it, so it is kept; the
         // right is only read.
         "nts_str_append" => Some(&[0]),
+        // The presence helpers touch one word of the header and keep nothing.
+        //
+        // Saying so is what lets the object stay on the stack. Without it,
+        // handing the receiver to a call is an escape, and **every object with
+        // an optional property somebody asks about moved to the heap**: the
+        // memory suite's `deleted-field` and `optional-unassigned` both went
+        // from 0 allocations to 17, which is the whole of what those cases
+        // measure. The helpers are `static inline` in C, so the call the
+        // analysis was reasoning about is not even emitted there.
+        name if name.starts_with("nts_presence_") => Some(&[]),
         _ => None,
     }
 }

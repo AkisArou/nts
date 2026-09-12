@@ -1,29 +1,37 @@
-// expect: an `in` naming `maybe`, which is optional -- its slot exists here
-//   whether or not it was written, and `{}` and `{ maybe: undefined }` disagree
-//   in JavaScript
+// expect: nothing refused
 //
-// The expectation carries the whole message on purpose. Written as the prefix
-// `an `in` naming `maybe`, which is optional` it could not tell this message
-// from one that changed only its tail, so a fix that reworded the explanation
-// would leave this reading "reproduces" forever. The compiler lane found the
-// same shape in its own guard, where `requires 1 argument` matched
-// `requires 1 arguments` because the plural was unconditional.
+// **FIXED on 2026-09-12, and kept as a guard.** This filed the refusal:
 //
-// `"required" in row` lowers. `"maybe" in row` does not, when `maybe` is
-// declared optional: the slot exists in the layout whether or not it was ever
-// written, so no test of the value can answer the question `in` is asking.
+//     an `in` naming `maybe`, which is optional -- its slot exists here
+//     whether or not it was written, and `{}` and `{ maybe: undefined }`
+//     disagree in JavaScript
 //
-//     "required" in row   -> lowers
-//     "maybe" in row      -> REFUSED
+// The slot still exists whether or not it was written; what changed is that the
+// object header now records whether it *was*. One bit per optional property,
+// in the `flags` word every object already carries -- bits 0 through 5 are
+// spoken for by the string, array and collector flags and the other
+// twenty-six were free, so it cost no memory and no ABI.
 //
-// `requiredKey` is the control. Without it the diagnostic reads as "`in` is
-// refused", which is false and is a different blocker --
-// `in-with-a-computed-key` is that one, where the key is a variable rather than
-// optional.
+//     "required" in row   answered from the type, as before, with no test
+//     "maybe" in row      answered from the bit
 //
-// 52 distinct sites in `runtime/node`, counted as sites rather than summed over
-// cones. It is how one asks "did the caller pass this option", which every
-// options bag in the profile does.
+// `requiredKey` is the control and is now the more important half: it asserts
+// that the *required* key did not start paying for a runtime test when the
+// optional one gained one. A version that answered every `in` at run time
+// would be correct and would give back what the closed world buys.
+//
+// # What this fixture could not have told you
+//
+// It was filed at **52 distinct sites**, and closing it moved the corpus by
+// one distinct thing and two sites. The 52 are mostly the *other* blocker --
+// `in-on-an-object-with-an-optional-declarer`, where the receiver is typed
+// `object` and the declarer is found by a whole-program walk. That one still
+// reproduces. Two fixtures for what read as one question, and the site count
+// belonged to the other one.
+//
+// The ledger row is §1's `in` naming an optional property; the remaining half
+// is a **computed** key, which leaves no set to test against and is
+// `in-with-a-computed-key`.
 
 interface Row {
   required: number;

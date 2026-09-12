@@ -2774,6 +2774,25 @@ NtsArray *nts_array_fill_ref(NtsArray *a, void *value) {
  */
 int32_t nts_to_int32_fn(double x) { return nts_to_int32(x); }
 
+/* The presence bits, for exactly the same reason: two instructions in C and a
+ * symbol everywhere else. The shift they apply is defined once, in the header,
+ * and these are what stop a backend from needing to know it. */
+void nts_presence_init_fn(NtsHeader *object, uint32_t mask) {
+  nts_presence_init(object, mask);
+}
+
+void nts_presence_set_fn(NtsHeader *object, uint32_t index) {
+  nts_presence_set(object, index);
+}
+
+void nts_presence_clear_fn(NtsHeader *object, uint32_t index) {
+  nts_presence_clear(object, index);
+}
+
+bool nts_presence_has_fn(const NtsHeader *object, uint32_t index) {
+  return nts_presence_has(object, index);
+}
+
 /* Rounding, for the same reason and with more in it: the header's definition
  * carries three cases a backend would have to get right on its own -- the half
  * that goes toward positive infinity, the value already integral near 2^53, and

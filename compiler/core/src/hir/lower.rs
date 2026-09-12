@@ -1395,6 +1395,32 @@ struct Naming {
     /// the rest of this struct is for.
     generators: rustc_hash::FxHashMap<NodeId, usize>,
 
+    /// Every property name some `in` in this program asks about.
+    ///
+    /// A presence bit is only worth maintaining where something reads it. The
+    /// first version maintained one for every optional property and cost
+    /// `benches`' `callback-field` **one counted operation against a floor of
+    /// zero** -- a store into a header word nobody would ever look at.
+    ///
+    /// Keyed by *name* rather than by (type, key). The receiver's type set is
+    /// decided during lowering and a name is decided by the source, so a name
+    /// is the fact available before any function is walked; over-approximating
+    /// costs a store on a same-named property of an unrelated type, and being
+    /// wrong the other way would be a bit that is read and never written.
+    ///
+    /// The bit *index* is unaffected: it stays a position among **all** the
+    /// layout's optional fields, so tracking a subset cannot renumber anything
+    /// and a key that starts being asked about needs no other agreement.
+    ///
+    /// **`Object.keys`, `Object.hasOwn` and `for...in` will not fit this.**
+    /// `in` names its key in the source and they do not: `Object.keys(o)` asks
+    /// about *every* optional property of `o`'s type at once. Whoever lands
+    /// them has to add the receiver's whole optional set here, not a key — and
+    /// a reader added without a matching producer is a bit that is read and
+    /// never written, which answers `false` for a property that is there and
+    /// says nothing while doing it.
+    presence_keys: rustc_hash::FxHashSet<String>,
+
     /// The token index of each class this program declares.
     ///
     /// A class used as a *value* needs one immortal object, the same one
@@ -1517,6 +1543,38 @@ fn abstract_generator_names(index: usize) -> (String, String) {
     let class = format!("Generator{index}");
     let method = format!("{class}#resume");
     (class, method)
+}
+
+/// Every property name an `in` in this program asks about.
+///
+/// A whole-program scan, because the question is whole-program: a presence bit
+/// is written wherever the property is, and read wherever somebody tests it,
+/// and the two are in different functions. See [`Naming::presence_keys`] for
+/// why the key is a name rather than a (type, key) pair.
+///
+/// A `BinaryExpression` holds its operator as a real token node, so the `in` is
+/// a child and this looks for it directly. A **computed** key contributes
+/// nothing and needs to: that form is refused, so no bit it would have wanted
+/// is ever read.
+fn presence_keys(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> rustc_hash::FxHashSet<String> {
+    let mut keys = rustc_hash::FxHashSet::default();
+    for index in 0..snapshot.nodes.len() {
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        if probe.kind_of(id) != Some(syntax::BINARY_EXPRESSION) {
+            continue;
+        }
+        let children = probe.children(id);
+        let [lhs, operator, _] = children.as_slice() else {
+            continue;
+        };
+        if probe.kind_of(*operator) != Some(syntax::IN_KEYWORD) {
+            continue;
+        }
+        if let Some(key) = probe.private_name_key(*lhs).or_else(|| probe.literal_key(*lhs)) {
+            keys.insert(key);
+        }
+    }
+    keys
 }
 
 /// Every symbol whose function can raise a `throw`.
@@ -1784,6 +1842,7 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
         }
     }
     naming.throwing = throwing_symbols(snapshot, &probe);
+    naming.presence_keys = presence_keys(snapshot, &probe);
     naming.generators = generators;
     naming.written_order = written_order;
     naming
@@ -2824,6 +2883,7 @@ fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
     builder.qualified.clone_from(&naming.qualified);
     builder.generators.clone_from(&naming.generators);
     builder.throwing.clone_from(&naming.throwing);
+    builder.presence_keys.clone_from(&naming.presence_keys);
     builder.written_order.clone_from(&naming.written_order);
     builder.class_tokens.clone_from(&naming.class_tokens);
 }
@@ -5459,6 +5519,7 @@ fn spell(kind: u16, fallback: &str) -> String {
 }
 
 /// Whether a type declares a property, and whether the answer is usable.
+#[derive(PartialEq, Eq)]
 enum Declares {
     /// Declared, and always present.
     Always,
@@ -6912,6 +6973,8 @@ struct FuncBuilder<'a> {
     generators: rustc_hash::FxHashMap<NodeId, usize>,
     /// Which functions can raise a `throw`. See [`Naming::throwing`].
     throwing: rustc_hash::FxHashSet<u32>,
+    /// Which property names an `in` asks about. See [`Naming::presence_keys`].
+    presence_keys: rustc_hash::FxHashSet<String>,
     /// The order the program writes each field-name set; see
     /// [`Naming::written_order`], which computes it once for the whole program.
     written_order: rustc_hash::FxHashMap<Vec<String>, Vec<String>>,
@@ -6967,6 +7030,7 @@ impl<'a> FuncBuilder<'a> {
             generator: None,
             generators: rustc_hash::FxHashMap::default(),
             throwing: rustc_hash::FxHashSet::default(),
+            presence_keys: rustc_hash::FxHashSet::default(),
             class_tokens: rustc_hash::FxHashMap::default(),
             written_order: rustc_hash::FxHashMap::default(),
             used_closures: Vec::new(),
@@ -8313,6 +8377,16 @@ impl<'a> FuncBuilder<'a> {
 
         let asynchronous = self.begin_async(member, &return_type)?;
         self.returns = return_type.clone();
+        // A class with no base has no `super()`, so its own field initialisers
+        // go at the top of its constructor. A derived class's go immediately
+        // after the `super()` call, which `lower_super` emits -- the language
+        // puts them there and `examples/a-field-initialiser` is the difference.
+        if is_constructor
+            && self.base.is_none()
+            && let Some(receiver) = self.this
+        {
+            self.initialize_own_fields(member, receiver)?;
+        }
         if let Some(body) = body {
             self.lower_block(body)?;
             if generated.is_some() {
@@ -9439,7 +9513,20 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
         let absent = self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone());
-        self.write_place(id, &place, absent)?;
+        // `coerce_to_slot` and then `field_delete` rather than `write_place`,
+        // which is the write path and would record a *write*. The coercion is
+        // the same one every store gets: it builds the `undefined` at the slot's
+        // own representation rather than at a guess.
+        //
+        // JavaScript removes a class field like any other, which is why the
+        // class case carries a bit at all instead of being answered from the
+        // type: `delete b.maybe` after `new Box()` makes `"maybe" in b` false,
+        // and no static answer can follow that.
+        let absent = self.coerce_to_slot(id, &place, absent)?;
+        let Place::Field { object, field } = place else {
+            unreachable!("checked above");
+        };
+        self.field_delete(object, field, absent, &origin);
         Ok(self.push(OpKind::ConstBool(true), HirType::Bool, origin))
     }
 
@@ -10258,28 +10345,12 @@ impl<'a> FuncBuilder<'a> {
         // point: the closure and the declaration have to name one cell.
         if let Some(cell) = self.opened_cell(symbol, index) {
             let origin = self.origin(at);
-            self.push(
-                OpKind::FieldSet {
-                    object: cell,
-                    field: 0,
-                    value,
-                },
-                HirType::Void,
-                origin.clone(),
-            );
+            self.field_set(cell, 0, value, &origin);
             // The cell was opened empty, above. This is the moment it stops
             // being, and the flag is what a closure's read consults.
             if self.is_guarded(index) {
                 let ready = self.push(OpKind::ConstBool(true), HirType::Bool, origin.clone());
-                self.push(
-                    OpKind::FieldSet {
-                        object: cell,
-                        field: 1,
-                        value: ready,
-                    },
-                    HirType::Void,
-                    origin,
-                );
+                self.field_set(cell, 1, ready, &origin);
             }
             return cell;
         }
@@ -10288,15 +10359,7 @@ impl<'a> FuncBuilder<'a> {
         let cell_ty = HirType::Managed(ManagedType::Object(cell_type(index)));
         self.layouts.push(self.cell_layout(index, ty));
         let cell = self.push(OpKind::ObjectNew { frame: false }, cell_ty, origin.clone());
-        self.push(
-            OpKind::FieldSet {
-                object: cell,
-                field: 0,
-                value,
-            },
-            HirType::Void,
-            origin,
-        );
+        self.field_set(cell, 0, value, &origin);
         cell
     }
 
@@ -11255,15 +11318,7 @@ impl<'a> FuncBuilder<'a> {
             let want = layout.fields[field as usize].ty.clone();
             let value = self.coerce(value, &want, child)?;
             let origin = self.origin(child);
-            self.push(
-                OpKind::FieldSet {
-                    object: receiver,
-                    field,
-                    value,
-                },
-                HirType::Void,
-                origin,
-            );
+            self.field_set(receiver, field, value, &origin);
         }
         Ok(())
     }
@@ -15921,6 +15976,104 @@ impl<'a> FuncBuilder<'a> {
         None
     }
 
+    /// `"k" in o` where some arm of `o`'s type declares `k` optionally: the
+    /// answer is the bit the writes recorded.
+    ///
+    /// A bit is a position in **one** layout, so every type the value can be has
+    /// to number `k` the same way for a single test to be right. Base-first
+    /// layout says a subclass and its base will -- and that is *checked* here
+    /// rather than relied on, because it is a property of a pass that runs after
+    /// this one and a wrong shared bit is a wrong answer rather than a failure.
+    ///
+    /// **The disagreement check is unreachable today and is written down as
+    /// such rather than left looking load-bearing.** Two arms can only number a
+    /// shared property differently by laying their fields out differently, and
+    /// such a union is already refused one step earlier -- `a `Wide` where a
+    /// `Narrow` is wanted, which is a pointer cast between two structs that do
+    /// not agree about where their shared fields are`. Tried, and that is the
+    /// refusal that came back. The two rest on different facts, field offsets
+    /// against bit positions, and the cast refusal is the largest single item in
+    /// the corpus census -- so the day it lifts is the day this stops being
+    /// redundant, and it should not have to be rediscovered then.
+    ///
+    /// Every arm must also declare it optionally. An arm that declares it
+    /// always and one that declares it optionally disagree about a value the
+    /// test cannot see, and that is the class question the mixed path answers.
+    fn in_by_presence(
+        &mut self,
+        id: NodeId,
+        rhs: NodeId,
+        members: &[TypeId],
+        optional: &[TypeId],
+        key: &str,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        if optional.len() != members.len() {
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "an `in` naming `{key}`, which {} of this union's {} arms declare optionally \
+                     and the rest declare always -- which arm it is decides the answer",
+                    optional.len(),
+                    members.len()
+                ),
+            ));
+        }
+        let mut agreed: Option<u32> = None;
+        for ty in optional {
+            // Built rather than looked up, the same call the mixed path below
+            // makes and for the same reason: a layout is what the bit is a
+            // position *in*, and a function may be lowered before anything that
+            // constructs the type it takes. `askAsBase(b: Base)` is that
+            // function, and the lookup answered "no layout in this program" for
+            // a class the program allocates two lines later.
+            self.layout_of(id, *ty)?;
+            let bit = match self.presence_of_key(*ty, key) {
+                Some(super::presence::Presence::Bit(bit)) => bit,
+                Some(super::presence::Presence::TooMany { optional }) => {
+                    return Err(self.unsupported(
+                        id,
+                        &format!(
+                            "an `in` naming `{key}`, on a type with {optional} optional \
+                             properties -- an object header records {}",
+                            super::presence::BITS
+                        ),
+                    ));
+                }
+                // No layout here, or the property is not optional after
+                // `declares` said it was. Neither is reachable from this arm and
+                // both are answered rather than assumed away.
+                _ => {
+                    return Err(self.unsupported(
+                        id,
+                        &format!(
+                            "an `in` naming `{key}` on a type with no layout in this program"
+                        ),
+                    ));
+                }
+            };
+            if *agreed.get_or_insert(bit) != bit {
+                return Err(self.unsupported(
+                    id,
+                    &format!(
+                        "an `in` naming `{key}`, which this union's arms record in different \
+                         bits -- one test cannot ask both"
+                    ),
+                ));
+            }
+        }
+        let Some(bit) = agreed else {
+            return Err(self.unsupported(id, &format!("an `in` naming `{key}` on no type at all")));
+        };
+        let object = self.lower_expression(rhs)?;
+        let index = self.push(
+            OpKind::ConstInt(i128::from(bit)),
+            PRESENCE_INDEX,
+            origin.clone(),
+        );
+        Ok(self.call_runtime("nts_presence_has", vec![object, index], HirType::Bool, &origin))
+    }
+
     fn lower_in(&mut self, id: NodeId, lhs: NodeId, rhs: NodeId) -> Result<ValueId, Diagnostic> {
         let Some(key) = self.private_name_key(lhs).or_else(|| self.literal_key(lhs)) else {
             return Err(self.unsupported(
@@ -16016,22 +16169,34 @@ impl<'a> FuncBuilder<'a> {
         members.sort_unstable_by_key(|ty| ty.0);
         members.dedup();
 
-        // Which of them declare it. The set is what the test becomes.
+        let (declaring, optional) = self.arms_declaring(rhs, &members, &key)?;
+        let origin = self.origin(id);
+        if !optional.is_empty() {
+            return self.in_by_presence(id, rhs, &members, &optional, &key);
+        }
+        self.in_over_the_arms(id, rhs, &members, declaring, &origin)
+    }
+
+    /// Which arms of the receiver's type declare the key, and which single arm
+    /// declares it optionally.
+    fn arms_declaring(
+        &mut self,
+        rhs: NodeId,
+        members: &[TypeId],
+        key: &str,
+    ) -> Result<(Vec<TypeId>, Vec<TypeId>), Diagnostic> {
         let mut declaring: Vec<TypeId> = Vec::new();
-        for member in &members {
-            match self.declares(*member, &key) {
+        let mut optional: Vec<TypeId> = Vec::new();
+        for member in members {
+            match self.declares(*member, key) {
                 Declares::Always => declaring.push(*member),
                 Declares::Never => {}
-                Declares::Optionally => {
-                    return Err(self.unsupported(
-                        id,
-                        &format!(
-                            "an `in` naming `{key}`, which is optional -- its slot exists here \
-                             whether or not it was written, and `{{}}` and `{{ {key}: undefined }}` \
-                             disagree in JavaScript"
-                        ),
-                    ));
-                }
+                // Answered from the header rather than from the slot, which is
+                // the whole of what the presence bit is for. Collected rather
+                // than answered here: a bit is a position in *one* layout, so
+                // whether the arms can share a test is a question about all of
+                // them, and the caller asks it once they are known.
+                Declares::Optionally => optional.push(*member),
                 Declares::NotAnObject => {
                     return Err(self.unsupported(
                         rhs,
@@ -16040,8 +16205,20 @@ impl<'a> FuncBuilder<'a> {
                 }
             }
         }
+        Ok((declaring, optional))
+    }
 
-        let origin = self.origin(id);
+    /// `"k" in o` answered by which of the receiver's arms declare `k`: a
+    /// constant when they agree, and the value's own class when they do not.
+    fn in_over_the_arms(
+        &mut self,
+        id: NodeId,
+        rhs: NodeId,
+        members: &[TypeId],
+        mut declaring: Vec<TypeId>,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = origin.clone();
         // Every arm declares it, or none does. The operand is still evaluated:
         // `in` has no short circuit and the left side of `&&` chains here often
         // has an effect.
@@ -16098,6 +16275,45 @@ impl<'a> FuncBuilder<'a> {
     /// [`generics::concrete`] is the same substitution the call path already
     /// makes and is bounded the same way: a constraint that is itself a
     /// parameter stays unresolved and keeps refusing.
+    /// Whether an **optional** property is written by the act of constructing
+    /// the object, so that its presence bit starts set.
+    ///
+    /// A class field is. `class Box { maybe?: string }` is a field
+    /// *declaration*, and under ES2022 class-field semantics -- which the
+    /// fixtures' `target: ESNext` selects, so `useDefineForClassFields` is on --
+    /// a declaration with no initialiser still defines the property as
+    /// `undefined` at construction. `"maybe" in new Box()` is **true**, and it
+    /// is true because something wrote it, not because optional means present.
+    ///
+    /// That distinction is the whole of why this is a *mask* and not an answer.
+    /// The first version made `declares` report such a property as always
+    /// present and skipped the bit entirely, which is right until the program
+    /// writes `delete b.maybe` -- JavaScript removes a class field like any
+    /// other, and a static answer cannot. `delete_expression.rs` said so.
+    ///
+    /// An **interface** or an anonymous object type is the other half: its
+    /// values are object literals, `{}` and `{ maybe: undefined }` are both one,
+    /// and nothing is written unless the literal writes it.
+    ///
+    /// `declare maybe?: string` emits nothing, so it defines nothing -- it is a
+    /// promise about a property some other code creates. It is `PROPERTY_
+    /// DECLARATION` like the field above and is the reason this asks the
+    /// modifiers rather than the kind alone. The corpus has 411 `declare` fields
+    /// and **none of them optional**, which is why a version that ignored the
+    /// modifier would have passed every test here and been wrong in the first
+    /// program that wrote one.
+    fn defined_at_construction(&self, property: &nts_semantic_schema::PropertyRecord) -> bool {
+        let Some(declaration) = property.declaration else {
+            return false;
+        };
+        if self.kind_of(declaration) != Some(syntax::PROPERTY_DECLARATION) {
+            return false;
+        }
+        let modifiers = self.node(declaration).modifiers;
+        !modifiers.contains(nts_semantic_schema::DeclarationModifiers::DECLARE)
+            && !modifiers.contains(nts_semantic_schema::DeclarationModifiers::ABSTRACT)
+    }
+
     fn declares(&self, ty: TypeId, key: &str) -> Declares {
         let ty = super::generics::concrete(self.snapshot, ty);
         let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
@@ -18001,6 +18217,117 @@ impl<'a> FuncBuilder<'a> {
         self.coerce(value, &want, id)
     }
 
+    /// Store into a field, and record that it was written.
+    ///
+    /// **The only way a `FieldSet` is emitted.** Recording presence at each of
+    /// the fourteen sites that used to push one directly would have been
+    /// fourteen chances to forget, and a forgotten one is not a crash: the bit
+    /// stays clear, `"x" in o` answers false for a property that is there, and
+    /// nothing anywhere says so. One derivation instead -- `super::hir::verify`
+    /// checks that no `FieldSet` on an optional field arrives without its
+    /// record, so a fifteenth site that bypasses this is a build failure rather
+    /// than a convention.
+    ///
+    /// Costs nothing where nothing is optional, which is every frame, capture
+    /// cell and closure environment in the program: the lookup is compile-time
+    /// and emits no operation at all.
+    fn field_set(&mut self, object: ValueId, field: u32, value: ValueId, origin: &Origin) {
+        self.push(
+            OpKind::FieldSet {
+                object,
+                field,
+                value,
+            },
+            HirType::Void,
+            origin.clone(),
+        );
+        let Some(bit) = self.presence_bit_of(object, field) else {
+            return;
+        };
+        let index = self.push(
+            OpKind::ConstInt(i128::from(bit)),
+            PRESENCE_INDEX,
+            origin.clone(),
+        );
+        self.call_runtime("nts_presence_set", vec![object, index], HirType::Void, origin);
+    }
+
+    /// Remove a field: store the absent tag, and record that the property is
+    /// gone.
+    ///
+    /// The second of exactly two operations that emit a `FieldSet`, and it is
+    /// separate from [`Self::field_set`] rather than a flag on it because the
+    /// two record *opposite* facts. Routing a deletion through the write path
+    /// emitted `nts_presence_set` immediately followed by `nts_presence_clear`
+    /// -- correct, and two instructions saying the thing and then unsaying it.
+    ///
+    /// The tag and the bit are both written because they are different facts:
+    /// the tag says the value is absent, the bit says the property is, and
+    /// `{ x: undefined }` is the program that tells them apart.
+    fn field_delete(&mut self, object: ValueId, field: u32, value: ValueId, origin: &Origin) {
+        self.push(
+            OpKind::FieldSet {
+                object,
+                field,
+                value,
+            },
+            HirType::Void,
+            origin.clone(),
+        );
+        let Some(bit) = self.presence_bit_of(object, field) else {
+            return;
+        };
+        let index = self.push(
+            OpKind::ConstInt(i128::from(bit)),
+            PRESENCE_INDEX,
+            origin.clone(),
+        );
+        self.call_runtime("nts_presence_clear", vec![object, index], HirType::Void, origin);
+    }
+
+    /// How a property's presence is recorded on this type.
+    ///
+    /// `None` means only that the layout is not built in this program, which is
+    /// the one answer that is about the compilation rather than about the type.
+    /// Everything else is a [`super::presence::Presence`] the caller has to
+    /// match, so that "not optional" and "optional and unrecordable" cannot be
+    /// merged into one `None` and then handled as the first -- they want
+    /// opposite treatment, and merging them is how a refusal turns into a wrong
+    /// answer.
+    fn presence_of_key(&self, ty: TypeId, key: &str) -> Option<super::presence::Presence> {
+        // Looked up rather than built. `layout_of` **creates**, and creating one
+        // here would materialise a layout for a type the program does not carry
+        // -- the trap `laid_out_as_a_prefix` and `token_base` both record.
+        let layout = self.layouts.iter().find(|layout| layout.types.contains(&ty))?;
+        Some(super::presence::of(
+            layout,
+            |candidate| self.declares(ty, candidate) == Declares::Optionally,
+            key,
+        ))
+    }
+
+    /// The presence bit for a field of the object this value holds, where
+    /// something in the program reads it.
+    ///
+    /// The one gate for every writer, so `field_set`, `field_delete` and the
+    /// construction mask cannot disagree about which bits are maintained. A bit
+    /// nobody tests is a store into a header word that is never read, and it
+    /// cost `callback-field` one counted operation against a floor of zero.
+    fn presence_bit_of(&self, object: ValueId, field: u32) -> Option<u32> {
+        let HirType::Managed(ManagedType::Object(ty)) = self.values[object.0 as usize].ty else {
+            return None;
+        };
+        let layout = self.layouts.iter().find(|layout| layout.types.contains(&ty))?;
+        let name = layout.fields.get(field as usize)?.name.clone();
+        if !self.presence_keys.contains(&name) {
+            return None;
+        }
+        match self.presence_of_key(ty, &name)? {
+            super::presence::Presence::Bit(bit) => Some(bit),
+            super::presence::Presence::Always | super::presence::Presence::TooMany { .. } => None,
+        }
+    }
+
     fn write_place(
         &mut self,
         id: NodeId,
@@ -18011,15 +18338,7 @@ impl<'a> FuncBuilder<'a> {
         let value = self.coerce_to_slot(id, place, value)?;
         match *place {
             Place::Field { object, field } => {
-                self.push(
-                    OpKind::FieldSet {
-                        object,
-                        field,
-                        value,
-                    },
-                    HirType::Void,
-                    origin,
-                );
+                self.field_set(object, field, value, &origin);
             }
             Place::Setter {
                 object,
@@ -18071,15 +18390,7 @@ impl<'a> FuncBuilder<'a> {
                     .and(self.bindings.get(&symbol).copied())
                 {
                     Some(cell) => {
-                        self.push(
-                            OpKind::FieldSet {
-                                object: cell,
-                                field: 0,
-                                value,
-                            },
-                            HirType::Void,
-                            origin,
-                        );
+                        self.field_set(cell, 0, value, &origin);
                     }
                     None => {
                         self.bindings.insert(symbol, value);
@@ -19107,15 +19418,7 @@ impl<'a> FuncBuilder<'a> {
             // that supplies one erases on the way in.
             let want = layout.fields[field as usize].ty.clone();
             let value = self.coerce(value, &want, property)?;
-            self.push(
-                OpKind::FieldSet {
-                    object,
-                    field,
-                    value,
-                },
-                HirType::Void,
-                origin.clone(),
-            );
+            self.field_set(object, field, value, &origin);
         }
         if erase_afterwards {
             return Ok(self.push(OpKind::Erase { value: object }, HirType::Erased, origin));
@@ -19168,15 +19471,7 @@ impl<'a> FuncBuilder<'a> {
             );
             let want = into.fields[target as usize].ty.clone();
             let read = self.coerce(read, &want, property)?;
-            self.push(
-                OpKind::FieldSet {
-                    object,
-                    field: target,
-                    value: read,
-                },
-                HirType::Void,
-                origin.clone(),
-            );
+            self.field_set(object, target, read, origin);
         }
         Ok(())
     }
@@ -19565,15 +19860,7 @@ impl<'a> FuncBuilder<'a> {
             let Some(at) = layout.index_of(field) else {
                 continue;
             };
-            self.push(
-                OpKind::FieldSet {
-                    object: error,
-                    field: at,
-                    value,
-                },
-                HirType::Void,
-                origin.clone(),
-            );
+            self.field_set(error, at, value, &origin);
         }
         let erased = self.push(OpKind::Erase { value: error }, HirType::Erased, origin);
         self.throw_erased(id, error, erased, &object)
@@ -19784,15 +20071,7 @@ impl<'a> FuncBuilder<'a> {
             let Some(field) = layout.index_of(field) else {
                 continue;
             };
-            self.push(
-                OpKind::FieldSet {
-                    object: receiver,
-                    field,
-                    value,
-                },
-                HirType::Void,
-                origin.clone(),
-            );
+            self.field_set(receiver, field, value, &origin);
         }
         Ok(())
     }
@@ -20040,15 +20319,7 @@ impl<'a> FuncBuilder<'a> {
             let value = self.lower_expression(element)?;
             let stored = self.coerce(value, &want, element)?;
             let field = u32::try_from(at).unwrap_or(0);
-            self.push(
-                OpKind::FieldSet {
-                    object,
-                    field,
-                    value: stored,
-                },
-                HirType::Void,
-                origin.clone(),
-            );
+            self.field_set(object, field, stored, &origin);
         }
         Ok(object)
     }
@@ -20590,15 +20861,7 @@ impl<'a> FuncBuilder<'a> {
                     .type_of(capture.at)
                     .unwrap_or_else(|| self.values[value.0 as usize].ty.clone());
                 let value = self.coerce(value, &field_ty, capture.at)?;
-                self.push(
-                    OpKind::FieldSet {
-                        object,
-                        field: u32::try_from(at).unwrap_or(0),
-                        value,
-                    },
-                    HirType::Void,
-                    origin.clone(),
-                );
+                self.field_set(object, u32::try_from(at).unwrap_or(0), value, &origin);
                 // The layout this side builds has to have the same fields in
                 // the same order as the one the body builds, or every index
                 // after this one is off by a field.
@@ -20635,15 +20898,7 @@ impl<'a> FuncBuilder<'a> {
                 )
             })?;
             let field_ty = self.values[value.0 as usize].ty.clone();
-            self.push(
-                OpKind::FieldSet {
-                    object,
-                    field: u32::try_from(at).unwrap_or(0),
-                    value,
-                },
-                HirType::Void,
-                origin.clone(),
-            );
+            self.field_set(object, u32::try_from(at).unwrap_or(0), value, &origin);
             fields.push(Field {
                 name: capture.name.clone(),
                 ty: field_ty,
@@ -20704,12 +20959,79 @@ impl<'a> FuncBuilder<'a> {
     /// sees the initialized value where node sees `undefined`. That is a real
     /// difference and a narrow one; the shape it needs is a base constructor
     /// calling a virtual method, which this compiler does not lower yet.
-    fn initialize_fields(
-        &mut self,
-        at: NodeId,
-        object: ValueId,
-        type_id: TypeId,
-    ) -> Result<(), Diagnostic> {
+    /// Set the presence bits for the optional fields a class *declares*.
+    ///
+    /// One store rather than one per field: the set is known at compile time, so
+    /// it is a constant mask and `nts_presence_init` is a single `or` into a
+    /// word the allocation just wrote. Nothing is emitted at all when the mask
+    /// is empty, which is every class with no optional field -- and every frame,
+    /// cell and closure environment, none of which come through here.
+    ///
+    /// `declare` and `abstract` members are excluded because they define
+    /// nothing; see [`Self::defined_at_construction`].
+    fn initialize_presence(&mut self, at: NodeId, object: ValueId, ty: TypeId, layout: &Layout) {
+        let Some(properties) = self
+            .snapshot
+            .types
+            .get(super::generics::concrete(self.snapshot, ty).0 as usize)
+            .and_then(|record| match &record.kind {
+                TypeKind::Object { properties } => Some(properties.clone()),
+                _ => None,
+            })
+        else {
+            return;
+        };
+        let mut mask = 0u32;
+        for property in &properties {
+            // **Own properties only.** This runs inside each class's own
+            // constructor now, so a base's optional fields are that base's
+            // constructor's to record -- and it runs for every class in the
+            // chain, so the union is unchanged. Taking the flattened list here
+            // would have each constructor set its ancestors' bits as well,
+            // which is harmless and is also three classes writing one word for
+            // no reason.
+            if !property.own
+                || !property.optional
+                || !self.defined_at_construction(property)
+                || !self.presence_keys.contains(&property.name)
+            {
+                continue;
+            }
+            if let super::presence::Presence::Bit(bit) = super::presence::of(
+                layout,
+                |candidate| {
+                    properties
+                        .iter()
+                        .any(|other| other.name == candidate && other.optional)
+                },
+                &property.name,
+            ) {
+                mask |= 1u32 << bit;
+            }
+        }
+        if mask == 0 {
+            return;
+        }
+        let origin = self.origin(at);
+        let value = self.push(
+            OpKind::ConstInt(i128::from(mask)),
+            PRESENCE_INDEX,
+            origin.clone(),
+        );
+        self.call_runtime(
+            "nts_presence_init",
+            vec![object, value],
+            HirType::Void,
+            &origin,
+        );
+    }
+
+    /// Every class from `type_id` up to the root, base-first.
+    ///
+    /// The order construction runs in, and the order a layout lays its fields
+    /// out in -- which is why an index taken against one class's layout is
+    /// valid against any subclass's.
+    fn construction_chain(&self, type_id: TypeId) -> Vec<TypeId> {
         let mut chain = vec![type_id];
         let mut ty = type_id;
         while let Some(base) = self.snapshot.base_types.get(&ty).and_then(|b| b.first()) {
@@ -20720,9 +21042,42 @@ impl<'a> FuncBuilder<'a> {
             ty = *base;
         }
         chain.reverse();
+        chain
+    }
 
+    /// Run the field initialisers `classes` declare, against an object of
+    /// `type_id`.
+    ///
+    /// **Which classes is the caller's,** because where they run is not one
+    /// answer. JavaScript runs a class's field initialisers inside its own
+    /// constructor, immediately after `super()` returns -- so
+    /// `class D extends B { y = this.x + 10 }` sees the `x` that `B`'s
+    /// constructor wrote. Emitting the whole chain at the allocation site
+    /// instead ran every initialiser before any constructor, and `y` read a
+    /// field nobody had written yet: **28 of 29 cases against node**, answering
+    /// `nan`.
+    ///
+    /// So a class that declares a constructor initialises its own fields in it,
+    /// and the allocation site is left with the classes *below* the one whose
+    /// constructor it calls -- those declare none of their own, so nothing else
+    /// will run them, and after the call is where the language puts them.
+    fn initialize_fields(
+        &mut self,
+        at: NodeId,
+        object: ValueId,
+        type_id: TypeId,
+        classes: &[TypeId],
+    ) -> Result<(), Diagnostic> {
         let layout = self.layout_of(at, type_id)?;
-        for class in chain {
+        for &class in classes {
+            // The presence bits this class's *declarations* set, in one store,
+            // before its initialisers run. A field declaration defines its
+            // property even with no initialiser -- ES2022 class-field
+            // semantics, and the reason `"maybe" in new Box()` is true -- so
+            // this records writes that happened rather than exempting the
+            // question. An initialiser sets its own bit through `field_set`,
+            // and setting a bit twice is setting it once.
+            self.initialize_presence(at, object, class, &layout);
             let Some(declaration) = self
                 .snapshot
                 .types
@@ -20819,17 +21174,23 @@ impl<'a> FuncBuilder<'a> {
                 self.this = outer;
                 let value = value?;
                 let want = layout.fields[field as usize].ty.clone();
+                // The layouts the field's own type needs, which used to be
+                // somebody else's doing. An initialiser was lowered at the
+                // allocation site, so a `Map<Conn, Entry>` built there got its
+                // key and value layouts from the function that wrote `new`;
+                // lowered inside the constructor it is the first mention of
+                // them anywhere, and the backend refused `an object type with
+                // no layout: type 4706`. One root, six cascaded functions, and
+                // `module#init` among them -- which is an addon that builds and
+                // does not load.
+                //
+                // Through containers rather than through fields, which is what
+                // `materialize` already walks: demanding a layout per field type
+                // refused 81 functions for holding a `Map` they never touch.
+                self.materialize(initializer, &want)?;
                 let value = self.coerce(value, &want, initializer)?;
                 let origin = self.origin(initializer);
-                self.push(
-                    OpKind::FieldSet {
-                        object,
-                        field,
-                        value,
-                    },
-                    HirType::Void,
-                    origin,
-                );
+                self.field_set(object, field, value, &origin);
             }
         }
         Ok(())
@@ -20894,6 +21255,33 @@ impl<'a> FuncBuilder<'a> {
         } else {
             ty
         }
+    }
+
+    /// Which classes' field initialisers the allocation site has to run.
+    ///
+    /// The ones no constructor will. A class that declares a constructor
+    /// initialises its own fields inside it -- at the top when it has no base,
+    /// after `super()` when it has one -- so what is left is the classes
+    /// *below* the one whose constructor is called. Those declare none of their
+    /// own, and they go **after** the call, because an implicit constructor is
+    /// `super(...args)` followed by this class's initialisers.
+    ///
+    /// Base-first, which is the order they run in.
+    fn initialisers_this_site_owes(&self, type_id: TypeId) -> Vec<TypeId> {
+        let chain = self.construction_chain(type_id);
+        let Some(declaring) = self.hierarchy.constructor(type_id) else {
+            // Nothing in the chain declares one, so no constructor runs at all
+            // and every class's initialisers are this site's.
+            return chain;
+        };
+        let mut owed: Vec<TypeId> = chain
+            .iter()
+            .rev()
+            .take_while(|class| **class != declaring)
+            .copied()
+            .collect();
+        owed.reverse();
+        owed
     }
 
     fn lower_new(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
@@ -21000,10 +21388,27 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
 
-        // Field initializers, before any constructor runs, so a constructor
-        // that assigns the same field wins -- which is what source order says.
-        self.initialize_fields(id, object, type_id)?;
+        let owed = self.initialisers_this_site_owes(type_id);
 
+        self.run_the_constructor(id, object, type_id, callee, class, &owed)
+    }
+
+    /// Call the constructor that runs for this type, and then the field
+    /// initialisers no constructor owns.
+    ///
+    /// Split out of [`Self::lower_new`] because it is where the construction
+    /// stops being uniform: everything above it is true of any class a token
+    /// could hold, and everything in it names a declared constructor.
+    fn run_the_constructor(
+        &mut self,
+        id: NodeId,
+        object: ValueId,
+        type_id: TypeId,
+        callee: NodeId,
+        class: String,
+        owed: &[TypeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
         // The nearest declared constructor, which may be a base's: a class
         // that declares none has an implicit one that forwards, and forwarding
         // to it directly is the same call with one frame fewer. A class with no
@@ -21025,6 +21430,8 @@ impl<'a> FuncBuilder<'a> {
             if !arguments.is_empty() {
                 return Err(self.unsupported(id, "a `new` with arguments and no constructor"));
             }
+            // Nothing runs but this, so this site owes the whole chain.
+            self.initialize_fields(id, object, type_id, owed)?;
             return Ok(object);
         };
         // Past this point the construction is **class-specific**: a declared
@@ -21064,6 +21471,11 @@ impl<'a> FuncBuilder<'a> {
             HirType::Void,
             origin,
         );
+        // And the classes below it, which declare no constructor of their own.
+        // After the call, because an implicit constructor is `super(...args)`
+        // followed by this class's initialisers -- so they see what the
+        // constructor wrote, which is the whole point.
+        self.initialize_fields(id, object, type_id, owed)?;
         Ok(object)
     }
 
@@ -28641,6 +29053,7 @@ impl<'a> FuncBuilder<'a> {
                 if let Some(provided) = provided {
                     self.initialize_error(id, receiver, &provided, arguments)?;
                 }
+                self.initialize_own_fields(id, receiver)?;
                 return Ok(receiver);
             }
             None => base,
@@ -28656,7 +29069,7 @@ impl<'a> FuncBuilder<'a> {
         } else {
             self.type_of(id).unwrap_or(HirType::Void)
         };
-        Ok(self.push(
+        let call = self.push(
             OpKind::Call {
                 callee: Callee::Direct(format!("{base}#{member}")),
                 args,
@@ -28664,7 +29077,35 @@ impl<'a> FuncBuilder<'a> {
             },
             ty,
             origin,
-        ))
+        );
+        if member == "constructor" {
+            self.initialize_own_fields(id, receiver)?;
+        }
+        Ok(call)
+    }
+
+    /// A class's own field initialisers, inside its own constructor: at the top
+    /// when it has no base, and immediately after `super()` returns when it
+    /// does.
+    ///
+    /// Where JavaScript puts them, and the reason they are not at the
+    /// allocation site: `class D extends B { y = this.x + 10 }` reads the `x`
+    /// that `B`'s constructor wrote, and running every class's initialisers
+    /// before any constructor made that read find a field nobody had written --
+    /// **28 of 29 cases against node**, answering `nan`.
+    ///
+    /// The class comes from the **receiver's type** rather than from the
+    /// `instance` the caller passes, which is `None` for a constructor. Inside
+    /// a constructor that type is the class the constructor belongs to rather
+    /// than whatever subclass is being built, and that is what makes the field
+    /// index right: the index comes from this class's layout, and base-first
+    /// layout makes it the same index in every subclass's.
+    fn initialize_own_fields(&mut self, id: NodeId, receiver: ValueId) -> Result<(), Diagnostic> {
+        let HirType::Managed(ManagedType::Object(class)) = self.values[receiver.0 as usize].ty
+        else {
+            return Ok(());
+        };
+        self.initialize_fields(id, receiver, class, &[class])
     }
 
     /// The name of the class a class extends.
@@ -29759,6 +30200,26 @@ impl<'a> FuncBuilder<'a> {
         })())
     }
 }
+
+/// The type of a presence index or mask: `uint32_t`, as the runtime declares it.
+///
+/// Not `NUMBER`. C converts a double to a `uint32_t` at the call and the C
+/// backend never had to notice, so the first version passed one and compiled
+/// clean; LLVM has no implicit conversion and rejected the module outright --
+/// `integer constant must have integer type`. The same sentence
+/// `codegen/llvm/src/signatures.rs` opens with, about `nts_tag_name`.
+///
+/// Writing it here is necessary and was not sufficient: the *middle end* holds
+/// its own table of what the runtime declares, and a helper missing from
+/// `hir::runtime` had its argument widened to a double on the way out whatever
+/// this said. Three tables have to name a new helper -- `hir::runtime` for the
+/// conversion, `codegen/llvm`'s for the declaration, and the C backend's
+/// `ERASES_CLASS` for the receiver cast -- and only the last two fail loudly
+/// when they do not.
+const PRESENCE_INDEX: HirType = HirType::Int {
+    bits: 32,
+    signed: false,
+};
 
 /// Whether a comparison token is the strict one.
 const fn strict_operator(token: u16) -> bool {

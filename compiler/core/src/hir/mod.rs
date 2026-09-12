@@ -39,6 +39,7 @@ pub mod guards;
 pub mod interprocedural;
 pub mod liveness;
 pub mod loops;
+pub mod presence;
 pub mod suspend;
 pub mod tags;
 pub mod unerase;
@@ -1992,7 +1993,36 @@ impl Program {
 
     #[must_use]
     pub fn cyclic_layouts(&self) -> Vec<bool> {
-        // Edges: which layouts a layout's reference fields can lead to.
+        // Which layouts each layout is a *base* of, directly. A field declares
+        // the type it is written as and holds any subtype of it, so an edge to a
+        // layout is an edge to everything that can be stored through it.
+        //
+        // **A closure field is the case that matters and it was missed.**
+        // `class Holder { run: ((n: number) => void) | null }` declares the
+        // *signature* layout, which is fieldless -- so `Holder` had no outgoing
+        // edge at all, `cyclic` was emitted as 0, and `nts_possible_root`
+        // returns on its first line for a descriptor that says so. The closure
+        // actually stored there captures `this` and points straight back.
+        //
+        // What that costs is not a slow path but a permanent one: the object is
+        // never offered to the cycle collector, so `h.run = (v) => { h.count +=
+        // v }` leaks for the life of the program. It shows up only where the
+        // cycle *cannot* be torn down by hand -- an object that never escapes
+        // gets its fields released at the end of the scope, which breaks the
+        // cycle without the collector, and that is why every fixture that had
+        // this shape passed until one of them handed the object to a callee.
+        let mut subtypes: Vec<Vec<usize>> = vec![Vec::new(); self.layouts.len()];
+        for (at, layout) in self.layouts.iter().enumerate() {
+            let Some(base) = layout.base else {
+                continue;
+            };
+            if let Some(above) = self.layouts.iter().position(|l| l.types.contains(&base)) {
+                subtypes[above].push(at);
+            }
+        }
+
+        // Edges: which layouts a layout's reference fields can lead to, and
+        // everything derived from those.
         let edges: Vec<Vec<usize>> = self
             .layouts
             .iter()
@@ -2000,6 +2030,17 @@ impl Program {
                 let mut targets = Vec::new();
                 for field in &layout.fields {
                     self.reaches(&field.ty, &mut targets);
+                }
+                // Transitively, because a base's subtype may itself be a base.
+                let mut at = 0;
+                while at < targets.len() {
+                    let next = targets[at];
+                    at += 1;
+                    for below in &subtypes[next] {
+                        if !targets.contains(below) {
+                            targets.push(*below);
+                        }
+                    }
                 }
                 targets
             })

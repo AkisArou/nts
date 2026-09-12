@@ -2,8 +2,9 @@
 //!
 //! TypeScript permits `delete` only where the property is optional — `TS2790` —
 //! so the slot always holds `T | undefined` and always has a tag. The deletion
-//! is writing that tag, and the tests are about it being a *store* rather than
-//! anything else.
+//! writes that tag, and it also clears the property's **presence bit**: the tag
+//! says the value is absent and the bit says the property is, and `{ x:
+//! undefined }` proves those are different facts.
 //!
 //! Skips only when `tsgo` is not built.
 
@@ -36,11 +37,28 @@ fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
         .unwrap_or_else(|| panic!("`{name}` is exported from examples/delete"))
 }
 
-/// A deletion is a field store of `undefined`, and nothing else.
+/// A deletion is a field store of `undefined` and a presence clear, and nothing
+/// else.
 ///
-/// Not a runtime call, not a rebuild of the object. The assertion is about
-/// *which* operations appear, because a `delete` that also called a helper
-/// would agree with node on every case and cost a call per deletion.
+/// Not a rebuild of the object, and no runtime call but the one. The assertion
+/// is about *which* operations appear, because a `delete` that also called a
+/// helper would agree with node on every case and cost a call per deletion.
+///
+/// It has asserted three different things, and each was right at the time.
+///
+/// **No call at all**, while `in`, `Object.keys` and `Object.hasOwn` all refused
+/// on an optional property and the tag was the whole answer. **A set and a
+/// clear**, when the presence bit arrived — that caught the deletion emitting a
+/// `nts_presence_set`, which is a deletion recording a *write*. And no call
+/// again now, for a different reason than the first: a bit is only maintained
+/// where something reads it, and **nothing in this fixture asks `"maybe" in
+/// bag`**.
+///
+/// So this is the pay-for-what-you-use gate rather than an absence of the
+/// feature, and the two are told apart by `examples/an-optional-property`,
+/// which does ask and does get its bit. Without that fixture beside it this
+/// assertion would pass just as well on a compiler where presence was never
+/// implemented.
 #[test]
 fn a_deletion_is_a_store_of_undefined() {
     let Some(lowered) = lowered("delete") else {
@@ -76,7 +94,7 @@ fn a_deletion_is_a_store_of_undefined() {
         .collect();
     assert!(
         calls.is_empty(),
-        "a deletion is a store, not a call: {calls:?}",
+        "nothing in this fixture asks `\"maybe\" in bag`, so no bit is maintained: {calls:?}",
     );
 }
 

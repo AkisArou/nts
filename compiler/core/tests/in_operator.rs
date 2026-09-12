@@ -162,14 +162,74 @@ fn a_constant_answer_still_evaluates_its_operand() {
     );
 }
 
-/// `in` naming an optional property is refused, and the refusal names the
-/// property rather than the feature.
+/// `in` naming an optional property is a presence test, and naming a required
+/// one is still a constant.
 ///
-/// The distinction is the whole point: `"label" in o` on the same object is
-/// supported and `examples/in-operator` has it. A refusal reading "`in` is not
-/// supported" would say the feature is absent when one property of one type is.
+/// Both halves. The first is the feature; the second is what it must not cost,
+/// because answering every `in` at run time would be a correct implementation
+/// that gave back what the closed world buys. `examples/in-operator` and
+/// `examples/an-optional-property` are compared against node by the gate, so
+/// what is asserted here is the shape rather than the answer.
+///
+/// This test read the other way until 2026-09-12 — it asserted the *refusal*,
+/// and that the refusal named the property rather than the feature. That
+/// distinction still holds and has just moved: a required property is answered
+/// statically and an optional one is answered from a bit, on the same object.
 #[test]
-fn in_on_an_optional_property_is_refused_by_name() {
+fn in_on_an_optional_property_reads_a_presence_bit() {
+    let Some(lowered) = lowered("an-optional-property") else {
+        return;
+    };
+    assert!(
+        lowered.is_complete(),
+        "nothing in the fixture refuses: {:?}",
+        lowered
+            .diagnostics
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>()
+    );
+
+    let optional = func(&lowered, "aLiteralWithout");
+    let calls: Vec<&str> = optional
+        .values
+        .iter()
+        .filter_map(|op| match &op.kind {
+            OpKind::Call {
+                callee: hir::Callee::External(name),
+                ..
+            } => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        calls.contains(&"nts_presence_has"),
+        "the answer comes from the header: {calls:?}",
+    );
+
+    // And the required one pays nothing at all -- not a cheaper test, none.
+    let required = func(&lowered, "aRequiredPropertyIsStatic");
+    let tested: Vec<&str> = required
+        .values
+        .iter()
+        .filter_map(|op| match &op.kind {
+            OpKind::Call {
+                callee: hir::Callee::External(name),
+                ..
+            } => Some(name.as_str()),
+            _ => None,
+        })
+        .filter(|name| name.starts_with("nts_presence"))
+        .collect();
+    assert!(
+        tested.is_empty(),
+        "a required property is answered from the type: {tested:?}",
+    );
+}
+
+/// An `in` whose key the program computes is refused, and separately.
+#[test]
+fn in_with_a_computed_key_is_refused() {
     let Some(lowered) = lowered("unsupported") else {
         return;
     };
@@ -179,18 +239,10 @@ fn in_on_an_optional_property_is_refused_by_name() {
         .map(|diagnostic| diagnostic.message.as_str())
         .collect();
     assert!(
-        reasons.iter().any(|reason| {
-            reason.contains("an `in` naming `limit`")
-                && reason.contains("optional")
-                && reason.contains("undefined")
-        }),
-        "the refusal names the property and why the slot cannot answer: {reasons:?}",
-    );
-    assert!(
         reasons
             .iter()
             .any(|reason| reason.contains("an `in` whose key is not a literal")),
-        "a computed key is refused separately: {reasons:?}",
+        "a computed key is refused: {reasons:?}",
     );
 }
 

@@ -911,6 +911,14 @@ const ERASES_CLASS: &[(&str, usize)] = &[
     ("nts_concat_into", 0),
     ("nts_environment_install_platform", 0),
     ("nts_number_to_string_into", 0),
+    ("nts_presence_clear", 0),
+    ("nts_presence_clear_fn", 0),
+    ("nts_presence_has", 0),
+    ("nts_presence_has_fn", 0),
+    ("nts_presence_init", 0),
+    ("nts_presence_init_fn", 0),
+    ("nts_presence_set", 0),
+    ("nts_presence_set_fn", 0),
     ("nts_promise_fulfill_reference", 1),
     ("nts_promise_fulfill_tagged", 1),
     ("nts_promise_reject", 1),
@@ -3842,6 +3850,23 @@ fn start_frame_object(
         origin,
         format!("{name}_frame.header.reserved = NTS_IMMORTAL;"),
     );
+    // And the flags word, which `nts_object_new`'s `memset` gives a heap object
+    // for nothing and a stack frame had never been given at all.
+    //
+    // It was safe for as long as nothing read it: `nts_retain` and
+    // `nts_release` both test `reserved == NTS_IMMORTAL` **first** and
+    // short-circuit before touching `flags`, so the collector never saw the
+    // uninitialised word. That is an ordering dependency between two clauses of
+    // one condition, stated nowhere, and the optional-property presence bits
+    // are read by a helper that is behind no such gate.
+    //
+    // Nothing reads it on a frame today -- an object whose presence is asked
+    // about escapes into the helper and is heap-allocated -- which makes this
+    // one store per stack construction against a defect that is currently
+    // unreachable. It is written anyway: the alternative is an invariant that
+    // holds because of what escape analysis happens to decide, and the cost is
+    // a `uint32_t` store beside the two this function already emits.
+    writer.line(origin, format!("{name}_frame.header.flags = 0;"));
     for field in layout.reference_fields() {
         // An erased field's zero is `undefined`, and it has to be spelled --
         // the tag is a struct member, not a pointer, so `= 0` is not C. That

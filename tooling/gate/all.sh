@@ -840,8 +840,21 @@ backend_examples() {
 
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
+#
+# **One below its sibling, and the one is named.**
+# `this-in-a-field-initializer` agrees here and leaks under counting: an object
+# and a closure capturing it are retained twice, once by the caller handing the
+# receiver over and once by the callee storing it, so one holder leaves a count
+# of two and no collector can call that garbage. `tooling/gate/rc.sh` carries
+# the full diagnosis and the same example in its `known_failing`.
+#
+# This floor was briefly 188, from **the sibling's number applied to two
+# measurements**. They are two runs asking different questions and one of them
+# had already printed 187 in the same log. A ratchet raised from a number that
+# was not its own is worse than one left too low: it fails on the next clean run
+# and the failure names the wrong thing.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 186 "through the LLVM backend, counting" ); }
+  backend_examples 187 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -852,7 +865,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 186 "through the LLVM backend" ); }
+  backend_examples 188 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform

@@ -804,6 +804,75 @@ _Static_assert((NTS_COLOR_MASK &
                 (NTS_TWO_BYTE | NTS_GROWN | NTS_BUFFERED | NTS_DYING)) == 0u,
                "a collector colour must not overwrite a representation flag");
 
+/* Whether an optional property was written, one bit each, above everything
+ * else this word holds.
+ *
+ * JavaScript distinguishes `{}` from `{ x: undefined }` and a struct cannot:
+ * an optional property's slot exists whether or not anybody stored to it, so
+ * `"x" in o`, `Object.keys`, `Object.hasOwn` and `for...in` all refused rather
+ * than answer from a slot that is always there. This is the missing fact, and
+ * it costs no memory at all -- bits 0 through 5 of `flags` are spoken for and
+ * the other twenty-six were free, in a word every object already carries.
+ *
+ * The *shift* is known here and nowhere else. The compiler passes a zero-based
+ * index and these three do the arithmetic, so there is no second copy of the
+ * 6 to drift; what the compiler does know is the capacity, because it has to
+ * refuse a layout with more optional properties than there are bits, and that
+ * one number is stated on both sides with an assertion here to catch a change.
+ */
+#define NTS_PRESENCE_SHIFT 6u
+#define NTS_PRESENCE_BITS (32u - NTS_PRESENCE_SHIFT)
+_Static_assert(((1u << NTS_PRESENCE_SHIFT) - 1u) ==
+                   (NTS_TWO_BYTE | NTS_GROWN | NTS_BUFFERED | NTS_DYING |
+                    NTS_COLOR_MASK),
+               "the presence bits must start above every flag below them, with "
+               "no gap that would silently shrink the capacity the compiler "
+               "refuses against");
+_Static_assert(NTS_PRESENCE_BITS == 26u,
+               "`hir::presence::BITS` says 26 as well; a change here without a "
+               "change there is a layout the compiler admits and this cannot "
+               "record");
+
+/* Record every optional property the construction itself wrote, in one store.
+ *
+ * A class field declaration defines its property even with no initialiser, so
+ * `class Box { maybe?: string }` has `maybe` from the moment it is allocated.
+ * That is a whole *set* of bits known at compile time, so it is one `or` of a
+ * constant rather than a call per property -- and zero for the object literals,
+ * frames, cells and closure environments that have no such field, where the
+ * compiler emits nothing at all.
+ *
+ * The mask is already shifted by the compiler's index space, not by bit
+ * position: it is passed as the bits it wants set among the presence bits, and
+ * the shift is applied here like everywhere else in this file. */
+static inline void nts_presence_init(NtsHeader *object, uint32_t mask) {
+  object->flags |= mask << NTS_PRESENCE_SHIFT;
+}
+
+/* Record that an optional property was written. */
+static inline void nts_presence_set(NtsHeader *object, uint32_t index) {
+  object->flags |= 1u << (NTS_PRESENCE_SHIFT + index);
+}
+
+/* `delete o.x`, which JavaScript permits only on an optional property. */
+static inline void nts_presence_clear(NtsHeader *object, uint32_t index) {
+  object->flags &= ~(1u << (NTS_PRESENCE_SHIFT + index));
+}
+
+/* Whether it was. */
+static inline bool nts_presence_has(const NtsHeader *object, uint32_t index) {
+  return (object->flags & (1u << (NTS_PRESENCE_SHIFT + index))) != 0u;
+}
+
+/* Linkable companions, the arrangement `nts_to_int32_fn` documents: the four
+ * above are `static inline` because C should pay nothing for a bit test, and a
+ * backend that cannot read a C header has no symbol to call. Reproducing the
+ * shift there would be a second definition of where the presence bits start. */
+void nts_presence_init_fn(NtsHeader *object, uint32_t mask);
+void nts_presence_set_fn(NtsHeader *object, uint32_t index);
+void nts_presence_clear_fn(NtsHeader *object, uint32_t index);
+bool nts_presence_has_fn(const NtsHeader *object, uint32_t index);
+
 /* Consider the candidates and reclaim whatever turns out to be garbage.
  *
  * Called automatically when candidates accumulate, and directly by a program
