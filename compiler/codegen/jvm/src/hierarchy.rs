@@ -84,12 +84,43 @@ pub fn declared<'a>(program: &Program, layout: &'a Layout) -> &'a [Field] {
 /// is the class name a `Fieldref` needs.
 #[must_use]
 pub fn declares_field<'a>(program: &'a Program, layout: &'a Layout, field: usize) -> &'a Layout {
-    layout
-        .fields
-        .get(field)
-        .and_then(|at| at.declared_by)
-        .and_then(|id| program.layout(id))
-        .unwrap_or(layout)
+    if let Some(by) =
+        layout.fields.get(field).and_then(|at| at.declared_by).and_then(|id| program.layout(id))
+    {
+        return by;
+    }
+    // **No class declares it, which does not mean this one holds it.** The
+    // fallback used to be `layout`, and that was right for as long as a field
+    // with no `declared_by` was also a field with no base above it -- a tuple's
+    // `_0`, a closure's capture, an anonymous object's member.
+    //
+    // A generator frame is the first layout that is both. `yielded` is
+    // synthesized, so nothing declares it, and it now lives on `Generator{n}`
+    // because a frame has a base. Answering `layout` keyed the widen plan on
+    // the *frame* at every access and on the *base* at the declaration, so the
+    // accesses widened to `D` and the field stayed `I`:
+    //
+    // ```text
+    // java.lang.NoSuchFieldError: Class nts.gen.squares$frame
+    //                             does not have member field 'double yielded'
+    // ```
+    //
+    // So the fallback is the arithmetic answer -- the base-most ancestor whose
+    // fields still reach this index -- which is precisely what `declared`
+    // slices on. The two derivations of "which class owns this slot" were
+    // disagreeing, and the whole reason `declared_by` exists is that arithmetic
+    // alone is wrong when two classes declare one name. Neither rule is
+    // sufficient: `declared_by` where a class claims the field, arithmetic
+    // where none does.
+    let mut owner = layout;
+    while let Some(base) = program.base_layout(owner).and_then(|id| program.layouts.get(id)) {
+        if field < base.fields.len() {
+            owner = base;
+        } else {
+            break;
+        }
+    }
+    owner
 }
 
 /// The declared classes sharing one layout, when more than one does.
