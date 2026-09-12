@@ -98,6 +98,7 @@ declare function nts_child_process_spawn(
   stdioSpec: readonly unknown[] | null,
   serialization: string,
   onMessage: (message: unknown) => void,
+  onDisconnect: () => void,
   onExit: (status: number, signal: number) => void,
   onError: (code: number) => void,
 ): number;
@@ -131,6 +132,7 @@ declare function nts_child_process_fork(
   serialization: string,
   onExit: (status: number, signal: number) => void,
   onMessage: (message: unknown) => void,
+  onDisconnect: () => void,
 ): number;
 /**
  * `sent` is a socket or a server travelling to the child, and it crosses as itself.
@@ -1080,7 +1082,13 @@ export class ChildProcess extends EventEmitter {
    * out. Assigning it in `fork` rather than declaring it here keeps that
    * distinction, which is the same reason `dns` does not stub `resolve*`.
    */
-  send?: (message: unknown) => boolean;
+  /** `(message, handle?, options?, callback?)`, the way node's is. */
+  send?: (
+    message: unknown,
+    handle?: unknown,
+    options?: unknown,
+    callback?: unknown,
+  ) => boolean;
   disconnect?: () => void;
   connected = false;
 
@@ -1094,6 +1102,20 @@ export class ChildProcess extends EventEmitter {
    * The host channel serialises it either way -- structured clone for advanced, JSON for
    * the default -- so this layer has no business reserialising it.
    */
+  /**
+   * The channel closed from the **child's** end.
+   *
+   * A worker calling `process.disconnect()` is how `cluster` hands a worker back, and
+   * the parent learns of it only from the binding: nothing on this side was called.
+   * Emitted before `exit`, because a `disconnect` listener is entitled to find
+   * `isConnected()` already false while the process is still alive.
+   */
+  _handleDisconnect(): void {
+    if (!this.connected) return;
+    this.connected = false;
+    this.emit("disconnect");
+  }
+  
   _handleMessage(message: unknown): void {
     // A message whose `cmd` begins with `NODE_` is node's *internal* channel traffic
     // and reaches `internalMessage` instead of `message`. That is not a curiosity: it
@@ -1161,6 +1183,9 @@ export function spawn(
       // hear -- which is four of the advanced-serialization files and stdout-ipc.
       (message: unknown): void => {
         if (child !== null) child._handleMessage(message);
+      },
+      (): void => {
+        if (child !== null) child._handleDisconnect();
       },
     (status: number, signal: number): void => {
       if (child !== null) child._handleExit(status, signal);
@@ -1676,6 +1701,9 @@ export function fork(
     },
     (message: unknown): void => {
       if (child !== null) child._handleMessage(message);
+    },
+    (): void => {
+      if (child !== null) child._handleDisconnect();
     },
   );
 

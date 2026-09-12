@@ -132,7 +132,7 @@ let nextHandle = 0;
 const MODE = (bits, slot) => (bits >> (slot * 2)) & 3;
 const NAMES = ["pipe", "inherit", "ignore"];
 
-globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached, uid, gid, stdioSpec, serialization, onMessage, onExit) => {
+globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached, uid, gid, stdioSpec, serialization, onMessage, onDisconnect, onExit) => {
   const [argv0, ...rest] = args;
   const options = {
     argv0,
@@ -195,6 +195,8 @@ globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached,
   if (typeof onMessage === "function") {
     child.on("message", (message) => onMessage(message));
     child.on("internalMessage", (message) => onMessage(message));
+    // The channel closing from the child's own end, which nothing here called.
+    if (typeof onDisconnect === "function") child.on("disconnect", () => onDisconnect());
   }
   child.on("exit", (code, signal) => {
     onExit(code === null ? -1 : code, signal === null ? 0 : (hostSignalNumbers[signal] ?? 0));
@@ -247,7 +249,7 @@ globalThis.nts_process_exec_path = () => process.execPath;
 // and parsing, which is the part a test can observe.
 import { fork as nodeFork } from "node:child_process";
 
-globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, serialization, onExit, onMessage) => {
+globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, serialization, onExit, onMessage, onDisconnect) => {
   const [, ...rest] = args;
   const modulePath = rest.shift();
   const options = { execPath, silent: silent !== 0, serialization };
@@ -278,6 +280,8 @@ globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, serializa
   // which is the whole of cluster's handshake. The module re-applies the same test to
   // decide which of *its* events to emit.
   child.on("internalMessage", (message) => onMessage(message));
+  // The channel closing from the child's own end, which nothing here called.
+  if (typeof onDisconnect === "function") child.on("disconnect", () => onDisconnect());
   child.on("exit", (code, signal) => {
     onExit(code === null ? -1 : code, signal === null ? 0 : (hostSignalNumbers[signal] ?? 0));
   });

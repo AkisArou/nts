@@ -1,0 +1,2 @@
+# Tests whose subject is cluster and whose upstream name says otherwise.
+test-listen-fd-cluster.js: upstream names it for the fd; the subject is a cluster worker listening on a descriptor the primary owns, which is this module's handle distribution and is why it fails rather than why it is excluded

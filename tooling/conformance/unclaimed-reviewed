@@ -53,6 +53,7 @@ test-fetch.mjs: the subject is fetch, owned by runtime/web-platform
 test-force-repl-with-eval.js: the subject is the REPL, which this profile does not implement
 test-force-repl.js: the subject is the REPL, which this profile does not implement
 test-global-setters.js: the subject is node's global object rather than a module
+test-inspect-support-for-node_options.js: the subject is NODE_OPTIONS and the inspector, neither of which this profile implements; it imports cluster only to spawn a worker
 test-inspector-break-when-eval.js: the subject is the V8 inspector protocol, which this profile does not implement
 test-inspector-debug-async-hook.js: the subject is the V8 inspector protocol, which this profile does not implement
 test-inspector-enabled.js: the subject is the inspector protocol, which this profile does not implement
