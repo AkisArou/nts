@@ -5538,3 +5538,68 @@ serve C and LLVM identically -- both emit their own checks from the same
 `checked` flag. Handed over with the numbers rather than worked around here,
 and the arm that already proves clean is the control that says the prover works
 when it can see.
+
+## Bar 1 on ART is five of eight, and the fifth came from the bounds prover
+
+`awfy-nbody` was 1.19x and is **1.00x**, twice, and the cause is MainClaude's
+bounds fix landing the CSE the section above asked for: `NBodySystem$advance`
+goes from one array read proved of three to three of three.
+
+**What that did to the artefact is the finding, not the ratio.**
+
+    NBodySystem$advance, AOT machine code
+
+                             before      after    reference
+    code size             982 bytes  647 bytes    647 bytes
+    calls                        16          8            8
+      pTestSuspend                4          4            4
+      pReadBarrierMark*           6          4            4
+      call [rdi + 32]             2          0            0
+      pThrowArrayBounds           2          0            0
+      pResolveType                1          0            0
+      pInitializeStaticStorage    1          0            0
+
+Our hot method is now **the same size as the hand-written Java's, to the byte,
+with the same call profile**. Not near it.
+
+**And it measures the second sentence of `subscript`'s doc, which had never been
+tested.** That doc has claimed since it was written that `checked: false` leaves
+the JVM's mandatory check as the only one, "eliminated in a counted loop, which
+is where this lane is cheaper than the native one". **Zero `pThrowArrayBounds`**
+is ART doing exactly that — and it means the two checks were never additive:
+ours was *preventing* the elimination of the one it duplicated. That is a
+stranger claim than "we emitted a redundant check" and only the emitted code
+could have made it.
+
+Four of the eight calls that vanished were not the guard but its shadow.
+`NtsRuntime.bounds` is a static on another class, so the call carried a
+class-initialisation check with it: `pResolveType` and
+`pInitializeStaticStorage` went when the call did.
+
+### The table, two sittings, binary frozen at `ab5cb694`
+
+| case | ART 1 | ART 2 | HotSpot 1 / 2 |
+| --- | --- | --- | --- |
+| `awfy-list` | **0.76x** | **0.76x** | 0.93x / 0.94x |
+| `awfy-bounce` | **0.87x** | **0.87x** | 1.09x / 1.10x |
+| `awfy-mandelbrot` | **0.89x** | **0.88x** | 0.84x / 0.83x |
+| `awfy-permute` | 0.51x | **0.97x** | 0.71x / 0.71x |
+| `awfy-nbody` | **1.00x** | **1.00x** | 1.00x / 1.03x |
+| `awfy-sieve` | 1.12x | 1.03x | 1.07x / 1.28x |
+| `awfy-queens` | 1.18x | 1.17x | 1.25x / 1.25x |
+| `awfy-towers` | 1.52x | 1.56x | 0.99x / 1.01x |
+
+**Five of eight, both times.**
+
+`awfy-permute`'s 0.51 is **not a number**: our own time is 15,051 against
+15,163 in the two sittings — identical — and the *reference* doubled, 29,471
+against 15,555. A ratio moving because its denominator was perturbed, which is
+the same reading error the `outlined2` arm nearly produced, caught the same way:
+by looking at the absolute columns. The row is ~0.97x and is under 1.00x either
+way, so the count does not rest on it.
+
+The three above the bar, with what is known about each:
+
+    awfy-sieve    1.03-1.12  and its own two harnesses disagree by 40%
+    awfy-queens   1.17-1.18  cause unfound; six mechanisms ruled out
+    awfy-towers   1.52-1.56  inlining, and three fixes priced as insufficient
