@@ -420,6 +420,36 @@ function addNumericalSeparator(value: string): string {
 }
 
 /**
+ * `Channel closed`.
+ *
+ * What `send` reports once the channel is gone: node hands it to the callback if there
+ * is one and emits it as an `error` if there is not, rather than returning false and
+ * saying nothing.
+ */
+export class ERR_IPC_CHANNEL_CLOSED extends NodeError {
+  override readonly code = "ERR_IPC_CHANNEL_CLOSED";
+
+  constructor() {
+    super("Channel closed");
+  }
+}
+
+/**
+ * `IPC channel is already disconnected`.
+ *
+ * node's `disconnect` on an already-disconnected channel emits this as an `error`
+ * rather than emitting `disconnect` a second time, which is the difference between
+ * one `disconnect` event and two.
+ */
+export class ERR_IPC_DISCONNECTED extends NodeError {
+  override readonly code = "ERR_IPC_DISCONNECTED";
+
+  constructor() {
+    super("IPC channel is already disconnected");
+  }
+}
+
+/**
  * `Forked processes must have an IPC channel, missing value 'ipc' in options.stdio`.
  *
  * A plain Error in node. `fork` requires an `'ipc'` entry in `stdio`, and a caller

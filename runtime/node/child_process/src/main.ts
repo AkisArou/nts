@@ -33,6 +33,8 @@ import {
   ERR_INVALID_ARG_VALUE,
   ERR_CHILD_PROCESS_IPC_REQUIRED,
   ERR_INVALID_HANDLE_TYPE,
+  ERR_IPC_CHANNEL_CLOSED,
+  ERR_IPC_DISCONNECTED,
   ERR_IPC_ONE_PIPE,
   ERR_MISSING_ARGS,
   ERR_OUT_OF_RANGE,
@@ -879,6 +881,14 @@ export class ChildProcess extends EventEmitter {
       this.exitCode = status;
       this.signalCode = null;
     }
+    // The channel closes when the child goes, from either side. node emits
+    // `disconnect` for that; this only emitted it when the *parent* called
+    // `disconnect()`, so a child that exited on its own left the parent's listener
+    // waiting -- which is what test-child-process-fork-ref2 reads.
+    if (this.connected) {
+      this.connected = false;
+      this.emit("disconnect");
+    }
     this.emit("exit", this.exitCode, this.signalCode);
     this.#maybeClose();
   }
@@ -1010,46 +1020,55 @@ export function spawn(
   const spawned = child;
   nextTick((): void => { spawned.emit("spawn"); });
 
-  // node arms a timeout in `spawn` as well as in `execFile`, so a plain
-  // `spawn(file, args, { timeout })` is killed too, and both kill when `exec`
-  // passes its options through. `once("exit")` disarms whichever did not fire.
+  armTimeoutAndAbort(spawned, opts);
+
+  return child;
+}
+
+/**
+ * `timeout` and `signal`, which node arms on every child rather than only on `exec`.
+ *
+ * Extracted so `fork` gets them too: it had neither, so `fork(file, { signal })` ran a
+ * child nothing could abort and test-child-process-fork-abort-signal waited for an
+ * `error` that was never coming. node arms both in `ChildProcess.prototype.spawn`,
+ * which `spawn` and `fork` both reach.
+ */
+function armTimeoutAndAbort(child: ChildProcess, opts: SpawnOptions): void {
   const killSignal = opts.killSignal ?? "SIGTERM";
   if (opts.timeout !== undefined && opts.timeout > 0) {
     let timer: Timeout | null = setTimeout((): void => {
       if (timer === null) return;
       timer = null;
       try {
-        spawned.kill(killSignal);
+        child.kill(killSignal);
       } catch (error) {
-        spawned.emit("error", error as Error);
+        child.emit("error", error as Error);
       }
     }, opts.timeout);
-    spawned.once("exit", (): void => {
+    child.once("exit", (): void => {
       if (timer !== null) { clearTimeout(timer); timer = null; }
     });
   }
-
   // node's `abortChildProcess`: the AbortError follows only when the signal was
   // actually delivered, because a child that has already exited is not an error.
   if (opts.signal !== undefined) {
     const signal = opts.signal;
     const onAbort = (): void => {
       try {
-        if (spawned.kill(killSignal)) {
-          spawned.emit("error", new AbortError(undefined, { cause: signal.reason }));
+        if (child.kill(killSignal)) {
+          child.emit("error", new AbortError(undefined, { cause: signal.reason }));
         }
       } catch (error) {
-        spawned.emit("error", error as Error);
+        child.emit("error", error as Error);
       }
     };
     if (signal.aborted) {
       nextTick(onAbort);
     } else {
       const cleanup = addTrackedAbortListener(signal, onAbort);
-      spawned.once("exit", (): void => { cleanup(); });
+      child.once("exit", (): void => { cleanup(); });
     }
   }
-  return child;
 }
 
 /** `error` must not fire before the caller has attached a listener. */
@@ -1467,6 +1486,9 @@ export function fork(
   // inheriting when nothing was said. `fork` was ignoring the array outright, so
   // `{ stdio: ['pipe','pipe','pipe','ipc'] }` inherited and `child.stderr` was null.
   child = new ChildProcess(handle, forkMode);
+  // `fork` had neither a timeout nor an abort signal: `fork(file, { signal })` ran a
+  // child nothing could stop.
+  armTimeoutAndAbort(child, opts as SpawnOptions);
   child.connected = true;
   child.send = (
     message: unknown,
@@ -1489,7 +1511,10 @@ export function fork(
     } else if (options !== undefined) {
       validateObject(options, "options");
     }
-    void callbackArg;
+    const callback = typeof handleArg === "function" ? handleArg
+      : typeof optionsArg === "function" ? optionsArg
+      : typeof callbackArg === "function" ? callbackArg
+      : undefined;
     // After the shuffle: `send(callback)` is only a message of undefined once the
     // callback has been taken out of the way.
     if (message === undefined) throw new ERR_MISSING_ARGS("message");
@@ -1511,10 +1536,29 @@ export function fork(
     // want real handle passing -- recv-handle, send-returns-boolean, fork-net-server
     // and the rest -- fail either way; they now fail loudly.
     if (handle !== undefined && handle !== null) throw new ERR_INVALID_HANDLE_TYPE();
-    if (!child!.connected) return false;
+    // Once the channel is gone node reports it rather than returning false in
+    // silence: the callback gets the error if there is one, and it is emitted as an
+    // `error` if there is not. test-child-process-send-after-close reads
+    // 'Channel closed'.
+    if (!child!.connected) {
+      const closed = new ERR_IPC_CHANNEL_CLOSED();
+      if (callback !== undefined) {
+        nextTick((): void => { (callback as (error: unknown) => void)(closed); });
+      } else {
+        nextTick((): void => { child!.emit("error", closed); });
+      }
+      return false;
+    }
     return nts_child_process_send(channel, JSON.stringify(message)) === 0;
   };
   child.disconnect = (): void => {
+    // node emits an **error** for a second disconnect rather than a second
+    // `disconnect` event, and that is the difference test-child-process-disconnect
+    // counts: it reads one and this emitted two.
+    if (!child!.connected) {
+      child!.emit("error", new ERR_IPC_DISCONNECTED());
+      return;
+    }
     child!.connected = false;
     nts_child_process_disconnect(handle);
     child!.emit("disconnect");
