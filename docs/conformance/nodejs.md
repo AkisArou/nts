@@ -23908,3 +23908,84 @@ my side. It is now the difference between a module that works and one that does 
 which is a stronger claim than "N more files pass" -- and it is the same chain twelve
 modules reach through `internal/tick.ts`, recorded in `build-floor.sh` when `dns` was
 the cheapest proof that clearing it would work.
+
+## The two crypto decisions, made with both numbers
+
+The goal text has asked twice for these to be settled *before the first binding*, and both
+halves have been measured since 2026-09-11. Deciding them is what this entry is; neither
+is a measurement and both are reversible, so what matters is that the reasoning and the
+falsifier are written next to the choice.
+
+### The numbers, restated so the decision can be checked against them
+
+    OpenSSL-specific assertions        tls   27 of 218 (12%)   crypto  29 of 128 (22%)
+    needs a primitive mbedTLS lacks    tls    0 of 218  (0%)   crypto  33 of 128 (26%)
+                                       webcrypto  43 of 47 (91%)
+
+The two rows answer different questions and pull in different directions. The first is
+*what a non-OpenSSL provider would fail*; the second is *what a non-OpenSSL provider could
+not attempt*.
+
+### Decision 1: match node's provider. The deciding number is crypto's, not tls's.
+
+**`tls` alone would not have decided this.** Zero of its 218 files need a primitive
+mbedTLS lacks. The protocol is the same wire format whoever implements it, and the whole
+cost of leaving OpenSSL there is 27 files of OpenSSL-specific assertion -- enumerable,
+`not-applicable`-able, each with a reason. On `tls`'s numbers alone, mbedTLS wins on
+footprint and loses almost nothing.
+
+**`crypto` decides it, and it is not close.** 33 of 128, plus 43 of webcrypto's 47, need
+something mbedTLS does not ship: a JWK codec (18 files), WebCrypto (7), EdDSA (12), PQC
+(12), scrypt (1), overlapping to 33. That is not a gap adapters close -- it is a different
+library's feature set. 76 files is more than half of everything `crypto` and `webcrypto`
+are, and the alternative to paying it is not "a smaller crypto" but "no crypto".
+
+So the footprint argument loses on its own terms. ~100x matters for native AOT and it is
+being weighed against a module that would not work.
+
+**`tls` follows `crypto` rather than being decided separately.** They are separable as
+*work* -- one is a protocol, one is API translation -- and not as a *link*: `tls` needs
+primitives, and linking two providers to save footprint on one of them spends the saving
+twice over.
+
+**BoringSSL is the form of the decision, not a separate option.** node supports it
+(`process.features.openssl_is_boringssl`, `--shared-openssl`), so it is API-compatible
+where node's own surface is concerned and smaller than OpenSSL. It is the right default for
+the AOT case *provided* node's own crypto suite passes against it.
+
+**The falsifier, and it is measurable by someone who can build node:** how many of node's
+128 `crypto` and 218 `tls` files node itself fails when built against BoringSSL. BoringSSL
+deliberately drops features OpenSSL carries, so that number is not zero, and if it is
+large then the choice collapses back to OpenSSL proper. It has not been measured here and
+this decision should not be read as if it had.
+
+### Decision 2: the interpreted lane is authoritative only because Decision 1 matched node
+
+`zlib`'s stand-in imports `node:zlib`, so its interpreted lane tests our TypeScript over
+node's engine -- legitimate, because the engine is the same one the compiled lane vendors,
+and the comparison is about our assembly. The hazard the goal names is that for crypto the
+same choice makes the lane test node against node.
+
+Decision 1 resolves it, and the two are coupled more tightly than they look:
+
+  - **Same provider as node** -- the interpreted lane compares our assembly over the same
+    engine. Authoritative for everything except the engine itself, which only the compiled
+    lane compares. Exactly `zlib`'s arrangement.
+  - **A different provider** -- the interpreted lane would run our TypeScript over node's
+    OpenSSL while the compiled lane ran it over mbedTLS, and every provider-visible
+    result would be measured against an engine the shipping build does not contain. The
+    lane would have to be declared non-authoritative for both modules, which means the 346
+    files of `tls` and `crypto` would only ever be evidence on the lane that currently
+    passes 49 files in total.
+
+So: **the stand-in reaches the same provider, and the lane stays authoritative.** Had the
+footprint argument won Decision 1, this decision would have had to go the other way, and
+the cost of that -- 346 files demoted to the compiled lane alone -- belongs in the same
+breath as the footprint saving it would have bought.
+
+### What is now unblocked and what is not
+
+`crypto` is the root of the largest remaining subtree -- `crypto -> tls -> https`, and
+http2's TLS transport behind it. Nothing in these two decisions implements any of it, and
+the first binding is still the first binding. What they remove is the requirement to decide
+this *while* writing it.
