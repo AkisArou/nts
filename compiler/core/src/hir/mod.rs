@@ -3631,6 +3631,32 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
 
     conversions += reconcile(&mut program);
 
+    // **The same rule again, now that the stores have their fields' types.**
+    //
+    // `simplify` above runs before `reconcile`, and a field read whose answer
+    // was just written is declined there whenever the two disagree about
+    // machine type -- which a stored literal always does: it is lowered as the
+    // `f64` the expression had, and the load has already been narrowed to the
+    // field's `i32`. So `c.seed = 5; return c.seed` did not forward while
+    // `c.seed = (…) & 65535; return c.seed` did, the mask having made the
+    // stored value an `i32` before either pass saw it.
+    //
+    // The evidence for that was not reachable from any dump, which is what made
+    // it worth fixing rather than documenting: `nts hir` shows `f64` on both
+    // sides and `nts hir --prepared` shows `i32` on both sides, and the
+    // mismatch exists only between them. The JVM lane read both, found matching
+    // types and a pass that declined anyway, and was one command from reporting
+    // it broken.
+    //
+    // Here rather than folded into `simplify`: before `dce`, which collects the
+    // loads this leaves unread, and still before `rc::insert`, which is what
+    // keeps the counts on the program this leaves behind.
+    simplified += program
+        .funcs
+        .iter_mut()
+        .map(simplify::forward_stores)
+        .sum::<usize>();
+
     // Specialization orphans values by design — a folded constant leaves its
     // unfolded original with no readers — and the C emitter declares a local for
     // everything it assigns.

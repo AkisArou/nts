@@ -91,15 +91,18 @@ export function aCallBetween(n: number): number {
 }
 
 /**
- * Under test: a second name for one object.
+ * Under test: a `const` copy, which is **not** an alias.
  *
- * `alias` and `c` are different SSA values and the same object, so the store
- * through one has to invalidate the record held for the other. Keyed by value
- * and invalidated by *field*, which is why this answers 9 rather than 5.
+ * This arm was written to test invalidation through a second name and does not
+ * test it: `alias` and `c` are one SSA value, so the second store overwrites
+ * the record rather than invalidating it and the load forwards to 9. The answer
+ * is right and the mechanism is not the one the name suggests -- a copy is
+ * erased before either pass sees it.
  *
- * The same rule makes `twoObjects` below keep both of its loads even though the
- * two objects are provably distinct -- invalidating by field is conservative in
- * exactly the direction that costs a load rather than an answer.
+ * Kept, with `twoReferencesToOneObject` below for the case it was meant to be,
+ * because the pair is the point: a fixture that passes while describing the
+ * wrong rule is the thing no instrument here checks, and this file has now
+ * produced two of them.
  */
 export function throughAnAlias(n: number): number {
   const c = new Counter(n & 7);
@@ -194,4 +197,29 @@ export function aReferenceIsNotForwarded(n: number): number {
   const held = head.next;
   head.next = new Link(2);
   return (held === null ? 0 : held.tag) + (head.next === null ? 0 : head.next.tag);
+}
+
+class Pair {
+  first: Counter;
+  constructor(c: Counter) {
+    this.first = c;
+  }
+}
+
+/**
+ * Under test: two **distinct SSA values** naming one object, which is what the
+ * `const` copy above only looked like.
+ *
+ * `a` and `b` are separate loads out of the same field, so nothing relates them
+ * and the store through `b` has to invalidate the record held for `a`. That is
+ * the rule keyed by *field* rather than by object doing its work: it answers 9,
+ * and it keeps the load rather than the answer.
+ */
+export function twoReferencesToOneObject(n: number): number {
+  const pair = new Pair(new Counter(n & 7));
+  const a = pair.first;
+  a.seed = 5;
+  const b = pair.first;
+  b.seed = 9;
+  return a.seed;
 }

@@ -336,7 +336,7 @@ pub fn substitute_terminator(terminator: &mut super::Terminator, of: impl Fn(Val
 /// Runs **before** `rc::insert`, which is what makes it safe under reference
 /// counting: the counts are placed on the program this leaves behind rather
 /// than on the loads it removed.
-fn forward_stores(func: &mut Func) -> usize {
+pub(super) fn forward_stores(func: &mut Func) -> usize {
     let mut replacement: FxHashMap<ValueId, ValueId> = FxHashMap::default();
     for block in &func.blocks {
         let mut stored: FxHashMap<(ValueId, u32), ValueId> = FxHashMap::default();
