@@ -23,10 +23,31 @@ import process from "node:process";
 // first use so no runner change is needed, and inherited from there.
 process.env.NTS_TEST_TMPDIR_ID ??= String(process.pid);
 
-let tmpPath = resolvePath(
+const tmpRoot = resolvePath(
   process.env.NODE_TEST_DIR || join(process.cwd(), "target/node-test-tmp"),
-  `.tmp.${process.env.NTS_TEST_TMPDIR_ID}`,
 );
+let tmpPath = resolvePath(tmpRoot, `.tmp.${process.env.NTS_TEST_TMPDIR_ID}`);
+
+// A test that forks gets a plain `node <file>` child, and no substitution reaches
+// a fresh process, so the child loads node's **real** `test/common` -- whose
+// `PIPE` lives in node's own tmpdir, computed as
+// `<NODE_TEST_DIR or test/>/.tmp.<TEST_SERIAL_ID || TEST_THREAD_ID || '0'>`. Only
+// the parent calls `refresh()`, and the parent's tmpdir is this one, so nothing in
+// the run ever created the directory the child binds its socket in.
+//
+// test-child-process-server-close therefore passed if and only if some earlier run
+// had left `third_party/node/test/.tmp.0` behind. Creating that directory and
+// removing it again flips the test on demand, which is how this was found: it read
+// as a regression from the change before it, and it was a pass that had been
+// resting on unrelated state. 33 tests in the parallel suite use `common.PIPE`.
+//
+// Exporting both variables makes node's computation land on the directory this
+// module manages, so the two agree by construction. The root has to exist before
+// any child loads node's helper, because it `realpathSync`es NODE_TEST_DIR at
+// import time and throws if it is absent.
+mkdirSync(tmpRoot, { recursive: true });
+process.env.NODE_TEST_DIR ??= tmpRoot;
+process.env.TEST_SERIAL_ID ??= process.env.NTS_TEST_TMPDIR_ID;
 
 export function refresh() {
   rmSync(tmpPath, { recursive: true, force: true });
