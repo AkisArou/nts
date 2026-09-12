@@ -5428,9 +5428,57 @@ both are far over the budget in either dexing, so neither is inlined in either
 and inlining cannot be what moved. What did change is that both halved in size.
 
 **So this row says code size costs on ART beyond the inliner's threshold**,
-which the `awfy-towers` experiment does not show and could not have. Stated as
-the reading rather than as the finding: what is measured is that halving two hot
-methods is worth 2.3x on this row, and *which* property of halving pays --
-instruction cache, register pressure, the JIT's own compile budget -- is not
-established by anything here. It is the first row in this file where size
-matters without a threshold being crossed, and it is one row.
+which the `awfy-towers` experiment does not show and could not have.
+
+**And the reference's own sizes bound that claim, which the first version of
+this section did not have.** The same missing-cell mistake as
+`ref-bytes-on-device.sh`, a fourth time: our two modes were compared without
+the reference's two.
+
+    method      ours_dbg  ours_rel |  ref_dbg  ref_rel
+    advance          313       167 |      220      212
+    energy           190        94 |      115      109
+
+In debug we are **42% bigger** than the hand-written Java and 2.54x slower. In
+release we are **21% smaller** and 1.19x slower. So the flag's 1.35 is size --
+the move from bigger-than to smaller-than tracks it -- and **the residual 1.19x
+is not**, because we are the smaller program and still lose. Two different
+things were being attributed to one number.
+
+Which property of *size* paid over that range -- instruction cache, register
+pressure, the JIT's own compile budget -- is still not established by anything
+here, and now need not be for the row's remaining gap: whatever is left is not
+bytes. That is one row, and it is the only place in this file where our hot
+method is smaller than the reference's.
+
+### The prologue is not the lever either, and that was five minutes to find out
+
+`awfy-nbody` says code size costs on ART past the inliner's threshold, which
+makes every source of emitted bytes a candidate. The largest standing one is
+this lane's prologue: `hir` is SSA, `StackMapTable` is eighty lines here rather
+than three thousand *because* every slot is definitely assigned, and what buys
+that is a default store into each non-parameter slot at method entry.
+
+Measured before costing the alternative, on `awfy-towers`:
+
+    method                      prologue    method
+    Benchmark$innerBenchmarkLoop      14        63
+    Towers$pushDisk                   14       178
+    Towers$popDiskFrom                 5       110
+    Towers$buildTowerAt                5        50
+    Towers$verifyResult                3        25
+    Towers$moveTopDisk                 0        31
+
+**Five bytes of 110 on the method that matters.** `popDiskFrom` needs to go from
+51 code units to about 25 to cross the threshold; the prologue is 4.5% of it.
+Removing it means per-block frames and `hir::liveness`, which is the whole of
+the design decision RFC-era note called "the strongest argument that a bytecode
+backend is tractable here" -- traded for four and a half percent of one method.
+
+So both size levers are now priced and both are refused: outlining the cold
+block moves 51 units to 34 and does not cross, and the prologue is 4.5%. The
+remaining bulk in `popDiskFrom` is the cold `throw` at half the method and the
+two `NtsRuntime.bounds` guards, and **no single one of the three gets there** --
+which is a more useful thing to know than any of them individually, because it
+says the row is not one change away and stops the next attempt being a fourth
+mechanism that moves nothing.

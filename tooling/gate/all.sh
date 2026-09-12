@@ -834,6 +834,20 @@ backend_examples() {
     echo "  ^ fell from $floor to $passed"
     return 1
   fi
+  # **Raise it from a run, and never above what the tree can produce on its
+  # own.** The companion to "never lower it to make a run pass", and the one
+  # nobody had written down because it only bites across sessions.
+  #
+  # On 2026-09-12 this printed `raise the floor to 189` from a run whose 189th
+  # example was *uncommitted* in another session's working tree. Taking the
+  # number would have put a floor of 189 into a gate that every other checkout
+  # answers with 188 -- red for everyone, for the one reason a floor exists to
+  # be immune to, and not reproducible by the person who landed it.
+  #
+  # Both halves are the same rule: **the floor describes the tree, not the
+  # run.** A number is only ready when the fixture that produces it is
+  # committed, which is why this message says what the run saw rather than
+  # editing anything itself.
   [ "$passed" -gt "$floor" ] && printf '  ^ raise the floor in tooling/gate/all.sh to %s\n' "$passed"
   return 0
 }
@@ -1100,7 +1114,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # lands rather than being absorbed into a gap. The plan this lane started
   # from set the target at "86 of 87, which is the LLVM floor"; the corpus has
   # grown by a hundred and one since and this backend refuses nothing in it.
-  backend_examples 188 "through the JVM backend" ); }
+  backend_examples 189 "through the JVM backend" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

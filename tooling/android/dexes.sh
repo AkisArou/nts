@@ -173,14 +173,16 @@ printf "%s method(s) across them\n" "$methods"
 # gate step three sessions run. Left as a word for four minutes while the count
 # was being measured, with a peer's gate running it. Inert is the only safe
 # unmeasured value.
-# **4382**, measured 2026-09-12 at `ca9f504d`: 247 dexed, 0 refused, 1 declined.
+# **4627**, measured 2026-09-12 at `1859d67b`: 260 dexed, 0 refused, 1 declined.
+# Was 4382 at `ca9f504d` over 247 targets; the corpus grew and every root that
+# carries presence bits gained an `ntsPresence()` reader with the interface.
 # Under the skeleton bug it would have been roughly half.
 #
 # Exact rather than padded, which is this repository's rule for a floor. A
 # codegen change that prunes more and drops this is indistinguishable *here*
 # from the defect it guards, and that is the point: a drop owes an explanation
 # and then a new number, rather than fitting under a margin somebody chose.
-floor=${NTS_DEX_METHOD_FLOOR:-4382}
+floor=${NTS_DEX_METHOD_FLOOR:-4627}
 if [ $# -eq 0 ] && [ "$methods" -lt "$floor" ]; then
   echo "only $methods method(s) dexed, against a floor of $floor" >&2
   # **Which of the two it is, said here rather than left to the reader.** This
