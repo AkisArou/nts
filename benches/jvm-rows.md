@@ -5878,14 +5878,36 @@ The warm number is still the right one for the table. The size is a fact in its
 own right, so that if something later comes in slow on first touch there is a
 written suspect rather than a mystery:
 
-    row           method             ours          reference    ratio
-    awfy-list     List.tail       13,960 bytes      363 bytes     38x
-    awfy-nbody    advance            647 bytes      647 bytes    1.00x
-    awfy-queens   getRowColumn       226 bytes      250 bytes    0.90x
-    awfy-towers   moveTopDisk        116 bytes      344 bytes    0.34x
+    row           method           ours  frames     reference  frames   ratio
+    awfy-nbody    advance          647 B     0         647 B      0     1.00x
+    awfy-queens   getRowColumn     226 B     0         250 B      0     0.90x
+    awfy-towers   moveTopDisk      116 B     0         344 B      5       --
+    awfy-list     List.tail     13,960 B   918         363 B      3       --
 
-`awfy-list` is the outlier by two orders of magnitude and the only row where
-this is worth watching. Nothing in the lowering asks for 918 frames --
+**Two of those four ratios were published here an hour ago and were wrong to
+compute.** A method's size only compares to another method's size when the two
+have inlined the same amount, and `awfy-towers` and `awfy-list` have not:
+
+- `moveTopDisk` at "0.34x" is not this lane being a third the size. The
+  reference's 344 bytes **contains five methods' work**; our 116 bytes contains
+  one method's and two real calls to the rest. The smaller number is the one
+  that did less.
+- `List.tail` at "38x" is the same error with the sign reversed: our 13,960
+  bytes contains 918 frames of callee, theirs contains 3.
+
+**A smaller method that calls out is not a smaller program.** MainClaude
+spotted the symptom -- "`towers` at 0.34x on a row we lose badly means the size
+and the time are telling different stories" -- and the cause is that the ratio
+was not measuring what it appeared to. Only `awfy-nbody` and `awfy-queens` have
+equal inlining on both sides, and only those two ratios mean anything.
+
+That is the same error as every other one today, in the one place I had just
+finished writing the warning about: two things compared while something that
+was not held constant differed between them. Here the uncontrolled variable is
+*how much of the program each number contains*.
+
+`awfy-list` remains the row worth watching, for the absolute rather than the
+ratio. Nothing in the lowering asks for 918 frames --
 `dex2oat` chose that because our code gave it nothing to stop at -- so if it
 ever becomes a problem the lever is a size budget in this emitter rather than
 anything in the HIR. **There is no measurement saying it is a problem and one
