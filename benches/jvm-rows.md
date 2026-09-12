@@ -6567,3 +6567,41 @@ on the line above the symptom -- the same failure as `2>/dev/null` hiding
 The generalisation this file keeps arriving at from new directions: when one
 message can mean several things, every instrument built on that message
 inherits the ambiguity, including a perfect reduction.
+
+### A JVM-only defect that cannot be filed, because every reduction of it is refused earlier
+
+MainClaude taught `blockers-check.mjs` an `emit-jvm ->` prefix, so a defect only
+this backend can see is expressible as a fixture for the first time -- written
+the usual way such a fixture runs `hir --prepared`, finds nothing refused, and
+reports **FIXED**, which is the failure that gets a fixture deleted.
+
+Four of this lane's five `storing a X where a Y is declared` causes are exactly
+that shape. The attempt to file one of them failed, and the reason is worth
+recording so nobody repeats it.
+
+The site is `QueueWithSizes<N>#enqueue` in `runtime/web-platform`, storing a
+`ValueWithSize<15626>` where a `ValueWithSize<15643>` is declared -- two type
+ids for one structural type, the object literal's inferred type against the
+declared parameter's. **Four reductions, each stopped by a different frontend
+refusal the full module does not hit:**
+
+    a generic interface passed between functions      no refusal at all
+    a generic class with an array field               `an empty array literal`
+    the nested `Fifo<ValueWithSize<T>>` shape         `an empty array literal`
+    the faithful shape, `(T | undefined)[]`           `a property of
+                                                       unrepresentable type`
+
+The real `Fifo` uses `= []` too and compiles, because `T` arrives instantiated
+at a layout-bearing type through a module this reduction does not have.
+
+**So the defect is real, reproducible in the corpus, and not reducible** -- the
+frontend refuses every small program that would reach this backend, and the
+large program that reaches it is a module. That is not a limit of the new
+fixture form; it is the same conditioning recorded two sections up, met from the
+other direction: **a backend-only defect can only be filed if a small program
+can get past the frontend to it.**
+
+Recorded rather than filed. The next attempt should start from the module and
+delete, not from a sketch and add -- which is the reduce-from-the-failing-case
+rule, and the thing that makes it expensive here is that the failing case is
+`runtime/web-platform` rather than five lines.
