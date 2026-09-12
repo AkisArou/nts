@@ -5844,7 +5844,7 @@ Java files in the vendored suite:
     files declaring `getX`/`setX` accessors    Body 13, Variable 11,
                                               SimpleLoop 8, Packet 8,
                                               Pair/List/Dictionary/... 4 each
-    files that *call* an accessor             21 of 79
+    files that *call* an accessor             19 of 79
 
 Including the hot classes of `awfy-list`, `awfy-nbody`, `awfy-towers` and
 `awfy-queens` -- which is to say, the rows the bar is written about.
@@ -5972,8 +5972,9 @@ It reproduces -- 1.15 and 1.12, moving 0.03 -- and it is the only row that
 *flips against us* between the modes. Three explanations are already dead, all
 ruled out without the device:
 
-- **Not the accessor pattern.** `Bounce.java` makes one accessor call. It is not
-  `awfy-list`'s shape.
+- **Not the accessor pattern.** `Bounce.java` makes **zero** accessor calls --
+  its one apparent match is `Arrays.setAll`, a JDK method. It is not
+  `awfy-list`'s shape, and by a wider margin than first reported.
 - **Not `widen`.** The case is integer-heavy -- `int` fields, `Math.abs(int)` --
   and both sides emit `iget`/`iput` with near-identical mixes. We are not
   holding these as doubles.
@@ -6205,3 +6206,32 @@ confirming the arm passes for the stated reason -- expensive, and neither lane
 will do it routinely. So the honest position is **a technique for arms and a
 habit for passes**, and claiming the technique covers both would be the same
 kind of overstatement the technique exists to catch.
+
+### A positive control proves a pattern can fire, not that only the subject fires it
+
+MainClaude's, and it corrects a number this file published as a column-head
+claim. Their case: a queue item measured at **2515 sites across 27 modules**,
+which would have been the largest unbuilt thing by an order of magnitude, and
+which was backticks in doc comments matched by a pattern for "identifier
+followed by a backtick". Their control matched once, correctly, and told them
+nothing -- it tested that the pattern finds a tagged template, not that it finds
+*only* tagged templates.
+
+**The asymmetry is the finding.** This file has been careful that every zero is
+a real zero -- the `(none)` rows, the `0 of 52`, the census that read zero
+because a matcher was too strict -- and careless about whether every large
+number is a real number. That is backwards: **a false zero costs an
+opportunity, a false large number costs the work.**
+
+Applied here immediately: the accessor census above matched
+`\\.(get|set)[A-Z][A-Za-z]*\\(`, which also fires on `Arrays.setAll(...)`, a JDK
+method that is not an accessor on anything. Re-counted against the **87
+accessors the suite actually declares**, it is **19 of 79 files, not 21** -- and
+one of the two removed is `Bounce`, cited two sections up as making "one
+accessor call". It makes none. The conclusion there was right and its
+supporting detail was wrong, which is the more dangerous arrangement.
+
+**And the re-count read `0 of 79` on its first run**, because `for m in
+$declared` does not split a variable in zsh -- the loop ran once with the whole
+list as a single string. Third time today, with a memory note about it open.
+The tell was the same as always: a uniform result across every item.
