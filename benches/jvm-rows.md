@@ -6179,6 +6179,22 @@ It does not touch `awfy-bounce`'s 30% AOT regression, which is the same
 program. Two `getfield`s cannot be 30%, and saying so here saves the next
 reader the connection.
 
+**Measured afterwards, because a prediction worth writing is worth checking.**
+Three sittings of `awfy-bounce` with the forward landed:
+
+    per-sitting AOT ratio   before   1.15  1.12
+                            after    1.088  1.106  1.111
+    JIT ratio               before   0.88  0.85
+                            after    0.869
+
+The row is **still over the bar and still about 25% worse in AOT than JIT**,
+which is the prediction holding. The ranges nearly touch and the shift is about
+0.03; that is **not** attributed to two removed loads here, because a sitting-
+to-sitting difference of that size is inside what this row has shown before and
+nothing distinguishes the two explanations. A confirmed prediction and an
+unattributed 0.03, rather than a small win claimed from a number that happened
+to move the right way.
+
 ### A comment claiming a mechanism is an unverified hypothesis, and one arm cannot test it
 
 The sharpest thing to come out of a day of these, and it is MainClaude's
