@@ -8,8 +8,17 @@
 //
 //     g.next() by hand              this refusal
 //     g.return(v)                   the same
-//     yield*                        refused by name
 //     [...generator]                a copy of something that is not an array
+//
+// **Two of the five listed here on 2026-09-11 have since landed, and this
+// comment went on naming them as gaps.** `yield*` is a walk with a `yield`
+// where the body would be -- `examples/a-yield-star`, 232 cases -- and a
+// generator walked anywhere but where it was made is `examples/
+// a-generator-walked-elsewhere`, 174 cases. Both were closed by the
+// representation the last paragraph below calls for, which is the thing to
+// read twice: the paragraph asking for it stayed accurate while the list
+// above it went stale, because a list of names is falsified one entry at a
+// time and an argument is not.
 //
 // # Why `next` by hand is not the same question the method was
 //
@@ -20,14 +29,24 @@
 // method *of*.
 //
 // So closing this is not a lookup that is missing -- it is deciding what a
-// generator **value** is when the program holds one rather than walks it. Three
-// of the four above are that same decision: `g.return(v)` needs the frame to
-// carry a completion, and `[...g]` needs a length nothing knows until the walk
-// ends.
+// generator **value** is when the program holds one rather than walks it. All
+// three above are that same decision: `g.return(v)` needs the frame to carry a
+// completion, and `[...g]` needs a length nothing knows until the walk ends.
 //
-// `yield*` is the odd one and is recorded separately in `lower_yield`: one
-// `next` on the outer generator is an unbounded number of steps on the inner
-// one, so the frame would need a nested cursor rather than a state number.
+// `g.next()` is the one with a shape already sitting there. The resumption
+// **answers `done`** and leaves the element in `frame.yielded`, which is
+// exactly the two halves of an `IteratorResult` -- so what is missing is not
+// the step but the *object*, and `IteratorResult<T, TReturn>` is a union of
+// `IteratorYieldResult` and `IteratorReturnResult` whose arms disagree about
+// both fields: `done` is optional in one and required in the other, and `value`
+// is `T` against `TReturn`. Probed on 2026-09-12: the same two fields written
+// as a plain `interface Step { value: number; done: boolean }` compile and
+// agree, and the lib.d.ts spelling refuses with `\`done\` on a union, whose
+// members lay their fields out differently`.
+//
+// **That is the census's number one row** -- 57 distinct things across all 23
+// modules -- so this row and that one are one question wearing two names, and
+// neither should be built without the other in view.
 //
 // # What the method half cost, kept because the shape recurs
 //

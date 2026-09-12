@@ -135,3 +135,34 @@ export function twoFramesOneGenerator(n: number): number {
   const second = drain(upTo(n & 7));
   return first * 100 + second;
 }
+
+/**
+ * Under test: a generator handed back by a function that is **not one**, and
+ * walked at the call rather than through a parameter.
+ *
+ * This is the shape the name-from-the-call rule got wrong, and it got it wrong
+ * by *looking right*: `relay(n)` is a direct call, so the walk took `relay` for
+ * the generator and emitted a call to `relay__resume`, a function nothing
+ * declares. `drain(chosen(n))` above does not reach it -- the frame arrives as
+ * a parameter there, so the call is out of view and the dispatch runs. The two
+ * differ only in whether a parameter stands between the call and the loop.
+ *
+ * It refused rather than mislinking, which is the only reason this was cheap to
+ * find; the diagnostic named `relay__resume` and so named the mistake.
+ */
+function relay(n: number): Generator<number> {
+  return upTo(n);
+}
+
+export function walkedStraightFromAReturn(n: number): number {
+  let total = 0;
+  for (const v of relay(n & 7)) total += v;
+  return total;
+}
+
+/** Under test: the same, where which generator comes back is not static. */
+export function walkedStraightFromAChoice(n: number): number {
+  let total = 0;
+  for (const v of chosen(n)) total += v;
+  return total;
+}

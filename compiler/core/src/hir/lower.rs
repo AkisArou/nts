@@ -7002,6 +7002,15 @@ struct FuncBuilder<'a> {
     generator: Option<super::GeneratorFrame>,
     /// Which generator each `function*` is, decided once by [`naming`].
     generators: rustc_hash::FxHashMap<NodeId, usize>,
+    /// The values in this function that are a generator frame *this call site
+    /// made*, and so whose resumption is named after the callee.
+    ///
+    /// The op cannot answer it. `OpKind::Call` says the call was direct and
+    /// says nothing about what it called being a generator, and the two are not
+    /// the same question: a plain function handing back a generator someone
+    /// else made is a direct call whose name has no resumption. Recorded where
+    /// the reservation is read, because that is the only place that knows.
+    generator_calls: rustc_hash::FxHashSet<ValueId>,
     /// Which functions can raise a `throw`. See [`Naming::throwing`].
     throwing: rustc_hash::FxHashSet<u32>,
     /// Which property names an `in` asks about. See [`Naming::presence_keys`].
@@ -7060,6 +7069,7 @@ impl<'a> FuncBuilder<'a> {
             async_result: None,
             generator: None,
             generators: rustc_hash::FxHashMap::default(),
+            generator_calls: rustc_hash::FxHashSet::default(),
             throwing: rustc_hash::FxHashSet::default(),
             presence_keys: rustc_hash::FxHashSet::default(),
             class_tokens: rustc_hash::FxHashMap::default(),
@@ -13342,12 +13352,6 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(OpKind::ConstFloat(0.0), HirType::Void, origin))
     }
 
-    /// `Object.keys(o)`, as the array of names the layout already holds.
-    ///
-    /// Insertion order is declaration order, which is what a layout is: fields
-    /// are laid out base-first and in the order the class declares them, and
-    /// that is the order `Object.keys` is specified to produce for string keys
-    /// that are not array indices.
     /// `Object.is(a, b)` — `SameValue`, which is `===` with two corrections.
     ///
     /// `===` says `NaN !== NaN` and `0 === -0`; `SameValue` says the opposite of
@@ -13476,6 +13480,12 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// `Object.keys(o)`, as the array of names the layout already holds.
+    ///
+    /// Insertion order is declaration order, which is what a layout is: fields
+    /// are laid out base-first and in the order the class declares them, and
+    /// that is the order `Object.keys` is specified to produce for string keys
+    /// that are not array indices.
     fn decide_object_keys(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
         // Lowered for its effects even though the answer does not depend on it:
         // `Object.keys(f())` calls `f`.
@@ -14394,9 +14404,19 @@ impl<'a> FuncBuilder<'a> {
     /// an entry and a resumption long after this runs. The name is derived from
     /// the generator's, and the generator is whatever call produced this value.
     ///
-    /// So a generator has to be walked where it was made. Handed to another
-    /// function it arrives as a parameter, and a parameter has no call behind it
-    /// to take a name from -- refused, by name, rather than guessed at.
+    /// A generator walked **anywhere but where it was made** therefore has no
+    /// name to take, and is not refused: the frame itself knows which body to
+    /// resume, so [`Self::generator_dispatch`] reads the slot the abstract
+    /// generator declares. A parameter, a field and a call that returned one all
+    /// go that way. This paragraph said that case was "refused, by name" for as
+    /// long as the dispatch had existed, which is the failure record 0161 is
+    /// about: a true sentence goes false when the code beside it moves, and
+    /// nothing checks a comment.
+    ///
+    /// So the *only* thing the direct path needs is certainty that the call it
+    /// is naming is the generator's own. `self.generator_calls` carries that,
+    /// and the op does not -- see the field. Guessing from the op emitted a call
+    /// to `make__resume` for a plain `make` that merely handed a generator back.
     fn generator_walk(&mut self, sequence: NodeId, value: ValueId) -> Result<Walk, Diagnostic> {
         let HirType::Managed(ManagedType::Object(frame)) = self.values[value.0 as usize].ty else {
             unreachable!("the caller matched an object type");
@@ -14408,7 +14428,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::Call {
                 callee: Callee::Direct(name),
                 ..
-            } => Some(name.clone()),
+            } if self.generator_calls.contains(&value) => Some(name.clone()),
             _ => None,
         };
         let resume = match made_here {
@@ -14544,9 +14564,10 @@ impl<'a> FuncBuilder<'a> {
         // Asked before `member_returns` rather than as a fallback after it,
         // because the declared type is not *missing* here -- it is present and
         // wrong, so a fallback would never run.
-        let iterator_ty = self
+        let reserved = self
             .member_declaration(ty, &iterator_member)
-            .and_then(|declaration| self.generators.get(&declaration).copied())
+            .and_then(|declaration| self.generators.get(&declaration).copied());
+        let iterator_ty = reserved
             .map(|index| HirType::Managed(ManagedType::Object(super::generator_frame(index))))
             .or_else(|| self.member_returns(ty, &iterator_member));
         let Some(iterator_ty) = iterator_ty else {
@@ -14565,6 +14586,7 @@ impl<'a> FuncBuilder<'a> {
             iterator_ty.clone(),
             origin,
         );
+        let iterator = self.note_generator_call(iterator, reserved);
 
         // **A generator `[Symbol.iterator]()` is walked as a generator**, not as
         // an iterator object. What came back is a frame, which is *resumed*; it
@@ -26427,18 +26449,53 @@ impl<'a> FuncBuilder<'a> {
 
         let args = self.lower_arguments(id, &arguments)?;
 
-        // Calling a generator produces its frame, not the `Generator<T, ...>`
-        // the checker says: that interface describes an object this compiler
-        // does not build, and the frame is what the call actually hands back.
-        // The reservation is read from the declaration, which is the same
-        // authority `begin_generator` used.
-        let ty = declaration
-            .and_then(|declaration| self.generators.get(&declaration).copied())
+        self.push_call(id, callee, args, declaration)
+    }
+
+    /// A lowered call, at the type its result actually has.
+    ///
+    /// Calling a generator produces its **frame**, not the `Generator<T, ...>`
+    /// the checker says: that interface describes an object this compiler does
+    /// not build, and the frame is what the call actually hands back. The
+    /// reservation is read from the declaration, which is the same authority
+    /// `begin_generator` used.
+    ///
+    /// And the same question answers the other one nobody else can: whether
+    /// *this* call is a generator's. `OpKind::Call` records that the call was
+    /// direct and records nothing about what it called, so a walk reading the
+    /// op cannot tell `count(n)` from a plain `relay(n)` that merely hands a
+    /// generator back -- and naming the resumption after the callee emitted a
+    /// call to `relay__resume`, which nothing declares. Recorded here because
+    /// here is the only place the two facts are both in hand.
+    /// Record a call whose result is a generator frame **this site made**.
+    ///
+    /// Beside [`Self::push_call`] rather than inside it because three places
+    /// produce a frame and only one of them is a plain call: a generator
+    /// *method* and an implicit `[Symbol.iterator]()` reach it through
+    /// `member_declaration` instead. Each knows its own way to the declaration
+    /// and they share what they do with the answer.
+    fn note_generator_call(&mut self, call: ValueId, reserved: Option<usize>) -> ValueId {
+        if reserved.is_some() {
+            self.generator_calls.insert(call);
+        }
+        call
+    }
+
+    fn push_call(
+        &mut self,
+        id: NodeId,
+        callee: Callee,
+        args: Vec<ValueId>,
+        declaration: Option<NodeId>,
+    ) -> Result<ValueId, Diagnostic> {
+        let reserved =
+            declaration.and_then(|declaration| self.generators.get(&declaration).copied());
+        let ty = reserved
             .map(|index| HirType::Managed(ManagedType::Object(super::generator_frame(index))))
             .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
         let origin = self.origin(id);
-        Ok(self.push(
+        let call = self.push(
             OpKind::Call {
                 callee,
                 args,
@@ -26446,7 +26503,8 @@ impl<'a> FuncBuilder<'a> {
             },
             ty,
             origin,
-        ))
+        );
+        Ok(self.note_generator_call(call, reserved))
     }
 
     /// The declaration a call resolves to, when it is a plain function.
@@ -29066,14 +29124,15 @@ impl<'a> FuncBuilder<'a> {
         // lines away and reads the declaration out of `call_targets`; a method
         // call has a receiver type and a member name, and
         // `PropertyRecord::declaration` is what turns those into the same node.
-        let ty = self
+        let reserved = self
             .member_declaration(type_id, &member_name)
-            .and_then(|declaration| self.generators.get(&declaration).copied())
+            .and_then(|declaration| self.generators.get(&declaration).copied());
+        let ty = reserved
             .map(|index| HirType::Managed(ManagedType::Object(super::generator_frame(index))))
             .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
         let origin = self.origin(id);
-        Ok(self.push(
+        let call = self.push(
             OpKind::Call {
                 callee,
                 args,
@@ -29081,7 +29140,8 @@ impl<'a> FuncBuilder<'a> {
             },
             ty,
             origin,
-        ))
+        );
+        Ok(self.note_generator_call(call, reserved))
     }
 
     /// The node that declares a member of a type, where one does.
