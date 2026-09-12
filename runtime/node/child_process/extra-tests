@@ -1,0 +1,7 @@
+# Tests whose subject is child_process and whose upstream name says otherwise.
+# Each is claimed rather than reviewed away, because the audit surfaced it only
+# once this module existed and its subject really is ours.
+test-pipe-head.js: upstream names it for the shell pipeline; the subject is exec through /bin/sh with the far end closing early
+test-cluster-net-send.js: upstream names it for cluster, which this profile does not implement; the subject is sending a net handle over the child_process IPC channel
+test-stdio-closed.js: upstream names it for the descriptors; the subject is spawn with stdio the parent has closed
+test-stdio-undestroy.js: as test-stdio-closed.js; spawn with stdio the parent has not destroyed

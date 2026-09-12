@@ -9,23 +9,78 @@
 # Removing a line makes the audit loud about that file again, which is the
 # intended way to revisit one.
 test-abort-controller-any-timeout.js: the subject is AbortController/AbortSignal, canonical globals owned by runtime/web-platform
+test-abortcontroller.js: AbortController and AbortSignal are web-platform globals; the file reaches its subject through the global and names `util` only to format
 test-abortsignal-any.mjs: the subject is AbortController/AbortSignal, canonical globals owned by runtime/web-platform
+test-abortsignal-cloneable.js: as above, plus structuredClone and MessageChannel, which are worker_threads transfer and outside this profile
 test-async-wrap-constructor.js: the subject is the private async_wrap binding rather than the public node:async_hooks surface
+test-async-wrap-pop-id-during-load.js: the subject is the private async_wrap binding rather than the public node:async_hooks surface
 test-async-wrap-trigger-id.js: the subject is the private async_wrap binding rather than the public node:async_hooks surface
+test-bash-completion.js: the subject is node's command-line surface rather than a module
+test-c-ares.js: the subject is the bundled c-ares resolver rather than the node:dns surface
+test-cli-bad-options.js: the subject is node's command-line surface rather than a module
+test-cli-eval-event.js: the subject is node's command-line surface rather than a module
+test-cli-eval.js: the subject is node's command-line surface rather than a module
 test-cli-node-cli-manpage-env-vars.mjs: the subject is node's command-line surface rather than a module
 test-cli-node-cli-manpage-options.mjs: the subject is node's command-line surface rather than a module
+test-cli-node-print-help-style.js: the subject is node's command-line surface rather than a module
+test-cli-node-print-help.js: the subject is node's command-line surface rather than a module
+test-cli-options-negation.js: the subject is node's command-line surface rather than a module
+test-cli-options-precedence.js: the subject is node's command-line surface rather than a module
+test-cli-permission-deny-fs.js: the subject is node's command-line surface rather than a module
+test-cli-permission-multiple-allow.js: the subject is node's command-line surface rather than a module
 test-cli-print-promise.mjs: the subject is node's command-line surface rather than a module
+test-cli-syntax-eval.js: the subject is node's command-line surface rather than a module
+test-cli-syntax-piped-bad.js: the subject is node's command-line surface rather than a module
+test-cli-syntax-piped-good.js: the subject is node's command-line surface rather than a module
+test-cluster-eaddrinuse.js: the subject is node:cluster, which this profile does not implement
+test-common-countdown.js: the subject is node's own test helper rather than a module
+test-common-expect-warning.js: the subject is node's own test helper rather than a module
+test-common-must-not-call.js: a test of node's own harness -- `common.mustNotCall` -- rather than of any node module
+test-coverage-with-inspector-disabled.js: the subject is the inspector protocol, which this profile does not implement
+test-debug-process.js: the subject is the debugger front end, which this profile does not implement
 test-debugger-invalid-json.mjs: the subject is the debugger front end, which this profile does not implement
+test-debugger-pid.js: the subject is the debugger front end, which this profile does not implement
+test-debugger-repeat-last.js: the subject is the debugger front end, which this profile does not implement
 test-debugger-unavailable-port.js: the subject is the debugger front end, which this profile does not implement
+test-debugger-websocket-secret-mismatch.js: the subject is the debugger front end, which this profile does not implement
 test-directory-import.js: the subject is the module loader, which this profile substitutes rather than implements
+test-dotenv-edge-cases.js: the subject is the `--env-file` CLI flag, which is the host's; `util` appears only in a message
+test-env-var-no-warnings.js: the subject is node's command-line surface rather than a module
+test-error-reporting.js: the subject is node's fatal-error reporting in a spawned process rather than a module
+test-eventtarget-custom-inspect-does-not-throw.js: reads `EventTarget.prototype[util.inspect.custom]` and asserts only that the result is a string. This profile does not dispatch arbitrary symbol-keyed inspect hooks (a section 13 non-goal), so our inspect would satisfy the assertion by ignoring the hook -- a pass that does not mean what the test means
 test-eventtarget-once-twice.js: the subject is EventTarget, a canonical global owned by runtime/web-platform
 test-fetch.mjs: the subject is fetch, owned by runtime/web-platform
+test-force-repl-with-eval.js: the subject is the REPL, which this profile does not implement
+test-force-repl.js: the subject is the REPL, which this profile does not implement
 test-global-setters.js: the subject is node's global object rather than a module
 test-inspector-break-when-eval.js: the subject is the V8 inspector protocol, which this profile does not implement
 test-inspector-debug-async-hook.js: the subject is the V8 inspector protocol, which this profile does not implement
+test-inspector-enabled.js: the subject is the inspector protocol, which this profile does not implement
 test-inspector-esm.js: the subject is the V8 inspector protocol, which this profile does not implement
 test-inspector-exception.js: the subject is the V8 inspector protocol, which this profile does not implement
+test-inspector-invalid-args.js: the subject is the inspector protocol, which this profile does not implement
+test-inspector-invalid-protocol.js: the subject is the inspector protocol, which this profile does not implement
+test-inspector-port-zero.js: the subject is the inspector protocol, which this profile does not implement
+test-inspector-stops-no-file.js: the subject is the inspector protocol, which this profile does not implement
+test-intl.js: the subject is the ICU build rather than a module
+test-kill-segfault-freebsd.js: the subject is node's fatal-error reporting in a spawned process rather than a module
+test-math-random.js: the subject is V8's random source rather than a module
+test-mime-api.js: genuinely a `util` test, and blocked on `util.MIMEType`, which is recorded in `missing-exports` as ordinary work nothing has needed yet. Claim it when that lands
+test-mime-whatwg.js: as test-mime-api.js
+test-module-loading-error.js: the subject is node's module loader rather than a module
+test-module-main-extension-lookup.js: the subject is node's module loader rather than a module
+test-module-main-fail.js: the subject is node's module loader rather than a module
+test-module-main-preserve-symlinks-fail.js: the subject is node's module loader rather than a module
 test-module-prototype-mutation.js: the subject is the module loader, which this profile substitutes rather than implements
+test-module-run-main-monkey-patch.js: the subject is node's module loader rather than a module
+test-module-wrap.js: the subject is node's module loader rather than a module
+test-module-wrapper.js: the subject is node's module loader rather than a module
+test-openssl-ca-options.js: the subject is tls/OpenSSL, which this profile does not implement
+test-permission-warning-flags.js: the subject is node's command-line surface rather than a module
+test-preload-worker.js: the subject is node's command-line surface rather than a module
+test-preload.js: the subject is node's command-line surface rather than a module
+test-promise-unhandled-flag.js: the subject is node's command-line surface rather than a module
+test-promises-unhandled-rejections.js: the subject is the `--unhandled-rejections` policy, a host CLI behaviour rather than a module here
 test-quic-blocklist.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
 test-quic-callback-error-onerror.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
 test-quic-diagnostics-channel-busy.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
@@ -50,22 +105,73 @@ test-quic-stream-onblocked.mjs: the subject is node:quic, which this profile doe
 test-quic-stream-reset-before-data.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
 test-quic-version-negotiation.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
 test-quic-zero-rtt-rejected-settings.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-release-npm.js: the subject is the release tarball's contents
+test-repl-array-prototype-tempering.js: the subject is the REPL, which this profile does not implement
+test-repl-clear-immediate-crash.js: the subject is the REPL, which this profile does not implement
+test-repl-cli-eval.js: the subject is the REPL, which this profile does not implement
+test-repl-close.js: the subject is the REPL, which this profile does not implement
 test-repl-definecommand.js: the subject is node:repl, which this profile does not implement
+test-repl-dynamic-import.js: the subject is the REPL, which this profile does not implement
+test-repl-harmony.js: the subject is the REPL, which this profile does not implement
 test-repl-history-dedup-multiline.js: the subject is node:repl, which this profile does not implement
+test-repl-import-referrer.js: the subject is the REPL, which this profile does not implement
+test-repl-inspect-defaults.js: the subject is the REPL, which this profile does not implement
+test-repl-require-context.js: the subject is the REPL, which this profile does not implement
+test-repl-tab-complete-nested-repls.js: the subject is the REPL, which this profile does not implement
 test-repl-tab-complete-no-warn.js: the subject is node:repl, which this profile does not implement
+test-repl-uncaught-exception-standalone.js: the subject is the REPL, which this profile does not implement
+test-repl-unexpected-token-recoverable.js: the subject is the REPL, which this profile does not implement
+test-repl-unsafe-array-iteration.js: the subject is the REPL, which this profile does not implement
+test-repl-unsupported-option.js: the subject is the REPL, which this profile does not implement
+test-require-invalid-main-no-exports.js: the subject is node's module loader rather than a module
 test-require-process.js: the subject is the module loader, which this profile substitutes rather than implements
+test-runner-cli-concurrency.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-cli-randomize.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-cli-timeout.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-cli.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
 test-runner-coverage-source-map.js: the subject is node's own test runner, which this profile does not implement
+test-runner-diagnostics-channel.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-enable-source-maps-issue.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-error-reporter.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-exit-code.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-extraneous-async-activity.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
 test-runner-filter-warning.js: the subject is node's own test runner, which this profile does not implement
+test-runner-force-exit-failure.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-log.mjs: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-misc.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-mock-timers-scheduler.js: a test of `node:test`'s mock timers; the runner is not in this profile
+test-runner-mock-timers-with-timeout.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-no-isolation-filtering.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
 test-runner-root-after-with-refed-handles.js: the subject is node's own test runner, which this profile does not implement
+test-runner-tag-filter-cli.mjs: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-todo-suite-hook-failure.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-runner-typechecking.js: a test of `node:test`'s assertions; as above
+test-runner-xfail.js: the subject is node's test runner, which this profile does not implement; child_process is how it launches one
+test-security-revert-unknown.js: the subject is node's command-line surface rather than a module
+test-sigint-infinite-loop.js: the subject is node's fatal-error reporting in a spawned process rather than a module
+test-source-map-invalid-url.js: the subject is source-map support in the loader rather than a module
+test-spawn-cmd-named-pipe.js: the subject is a Windows named pipe passed on the command line; this profile builds the posix side
 test-sqlite-backup.mjs: the subject is node:sqlite, which this profile does not implement
+test-stack-size-limit.js: the subject is node's command-line surface rather than a module
+test-startup-large-pages.js: the subject is node's command-line surface rather than a module
+test-sync-io-option.js: the subject is node's command-line surface rather than a module
 test-throw-error-with-getter-throw-traced.mjs: the subject is V8 stack-trace formatting for an uncaught throw
 test-throw-undefined-or-null-traced.mjs: the subject is V8 stack-trace formatting for an uncaught throw
+test-tls-cli-min-max-conflict.js: the subject is tls/OpenSSL, which this profile does not implement
+test-tls-env-extra-ca-no-crypto.js: the subject is tls/OpenSSL, which this profile does not implement
 test-tls-set-default-ca-certificates-append-fetch.mjs: the subject is node:tls, which this profile does not implement
 test-tls-set-default-ca-certificates-reset-fetch.mjs: the subject is node:tls, which this profile does not implement
+test-tracing-no-crash.js: the subject is node's command-line surface rather than a module
 test-tty-stdin-pipe.js: the subject is node:tty, which this profile does not implement
+test-uncaught-exception-handler-stack-overflow-on-stack-overflow.js: the subject is node's fatal-error reporting in a spawned process rather than a module
+test-uncaught-exception-handler-stack-overflow.js: the subject is node's fatal-error reporting in a spawned process rather than a module
+test-unhandled-exception-rethrow-error.js: the subject is node's fatal-error reporting in a spawned process rather than a module
 test-urlpattern-invalidthis.js: the subject is URLPattern, a WHATWG global in runtime/web-platform's lane rather than a node:url export
 test-urlpattern-types.js: the subject is URLPattern, a WHATWG global in runtime/web-platform's lane rather than a node:url export
 test-urlpattern.js: the subject is URLPattern, a WHATWG global in runtime/web-platform's lane rather than a node:url export
+test-vm-api-handles-getter-errors.js: the subject is node:vm, which this profile does not implement
+test-vm-syntax-error-stderr.js: the subject is node:vm, which this profile does not implement
+test-webcrypto-cryptokey-brand-check.js: reaches WebCrypto through the global `crypto`; it names `util` for `types.isCryptoKey`, but the subject is WebCrypto and is not in this profile
 test-webstream-encoding-inspect.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
 test-webstreams-abort-controller.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
 test-webstreams-adapters-writable-buffer-sources.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
@@ -79,21 +185,4 @@ test-whatwg-readablestream.mjs: the subject is the WHATWG streams surface, which
 test-whatwg-transformstream-cancel-write-race.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
 test-whatwg-webstreams-compression.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
 test-whatwg-webstreams-encoding.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
-
-# --- surfaced once the audit stopped discounting a module that was the subject
-#
-# `util` and `timers` are on the incidental list because `inspect` and a settle
-# `setTimeout` appear in tests about other things. That discount used to apply
-# even when the file imported nothing else, which hid `test-global-encoder.js`
-# -- now claimed by `util` and passing. These are the rest of that batch.
-test-abortcontroller.js: AbortController and AbortSignal are web-platform globals; the file reaches its subject through the global and names `util` only to format
-test-abortsignal-cloneable.js: as above, plus structuredClone and MessageChannel, which are worker_threads transfer and outside this profile
-test-common-must-not-call.js: a test of node's own harness -- `common.mustNotCall` -- rather than of any node module
-test-dotenv-edge-cases.js: the subject is the `--env-file` CLI flag, which is the host's; `util` appears only in a message
-test-eventtarget-custom-inspect-does-not-throw.js: reads `EventTarget.prototype[util.inspect.custom]` and asserts only that the result is a string. This profile does not dispatch arbitrary symbol-keyed inspect hooks (a section 13 non-goal), so our inspect would satisfy the assertion by ignoring the hook -- a pass that does not mean what the test means
-test-mime-api.js: genuinely a `util` test, and blocked on `util.MIMEType`, which is recorded in `missing-exports` as ordinary work nothing has needed yet. Claim it when that lands
-test-mime-whatwg.js: as test-mime-api.js
-test-promises-unhandled-rejections.js: the subject is the `--unhandled-rejections` policy, a host CLI behaviour rather than a module here
-test-runner-mock-timers-scheduler.js: a test of `node:test`'s mock timers; the runner is not in this profile
-test-runner-typechecking.js: a test of `node:test`'s assertions; as above
-test-webcrypto-cryptokey-brand-check.js: reaches WebCrypto through the global `crypto`; it names `util` for `types.isCryptoKey`, but the subject is WebCrypto and is not in this profile
+test-windows-abort-exitcode.js: the subject is node's fatal-error reporting in a spawned process rather than a module

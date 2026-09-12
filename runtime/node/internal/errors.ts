@@ -419,6 +419,24 @@ function addNumericalSeparator(value: string): string {
   return `${value.slice(0, i)}${result}`;
 }
 
+/**
+ * `stdout maxBuffer length exceeded`.
+ *
+ * A **RangeError** in node, not an Error, and
+ * test-child-process-exec-maxbuf asserts `err instanceof RangeError` beside the
+ * code and the message.
+ */
+export class ERR_CHILD_PROCESS_STDIO_MAXBUFFER extends NodeRangeError {
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
+  override readonly code = "ERR_CHILD_PROCESS_STDIO_MAXBUFFER";
+
+  constructor(streamName: string) {
+    super(`${streamName} maxBuffer length exceeded`);
+  }
+}
+
 /** `The value of "pid" is out of range. It must be an integer. Received NaN`. */
 export class ERR_OUT_OF_RANGE extends NodeRangeError {
   override get ["constructor"](): unknown {

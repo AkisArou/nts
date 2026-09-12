@@ -7,3 +7,6 @@ test-listen-fd-ebadf.js: upstream names it for the fd rather than the module; th
 test-destroy-socket-in-lookup.js: upstream names it for the operation rather than the module; the subject is net.Socket.destroy during the DNS lookup that precedes connect
 test-gc-net-timeout.js: upstream names it for the collection it forces; the subject is a net.Socket timeout
 test-ref-unref-return.js: upstream names it for the operation; the subject is that ref and unref return the socket, on both net and dgram
+test-listen-fd-server.js: upstream names it for the fd rather than the module; the subject is net.Server and an http.Server listening on an inherited descriptor, as test-listen-fd-ebadf.js
+test-listen-fd-detached.js: as test-listen-fd-server.js; a detached child inheriting the listening socket
+test-listen-fd-detached-inherit.js: as test-listen-fd-server.js, with stdio inherited as well
