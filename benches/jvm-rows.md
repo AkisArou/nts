@@ -5274,3 +5274,48 @@ harness. What survives is concentrated in the two methods with cold `throw`
 paths -- `popDiskFrom` 51 against 25, `pushDisk` 66 against 33 -- which is the
 outlining item, and better bounded for it: 51 units with a ~25-unit cold block
 taken out lands near the reference and under ART's budget.
+
+### Outlining the cold path was priced and is not worth building
+
+The previous section argued for outlining the cold `throw` block, on the
+strength of it being 31 of `popDiskFrom`'s 67 code units. Priced before built,
+which is the rule, and **it does not clear the bar.**
+
+The arms are three transcriptions of `Towers` differing in one thing each,
+dexed with `--release` and run on ART through `cmd package compile -m speed`:
+
+    arm          popDiskFrom   T2.moveTopDisk AOT   inlined frames
+    control            25 u            354 bytes                 5
+    outlined2          34 u            102 bytes                 0
+    bloat              40 u            102 bytes                 0
+    ours (real)        51 u            116 bytes                 0
+
+`outlined2` is this lane's hot path -- two explicit `NtsRuntime.bounds` guards
+included -- with the cold block replaced by a single static call. It lands at
+**34 code units and is not inlined**. So the threshold sits between 25 and 34,
+below ART's documented 32 rather than at it, and outlining takes
+`popDiskFrom` from 51 to 34 without crossing it.
+
+**The timing says the same thing and says it in a way that could be misread.**
+`outlined2`'s AOT ratio is 1.25x against `control`'s 1.83x, which looks like an
+improvement and is not: ours barely moved (41,142 against 41,336) and the
+*reference* got slower (32,789 against 22,553), because the reference is the
+arm that lost its inlining. A ratio improving because the denominator got worse
+is the same reading error as `awfy-sieve`'s two harnesses, and the absolute
+columns are what stop it.
+
+So the mechanism from the previous section is confirmed -- inlining is the
+difference, and method size in code units is what decides it -- and **the fix
+that follows from it is not outlining alone.** Getting `popDiskFrom` under the
+threshold needs the cold block *and* the two bounds guards *and* the rest, from
+51 units to about 25. The guards are deliberate: an escaping
+`ArrayIndexOutOfBoundsException` reads as a refusal to the differential, which
+is a day of false failures. That trade was made for a reason and this is the
+first time it has had a price attached, which is worth more than the
+optimisation would have been.
+
+**What this cost: one afternoon of measurement and nothing else.** Built, it
+would have been a change to `body.rs`, a new class-file shape, tests for it,
+and a row that did not move -- and the row not moving would then have needed
+explaining, on top of the six mechanisms already in the ledger that did not
+move it either.

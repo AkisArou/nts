@@ -1080,10 +1080,10 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # when the second of the two below was closed, and **185 to 187** when the
   # corpus reached 188 and this lane agreed on every new example. The one it
   # does not have is named rather than counted, because a floor that only says a
-  # number cannot tell a gap from a regression:
-  #
-  #   a-class-stored-and-compared      the covariant-constructor-return gap
-  #                                    two paragraphs up, unchanged
+  # number cannot tell a gap from a regression -- and as of `bfe076fb` there is
+  # nothing to name. `a-class-stored-and-compared` was the last, and it closed
+  # on the rule two paragraphs up rather than on the representation change the
+  # ledger had been predicting for it.
   #
   # `a-unary-plus-is-a-conversion` was the second and is closed: it wanted
   # `nts_value_to_number`, which had no row in `codegen/jvm`'s table and no
@@ -1093,7 +1093,14 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # same operation. The arm stayed in the example rather than being trimmed to
   # make three backends agree, which is what made it findable: trimming it would
   # have taken the only thing that asks the question.
-  backend_examples 187 "through the JVM backend" ); }
+  # **188 of 188, and the two numbers are meant to be the same one.** The run
+  # that moved it printed no `not agreeing:` line at all. A floor equal to the
+  # corpus is a different instrument from one below it: it cannot ratchet, only
+  # hold, and an example that does not agree fails this step on the day it
+  # lands rather than being absorbed into a gap. The plan this lane started
+  # from set the target at "86 of 87, which is the LLVM floor"; the corpus has
+  # grown by a hundred and one since and this backend refuses nothing in it.
+  backend_examples 188 "through the JVM backend" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
