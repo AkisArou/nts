@@ -132,7 +132,7 @@ let nextHandle = 0;
 const MODE = (bits, slot) => (bits >> (slot * 2)) & 3;
 const NAMES = ["pipe", "inherit", "ignore"];
 
-globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached, uid, gid, stdioSpec, onExit) => {
+globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached, uid, gid, stdioSpec, serialization, onMessage, onExit) => {
   const [argv0, ...rest] = args;
   const options = {
     argv0,
@@ -157,6 +157,8 @@ globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached,
   // to drop privileges ran as the caller and nothing said so.
   if (uid >= 0) options.uid = uid;
   if (gid >= 0) options.gid = gid;
+  // Only meaningful when `stdio` names a channel, and harmless when it does not.
+  options.serialization = serialization;
 
   let child;
   try {
@@ -188,6 +190,9 @@ globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached,
   // Returning a handle and reporting the failure through the exit callback keeps
   // one shape for both lanes.
   child.on("error", () => { entry.failed = true; });
+  // A spawned child with an `'ipc'` slot has a channel, and its messages reach the
+  // caller the same way a forked child's do. Only `fork` wired this.
+  if (typeof onMessage === "function") child.on("message", (message) => onMessage(message));
   child.on("exit", (code, signal) => {
     onExit(code === null ? -1 : code, signal === null ? 0 : (hostSignalNumbers[signal] ?? 0));
   });
@@ -239,10 +244,10 @@ globalThis.nts_process_exec_path = () => process.execPath;
 // and parsing, which is the part a test can observe.
 import { fork as nodeFork } from "node:child_process";
 
-globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, onExit, onMessage) => {
+globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, serialization, onExit, onMessage) => {
   const [, ...rest] = args;
   const modulePath = rest.shift();
-  const options = { execPath, silent: silent !== 0 };
+  const options = { execPath, silent: silent !== 0, serialization };
   if (env !== null) {
     options.env = Object.fromEntries(env.map((entry) => {
       const at = entry.indexOf("=");
@@ -260,14 +265,17 @@ globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, onExit, o
   const handle = nextHandle++;
   live.set(handle, { child, failed: false });
   child.on("error", () => {});
-  child.on("message", (message) => onMessage(JSON.stringify(message)));
+  // The value, not text: the host channel already serialised it, with structured
+  // clone under `serialization: "advanced"`, and re-encoding it as JSON here would
+  // undo exactly what that option is for.
+  child.on("message", (message) => onMessage(message));
   child.on("exit", (code, signal) => {
     onExit(code === null ? -1 : code, signal === null ? 0 : (hostSignalNumbers[signal] ?? 0));
   });
   return handle;
 };
 
-globalThis.nts_child_process_send = (handle, line, sent) => {
+globalThis.nts_child_process_send = (handle, message, sent) => {
   const entry = live.get(handle);
   if (entry === undefined) return -32;
   try {
@@ -277,9 +285,9 @@ globalThis.nts_child_process_send = (handle, line, sent) => {
     // the one argument here that has no representation in the compiled runtime, and
     // that is written down in the module beside the declaration rather than here.
     if (sent !== undefined && sent !== null) {
-      return entry.child.send(JSON.parse(line), sent) ? 0 : -32;
+      return entry.child.send(message, sent) ? 0 : -32;
     }
-    return entry.child.send(JSON.parse(line)) ? 0 : -32;
+    return entry.child.send(message) ? 0 : -32;
   } catch {
     return -32;
   }

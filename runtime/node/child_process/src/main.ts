@@ -96,6 +96,8 @@ declare function nts_child_process_spawn(
    * the trade is nothing against nine.
    */
   stdioSpec: readonly unknown[] | null,
+  serialization: string,
+  onMessage: (message: unknown) => void,
   onExit: (status: number, signal: number) => void,
   onError: (code: number) => void,
 ): number;
@@ -126,8 +128,9 @@ declare function nts_child_process_fork(
   env: string[] | null,
   cwd: string,
   silent: number,
+  serialization: string,
   onExit: (status: number, signal: number) => void,
-  onMessage: (line: string) => void,
+  onMessage: (message: unknown) => void,
 ): number;
 /**
  * `sent` is a socket or a server travelling to the child, and it crosses as itself.
@@ -142,7 +145,7 @@ declare function nts_child_process_fork(
  */
 declare function nts_child_process_send(
   handle: number,
-  line: string,
+  message: unknown,
   sent?: unknown,
 ): number;
 declare function nts_child_process_disconnect(handle: number): void;
@@ -267,6 +270,7 @@ export interface SpawnSyncOptions {
   shell?: boolean | string | undefined;
   killSignal?: string | number | undefined;
   signal?: AbortSignalLike | undefined;
+  serialization?: string | undefined;
   uid?: number | undefined;
   gid?: number | undefined;
   windowsHide?: boolean | undefined;
@@ -802,6 +806,98 @@ export interface SpawnOptions extends SpawnSyncOptions {
 }
 
 /**
+ * The IPC channel's half of a ChildProcess: `connected`, `send` and `disconnect`.
+ *
+ * Extracted from `fork` so `spawn` can have it too -- a child spawned with an `'ipc'`
+ * slot has a channel, and before this it had one the caller could not reach.
+ */
+function attachChannel(child: ChildProcess, channel: number): void {
+  child.connected = true;
+  child.send = (
+    message: unknown,
+    handleArg?: unknown,
+    optionsArg?: unknown,
+    callbackArg?: unknown,
+  ): boolean => {
+    // node's argument shuffle, and its order decides which error a caller gets.
+    // `send` takes (message, handle?, options?, callback?) and any of the last three
+    // may be the callback, so node walks them in that order before validating
+    // anything. test-child-process-send-type-error drives nine spellings through this
+    // and they land on three different clauses.
+    let handle = handleArg;
+    let options = optionsArg;
+    if (typeof handleArg === "function") {
+      handle = undefined;
+      options = undefined;
+    } else if (typeof optionsArg === "function") {
+      options = undefined;
+    } else if (options !== undefined) {
+      validateObject(options, "options");
+    }
+    const callback = typeof handleArg === "function" ? handleArg
+      : typeof optionsArg === "function" ? optionsArg
+      : typeof callbackArg === "function" ? callbackArg
+      : undefined;
+    // After the shuffle: `send(callback)` is only a message of undefined once the
+    // callback has been taken out of the way.
+    if (message === undefined) throw new ERR_MISSING_ARGS("message");
+    // What can cross the channel: node serialises a string, an object, a number or a
+    // boolean and rejects the rest by name. A Symbol is the case test-child-process-fork
+    // asserts, and `JSON.stringify` would have turned it into `undefined` -- the bug
+    // the comment above that assertion in node's own test still points at.
+    if (typeof message !== "string" && typeof message !== "object"
+      && typeof message !== "number" && typeof message !== "boolean") {
+      throw new ERR_INVALID_ARG_TYPE(
+        "message", ["string", "object", "number", "boolean"], message,
+      );
+    }
+    // A sendable handle is an object -- a socket or a server. Anything else truthy is
+    // not one, and node says so rather than serialising it: `send('msg', 'meow')` is
+    // ERR_INVALID_HANDLE_TYPE, which test-child-process-send-type-error asserts.
+    const sending = handle !== undefined && handle !== null;
+    if (sending && typeof handle !== "object") throw new ERR_INVALID_HANDLE_TYPE();
+    // Once the channel is gone node reports it rather than returning false in
+    // silence: the callback gets the error if there is one, and it is emitted as an
+    // `error` if there is not. test-child-process-send-after-close reads
+    // 'Channel closed'.
+    if (!child.connected) {
+      const closed = new ERR_IPC_CHANNEL_CLOSED();
+      if (callback !== undefined) {
+        nextTick((): void => { (callback as (error: unknown) => void)(closed); });
+      } else {
+        nextTick((): void => { child.emit("error", closed); });
+      }
+      return false;
+    }
+    return nts_child_process_send(
+      channel, message, sending ? handle : undefined,
+    ) === 0;
+  };
+  child.disconnect = (): void => {
+    // node emits an **error** for a second disconnect rather than a second
+    // `disconnect` event, and that is the difference test-child-process-disconnect
+    // counts: it reads one and this emitted two.
+    if (!child.connected) {
+      child.emit("error", new ERR_IPC_DISCONNECTED());
+      return;
+    }
+    child.connected = false;
+    nts_child_process_disconnect(channel);
+    child.emit("disconnect");
+  };
+}
+
+/**
+ * `'json'` unless the caller asked for `'advanced'`.
+ *
+ * The host channel does the serialising, so this only has to name which. `validateSerialization`
+ * has already refused anything else by the time this runs.
+ */
+function serializationOf(opts: { serialization?: unknown }): string {
+  return opts.serialization === "advanced" ? "advanced" : "json";
+}
+
+/**
  * The caller's `stdio` for the binding, or null when they said nothing.
  *
  * A string becomes three of itself, the way node's `stdioStringToArray` expands it. An
@@ -988,14 +1084,17 @@ export class ChildProcess extends EventEmitter {
   disconnect?: () => void;
   connected = false;
 
-  /** Called by the binding for each complete line the channel delivered. */
-  _handleMessage(line: string): void {
-    let message: unknown;
-    try {
-      message = JSON.parse(line) as unknown;
-    } catch {
-      return;
-    }
+  /**
+   * Called by the binding for each message the channel delivered.
+   *
+   * The value crosses as a value. It used to cross as JSON text, which silently decided
+   * what a message could be: `serialization: 'advanced'` exists so a message can carry a
+   * Uint8Array, a Buffer, a Map, a BigInt, a circular object or an Error, and
+   * `JSON.stringify` turns the first five into something else and throws on the sixth.
+   * The host channel serialises it either way -- structured clone for advanced, JSON for
+   * the default -- so this layer has no business reserialising it.
+   */
+  _handleMessage(message: unknown): void {
     this.emit("message", message);
   }
 }
@@ -1050,6 +1149,14 @@ export function spawn(
     // becomes three of itself. A descriptor, `'ipc'` in any slot, or another child's
     // stream goes through as written, because the packed mode cannot say those.
     stdioSpecOf(opts.stdio),
+      serializationOf(opts),
+      // A spawned child has a channel when `stdio` names one, and then it gets the same
+      // `message` events a forked one does. Only `fork` wired this, so
+      // `spawn(file, args, { stdio: ['ipc', ...] })` had a channel the caller could not
+      // hear -- which is four of the advanced-serialization files and stdout-ipc.
+      (message: unknown): void => {
+        if (child !== null) child._handleMessage(message);
+      },
     (status: number, signal: number): void => {
       if (child !== null) child._handleExit(status, signal);
     },
@@ -1084,6 +1191,12 @@ export function spawn(
   // nothing else has fired before it.
   child.spawnfile = command;
   child.spawnargs = argv.slice();
+  // A channel exists when `stdio` named one, and then the child gets what a forked child
+  // gets. `send` lived only in `fork`, so `spawn(file, args, { stdio: ['ipc', ...] })`
+  // returned a child with a channel and no way to use it.
+  if (Array.isArray(opts.stdio) && (opts.stdio as readonly unknown[]).includes("ipc")) {
+    attachChannel(child, handle);
+  }
   const spawned = child;
   nextTick((): void => { spawned.emit("spawn"); });
 
@@ -1539,11 +1652,12 @@ export function fork(
     flattenEnv(opts.env),
     cwdPath(opts.cwd),
     forkPipes,
+    serializationOf(opts),
     (status: number, signal: number): void => {
       if (child !== null) child._handleExit(status, signal);
     },
-    (line: string): void => {
-      if (child !== null) child._handleMessage(line);
+    (message: unknown): void => {
+      if (child !== null) child._handleMessage(message);
     },
   );
 
@@ -1555,9 +1669,6 @@ export function fork(
     return failed;
   }
 
-  // The channel is the fork's numeric handle. Named, because `send`'s own second
-  // argument is also called a handle and means something else entirely.
-  const channel = handle;
   // An explicit `stdio` decides the slots; `silent` only chooses between piping and
   // inheriting when nothing was said. `fork` was ignoring the array outright, so
   // `{ stdio: ['pipe','pipe','pipe','ipc'] }` inherited and `child.stderr` was null.
@@ -1565,78 +1676,6 @@ export function fork(
   // `fork` had neither a timeout nor an abort signal: `fork(file, { signal })` ran a
   // child nothing could stop.
   armTimeoutAndAbort(child, opts as SpawnOptions);
-  child.connected = true;
-  child.send = (
-    message: unknown,
-    handleArg?: unknown,
-    optionsArg?: unknown,
-    callbackArg?: unknown,
-  ): boolean => {
-    // node's argument shuffle, and its order decides which error a caller gets.
-    // `send` takes (message, handle?, options?, callback?) and any of the last three
-    // may be the callback, so node walks them in that order before validating
-    // anything. test-child-process-send-type-error drives nine spellings through this
-    // and they land on three different clauses.
-    let handle = handleArg;
-    let options = optionsArg;
-    if (typeof handleArg === "function") {
-      handle = undefined;
-      options = undefined;
-    } else if (typeof optionsArg === "function") {
-      options = undefined;
-    } else if (options !== undefined) {
-      validateObject(options, "options");
-    }
-    const callback = typeof handleArg === "function" ? handleArg
-      : typeof optionsArg === "function" ? optionsArg
-      : typeof callbackArg === "function" ? callbackArg
-      : undefined;
-    // After the shuffle: `send(callback)` is only a message of undefined once the
-    // callback has been taken out of the way.
-    if (message === undefined) throw new ERR_MISSING_ARGS("message");
-    // What can cross the channel: node serialises a string, an object, a number or a
-    // boolean and rejects the rest by name. A Symbol is the case test-child-process-fork
-    // asserts, and `JSON.stringify` would have turned it into `undefined` -- the bug
-    // the comment above that assertion in node's own test still points at.
-    if (typeof message !== "string" && typeof message !== "object"
-      && typeof message !== "number" && typeof message !== "boolean") {
-      throw new ERR_INVALID_ARG_TYPE(
-        "message", ["string", "object", "number", "boolean"], message,
-      );
-    }
-    // A sendable handle is an object -- a socket or a server. Anything else truthy is
-    // not one, and node says so rather than serialising it: `send('msg', 'meow')` is
-    // ERR_INVALID_HANDLE_TYPE, which test-child-process-send-type-error asserts.
-    const sending = handle !== undefined && handle !== null;
-    if (sending && typeof handle !== "object") throw new ERR_INVALID_HANDLE_TYPE();
-    // Once the channel is gone node reports it rather than returning false in
-    // silence: the callback gets the error if there is one, and it is emitted as an
-    // `error` if there is not. test-child-process-send-after-close reads
-    // 'Channel closed'.
-    if (!child!.connected) {
-      const closed = new ERR_IPC_CHANNEL_CLOSED();
-      if (callback !== undefined) {
-        nextTick((): void => { (callback as (error: unknown) => void)(closed); });
-      } else {
-        nextTick((): void => { child!.emit("error", closed); });
-      }
-      return false;
-    }
-    return nts_child_process_send(
-      channel, JSON.stringify(message), sending ? handle : undefined,
-    ) === 0;
-  };
-  child.disconnect = (): void => {
-    // node emits an **error** for a second disconnect rather than a second
-    // `disconnect` event, and that is the difference test-child-process-disconnect
-    // counts: it reads one and this emitted two.
-    if (!child!.connected) {
-      child!.emit("error", new ERR_IPC_DISCONNECTED());
-      return;
-    }
-    child!.connected = false;
-    nts_child_process_disconnect(handle);
-    child!.emit("disconnect");
-  };
+  attachChannel(child, handle);
   return child;
 }
