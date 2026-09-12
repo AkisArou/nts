@@ -6683,3 +6683,101 @@ those four sites.** It is two lines in `lower.rs`, which is MainClaude's file.
 Three hypotheses are dead and the question is now a single integer at a single
 line -- which is the right thing to hand over, and better than the report that
 started this, since that one pointed at a pass and this one points at a line.
+
+## `awfy-towers` is a bounds-check row, not an inliner-budget row
+
+**I had the mechanism ranked wrong, and so did every entry above this one.**
+The row's ledger says "inlining, and three fixes priced as insufficient". The
+inliner budget is real and it is worth **1.08x**. The two `NtsRuntime.bounds`
+guards per method are worth **1.65x**, and nothing above this line had priced
+them at all -- they were treated as a fixed cost with a deliberate reason, which
+they are, and never as a term in the ratio.
+
+### What was measured
+
+Both guards at both subscripts of `Towers$popDiskFrom` are the **integral** form
+`bounds:(II)I`, on a **bare** array -- `arraylength` only assembles against a
+real array, so this is not the growable wrapper whose capacity exceeds its
+length. Read off the dex rather than inferred, each guard is exactly **5 code
+units**:
+
+    0002: array-length v0, v3                          1 unit
+    0003: invoke-static {v0, v4}, NtsRuntime.bounds     3 units
+    0006: move-result v0                               1 unit
+    0007: aget-object v0, v3, v0                       happens either way
+
+`popDiskFrom` is 51 code units; the two guards are 10 of them.
+
+Two arms, a transcription of our shape -- static methods, direct fields,
+`double movesDone`, cold block outlined -- differing **only** in whether the
+four subscripts go through `bounds`. Minima over two sittings:
+
+    ours (real nts)          AOT  40874.1      JIT  37682.6
+    transcription guarded    AOT  37849.5      JIT  37735.1
+    transcription bare       AOT  22988.7      JIT  22243.8
+
+**The JIT column is the control that makes this readable.** Ours and the guarded
+transcription are within **0.14%** under the JIT, so the transcription is a
+faithful model of what we emit -- which is the thing `aot-on-device.sh`'s own
+comment warns cannot be assumed, and here it is checked rather than assumed.
+Under AOT ours is **8.0%** worse than the same transcription, and the JIT
+agreeing while the AOT disagrees is what an inlining difference looks like.
+
+    guards           37849.5 / 22988.7  =  1.646x
+    not inlined      40874.1 / 37849.5  =  1.080x
+    product                                1.778x
+    the row, measured                      1.80x
+
+The whole gap decomposes, and the larger term is the one nobody had priced.
+
+### The hypothesis I brought to this, and what killed it
+
+I expected the arms to bracket ART's inliner threshold: guarded over it, bare
+under, the speedup being the inlining. **`oatdump` says both arms were
+inlined**, and says it in the direction that reads backwards:
+
+    arm        InlineInfo rows   max depth   distinct methods inlined
+    guarded               17         1        4
+    bare                   5         0        3
+
+The **faster** arm has **less** recorded inlining. `InlineInfo` rows describe
+frames at points where inlined code can throw, so the guarded arm has more of
+them *because a guard is a throw site that got inlined*. Reading that count as
+"how much was inlined" would have inverted the conclusion -- and the extra
+method in the guarded arm is the guard itself, not a caller that failed to
+inline. My transcription's `popDiskFrom` is 27 code units, not our 51, because
+javac does not emit our prologue stores; so the arms never straddled the
+threshold and could not have tested what I built them for.
+
+**They answered a better question than the one I asked**, which is the fourth
+time that has happened here.
+
+### What this makes available
+
+The two fixes already priced *separately* and refused are **jointly
+sufficient**, which neither pricing could see:
+
+    popDiskFrom          51 u
+      outline cold block 34 u    measured earlier; alone, does not cross
+      drop both guards   24 u    measured today; alone, leaves 41 u
+    the control arm that ART does inline, with 5 frames        25 u
+
+Together they land at 24 units, under the arm that inlines, and take both terms
+of the product. `1.80 / (1.646 x 1.080)` is **1.01x** -- at the bar rather than
+0.79 over it. Each was refused on its own and the pair was never priced, because
+a fix that does not cross a threshold reads as worthless rather than as half of
+one.
+
+**Not built, and one thing has to be answered first.** The guard is buying the
+*message*, not the safety: on a bare array with an integral index, ART's own
+mandatory check tests exactly `0 <= i < length`, and the fractional case the
+helper also exists for (`xs[0.5]` is `undefined`, not `xs[0]` after a `d2i`)
+cannot arise from an `int`. So the question is whether the `nts:`-prefixed
+refusal is part of what `checked: true` promises or only that the program stops
+-- which is the middle end's to answer, and is asked rather than guessed.
+
+The cost if it must be translated at a boundary is real and worth stating now:
+an `ArrayIndexOutOfBoundsException` from a `checked: false` access is currently
+a **defect**, loudly, and a blanket catch would reclassify compiler bugs as
+refusals. That is the lane's one bug-finding advantage over the other two, and
+it is not worth 0.65 of a ratio.
