@@ -6393,10 +6393,33 @@ variable per arm:
     captures (number)=>number and awaits it              1
     captures (number)=>Promise<void> and awaits it       1
 
-So there are **two independent triggers**, not one pair of features: a captured
-signature whose return is a `Promise`, *or* an `await` inside the arrow. Either
-suffices; a captured `number`, or a captured plain function merely called, does
-neither.
+~~So there are two independent triggers: a captured signature whose return is a
+`Promise`, or an `await` inside the arrow.~~ **Both were wrong, and the third
+reduction is the one that holds.** MainClaude instrumented it; the cause is
+**arity alone**:
+
+    zero-argument callback literal, async     NTS4001 x 1
+    one-argument  callback literal, async     0            <- the control
+    zero-argument callback literal, **sync**  NTS4001 x 1
+
+`async` is not involved. `signature_key` requires parameter lists to be equal,
+and **TypeScript permits a callback to ignore trailing parameters** -- `() => 1`
+is assignable to `(c: number) => number`, which every JavaScript programmer
+writes. The closure matches no layout, gets no base, and this backend reports
+the missing base.
+
+**So "a captured signature returning a Promise" was a correlate**: a
+Promise-returning callback is what made me write `async () => {}`, and the zero
+arguments were the cause. And **the `await` trigger was a different bug
+entirely** -- `await cb(c)` where `cb` returns `number` is
+`NTS1001 an await of something that is not a promise`, a deliberate refusal
+because the tick is observable. That refusal deletes `Closure0#call`, leaving a
+layout with no method, and this backend reports the consequence four passes
+later.
+
+**My probe counted only lines containing `declined`, and NTS1001 does not say
+it.** The cause was in the output I filtered away, on the line above the
+symptom.
 
 That correction exists because a reconstruction from prose failed. The
 description was mine, it was published, and it was not precise enough to rebuild
@@ -6512,3 +6535,35 @@ profile-free AOT compiler it is a structural advantage -- the same one
 reference's dispatches are monomorphic and cheap. Two rows, one mechanism,
 opposite magnitudes: the advantage is real and its size depends entirely on what
 the reference does with the calls it keeps.
+
+### A minimal pair isolates a token, not a mechanism
+
+The closure reduction was corrected three times and each correction removed a
+feature the previous account had called essential:
+
+    "an async arrow that captures a value"      -> what is captured matters
+    "a captured Promise-returning signature,
+     or an await inside"                        -> neither; arity alone
+    arity                                       -> holds
+
+**The method that produced all three was the same and it is the one this file
+had just finished recommending**: reduce from the failing case, vary one thing.
+It is still right, and the correction to it is that a one-token difference
+proves the token matters and says **nothing about which pass it matters in**.
+
+`p3` and `p4` differ by `await`. The `await` gates a *frontend refusal* --
+`an await of something that is not a promise` -- whose consequence surfaces as
+this backend's relation message four passes later. So a perfectly executed
+minimal pair reported "await is a trigger for the relation bug", and the await
+was a trigger for a different bug that shares a symptom.
+
+Two things follow. **A shared message defeats a minimal pair**, because the pair
+can only compare outcomes and the outcome is the same sentence. And **the filter
+is part of the instrument**: mine counted lines containing `declined`, the
+frontend diagnostic does not contain it, so the cause was printed and discarded
+on the line above the symptom -- the same failure as `2>/dev/null` hiding
+`binary file matches`.
+
+The generalisation this file keeps arriving at from new directions: when one
+message can mean several things, every instrument built on that message
+inherits the ambiguity, including a perfect reduction.
