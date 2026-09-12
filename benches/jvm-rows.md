@@ -5784,3 +5784,49 @@ must not be read as this compiler being five times faster**. It is the fourth
 ratio today whose movement belongs to its denominator, and the first one that
 reproduces -- which is what makes stating the absolutes beside it necessary
 rather than merely careful.
+
+### `awfy-list`: `dex2oat` did not bail, it could not devirtualise — and that is structural
+
+MainClaude's question was the right one: is the reference's AOT build doing
+something structurally different, or is `dex2oat` bailing and leaving the method
+interpreted? If it bailed, the AOT column for that row is not measuring compiled
+Java and wants a footnote rather than a number.
+
+**It did not bail.** `List.tail` is compiled, 363 bytes of machine code. What it
+compiled to is the answer:
+
+    List.tail, AOT                 ours        reference
+    machine code             13,960 bytes      363 bytes
+    inlined frames                    918              3
+    virtual dispatches                  0              5
+    recursive self-calls               32              4
+
+**Ours has no virtual dispatch to resolve, so `dex2oat` inlined 918 frames.**
+The reference reaches every field through an accessor -- `getNext()`,
+`getVal()`, Are We Fast Yet being a port from SOM, where that is the house
+style -- and a profile-free ahead-of-time compiler cannot devirtualise those.
+It inlines three frames and pays five `call [rdi + 32]` per invocation, through
+a **triple**-recursive workload, which is where 3.8x comes from.
+
+Under the JIT the reference's profile devirtualises them and the row reads
+0.75x. Under AOT there is no profile, and this is the same mechanism
+`awfy-nbody` showed from the other side: there, ART's JIT inlined the
+reference's 33 accessor calls to nothing and we were merely level.
+
+**So the 0.20x is a fact about this lane, and a narrower one than "five times
+faster".** Precisely: *our output does not depend on profile-guided
+devirtualisation and hand-written Java in this style does*. On Android, where
+`dex2oat` compiles at install without a profile, that is a structural advantage
+rather than a lucky row -- and it is the first thing measured here that argues
+for the lane on Android specifically rather than for the codegen generally.
+
+The caveat is the reference's style, and it is a real one: this says nothing
+about Java written with direct field access. It says something about the Java
+that exists in this suite, which is the Java the `Java` column is.
+
+**And our 13,960-byte method is worth noticing rather than celebrating.** That
+is 38x the reference's, from a compiler unrolling recursion 918 frames deep
+because nothing stopped it. It is faster here and it is the kind of number that
+bounds a method somewhere else -- `awfy-towers` lost its inlining at 34 code
+units of *dex*, and a 13,960-byte AOT method is the same compiler with the
+brakes off.
