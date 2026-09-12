@@ -871,9 +871,22 @@ function attachChannel(child: ChildProcess, channel: number): void {
       }
       return false;
     }
-    return nts_child_process_send(
+    const written = nts_child_process_send(
       channel, message, sending ? handle : undefined,
     ) === 0;
+    // **The callback is node's acknowledgement that the message went**, and it was being
+    // located by the argument shuffle and then dropped. `send('x', handle, cb)` is a
+    // three-argument form whose whole point is the callback, and
+    // test-child-process-send-returns-boolean drives five of them expecting each to
+    // settle. On a next tick because node's is asynchronous even when the write was not:
+    // a caller that gets its callback synchronously would see it before its own `send`
+    // returned.
+    if (callback !== undefined) {
+      nextTick((): void => {
+        (callback as (error: Error | null) => void)(written ? null : new ERR_IPC_CHANNEL_CLOSED());
+      });
+    }
+    return written;
   };
   child.disconnect = (): void => {
     // node emits an **error** for a second disconnect rather than a second

@@ -8,7 +8,7 @@ What is not deliberate is a failure nobody wrote down, so they are all below.
 
 ## Where it is
 
-    interpreted   120 file(s): 84 passed, 26 failed, 9 skipped, 1 not applicable
+    interpreted   120 file(s): 101 passed, 9 failed, 9 skipped, 1 not applicable
     compiled      120 file(s):  0 passed, 110 failed, 9 skipped, 1 not applicable
 
 114 by `test-pattern`, 4 claimed in `extra-tests`, 2 local fixtures. 1 passed when the
@@ -18,43 +18,56 @@ Measured with `run.mjs --module child_process`, not added up: an earlier batch r
 where ten individual passes had predicted 81, because one of them came with a
 regression.
 
-## What is left: 26 files under seven named causes
+## What is left: 9 files, each with a cause
 
-The IPC channel itself **works** -- fork, `send` each way, the child's `process.send`,
-`disconnect`, exit 0, held by `local/ipc-roundtrip-local.js`. So none of these is "fork
-is broken"; each is a feature on top of a channel that carries messages.
+The IPC channel works -- fork, `send` each way, the child's `process.send`, `disconnect`,
+exit 0, held by `local/ipc-roundtrip-local.js`. Handle passing works: a socket crosses to a
+worker. What remains is nine files, and the causes are separated below into **diagnosed**
+-- a mechanism was found and checked -- and **observed**, where only the failing assertion
+is known. Calling the second kind a cause would be the thing this directory keeps warning
+about.
 
-     8  handle passing over the channel     recv-handle, send-returns-boolean, fork-net,
-                                            fork-dgram, fork-getconnections,
-                                            cluster-net-send and two more. `send`'s
-                                            second argument is currently **rejected**
-                                            with ERR_INVALID_HANDLE_TYPE rather than
-                                            ignored, which is what node raises for a
-                                            thing that cannot be sent and is true of
-                                            all of them here.
-     7  channel lifecycle                  disconnect, send-after-close, send-keep-open,
-                                            internal, fork-ref2, fork-abort-signal,
-                                            fork-timeout-kill-signal
-     5  a channel on spawn, not only fork  advanced-serialization x4, stdout-ipc.
-                                            `send` is assigned in `fork`'s body, so a
-                                            child from `spawn(.., { stdio: [.., 'ipc'] })`
-                                            has none, and the spawn binding makes no
-                                            channel. `advanced` serialization is also
-                                            unimplemented -- accepting the name and
-                                            using JSON would be the wrong half to get
-                                            right, so `validateSerialization` accepts it
-                                            and nothing else pretends.
-     3  a stream as a stdio entry          pipe-dataflow, stdio-merge-stdouts-into-cat,
-                                            stdio-reuse-readable-stdio. The binding
-                                            carries stdio as a packed 6-bit mode, so a
-                                            descriptor cannot cross it.
-     1  extra stdio slots beyond three     fork-stdio wants `child.stdio[4]`
-     1  ChildProcess.prototype.spawn       constructor
-     1  a file URL for modulePath          fork-url.mjs
+### Diagnosed
 
-Four of the seven are the same shape: the binding's stdio is three slots and one flag
-where node's is an array. That is one change, not four, and it is the largest single
-item left in this module.
+    advanced-serialization.js             a Buffer comes back as a Uint8Array
+    advanced-serialization-host-objects.js  the same
+
+  `serialization: 'advanced'` round-trips a value through v8's structured clone. The value
+  sent is **this profile's** Buffer, which is not node's, so v8 records it as a plain
+  Uint8Array and node's deserialiser -- which re-wraps only its own Buffers -- hands back a
+  Uint8Array. Measured both ways: node round-trips its own Buffer as a `Buffer`
+  (`isBuffer` true); ours returns `ctor=Uint8Array, isBuffer=false`, while `Map` and
+  `bigint` in the same message survive intact. So the channel is fine and the realm is not.
+  Fixing it means converting our Buffers to the host's on the way out and back again on the
+  way in, a deep walk of arbitrary structured data at the boundary, which is a decision
+  rather than an oversight. Fourth instance of this family after `atob`, `URL` and the
+  child stdio streams.
+
+    fork-stdio.js                         a fourth stdio slot
+    pipe-dataflow.js                      the parent must not read a stream it hands on
+    stdio-reuse-readable-stdio.js         the same stream handed to a second child
+    constructor.js                        `ChildProcess.prototype.spawn`
+
+  `fork-stdio` wants `child.stdio[4]` -- a slot beyond the three plus the channel.
+  `pipe-dataflow` and `stdio-reuse-readable-stdio` assert that the parent never reads a
+  stream it handed to another child, and
+  `ChildReadable` reads in its constructor, which `test-child-process-kill` requires so a
+  killed child's stdout still reaches `end`; those two pull opposite ways and the answer is
+  a decision about who owns the read, not a line of code. `constructor` wants node's
+  internal spawn method on a bare `new ChildProcess()`, which means publishing the internal
+  spawn surface.
+
+### Observed, not diagnosed
+
+    send-returns-boolean.js               the fourth of five `send`s never settles
+    send-keep-open.js                     the child's exit assertion never runs
+    test-cluster-net-send.js  (claimed)   a net handle over the channel, with cluster's
+                                          worker half in play
+
+  Each has a located assertion and no found mechanism. `send`'s callback *was* being
+  dropped -- located by the argument shuffle and never invoked -- and fixing that moved
+  neither, so whatever these are, it is not that. Written here as observations so the next
+  person does not inherit a guess dressed as a cause.
 
 ## The three I called unfixable, which pass here
 
