@@ -5,7 +5,7 @@ below is worth less than the paragraph after it.
 
 ## Where it is
 
-    interpreted   86 file(s): 33 passed, 51 failed, 2 skipped, 0 not applicable
+    interpreted   86 file(s): 41 passed, 43 failed, 2 skipped, 0 not applicable
 
 84 by `test-pattern`, 1 claimed in `extra-tests`, 2 local fixtures. The claimed one --
 `test-listen-fd-cluster.js` -- fails, and claiming a failing test is the honest direction:
@@ -72,19 +72,28 @@ before it was understood.
 
 ## What is absent, and what it costs
 
-**Handle distribution.** `round_robin_handle` and `shared_handle` -- a worker calling
-`listen()` asks the primary for a server handle, and the primary either shares the
-descriptor or accepts connections itself and passes sockets over the channel. That is the
-half of `cluster` that makes it worth having, and with it go `listening`, most of the 57
-failures, and any test that binds a port.
+**The shared-descriptor path.** `shared_handle` -- what node uses when
+`schedulingPolicy` is `SCHED_NONE`, and for `udp4`/`udp6` always, because a datagram
+address has no connections to distribute. A worker asking for one gets `ENOTSUP` on the
+acknowledgement, so it fails at once rather than waiting.
 
-An unimplemented act is **answered** rather than ignored, and that was not cosmetic: an
-unanswered `queryServer` left `test-cluster-bind-twice` running for eighteen minutes
-before its per-file timeout, because node's worker waits for the acknowledgement. Now any
-act this module does not implement gets `{ ack: seq, errno: 'ENOTSUP' }`, which node's
-worker turns into an error at once.
+**A descriptor passed in as `fd`.** `queryServer` with `fd >= 0` is answered the same way.
 
-**A worker's own channel comes from the host.** `node:process` in this profile has no
-`send`, `connected` or `disconnect` -- nothing needed them until a module could be a
-forked child of itself -- so `nts_cluster_self_*` reach the host's three, named in
-`bindings.node.mjs` rather than hidden. They go when `process` grows a channel.
+Round-robin distribution **is** here: the primary binds the address once, accepts, and
+hands each connection to the next free worker, queueing when none is free and putting a
+connection back if a worker refuses it. `listening` reaches the worker and cluster.
+
+### Two things that had to be right for it to work at all
+
+**A listener outlives its last worker unless something releases it.** A worker that leaves
+by exiting rather than by closing its server never sends `close`, so the listening socket
+stays open, the event loop stays alive, and the process hangs *after the test has already
+passed*. That reads as "an exit handler failed" and not as a leak, and it cost a run at
+exit code 124 before it was understood. A departing worker now releases every address it
+held.
+
+**A negative port means a path, not a host.** node's own RoundRobinHandle branches the
+same way. Listening on port -1 broke `test-cluster-listen-pipe-readable-writable`, which
+had been *passing* on the ENOTSUP that used to come back instead -- a pass that improved
+into a failure, which is the shape worth watching for when a stub becomes an
+implementation.

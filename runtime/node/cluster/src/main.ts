@@ -29,6 +29,8 @@
 
 import { EventEmitter } from "../../events/src/main.ts";
 import { fork as forkChild } from "../../child_process/src/main.ts";
+import { createServer } from "../../net/src/main.ts";
+import type { Server, Socket } from "../../net/src/main.ts";
 import type { ChildProcess } from "../../child_process/src/main.ts";
 
 declare function nts_process_env(name: string): string;
@@ -167,6 +169,8 @@ class Cluster extends EventEmitter {
   worker: Worker | undefined = undefined;
 
   #nextId = 0;
+  #seq = 0;
+  readonly #distributions = new Map<string, Distribution>();
 
   setupPrimary(options?: ClusterSettings): void {
     const merged: ClusterSettings = { ...this.settings, ...(options ?? {}) };
@@ -205,23 +209,7 @@ class Cluster extends EventEmitter {
     // The internal channel, not the ordinary one: everything below travels with a
     // `NODE_CLUSTER` command and must not reach a program's `message` listener.
     child.on("internalMessage", (message: unknown): void => {
-      const act = actOf(message);
-      if (act === "online") {
-        worker.state = "online";
-        worker.emit("online");
-        this.emit("online", worker);
-        return;
-      }
-      // **Everything else is answered, not ignored.** A worker asking for a server
-      // handle blocks until the primary replies, so silence is a hang rather than a
-      // missing feature: one unanswered `queryServer` held a test for eighteen minutes
-      // before its per-file timeout. node's worker reads `errno` off the acknowledgement
-      // and turns it into an error, so an act this profile does not implement gets
-      // ENOTSUP and the worker finds out at once.
-      const seq = seqOf(message);
-      if (seq !== undefined) {
-        worker.send({ cmd: "NODE_CLUSTER", ack: seq, errno: "ENOTSUP" });
-      }
+      this.#onInternal(worker, message);
     });
     // The ordinary channel, re-emitted on the worker and on cluster itself. node does
     // both, and a program that only ever holds the `Worker` would otherwise have no way
@@ -232,6 +220,13 @@ class Cluster extends EventEmitter {
     });
     child.on("exit", (code: number | null, signal: string | null): void => {
       worker.state = "dead";
+      // **A listener outlives its last worker unless this runs.** A worker that leaves by
+      // exiting rather than by closing its server never sends `close`, so the primary's
+      // listening socket stays open, the event loop stays alive, and the process hangs
+      // after the test has already passed -- which reads as "an exit handler failed" and
+      // not as a leak. node removes a departing worker from every handle for the same
+      // reason.
+      this.#releaseWorker(worker);
       delete this.workers[`${id}`];
       worker.emit("exit", code, signal);
       this.emit("exit", worker, code, signal);
@@ -247,6 +242,215 @@ class Cluster extends EventEmitter {
 
     this.emit("fork", worker);
     return worker;
+  }
+
+  /**
+   * One internal message from one worker.
+   *
+   * An acknowledgement is dispatched first, because a worker's reply to `newconn` carries
+   * `ack` and no `act` -- reading `act` first would drop it. Then the acts this module
+   * implements. Anything else is **answered** with ENOTSUP rather than ignored: node's
+   * worker waits for the acknowledgement, so silence is a hang, and one unanswered
+   * `queryServer` held a file for eighteen minutes before its per-file timeout.
+   */
+  #onInternal(worker: Worker, message: unknown): void {
+    const ack = ackOf(message);
+    if (ack !== undefined) {
+      for (const distribution of this.#distributions.values()) {
+        const pending = distribution.waiting.get(ack);
+        if (pending === undefined) continue;
+        distribution.waiting.delete(ack);
+        if (acceptedOf(message)) {
+          // The worker took it. Nothing to do but offer the next one.
+        } else {
+          // It is shutting down: put the connection back for somebody else.
+          const socket = distribution.handedTo.get(ack);
+          if (socket !== undefined) distribution.pending.unshift(socket);
+        }
+        distribution.handedTo.delete(ack);
+        pending();
+        return;
+      }
+      return;
+    }
+
+    const act = actOf(message);
+    if (act === "online") {
+      worker.state = "online";
+      worker.emit("online");
+      this.emit("online", worker);
+      return;
+    }
+    if (act === "queryServer") {
+      this.#queryServer(worker, message);
+      return;
+    }
+    if (act === "listening") {
+      worker.state = "listening";
+      const address = addressOf(message);
+      worker.emit("listening", address);
+      this.emit("listening", worker, address);
+      return;
+    }
+    if (act === "close") {
+      this.#closeServer(worker, message);
+      return;
+    }
+    if (act === "exitedAfterDisconnect") {
+      worker.exitedAfterDisconnect = true;
+      const seq = seqOf(message);
+      if (seq !== undefined) worker.send({ cmd: "NODE_CLUSTER", ack: seq });
+      return;
+    }
+    const seq = seqOf(message);
+    if (seq !== undefined) {
+      worker.send({ cmd: "NODE_CLUSTER", ack: seq, errno: "ENOTSUP" });
+    }
+  }
+
+  /**
+   * A worker wants to serve an address, and the primary binds it once.
+   *
+   * The key is node's: address, port, addressType and fd, with the worker's index added
+   * when the port is 0 -- because port 0 means "any port" and two workers asking for it
+   * want two different listeners rather than a share of one.
+   */
+  #queryServer(worker: Worker, message: unknown): void {
+    if (worker.exitedAfterDisconnect) return;
+    const seq = seqOf(message);
+    const asked = message as {
+      address?: unknown; port?: unknown; addressType?: unknown; fd?: unknown; index?: unknown;
+    };
+    const address = typeof asked.address === "string" ? asked.address : "";
+    const port = typeof asked.port === "number" ? asked.port : -1;
+    const addressType = asked.addressType;
+    const fd = typeof asked.fd === "number" ? asked.fd : -1;
+    const key = `${address}:${port}:${String(addressType)}:${fd}`
+      + (port === 0 ? `:${String(asked.index)}` : "");
+
+    // A datagram address is not shared out: there are no connections to distribute, which
+    // is node's own reason for exempting udp4 and udp6 from round robin. This profile does
+    // not implement the shared-descriptor path either, so it says so.
+    if (addressType === "udp4" || addressType === "udp6" || fd >= 0) {
+      if (seq !== undefined) {
+        worker.send({ cmd: "NODE_CLUSTER", ack: seq, key, errno: "ENOTSUP" });
+      }
+      return;
+    }
+
+    let distribution = this.#distributions.get(key);
+    if (distribution === undefined) {
+      distribution = new Distribution(key);
+      this.#distributions.set(key, distribution);
+      const server = createServer((socket: Socket): void => {
+        distribution!.pending.push(socket);
+        this.#handoffNext(distribution!);
+      });
+      distribution.server = server;
+      server.on("error", (error: Error & { code?: string }): void => {
+        const errno = error.code ?? "EADDRINUSE";
+        const waiting = distribution!.bound;
+        distribution!.bound = [];
+        this.#distributions.delete(key);
+        for (const settle of waiting) settle(errno);
+      });
+      // A negative port means the address is a **path**, not a host: node's own
+      // RoundRobinHandle branches the same way, `listen({ path })` against
+      // `listen({ port, host })`. Listening on port -1 is what broke
+      // test-cluster-listen-pipe-readable-writable, which had been passing on the ENOTSUP
+      // that used to come back instead.
+      const where = port < 0
+        ? { path: address }
+        : { port, host: address === "" ? undefined : address };
+      server.listen(where, (): void => {
+        distribution!.listening = true;
+        const bound = server.address();
+        if (bound !== null && typeof bound === "object") {
+          distribution!.sockname = bound as { address: string; family: string; port: number };
+        }
+        const waiting = distribution!.bound;
+        distribution!.bound = [];
+        for (const settle of waiting) settle(undefined);
+      });
+    }
+
+    const share = distribution;
+    share.all.set(worker.id, worker);
+    const reply = (errno: string | undefined): void => {
+      if (seq === undefined) return;
+      if (errno !== undefined) {
+        worker.send({ cmd: "NODE_CLUSTER", ack: seq, key, errno });
+        return;
+      }
+      worker.send({ cmd: "NODE_CLUSTER", ack: seq, key, sockname: share.sockname });
+      // In case connections arrived while it was still binding.
+      this.#handoff(share, worker);
+    };
+    if (share.listening) reply(undefined);
+    else share.bound.push(reply);
+  }
+
+  /** Offer the oldest pending connection to the next free worker, if both exist. */
+  #handoffNext(share: Distribution): void {
+    const worker = share.free.shift();
+    if (worker === undefined) return;
+    this.#handoff(share, worker);
+  }
+
+  /**
+   * Hand one connection to one worker, or park the worker as free.
+   *
+   * The socket is remembered against the sequence number so a refusal can put it back:
+   * node does the same, because a worker shutting down must not take the connection with
+   * it.
+   */
+  #handoff(share: Distribution, worker: Worker): void {
+    if (!share.all.has(worker.id)) return;
+    const socket = share.pending.shift();
+    if (socket === undefined) {
+      share.free.push(worker);
+      return;
+    }
+    this.#seq += 1;
+    const seq = this.#seq;
+    share.handedTo.set(seq, socket);
+    share.waiting.set(seq, (): void => {
+      this.#handoff(share, worker);
+    });
+    worker.send({ cmd: "NODE_CLUSTER", act: "newconn", key: share.key, seq }, socket);
+  }
+
+  /** Drop a departed worker from every address, closing any listener left with none. */
+  #releaseWorker(worker: Worker): void {
+    for (const [key, share] of this.#distributions) {
+      if (!share.all.delete(worker.id)) continue;
+      share.free = share.free.filter((candidate) => candidate.id !== worker.id);
+      if (share.all.size === 0) {
+        // Anything still queued has nowhere to go.
+        for (const socket of share.pending) socket.destroy();
+        share.pending = [];
+        share.server?.close();
+        this.#distributions.delete(key);
+      }
+    }
+  }
+
+  /** A worker is done with an address; the listener closes when the last one leaves. */
+  #closeServer(worker: Worker, message: unknown): void {
+    const key = (message as { key?: unknown }).key;
+    const seq = seqOf(message);
+    if (typeof key === "string") {
+      const share = this.#distributions.get(key);
+      if (share !== undefined) {
+        share.all.delete(worker.id);
+        share.free = share.free.filter((candidate) => candidate.id !== worker.id);
+        if (share.all.size === 0) {
+          share.server?.close();
+          this.#distributions.delete(key);
+        }
+      }
+    }
+    if (seq !== undefined) worker.send({ cmd: "NODE_CLUSTER", ack: seq });
   }
 
   /** Ask every worker to leave, and call back when the last one has. */
@@ -297,11 +501,71 @@ function inheritedEnvironment(): Record<string, string> {
   return out;
 }
 
+/**
+ * One listening address, shared out to the workers that asked for it.
+ *
+ * This is node's `RoundRobinHandle` in the shape this profile can express. node takes the
+ * server's internal handle and installs its own `onconnection`, which reaches past the
+ * public surface; here the primary simply *accepts* the connection and forwards the
+ * socket, which is the same division of labour -- the primary owns the listener, the
+ * workers own the connections -- reached through `net.createServer`.
+ *
+ * A connection is never dropped for want of a worker: it waits in `pending` until one is
+ * free, which is what `handles` is for in node's version.
+ */
+class Distribution {
+  readonly key: string;
+  server: Server | null = null;
+  sockname: { address: string; family: string; port: number } | null = null;
+  listening = false;
+  /** Every worker sharing this address, by id. */
+  readonly all = new Map<number, Worker>();
+  /** Those waiting for a connection, oldest first. */
+  free: Worker[] = [];
+  /** Accepted and not yet handed to anyone. */
+  pending: Socket[] = [];
+  /** Replies owed by workers, by the sequence number they must quote back. */
+  readonly waiting = new Map<number, () => void>();
+  /** Callbacks to run once the address is bound, or its error reported. */
+  bound: ((errno: string | undefined) => void)[] = [];
+  /** The connection handed out under each sequence number, so a refusal can undo it. */
+  readonly handedTo = new Map<number, Socket>();
+
+  constructor(key: string) {
+    this.key = key;
+  }
+}
+
 /** The `seq` an acknowledgement has to quote back, or undefined if there is none. */
 function seqOf(message: unknown): number | undefined {
   if (message === null || typeof message !== "object") return undefined;
   const seq = (message as { seq?: unknown }).seq;
   return typeof seq === "number" ? seq : undefined;
+}
+
+/** The sequence number an acknowledgement is quoting, if this message is one. */
+function ackOf(message: unknown): number | undefined {
+  if (message === null || typeof message !== "object") return undefined;
+  const ack = (message as { ack?: unknown }).ack;
+  return typeof ack === "number" ? ack : undefined;
+}
+
+/** Whether a worker's reply took the connection. */
+function acceptedOf(message: unknown): boolean {
+  if (message === null || typeof message !== "object") return false;
+  return (message as { accepted?: unknown }).accepted === true;
+}
+
+/** The address a worker reports itself listening on. */
+function addressOf(message: unknown): unknown {
+  if (message === null || typeof message !== "object") return undefined;
+  const shaped = message as { address?: unknown; port?: unknown; addressType?: unknown; fd?: unknown };
+  return {
+    address: shaped.address,
+    port: shaped.port,
+    addressType: shaped.addressType,
+    fd: shaped.fd,
+  };
 }
 
 /** The `act` of an internal cluster message, or undefined for anything else. */
