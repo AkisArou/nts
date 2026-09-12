@@ -6501,6 +6501,43 @@ fn representation_of(
             }
         }
 
+        // `TypeKind::Intersection` falls here, and **that is a decision** rather
+        // than an omission.
+        //
+        // It is tempting and it is wrong, measured on 2026-09-12. The rule that
+        // suggests itself -- take whichever member has a concrete
+        // representation, since `object` and `unknown` constrain nothing --
+        // cleared 37 of 39 intersection refusals in `util` and `stream`, which
+        // read exactly like progress.
+        //
+        // It answers incorrectly. Every one of those sites is the same shape,
+        // and it is the shape `in` produces:
+        //
+        // ```ts
+        // if (typeof v === "object" && "href" in v && typeof v.href === "string")
+        // ```
+        //
+        // `"href" in v` narrows to `object & { href: unknown }`, and the
+        // concrete member is a **synthetic record the checker made from the key
+        // name**. Its layout puts `href` at index zero. The value is any object
+        // that has an `href` at all, at whatever offset its own class put it --
+        // so the read is at a fabricated offset. A class with two fields ahead
+        // of `href` disagreed with node on **29 of 29 cases**, having refused
+        // honestly a moment earlier.
+        //
+        // The general statement is one this compiler has already paid for
+        // elsewhere: **`in` answers whether a property exists, not where it
+        // is.** That is why presence needed a bit in the header rather than a
+        // layout lookup, and it is the same sentence one level up.
+        //
+        // So a correct version needs the narrowing to establish a *layout*, not
+        // a property. `v instanceof C` does that and already lowers. A type
+        // predicate returning `v is C` for a declared class does too. What
+        // cannot is a structural refinement over a receiver whose class is
+        // unknown, which is what the corpus's 37 are.
+        //
+        // Left with no arm would read as an oversight; this is the arm.
+        //
         // `any` and `unknown` fall here and are refused, which is right for one
         // of them and wrong for the other.
         //
