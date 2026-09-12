@@ -83,6 +83,19 @@ declare function nts_child_process_spawn(
   detached: number,
   uid: number,
   gid: number,
+  /**
+   * The caller's `stdio` as it was written, or null when nothing was said.
+   *
+   * `stdioMode` is three slots of two bits, which is enough to decide *which streams
+   * this module exposes* and not enough to describe what node accepts: `'ipc'` in an
+   * arbitrary slot, a file descriptor, another child's stream. Those go through here
+   * instead, and the host's own `spawn` resolves them.
+   *
+   * An array that may hold objects **has no representation in the compiled runtime**,
+   * so that lane declines this binding. It passes 0 of 110 files in this module, so
+   * the trade is nothing against nine.
+   */
+  stdioSpec: readonly unknown[] | null,
   onExit: (status: number, signal: number) => void,
   onError: (code: number) => void,
 ): number;
@@ -156,8 +169,22 @@ const SIGNAL_NUMBERS: Record<string, number> = {
  * arrive and there is nothing to pull.
  */
 class ChildReadable extends Readable {
+  /**
+   * Which child and which slot this stream is, so a *later* `spawn` can be handed it
+   * as a stdio entry.
+   *
+   * `stdio: [cat.stdout, 'pipe', 'pipe']` asks for one child's output to be another's
+   * input, and node resolves that by taking the stream's descriptor. Ours has no
+   * descriptor to give -- the binding owns the pipe -- so the pair travels instead and
+   * the stand-in looks up the host stream behind it. Three tests ask for exactly this.
+   */
+  readonly ntsChildHandle: number;
+  readonly ntsChildSlot: number;
+
   constructor(handle: number, which: number, onEof: () => void) {
     super();
+    this.ntsChildHandle = handle;
+    this.ntsChildSlot = which;
     nts_child_process_read_start(
       handle,
       which,
@@ -190,6 +217,10 @@ class ChildReadable extends Readable {
 
 /** A child's stdin. */
 class ChildWritable extends Writable {
+  /** As `ChildReadable`: slot 0, so another child can be given this as its input. */
+  readonly ntsChildHandle: number;
+  readonly ntsChildSlot = 0;
+
   #handle: number;
 
   /**
@@ -204,6 +235,7 @@ class ChildWritable extends Writable {
 
   constructor(handle: number) {
     super();
+    this.ntsChildHandle = handle;
     this.#handle = handle;
   }
 
@@ -769,6 +801,22 @@ export interface SpawnOptions extends SpawnSyncOptions {
   stdio?: string | readonly string[] | undefined;
 }
 
+/**
+ * The caller's `stdio` for the binding, or null when they said nothing.
+ *
+ * A string becomes three of itself, the way node's `stdioStringToArray` expands it. An
+ * array passes through untouched: `stdioMode` below reduces it to what *this module* can
+ * expose, and this keeps what the host can act on -- `'ipc'` in any slot, a descriptor,
+ * another child's stream.
+ */
+function stdioSpecOf(
+  stdio: string | readonly string[] | undefined,
+): readonly unknown[] | null {
+  if (stdio === undefined) return null;
+  if (typeof stdio === "string") return [stdio, stdio, stdio];
+  return stdio;
+}
+
 /** `'pipe'` is 0, `'inherit'` 1, `'ignore'` 2 -- what every other spelling reduces to. */
 /**
  * `serialization` is one of three things or it is an error.
@@ -998,6 +1046,10 @@ export function spawn(
     // as the caller instead of failing EPERM.
     typeof opts.uid === "number" ? opts.uid : -1,
     typeof opts.gid === "number" ? opts.gid : -1,
+    // The caller's own `stdio`, normalised only where node normalises it: a string
+    // becomes three of itself. A descriptor, `'ipc'` in any slot, or another child's
+    // stream goes through as written, because the packed mode cannot say those.
+    stdioSpecOf(opts.stdio),
     (status: number, signal: number): void => {
       if (child !== null) child._handleExit(status, signal);
     },

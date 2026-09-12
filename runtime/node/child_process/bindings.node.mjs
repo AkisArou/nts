@@ -107,18 +107,42 @@ import { constants as hostOsConstants } from "node:os";
 // publishes, and reported every other signal as 0.
 const hostSignalNumbers = hostOsConstants.signals;
 
+/**
+ * A stdio entry the host can act on.
+ *
+ * `stdio: [cat.stdout, 'pipe', 'pipe']` hands one child's stream to another child, and
+ * the host resolves that from the stream's descriptor. The module's own stream has no
+ * descriptor -- the binding owns the pipe -- so it carries the child and slot it belongs
+ * to and this swaps in the host stream standing behind it. Everything else passes
+ * through: a name, a number, a host stream the test made itself.
+ */
+function hostStream(entry) {
+  if (entry === null || typeof entry !== "object") return entry;
+  if (typeof entry.ntsChildHandle !== "number") return entry;
+  const owner = live.get(entry.ntsChildHandle);
+  if (owner === undefined) return entry;
+  const slot = entry.ntsChildSlot;
+  return (slot === 0 ? owner.child.stdin : slot === 1 ? owner.child.stdout : owner.child.stderr)
+    ?? entry;
+}
+
 const live = new Map();
 let nextHandle = 0;
 
 const MODE = (bits, slot) => (bits >> (slot * 2)) & 3;
 const NAMES = ["pipe", "inherit", "ignore"];
 
-globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached, uid, gid, onExit) => {
+globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached, uid, gid, stdioSpec, onExit) => {
   const [argv0, ...rest] = args;
   const options = {
     argv0,
     detached: detached !== 0,
-    stdio: [NAMES[MODE(stdioMode, 0)], NAMES[MODE(stdioMode, 1)], NAMES[MODE(stdioMode, 2)]],
+    // The caller's array when there is one: the host understands `'ipc'` in any slot,
+    // a descriptor, and another child's stream, and the packed mode cannot say any of
+    // those. The mode remains the fallback for a caller who said nothing.
+    stdio: stdioSpec !== null && stdioSpec !== undefined
+      ? stdioSpec.map(hostStream)
+      : [NAMES[MODE(stdioMode, 0)], NAMES[MODE(stdioMode, 1)], NAMES[MODE(stdioMode, 2)]],
   };
   if (env !== null) {
     options.env = Object.fromEntries(env.map((entry) => {
