@@ -487,13 +487,34 @@ function decode(bytes: Uint8Array, encoding: string | undefined): Buffer | strin
   return buffer.toString(encoding);
 }
 
+/**
+ * The caller's options, copied, with no prototype.
+ *
+ * node writes `{ __proto__: null, ...options }` at every entry point and the reason
+ * is test-child-process-prototype-tampering: with `Object.prototype.cwd = '/tmp'`
+ * set, reading `options.cwd` off an object the caller passed as `{}` finds `/tmp`,
+ * and the child runs somewhere the caller never asked for. Copying own enumerable
+ * keys onto a null prototype is what stops an inherited option being read as one.
+ *
+ * `env` is copied by reference, so *its* prototype chain survives -- node includes
+ * inherited keys there deliberately, and `envKeys` depends on that. The two are not
+ * in tension: an inherited **option** is not the caller's, an inherited **env** key
+ * is.
+ */
+function ownOptions<T extends object>(options: T): T {
+  const source = options as Record<string, unknown>;
+  const copy = Object.create(null) as Record<string, unknown>;
+  for (const key of Object.keys(source)) copy[key] = source[key];
+  return copy as T;
+}
+
 function normaliseArgs(
   file: string,
   args: readonly string[] | SpawnSyncOptions | undefined,
   options: SpawnSyncOptions | undefined,
 ): { args: string[]; options: SpawnSyncOptions } {
   let list: string[] = [];
-  let opts: SpawnSyncOptions = {};
+  let opts: SpawnSyncOptions = ownOptions({}) as SpawnSyncOptions;
   if (Array.isArray(args)) {
     // Captured before the assertion, which is why this reads oddly.
     // `Array.isArray` narrows to `readonly string[]`; `validateArray` asserts
@@ -505,7 +526,7 @@ function normaliseArgs(
     list = given.slice();
     if (options !== undefined) {
       validateObject(options, "options");
-      opts = options;
+      opts = ownOptions(options);
     }
   } else if (args === undefined || args === null) {
     // node treats `args == null` as "no arguments" and leaves the options in the
@@ -514,11 +535,11 @@ function normaliseArgs(
     // `undefined`, `null` and `[]` and requires all three to report the same cwd.
     if (options !== undefined) {
       validateObject(options, "options");
-      opts = options;
+      opts = ownOptions(options);
     }
   } else {
     validateObject(args, "options");
-    opts = args as SpawnSyncOptions;
+    opts = ownOptions(args as SpawnSyncOptions);
   }
   void file;
   return { args: list, options: opts };
@@ -699,7 +720,7 @@ export function execSync(
   validateString(command, "command");
   const opts: SpawnSyncOptions = options === undefined ? {} : options;
   const shell = typeof opts.shell === "string" ? opts.shell : true;
-  const result = spawnSync(command, [], { ...opts, shell });
+  const result = spawnSync(command, [], ownOptions({ ...opts, shell }));
   return checked(result, command);
 }
 
@@ -1221,7 +1242,7 @@ export function execFile(
   callback?: ExecCallback,
 ): ChildProcess {
   let list: readonly string[] | undefined;
-  let opts: SpawnOptions = {};
+  let opts: SpawnOptions = ownOptions({}) as SpawnOptions;
   let done: ExecCallback | undefined;
 
   const classify = (value: unknown, position: string, allowArray: boolean): string => {
@@ -1234,7 +1255,7 @@ export function execFile(
 
   const second = classify(args, "args", true);
   if (second === "array") list = args as readonly string[];
-  else if (second === "options") opts = args as SpawnOptions;
+  else if (second === "options") opts = ownOptions(args as SpawnOptions);
   else if (second === "callback") done = args as ExecCallback;
 
   // **Parsing stops at the callback.** `execFile(cmd, callback, "a string")` is
@@ -1244,7 +1265,7 @@ export function execFile(
   // it would be stricter than node and would fail that one line.
   if (second !== "callback") {
     const third = classify(options, "options", false);
-    if (third === "options") opts = options as SpawnOptions;
+    if (third === "options") opts = ownOptions(options as SpawnOptions);
     else if (third === "callback") done = options as ExecCallback;
 
     if (third !== "callback" && callback !== undefined && callback !== null) {
@@ -1268,15 +1289,15 @@ export function exec(
   callback?: ExecCallback,
 ): ChildProcess {
   validateString(command, "command");
-  let opts: SpawnOptions = {};
+  let opts: SpawnOptions = ownOptions({}) as SpawnOptions;
   let done: ExecCallback | undefined;
   if (typeof options === "function") done = options as ExecCallback;
-  else if (options !== undefined && options !== null) opts = options as SpawnOptions;
+  else if (options !== undefined && options !== null) opts = ownOptions(options as SpawnOptions);
   if (callback !== undefined) done = callback;
 
   checkNoNullBytes(command, [], opts);
   const shell = typeof opts.shell === "string" ? opts.shell : true;
-  const child = spawn(command, [], { ...opts, shell });
+  const child = spawn(command, [], ownOptions({ ...opts, shell }));
   const maxBuffer = opts.maxBuffer ?? MAX_BUFFER;
   return collect(child, command, "encoding" in opts ? opts.encoding : "utf8", maxBuffer, done, opts.timeout ?? 0, opts.killSignal ?? "SIGTERM");
 }
@@ -1310,7 +1331,7 @@ export function fork(
 ): ChildProcess {
   validateString(modulePath, "modulePath");
   let list: readonly string[] = [];
-  let opts: ForkOptions = {};
+  let opts: ForkOptions = ownOptions({}) as ForkOptions;
   if (Array.isArray(args)) {
     list = args as readonly string[];
   } else if (args !== undefined && args !== null) {
@@ -1323,7 +1344,7 @@ export function fork(
     if (typeof args !== "object") {
       throw new ERR_INVALID_ARG_TYPE("args", ["object", "Array"], args);
     }
-    opts = args as ForkOptions;
+    opts = ownOptions(args as ForkOptions);
   }
   if (options !== undefined && options !== null) {
     // `typeof [] === "object"`, so a bare `typeof` check lets an array through
@@ -1331,7 +1352,7 @@ export function fork(
     // child instead of throwing. `validateObject` rejects arrays, which is the
     // whole reason it exists rather than being written inline.
     validateObject(options, "options");
-    opts = options;
+    opts = ownOptions(options);
   }
 
   checkNoNullBytes(modulePath, list, opts);
