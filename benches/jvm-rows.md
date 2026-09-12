@@ -108,6 +108,7 @@ meets them. This is the map; the row table below it is the current state.
   - Which other references are the unstable half: two, and four that are the machine
   - The control: the harnesses agree, and both halves of `awfy-sieve` are bimodal
   - `erasure-stored-unknown` is a `long[]` where the JVM wants a `double[]`: 3.5x on ART, 0% here
+  - Generators as values: what this lane already has, and the two numbers that bear on it
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -4430,6 +4431,60 @@ than re-derived: **the mechanism is 3.51x on ART and 0% on HotSpot, the fix is a
 array-element dimension in `widen.rs`, and the reach is 1 of 247.** If a real
 Android program is ever profiled and this shape is in its hot path, all three of
 those are already here.
+
+### Generators as values: what this lane already has, and the two numbers that bear on it
+
+The compiler lane is planning a representation for `Generator<T, TReturn, TNext>`
+-- 356 refusals in `runtime/node`, of which 305 are async -- as frame pointer plus
+resumption pointer, mirroring a closure. Answered from the emitted code rather
+than from memory, and recorded here because it will be built later and the code it
+was read from can move.
+
+**The representation exists already.** A frame layout any `Suspend` names gets, in
+`object_class`:
+
+    implements nts/rt/NtsResumable
+    public void resume()V   ->  invokestatic Program.<resume_name>(LFrame;)V
+
+So a generator frame on this lane is a synthesized class with a concrete `resume`
+reachable through an interface. And `resumes()` recovers the name by scanning
+`Suspend { frame, resume }` **operations** -- not from the call that made the
+frame, which is the C and LLVM constraint (`lower.rs`'s
+`Callee::Direct(suspend::resume_name(name))`). The name already travels with the
+op here.
+
+**So a generator value needs only the frame pointer on this lane.** The resumption
+pointer is already a virtual method on the frame's own class, and a generator that
+arrived from elsewhere is `invokeinterface NtsResumable.resume()V` with nothing new.
+
+**Two numbers that bear on the design, both from this session.**
+
+*Keeping the direct call where the generator is made locally is worth far more on
+ART than the HotSpot measurement says.* Monomorphic dispatch is **free on HotSpot
+and is not free on ART**:
+
+    ART      field read 1058   virtual 1 impl 2178 (2.06x)   interface 2162 (2.04x)
+    HotSpot  field read 1056   virtual 1 impl 1079 (1.02x)   3 subclasses 4314 (4.08x)
+
+So the indirect path costs about nothing on HotSpot at a monomorphic site and
+about 2x on **every resumption** on ART. Interface against abstract class is a
+wash there (2.04 against 2.06); `NtsHost` is an abstract class only because
+interface *default* methods need API 24, which `NtsResumable` does not use.
+
+*And if the resumption pointer is typed as a signature layout* it goes through the
+closure-base machinery (`Layout.base` -> `Fn$`), which is where the `(D)D` tax
+lives: a generator whose `next(v)` takes and returns `number` gets `call(D)D` from
+its declared type even where every operation is int-exact, measured at **2.6x on
+ART and 0% on HotSpot**. Not an argument against the representation -- an argument
+that its Android cost will not appear in any HotSpot measurement of it.
+
+**What would break here: nothing, and the checks are cheap to redo.** `widen.rs`
+keys on `(class, field)` and its `narrow()` matches only signed ints of at most 32
+bits, so a reference field is not a widening candidate. The StackMapTable is a
+pure function of the per-function slot table and frame *fields* do not touch it.
+`declare_fields` **refuses** (NTS4013) rather than renames when two properties
+mangle to one JVM field, so a synthetic `resume` field colliding with a user
+property of that name fails loudly.
 
 ## Open, and whose
 
