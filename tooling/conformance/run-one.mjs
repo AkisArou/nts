@@ -438,6 +438,7 @@ try {
   } else {
     const shims = join(moduleDir, "bindings.node.mjs");
     if (existsSync(shims)) await import(shims);
+    hideBindingGlobals();
     exports = await import(join(moduleDir, "src/main.ts"));
     if (mutatedAddon || mutatedSilent) exports = poison(exports);
   }
@@ -593,6 +594,7 @@ try {
       const dir = join(ROOT, "runtime/node", name);
       const siblingShims = join(dir, "bindings.node.mjs");
       if (existsSync(siblingShims)) await import(siblingShims);
+      hideBindingGlobals();
       const siblingExports = { ...(await import(join(dir, "src/main.ts"))) };
       const siblingShape = join(dir, "shape.mjs");
       const siblingShapeModule = existsSync(siblingShape) ? await import(siblingShape) : null;
@@ -1361,6 +1363,34 @@ async function executeEsmTest(modulePath) {
 
 function revealLoadTimeWarnings() {
   for (const args of loadTimeWarnings.splice(0)) realEmitWarning(...args);
+}
+
+/**
+ * The binding surface, reachable and not enumerable.
+ *
+ * A stand-in installs its bindings with `globalThis.nts_x = ...` -- 350 such
+ * assignments across 11 `bindings.node.mjs` files -- and a plain assignment makes
+ * an **enumerable** own property. node's own `test/common/index.js` walks
+ * `for (const val in globalThis)` at exit and fails the file with
+ * `Unexpected global(s) found: nts_write_stdout, ...`, so any test that reaches
+ * the real `common` fails for the scaffolding rather than for the module. Every
+ * `.mjs` test does, because `import '../common/index.mjs'` is not substituted,
+ * and so does any CJS test requiring `common/child_process`, whose line 5 is
+ * `require('./')`.
+ *
+ * On the compiled lane these names are C externs and not globals at all, so the
+ * enumerability is an artefact of this lane and not something the profile
+ * publishes. Nothing is hidden from the code under test: `declare function
+ * nts_x` resolves exactly as before, the property stays writable and
+ * configurable, and only `for...in` and `Object.keys` stop listing it.
+ */
+function hideBindingGlobals() {
+  for (const key of Object.getOwnPropertyNames(globalThis)) {
+    if (!key.startsWith("nts_")) continue;
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, key);
+    if (descriptor === undefined || !descriptor.enumerable || !descriptor.configurable) continue;
+    Object.defineProperty(globalThis, key, { ...descriptor, enumerable: false });
+  }
 }
 
 function shimmedRequire(id, fromFile) {

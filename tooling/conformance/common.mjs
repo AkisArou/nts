@@ -240,6 +240,10 @@ export function makeCommon(pipePath, nodeCommonDirectory = "", spawn) {
     runWithInvalidFD,
     spawnPromisified,
     nodeProcessAborted,
+    // node's own, and the posix half of it because `isWindows` is false here.
+    // Three tests spread it into `spawn(...common.pwdCommand, ...)`, and a missing
+    // one is `undefined is not iterable` rather than a named absence.
+    pwdCommand: ["pwd", []],
     isWindows: false,
     isLinux: hostProcess.platform === "linux",
     isMainThread: true,
