@@ -6058,3 +6058,43 @@ instrument built to enforce it.
 over.** Under: `awfy-list` 0.20, `awfy-mandelbrot` 0.88, `awfy-queens` 0.92-0.94,
 `awfy-nbody` at parity. Unplaceable: `awfy-sieve`. Over: `awfy-permute` 1.017,
 `awfy-bounce` 1.12-1.15, `awfy-towers` 1.80-1.81.
+
+### The store-to-load forward reaches this lane, and why it declines is visible in neither dump
+
+MainClaude's forward landed and the site this lane reported is the one it hits.
+`Counter#masked`, the `& 65535` shape from `awfy-som.ts`:
+
+    26: putfield  Counter.seed:I
+    29: iload 4
+    31: ireturn
+
+No re-read. `Random.next` goes from two `field.get` to one, which was the two
+dex units this lane measured against `som/Random.java`'s thirteen.
+
+**The literal shape still declines, and the reason cannot be seen from here.**
+
+    hir              %1 = const 5 : f64      %3 = field.get %0.0 : f64
+    hir --prepared   %4 = const 5 : i32      %3 = field.get %0.0 : i32
+    bytecode         putfield ; aload_0 ; getfield
+
+The types **match at both printable stages** -- f64 on both sides before, i32 on
+both sides after. The condition that declines it, a stored literal still `f64`
+while the load has been narrowed to `i32`, exists only *between* them.
+
+So `c.seed = 5; return c.seed` does not forward, `this.seed = (...) & 65535;
+return this.seed` does, and the difference is that the mask made the value `i32`
+before the pass looked -- which is why this lane's `Random.next` was on the side
+of the line where the missing forward was visible in the dex at all.
+
+**This is `the-source-of-a-pass-is-not-its-output` with a third case.**
+`--prepared` exists because the default mode prints a program no backend
+receives. Here **neither** mode prints the state the pass saw, and there is no
+flag that does. A reader diagnosing this by printing HIR sees matching types at
+both ends and a pass that declined anyway, and concludes the pass is broken.
+What prevented that conclusion was the explanation being specific enough to
+test: f64-against-i32 was named, looked for, found in neither dump, and
+transience was the only reading left.
+
+Recorded here rather than left in a message because the next person to
+investigate a declined optimisation will reach for `--prepared` first, and on
+this one it will agree with them.
