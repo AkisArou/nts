@@ -1,0 +1,19 @@
+# Files this module's `test-pattern` claims and that cannot measure it.
+#
+# One so far, and it was found by `--sabotage` rather than by reading: the module
+# was emptied and this file kept passing, on **both** lanes. A test that passes
+# against a module that does nothing is measuring something else.
+#
+#   test-child-process-fork-closed-channel-segfault.js
+#
+# Its subject is `cluster`, which this profile does not implement. It calls
+# `cluster.isPrimary` and forks through node's own cluster, so `child_process`
+# never comes into it -- and because `cluster` is not in this module's `uses`, the
+# runner hands it node's real one, which makes the file node-against-node. What it
+# asserts is the absence of a segfault, which an absent module satisfies for free.
+#
+# Removing it lowers this module's count from 81 to 80 on the interpreted lane and
+# from 1 to **0** on the compiled lane. That second number is the honest one: the
+# compiled lane has no non-hollow pass here at all, and reporting 1 was reporting
+# this file.
+test-child-process-fork-closed-channel-segfault.js: the subject is cluster, which this profile does not implement; it forks through node's own cluster and passes against an emptied module on both lanes

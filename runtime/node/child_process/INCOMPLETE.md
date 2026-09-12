@@ -8,7 +8,8 @@ What is not deliberate is a failure nobody wrote down, so they are all below.
 
 ## Where it is
 
-    119 file(s): 81 passed, 29 failed, 9 skipped, 0 not applicable
+    interpreted   119 file(s): 80 passed, 29 failed, 9 skipped, 1 not applicable
+    compiled      119 file(s):  0 passed, 109 failed, 9 skipped, 1 not applicable
 
 Measured with `run.mjs --module child_process`, not added up: the same batch read 80
 on its first full run, because ten individual passes came with one regression.
@@ -94,9 +95,24 @@ says so. Renamed to `on_sync_exit`.
 slicing the asserted binding is `unknown[]` and TS2322. The interpreted lane never
 saw it, because it does not typecheck.
 
-## What the compiled lane says
+## What the compiled lane says, and the hollow pass it was hiding
 
-Not measured for this module. `compiled-axis.sh` covers the 24 modules that were in
-the profile before this one; the axis was 49 files there, of which `tty` and `dns`
-contributed one each as new modules. Adding this module to that measurement is the
-next thing anyone quoting the axis should do.
+**0 passed, 109 failed.** Against 80 on the interpreted lane, on the same corpus and
+the same source -- the shape `stream` already shows at 252/0 against 1/251, and the
+reason the goal text calls the compiled lane the axis.
+
+The compiled lane first read **1 passed**, and `--sabotage` said that pass was hollow:
+emptying the module left the count at 1 on both lanes. The file is
+`test-child-process-fork-closed-channel-segfault.js`, its subject is `cluster`, and
+because `cluster` is not in this module's `uses` the runner hands it node's own -- so
+it forks through node's cluster, never reaches this module, and asserts the absence of
+a segfault, which an absent module satisfies for free. It is in `not-applicable` now
+with that reason.
+
+Removing it takes the interpreted lane from 81 to 80 and the compiled lane from 1 to
+0. Both are the honest direction, and the second is the point: **the compiled lane has
+no non-hollow pass in this module at all**, and the 1 it reported was this file.
+
+So the compiled axis is unchanged by adding this module -- 49 across 25 modules rather
+than 24. The earlier note in the ledger asking whoever quotes the axis to add this
+module has its answer: it adds nothing.
