@@ -188,6 +188,37 @@ fn descriptor_of_element(element: &HirType) -> Option<&'static str> {
     })
 }
 
+/// A descriptor a *field* may carry, which is not every descriptor.
+///
+/// JVMS 4.3.2 makes a field descriptor a `FieldType`, and `V` is only ever a
+/// return descriptor. A class file carrying `V someField` is not wrong so much
+/// as unloadable: it is rejected with `ClassFormatError` by the *classloader*,
+/// on whichever program happens to reach it, which is the one kind of mistake
+/// this backend can make that no test of ours observes.
+///
+/// [`descriptor`] serves returns as well as fields, so it answers `Some("V")`
+/// for `HirType::Void` -- asserted two tests below -- and the field path could
+/// not tell that from a representable type by asking it alone.
+///
+/// **Reachable since an abstract generator gained a `yielded` field.**
+/// `Generator<void, void, string>` is driven entirely by what the caller passes
+/// to `next(v)`: its elements go in rather than out, so it has no element type
+/// and the shared prefix has nothing to put in that slot. No *frame* ever hit
+/// this, because a frame is built only for a generator that lowers; the
+/// abstract layout is emitted whenever a signature names one.
+///
+/// The compiler lane refuses it upstream, and this is the same refusal at the
+/// site that would emit it. **A guard inherited from a caller is not a guard**
+/// -- `docs/records/0295` -- and relying on that one would make an unloadable
+/// class the failure mode if it ever narrowed.
+#[must_use]
+pub fn field_descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
+    match descriptor(shape, ty) {
+        Some(d) if d == "V" => None,
+        other => other,
+    }
+}
+
 /// `Map` and `Set`, which are one table with the values left out of one of them.
 pub const MAP: &str = "nts/rt/NtsMap";
 /// A `Date`: a `double` and an identity, and the two operations that reach it.
@@ -651,6 +682,25 @@ mod tests {
         assert_eq!(descriptor(Shape::of(&empty()), &HirType::Never), None);
         assert_eq!(descriptor(Shape::of(&empty()), &HirType::Void).as_deref(), Some("V"));
         assert_eq!(kind(&HirType::Void), None, "void has no computational kind");
+    }
+
+    /// `V` is a return descriptor and never a field's. A class declaring
+    /// `V yielded` is rejected by the classloader rather than by anything here,
+    /// so the two spellings are pinned apart where they are decided.
+    #[test]
+    fn void_is_a_return_descriptor_and_not_a_field_one() {
+        assert_eq!(descriptor(Shape::of(&empty()), &HirType::Void).as_deref(), Some("V"));
+        assert_eq!(
+            field_descriptor(Shape::of(&empty()), &HirType::Void),
+            None,
+            "a field may not be declared `V`: JVMS 4.3.2"
+        );
+        let double = HirType::Float { bits: 64 };
+        assert_eq!(
+            field_descriptor(Shape::of(&empty()), &double).as_deref(),
+            Some("D"),
+            "and everything else is unchanged"
+        );
     }
 
     /// A bigint is a reference on this backend, which is the whole of what

@@ -339,7 +339,8 @@ fn declare_fields(
                 origin.location,
             ));
         }
-        let Some(descriptor) = types::descriptor(types::Shape::of(program), &field.ty) else {
+        let Some(descriptor) = types::field_descriptor(types::Shape::of(program), &field.ty)
+        else {
             return Err(Diagnostic::error(
                 "NTS4006",
                 format!(
