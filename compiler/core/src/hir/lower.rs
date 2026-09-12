@@ -28385,13 +28385,14 @@ impl<'a> FuncBuilder<'a> {
             && let Some(index) = super::builtin::error_index(&record.name)
         {
             let ty = super::constructor_token(index);
+            let base = self.token_base(id);
             self.layouts.push(Layout {
                 types: vec![ty],
                 name: super::builtin::constructor_name(&record.name),
                 interfaces: Vec::new(),
                 fields: Vec::new(),
                 methods: Vec::new(),
-                base: None,
+                base,
             });
             let ty = HirType::Managed(ManagedType::Object(ty));
             return Ok(self.push(OpKind::ClosureStatic, ty, origin));
@@ -28426,18 +28427,87 @@ impl<'a> FuncBuilder<'a> {
             && let Some(index) = self.class_tokens.get(&symbol.0).copied()
         {
             let ty = super::class_token(index);
+            let base = self.token_base(id);
             self.layouts.push(Layout {
                 types: vec![ty],
                 name: super::builtin::constructor_name(&record.name),
                 interfaces: Vec::new(),
                 fields: Vec::new(),
                 methods: Vec::new(),
-                base: None,
+                base,
             });
             let ty = HirType::Managed(ManagedType::Object(ty));
             return Ok(self.push(OpKind::ClosureStatic, ty, origin));
         }
         Err(self.unsupported(id, &self.describe_name(id, symbol)))
+    }
+
+    /// The signature `typeof C` names, as a class token's base.
+    ///
+    /// A token is stored into slots declared `typeof TypeError`, and that type
+    /// has a layout of its own — the fieldless `Fn{ty}` a function type gets. On
+    /// a backend that lays out base-first the two coincide and nothing notices;
+    /// on one that relates classes **by name**, storing one into the other is
+    /// two unrelated final classes, and the JVM says so:
+    ///
+    /// ```text
+    /// NTS4001 storing a `Ctor_TypeError` where a `Fn16__20` is declared,
+    ///         and the first does not extend the second here
+    /// ```
+    ///
+    /// which is the refusal `a-class-stored-and-compared` carried as that
+    /// backend's last failing example. A closure already gets this relation
+    /// from [`relate_closures_to_signatures`]; a class token is the other thing
+    /// that is a value of a function type, and was not getting it.
+    ///
+    /// The base alone, with no abstract declaration beside it — which is what a
+    /// closure needs and a token does not. Nothing dispatches a call to one; it
+    /// exists to have an address, so there is no slot to reach and no body to
+    /// declare. **Calling** a class value is a separate feature, separately
+    /// refused.
+    ///
+    /// Measured rather than argued, because a relation that states something
+    /// true and changes nothing should be deleted: with the base suppressed the
+    /// JVM declines a token stored where its own `typeof` is declared, and with
+    /// it that case agrees on all three backends.
+    ///
+    /// It does **not** close the union case — `cond ? TypeError : RangeError`,
+    /// and `a-class-stored-and-compared`. There the checker collapses the
+    /// conditional to a single constructor type, so the token is `Ctor_Other`
+    /// and the slot is declared `Fn3__1`, two genuinely different signatures
+    /// rather than two ids for one. A base cannot relate those; what would is
+    /// the thing that gives the token a representation of its own.
+    ///
+    /// One function for both arms below. They differ only in where the token's
+    /// index comes from — a compile-time list for a provided error, the
+    /// program's own count for a declared class — and the base is the same
+    /// question for both. Written once because the first version was written
+    /// into one arm, and the arm it was written into was not the one the
+    /// failing example took.
+    fn token_base(&self, id: NodeId) -> Option<TypeId> {
+        let declared = self
+            .snapshot
+            .node_types
+            .get(&id)
+            .copied()
+            .filter(|declared| self.is_a_signature(*declared))?;
+        // Looked up rather than demanded, and the difference is the one
+        // `laid_out_as_a_prefix` documents two hundred lines up: **`layout_of`
+        // is not a query, it creates**. Calling it here materialised a fieldless
+        // `Fn{ty}` for a signature that had none, and the sweep answered
+        // `NTS2006 closure class `Closure14` reached code generation with no
+        // method to call` -- a closure that had been writing into a slot of its
+        // own type now writing into a distinct one. The same sentence as the
+        // `incompatible pointer types` that comment records.
+        //
+        // So the base is set where the program already carries the layout, and
+        // left alone where it does not. A base naming a layout nothing carries
+        // would be a dangling relation, which is the other half of the same
+        // rule.
+        self.layouts
+            .iter()
+            .any(|layout| layout.types.contains(&declared))
+            .then_some(declared)
     }
 
     /// `null` and `undefined`, which are one value in a compiled program.

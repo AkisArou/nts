@@ -77,6 +77,32 @@ pub const fn of_reference(managed: &ManagedType) -> u32 {
     match managed {
         ManagedType::String => STRING,
         ManagedType::Object(ty) if super::is_closure_type(*ty) => FUNCTION,
+        // A symbol, which this table defined a tag for and then never returned.
+        //
+        // [`SYMBOL`] is documented four lines up — "`typeof` answers
+        // `"symbol"`, so it sits below `OBJECT`" — and `Symbol` appeared
+        // nowhere else in this file, so an erased symbol was tagged `OBJECT`.
+        //
+        // **It was absent and free for as long as nobody asked.** Nothing here
+        // reads a compile-time tag to decide what a reference *is*: the C
+        // backend asks the descriptor, so `typeof` and `String()` were right on
+        // that lane whatever this said. The two things that trust it are the
+        // JVM's `Erase`, which chose `ofObject` over `ofTagged` and made
+        // `typeof` on an erased symbol answer wrongly, and `lower_settle`
+        // below, which supplies a promise's payload tag rather than making the
+        // runtime read the header back — so a `Promise<symbol>` carried
+        // `OBJECT`. No program in the corpus settles one, which is why a
+        // missing arm cost nothing for as long as it did.
+        //
+        // The JVM lane's listing is the clearest statement of why a wrong tag
+        // is worse than one wrong answer. The only live test in the emitted
+        // method compares the tag against 5 while the value carries 6, so "is
+        // it a symbol" answers no for a value that is one — and then TypeScript
+        // narrowing, which is *correct*, excludes the symbol arm and folds
+        // `typeof v` to the literal `"string"`. A false premise with sound
+        // reasoning on top, and the folded constants make the later answers
+        // look like they were never computed at run time at all.
+        ManagedType::Symbol => SYMBOL,
         _ => OBJECT,
     }
 }
