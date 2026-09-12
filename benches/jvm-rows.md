@@ -6364,10 +6364,28 @@ Reduced from it rather than reasoned about:
 
         storing a `Closure1` where a `Fn2__3` is declared
 
-**Either feature alone compiles; together they refuse.** The minimal shape is an
-`async` arrow that captures a value and is returned where a signature type is
-declared -- twelve lines, no optional parameter, no inline signature, no type
-alias.
+**Either feature alone compiles; together they refuse.**
+
+~~The minimal shape is an `async` arrow that captures a value.~~ **"A value" was
+wrong and MainClaude could not reproduce it from that description** -- they
+captured a `number` and saw no declines, correctly. Narrowed further, with one
+variable per arm:
+
+    captures a number                                    0 declines
+    captures (number)=>number and calls it               0
+    captures (number)=>Promise<void>, does not await     1
+    captures (number)=>number and awaits it              1
+    captures (number)=>Promise<void> and awaits it       1
+
+So there are **two independent triggers**, not one pair of features: a captured
+signature whose return is a `Promise`, *or* an `await` inside the arrow. Either
+suffices; a captured `number`, or a captured plain function merely called, does
+neither.
+
+That correction exists because a reconstruction from prose failed. The
+description was mine, it was published, and it was not precise enough to rebuild
+from -- which is the same step where three earlier probes went wrong, and the
+reason the artefact rather than the account is what gets sent.
 
 **And that is why three careful probes missed it.** MainClaude varied one
 feature of `tap` at a time from a working baseline -- named type alias, inline
