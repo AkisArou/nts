@@ -17056,7 +17056,16 @@ impl<'a> FuncBuilder<'a> {
             else {
                 // A setter, for the same reason.
                 if let Some(callee) = self.accessor_callee(type_id, &name, "set ") {
-                    return Ok(Place::Setter { object, callee });
+                    let getter = self.accessor_callee(type_id, &name, "get ");
+                    let wants = self
+                        .declared_type_of(type_id, &name)
+                        .and_then(|declared| self.represent(declared));
+                    return Ok(Place::Setter {
+                        object,
+                        callee,
+                        getter,
+                        wants,
+                    });
                 }
                 return Err(self.absent_member(target, type_id, &name));
             };
@@ -17185,8 +17194,64 @@ impl<'a> FuncBuilder<'a> {
             // The message said "a compound assignment" while `??=` was refused
             // by it too, which is a refusal naming a construct the source does
             // not contain.
+            // `o.x += 1` and `o.x ??= 1` where `x` is an accessor: read
+            // through the **getter**, which travels with the place for exactly
+            // this. A plain `o.x = v` never comes here, which is why the gap was
+            // narrower than the message suggested.
+            Place::Setter {
+                object,
+                getter: Some(ref getter),
+                ref wants,
+                ..
+            } => {
+                let getter = getter.clone();
+                // The **accessor's** declared type rather than the assignment
+                // node's. `a.v ??= n` is typed `number` at the assignment and
+                // the getter answers `number | undefined`, so taking the type
+                // from the node produced a read claiming to be an `f64` while
+                // the call returned an erased value -- which clang reported as
+                // `operand of type 'NtsValue' where a real type is required`,
+                // three passes after the mistake.
+                let ty = wants
+                    .clone()
+                    .or_else(|| self.type_of(id))
+                    .ok_or_else(|| self.unrepresentable(id, "an accessor's value"))?;
+                // **The read and the result are the same value here, and for an
+                // erased accessor they want different types.** `a.v ??= n` tests
+                // the read for absence -- which needs the tag -- and answers
+                // with it on the present path, where the assignment's type is
+                // `number` because `??=` has excluded the absent arm. One value
+                // cannot be both, and a branch typed from the assignment then
+                // casts an `NtsValue` to a double: clang says `operand of type
+                // 'NtsValue' where arithmetic ... is required`.
+                //
+                // A *field* in the same shape works, because the flow analysis
+                // tracks the slot and narrows the read. A getter call is not a
+                // slot and has nothing to narrow, so this is refused by name
+                // rather than lowered into that cast.
+                if ty == HirType::Erased {
+                    return Err(self.unsupported(
+                        id,
+                        "a compound assignment through an accessor whose value is erased",
+                    ));
+                }
+                let read = self.push(
+                    OpKind::Call {
+                        callee: getter,
+                        args: vec![object],
+                        frame: None,
+                    },
+                    ty,
+                    origin,
+                );
+                self.narrowed(id, read)?
+            }
+            // A **write-only** accessor: `set x(v)` with no `get x`, which
+            // TypeScript permits. A compound assignment on one reads something
+            // that cannot be read, and says that rather than naming the
+            // assignment.
             Place::Setter { .. } => {
-                return Err(self.unsupported(id, "an assignment that reads through an accessor"));
+                return Err(self.unsupported(id, "a compound assignment through a set-only accessor"));
             }
             Place::Element { array, index } => {
                 let HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) =
@@ -17621,7 +17686,7 @@ impl<'a> FuncBuilder<'a> {
             // unknown = "text"; held = n` rebound `held` to an `f64`, and a
             // later `typeof held` then had no tag to read.
             Place::Binding { ref ty, .. } => ty.clone(),
-            Place::Setter { .. } => None,
+            Place::Setter { ref wants, .. } => wants.clone(),
         };
         let Some(want) = want else {
             return Ok(value);
@@ -17652,7 +17717,11 @@ impl<'a> FuncBuilder<'a> {
                     origin,
                 );
             }
-            Place::Setter { object, ref callee } => {
+            Place::Setter {
+                object,
+                ref callee,
+                ..
+            } => {
                 self.push(
                     OpKind::Call {
                         callee: callee.clone(),
@@ -29701,9 +29770,31 @@ enum Place {
     },
     /// A setter. `o.x = v` where `x` is one runs code, so this is a call with
     /// the receiver and the value as its two arguments.
+    ///
+    /// The **getter** travels with it, where the same member has one. A plain
+    /// `o.x = v` never needs it, but `o.x += 1` and `o.x ??= 1` read before they
+    /// write and the read is that call -- and resolving it here rather than at
+    /// the assignment is what keeps the two from asking the hierarchy the same
+    /// question twice and disagreeing about the answer.
+    ///
+    /// `None` for a write-only accessor, which TypeScript permits: `set x(v)`
+    /// with no `get x`. A compound assignment on one is a read of something
+    /// that cannot be read, and is refused as such rather than as the absence
+    /// of a field.
     Setter {
         object: ValueId,
         callee: Callee,
+        getter: Option<Callee>,
+        /// What the accessor's value is declared as, for the store to coerce
+        /// toward.
+        ///
+        /// `None` while only a plain `o.x = v` reached this place, because the
+        /// assignment had already coerced by then. A compound assignment builds
+        /// its own value and does not: `??=` on a `number | undefined` accessor
+        /// handed the setter an `f64` where it wanted an erased slot, and the
+        /// verifier said so as `CallArgumentType { expected: Erased, found:
+        /// Float }` rather than the program being wrong at run time.
+        wants: Option<HirType>,
     },
     Element {
         array: ValueId,

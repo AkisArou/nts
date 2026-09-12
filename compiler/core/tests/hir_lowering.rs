@@ -1079,17 +1079,21 @@ fn an_assignment_that_reads_through_an_accessor_is_refused_in_those_words() {
     let Some(lowered) = lowered("unsupported") else {
         return;
     };
-    // `g.level ||= n` reads the getter and writes the setter, and the place
-    // built here knows only the setter.
+    // The plain shape lowers now -- the getter travels with the setter in the
+    // `Place`, so `g.level ||= n` on a `number` accessor reads, tests and
+    // writes. What is left is the **erased** one: the read is both the absence
+    // test and the result, wanting the tag for one and a number for the other,
+    // and a getter call is not a slot for the flow analysis to narrow the way it
+    // narrows a field.
     //
-    // Pinned on the wording and not merely on the refusal, because the message
-    // said "a compound assignment" while it was refusing `??=` as well -- a
-    // refusal naming a construct the source does not contain, which sends
-    // whoever reads it looking for a `+=` that is not there.
+    // Pinned on the wording and not merely on the refusal, for the reason the
+    // earlier version of this test gave: the message once said "a compound
+    // assignment" while refusing `??=` as well, which names a construct the
+    // source does not contain.
     assert!(
         lowered.diagnostics.iter().any(|d| d
             .message
-            .contains("an assignment that reads through an accessor")),
+            .contains("through an accessor whose value is erased")),
         "no accessor refusal among {:?}",
         lowered
             .diagnostics
