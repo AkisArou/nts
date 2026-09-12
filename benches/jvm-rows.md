@@ -5912,3 +5912,61 @@ ratio. Nothing in the lowering asks for 918 frames --
 ever becomes a problem the lever is a size budget in this emitter rather than
 anything in the HIR. **There is no measurement saying it is a problem and one
 is not being invented.**
+
+## Bar 1, two sittings in both modes, and the AOT column is the steadier one
+
+Same frozen binary `ab5cb694`, `--release` dexed, two sittings of all eight in
+both modes:
+
+| case | JIT 1 / 2 | move | AOT 1 / 2 | move |
+| --- | --- | --- | --- | --- |
+| `awfy-list` | 0.75 / 0.74 | 0.01 | **0.20 / 0.20** | 0.00 |
+| `awfy-bounce` | 0.88 / 0.85 | 0.03 | 1.15 / 1.12 | 0.03 |
+| `awfy-mandelbrot` | 0.89 / 0.88 | 0.01 | **0.88 / 0.88** | 0.00 |
+| `awfy-permute` | 0.98 / 0.99 | 0.01 | 1.01 / 1.01 | 0.00 |
+| `awfy-nbody` | 1.00 / 1.02 | 0.02 | 1.00 / 1.01 | 0.01 |
+| `awfy-sieve` | 1.21 / 1.13 | **0.08** | 1.00 / 1.01 | 0.01 |
+| `awfy-queens` | 1.18 / 1.08 | **0.10** | **0.92 / 0.94** | 0.02 |
+| `awfy-towers` | 1.59 / 1.61 | 0.02 | 1.81 / 1.80 | 0.01 |
+
+**Every AOT row reproduces within 0.03 and the worst JIT row moves 0.10.** That
+is MainClaude's argument arriving as evidence rather than reasoning: the table's
+own rule is to exclude the compiler from the measurement, and the column that
+fails to reproduce is the one where tier-up has not finished. The JIT column is
+the artefact.
+
+### The two columns disagree about *which* rows pass, not only how many
+
+This is the part that makes two columns necessary rather than tidy.
+
+    pass in JIT, fail in AOT     awfy-bounce    0.88/0.85  ->  1.15/1.12
+                                awfy-permute   0.98/0.99  ->  1.01/1.01
+    fail in JIT, pass in AOT     awfy-queens    1.18/1.08  ->  0.92/0.94
+
+So a count is not transferable between them and neither is a row. "Bar 1 is N of
+8" needs the mode in the sentence, and a row that passes in one column is not a
+row that passes.
+
+**Three rows sit at 1.00-1.01 in AOT** -- `nbody`, `sieve`, `permute` -- which is
+inside the reproducibility of the measurement and not adjudicated here. Counting
+them either way would be picking a side of a coin the instrument cannot see.
+What is not marginal: `list`, `mandelbrot` and `queens` are clearly under in
+AOT, and `bounce` and `towers` are clearly over.
+
+### `awfy-bounce` is the one row in the AOT column with no mechanism
+
+It reproduces -- 1.15 and 1.12, moving 0.03 -- and it is the only row that
+*flips against us* between the modes. Three explanations are already dead, all
+ruled out without the device:
+
+- **Not the accessor pattern.** `Bounce.java` makes one accessor call. It is not
+  `awfy-list`'s shape.
+- **Not `widen`.** The case is integer-heavy -- `int` fields, `Math.abs(int)` --
+  and both sides emit `iget`/`iput` with near-identical mixes. We are not
+  holding these as doubles.
+- **Not the dex.** Scoped by class, `Ball.bounce` and `Bounce.benchmark` are at
+  parity on both sides: 3 move, 3 const, 3 add-int, 2 new-instance each.
+
+Which leaves it entirely in what `dex2oat` makes of equivalent input, and that
+is the next thing to point `oatdump` at. Recorded now because three dead
+hypotheses are worth more to the next attempt than an untested fourth.
