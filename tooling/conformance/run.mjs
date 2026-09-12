@@ -27,7 +27,7 @@
 //   node run.mjs --module path [--addon target/node/path.node] [--only f.js]
 //                              [--verbose] [--json]
 
-import { readdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { join, dirname, resolve as resolvePath } from "node:path";
 import { execFileSync } from "node:child_process";
 import process from "node:process";
@@ -229,76 +229,6 @@ const upstream = [
 // per line. A path can name a suite directory (every `test-*.js` in it) or one
 // exact test file when a shared suite contains tests for many subsystems. Names
 // retain the directory prefix so duplicate basenames remain auditable.
-// **Tests that need their stdio to be a terminal.** A module names them one per
-// line in `needs-pty`, and they run under `script(1)`, which allocates a
-// pseudo-terminal and gives the child fds 0, 1 and 2 on it.
-//
-// This exists because `pseudo-tty/test-tty-isatty.js` asserts `isatty(0)`,
-// `isatty(1)` and `isatty(2)` are **true**. The runner gives its children pipes,
-// so a correct `tty` fails that file, and every `tty` test worth running is in
-// the same position -- which made "green with 0 hollow" unsatisfiable for that
-// module by writing any amount of code.
-//
-// Inert without the file: no module that lacks one changes behaviour, and only
-// the named tests take the wrapped path. `script` is util-linux and is not
-// everywhere, so its absence is a **skip with a reason** rather than a failure --
-// a missing harness tool is not the profile's defect.
-// **node's test tree needs a `package.json` saying `commonjs`, and has none.**
-//
-// This repository's own `package.json` declares `"type": "module"`, and node's
-// checkout has no top-level `package.json` at all -- 0 of its 49 root entries.
-// So the nearest one above `third_party/node/test/parallel/*.js` is ours, and
-// node reads every one of those files as an ES module.
-//
-// In-process tests never notice, because the runner loads them itself. A test
-// that **spawns a child** running a `.js` test file does: the child gets
-// `require is not defined in ES module scope`, or fails on a top-level `return`,
-// and reports empty output with a non-zero status. Controlled both ways --
-// `spawnSync(execPath, [file, "child"])` gives status 1 and `""` without this
-// file and status 0 with it, using **node's own** `child_process` in both cases,
-// so it is not a defect in anything this profile wrote.
-//
-// Written here rather than left in the tree because `third_party/node` is
-// untracked and a `git clean` there would take it. Creating it is idempotent and
-// costs a `stat`. The full interpreted lane is byte-identical with and without
-// it -- 0 modules failing either way -- so it changes no existing result; it only
-// stops child-spawning tests failing for a reason that is ours.
-const nodePackageJson = join(ROOT, "third_party/node/package.json");
-if (!existsSync(nodePackageJson)) {
-  try {
-    writeFileSync(nodePackageJson, '{ "type": "commonjs" }\n');
-  } catch (error) {
-    // A read-only or absent checkout is not this runner's problem to solve, but
-    // it says so rather than passing silently. The first version of this block
-    // swallowed a `ReferenceError` -- `writeFileSync` was never imported -- and
-    // the runner reported a green lane while creating nothing. A catch that
-    // hides a programming error is worse than no catch.
-    process.stderr.write(`note: could not write ${nodePackageJson}: ${error.message}\n`);
-  }
-}
-
-const needsPtyPath = join(moduleDir, "needs-pty");
-const needsPty = new Set(
-  existsSync(needsPtyPath)
-    ? readFileSync(needsPtyPath, "utf8")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith("#"))
-    : [],
-);
-let ptyAvailable = null;
-const haveScript = () => {
-  if (ptyAvailable === null) {
-    try {
-      execFileSync("script", ["--version"], { stdio: "ignore" });
-      ptyAvailable = true;
-    } catch {
-      ptyAvailable = false;
-    }
-  }
-  return ptyAvailable;
-};
-
 const additionalSuitesPath = join(moduleDir, "test-suites");
 if (existsSync(additionalSuitesPath)) {
   for (const suiteName of readFileSync(additionalSuitesPath, "utf8")
@@ -423,23 +353,10 @@ for (const test of tests) {
     rows.push({ name, kind: "n/a", why: notApplicableReason });
     continue;
   }
-  const wantsPty = needsPty.has(name) || (shortName !== undefined && needsPty.has(shortName));
-  if (wantsPty && !haveScript()) {
-    rows.push({ name, kind: "skip", why: "needs a pseudo-terminal and script(1) is not installed" });
-    continue;
-  }
   try {
-    const argv = [...nodeFlags(test.path), join(HERE, "run-one.mjs"), moduleName, test.path, addon ?? "-"];
-    // `script -qec <command> /dev/null`: quiet, no timing file, run the command
-    // under a pty. The command is one string, so each argument is single-quoted;
-    // these are absolute paths this file built, not user input.
-    const quoted = [process.execPath, ...argv]
-      .map((part) => `'${String(part).replaceAll("'", "'\\''")}'`)
-      .join(" ");
     const out = execFileSync(
-      ...(wantsPty
-        ? ["script", ["-qec", quoted, "/dev/null"]]
-        : [process.execPath, argv]),
+      process.execPath,
+      [...nodeFlags(test.path), join(HERE, "run-one.mjs"), moduleName, test.path, addon ?? "-"],
       {
         encoding: "utf8",
         timeout: 60_000,
@@ -457,7 +374,6 @@ for (const test of tests) {
       },
     );
     const line = out
-      .replaceAll("\r", "")
       .trim()
       .split("\n")
       .filter((candidate) => candidate.startsWith(RESULT_PREFIX))
@@ -483,9 +399,10 @@ for (const test of tests) {
       .pop();
     if (printed) {
       const reported = JSON.parse(printed.slice(RESULT_PREFIX.length));
-      const why = (e.stderr ?? "")
+      const escaped = (e.stderr ?? "")
         .split("\n")
         .find((l) => l.includes("Error") || l.includes("Assertion"));
+      const why = escaped;
       rows.push(
         reported.kind === "pass"
           ? {
@@ -494,7 +411,31 @@ for (const test of tests) {
               why: (why ?? "an exit handler failed").trim().slice(0, 110),
               detail: e.stderr,
             }
-          : { name, ...reported },
+          // A framed failure is not always the cause, and this used to be the
+          // only thing shown. A test can fail an assertion *inside a callback*
+          // and thereby leave later callbacks unfired: the escaped exception goes
+          // to node's default handler and lands in stderr, while the runner's exit
+          // handler speaks only for the unfired callbacks, because it reports
+          // pending `mustCall`s when nothing else has reported. The counts then
+          // name neither the case nor the clause.
+          //
+          // test-child-process-exec-maxbuf is the case that paid for this: it
+          // reports thirteen callbacks at 0/1 in under a second, and five separate
+          // probes of it came back clean because none of them was its failing
+          // case. Running `run-one.mjs` by hand printed the real error
+          // immediately. So stderr is appended when it carries one and the framed
+          // result does not mention it.
+          //
+          // This can only lengthen the detail of a row that is already failing --
+          // no verdict depends on it.
+          : {
+              name,
+              ...reported,
+              detail:
+                escaped === undefined || (reported.detail ?? "").includes(escaped.trim())
+                  ? reported.detail
+                  : `${reported.detail ?? ""}\n\n-- and on stderr, which the framed result does not mention --\n${e.stderr}`.trim(),
+            },
       );
       continue;
     }
