@@ -6909,3 +6909,68 @@ asked for it with a number attached.
 Still not built. What I have changed my mind about is the question: it is not
 "may I drop the guard" but "is the checked/unchecked distinction worth an
 exception table", and that one is mine to answer rather than the middle end's.
+
+### The contract permits it and the harness does not, and I checked rather than took it
+
+MainClaude answered: **`checked: true` promises that an out-of-range index
+terminates the program, not the message.** Nothing in the middle end consumes
+the text and no lowering branches on it. That is the op's meaning and it is
+theirs to state.
+
+The same message also said the differential "classifies by process outcome and
+exit status, not by matching that prefix". **That part is wrong, and it is the
+part the fix actually rests on**, so it is recorded rather than smoothed over --
+the file is in my paths and checking it cost one `sed`.
+
+`stopped_with` classifies in this order: a timeout; an `nts:` line that is not
+one of the three known prefixes, which is a **defect**; a class-level error by
+name (`VerifyError`, `ClassFormatError`, ...), a defect; and then
+
+    if a line starts with `at ` and contains `(`   ->  Defect
+
+with the comment "a stack frame is a defect, whatever threw it" and exactly
+three carve-outs: `NtsRefusal`, `OutOfMemoryError`, `StackOverflowError`. Its
+own history is why -- a hundred and seventy `NullPointerException`s once
+reported as "agreed on every case", because the fallthrough was `Declined`.
+
+**So an `ArrayIndexOutOfBoundsException` prints a stack trace and lands as a
+defect.** Dropping the guard and letting ART's check fire would turn every
+legitimate `checked: true` refusal into a red run -- which is the exact failure
+the plan predicted ("a day of why does the JVM lane report 40 failures") and the
+reason the guards were written in the first place.
+
+**And the property I was protecting is live, which is worth saying because last
+time I argued one it was not.** An AIOOBE from a `checked: false` access -- a
+site the middle end *proved* in range -- produces a stack trace today and is
+read as a defect today. That is a real compiler-bug alarm and not a
+hypothetical one. Adding `ArrayIndexOutOfBoundsException` to the carve-out list
+would be the cheap fix and would silence exactly that alarm.
+
+### Which leaves one implementation, and it is the one with a price
+
+MainClaude's condition is the right one and sharper than mine: the constraint is
+not about `checked: true`, it is about telling the two apart **at the point the
+exception escapes**, and a blanket catch is not the only way to satisfy it.
+
+The version that satisfies it structurally: a try/catch around the `checked:
+true` access itself, in the generated method, rethrowing as `NtsRefusal` with
+the sentence rebuilt from the AIOOBE's own index and length. The site is known
+at compile time, so a `checked: false` access is untouched and stays loud, and
+an exception-table entry costs **zero code units on the straight-line path** --
+which is the whole point, since the straight-line path is what ART's inliner
+measures.
+
+Its price is the one piece of the plan that was deliberately avoided: a handler
+is the only place the operand stack is not empty at a block boundary, so the
+emitter needs `same_locals_1_stack_item` frames. **That is smaller than the plan
+feared.** The stack at handler entry is exactly `[throwable]` and every local
+already has one fixed type for the whole method and is definitely assigned by
+the prologue -- the two facts the eighty-line StackMapTable design rests on.
+A handler frame is therefore as computable as every other frame, and the design
+survives with one more frame kind rather than an abstract interpreter.
+
+So: the op permits it, the harness forbids the cheap version, and the honest
+version is an exception table plus one frame encoding, against a row worth
+1.80x -> ~1.01x. That is the first thing this lane has met that asks for the
+avoided machinery **with a number attached**, which is the condition the plan
+set for reconsidering it.
