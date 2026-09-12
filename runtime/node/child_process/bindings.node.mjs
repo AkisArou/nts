@@ -113,7 +113,7 @@ let nextHandle = 0;
 const MODE = (bits, slot) => (bits >> (slot * 2)) & 3;
 const NAMES = ["pipe", "inherit", "ignore"];
 
-globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached, onExit) => {
+globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached, uid, gid, onExit) => {
   const [argv0, ...rest] = args;
   const options = {
     argv0,
@@ -127,12 +127,23 @@ globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached,
     }));
   }
   if (cwd !== "") options.cwd = cwd;
+  // -1 is "leave it alone". node's own spawn throws EPERM here for a non-root
+  // caller asking for uid 0, and that throw is the point: these two options were
+  // validated by the module and then dropped before the binding, so a child asked
+  // to drop privileges ran as the caller and nothing said so.
+  if (uid >= 0) options.uid = uid;
+  if (gid >= 0) options.gid = gid;
 
   let child;
   try {
     child = nodeSpawn(file, rest, options);
-  } catch {
-    return -2;
+  } catch (error) {
+    // node's own `spawn` throws for every spawn errno but five, and the errno is on
+    // the thrown error. Flattening it to -2 turned an EPERM -- which
+    // `spawn('echo', [], { uid: 0 })` raises for a non-root user -- into an ENOENT,
+    // and ENOENT is one of the five this module reports asynchronously. The test
+    // asserting a synchronous throw then saw nothing at all.
+    return typeof error?.errno === "number" ? error.errno : -2;
   }
   // node decides synchronously whether the spawn took: a child that failed has no
   // `pid`, and its `error` event follows on a later tick. The compiled lane's

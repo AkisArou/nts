@@ -379,6 +379,7 @@ static void on_child_write(uv_write_t *request, int status) {
 double nts_child_process_spawn(const NtsString *file, NtsHeader *args,
                                NtsHeader *env, const NtsString *cwd,
                                double stdio_mode, double detached,
+                               double uid, double gid,
                                NtsHeader *on_exit, NtsHeader *on_error) {
     (void)on_error;
     const double claimed = child_claim();
@@ -430,6 +431,17 @@ double nts_child_process_spawn(const NtsString *file, NtsHeader *args,
     options.stdio_count = 3;
     options.stdio = stdio;
     if (detached != 0) options.flags |= UV_PROCESS_DETACHED;
+    /* libuv applies these after the fork and before the exec, and reports a
+     * failure through uv_spawn's return -- which is how a non-root caller asking
+     * for uid 0 becomes EPERM rather than a child running as itself. */
+    if (uid >= 0) {
+        options.uid = (uv_uid_t)uid;
+        options.flags |= UV_PROCESS_SETUID;
+    }
+    if (gid >= 0) {
+        options.gid = (uv_gid_t)gid;
+        options.flags |= UV_PROCESS_SETGID;
+    }
 
     child->process.data = child;
     const int started = uv_spawn(loop, &child->process, &options);

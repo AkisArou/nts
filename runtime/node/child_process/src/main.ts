@@ -40,7 +40,8 @@ import type { Timeout } from "../../timers/src/main.ts";
 import { addTrackedAbortListener, EventEmitter } from "../../events/src/main.ts";
 import type { AbortSignalLike } from "../../internal/abort.ts";
 import { nextTick } from "../../internal/tick.ts";
-import { errName } from "../../internal/uv.ts";
+import { errName, errnoException } from "../../internal/uv.ts";
+import { emitWarning } from "../../internal/process-warning.ts";
 import { fileURLToPath } from "../../url/src/fileurl.ts";
 import type { URL } from "../../url/src/url.ts";
 import { Readable } from "../../stream/src/readable.ts";
@@ -74,6 +75,8 @@ declare function nts_child_process_spawn(
   cwd: string,
   stdioMode: number,
   detached: number,
+  uid: number,
+  gid: number,
   onExit: (status: number, signal: number) => void,
   onError: (code: number) => void,
 ): number;
@@ -168,6 +171,16 @@ class ChildReadable extends Readable {
 class ChildWritable extends Writable {
   #handle: number;
 
+  /**
+   * Node's child stdin is a `net.Socket`, which is a Duplex, so it answers
+   * `readable` as well as `writable` -- `false`, because the pipe only goes one
+   * way. A plain `Writable` has no such property and answered `undefined`, which
+   * is what test-child-process-stdin compares against `false`.
+   */
+  get readable(): boolean {
+    return false;
+  }
+
   constructor(handle: number) {
     super();
     this.#handle = handle;
@@ -201,6 +214,8 @@ export interface SpawnSyncOptions {
   shell?: boolean | string | undefined;
   killSignal?: string | number | undefined;
   signal?: AbortSignalLike | undefined;
+  uid?: number | undefined;
+  gid?: number | undefined;
   windowsHide?: boolean | undefined;
 }
 
@@ -403,6 +418,28 @@ function flattenEnv(env: Record<string, string> | undefined): string[] | null {
   return flat;
 }
 
+/**
+ * node's DEP0190, emitted once per process.
+ *
+ * Passing `args` *and* `shell: true` concatenates them into the command line
+ * without escaping, which is node's stated reason for deprecating it. The flag is
+ * module-scope because node's is (`emittedDEP0190Already`), and the warning is about
+ * what the caller asked for rather than about our shaping.
+ * test-child-process-execfile waits for it with `common.expectWarning`.
+ */
+let emittedDep0190 = false;
+
+function warnArgsWithShell(argCount: number): void {
+  if (argCount === 0 || emittedDep0190) return;
+  emittedDep0190 = true;
+  emitWarning(
+    "Passing args to a child process with shell option true can lead to security "
+      + "vulnerabilities, as the arguments are not escaped, only concatenated.",
+    "DeprecationWarning",
+    "DEP0190",
+  );
+}
+
 /** `shell: true` means `/bin/sh -c <command>`; a string names the shell. */
 function shellCommand(command: string, shell: boolean | string): [string, string[]] {
   const file = typeof shell === "string" && shell !== "" ? shell : "/bin/sh";
@@ -484,6 +521,7 @@ export function spawnSync(
   let command = file;
   let argv: string[];
   if (opts.shell !== undefined && opts.shell !== null && opts.shell !== false && opts.shell !== "") {
+    warnArgsWithShell(normalised.args.length);
     const joined = [file, ...normalised.args].join(" ");
     const pair = shellCommand(joined, opts.shell);
     command = pair[0];
@@ -698,6 +736,16 @@ export class ChildProcess extends EventEmitter {
   signalCode: string | null = null;
   killed = false;
   stdin: ChildWritable | null = null;
+  /**
+   * What node calls the child by.
+   *
+   * `spawnargs` is the whole argv including argv[0], which is why
+   * test-child-process-spawn-shell reads its *last* element to find the command it
+   * handed to the shell. The error path slices argv[0] off, the way node's
+   * `ChildProcess.prototype.spawn` does when it builds `err.spawnargs`.
+   */
+  spawnfile = "";
+  spawnargs: string[] = [];
   stdout: ChildReadable | null = null;
   stderr: ChildReadable | null = null;
   readonly stdio: (ChildWritable | ChildReadable | null)[] = [];
@@ -808,6 +856,7 @@ export function spawn(
   let command = file;
   let argv: string[];
   if (opts.shell !== undefined && opts.shell !== null && opts.shell !== false && opts.shell !== "") {
+    warnArgsWithShell(normalised.args.length);
     const joined = [file, ...normalised.args].join(" ");
     const pair = shellCommand(joined, opts.shell);
     command = pair[0];
@@ -825,6 +874,11 @@ export function spawn(
     cwdPath(opts.cwd),
     mode,
     opts.detached === true ? 1 : 0,
+    // -1 means "leave it alone"; a real uid or gid is unsigned. These were
+    // validated and then dropped, so `spawn(file, args, { uid: 0 })` ran the child
+    // as the caller instead of failing EPERM.
+    typeof opts.uid === "number" ? opts.uid : -1,
+    typeof opts.gid === "number" ? opts.gid : -1,
     (status: number, signal: number): void => {
       if (child !== null) child._handleExit(status, signal);
     },
@@ -842,9 +896,14 @@ export function spawn(
     // against node. The mode has to be the requested one: 0x2a is three `ignore`
     // slots, so `test-child-process-cwd` found `child.stdout` null and threw one
     // line before its assertion.
+    if (!ASYNC_SPAWN_ERRORS.includes(errName(handle))) {
+      throw errnoException(handle, "spawn");
+    }
     const failed = new ChildProcess(-1, mode);
     failed.pid = undefined;
     failed.exitCode = handle;
+    failed.spawnfile = command;
+    failed.spawnargs = argv.slice();
     nextTickEmitError(failed, file, handle);
     return failed;
   }
@@ -852,6 +911,8 @@ export function spawn(
   // node emits `spawn` on a nextTick after a successful spawn, before any stdio
   // event -- test-child-process-spawn-event asserts both the event and that
   // nothing else has fired before it.
+  child.spawnfile = command;
+  child.spawnargs = argv.slice();
   const spawned = child;
   nextTick((): void => { spawned.emit("spawn"); });
 
@@ -898,14 +959,36 @@ export function spawn(
 }
 
 /** `error` must not fire before the caller has attached a listener. */
+/**
+ * The five spawn failures node reports asynchronously.
+ *
+ * `ChildProcess.prototype.spawn` sends EACCES, EAGAIN, EMFILE, ENFILE and ENOENT
+ * to `process.nextTick` as an `error` event, and **throws** for anything else. That
+ * is not a detail: `spawn('echo', [], { uid: 0 })` as a non-root user fails EPERM,
+ * and test-child-process-uid-gid asserts a synchronous throw matching /\bEPERM\b/.
+ * Emitting it asynchronously instead means the `assert.throws` sees nothing and the
+ * error arrives later with nobody listening.
+ */
+const ASYNC_SPAWN_ERRORS = ["EACCES", "EAGAIN", "EMFILE", "ENFILE", "ENOENT"];
+
 function nextTickEmitError(child: ChildProcess, file: string, status: number): void {
   nextTick((): void => {
-    const error: Error & { errno?: number; code?: string; syscall?: string; path?: string } =
-      new Error(`spawn ${file} failed`);
+    const error: Error & {
+      errno?: number;
+      code?: string;
+      syscall?: string;
+      path?: string;
+      spawnargs?: string[];
+    } = new Error(`spawn ${file} failed`);
     error.errno = status;
-    error.code = "ENOENT";
+    // The name of the errno rather than a constant: five codes reach this path and
+    // hardcoding ENOENT reported the wrong one for the other four.
+    error.code = errName(status);
     error.syscall = `spawn ${file}`;
     error.path = file;
+    // node: `err.spawnargs = ArrayPrototypeSlice(this.spawnargs, 1)` -- argv without
+    // argv[0], which test-child-process-spawn-error compares against what it passed.
+    error.spawnargs = child.spawnargs.slice(1);
     child.emit("error", error);
     child.emit("close", child.exitCode, null);
   });
@@ -936,6 +1019,13 @@ function collect(
   timeout: number,
   killSignal: string | number,
 ): ChildProcess {
+  // Before the callback check, because node's `execFile` sets it on the way past:
+  // `exec('fhqwhgads').stderr.on('data', ...)` with no callback at all still gets
+  // strings, which test-child-process-exec-stdout-stderr-data-string asserts.
+  if (encoding !== undefined && encoding !== "buffer" && Buffer.isEncoding(encoding)) {
+    child.stdout?.setEncoding(encoding);
+    child.stderr?.setEncoding(encoding);
+  }
   if (callback === undefined) return child;
   // A chunk is a string once something calls `setEncoding` on the stream, which
   // test-child-process-exec-env does itself. Node reads `readableEncoding` to
@@ -994,10 +1084,6 @@ function collect(
   // test-child-process-exec-maxbuf asserts. Without this the chunk is a Buffer, ten
   // bytes is three and a third characters, and the caller gets '中文测' and a
   // replacement character.
-  if (encoding !== undefined && encoding !== "buffer" && Buffer.isEncoding(encoding)) {
-    child.stdout?.setEncoding(encoding);
-    child.stderr?.setEncoding(encoding);
-  }
   if (child.stdout !== null) {
     child.stdout.on("data", (chunk: Uint8Array | string): void => {
       const length = typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
@@ -1066,7 +1152,11 @@ function collect(
     if (code === 0 && signal === null) { finish(null); return; }
     const error: Error & { code?: unknown; signal?: string | null; killed?: boolean } =
       new Error(`Command failed: ${command}\n${merge(err) as string}`);
-    error.code = code;
+    // A negative exit code is a uv error rather than a status, and node translates
+    // it: `code < 0 ? getSystemErrorName(code) : code`. test-child-process-execfile
+    // says so in its own comment -- "negative exit codes can be translated to UV
+    // error names" -- and asserts `getSystemErrorName(-1)`, which is EPERM.
+    error.code = typeof code === "number" && code < 0 ? errName(code) : code;
     error.signal = signal;
     finish(error);
   });

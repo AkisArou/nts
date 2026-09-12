@@ -72,9 +72,14 @@ NtsHeader *nts_child_process_spawn_sync(const NtsString *file, NtsHeader *args,
  * `close` are separate events and a caller may still read buffered output
  * between them.
  */
+/* `uid` and `gid` are -1 for "leave it alone"; a real uid or gid is unsigned, so
+ * the sentinel cannot collide with one. They were absent from this signature
+ * entirely and the options were validated and then dropped, so a child asked to
+ * drop privileges ran as the caller and said nothing. */
 double nts_child_process_spawn(const NtsString *file, NtsHeader *args,
                                NtsHeader *env, const NtsString *cwd,
                                double stdio_mode, double detached,
+                               double uid, double gid,
                                NtsHeader *on_exit, NtsHeader *on_error);
 
 /** Begin reading a child's stdout (`which` 1) or stderr (`which` 2). */
