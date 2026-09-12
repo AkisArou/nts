@@ -39,7 +39,20 @@ the ones producing no layout evidence.
 ## The measurement that changed the reason
 
 Every site was measured first: **63 distinct sites, 63 distinct (site, arriving
-type) pairs — every one monomorphic.** On HotSpot that means an interface and a
+type) pairs — every one monomorphic.**
+
+*Where, since a number without a tree is half a number:* the main working tree,
+across `fs`, `http`, `net`, `stream`, `dgram` and `process`, before `29994277`
+landed — and with two other lanes committing to `runtime/node` throughout. It
+**cannot be re-taken**: specialisation changed which casts refuse, so the sites
+it counted no longer exist as refusals. A first count of 60 from the same session
+differed only because a loose regex merged two files sharing a basename; the 63
+is from full paths.
+
+That is weaker provenance than it should be, and it is stated rather than
+implied. The decision it supports — specialise, because every site is
+monomorphic — does not turn on the exact figure, but a reader re-deriving it will
+get a different number for a reason that is not a change in the conclusion. On HotSpot that means an interface and a
 copy are both on the top row and dispatch cost decides nothing.
 
 Then the same curve on ART, which is the runtime that lane exists for:
