@@ -6,11 +6,28 @@
 // dispatched through an abstract base rather than called on a concrete class.
 // That is what nts emits once a generator arrives as a parameter.
 //
-// An abstract class rather than an interface, and it is a coin toss with a
-// reason: the JVM lane measured the two at 2.04x and 2.06x a field read on ART,
-// which is the same number, so the choice is made on the other ground -- nts
-// emits the abstract generator as a class, and the reference should be what nts
-// emits rather than an equally fast alternative to it.
+// An abstract class rather than an interface, and it is **not** a coin toss.
+// The 2.04x and 2.06x that suggested one are the *ART* pair; the same probe on
+// HotSpot, which is the runtime this column is published from:
+//
+//     HotSpot   field read 1056   virtual, 1 subclass 1079 (1.02x)
+//                                 interface, 1 impl   1230 (1.16x)
+//     ART       field read 1058   virtual, 1 subclass 2178 (2.06x)
+//                                 interface, 1 impl   2162 (2.04x)
+//
+// At one implementer an interface costs **14% more than a virtual call on
+// HotSpot**. They are indistinguishable on ART and they are not here. So an
+// interface would have made the *reference* 14% slower on the runtime the row
+// is quoted from, which flatters this compiler -- the one direction a harness
+// must never be wrong in, and the same trap `benches/jvm-rows.md` records for
+// `awfy-sieve`, where one extra static call cost its reference 18%.
+//
+// It also happens to be what nts emits, which is a good tie-breaker and not the
+// reason. The reason is that it is the *faster* reference of the two.
+//
+// Measured at one implementer and at three; this case has **two**, where
+// HotSpot guards two direct calls bimorphically and neither number applies
+// directly. The direction at one is what the choice rests on.
 //
 // Fields are `double` rather than `int` for the reason `generator/ref.java`
 // gives: a TypeScript `number` is an f64, and a reference using narrower storage
