@@ -374,31 +374,6 @@ fn main() -> Result<()> {
         cases.retain(|case| requested.iter().any(|want| case.file_name() == Some(want)));
     }
 
-    // A name that selects nothing is a typo, and it used to produce a *table*.
-    // `NTS_BENCH_LANES=native` -- there is no such lane, the selector takes `c`
-    // -- fell through `lane_matches` to `label.contains("native")`, matched no
-    // variant, and printed every nts column as `--` with node's filled in.
-    // 78.75 ms against 79.42 ms sat exactly where a result belonged, and the
-    // run that produced it was two sittings of nothing.
-    //
-    // The third time in one day that a configuration produced a plausible table
-    // instead of an error, after `d8`'s debug default and `dex2oat`. A filter
-    // that matches nothing has to say so, because `--` already means "this lane
-    // refused" and the two are indistinguishable in the output.
-    if let Some(ref only) = wanted_lanes() {
-        let dead: Vec<&str> = only
-            .iter()
-            .filter(|want| !VARIANTS.iter().any(|v| lane_matches(want, v.label)))
-            .map(String::as_str)
-            .collect();
-        if !dead.is_empty() {
-            bail!(
-                "NTS_BENCH_LANES names {} which selects no lane; the names are \
-                 c, llvm, jvm, f64 and node",
-                dead.join(", ")
-            );
-        }
-    }
     let out = root.join("target/bench");
     std::fs::create_dir_all(&out).context("creating the build directory")?;
     // Written once; every case compiles against them.

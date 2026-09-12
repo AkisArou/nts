@@ -1574,6 +1574,37 @@ fn presence_keys(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> rustc_hash
             keys.insert(key);
         }
     }
+    // And every key `Object.hasOwn(o, "k")` names, which asks the same question
+    // in the other spelling and reads the same bit.
+    //
+    // `Object.keys` and `for...in` are **not** here and cannot be: they name no
+    // key, so tracking what they need means the receiver's whole optional set
+    // rather than a name. Whoever lands those adds it; a reader added without a
+    // matching producer is a bit that is read and never written, which answers
+    // false for a property that is there and says nothing while doing it.
+    for index in 0..snapshot.nodes.len() {
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        if probe.kind_of(id) != Some(syntax::CALL_EXPRESSION) {
+            continue;
+        }
+        let children = probe.children(id);
+        let [callee, rest @ ..] = children.as_slice() else {
+            continue;
+        };
+        if probe.kind_of(*callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            continue;
+        }
+        let parts = probe.children(*callee);
+        let [_, member] = parts.as_slice() else {
+            continue;
+        };
+        if probe.literal_name(*member).as_deref() != Some("hasOwn") {
+            continue;
+        }
+        if let Some(key) = rest.get(1).and_then(|key| probe.literal_key(*key)) {
+            keys.insert(key);
+        }
+    }
     keys
 }
 
@@ -13544,13 +13575,71 @@ impl<'a> FuncBuilder<'a> {
             // answer it. Named rather than guessed.
             return Err(self.unsupported(key, "`Object.hasOwn` with a key the program computes"));
         };
-        let names = self.own_names(id, argument)?;
+        // An **optional** property is answered from the header, exactly as `"k"
+        // in o` is. `own_names` refuses on one -- rightly, while a layout was
+        // the only thing to ask -- so this asks the value first and falls
+        // through to the layout for every property whose presence the type
+        // settles.
+        if let HirType::Managed(ManagedType::Object(ty)) = self.values[table.0 as usize].ty
+            && self.declares(ty, &wanted) == Declares::Optionally
+        {
+            let origin = self.origin(id);
+            let bit = match self.presence_of_key(ty, &wanted) {
+                Some(super::presence::Presence::Bit(bit)) => bit,
+                Some(super::presence::Presence::TooMany { optional }) => {
+                    return Err(self.unsupported(
+                        id,
+                        &format!(
+                            "`Object.hasOwn` naming `{wanted}` on a type with {optional} \
+                             optional properties -- an object header records {}",
+                            super::presence::BITS
+                        ),
+                    ));
+                }
+                _ => {
+                    return Err(self.unsupported(
+                        id,
+                        &format!(
+                            "`Object.hasOwn` naming `{wanted}` on a type with no layout in \
+                             this program"
+                        ),
+                    ));
+                }
+            };
+            let index = self.push(
+                OpKind::ConstInt(i128::from(bit)),
+                PRESENCE_INDEX,
+                origin.clone(),
+            );
+            return Ok(self.call_runtime(
+                "nts_presence_has",
+                vec![table, index],
+                HirType::Bool,
+                &origin,
+            ));
+        }
+        // One key, from the layout, without asking for the whole list.
+        //
+        // `own_names` refuses a type with *any* optional property, because
+        // `Object.keys` has to name all of them and an optional one is a fact
+        // about the value. Asking it here made `Object.hasOwn(b, "keep")` --
+        // a **required** key -- refuse because some *other* property of the
+        // type was optional, which is a question it never asked.
+        //
+        // `fields` rather than `declares`, and that is the distinction to keep:
+        // a method is declared and is not an own property, so
+        // `Object.hasOwn(o, "someMethod")` is false in JavaScript and a layout's
+        // field list is what says so.
         let origin = self.origin(id);
-        Ok(self.push(
-            OpKind::ConstBool(names.contains(&wanted)),
-            HirType::Bool,
-            origin,
-        ))
+        let present = if let HirType::Managed(ManagedType::Object(ty)) =
+            self.values[table.0 as usize].ty
+        {
+            let layout = self.layout_of(id, ty)?;
+            layout.fields.iter().any(|field| field.name == wanted)
+        } else {
+            self.own_names(id, argument)?.contains(&wanted)
+        };
+        Ok(self.push(OpKind::ConstBool(present), HirType::Bool, origin))
     }
 
     /// `BigInt.asIntN(bits, v)` and its unsigned twin.
