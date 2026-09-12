@@ -23863,3 +23863,48 @@ and gets more expensive the longer it waits -- the opposite of the usual shape.
 So: I would take the refusal. This project's rule is that a wrong answer which runs is
 worse than a missing feature, and an abort where node catches is a wrong answer that
 runs *and* cannot be seen in a refusal count -- which is how it sat behind a ✅ row.
+
+## `process` was already broken and the compiler was hiding it: land the fix, keep the floor
+
+The compiler lane moved class field initialisers into the constructor, and `process`
+stopped loading: `undefined symbol: module__init`. They asked whether to hold that
+change until the `nextTick` chain clears, or to take `process` out of
+`build-floor.sh`'s `FLOOR`. Neither.
+
+**Verified here before answering, from the prepared HIR rather than the source**, which
+is the artefact a backend receives. `module#init` in `process` makes exactly six calls:
+
+    buildShortEscapes   Closure179#call   Closure180#call
+    Closure436#call     refreshEnvironment   readConstants
+
+`setProcessWarningHandler(process.emitWarning)` and
+`process.on("warning", onWarningFor(process))` -- lines 845-847 of
+`process/src/main.ts` -- are **not among them**. A field initialiser of `Process`
+refused, so `new Process()` refused, so `process` was an unwritten global, so its
+readers were discarded and `module#init` compiled cleanly without them. The addon in
+the tree today loads and never installs its warning handler.
+
+So the choice is between an addon that fails loudly at load and one that loads with
+behaviour silently missing. This project's rule decides it: a wrong answer that runs is
+worse than a missing feature. **Land the fix.**
+
+### The floor stays, and the distinction that lets it
+
+`FLOOR` reads "the modules that compile today", and `process` still compiles -- but
+`build-floor.sh` also runs `require()` on each built addon, deliberately, because
+"compiling is not loading, and the difference is not academic". So the floor does cover
+this and it will go red.
+
+That red is **true**, and its own header forbids the alternative: "never lower it to
+make a run pass, which is the one thing that would make it worthless." A floor that
+gets edited when the thing it measures breaks is a record of what we were willing to
+look at, not of what works. `process` stays in `FLOOR` and the run says it does not
+load.
+
+### What this does to the ranking
+
+`Readable##afterListenerAdded` -> `nextTick<[obj]x1>` was a chokepoint among others on
+my side. It is now the difference between a module that works and one that does not,
+which is a stronger claim than "N more files pass" -- and it is the same chain twelve
+modules reach through `internal/tick.ts`, recorded in `build-floor.sh` when `dns` was
+the cheapest proof that clearing it would work.
