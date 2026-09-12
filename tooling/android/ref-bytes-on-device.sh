@@ -70,7 +70,16 @@ public final class RefBytes {
         Method start = dbg.getMethod("startAllocCounting");
         Method stop = dbg.getMethod("stopAllocCounting");
         Method size = dbg.getMethod("getGlobalAllocSize");
-        for (int i = 0; i < 20000; i++) { sink += work.run(); }
+        // Warm up by *time*, not by a fixed count -- the rule `bytes-on-device.sh`
+        // already applies to the compiled side, arriving here two runs late.
+        // Twenty thousand iterations of `awfy-mandelbrot` is twenty thousand
+        // times twenty-two milliseconds, and the halve-and-retry below repeats
+        // the warmup on every attempt. That is what made `awfy-mandelbrot` and
+        // `exceptions` come back as timeouts from a survey where every other
+        // row took seconds, and it is a property of this driver rather than of
+        // those two programs.
+        long until = System.nanoTime() + 5000000000L;
+        for (int i = 0; i < 20000 && System.nanoTime() < until; i++) { sink += work.run(); }
         int n = Integer.parseInt(a[0]);
         start.invoke(null);
         long before = ((Number) size.invoke(null)).longValue();
@@ -93,14 +102,48 @@ JAVA
 # which is the same shape as fixing one of two drivers in one heredoc, earlier
 # the same night. A fix belongs to the family, not to the file it was found in.
 awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
-printf "%-24s %14s\n" "case" "ref on ART"
+
+# **The fourth cell.** `bytes-on-device.sh` gives ours on HotSpot and ours on
+# ART; this gave the reference on ART and nothing on HotSpot, so the table had
+# three corners of a 2x2 and the missing one is the one that says *why* a row
+# rises on ART.
+#
+# Twelve of fifty-one rows allocate materially more on ART than on HotSpot, and
+# on nine of them we are at or under the reference **on ART** -- which reads as
+# "ART has no escape analysis and everyone pays" only if the reference is known
+# to rise too. Without this column that was an inference from `ours/ref = 1.00`
+# rather than a measurement.
+#
+# `com.sun.management.ThreadMXBean` again, and not a second counter: the
+# comparison this column exists for is against `H.java`'s numbers, and two
+# instruments would make every difference ambiguous about which of them moved.
+cat > "$work/stub/RefH.java" <<'JAVA'
+import com.sun.management.ThreadMXBean;
+import java.lang.management.ManagementFactory;
+public final class RefH {
+    static double sink;
+    public static void main(String[] a) throws Exception {
+        Bench.Work work = (Bench.Work) Class.forName("Ref")
+            .getDeclaredConstructor().newInstance();
+        ThreadMXBean mx = (ThreadMXBean) ManagementFactory.getThreadMXBean();
+        long id = Thread.currentThread().getId();
+        long until = System.nanoTime() + 5000000000L;
+        for (int i = 0; i < 20000 && System.nanoTime() < until; i++) { sink += work.run(); }
+        int n = Integer.parseInt(a[0]);
+        long before = mx.getThreadAllocatedBytes(id);
+        for (int i = 0; i < n; i++) { sink += work.run(); }
+        System.out.println((mx.getThreadAllocatedBytes(id) - before) / n);
+    }
+}
+JAVA
+printf "%-24s %14s %14s\n" "case" "ref HotSpot" "ref on ART"
 for case in "$@"; do
   ref=$root/benches/cases/$case/ref.java
-  [ -f "$ref" ] || { printf "%-24s %14s\n" "$case" "no ref.java"; continue; }
+  [ -f "$ref" ] || { printf "%-24s %14s %14s\n" "$case" "no ref.java" "no ref.java"; continue; }
   out=$work/$case
   mkdir -p "$out/classes" "$out/dex"
   cp "$ref" "$out/Ref.java"
-  cp "$work/stub/Bench.java" "$work/stub/RefBytes.java" "$out/"
+  cp "$work/stub/Bench.java" "$work/stub/RefBytes.java" "$work/stub/RefH.java" "$out/"
   # The AWFY sources when they are there, for the eight `awfy-*` references
   # that construct one of their classes. Absent is fine and only those need it.
   sources=$(find "$out" -name '*.java')
@@ -109,14 +152,14 @@ for case in "$@"; do
   case "$case" in
     awfy-*)
       [ -n "$theirs" ] || {
-        printf "%-24s %14s\n" "$case" "no awfy sources"; continue; } ;;
+        printf "%-24s %14s %14s\n" "$case" "no awfy sources" "no awfy sources"; continue; } ;;
   esac
   [ -n "$theirs" ] && sources="$sources $theirs"
   # shellcheck disable=SC2086
   javac -nowarn -d "$out/classes" $sources 2> "$out/javac.log" \
-    || { printf "%-24s %14s\n" "$case" "javac"; continue; }
+    || { printf "%-24s %14s %14s\n" "$case" "javac" "javac"; continue; }
   "$tools/d8" --min-api 29 --output "$out/dex" $(find "$out/classes" -name '*.class') \
-    > /dev/null 2>&1 || { printf "%-24s %14s\n" "$case" "d8"; continue; }
+    > /dev/null 2>&1 || { printf "%-24s %14s %14s\n" "$case" "d8" "d8"; continue; }
   adb push "$out/dex/classes.dex" "/data/local/tmp/rb-$case.dex" > /dev/null 2>&1
   # `getGlobalAllocSize` is 32-bit and wraps, and there is no HotSpot figure to
   # size this run from the way `bytes-on-device.sh` does -- a reference has no
@@ -136,5 +179,9 @@ for case in "$@"; do
     esac
   done
   adb shell "rm -f /data/local/tmp/rb-$case.dex" > /dev/null 2>&1 || true
-  printf "%-24s %14s\n" "$case" "$got"
+  # The same reference, the same counter its compiled counterpart uses, on this
+  # machine's JVM. No halve-and-retry: `getThreadAllocatedBytes` is a `long`,
+  # and the 32-bit wrap the loop above exists for is `getGlobalAllocSize`'s.
+  hot=$(java -cp "$out/classes" RefH "$runs" 2>/dev/null | tr -d '\r' | tail -1)
+  printf "%-24s %14s %14s\n" "$case" "${hot:-none}" "$got"
 done

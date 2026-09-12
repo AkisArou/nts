@@ -225,3 +225,39 @@ if [ "$agreed" = 0 ]; then
 else
   echo "$agreed case(s) agree between java and dalvikvm"
 fi
+
+# **The count this step owes itself**, and the reason is `docs/records/0295` and
+# `dexes.sh`'s method floor rather than anything about this device.
+#
+# Everything above is a check on `differ`, and `differ` can only rise on a case
+# that got as far as running on both runtimes. So every failure that stops a
+# case *earlier* -- a `javac` that cannot find its sources, a backend that
+# declines, an `adb push` to a full disk -- lands in `noted`, which is not
+# fatal, and leaves `differ` at zero. A step that compared one case of nine
+# reports "1 case(s) agree" and exits green, and a reader scanning a gate log
+# sees a passing line.
+#
+# The honest sentence above was added for the `agreed = 0` case after `javac`
+# fell off the PATH and this printed "every case agrees" over nine comparisons
+# that never ran. It fixed the sentence and not the exit: green was still the
+# answer. **A sentence a reader has to notice is not a ratchet.**
+#
+# **9**, measured 2026-09-12: the nine cases in the default list, all agreeing.
+# Exact rather than padded, which is this repository's rule for a floor -- a
+# case that stops building owes an explanation and then a new number, rather
+# than fitting under a margin somebody chose.
+floor=${NTS_ON_DEVICE_FLOOR:-9}
+if [ $# -eq 0 ] && [ "$agreed" -lt "$floor" ]; then
+  echo "only $agreed case(s) were compared, against a floor of $floor" >&2
+  # Which of the two it is, said here rather than left to the reader -- the
+  # same split `dexes.sh` makes, and for the same reason: a peer meeting this
+  # on an unrelated change should not have to work out which kind it is.
+  if [ "$noted" -gt 0 ]; then
+    echo "and $noted case(s) did not get as far as running, so the shortfall is" >&2
+    echo "cases that failed to build or push rather than cases that disagreed" >&2
+  else
+    echo "with nothing noted, so the cases were skipped before they were tried" >&2
+    echo "-- check the driver list above against the default set" >&2
+  fi
+  exit 1
+fi

@@ -4888,3 +4888,137 @@ against `boolean:3 int:1`, `awfy-permute` at `double:1` against `int:1`,
 `awfy-sieve` matching, and `awfy-towers` and `awfy-bounce` both at one reference
 array each. An instrument that cannot reproduce the numbers you already have is
 not ready to produce ones you do not.
+
+## Bar 3 widened from eight rows to fifty-two, and it fails on twelve
+
+`bytes/op on ART no worse than on HotSpot` was checked on the eight `awfy-*`
+rows and held on all eight. That is the set the bar is *written* about and it is
+not the set the claim is *about*: every case with a `ref.java` is a program this
+lane emits and ships. 52 of them carry one. Frozen binary `18312d3d`, corpus at
+`2f8b0211`, one process per case with a per-case timeout so a slow row is a
+reported row rather than a dead sweep.
+
+**Twelve of fifty-one measured rows allocate materially more on ART than on
+HotSpot** -- more than 100 bytes an operation and more than 5%, which is the
+tolerance this file needs because `bytes-on-device.sh`'s own rule is absolute
+and calls 0.7% of an 8MB row a finding.
+
+    row                   HotSpot         ART        ours/ref on ART
+    bigint                   8288       22032   +166%        0.28x
+    case-convert            10232       23152   +126%        0.79x
+    number-format            4608        6456    +40%        1.00x
+    growth-fixed            16400       20480    +25%        1.00x
+    growth-grown            32896       36992    +12%        1.81x
+    map-and-set             65952       74144    +12%        1.09x
+    node-utf8               75432       83136    +10%        1.23x
+    generator                   0       80000   from zero    1.00x
+    generator-dispatched        0       80040   from zero    1.00x
+    in-narrowing                0       81920   from zero    1.00x
+    optional-chain              0     1600000   from zero    1.00x
+    instanceof                  0     2133336   from zero    1.00x
+
+**The third column is the one that matters and it is why the count is not the
+finding.** On nine of the twelve we are at or under the hand-written Java
+reference *on ART*. A row that allocates nothing on HotSpot and 2MB an operation
+on ART, while the reference does the same, is C2's escape analysis being absent
+rather than this backend emitting something bad: everyone pays it, including the
+person who wrote the reference by hand.
+
+**Three are ours**: `growth-grown` at 1.81x, `node-utf8` at 1.23x and
+`map-and-set` at 1.09x rise on ART *and* sit above their reference there. Those
+are the queue. The other nine are a platform ceiling and belong in the report
+rather than in the work list -- the same partition this file already makes for
+bar 2 with `Java/node`.
+
+### And the direction nobody asked about: six rows where we allocate nothing and a Java programmer cannot
+
+    row                   ours on ART    reference on ART
+    exceptions                      0           1,600,000
+    erasure-unknown                 0           1,052,516
+    objects                         0              98,328
+    generic-classes                 0              63,488
+    substrings                      0              24,576
+    closures                        0                  16
+
+Checked in the artefact rather than inferred from the counter. `objects` emits
+**zero** allocation instructions against the reference's six;
+`erasure-unknown`'s `erasureUnknown` is a hundred instructions with zero against
+the reference's four. So this is not the counter failing to see something.
+
+**And the fourth cell of the table says why it holds on ART, which three cells
+could not.** `ref-bytes-on-device.sh` measured the reference on ART only, so
+"the reference allocates 98,328 and we allocate nothing" left open whether the
+reference is simply an allocating program. It is not: the same reference reads
+**0 bytes/op on HotSpot** and 98,328 on ART. C2 scalar-replaces its six
+allocations and ART cannot. Ours is zero on *both*, because the elimination
+happened in this compiler rather than in a JIT -- which is the whole argument
+for an ahead-of-time compiler on a platform whose JIT is weaker, stated as a
+number on a row instead of as a prediction.
+
+`instanceof` was predicted before it was read and came back as predicted: the
+reference is **0 on HotSpot and 2,133,336 on ART**, the same pair as ours, so
+that row is C2 and not either compiler. Written down because a prediction that
+is only recorded when it is wrong makes the wrong ones look characteristic.
+
+`exceptions` is the largest gap in the survey and was invisible until the
+warmup below was fixed: the reference allocates **9,100,000 bytes an operation
+on HotSpot and 1,600,000 on ART** where we allocate nothing at all. That is the
+`fillInStackTrace` prediction from the original plan arriving as a measurement
+-- this compiler knows whole-program whether `.stack` is ever read, and V8 and
+a Java programmer both cannot.
+
+**Say which half of the feature that is measured over, every time it is
+quoted.** A `throw` that crosses a call is *refused* as of `9b0b609c`, so the
+shape that allocates nothing is also the only shape that compiles. The number is
+real and it is about same-function throws, which lower to a `Jump` with the
+thrown value as a block argument and therefore have no exception table, no
+handler frame and nothing to fill in. If that refusal ever lifts, whole-program
+knowledge of whether `.stack` is read gets **harder** rather than easier: an
+unwinder needs frames this design never builds. MainClaude's point, and it
+belongs next to the number rather than in a later correction.
+
+### Two of the worst rows are the fixture, and the reference is doing less work
+
+Worth separating before either becomes a work item, because both read as
+codegen gaps and neither is.
+
+**`arrays`, 272 B/op against a reference that allocates nothing.** The
+TypeScript declares `const xs = [0, 37, 74, ...]` **inside** `convolve`, so the
+language says a fresh 32-element array per call and we emit one. `ref.java`
+hoists the identical literal to a `private static final double[] XS` and reads
+it. Different programs. Ours is right about the source.
+
+**`growth-grown`, 1.81x.** The TypeScript builds its array with 2,048 `push`es
+from empty; `ref.java` writes `new double[2048]` because the programmer knows
+`n`. A doubling ladder costs about 2x the final array and 36,992 is exactly
+that plus the wrapper. This file already recorded the row as "at its floor --
+no policy that does not know the final size beats 2x", which is true and was
+answering a smaller question than the row asks.
+
+Both have a real optimisation behind them and **neither is this backend's**:
+hoisting a non-escaping, never-mutated constant array literal to a static, and
+inferring a growable array's capacity from a provably-constant push count. The
+C lane does neither either -- `emit-c` puts `nts_array_new` inside `convolve`
+for the first -- so they are middle-end opportunities that all three backends
+would get, and they are reported upstream rather than built here. Reach is
+modest and measured rather than assumed: the syntactic shape is in 5 of 61 bench
+case files, 19 of 228 example files and 4 of 312 `runtime/node` files, and two of the five
+bench cases mutate the array and so are ineligible.
+
+### What the sweep could not measure, and why it was the instrument
+
+Three rows of 52 came back short: `elementwise` ships its own driver and neither
+allocation driver can call it, and `awfy-mandelbrot` and `exceptions` timed out
+on the **reference** side. Two of the three are now measured, and both were
+worth having -- `awfy-mandelbrot`'s reference is 16 and 8, exactly ours, and
+`exceptions` is the largest gap in the table.
+
+The timeout was not those two programs. `RefBytes` warmed a fixed **20,000
+iterations** where its compiled counterpart `H.java` warms by *time* with a five
+second cap -- and the halve-and-retry loop repeats the warmup on every attempt.
+Twenty thousand iterations of `awfy-mandelbrot` is twenty thousand times
+twenty-two milliseconds. The comment justifying the time bound is already in
+`bytes-on-device.sh`, written when it cost an hour a row there; it did not reach
+the sibling. **A fix belongs to the family and not to the file it was found in**
+-- which is the second time that sentence has been written in this file about
+these two scripts, the first being `NTS_AWFY`.
