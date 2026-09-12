@@ -6781,3 +6781,79 @@ an `ArrayIndexOutOfBoundsException` from a `checked: false` access is currently
 a **defect**, loudly, and a blanket catch would reclassify compiler bugs as
 refusals. That is the lane's one bug-finding advantage over the other two, and
 it is not worth 0.65 of a ratio.
+
+## The bounds-guard fix clears one row, and the survey says which
+
+Before pressing the `checked: true` question, the obvious question: which other
+rows pay the 1.65x? Counted over the emitted classes of every bench case --
+static call sites, so it over-counts cold ones:
+
+    node-utf8      11        excluded by the goal: platform intrinsics
+    elementwise     4        not an awfy row
+    bytes           4        not an awfy row
+    awfy-towers     4        1.80x  <- the row
+    awfy-nbody      4        1.00x  already at the bar
+
+**Every other case has none.** `awfy-bounce` has six array instructions and
+**zero** guards -- its subscripts are all `checked: false`, so the middle end
+proved them and there is nothing to remove. So the fix is worth one row, and the
+row it is worth is the one it was found on. Stated because the opposite would
+have been much more valuable and I would rather have looked than assumed.
+
+(The build surveyed is three days old; its `towers` dex matched the 51 code
+units measured independently here, which is the check that it is not stale in
+the way that would matter.)
+
+## `awfy-bounce`: the two named suspects are dead, and so is the instrument
+
+The section above stopped at "the remaining suspects are the ones neither dump
+covers: the `som.Random` port, and the hundred allocations a round". Both are
+now dead.
+
+**Not the allocations.** Measured rather than reasoned about:
+
+    awfy-bounce       HotSpot      ART     objects   avg
+    ours                 3616     2840         103    27
+    reference            3648     2856
+
+Ours allocates **less**, by half a percent, on both runtimes. A 30% AOT
+regression is not 16 bytes.
+
+**Not `som.Random`.** The port is fully integer-specialised -- `getfield I`,
+`imul`, `iadd`, `iand`, `putfield I`, `ireturn`, with no `d2i` and no double
+anywhere. `widen` handled it, and the arithmetic is `(seed * 1309 + 13849) &
+65535` on both sides.
+
+**And not an uncompiled method**, which was worth one check because it would
+have explained 30% outright: `Ball$bounce` has AOT code at `code_offset
+0x10f30`, size 204, frame 32. It is compiled, not interpreted.
+
+So seven hypotheses are dead on this row: accessors, `widen`, the dex, the two
+methods' AOT code, allocation, the `Random` port, and interpretation.
+
+### The instrument cannot do the thing the last section asked for
+
+The prescription there was to stop using `--method-filter` and dump the whole
+odex for both sides. **That is not available with this harness**, and the reason
+is structural rather than a bug: both sides install as `org.nts.benchprobe`, so
+installing the reference *replaces* ours, and by the time a run has finished
+there is exactly one odex on the device. My first attempt produced a 103,006
+line reference dump and a **0 line** dump of ours, and the zero is a fact about
+the instrument and not about the code.
+
+`NTS_AOT_KEEP=1` keeps the work directory but `with-dex.apk` is rebuilt per
+side, so the kept artefact is also the reference's. Dumping both sides
+unfiltered needs either two package names or a dump taken *between* the two
+installs, and neither exists today.
+
+Recorded rather than worked around, because the cost of the workaround is a
+change to a script three sessions run and the row it would serve is 1.11x.
+
+### One difference that is real and is not ours
+
+The reference `Bounce.benchmark` builds its array with `Arrays.setAll` and a
+lambda, which d8 desugars into `Bounce$$ExternalSyntheticLambda0.apply` plus
+`Bounce.lambda$benchmark$0`; our TypeScript writes a plain indexed loop. That is
+a difference in the two programs rather than in the two compilers, and it is 100
+of the roughly 5,000 calls a round, so it is named here and not offered as the
+mechanism.
