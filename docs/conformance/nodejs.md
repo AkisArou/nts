@@ -23776,3 +23776,39 @@ The conclusion came from the branch, which is 136 commits behind and reads 67 pa
 was right about the tree it was taken in and wrong about the tree it was published
 for; the first was 350 against 339. **A tree is part of a number's population**, and
 so is a claim's.
+
+## `?.` is green for the three spellings the row names, and the fourth is 389 refusals
+
+`docs/conformance/typescript.md:111` marks `?.`, `?.()` and `?.[]` ✅, and the corpus
+carries **389 refused "optional-chained method call" sites** -- 90 in `runtime/node`,
+the rest in web-platform. Both are true. The row is not wrong about what it says; the
+refused form is a **fourth** spelling it does not name.
+
+Probed with one program per form, `NTS_BACKEND=jvm nts check`:
+
+    held?.value           property through an optional receiver      lowers
+    fn?.(1)               calling an optional function value         lowers
+    table?.["a"]          index through an optional receiver         lowers
+    held?.value()         **a method call through an optional receiver   REFUSED**
+    held?.value?.()       refused differently: reading the method as a
+                          function value has no representation
+    if (h === undefined) … else h.value()                            lowers
+
+So `?.()` in the row means *calling an optional function*, which is a different
+construct from *calling a method on an optional receiver*, and only the second is
+refused. Four functions in one probe produced exactly one optional-chaining refusal
+and two agreeing cases, which is what makes this a measurement rather than a reading
+of the message text.
+
+**The obvious workaround is not one.** `x?.m?.()` trades the optional-chaining
+refusal for "a type that has no representation (a function type)", because it forces
+the method to be read as a value. The form that lowers is an explicit `undefined`
+check, which is why the 90 sites in `runtime/node` cannot be fixed by a
+search-and-replace.
+
+The message cannot tell the subsets apart either: all 659 instances across the build
+logs render as the same generic `` `a?.b()` ``, so the count has to come from the
+source locations. Ranking by message would have said there was one kind of failure
+here, and there are two.
+
+`typescript.md` belongs to the compiler lane, so the row itself is theirs to amend.
