@@ -381,7 +381,9 @@ fn code_attribute(pool: &mut Pool, body: &Body) -> (Vec<u8>, Vec<Origin>) {
     attributes.extend_from_slice(&line_body);
 
     let mut attribute_count = 1;
-    if let Some(frames) = frames::stack_map_table(pool, &body.locals, &body.frame_offsets) {
+    if let Some(frames) =
+        frames::stack_map_table(pool, &body.locals, &body.frame_offsets, &body.handler_frames)
+    {
         let name = pool.utf8("StackMapTable");
         attributes.extend_from_slice(&name.to_be_bytes());
         attributes.extend_from_slice(&u32::try_from(frames.len()).unwrap_or(u32::MAX).to_be_bytes());
@@ -394,7 +396,16 @@ fn code_attribute(pool: &mut Pool, body: &Body) -> (Vec<u8>, Vec<Origin>) {
     inner.extend_from_slice(&body.max_locals.to_be_bytes());
     inner.extend_from_slice(&u32::try_from(body.code.len()).unwrap_or(u32::MAX).to_be_bytes());
     inner.extend_from_slice(&body.code);
-    write_count(&mut inner, 0); // exception table -- see the plan on handlers
+    // The exception table, in declaration order -- which is search order
+    // (JVMS 4.7.3), so writing it sorted would silently change which handler
+    // wins when two ranges overlap.
+    write_count(&mut inner, body.handlers.len());
+    for handler in &body.handlers {
+        inner.extend_from_slice(&handler.start.to_be_bytes());
+        inner.extend_from_slice(&handler.end.to_be_bytes());
+        inner.extend_from_slice(&handler.target.to_be_bytes());
+        inner.extend_from_slice(&pool.class(handler.catch_type.as_str()).to_be_bytes());
+    }
     write_count(&mut inner, attribute_count);
     inner.extend_from_slice(&attributes);
 

@@ -122,6 +122,29 @@ struct Fixup {
 
 /// A finished method body, and everything the `Code` attribute needs.
 ///
+/// One `exception_table` row: the range it guards, where control goes, and
+/// what it catches.
+///
+/// Offsets rather than labels, because this is the resolved form -- the builder
+/// holds labels and `Code::finish` turns them into these.
+#[derive(Debug, Clone)]
+pub struct Handler {
+    pub start: u16,
+    pub end: u16,
+    pub target: u16,
+    /// The binary name of the caught class.
+    pub catch_type: String,
+}
+
+/// A handler before its labels are placed.
+#[derive(Debug)]
+struct PendingHandler {
+    start: Label,
+    end: Label,
+    target: Label,
+    catch_type: String,
+}
+
 /// `Clone` because a covariant override needs the *same* body under a second
 /// descriptor -- a bridge method is byte-for-byte the forwarder it stands in
 /// front of, and rebuilding it would be two chances to emit one thing.
@@ -136,6 +159,13 @@ pub struct Body {
     pub frame_offsets: Vec<u16>,
     /// The slot table, as verification entries.
     pub locals: Vec<VType>,
+    /// The `exception_table`, in the order the handlers were declared -- which
+    /// is the order the JVM searches, so it is not sorted.
+    pub handlers: Vec<Handler>,
+    /// Handler entry offsets and what the JVM will have pushed there. Separate
+    /// from `frame_offsets` because these are the only frames whose operand
+    /// stack is not empty.
+    pub handler_frames: Vec<(u16, VType)>,
 }
 
 /// A method body under construction.
@@ -146,6 +176,8 @@ pub struct Code {
     labels: Vec<Option<u16>>,
     fixups: Vec<Fixup>,
     frame_offsets: Vec<u16>,
+    handlers: Vec<PendingHandler>,
+    handler_frames: Vec<(u16, VType)>,
     locals: Vec<VType>,
     max_locals: u16,
     stack: i32,
@@ -165,6 +197,8 @@ impl Code {
             labels: Vec::new(),
             fixups: Vec::new(),
             frame_offsets: Vec::new(),
+            handlers: Vec::new(),
+            handler_frames: Vec::new(),
             locals,
             max_locals,
             stack: 0,
@@ -213,6 +247,45 @@ impl Code {
         }
         if !self.frame_offsets.contains(&at) {
             self.frame_offsets.push(at);
+        }
+    }
+
+    /// Guard everything between two labels with a handler.
+    ///
+    /// Declaration order **is** search order (JVMS 4.7.3), so these are kept in
+    /// the order they were declared rather than sorted by offset.
+    pub fn try_catch(&mut self, start: Label, end: Label, target: Label, catch_type: &str) {
+        self.handlers.push(PendingHandler {
+            start,
+            end,
+            target,
+            catch_type: catch_type.to_owned(),
+        });
+    }
+
+    /// Place a handler's entry here.
+    ///
+    /// This is [`bind`](Self::bind)'s one exception, and the only place in this
+    /// emitter where a block begins with something on the operand stack: the
+    /// JVM pushes the caught throwable before transferring control, so the
+    /// depth here is one by the platform's doing rather than by anything the
+    /// code did. `bind` refuses that, and refusing it everywhere else is still
+    /// the right rule -- which is why this is a second method and not a flag on
+    /// the first.
+    ///
+    /// Nothing may fall through into a handler. The caller ends the guarded
+    /// range with a jump or a return, and the verifier says so if it does not.
+    pub fn bind_handler(&mut self, label: Label, catch_type: &str) {
+        let at = self.offset();
+        if let Some(slot) = self.labels.get_mut(label.0 as usize) {
+            *slot = Some(at);
+        }
+        self.stack = 1;
+        self.max_stack = self.max_stack.max(1);
+        let thrown = VType::Object(catch_type.to_owned());
+        match self.handler_frames.iter_mut().find(|(offset, _)| *offset == at) {
+            Some(existing) => existing.1 = thrown,
+            None => self.handler_frames.push((at, thrown)),
         }
     }
 
@@ -818,6 +891,23 @@ impl Code {
         }
         self.frame_offsets.sort_unstable();
         self.frame_offsets.dedup();
+        // Resolved here rather than as they are declared, because a handler
+        // commonly guards a range whose end is not yet placed.
+        let mut handlers = Vec::with_capacity(self.handlers.len());
+        for pending in &self.handlers {
+            let placed = |label: Label| self.labels.get(label.0 as usize).copied().flatten();
+            let (Some(start), Some(end), Some(target)) =
+                (placed(pending.start), placed(pending.end), placed(pending.target))
+            else {
+                return Err(Error::UnboundLabel);
+            };
+            handlers.push(Handler {
+                start,
+                end,
+                target,
+                catch_type: pending.catch_type.clone(),
+            });
+        }
         Ok(Body {
             max_stack: u16::try_from(self.max_stack).unwrap_or(u16::MAX),
             max_locals: self.max_locals,
@@ -825,6 +915,8 @@ impl Code {
             origins: self.origins,
             frame_offsets: self.frame_offsets,
             locals: self.locals,
+            handlers,
+            handler_frames: self.handler_frames,
         })
     }
 }

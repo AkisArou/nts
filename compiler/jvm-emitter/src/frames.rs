@@ -97,17 +97,48 @@ impl VType {
 /// a straight-line method and means the attribute must be omitted rather than
 /// written empty.
 #[must_use]
-pub fn stack_map_table(pool: &mut Pool, locals: &[VType], offsets: &[u16]) -> Option<Vec<u8>> {
-    let mut wanted = offsets.iter().copied().filter(|&at| at != 0).peekable();
-    wanted.peek()?;
-    let offsets: Vec<u16> = wanted.collect();
+pub fn stack_map_table(
+    pool: &mut Pool,
+    locals: &[VType],
+    offsets: &[u16],
+    handlers: &[(u16, VType)],
+) -> Option<Vec<u8>> {
+    // **A handler's entry is the one offset where the operand stack is not
+    // empty**, and it is the whole reason this table needs a second frame kind.
+    // The JVM has pushed the caught throwable and nothing else, so the stack is
+    // exactly one entry; the locals are the same fixed slot table every other
+    // frame names, because a slot's type does not change over a method and the
+    // prologue has already assigned every one of them.
+    //
+    // Those are the two facts the rest of this module rests on, so a handler
+    // costs one encoding rather than the abstract interpreter the general
+    // problem needs. Written down because the plan priced this as the expensive
+    // part and it is not.
+    let mut frames: Vec<(u16, Option<VType>)> =
+        offsets.iter().filter(|&&at| at != 0).map(|&at| (at, None)).collect();
+    for (at, thrown) in handlers {
+        if *at == 0 {
+            continue;
+        }
+        match frames.iter_mut().find(|(existing, _)| existing == at) {
+            // A target that is also an ordinary block boundary: the handler
+            // wins, because the stack there is the throwable either way.
+            Some(slot) => slot.1 = Some(thrown.clone()),
+            None => frames.push((*at, Some(thrown.clone()))),
+        }
+    }
+    if frames.is_empty() {
+        return None;
+    }
+    frames.sort_by_key(|(at, _)| *at);
 
     let mut body = Vec::new();
-    let count = u16::try_from(offsets.len()).unwrap_or(u16::MAX);
+    let count = u16::try_from(frames.len()).unwrap_or(u16::MAX);
     body.extend_from_slice(&count.to_be_bytes());
 
     let mut previous: Option<u16> = None;
-    for (nth, &at) in offsets.iter().enumerate() {
+    for (nth, (at, thrown)) in frames.iter().enumerate() {
+        let at = *at;
         // JVMS 4.7.4: the first frame's delta is its offset; every later one is
         // measured from *one past* the previous frame. The `- 1` is the whole
         // reason a hand-written table is usually wrong the first time.
@@ -123,7 +154,23 @@ pub fn stack_map_table(pool: &mut Pool, locals: &[VType], offsets: &[u16]) -> Op
             for local in locals {
                 local.write(pool, &mut body);
             }
-            body.extend_from_slice(&0u16.to_be_bytes()); // the stack, empty
+            match thrown {
+                Some(thrown) => {
+                    body.extend_from_slice(&1u16.to_be_bytes());
+                    thrown.write(pool, &mut body);
+                }
+                None => body.extend_from_slice(&0u16.to_be_bytes()),
+            }
+        } else if let Some(thrown) = thrown {
+            // same_locals_1_stack_item carries its delta in the tag over
+            // 64..=127, and 247 takes an explicit one past that.
+            if delta <= 63 {
+                body.push(64 + u8::try_from(delta).unwrap_or(63));
+            } else {
+                body.push(247);
+                body.extend_from_slice(&delta.to_be_bytes());
+            }
+            thrown.write(pool, &mut body);
         } else if delta <= 63 {
             // same_frame, whose type byte *is* the delta.
             body.push(u8::try_from(delta).unwrap_or(63));
@@ -145,9 +192,9 @@ mod tests {
     #[test]
     fn nothing_to_write_for_straight_line_code() {
         let mut pool = Pool::new();
-        assert!(stack_map_table(&mut pool, &[VType::Integer], &[]).is_none());
+        assert!(stack_map_table(&mut pool, &[VType::Integer], &[], &[]).is_none());
         assert!(
-            stack_map_table(&mut pool, &[VType::Integer], &[0]).is_none(),
+            stack_map_table(&mut pool, &[VType::Integer], &[0], &[]).is_none(),
             "the entry frame is implicit"
         );
     }
@@ -155,7 +202,7 @@ mod tests {
     #[test]
     fn the_first_delta_is_the_offset_and_the_rest_are_one_less() {
         let mut pool = Pool::new();
-        let body = stack_map_table(&mut pool, &[VType::Integer], &[10, 20, 21]).unwrap();
+        let body = stack_map_table(&mut pool, &[VType::Integer], &[10, 20, 21], &[]).unwrap();
         assert_eq!(&body[0..2], &3u16.to_be_bytes(), "three frames");
         assert_eq!(body[2], 255, "the first is a full frame");
         assert_eq!(&body[3..5], &10u16.to_be_bytes(), "its delta is its offset");

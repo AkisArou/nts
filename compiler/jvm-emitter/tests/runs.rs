@@ -402,6 +402,62 @@ fn a_narrow_array_is_allocated_at_its_own_width() {
     assert_eq!(stdout, "373.0");
 }
 
+/// A handler entry is the one block boundary whose operand stack is not empty.
+///
+/// Every other frame this emitter writes is `same_frame` over a fixed slot
+/// table, because nothing survives a jump. The JVM pushes the caught throwable
+/// before transferring control, so a handler's frame is
+/// `same_locals_1_stack_item` -- the same locals, one thing on the stack -- and
+/// getting that encoding wrong is a `VerifyError` at class load rather than a
+/// wrong answer, which is what makes this cheap to be sure of.
+///
+/// The array access here is deliberately out of range: the JVM's own bounds
+/// check is the thing that throws, which is exactly the arrangement the backend
+/// wants for a `checked: true` subscript -- no explicit guard on the
+/// straight-line path, and the refusal rebuilt in a handler that costs nothing
+/// until it runs.
+#[test]
+fn a_handler_catches_an_out_of_range_access() {
+    const AIOOBE: &str = "java/lang/ArrayIndexOutOfBoundsException";
+    let locals = vec![
+        VType::Object(ARGS.into()),
+        VType::Object("[I".into()),
+        VType::Integer,
+    ];
+    let Some(stdout) = run_main("Handler", locals, |code, pool, o| {
+        code.const_int(o, pool, 3);
+        code.new_array(o, pool, "I");
+        code.store(o, Kind::Ref, 1);
+
+        let start = code.label();
+        let end = code.label();
+        let caught = code.label();
+        let done = code.label();
+        code.try_catch(start, end, caught, AIOOBE);
+
+        code.bind(start);
+        code.load(o, Kind::Ref, 1);
+        code.const_int(o, pool, 9); // past the end of a three-element array
+        code.array_load(o, "I");
+        code.store(o, Kind::Int, 2); // not reached
+        code.bind(end);
+        code.goto(o, done);
+
+        code.bind_handler(caught, AIOOBE);
+        code.pop(o, 1);
+        code.const_int(o, pool, 42);
+        code.store(o, Kind::Int, 2);
+
+        code.bind(done);
+        out(code, pool, o);
+        code.load(o, Kind::Int, 2);
+        println(code, pool, o, "I");
+    }) else {
+        return;
+    };
+    assert_eq!(stdout, "42", "the handler ran, so the frame and the table verified");
+}
+
 #[test]
 fn a_generated_class_with_a_field() {
     let Some(java) = java_home_bin("java") else {
