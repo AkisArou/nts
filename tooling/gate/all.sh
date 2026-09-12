@@ -1114,7 +1114,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # lands rather than being absorbed into a gap. The plan this lane started
   # from set the target at "86 of 87, which is the LLVM floor"; the corpus has
   # grown by a hundred and one since and this backend refuses nothing in it.
-  backend_examples 190 "through the JVM backend" ); }
+  backend_examples 192 "through the JVM backend" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
