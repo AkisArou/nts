@@ -44,18 +44,38 @@ about.
   child stdio streams.
 
     fork-stdio.js                         a fourth stdio slot
-    pipe-dataflow.js                      the parent must not read a stream it hands on
-    stdio-reuse-readable-stdio.js         the same stream handed to a second child
     constructor.js                        `ChildProcess.prototype.spawn`
 
   `fork-stdio` wants `child.stdio[4]` -- a slot beyond the three plus the channel.
-  `pipe-dataflow` and `stdio-reuse-readable-stdio` assert that the parent never reads a
-  stream it handed to another child, and
-  `ChildReadable` reads in its constructor, which `test-child-process-kill` requires so a
-  killed child's stdout still reaches `end`; those two pull opposite ways and the answer is
-  a decision about who owns the read, not a line of code. `constructor` wants node's
-  internal spawn method on a bare `new ChildProcess()`, which means publishing the internal
-  spawn surface.
+  `constructor` wants node's internal spawn method on a bare `new ChildProcess()`, which
+  means publishing the internal spawn surface.
+
+    pipe-dataflow.js                      `cat.stdout._handle` is undefined
+
+  Not the dataflow. The test instruments node's internals before asserting anything --
+
+      cat.stdout._handle.readStart = common.mustNotCall();
+
+  -- and under `'use strict'` that line throws `TypeError: Cannot set properties of
+  undefined`, so the 1MB through `cat | grep | wc` is never reached. Measured both ways:
+  node reports `typeof stdout._handle === 'object'` and the assignment succeeds; ours
+  reports `undefined` and it throws.
+
+  **And the cheap fix would be a hollow pass.** Handing out a `_handle` object carrying a
+  `readStart` this profile never calls would satisfy `mustNotCall` -- while
+  `ChildReadable`'s constructor starts reading eagerly, which is the exact thing the test
+  exists to forbid. The test's subject is reachable only by first answering the question
+  below; the `_handle` is what stops it being asked.
+
+    stdio-reuse-readable-stdio.js         who owns the read
+
+  This one is the ownership question, and it is not the same bug as `pipe-dataflow` despite
+  arriving next to it: the file never mentions `_handle`. It hands `p1.stdout` to `head`,
+  waits for `head` to exit, and then reads `p1.stdout` from the parent -- legal because
+  `head` is no longer reading. Ours reads that stream from the constructor onward, so
+  parent and child consume the same pipe. `test-child-process-kill` needs the eager read so
+  a killed child's stdout still reaches `end`; the two pull opposite ways and the answer is
+  a decision about who owns the read, not a line of code.
 
 ### Observed, not diagnosed
 
