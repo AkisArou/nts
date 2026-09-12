@@ -583,6 +583,37 @@ public final class NtsMap {
      * so the two cannot disagree -- which they would silently, as a lookup that
      * simply never finds anything.
      */
+    /**
+     * The tags {@link #sameKey} compares by reference identity, which is its
+     * `default` arm and therefore everything it does not name.
+     *
+     * <p>**Written as the complement rather than as a list**, so that a tag
+     * added to `sameKey`'s switch and not to this one is a compile-time
+     * difference in one place rather than a silent disagreement in two. The two
+     * are one rule and were two: `findObject` and its unboxed sibling both
+     * tested `candidate.tag == OBJECT` directly.
+     *
+     * <p>That held for exactly as long as `OBJECT` was the only reference tag an
+     * erased key could carry. `hir::tags::of_reference` gained a
+     * `ManagedType::Symbol` arm on 2026-09-12, so a symbol key became
+     * `SYMBOL`-tagged, and a lookup by bare reference stopped finding one it had
+     * itself stored -- `twoSymbolsAreTwoKeys` and `aMixedKeyMap` in
+     * `examples/symbol-values`. Hashing was already right, because `hash`'s own
+     * default arm calls `hashObject` for the same reason this exists.
+     */
+    private static boolean keyedByIdentity(int tag) {
+        switch (tag) {
+            case NtsValue.NUMBER:
+            case NtsValue.BOOLEAN:
+            case NtsValue.STRING:
+            case NtsValue.UNDEFINED:
+            case NtsValue.NULL:
+                return false;
+            default:
+                return true;
+        }
+    }
+
     private static int hashObject(Object ref) {
         int h = System.identityHashCode(ref);
         h *= 0x9e3779b1;
@@ -610,7 +641,7 @@ public final class NtsMap {
         if (buckets.length == 0) {
             for (int i = head; i < used; i++) {
                 NtsValue candidate = keys[i];
-                if (candidate != null && candidate.tag == NtsValue.OBJECT && candidate.ref == key) {
+                if (candidate != null && keyedByIdentity(candidate.tag) && candidate.ref == key) {
                     return i;
                 }
             }
@@ -624,7 +655,7 @@ public final class NtsMap {
             if (cell == 0L) { return -1; }
             int slot = (int) cell - 1;
             NtsValue candidate = keys[slot];
-            if ((int) (cell >>> 32) == h && candidate.tag == NtsValue.OBJECT && candidate.ref == key) {
+            if ((int) (cell >>> 32) == h && keyedByIdentity(candidate.tag) && candidate.ref == key) {
                 return slot;
             }
             p = (p + 1) & mask;

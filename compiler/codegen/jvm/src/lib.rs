@@ -469,6 +469,19 @@ fn object_class(
     if nts_core::hir::is_tuple_layout_name(&layout.name) {
         builder.interfaces.push(types::TUPLE.to_owned());
     }
+    // A class whose dispatch table names a no-argument `toString` returning a
+    // string. `String(v)` on an erased object needs to tell that from a class
+    // that merely inherits `java.lang.Object`'s, and no *class* can answer it --
+    // they all have one. See `types::STRINGABLE`.
+    //
+    // **The member name is part of the key, and the descriptor with it.** Asking
+    // only "is there a slot returning a string" would mark a class with an
+    // unrelated `label(): string`, whose `toString` is then Object's and whose
+    // `String()` answers `nts.gen.Thing@1b6d3586`. That is the mistake
+    // `callback_interfaces` made with `call` and fixed, one method name over.
+    if declares_own_to_string(program, layout) {
+        builder.interfaces.push(types::STRINGABLE.to_owned());
+    }
     if let Some(resume) = resumes(program, layout) {
         builder.interfaces.push(types::RESUMABLE.to_owned());
         let origin = program_origin(program);
@@ -587,6 +600,24 @@ fn render(
 /// Deduplicated, because two slots can name one function -- a class inheriting
 /// a callback and redeclaring it would otherwise list the interface twice, and
 /// a duplicate entry in `interfaces` is a class file the verifier rejects.
+/// Whether this layout's dispatch table names a `toString(): string` of its own.
+///
+/// The descriptor has to be exactly `()Ljava/lang/String;`, because that is the
+/// one that overrides `java.lang.Object.toString` and so the one `ref.toString()`
+/// reaches. A `toString(radix)` is a different method to the JVM and marking its
+/// class would promise a call that resolves elsewhere.
+fn declares_own_to_string(program: &Program, layout: &nts_core::hir::Layout) -> bool {
+    layout.methods.iter().flatten().any(|name| {
+        hierarchy::member_name(name) == "toString"
+            && program
+                .funcs
+                .iter()
+                .find(|func| &func.name == name)
+                .and_then(|func| instance_descriptor(program, func))
+                .is_some_and(|descriptor| descriptor == "()Ljava/lang/String;")
+    })
+}
+
 fn callback_interfaces(
     program: &Program,
     layout: &nts_core::hir::Layout,

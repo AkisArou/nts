@@ -194,9 +194,28 @@ public final class NtsRuntime {
         System.err.flush(); System.exit(1);
     }
     /** Package-visible: the buffer and view classes report lengths the same way. */
+    /**
+     * How a number is spelled, which is {@link #numberToString} and nothing
+     * else.
+     *
+     * <p>**This was a second implementation and it disagreed.** It answered
+     * `String.format("%g", value)` for anything not a whole number, which is C's
+     * six-significant-digit default: `1.5` printed as `1.50000` and `0.1` as
+     * `0.100000`, where node gives `1.5` and `0.1`. Whole numbers agreed, so
+     * every test that happened to use one passed.
+     *
+     * <p>The comment on {@code NtsValue.valueToString} already said the number
+     * must not go through `Double.toString` "because the two disagree -- `1e21`
+     * against `1.0E21` -- and node's spelling is the one this has to match". The
+     * intent was right and the implementation was a third spelling that matched
+     * neither. `numberToString` is the one that is tested against node, and a
+     * conversion with two implementations has two answers.
+     *
+     * <p>Kept as a name rather than deleted because diagnostics call it -- an
+     * index in a refusal message reads better as `1.5` than `1.50000` too.
+     */
     static String numberText(double value) {
-        if (value == (long) value && Math.abs(value) < 1e15) { return Long.toString((long) value); }
-        return String.format("%g", value);
+        return numberToString(value);
     }
     public static double[] arrayFill(double[] array, double value) { Arrays.fill(array, value); return array; }
     public static boolean[] arrayFillBool(boolean[] array, boolean value) { Arrays.fill(array, value); return array; }

@@ -75,16 +75,21 @@ public final class NtsValue {
     /**
      * `String(v)` on a value carrying its own tag.
      *
-     * <p>Exact for `undefined`, `null`, a boolean, a number and a string. Every
-     * other tag **aborts rather than guessing**, which is the C lane's rule and
-     * is worth keeping rather than falling back to `toString`: a value tagged
-     * `OBJECT` reaching here is a lowering that should have refused, and
-     * answering `[object Object]` would turn a compiler bug into a plausible
-     * string that some test then bakes in.
+     * <p>Exact for every tag the table defines except `FUNCTION`, which aborts
+     * because node answers with the function's source text and this compiler
+     * keeps none. That refusal is the C lane's rule and is worth keeping: any
+     * string invented for it would be a plausible one that some test bakes in.
      *
-     * <p>The number goes through {@link NtsRuntime#numberText}, not
-     * `Double.toString`, because the two disagree -- `1e21` against `1.0E21`
-     * among others -- and node's spelling is the one this has to match.
+     * <p>`OBJECT` used to abort here too, on the ground that reaching it was a
+     * lowering that should have refused. `spells_itself` admits `unknown` now,
+     * so it is reached deliberately and answered -- see {@link #objectText}.
+     *
+     * <p>The number goes through {@link NtsRuntime#numberText}, which is
+     * {@link NtsRuntime#numberToString}, not `Double.toString`: the two
+     * disagree -- `1e21` against `1.0E21` among others -- and node's spelling is
+     * the one this has to match. It is the **same** converter the typed path
+     * uses, which is the point; it was a separate one until 2026-09-12 and
+     * spelled `1.5` as `1.50000`.
      */
     public static String valueToString(NtsValue value) {
         if (value == null) {
@@ -101,6 +106,8 @@ public final class NtsValue {
                 return NtsRuntime.numberText(value.num);
             case STRING:
                 return (String) value.ref;
+            case OBJECT:
+                return objectText(value.ref);
             case SYMBOL:
                 // `SymbolDescriptiveString`, and **`NtsSymbol.describe` rather
                 // than a second copy of it**: `String(sym)` on a typed symbol
@@ -110,10 +117,140 @@ public final class NtsValue {
                 // `Symbol()` with no description -- which prints `Symbol()` and
                 // whose `.description` is `undefined`, not `""`.
                 return NtsSymbol.describe((NtsSymbol) value.ref);
+            case FUNCTION:
+                // **Node answers with the function's source text and this lane
+                // has none.** Refused rather than guessed, which is the same
+                // choice `runtime/c` makes at the same tag: any string we
+                // invented would be a wrong answer that ran, and the one thing
+                // worse than refusing `String(f)` is printing something
+                // plausible for it.
+                throw new NtsRefusal("String() of a function, whose source text "
+                    + "this compiler does not keep");
             default:
+                // BIGINT never erases, so every tag the table defines is
+                // answered above. This is unreachable rather than unhandled.
                 throw new NtsRefusal("String() on tag " + value.tag
-                    + ", which the lowering should have refused rather than reaching here");
+                    + ", which is not a tag this table defines");
         }
+    }
+
+    /**
+     * `String(o)` for an erased object, which is three questions in one.
+     *
+     * <p>An object that declares its own `toString` answers with it; an array
+     * answers with its elements joined by a comma; anything else is
+     * `"[object Object]"`, which is not a fallback but the right answer -- an
+     * object whose prototype chain adds nothing *is* that string.
+     */
+    private static String objectText(Object ref) {
+        if (ref == null) {
+            return "null";
+        }
+        if (ref instanceof NtsSymbol) {
+            // **An erased symbol arrives tagged `OBJECT`.**
+            // `hir::tags::of_reference` answers `STRING` for a string and
+            // `FUNCTION` for a closure type and `OBJECT` for everything else,
+            // and has no arm for `ManagedType::Symbol` -- so the tag cannot
+            // tell one from an object here.
+            //
+            // `runtime/c` is unaffected because it can ask the descriptor what
+            // the object *is*; this lane has the tag and the class, and the
+            // class is the one that knows. That is the same answer `isArray`
+            // gives for the same reason, and it keeps `String(sym)` agreeing
+            // with node -- `Symbol(tag)` rather than `[object Object]` --
+            // without waiting on the shared table.
+            //
+            // The tag itself is still wrong, and `typeof` reads the tag: that
+            // is `hir::tags`' to fix and is reported rather than worked around
+            // twice.
+            return NtsSymbol.describe((NtsSymbol) ref);
+        }
+        if (ref instanceof NtsStringable) {
+            return ref.toString();
+        }
+        if (ref.getClass().isArray() || ref instanceof NtsArrayD || ref instanceof NtsArrayL
+            || ref instanceof NtsArrayZ) {
+            return arrayText(ref);
+        }
+        if (ref instanceof NtsTuple) {
+            // A tuple is a generated struct with named fields rather than an
+            // indexable run, so joining it would need the field list the class
+            // does not carry. `Array.isArray` says true of one and `String()`
+            // refuses it -- stated rather than silently answered
+            // `"[object Object]"`, which would be a wrong answer that ran.
+            throw new NtsRefusal("String() of a tuple, which this lane lays out "
+                + "as a struct and cannot walk as a run of elements");
+        }
+        return "[object Object]";
+    }
+
+    /**
+     * The elements, comma-joined, with `null` and `undefined` contributing the
+     * empty string and a nested array recursing.
+     *
+     * <p>**`java.lang.reflect.Array` rather than a chain against every element
+     * type**, for the reason {@link #isArray} gives for using
+     * `getClass().isArray()`: the element analysis chooses `double[]`, `int[]`,
+     * `long[]`, `boolean[]` or `Object[]` depending on what it proved, and a
+     * chain covering the ones that exist today goes stale the first time it
+     * proves something new. The compiler lane hit exactly that on 2026-09-12 --
+     * a join that read `int32_t[]` storage as 8-byte doubles and answered
+     * nineteen characters where three were wanted.
+     *
+     * <p>Reflection is affordable here because `String(array)` is a diagnostic
+     * path, not a hot one; the alternative is a correctness hazard on every
+     * future element type.
+     */
+    private static String arrayText(Object ref) {
+        Object items = ref;
+        int count = -1;
+        if (ref instanceof NtsArrayD) {
+            items = ((NtsArrayD) ref).items;
+            count = NtsArrayD.count((NtsArrayD) ref);
+        } else if (ref instanceof NtsArrayL) {
+            items = ((NtsArrayL) ref).items;
+            count = NtsArrayL.count((NtsArrayL) ref);
+        } else if (ref instanceof NtsArrayZ) {
+            items = ((NtsArrayZ) ref).items;
+            count = NtsArrayZ.count((NtsArrayZ) ref);
+        }
+        if (count < 0) {
+            count = java.lang.reflect.Array.getLength(items);
+        }
+        StringBuilder text = new StringBuilder();
+        for (int at = 0; at < count; at++) {
+            if (at > 0) {
+                text.append(',');
+            }
+            text.append(elementText(java.lang.reflect.Array.get(items, at)));
+        }
+        return text.toString();
+    }
+
+    /** One element of a joined array, by the rules `Array.prototype.join` uses. */
+    private static String elementText(Object element) {
+        if (element == null) {
+            return "";
+        }
+        if (element instanceof NtsValue) {
+            NtsValue held = (NtsValue) element;
+            // `join` renders `null` and `undefined` as the empty string, which
+            // is the one place it differs from `String()` of the same value.
+            return held.tag == NULL || held.tag == UNDEFINED ? "" : valueToString(held);
+        }
+        if (element instanceof String) {
+            return (String) element;
+        }
+        if (element instanceof Boolean) {
+            return ((Boolean) element) ? "true" : "false";
+        }
+        if (element instanceof Character) {
+            return String.valueOf(((Character) element).charValue());
+        }
+        if (element instanceof Number) {
+            return NtsRuntime.numberText(((Number) element).doubleValue());
+        }
+        return objectText(element);
     }
 
     /** `instanceof ArrayBuffer`, which is one class here and one descriptor there. */

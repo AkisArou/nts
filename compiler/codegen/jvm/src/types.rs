@@ -219,6 +219,15 @@ pub fn field_descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
     }
 }
 
+/// A generated class that declares its own `toString`, marked so that
+/// `String(v)` on an erased object can tell it from one that inherits
+/// `java.lang.Object`'s.
+///
+/// `runtime/c` reads a null `descriptor->methods[nts_to_string_slot]` as "none
+/// declared". There is no such null here: every class has a `toString`, so the
+/// absence has to be spelled nominally. See `NtsStringable`.
+pub const STRINGABLE: &str = "nts/rt/NtsStringable";
+
 /// `Map` and `Set`, which are one table with the values left out of one of them.
 pub const MAP: &str = "nts/rt/NtsMap";
 /// A `Date`: a `double` and an identity, and the two operations that reach it.
