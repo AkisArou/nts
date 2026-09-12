@@ -1009,6 +1009,12 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # Verified here rather than taken: rebuilt at `e6689b9a`, the example emits
   # five classes and `a-structural-cast-that-is-not-a-prefix` seven, both clean.
   #
+  # **178 to 179 with the class token's base, `81c5200e`.** A token stored
+  # where its own `typeof` is declared reached this backend as a value of a
+  # function type with no base, and was declined; `relate_closures_to_signatures`
+  # already gave a closure that relation and a class token is the other thing
+  # that is one. Settled by A/B on the compiler lane rather than by argument.
+  #
   # **176 to 178 with the generator work, `9b86de96`.** A generator can now be a
   # parameter, so `a-generator-walked-elsewhere` and `a-yield-star` arrived and
   # both agree. Two defects here had to go first and neither was in the
@@ -1029,7 +1035,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # So the two gaps are the same sentence one representation apart, and neither
   # is this lane being behind. Both swept one at a time rather than inferred
   # from a total.
-  backend_examples 178 "through the JVM backend" ); }
+  backend_examples 179 "through the JVM backend" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
