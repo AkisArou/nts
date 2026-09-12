@@ -7093,3 +7093,112 @@ deliberately: two projections died today between "this obviously works" and the
 device, and the sidecar's top-frame matching has at least one unexamined
 assumption in it -- that the throwing frame is the top frame, which inlining on
 ART may well make false.
+
+## The same case compiles the guard two different ways, and only one of them is the benchmark
+
+To ask the artefact instead of a transcription, `checked_subscript` got an
+experiment flag -- `NTS_JVM_UNCHECKED=1`, in the spirit of
+`NTS_JVM_CLASSFILE=49`: it answers one question and never ships. Then a
+comparison with it on and off, which came back **identical, four guards either
+way**, and I was two minutes from filing the flag as not working.
+
+It was working. I was compiling a different program.
+
+    emit-jvm <tsconfig>                        4 x bounds:(ID)I
+    emit-jvm <tsconfig> --entry module#init --entry work
+                                               4 x bounds:(II)I
+
+**A subscript's guard has two forms and the case picks one by how it was
+compiled.** Without an entry, `emit-jvm` reads the case as a *library*, nothing
+specialises the loop counter, the index stays an `f64`, and the guard is the
+`(ID)I` form -- which the flag deliberately does not touch, because a double
+index *can* be fractional and there the check is load-bearing rather than
+diagnostic. With the entries the bench and device scripts actually pass,
+specialisation makes it an `i32` and the guard is `(II)I`.
+
+So the flag was correct, the measurement was of a program no benchmark runs, and
+the two disagree in exactly the dimension under test. This is
+`nts-bench-does-not-follow-the-cli` and `dexes.sh`'s "the library reading is the
+widest surface" note meeting from the third side: the library reading is the
+widest surface **and it is not the shipped one**, and a question about
+specialised code cannot be asked of it.
+
+With the entries passed, the real artefact:
+
+    method                  guarded    unguarded
+    Towers$popDiskFrom         51 u        41 u
+    Towers$pushDisk            66 u        56 u
+    Towers$moveTopDisk         15 u        15 u
+
+Exactly ten units a method, which is the two guards at five each read off the
+dex hours earlier -- the first number today that a projection and the artefact
+agreed on. Both are still above the budget, so this buys the guards' direct cost
+and not the inlining; crossing needs the cold-block outlining as well.
+
+## The artefact says 1.284x where the transcription said 1.646x, and the row does not clear
+
+The whole line of work, answered by the real compiler instead of a hand-written
+Java stand-in. AOT minima over two sittings, `--release` dexed, real `ref.java`
+as the reference:
+
+    ours, guarded        40874.1       ratio 1.804     (the recorded 1.80)
+    ours, unguarded      31825.6       ratio 1.405
+    reference            22658.9
+
+    the guards are worth   40874.1 / 31825.6 = 1.284x
+    the transcription said                     1.646x
+
+The JIT column agrees -- 37682.6 to 29888.7, 1.261x -- so this is the change and
+not the mode.
+
+**A transcription is not the bytecode, and `aot-on-device.sh` says so in its own
+comment.** I read that comment, quoted it in this file, said the property under
+test was method size and therefore checkable, and then used the same arms to
+project a *timing*. Size was checkable. The ratio was not, and it was out by
+28%.
+
+The mechanism is the converse of "a profile share is not a saving": our emitted
+code carries prologue stores, extra locals and adaptions the transcription has
+none of, so the guards are a smaller fraction of a bigger total. Removing a
+fixed cost from a slower program buys a smaller *ratio* than removing it from a
+faster one, and every arm I built was the faster one.
+
+### What the row is worth, and the decision
+
+    towers today                                                  1.80x
+    guards removed                                    measured    1.40x
+    guards removed plus the cold-block outlining      projected  ~1.30x
+    the bar                                                       1.00x
+
+**Refused.** The pair is worth about half a ratio and the row still misses by
+0.30, against: a per-site table the compiler emits and `Check` reads, so an
+AIOOBE at a `checked: true` site is a refusal and anywhere else stays a defect;
+the outlining; and a permanent narrowing of the one alarm this lane has that C
+and LLVM do not. That is a great deal of machinery to move a row from clearly
+over to still clearly over.
+
+The experiment flag is reverted rather than kept. `NTS_JVM_CLASSFILE=49` is the
+precedent for keeping one, and it does not apply: that flag changes what
+verifies, this one changes what a refusal *looks like*, and a gate run with it
+set would reclassify every legitimate refusal as a defect. Three sessions share
+this tree. The measurement is recorded here with the two `--entry` flags it
+needs, which is enough to repeat it.
+
+### Four projections, four refutations, one row
+
+Written out because the sequence is the finding rather than any one of them:
+
+    inlining is the mechanism            1.45x       it was the guards, 1.65x
+    dropping guards gives 24 units       24 u        30 u -- a handler is code
+    a try/catch is free until it throws  0           1.32x -- try regions cost
+    the guards are worth 1.65x           1.646x      1.284x on the real compiler
+
+Every one was a correct measurement of something. The first three were of the
+wrong quantity; the fourth was of the wrong program. **The row never moved and
+the estimate of what would move it fell by half at each step**, which is the
+shape to watch for -- not a single wrong number but a sequence that keeps
+arriving at "worth doing" from a different direction.
+
+`awfy-towers` stays over the bar with its mechanism now fully priced: 1.284x of
+bounds checks and 1.08x of inliner budget, and the rest -- about 1.30x -- is
+codegen quality nothing measured today touches.
