@@ -243,10 +243,18 @@ globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, onExit, o
   return handle;
 };
 
-globalThis.nts_child_process_send = (handle, line) => {
+globalThis.nts_child_process_send = (handle, line, sent) => {
   const entry = live.get(handle);
   if (entry === undefined) return -32;
   try {
+    // `sent` is a socket or a server, and it crosses as itself: the host's own
+    // `child.send(message, handle)` does the descriptor passing, which is a sendmsg
+    // with SCM_RIGHTS and not something this stand-in should reimplement. It is also
+    // the one argument here that has no representation in the compiled runtime, and
+    // that is written down in the module beside the declaration rather than here.
+    if (sent !== undefined && sent !== null) {
+      return entry.child.send(JSON.parse(line), sent) ? 0 : -32;
+    }
     return entry.child.send(JSON.parse(line)) ? 0 : -32;
   } catch {
     return -32;

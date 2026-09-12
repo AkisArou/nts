@@ -116,7 +116,22 @@ declare function nts_child_process_fork(
   onExit: (status: number, signal: number) => void,
   onMessage: (line: string) => void,
 ): number;
-declare function nts_child_process_send(handle: number, line: string): number;
+/**
+ * `sent` is a socket or a server travelling to the child, and it crosses as itself.
+ *
+ * The host's `child.send(message, handle)` does the descriptor passing -- a sendmsg
+ * with SCM_RIGHTS -- so the stand-in hands the object straight over rather than
+ * reimplementing it. **This parameter has no representation in the compiled runtime**,
+ * the same wall `tty`'s `isatty(fd: unknown)` hit: an object cannot be built at a
+ * Node-API parameter. So the compiled lane declines this binding -- and it already
+ * passes 0 of 110 files in this module, so nothing is traded for what the interpreted
+ * lane gains.
+ */
+declare function nts_child_process_send(
+  handle: number,
+  line: string,
+  sent?: unknown,
+): number;
 declare function nts_child_process_disconnect(handle: number): void;
 
 /** Node's signal names, in the direction the binding needs them. */
@@ -1389,11 +1404,20 @@ export interface ForkOptions extends SpawnOptions {
  * true about what those tests assert and false about what they do.
  */
 export function fork(
-  modulePath: string,
+  modulePath: string | URL,
   args?: readonly string[] | ForkOptions,
   options?: ForkOptions,
 ): ChildProcess {
-  validateString(modulePath, "modulePath");
+  // node accepts a `file:` URL here, and test-child-process-fork-url passes
+  // `new URL(import.meta.url)`. Read structurally for the reason `cwdPath` is: the
+  // caller's URL is the *host's* class on the interpreted lane, so `instanceof`
+  // against the one this module imports answers false and the branch is unreachable.
+  const modulePathIsUrl = typeof modulePath === "object" && modulePath !== null
+    && typeof (modulePath as { href?: unknown }).href === "string";
+  if (!modulePathIsUrl) validateString(modulePath, "modulePath");
+  const modulePathString = modulePathIsUrl
+    ? fileURLToPath(`${(modulePath as { href: string }).href}`)
+    : (modulePath as string);
   let list: readonly string[] = [];
   let opts: ForkOptions = ownOptions({}) as ForkOptions;
   if (Array.isArray(args)) {
@@ -1449,12 +1473,12 @@ export function fork(
   const forkPipes = (forkMode & 0x3) === 0 || ((forkMode >> 2) & 0x3) === 0
     || ((forkMode >> 4) & 0x3) === 0 ? 1 : 0;
 
-  checkNoNullBytes(modulePath, list, opts);
+  checkNoNullBytes(modulePathString, list, opts);
   const execPath = opts.execPath === undefined ? nts_process_exec_path() : opts.execPath;
   const execArgv = opts.execArgv === undefined ? [] : opts.execArgv;
   rejectNullBytes(execPath, "options.execPath");
   for (const argument of execArgv) rejectNullBytes(argument, "options.execArgv");
-  const argv = [execPath, ...execArgv, modulePath, ...list];
+  const argv = [execPath, ...execArgv, modulePathString, ...list];
 
   let child: ChildProcess | null = null;
   const handle = nts_child_process_fork(
@@ -1475,7 +1499,7 @@ export function fork(
     const failed = new ChildProcess(-1, forkMode);
     failed.pid = undefined;
     failed.exitCode = handle;
-    nextTickEmitError(failed, modulePath, handle);
+    nextTickEmitError(failed, modulePathString, handle);
     return failed;
   }
 
@@ -1528,14 +1552,11 @@ export function fork(
         "message", ["string", "object", "number", "boolean"], message,
       );
     }
-    // **Every handle is unsendable here, and saying so is the point.** Handle passing
-    // over the channel is not implemented, and until it is, this argument was being
-    // *ignored*: `send(message, socket)` serialised the message and dropped the
-    // socket silently. ERR_INVALID_HANDLE_TYPE is the error node raises for a thing
-    // that cannot be sent, and it is currently true of all of them. The files that
-    // want real handle passing -- recv-handle, send-returns-boolean, fork-net-server
-    // and the rest -- fail either way; they now fail loudly.
-    if (handle !== undefined && handle !== null) throw new ERR_INVALID_HANDLE_TYPE();
+    // A sendable handle is an object -- a socket or a server. Anything else truthy is
+    // not one, and node says so rather than serialising it: `send('msg', 'meow')` is
+    // ERR_INVALID_HANDLE_TYPE, which test-child-process-send-type-error asserts.
+    const sending = handle !== undefined && handle !== null;
+    if (sending && typeof handle !== "object") throw new ERR_INVALID_HANDLE_TYPE();
     // Once the channel is gone node reports it rather than returning false in
     // silence: the callback gets the error if there is one, and it is emitted as an
     // `error` if there is not. test-child-process-send-after-close reads
@@ -1549,7 +1570,9 @@ export function fork(
       }
       return false;
     }
-    return nts_child_process_send(channel, JSON.stringify(message)) === 0;
+    return nts_child_process_send(
+      channel, JSON.stringify(message), sending ? handle : undefined,
+    ) === 0;
   };
   child.disconnect = (): void => {
     // node emits an **error** for a second disconnect rather than a second
