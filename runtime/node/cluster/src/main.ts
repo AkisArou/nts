@@ -223,6 +223,13 @@ class Cluster extends EventEmitter {
         worker.send({ cmd: "NODE_CLUSTER", ack: seq, errno: "ENOTSUP" });
       }
     });
+    // The ordinary channel, re-emitted on the worker and on cluster itself. node does
+    // both, and a program that only ever holds the `Worker` would otherwise have no way
+    // to hear its own worker: `worker.on('message')` was silent.
+    child.on("message", (message: unknown, handle?: unknown): void => {
+      worker.emit("message", message, handle);
+      this.emit("message", worker, message, handle);
+    });
     child.on("exit", (code: number | null, signal: string | null): void => {
       worker.state = "dead";
       delete this.workers[`${id}`];

@@ -116,6 +116,23 @@ const hostSignalNumbers = hostOsConstants.signals;
  * to and this swaps in the host stream standing behind it. Everything else passes
  * through: a name, a number, a host stream the test made itself.
  */
+/**
+ * A handle the host's `child.send(message, handle)` will accept.
+ *
+ * `cluster` distributes accepted connections by sending them to a worker, and the host
+ * needs one of *its* sockets. This profile's `net.Socket` is a number on the boundary --
+ * a `uv_tcp_t` on the compiled side -- so `net`'s stand-in keeps the host object behind
+ * that number and `nts_net_host_socket` hands it back. A socket that is already the
+ * host's passes through, which is what a test constructing its own gets.
+ */
+function hostHandle(sent) {
+  if (sent === null || typeof sent !== "object") return sent;
+  const handle = sent._handle;
+  if (typeof handle !== "number") return sent;
+  if (typeof globalThis.nts_net_host_socket !== "function") return sent;
+  return globalThis.nts_net_host_socket(handle) ?? sent;
+}
+
 function hostStream(entry) {
   if (entry === null || typeof entry !== "object") return entry;
   if (typeof entry.ntsChildHandle !== "number") return entry;
@@ -298,7 +315,7 @@ globalThis.nts_child_process_send = (handle, message, sent) => {
     // the one argument here that has no representation in the compiled runtime, and
     // that is written down in the module beside the declaration rather than here.
     if (sent !== undefined && sent !== null) {
-      return entry.child.send(message, sent) ? 0 : -32;
+      return entry.child.send(message, hostHandle(sent)) ? 0 : -32;
     }
     return entry.child.send(message) ? 0 : -32;
   } catch {

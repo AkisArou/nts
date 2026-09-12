@@ -5,9 +5,9 @@ below is worth less than the paragraph after it.
 
 ## Where it is
 
-    interpreted   85 file(s): 25 passed, 58 failed, 2 skipped, 0 not applicable
+    interpreted   86 file(s): 33 passed, 51 failed, 2 skipped, 0 not applicable
 
-84 by `test-pattern`, 1 claimed in `extra-tests`, 1 local fixture. The claimed one --
+84 by `test-pattern`, 1 claimed in `extra-tests`, 2 local fixtures. The claimed one --
 `test-listen-fd-cluster.js` -- fails, and claiming a failing test is the honest direction:
 its subject is this module's handle distribution, so it belongs in the denominator.
 

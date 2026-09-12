@@ -48,6 +48,22 @@ function adoptAt(handle, socket) {
   sockets.set(handle, entry);
 }
 
+/**
+ * The host socket behind one of this module's handles, for another module's stand-in.
+ *
+ * `cluster` distributes accepted connections by sending them over the IPC channel, and the
+ * host's `child.send(message, handle)` needs a *host* socket. This module's sockets are
+ * numbers on the boundary -- a `uv_tcp_t` on the compiled side -- so the number is what a
+ * sibling can hold, and this turns it back into the object the host will accept. Nothing
+ * in the profile's own TypeScript may use this: it exists because the interpreted lane's
+ * sockets have host objects behind them and the compiled lane's do not, which is exactly
+ * the kind of thing a stand-in is for.
+ */
+globalThis.nts_net_host_socket = (handle) => {
+  const entry = sockets.get(handle);
+  return entry === undefined ? undefined : entry.socket;
+};
+
 /** Register a connected socket and hand back its handle. */
 function adopt(socket) {
   const handle = nextHandle++;
