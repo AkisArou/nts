@@ -6300,3 +6300,45 @@ That is worth knowing rather than fixing on sight: `javac` reads it correctly,
 the jar-drift test compiles it and compares bytes, and nothing in the build
 cares. What it costs is that any text census over `runtime/jvm` silently omits
 it -- the same failure as the bench case, in this lane's own sources.
+
+### The newly-reachable async generators do not refuse here, and one refusal row is four causes
+
+MainClaude's async-generator work made six `async function*` sites reachable
+that had been refused earlier in the pipeline. New programs arriving is when
+this backend breaks, so: `fs`, `stream` and `timers` compiled through
+`emit-jvm`.
+
+    module    classes   NTS4xxx refusals
+    fs           1286        89
+    stream        932        42
+    timers        158        14
+
+**None of the refusals is generator-shaped.** The largest is 62 of "a call to X
+which this backend has no name for" -- missing runtime helpers, the standing
+gap -- and the rest are pre-existing. The six arrivals compile.
+
+**And printing one row rather than counting it splits it, the way it has split
+every other row today.** The 14 `storing a X where a Y is declared` refusals are
+at least four separate things:
+
+    4   Closure<N> -> Fn<...>                      a closure where a signature
+                                                   layout is declared
+    2   Ctor_EventEmitterAsyncResource
+          -> EventEmitterAsyncResource             a class token where the class
+                                                   itself is declared
+    2   ValueWithSize<15626>
+          -> ValueWithSize<15643>                  two instantiations of one
+                                                   generic, different type ids
+    2   TimersList -> ListNode
+    2   SystemErrorException -> SystemError        structural subtyping
+
+`a-class-stored-and-compared` -- the example that closed the jvm floor at 188 --
+was a *fifth* shape, a token into a function-type layout. So the single message
+this backend emits for all of them has been reporting five causes as one, and
+the one that was fixed is not the one with the most instances here. **The row
+could not be ranked while it was one sentence**, which is MainClaude's phrase
+for exactly this, arriving in this lane's own diagnostics.
+
+The closure arm is the interesting one: `relate_closures_to_signatures` exists
+to give a closure the base its signature layout needs, and four sites say it did
+not. That is a `hir` question and it is handed over rather than guessed at.
