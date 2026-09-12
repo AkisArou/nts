@@ -584,9 +584,24 @@ export function spawnSync(
 
   let input: Uint8Array | null = null;
   if (opts.input !== undefined && opts.input !== null) {
-    input = typeof opts.input === "string"
-      ? Buffer.from(opts.input)
-      : opts.input;
+    const given = opts.input as unknown;
+    if (typeof given === "string") {
+      input = Buffer.from(given);
+    } else {
+      // A typed array is not its bytes. `Buffer.from(new Int16Array(44))` reads it
+      // as 44 *numbers* and truncates each to one byte, so an 88-byte payload
+      // arrived as 44 -- exactly half, which is what
+      // test-child-process-spawnsync-input showed. node takes the bytes:
+      // `Buffer.from(view.buffer, view.byteOffset, view.byteLength)`. A DataView has
+      // the same three members and no element type at all, which is why that test
+      // walks every view `common.getArrayBufferViews` produces.
+      const view = given as { buffer?: ArrayBufferLike; byteOffset?: number; byteLength?: number };
+      const buffer = view.buffer;
+      const byteLength = view.byteLength;
+      input = buffer !== undefined && byteLength !== undefined
+        ? new Uint8Array(buffer, view.byteOffset ?? 0, byteLength)
+        : (given as Uint8Array);
+    }
   }
 
   let status: number | null = null;
