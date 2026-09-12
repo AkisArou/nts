@@ -346,6 +346,7 @@ fn repository_root(args: &[String]) -> Result<Utf8PathBuf> {
 
 fn main() -> Result<()> {
     let argv: Vec<String> = std::env::args().skip(1).collect();
+    validate_lanes()?;
     let root = repository_root(&argv)?;
     let cases_dir = root.join("benches/cases");
 
@@ -373,6 +374,31 @@ fn main() -> Result<()> {
         cases.retain(|case| requested.iter().any(|want| case.file_name() == Some(want)));
     }
 
+    // A name that selects nothing is a typo, and it used to produce a *table*.
+    // `NTS_BENCH_LANES=native` -- there is no such lane, the selector takes `c`
+    // -- fell through `lane_matches` to `label.contains("native")`, matched no
+    // variant, and printed every nts column as `--` with node's filled in.
+    // 78.75 ms against 79.42 ms sat exactly where a result belonged, and the
+    // run that produced it was two sittings of nothing.
+    //
+    // The third time in one day that a configuration produced a plausible table
+    // instead of an error, after `d8`'s debug default and `dex2oat`. A filter
+    // that matches nothing has to say so, because `--` already means "this lane
+    // refused" and the two are indistinguishable in the output.
+    if let Some(ref only) = wanted_lanes() {
+        let dead: Vec<&str> = only
+            .iter()
+            .filter(|want| !VARIANTS.iter().any(|v| lane_matches(want, v.label)))
+            .map(String::as_str)
+            .collect();
+        if !dead.is_empty() {
+            bail!(
+                "NTS_BENCH_LANES names {} which selects no lane; the names are \
+                 c, llvm, jvm, f64 and node",
+                dead.join(", ")
+            );
+        }
+    }
     let out = root.join("target/bench");
     std::fs::create_dir_all(&out).context("creating the build directory")?;
     // Written once; every case compiles against them.
@@ -1188,8 +1214,41 @@ fn lane_matches(want: &str, label: &str) -> bool {
         "llvm" => label.contains("llvm"),
         "c" => label == "nts" || label == "c++",
         "f64" => label.contains("f64"),
-        other => label.contains(other),
+        // **No fall-through.** `NTS_BENCH_LANES=native` is not a lane -- the C
+        // selector is `c` -- and the arm that used to be here read
+        // `label.contains(other)`, matched nothing, and produced a full table
+        // with every nts column `--` and node's filled. A person read 78.75
+        // against 79.42 ms off it and nearly took it as a result.
+        //
+        // A filter that matches nothing is the same failure as a discovery loop
+        // that finds nothing and a comparison that compares nothing: the output
+        // is shaped like an answer. `validate_lanes` refuses before any of it
+        // runs, so this arm cannot be reached with an unknown name.
+        _ => false,
     }
+}
+
+/// Every name `NTS_BENCH_LANES` accepts, so an unknown one is refused rather
+/// than silently selecting nothing.
+const LANES: &[&str] = &["jvm", "llvm", "c", "f64"];
+
+/// Refuse an unknown lane name before a single case is compiled.
+fn validate_lanes() -> Result<()> {
+    let Some(wanted) = wanted_lanes() else {
+        return Ok(());
+    };
+    let unknown: Vec<&str> =
+        wanted.iter().filter(|lane| !LANES.contains(&lane.as_str())).map(String::as_str).collect();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    bail!(
+        "NTS_BENCH_LANES names {} which is not a lane -- the lanes are {}. \
+         A name that selects nothing would print a table with every nts column \
+         `--` and node's filled, which reads as a result.",
+        unknown.join(", "),
+        LANES.join(", ")
+    )
 }
 
 fn finish_row(
