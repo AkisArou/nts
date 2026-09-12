@@ -6857,3 +6857,55 @@ lambda, which d8 desugars into `Bounce$$ExternalSyntheticLambda0.apply` plus
 a difference in the two programs rather than in the two compilers, and it is 100
 of the roughly 5,000 calls a round, so it is named here and not offered as the
 mechanism.
+
+### I asked the middle end a question I could half-answer myself, and did
+
+The `checked: true` question above was worth asking and I should have looked
+first, because most of it is written down in this repository already.
+
+**The refusal text is part of the contract, not incidental.** The differential's
+own test says so in the clearest available words:
+
+    // A bounds check: it refuses, prints, then aborts. SIGABRT with a
+    // refusal line is the program keeping the promise its `!` made.
+
+`checked: true` is exactly "the program wrote `!` and the compiler did not
+believe it", so the refusal is that promise being kept where a reader can see
+it. And the message is **cross-backend**: `runtime/c/nts_runtime.h` declares
+`nts_bounds(double index, uint32_t length)` and produces the same sentence, so
+three lanes agree on it by construction rather than by coincidence.
+
+Two things that narrow rather than settle it:
+
+- **The agreement fixture is about the other path.**
+  `agreements/an-indexed-write-at-or-past-the-length` reasons about
+  `nts_array_grow_slot`, which is the **growable** array -- where the refusal is
+  a representation limit, node grows and we abort, and the two disagree whatever
+  the reason. `towers` indexes a **bare** array. So that fixture governs the
+  wrapper and not the path the ten code units are on.
+- **The differential's tests are parser tests.** They call `stopped_with` on
+  synthetic strings, so changing what the JVM prints would not turn any of them
+  red. It would change how a real run is *classified*: with no `nts:` line,
+  `stopped()` reads an out-of-range access as a **defect** rather than a
+  declined case. Nothing would fail; the meaning would move. That is the worse
+  of the two failure modes and it is worth naming as the reason not to try it
+  and see.
+
+**So the honest form of the fix is narrower than "drop the guard".** ART's own
+`ArrayIndexOutOfBoundsException` message carries both the index and the length,
+so a boundary translation can reproduce the sentence. The distinction that would
+be lost is between an out-of-range access the program asked for (`checked:
+true`, a refusal) and one the middle end *proved impossible* (`checked: false`,
+a compiler bug that is currently loud). A blanket catch merges them.
+
+Scoping it to methods that contain at least one `checked: true` bare-array
+access keeps the loud behaviour everywhere else, and costs an exception-table
+entry -- zero code units on the straight-line path -- plus the one
+StackMapTable frame kind this backend has never needed, because a handler is the
+only place the operand stack is not empty at a block boundary. That is the piece
+of the plan that was deliberately avoided, and this is the first thing that has
+asked for it with a number attached.
+
+Still not built. What I have changed my mind about is the question: it is not
+"may I drop the guard" but "is the checked/unchecked distinction worth an
+exception table", and that one is mine to answer rather than the middle end's.
