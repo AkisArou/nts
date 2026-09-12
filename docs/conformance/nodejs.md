@@ -23989,3 +23989,59 @@ breath as the footprint saving it would have bought.
 http2's TLS transport behind it. Nothing in these two decisions implements any of it, and
 the first binding is still the first binding. What they remove is the requirement to decide
 this *while* writing it.
+
+## A commit that deleted a mechanism its message did not mention
+
+The compiled axis was re-measured on 2026-09-13 and read **74 passed across 26 modules**,
+against 49 across 24 on 09-12. The whole of the +25 is `cluster`, which did not exist for
+the earlier run; the rest of the tree moved by `net` +2, `process` -1 and `tty` -1. Which
+makes the headline the least interesting part, because both of those minus ones were
+somebody's mistake and one of them was mine.
+
+### `tty` 1 -> 0: I deleted the pty harness
+
+`f83be20a`, whose message is *"The runner reported the consequence and dropped the cause"*
+and whose subject is appending a child's stderr to a framed failure, also removed from
+`run.mjs`:
+
+  * the `needs-pty` reader, the `script(1)` availability check and the wrapped spawn --
+    the entire pseudo-terminal path;
+  * the `\r` stripping in the result parse, which is part of that path;
+  * the block that writes `third_party/node/package.json` as `{ "type": "commonjs" }`.
+
+`pseudo-tty/test-tty-isatty.js` asserts `isatty(0)`, `isatty(1)` and `isatty(2)` are all
+**true**, and the runner gives its children `["ignore", "pipe", "pipe"]`. So a correct `tty`
+fails it, and the row read as a defect in the module. Measured: under `script` the same
+sources and **the same artifact from the earlier run** pass on both lanes; without it both
+report *"stdin reported to not be a tty, but it is"*. The file `runtime/node/tty/needs-pty`
+sat in the tree the whole time with **no reader anywhere in `tooling/`** -- which is how the
+deletion survived review, including mine.
+
+The `package.json` block is the worse half. `third_party/node` is untracked, the file was
+already on disk, so nothing failed and nothing said anything; the only thing still
+guaranteeing that every child-spawning test could parse its own file was that nobody had run
+`git clean` there yet. All of it is restored.
+
+### `process` 1 -> 0: an addon that links and cannot load
+
+Not this profile's code. `process.node` from today's tree fails at load with
+`undefined symbol: module__init`: `addon.c` declares and calls it, `program.c` defines it in
+no translation unit, and `nts hir --prepared` shows `export func module#init() -> void`
+present, so the HIR has the function and the C emitter drops it. Bracketed on emission alone
+with the source held fixed -- pin AE (09-12 04:05) defines it, pin AF (09-13 01:26) does not.
+27 commits touch `compiler/` between those times. Reported to the compiler side with the
+bracket; the lead runs the opposite way to the obvious one, in that AE *reported* five
+`module-scope variable whose initializer was refused` in `process/src/main.ts` and still
+emitted the definition, and AF reports none and drops it.
+
+What this repository owes the finding is that **nothing in the pipeline noticed**. `emit-c`
+exits 0, `clang` links a shared object with undefined symbols because they resolve at load,
+and `build.sh` reports the byte count of a file that cannot be required. The axis therefore
+printed **92 failed** for `process` where the truth was one load failure repeated 92 times
+-- a count whose unit was wrong by a factor of 92. `compiled-axis.sh` now loads each artifact
+once before running its tests and prints `WILL NOT LOAD` instead. Checked across all 26: 25
+load, `process` does not, and it is the only one with an undefined `*__init`.
+
+`build.sh` is deliberately left alone: making it fail here would red-gate every peer building
+all modules until the emitter is fixed, and that is not this session's call to make.
+

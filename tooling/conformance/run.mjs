@@ -27,7 +27,7 @@
 //   node run.mjs --module path [--addon target/node/path.node] [--only f.js]
 //                              [--verbose] [--json]
 
-import { readdirSync, existsSync, readFileSync } from "node:fs";
+import { readdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname, resolve as resolvePath } from "node:path";
 import { execFileSync } from "node:child_process";
 import process from "node:process";
@@ -342,6 +342,73 @@ function nodeFlags(path) {
   );
 }
 
+// **node's test tree needs a `package.json` saying `commonjs`, and has none.**
+//
+// This repository's own `package.json` declares `"type": "module"`, and node's
+// checkout has no top-level `package.json` at all. So the nearest one above
+// `third_party/node/test/parallel/*.js` is ours, and node reads every one of those
+// files as an ES module. In-process tests never notice, because the runner loads
+// them itself. A test that **spawns a child** running a `.js` test file does: the
+// child gets `require is not defined in ES module scope`, or fails on a top-level
+// `return`, and reports empty output with a non-zero status.
+//
+// Written here rather than left in the tree because `third_party/node` is untracked
+// and a `git clean` there would take it. Creating it is idempotent and costs a
+// `stat`.
+//
+// **This block and the pty one below were deleted by f83be20a**, whose message
+// describes only adding stderr to framed failures. The file it writes happened to
+// already exist on disk, so nothing failed and nothing said anything -- a mechanism
+// whose only remaining guarantee was that nobody had run `git clean` yet.
+const nodePackageJson = join(ROOT, "third_party/node/package.json");
+if (!existsSync(nodePackageJson)) {
+  try {
+    writeFileSync(nodePackageJson, '{ "type": "commonjs" }\n');
+  } catch (error) {
+    // A read-only or absent checkout is not this runner's problem to solve, but it
+    // says so rather than passing silently. The first version of this block
+    // swallowed a `ReferenceError` -- `writeFileSync` was never imported -- and the
+    // runner reported a green lane while creating nothing.
+    process.stderr.write(`note: could not write ${nodePackageJson}: ${error.message}\n`);
+  }
+}
+
+// **Tests that need their stdio to be a terminal.** A module names them one per line
+// in `needs-pty`, and they run under `script(1)`, which allocates a pseudo-terminal
+// and gives the child fds 0, 1 and 2 on it.
+//
+// This exists because `pseudo-tty/test-tty-isatty.js` asserts `isatty(0)`,
+// `isatty(1)` and `isatty(2)` are **true**. The runner gives its children pipes, so a
+// correct `tty` fails that file -- measured, on both lanes: under `script` the same
+// sources and the same artifact pass, and without it both report "stdin reported to
+// not be a tty, but it is". The row was reading as a defect in `tty`.
+//
+// Inert without the file: no module that lacks one changes behaviour, and only the
+// named tests take the wrapped path. `script` is util-linux and is not everywhere, so
+// its absence is a **skip with a reason** rather than a failure -- a missing harness
+// tool is not the profile's defect.
+const needsPtyPath = join(moduleDir, "needs-pty");
+const needsPty = new Set(
+  existsSync(needsPtyPath)
+    ? readFileSync(needsPtyPath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#"))
+    : [],
+);
+let ptyAvailable = null;
+const haveScript = () => {
+  if (ptyAvailable === null) {
+    try {
+      execFileSync("script", ["--version"], { stdio: "ignore" });
+      ptyAvailable = true;
+    } catch {
+      ptyAvailable = false;
+    }
+  }
+  return ptyAvailable;
+};
+
 const rows = [];
 for (const test of tests) {
   const { name } = test;
@@ -353,10 +420,23 @@ for (const test of tests) {
     rows.push({ name, kind: "n/a", why: notApplicableReason });
     continue;
   }
+  const wantsPty = needsPty.has(name) || (shortName !== undefined && needsPty.has(shortName));
+  if (wantsPty && !haveScript()) {
+    rows.push({ name, kind: "skip", why: "needs a pseudo-terminal and script(1) is not installed" });
+    continue;
+  }
   try {
+    const argv = [...nodeFlags(test.path), join(HERE, "run-one.mjs"), moduleName, test.path, addon ?? "-"];
+    // `script -qec <command> /dev/null`: quiet, no timing file, run the command under
+    // a pty. The command is one string, so each argument is single-quoted; these are
+    // absolute paths this file built, not user input.
+    const quoted = [process.execPath, ...argv]
+      .map((part) => `'${String(part).replaceAll("'", "'\\''")}'`)
+      .join(" ");
     const out = execFileSync(
-      process.execPath,
-      [...nodeFlags(test.path), join(HERE, "run-one.mjs"), moduleName, test.path, addon ?? "-"],
+      ...(wantsPty
+        ? ["script", ["-qec", quoted, "/dev/null"]]
+        : [process.execPath, argv]),
       {
         encoding: "utf8",
         timeout: 60_000,
@@ -374,6 +454,9 @@ for (const test of tests) {
       },
     );
     const line = out
+      // A pty ends its lines `\r\n`, so this is part of the `needs-pty` path
+      // rather than tidiness -- it was deleted with the rest of it.
+      .replaceAll("\r", "")
       .trim()
       .split("\n")
       .filter((candidate) => candidate.startsWith(RESULT_PREFIX))
@@ -393,6 +476,7 @@ for (const test of tests) {
     // `process.on('exit')`, so this is a failure the child could not know
     // about when it printed.
     const printed = (e.stdout ?? "")
+      .replaceAll("\r", "")
       .trim()
       .split("\n")
       .filter((candidate) => candidate.startsWith(RESULT_PREFIX))

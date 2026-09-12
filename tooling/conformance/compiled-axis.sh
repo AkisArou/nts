@@ -25,6 +25,16 @@
 # That a module at zero is broken. Seven are at zero because the boundary cannot
 # build what their surface returns, which is a different fact from a failing test
 # and is why `compiled-coverage.mjs` exists beside this.
+#
+# # An addon that does not load is one fact, not N failures
+#
+# A shared object links with undefined symbols -- they resolve at load -- so the
+# compiler can emit a call to a function it never defined, `clang` will link it, and
+# `build.sh` exits 0. `process` did exactly that on 2026-09-13: `addon.c` declares and
+# calls `module__init`, `program.c` defines it in no translation unit, and the row read
+# **92 failed** when the truth was one `undefined symbol: module__init` repeated 92
+# times. So each artifact is loaded once before its tests run, and a failure to load is
+# printed as itself. Measured across the 26: 25 load, `process` does not.
 set -uo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root" || exit 1
@@ -39,6 +49,11 @@ for dir in runtime/node/*/; do
   [ -f "$dir/tsconfig.json" ] || continue
   if NTS_ADDON_OUT="$out" timeout 1200 bash "$root/tooling/conformance/build.sh" \
       "$module" > "$out/$module.build.log" 2>&1; then
+    if ! loaderr="$(node -e 'require(process.argv[1])' "$out/$module.node" 2>&1)"; then
+      printf '%-20s WILL NOT LOAD -- %s\n' "$module" \
+        "$(printf '%s' "$loaderr" | tr '\n' ' ' | sed 's/.*: //' | cut -c1-60)"
+      continue
+    fi
     line="$(timeout 900 node "$root/tooling/conformance/run.mjs" \
       --module "$module" --addon "$out/$module.node" 2>&1 | tail -1)"
     printf '%-20s %s\n' "$module" "$line"
