@@ -109,6 +109,7 @@ meets them. This is the map; the row table below it is the current state.
   - The control: the harnesses agree, and both halves of `awfy-sieve` are bimodal
   - `erasure-stored-unknown` is a `long[]` where the JVM wants a `double[]`: 3.5x on ART, 0% here
   - Generators as values: what this lane already has, and the two numbers that bear on it
+  - And the settled shape has one consequence: a prefix is not a subtype here
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -4485,6 +4486,41 @@ pure function of the per-function slot table and frame *fields* do not touch it.
 `declare_fields` **refuses** (NTS4013) rather than renames when two properties
 mangle to one JVM field, so a synthetic `resume` field colliding with a user
 property of that name fails loudly.
+
+### And the settled shape has one consequence: a prefix is not a subtype here
+
+The design landed as no function-typed field at all -- C and LLVM dispatch the
+resumption through the descriptor's existing `methods` table, this lane needs
+nothing -- and `Generator<T>` gets its representation as **the structural prefix
+that already exists in the emitted C**, `{header, state: i32, yielded: T}` at
+offsets 24 and 28, with the existing prefix cast carrying a concrete frame to it.
+
+**The prefix cast does not carry on this lane.** `object_class` takes a class's
+superclass from one place:
+
+    let super_name = program.base_layout(layout)
+        .and_then(|at| program.layouts.get(at))
+        .map_or_else(|| "java/lang/Object".to_owned(), types::class_name);
+
+So a `Generator<T>` that no frame layout names as its `Layout.base` leaves every
+frame `extends java/lang/Object`, and a frame passed where `Generator<T>` is
+declared is **NTS4001** -- the same refusal as this lane's one remaining gap.
+Fields coinciding at offsets 24 and 28 buys nothing: `getfield Generator.state`
+needs the object to *be* a `Generator`.
+
+**And it is the one shape specialisation cannot remove.**
+`a-structural-cast-that-is-a-prefix` closed on 2026-09-12 because specialisation
+monomorphised the callee. "A generator walked where it was not made" is by
+definition the case where the callee cannot know which frame it got, so the
+mechanism that closed the last prefix gap is unavailable for this one.
+
+The ask is machinery that already exists: record the abstract generator as the
+`Layout.base` of each frame layout, the way every closure names its `Fn$`
+signature layout. Then this backend emits `class upTo$frame extends
+nts/gen/Generator` on its own and the rest follows. The trap that comes with it is
+the one the plan already names -- `same_shape` must refuse to merge two layouts
+with different bases, and two generators capturing nothing are structurally
+identical from offset 32 on.
 
 ## Open, and whose
 
