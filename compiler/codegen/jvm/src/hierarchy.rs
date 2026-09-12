@@ -156,6 +156,52 @@ pub fn member_name(func_name: &str) -> String {
     crate::body::method_name(tail)
 }
 
+/// The JVM name a dispatch slot is known by, which is the *declaring* layout's
+/// and not the implementing function's.
+///
+/// The JVM resolves a virtual call by name and descriptor, so an override has to
+/// carry the name the base declared. For an ordinary hierarchy that falls out of
+/// [`member_name`] on its own: an implementer of `Shape#area` is called
+/// `Square#area`, and both sides of the `#` agree by construction.
+///
+/// **A generator resumption does not agree.** `Generator0` declares the slot as
+/// `Generator0#resume` and the frame that fills it is `upTo__resume` -- a free
+/// function with no `#` in it at all -- so naming the forwarder after the
+/// implementer emitted `public boolean upTo__resume()` on a class whose
+/// superclass declares `abstract boolean resume()`. Both methods exist, neither
+/// overrides the other, and the failure is
+///
+/// ```text
+/// java.lang.AbstractMethodError: Receiver class nts.gen.upTo$frame does not
+/// define or inherit an implementation of the resolved method
+/// 'abstract boolean resume()' of abstract class nts.gen.Generator0
+/// ```
+///
+/// which the verifier does not catch, because an override is checked at the call
+/// and not at load.
+///
+/// So the name is taken from the base-most layout that declares the slot. That
+/// is the same correction `Field::declared_by` made for fields -- the class that
+/// *declares* a member is a different question from the one that implements it,
+/// and only the first decides what the JVM calls it.
+#[must_use]
+pub fn declared_member(program: &Program, layout: &Layout, slot: usize) -> Option<String> {
+    let mut at = layout;
+    let mut name = at.methods.get(slot)?.as_ref()?;
+    // Up the chain while a base also declares this slot: the first declaration
+    // is the one the JVM resolved against.
+    while let Some(base) = program.base_layout(at).and_then(|id| program.layouts.get(id)) {
+        match base.methods.get(slot).and_then(Option::as_ref) {
+            Some(inherited) => {
+                name = inherited;
+                at = base;
+            }
+            None => break,
+        }
+    }
+    Some(member_name(name))
+}
+
 /// Is this layout emitted as a JVM *interface* rather than as a class?
 ///
 /// True of a layout some other layout declares itself to implement. That is the

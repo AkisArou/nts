@@ -645,7 +645,13 @@ fn dispatch_forwarders(
                 origin.location,
             ));
         };
-        let member = hierarchy::member_name(func_name);
+        // The declaring layout's name, not the implementer's. See
+        // `hierarchy::declared_member`: a generator frame fills a slot declared
+        // as `Generator0#resume` with a free function called `upTo__resume`, and
+        // naming the forwarder after the implementer is an `AbstractMethodError`
+        // the verifier cannot catch.
+        let member = hierarchy::declared_member(program, layout, slot)
+            .unwrap_or_else(|| hierarchy::member_name(func_name));
         let descriptor = instance_descriptor(program, target).ok_or_else(|| {
             Diagnostic::error(
                 "NTS4008",
