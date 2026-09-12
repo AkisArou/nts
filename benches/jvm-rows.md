@@ -6605,3 +6605,81 @@ Recorded rather than filed. The next attempt should start from the module and
 delete, not from a sketch and add -- which is the reduce-from-the-failing-case
 rule, and the thing that makes it expensive here is that the failing case is
 `runtime/web-platform` rather than five lines.
+
+## The four closure sites are not the arity case, and not the async one either
+
+MainClaude closed their loop first: the async-arrow fix moved my four
+`NTS4001 storing a Closure...` sites by **zero**, and they filed arity -- a
+callback literal with fewer parameters than its slot -- as the standing cause,
+with the cheap check being to read the arity off each site. I read it. **It is
+not arity, at any of the four.**
+
+`signature_name` (`lower.rs:4524`) makes the slot's arity legible from its name:
+`Fn<p1>_<p2>__<ret>`, and the separator is doubled precisely so `Fn2_2__2` and
+`Fn2__2` are different strings. So the slot arity is countable without running
+anything, and the literal's is countable from the source:
+
+    site                              slot             slot params   written
+    stream  consumers.ts:205  tap     Fn9112_97__9115            2         2
+    fs      (same source)     tap     Fn12582_97__12585          2         2
+    fs      async.ts:409      settle  Fn28__174                  1         1
+    querystring main.ts:180   stringify Fn2029_2043__25          2         2
+
+Every one matches. And the fourth is not a closure literal at all -- `stringify`
+has no arrow in it; `convert` is a slot assigned one of two *named* functions,
+`encodeStringified` or `encodeStringifiedCustom`, both `(v, encode) => string`.
+A hypothesis about how a literal is *written* cannot explain a site with no
+literal.
+
+### The async hypothesis was mine, and I killed it the same sitting
+
+Two of the four (`tap`) are `async` arrows, `signature_key`'s third element is
+`is_async`, and `signature_name` spells it as an `A` prefix -- and **zero of the
+312 `Fn` layouts emitted across `stream` and `fs` carry an `A`**. That is a
+clean mechanism: if the arrow's key is async and no layout's ever is, `matching`
+is empty and the closure gets no base.
+
+It is also wrong, and two arms differing in one word said so:
+
+    export function make(): (x: number) => Promise<number> {
+      return (x) => Promise.resolve(x + 1);     // arm A
+      return async (x) => x + 1;                // arm B
+    }
+
+Both compile, and both closures extend `Fn4__5` -- the *async* arm's layout has
+no `A` either. So `is_async` is false in this position for both, the 312-to-zero
+count is telling me the flag is rarely set rather than that it blocks anything,
+and MainClaude's "async turned out not to be involved at all" is confirmed from
+my side rather than taken on theirs. **A count of zero was evidence for a
+mechanism and evidence of nothing.**
+
+### Where it actually is, and the measurement I cannot make
+
+`relate_closures_to_signatures` ends its per-closure work at
+
+    let [signature] = matching[..] else { continue };
+
+-- exactly one matching layout, or the closure is left with no base, which is
+the decline. So all four sites are **either zero matches or two**, and those are
+opposite defects: zero is a signature nothing declares, two is the ambiguity the
+comment above that line says it is forbidden from guessing through.
+
+Four sketches, none of which reproduce, each varying one thing from a clean
+baseline:
+
+    inline slot, no capture                    related, Fn4__4
+    + an ordinary capture                      related, Fn3__3
+    + a function-typed capture                 related, Fn4__4
+    the same inline type written twice         related, BOTH to Fn4__4
+
+The last is the hazard the pass's own doc names -- "an inline `(x: number) =>
+number` written in two places can be two type ids for one structural type" --
+and it did not fire: both closures interned to one id and got one base. So the
+sketch cannot even produce the documented failure, which is the same wall the
+`ValueWithSize` reduction hit two sections up, and for the same reason.
+
+**What is left is one number I cannot read from outside: `matching.len()` at
+those four sites.** It is two lines in `lower.rs`, which is MainClaude's file.
+Three hypotheses are dead and the question is now a single integer at a single
+line -- which is the right thing to hand over, and better than the report that
+started this, since that one pointed at a pass and this one points at a line.
