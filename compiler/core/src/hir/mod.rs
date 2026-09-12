@@ -2915,10 +2915,155 @@ fn remap_field_accesses(program: &mut Program, moved: &[Vec<u32>]) {
     }
 }
 
+/// Give a class token the signature layout it is stored into, where there is
+/// exactly one.
+///
+/// `Ctor_Other` is an empty layout with no base, and storing it where a
+/// `Fn3__1` is declared is a decline on the JVM -- `storing a Ctor_Other where
+/// a Fn3__1 is declared, and the first does not extend the second here`. It is
+/// the last example that backend disagrees on.
+///
+/// # This is not the edge that was built and reverted
+///
+/// `lower::token_base` gives a token the base of its **own** `typeof`, which is
+/// the right relation when the program declares that type: `typeof Message` is
+/// `Fn3__1`, so `Ctor_Message` extends it and a store into `Server.#Message`
+/// verifies. A second attempt extended that to the other token and was reverted
+/// on 2026-09-10, because `typeof Other` names a *different* signature -- it
+/// would have produced `Ctor_Other extends Fn3__6` against a slot wanting
+/// `Fn3__1`, and the declines did not move.
+///
+/// The two rules **coincide** on `Ctor_Message` and differ on `Ctor_Other`,
+/// which is why that revert reads as evidence against this and is not. Here the
+/// base comes from the slot the token is *stored into*, and in that program
+/// `typeof Other` is never a declared type at all -- `nts layouts` emits one
+/// `Fn` layout, and there is no `Fn3__6` for the reverted rule to have used.
+///
+/// # Why it is a pass and not a lookup at the token
+///
+/// Because the question is whole-program. Lowering reaches stores one at a
+/// time, so "how many signatures does this token reach" is always "the ones so
+/// far": the first store would give a base and a later store to a second
+/// signature would find one already there. Whichever way that resolved, one of
+/// the two callers would be wrong with **nothing emitted to say so** -- record
+/// 0096's merge hazard one level up, where `M === Message` answers true for a
+/// program that says false.
+///
+/// Reaching two is left alone and stays declined. That is the union case
+/// (`cond ? TypeError : RangeError`) and it needs a representation a single
+/// base cannot express.
+///
+/// The slot's declared type is not tested for being a function type: the
+/// checker already refused any program that stores a token somewhere else, so
+/// asking again here would be a second derivation of a fact the frontend owns.
+fn relate_tokens_to_the_slot_they_reach(program: &mut Program) {
+    let is_token: Vec<bool> = program
+        .layouts
+        .iter()
+        .map(|layout| layout.base.is_none() && builtin::is_constructor_name(&layout.name))
+        .collect();
+    if !is_token.iter().any(|token| *token) {
+        return;
+    }
+    // Which layout a type names, for the types tokens carry.
+    let layout_of = |ty: &HirType| -> Option<usize> {
+        let HirType::Managed(ManagedType::Object(id)) = ty else {
+            return None;
+        };
+        program.layouts.iter().position(|l| l.types.contains(id))
+    };
+    let params: rustc_hash::FxHashMap<&str, &[Param]> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.as_str(), func.params.as_slice()))
+        .collect();
+
+    // Every declared slot a token value reaches, by the token's layout.
+    let mut reaches: rustc_hash::FxHashMap<usize, Vec<TypeId>> = rustc_hash::FxHashMap::default();
+    let note = |token: usize, declared: &HirType, into: &mut rustc_hash::FxHashMap<usize, Vec<TypeId>>| {
+        let HirType::Managed(ManagedType::Object(id)) = declared else {
+            return;
+        };
+        let seen = into.entry(token).or_default();
+        if !seen.contains(id) {
+            seen.push(*id);
+        }
+    };
+    for func in &program.funcs {
+        for op in &func.values {
+            match &op.kind {
+                OpKind::FieldSet {
+                    object,
+                    field,
+                    value,
+                } => {
+                    let Some(token) = layout_of(&func.values[value.0 as usize].ty)
+                        .filter(|at| is_token[*at])
+                    else {
+                        continue;
+                    };
+                    let Some(holder) = layout_of(&func.values[object.0 as usize].ty) else {
+                        continue;
+                    };
+                    let Some(slot) = program.layouts[holder].fields.get(*field as usize) else {
+                        continue;
+                    };
+                    note(token, &slot.ty.clone(), &mut reaches);
+                }
+                OpKind::Call {
+                    callee: Callee::Direct(name),
+                    args,
+                    ..
+                } => {
+                    let Some(declared) = params.get(name.as_str()) else {
+                        continue;
+                    };
+                    for (at, arg) in args.iter().enumerate() {
+                        let Some(token) = layout_of(&func.values[arg.0 as usize].ty)
+                            .filter(|at| is_token[*at])
+                        else {
+                            continue;
+                        };
+                        let Some(param) = declared.get(at) else {
+                            continue;
+                        };
+                        note(token, &param.ty.clone(), &mut reaches);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Decided before anything is written, so the closure reading `layouts` is
+    // done borrowing by the time one is changed.
+    let decided: Vec<(usize, TypeId)> = reaches
+        .into_iter()
+        .filter_map(|(token, slots)| {
+            // Exactly one, and not the token's own layout -- a token stored
+            // into a slot declared as itself needs no relation, and giving it
+            // one would be a layout that is its own base.
+            let [only] = slots.as_slice() else { return None };
+            let names_itself =
+                layout_of(&HirType::Managed(ManagedType::Object(*only))) == Some(token);
+            (!names_itself).then_some((token, *only))
+        })
+        .collect();
+    for (token, base) in decided {
+        program.layouts[token].base = Some(base);
+    }
+}
+
 fn settle(lowered: &mut lower::Lowered) {
     // First of all: everything below reads the block graph, and a block nothing
     // can reach is not part of it. See `dce::prune_unreachable`.
     dce::prune_unreachable_blocks(&mut lowered.program);
+    // Before `put_bases_first`, which reads bases to decide field order. A
+    // token layout is empty, so the base this gives it moves no field -- but
+    // the ordering is stated rather than left to look arbitrary, because a
+    // token layout that ever gains a field would make the other order wrong
+    // and nothing else would say so.
+    relate_tokens_to_the_slot_they_reach(&mut lowered.program);
     put_bases_first(&mut lowered.program);
     // Before anything looks at the program: a function that calls a refused one
     // has a call to nothing in it.

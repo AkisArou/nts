@@ -29423,12 +29423,26 @@ impl<'a> FuncBuilder<'a> {
     /// JVM declines a token stored where its own `typeof` is declared, and with
     /// it that case agrees on all three backends.
     ///
-    /// It does **not** close the union case — `cond ? TypeError : RangeError`,
-    /// and `a-class-stored-and-compared`. There the checker collapses the
-    /// conditional to a single constructor type, so the token is `Ctor_Other`
-    /// and the slot is declared `Fn3__1`, two genuinely different signatures
-    /// rather than two ids for one. A base cannot relate those; what would is
-    /// the thing that gives the token a representation of its own.
+    /// It does **not** close every token, and the sentence that used to stand
+    /// here about why was wrong for the case in front of it.
+    ///
+    /// This relation needs the program to *declare* the token's own `typeof`.
+    /// `typeof Other` is declared nowhere in `a-class-stored-and-compared`, so
+    /// `Ctor_Other` got nothing here and was declined on the JVM against the
+    /// `Fn3__1` slot it is stored into. What closed that is
+    /// [`super::relate_tokens_to_the_slot_they_reach`], which asks the opposite
+    /// question — the signature the token is **stored into** rather than the one
+    /// its own type names — and can only be asked once the whole program is
+    /// known.
+    ///
+    /// The two rules **coincide** on `Ctor_Message`, whose own `typeof` and
+    /// whose slot are both `Fn3__1`, which is why this one looked like the
+    /// general answer and was the special case.
+    ///
+    /// What neither closes is the *union* — `cond ? TypeError : RangeError`,
+    /// where a token must be two signatures at once. A base cannot relate
+    /// those; what would is the thing that gives the token a representation of
+    /// its own.
     ///
     /// One function for both arms below. They differ only in where the token's
     /// index comes from — a compile-time list for a provided error, the
