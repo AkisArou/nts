@@ -42,12 +42,22 @@ export async function outer(n: number): Promise<number> {
 
 // Two suspension mechanisms at once: the frame has to survive being resumed
 // from a consumer and from an awaited promise both.
+//
+// **This one lowers as of 2026-09-12** and is kept here as the neighbour of the
+// case below, which does not. It is the reason this file refuses four things
+// rather than five. `examples/an-async-generator` is where it is measured.
 export async function* streamed(n: number): AsyncGenerator<number> {
   yield n;
 }
 
 // A loop whose *iteration protocol* suspends, so the suspension points are
 // inside machinery the source never wrote.
+//
+// Still refused, and the message moved to say so more precisely: the loop form
+// is fine now, and what has no representation is `AsyncIterable<T>` itself --
+// a `[Symbol.asyncIterator]()` handing back an object with a `next()` returning
+// `Promise<IteratorResult<T>>`. An `AsyncGenerator<T, …>` in the same position
+// walks.
 export async function consumed(xs: AsyncIterable<number>): Promise<number> {
   let total = 0;
   for await (const x of xs) {

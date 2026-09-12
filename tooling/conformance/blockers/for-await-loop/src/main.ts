@@ -1,26 +1,47 @@
-// expect: a `for await` loop
+// expect: a parameter of unrepresentable type (`AsyncIterable`)
 //
-// `for await (const x of source)`. The synchronous loop over the same values
-// lowers, so it is the `await` in the loop head and not iteration:
+// **The loop form landed on 2026-09-12 and this moved rather than cleared.**
+// It expected `a \`for await\` loop` -- a refusal of the *syntax* -- and now
+// reports the type of its own parameter:
 //
-//     for (const value of values)        -> lowers
-//     for await (const value of values)  -> REFUSED
+//     for (const value of values)        lowers
+//     for await (const value of values)  lowers, where `values` is an
+//                                        `AsyncGenerator<T, …>`
+//     for await (const value of values)  REFUSED, where `values` is an
+//                                        `AsyncIterable<T>`
 //
-// `control` is the control and is `async` itself, so the refusal cannot be read
-// as "async functions do not lower" -- it is the loop form alone.
+// That is a better message and a smaller claim. `async function*` and the
+// `for await` that drives one are in `examples/an-async-generator`, nine
+// exports on all three backends; what is left here is the **protocol object**,
+// and it is the same shape as its synchronous twin.
 //
-// **22 distinct sites: `stream` 20, `fs` 2.** Counted as sites, not summed over
-// module cones. Twenty of twenty-two are in `stream`, which is the module this
-// costs: `stream/src/iter/` exists to turn a stream into an async iterable, and
-// `for await` is how every consumer of that reads it. `Readable[Symbol.async
-// Iterator]`, `pipeline` over async sources, and the `iter/` helpers are all
-// behind it.
+// # The distinction this fixture now holds
 //
-// **Ruled out on the way**: that this is the same gap as `an async generator`,
-// which reports at 13 sites and is a separate message. A generator *produces*
-// the sequence and this *consumes* one; the fixture below has no `yield` and no
-// generator anywhere, and still refuses. They may share an implementation and
-// they do not share a repro, so both are needed to see a fix land.
+// An `AsyncGenerator<T, …>` is a *frame*: this compiler builds it, lays it out,
+// and resumes it. An `AsyncIterable<T>` is an interface with a
+// `[Symbol.asyncIterator]()` that hands back an object with a `next()` returning
+// `Promise<IteratorResult<T>>` -- three things this compiler does not build, and
+// `IteratorResult` is a union whose two arms lay their fields out differently,
+// which is the refusal census's number one row.
+//
+// So the synchronous pair is the map for the asynchronous one:
+//
+//     Generator<T>       a frame, resumed        lowers
+//     Iterable<T>        `[Symbol.iterator]()` + `next()`  lowers, as a protocol
+//     AsyncGenerator<T>  a frame, stepped        lowers as of 2026-09-12
+//     AsyncIterable<T>   the protocol, awaited   this fixture
+//
+// # What it still costs
+//
+// The sites were counted as 22 -- `stream` 20, `fs` 2 -- when the message was
+// about the loop. That number was about the syntax and no longer answers this:
+// a site whose sequence is an `AsyncGenerator` now lowers, and only the ones
+// typed as a protocol remain. Re-count against this message rather than
+// carrying the old total forward, which is the mistake the `an async generator`
+// row made in the other direction.
+//
+// `control` is `async` itself, so the refusal cannot be read as "async
+// functions do not lower".
 
 export async function control(values: number[]): Promise<number> {
   let total = 0;

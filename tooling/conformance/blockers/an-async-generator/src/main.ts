@@ -1,40 +1,68 @@
-// expect: an async generator
+// expect: nothing refused
 //
-// `async function*`. 13 distinct named things across 9 modules.
+// **Landed 2026-09-12.** This fixture used to expect `an async generator` and
+// is kept as a regression guard, because what it reduced was a *combination*
+// rather than a feature: both halves compiled and the pair did not.
 //
-// # Both halves work; the combination does not
+//     function* g(): Generator<number>              compiled
+//     async function g(): Promise<number>           compiled
+//     async function* g(): AsyncGenerator<number>   refused
 //
-//     function* g(): Generator<number>              compiles
-//     async function g(): Promise<number>           compiles
-//     async function* g(): AsyncGenerator<number>   refuses
+// That reading was right and was the useful half of the report. The machinery
+// each half needs was already there, and what had to be built was one frame
+// speaking both protocols: `state` and `yielded` where every generator keeps
+// them, `awaited` and `result` after, and a resumption that returns nothing
+// because by the time it reaches a `yield` there is no caller left standing in
+// front of it.
 //
-// A synchronous generator compiles and an async function compiles. So neither
-// suspension nor iteration is missing on its own, and what has no lowering is
-// the two together. That is a narrower claim than the message makes, and it is
-// the claim a reader needs: the machinery each half needs is already there.
+// The working feature lives in `examples/an-async-generator`, nine exports and
+// 261 cases on C, LLVM and the JVM, including one that records the **order** a
+// step takes rather than its value -- every other arm gives the same sum
+// whether or not the step ever suspended.
 //
-// Worth stating alongside the promise fixture, which found the same shape from
-// the other direction -- `await` compiles and `.then` does not. Twice now the
-// diagnostic has read as a whole feature being absent where a specific
-// combination or surface is.
+// # Four refusals stood between the declaration and here
 //
-// # It is not the return type
+// Worth listing, because the message named the construct at each and the cause
+// moved every time:
 //
-// A generator annotated `IterableIterator<number>` rather than
-// `Generator<number>` refuses for a different reason -- `a generator whose
-// element type is not record` -- so the sync control above is written with
-// `Generator<number>` deliberately. Getting that wrong would have made the
-// control refuse and turned this fixture into a claim that generators do not
-// work, which is false.
+//     an async generator                      the frontend, by name
+//     an `async` generator                    `begin_generator`, by name
+//     element type is not recorded            `AsyncGenerator` was not in the
+//                                             frontend's natively-represented
+//                                             list, so `T` never arrived
+//     an `async` function's result of         `begin_async` wanted a promise;
+//     unrepresentable type (a function type)  an async generator settles one
+//                                             per *step*, not one per call
+//
+// The third is the one to read twice. `Generator` was on that list with a
+// paragraph arguing why, and the paragraph never said which of the two it was
+// about -- it applies to `AsyncGenerator` word for word. One name missing from
+// one list, and every `async function*` stopped four lines into the lowering
+// with a message about its element type.
 
-export function* syncGenerator(): Generator<number> {
-  yield 1;
+/** Control: a synchronous generator, walked by `for...of`. */
+export function syncGenerator(n: number): number {
+  let total = 0;
+  for (const v of counting(n & 3)) total += v;
+  return total;
 }
 
-export async function asyncFunction(): Promise<number> {
-  return 1;
+function* counting(limit: number): Generator<number> {
+  for (let i = 0; i < limit; i++) yield i;
 }
 
-export async function* asyncGenerator(): AsyncGenerator<number> {
-  yield 1;
+/** Control: an `async` function with an `await`. */
+export async function asyncFunction(n: number): Promise<number> {
+  return await Promise.resolve(n & 3);
+}
+
+/** Under test: the two together. */
+async function* asyncCounting(limit: number): AsyncGenerator<number> {
+  for (let i = 0; i < limit; i++) yield i;
+}
+
+export async function asyncGenerator(n: number): Promise<number> {
+  let total = 0;
+  for await (const v of asyncCounting(n & 3)) total += v;
+  return total;
 }

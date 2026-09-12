@@ -40,6 +40,13 @@ use crate::source::SemanticSource;
 #[derive(Serialize, Deserialize)]
 struct Entry {
     schema: u32,
+    /// The compiler binary that decomposed this snapshot; see `compiler_stamp`.
+    ///
+    /// A field of its own rather than folded into `tool`, for the reason the
+    /// `configs` comment below gives about itself: an entry written before this
+    /// existed has no such field, `postcard` refuses it, and it is recomputed
+    /// rather than trusted.
+    built_by: u128,
     tool: String,
     /// Every file the snapshot read, and what its bytes hashed to.
     read: Vec<(String, u128)>,
@@ -75,9 +82,32 @@ pub fn snapshot<S: SemanticSource>(
     };
     let listing = project_listing(tsconfig);
     let path = dir.join(format!("{:032x}.postcard", hash_of(tsconfig.as_str().as_bytes())));
+    // The compiler that *built* the snapshot, beside the tool that answered the
+    // questions. `tool` stamps `tsgo`; the decomposer turning tsgo's answers
+    // into a `SemanticSnapshot` lives here, and nothing recorded it.
+    //
+    // **That is not a refinement, it is the hole this module's own argument
+    // leaves open.** The header above says a wrong hit "would cost a green
+    // gate", and then proves freshness of the *sources*, the *configs*, the
+    // *listing* and *tsgo* -- everything except the code that reads them. On
+    // 2026-09-12 one line was added to `decompose.rs` naming `AsyncGenerator`
+    // as natively represented, and 8581 stored entries went on answering
+    // without it: `emit-c` compiled the program and `nts check` refused it, in
+    // the same tree, from the same source, in the same second.
+    //
+    // `schema` does not cover it and should not be made to: the snapshot's
+    // *shape* was unchanged, and a version number bumped by hand is a step that
+    // gets forgotten exactly when it matters.
+    //
+    // The granularity is right rather than merely safe. This changes only when
+    // the binary is relinked, so a gate whose `build` step is a no-op keeps
+    // every entry, and a gate that rebuilt the compiler retakes them once --
+    // which is the run whose answers were going to be wrong.
+    let built_by = compiler_stamp();
 
     if let Some(entry) = read_entry(&path)
         && entry.schema == SCHEMA_VERSION
+        && entry.built_by == built_by
         && entry.tool == tool
         && entry.listing == listing
         && entry.configs == config_chain(tsconfig)
@@ -108,6 +138,7 @@ pub fn snapshot<S: SemanticSource>(
     if read.len() == wanted {
         let entry = Entry {
             schema: SCHEMA_VERSION,
+            built_by,
             tool: tool.to_owned(),
             read,
             listing,
@@ -120,6 +151,32 @@ pub fn snapshot<S: SemanticSource>(
         }
     }
     Ok(snapshot)
+}
+
+/// What identifies the compiler that built a snapshot.
+///
+/// The running executable's length and modification time, hashed. Not its
+/// contents: the binary is ~100MB and this is on the path of every compile,
+/// where the metadata read is two syscalls and changes on exactly the events
+/// that matter -- a relink.
+///
+/// Zero when the executable cannot be found or stat'd, which fails *closed* in
+/// the sense that matters: every run that cannot identify itself agrees on one
+/// stamp, so entries are shared between them rather than an unreadable
+/// compiler silently getting its own cache.
+fn compiler_stamp() -> u128 {
+    let Ok(exe) = std::env::current_exe() else {
+        return 0;
+    };
+    let Ok(meta) = std::fs::metadata(&exe) else {
+        return 0;
+    };
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |since| since.as_nanos());
+    hash_of(&format!("{}:{}:{modified}", exe.display(), meta.len()).into_bytes())
 }
 
 /// Where entries live, or `None` when the cache is switched off.

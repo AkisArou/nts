@@ -955,6 +955,18 @@ impl<'a> Decomposer<'a> {
                         | "Set"
                         | "ReadonlySet"
                         | "Generator"
+                        // `AsyncGenerator<T, TReturn, TNext>` on exactly the
+                        // same argument, and leaving it out was not a decision:
+                        // the paragraph above argues the case in terms that
+                        // never mentioned which of the two it was about, and
+                        // one of the two was in the list. An `async function*`
+                        // is the same frame with a second suspension protocol,
+                        // so decomposing the library's interface would pull in
+                        // `next`, `return`, `throw` and `IteratorResult` to
+                        // describe something already compiled -- and without
+                        // the type argument the element is not recorded at all,
+                        // which is where every `async function*` stopped.
+                        | "AsyncGenerator"
                         // A `Date` is a double. Decomposing `lib.d.ts`'s
                         // interface would pull in forty accessors to describe
                         // an object this compiler represents as a header and a

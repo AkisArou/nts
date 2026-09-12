@@ -481,6 +481,21 @@ pub struct Func {
     pub frame: Option<GeneratorFrame>,
 }
 
+/// Which of the two generator protocols a `function*` speaks.
+///
+/// `AsyncGenerator<T, …>` is a separate abstract class from `Generator<T, …>`
+/// and not a flag on one, because its resumption has a different signature:
+/// a synchronous resumption answers `done` to a caller standing in front of it,
+/// and an asynchronous one answers nobody and settles a promise instead. One
+/// class declaring both would be one slot with two signatures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeneratorKind {
+    /// `function*`.
+    Sync,
+    /// `async function*`.
+    Async,
+}
+
 /// What a generator's frame is, said once so that two passes agree about it.
 ///
 /// Reserved by the lowering. [`suspend`] builds the layout from it and the
@@ -492,6 +507,13 @@ pub struct Func {
 pub struct GeneratorFrame {
     /// The synthetic type id, from [`generator_frame`].
     pub ty: TypeId,
+    /// Whether this is a `function*` or an `async function*`.
+    ///
+    /// Carried on the frame rather than re-derived in [`suspend`] because the
+    /// two would then be two answers to one question: the lowering reads the
+    /// declaration's modifiers and the pass would read the ops, and a body that
+    /// yields without awaiting looks synchronous from the ops alone.
+    pub kind: GeneratorKind,
     /// What `yield` produces, at the representation the field holds.
     pub yields: HirType,
     /// The checker's own id for the declared `Generator<T, TReturn, TNext>`.

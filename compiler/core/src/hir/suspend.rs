@@ -72,6 +72,19 @@ const FIELD_RESULT: u32 = 1;
 const FIELD_AWAITED: u32 = 2;
 const FIXED_FIELDS: u32 = 3;
 
+/// Where an **async** generator keeps the promise for the step in progress.
+///
+/// Public because the two halves are in different files and must not each pick
+/// a number: [`rewrite`] settles this field and the `for await` that drives the
+/// generator is what fills it, one step at a time. A slot numbered twice is a
+/// slot two places have to agree about, and they would agree until one moved.
+///
+/// After `state`, `yielded` and `awaited`, which is forced rather than chosen:
+/// the first two are the prefix every frame shares with the abstract generator,
+/// so a walk reading `yielded` by number reads it correctly off a synchronous
+/// frame and an asynchronous one alike.
+pub const FIELD_STEP_RESULT: u32 = 3;
+
 /// The element a generator most recently yielded.
 ///
 /// Slot one, where an `async` frame keeps its promise, because a generator has
@@ -96,6 +109,22 @@ pub const FIELD_YIELDED: u32 = 1;
 enum Mode {
     Async,
     Generator,
+    /// `async function*`: both protocols, in one frame.
+    ///
+    /// It suspends on an `await` the way [`Self::Async`] does -- leaving a
+    /// subscription and returning to nobody -- and on a `yield` it settles the
+    /// promise **the consumer made for this step**. So it has a `result` like an
+    /// `async` frame and a `yielded` like a generator's, and its resumption
+    /// returns nothing: by the time a step finishes there may be no caller left
+    /// standing in front of it.
+    ///
+    /// `done` rides that promise as a number, `0` or `1`, rather than on a
+    /// helper of its own. `nts_promise_fulfill_number` and `nts_promise_number`
+    /// already exist and are already named by all three backends, and a new
+    /// runtime helper reds every backend that has not learned it yet -- with
+    /// `bench-agree` having no allowance list, that is a landing blocked on
+    /// another lane rather than a line of C.
+    AsyncGenerator,
 }
 
 impl Mode {
@@ -105,7 +134,38 @@ impl Mode {
             Self::Async => FIXED_FIELDS,
             // `state` and `yielded`, and nothing else.
             Self::Generator => 2,
+            // `state`, `yielded`, `awaited`, `result`.
+            Self::AsyncGenerator => 4,
         }
+    }
+
+    /// Where the promise being settled lives, for the modes that settle one.
+    ///
+    /// **Not a constant, because the two disagree about slot 1.** An `async`
+    /// frame keeps its promise there and a generator keeps its element, and an
+    /// async generator needs the element at 1 -- that is the prefix every frame
+    /// shares with the abstract generator, and a walk that reads `yielded` by
+    /// number reads it off whichever frame arrives. So the promise goes after
+    /// the two it cannot displace.
+    fn result(self) -> Option<u32> {
+        match self {
+            Self::Async => Some(FIELD_RESULT),
+            Self::Generator => None,
+            Self::AsyncGenerator => Some(FIELD_STEP_RESULT),
+        }
+    }
+
+    /// Where the thing most recently awaited lives.
+    fn awaited(self) -> Option<u32> {
+        match self {
+            Self::Async | Self::AsyncGenerator => Some(FIELD_AWAITED),
+            Self::Generator => None,
+        }
+    }
+
+    /// Whether this mode's resumption answers its caller or settles a promise.
+    fn settles(self) -> bool {
+        matches!(self, Self::Async | Self::AsyncGenerator)
     }
 }
 
@@ -389,28 +449,34 @@ fn rewrite(func: &Func, index: usize, layouts: &[Layout]) -> Result<Rewritten, D
     }
     let yields = |kind: &OpKind| matches!(kind, OpKind::Yield { .. });
     let generator = func.frame.as_ref();
-    // An `async function*` is both at once, and the two protocols disagree
-    // about what a resumption is for: one settles a promise nobody is waiting
-    // in front of, the other answers a caller who is. Refused by name rather
-    // than by whichever check happened to fire first.
+    // A body that yields and a frame that says it is a generator have to agree.
+    // They can disagree in one direction only -- a `yield` reached here from a
+    // function the lowering did not reserve a frame for -- and that is a bug
+    // rather than a program, so it is refused rather than guessed at.
     if generator.is_some() != func.values.iter().any(|op| yields(&op.kind)) {
-        return Err(refuse(func, "an `async` generator"));
+        return Err(refuse(func, "a `yield` outside a generator"));
     }
-    let mode = if generator.is_some() {
-        Mode::Generator
-    } else {
-        Mode::Async
+    // **Which protocol, from the declaration rather than from the ops.** An
+    // `async function*` whose body never awaits has exactly the ops of a
+    // synchronous generator, so deriving the mode from what is in the function
+    // would compile it as one -- and its consumer awaits a promise that the
+    // resumption would never have settled. `GeneratorKind` is carried on the
+    // frame for this: the lowering read the modifiers, and nothing downstream
+    // has to re-derive a fact the source stated.
+    let mode = match generator.map(|frame| frame.kind) {
+        Some(super::GeneratorKind::Sync) => Mode::Generator,
+        Some(super::GeneratorKind::Async) => Mode::AsyncGenerator,
+        None => Mode::Async,
     };
-    if mode == Mode::Generator && func.values.iter().any(|op| matches!(op.kind, OpKind::Await { .. }))
-    {
-        return Err(refuse(func, "an `async` generator"));
-    }
     let result = match mode {
         Mode::Async => Some(
             func.async_result
                 .ok_or_else(|| refuse(func, "an `await` outside an `async` function"))?,
         ),
-        Mode::Generator => None,
+        // An async generator settles one promise per *step*, and the consumer
+        // makes it. There is no value in this function to map to a slot: the
+        // field is written from outside and read here.
+        Mode::Generator | Mode::AsyncGenerator => None,
     };
 
     // What goes in the frame. Order is fixed rather than incidental: the fixed
@@ -535,6 +601,42 @@ impl Build {
     }
 }
 
+/// The promise one step of an async generator settles.
+///
+/// `Promise<f64>`, carrying `done` as `0` or `1`. A boolean would read better
+/// and would cost a `nts_promise_fulfill_bool` that does not exist -- and a new
+/// runtime helper is not a line of C, it is every backend that has not learned
+/// the name refusing until it does, with `bench-agree` having no allowance list
+/// to land through. The number is already carried by `nts_promise_fulfill_number`
+/// and read back by `nts_promise_number`, both of which all three backends name.
+///
+/// The *element* does not ride this promise. It is left in `yielded`, where a
+/// synchronous generator leaves it and where the walk already reads it from, so
+/// nothing is allocated per element here either.
+pub(super) fn step_promise() -> HirType {
+    HirType::Managed(ManagedType::Promise(Box::new(HirType::Float { bits: 64 })))
+}
+
+/// Settle the step in progress: `done`, or another element in `yielded`.
+fn settle_step(build: &mut Build, frame: ValueId, mode: Mode, done: bool) {
+    let Some(slot) = mode.result() else {
+        return;
+    };
+    let promise = build.get(frame, slot, step_promise());
+    let flag = build.push(
+        OpKind::ConstFloat(if done { 1.0 } else { 0.0 }),
+        HirType::Float { bits: 64 },
+    );
+    build.push(
+        OpKind::Call {
+            callee: super::Callee::External("nts_promise_fulfill_number".to_owned()),
+            args: vec![promise, flag],
+            frame: None,
+        },
+        HirType::Void,
+    );
+}
+
 /// `f(args)`: make the frame, fill it, start the machine, hand back the promise.
 ///
 /// The body it replaces is gone entirely -- it lives in the resume function
@@ -613,7 +715,7 @@ fn entry_function(
             );
             build.get(frame, FIELD_RESULT, func.return_type.clone())
         }
-        Mode::Generator => frame,
+        Mode::Generator | Mode::AsyncGenerator => frame,
     };
 
     Func {
@@ -767,6 +869,37 @@ pub fn generator_prefix(yields: &HirType) -> Vec<Field> {
     ]
 }
 
+/// The prefix an **async** generator's frame begins with.
+///
+/// `generator_prefix`, then `awaited`, then `result`. Public and used by both
+/// halves on purpose: [`frame_fields`] builds the concrete frame from it and
+/// the lowering builds the abstract `AsyncGenerator<T, …>` class from it, and
+/// the two must agree about *four* fields rather than two.
+///
+/// They did not, and the failure is worth keeping: the abstract class carried
+/// only `generator_prefix`, so an async generator reaching a walk as a
+/// **parameter** -- typed as the abstract class, the commonest spelling in the
+/// corpus -- had the step's promise written at slot 3 of a two-field layout.
+/// `NTS2006 a field index outside its layout`, from the backend, on the two
+/// arms that dispatch and on neither of the arms that call directly.
+#[must_use]
+pub fn async_generator_prefix(yields: &HirType) -> Vec<Field> {
+    let mut fields = generator_prefix(yields);
+    fields.push(Field {
+        name: "awaited".to_owned(),
+        ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
+        readonly: false,
+        declared_by: None,
+    });
+    fields.push(Field {
+        name: "result".to_owned(),
+        ty: step_promise(),
+        readonly: false,
+        declared_by: None,
+    });
+    fields
+}
+
 /// The frame's fields: the fixed three, then one per parameter, then one for
 /// every value that has to survive a suspension.
 ///
@@ -800,6 +933,12 @@ fn frame_fields(
             },
         ],
         Mode::Generator => generator_prefix(yields.unwrap_or(&HirType::Void)),
+        // The generator prefix **first**, unchanged, and the async fields after
+        // it. That order is the whole of why an async generator can be walked
+        // through the same slot a synchronous one is: `state` and `yielded` sit
+        // where every frame keeps them, so the abstract generator's layout is
+        // still a structural prefix of this one.
+        Mode::AsyncGenerator => async_generator_prefix(yields.unwrap_or(&HirType::Void)),
     };
     for param in &func.params {
         fields.push(Field {
@@ -856,7 +995,7 @@ fn resume_function(
 
     // Whether anything still needs the shared exit: an `await` whose rejection
     // the lowering did not give a handler.
-    let shared_exit = mode == Mode::Async
+    let shared_exit = mode.settles()
         && points.iter().any(|(_, _, value)| {
             matches!(
                 &func.values[value.0 as usize].kind,
@@ -866,7 +1005,7 @@ fn resume_function(
                 }
             )
         });
-    let (base, starts) = segment_layout(func, points, mode, shared_exit);
+    let (base, starts) = segment_layout(func, points, shared_exit);
     // Immediately after the dispatch chain, which is what `segment_layout`
     // reserved the extra block for. A generator has no such block: a `yield`
     // cannot reject, and neither has a function whose every `await` is caught.
@@ -912,6 +1051,14 @@ fn resume_function(
                     let done = build.push(OpKind::ConstBool(true), HirType::Bool);
                     terminator = Terminator::Return(Some(done));
                 }
+                // An async generator answers nobody: the walk is holding the
+                // step's promise, so finishing means settling it with *done*
+                // rather than returning it. `TReturn` is discarded here exactly
+                // as a synchronous generator's is.
+                if mode == Mode::AsyncGenerator && matches!(terminator, Terminator::Return(_)) {
+                    settle_step(&mut build, frame, mode, true);
+                    terminator = Terminator::Return(None);
+                }
                 // A terminator reads values too, and a jump's arguments are the
                 // easiest to forget: a loop's counter is a block parameter of
                 // the header, and a segment reached only from the dispatch is
@@ -927,7 +1074,7 @@ fn resume_function(
                 break;
             };
             let marker = i64::try_from(resume_at.len()).unwrap_or(0);
-            let paused = pause(&mut build, frame, slot_of, awaited, name, marker);
+            let paused = pause(&mut build, frame, slot_of, awaited, name, marker, mode);
             body.push(super::Block {
                 params: std::mem::take(&mut params),
                 ops: std::mem::take(&mut build.ops),
@@ -937,9 +1084,15 @@ fn resume_function(
             resume_at.push(super::BlockId(landing));
             // A `yield` lands straight back in the body. The rejection test
             // below exists because a promise can settle either way; nothing
-            // resumes a generator with a failure, because the caller resuming
-            // it is not settling anything.
-            if mode == Mode::Generator {
+            // resumes a *yield* with a failure, because whoever resumes it is
+            // not settling anything.
+            //
+            // **Asked of the suspension rather than of the mode**, which is the
+            // difference an async generator makes: it has both kinds in one
+            // function, so "does this one need a rejection test" stopped being
+            // a property of the function the moment `await` and `yield` could
+            // appear in the same body.
+            if matches!(build.values[awaited.0 as usize].kind, OpKind::Yield { .. }) {
                 from = op + 1;
                 continue;
             }
@@ -972,10 +1125,14 @@ fn resume_function(
 
     let mut blocks = dispatch_chain(&mut build, frame, &resume_at);
     if shared_exit {
-        blocks.push(rejection_exit(&mut build, frame));
+        blocks.push(rejection_exit(&mut build, frame, mode));
     }
     blocks.extend(body);
-    if mode == Mode::Async {
+    // Every mode whose resumption can hand the frame to the runtime gives it
+    // back at the exits that do not. For an async generator that includes each
+    // `yield`: the walk retained for this step, the step is over, and the
+    // reference goes back with the answer.
+    if mode.settles() {
         give_the_frame_back(&mut build, &mut blocks, frame, &func.origin);
     }
     assembled_resume(name, func, frame_ty.clone(), build, blocks, mode)
@@ -995,11 +1152,15 @@ fn pause(
     stopping: ValueId,
     resume: &str,
     marker: i64,
+    mode: Mode,
 ) -> Terminator {
     match build.values[stopping.0 as usize].kind.clone() {
         OpKind::Await { promise, .. } => {
             let promise = reload(build, frame, slot_of, promise);
-            build.set(frame, FIELD_AWAITED, promise);
+            let Some(slot) = mode.awaited() else {
+                unreachable!("a generator that awaits is an async generator");
+            };
+            build.set(frame, slot, promise);
             let marker = build.constant(marker);
             build.set(frame, FIELD_STATE, marker);
             build.push(
@@ -1017,6 +1178,13 @@ fn pause(
             build.set(frame, FIELD_YIELDED, value);
             let marker = build.constant(marker);
             build.set(frame, FIELD_STATE, marker);
+            if mode == Mode::AsyncGenerator {
+                // Nobody is standing here to be answered: the walk holds this
+                // step's promise and is suspended on it, so *not done* is a
+                // settlement rather than a return value.
+                settle_step(build, frame, mode, false);
+                return Terminator::Return(None);
+            }
             let unfinished = build.push(OpKind::ConstBool(false), HirType::Bool);
             Terminator::Return(Some(unfinished))
         }
@@ -1051,7 +1219,7 @@ fn assembled_resume(
         // the walk needs to decide whether to go round again; the element it
         // left in the frame.
         return_type: match mode {
-            Mode::Async => HirType::Void,
+            Mode::Async | Mode::AsyncGenerator => HirType::Void,
             Mode::Generator => HirType::Bool,
         },
         values: build.values,
@@ -1109,7 +1277,6 @@ fn assembled_resume(
 fn segment_layout(
     func: &Func,
     points: &[(usize, usize, ValueId)],
-    mode: Mode,
     shared_exit: bool,
 ) -> (u32, Vec<u32>) {
     // The dispatch chain, then one block the whole function shares for
@@ -1128,20 +1295,31 @@ fn segment_layout(
     // block for the whole function and is reserved only when something reaches
     // it. Spending one `shared` on both took a block away from every generator
     // and broke `examples/generators`, which is what the corpus is for.
-    let shared = usize::from(mode == Mode::Async);
+    // **Per suspension point, not per function.** An `await` needs two blocks
+    // -- the segment that suspends and the one the dispatch lands on, which
+    // tests for a rejection before anything reads a payload -- and a `yield`
+    // needs only the first. That was a property of the *mode* until an async
+    // generator could hold both kinds, and counting it per mode would hand an
+    // async generator two blocks for every `yield` and leave the block indices
+    // one short per await, which is a jump to the wrong segment rather than an
+    // error.
+    let blocks_for = |value: ValueId| {
+        1 + usize::from(matches!(
+            func.values[value.0 as usize].kind,
+            OpKind::Await { .. }
+        ))
+    };
     let base = u32::try_from(points.len() + 2 + usize::from(shared_exit)).unwrap_or(0);
     let mut starts = Vec::new();
     let mut count = 0u32;
     for index in 0..func.blocks.len() {
         starts.push(base + count);
-        let cuts = points
+        let here: usize = points
             .iter()
             .filter(|(block, _, _)| *block == index)
-            .count();
-        // Two blocks per suspension, not one: the segment that suspends, and
-        // the one the dispatch lands on, which tests for a rejection before
-        // anything reads a payload. A generator needs only the first.
-        count += u32::try_from((1 + shared) * cuts + 1).unwrap_or(1);
+            .map(|(_, _, value)| blocks_for(*value))
+            .sum();
+        count += u32::try_from(here + 1).unwrap_or(1);
     }
     (base, starts)
 }
@@ -1306,10 +1484,19 @@ fn read_reason(build: &mut Build, frame: ValueId) -> ValueId {
 /// It reads the awaited promise out of the frame rather than taking it as a
 /// parameter, so every resumption can share one block: the field holds
 /// whichever promise this resumption was waiting on.
-fn rejection_exit(build: &mut Build, frame: ValueId) -> super::Block {
+///
+/// **The promise it rejects is the one this mode settles**, which is not the
+/// same slot in both: an `async` frame keeps it at 1 and an async generator
+/// keeps the element there. Reading the constant rejected `yielded` -- a
+/// `double` where a promise was wanted -- and clang said so, which is the only
+/// reason it was not a pointer made of a number's bits.
+fn rejection_exit(build: &mut Build, frame: ValueId, mode: Mode) -> super::Block {
     let promise = HirType::Managed(ManagedType::Promise(Box::new(HirType::Void)));
-    let result = build.get(frame, FIELD_RESULT, promise.clone());
-    let held = build.get(frame, FIELD_AWAITED, promise);
+    let Some(slot) = mode.result() else {
+        unreachable!("only a mode that settles a promise has a rejection exit");
+    };
+    let result = build.get(frame, slot, promise.clone());
+    let held = build.get(frame, mode.awaited().unwrap_or(FIELD_AWAITED), promise);
     build.push(
         OpKind::Call {
             callee: super::Callee::External("nts_promise_reject_with".to_owned()),

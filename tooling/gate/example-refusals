@@ -29,7 +29,7 @@
 generic-classes-unsupported 8 the constructs the name promises
 generator-unsupported 3 the constructs the name promises
 dates-unsupported 6 the constructs the name promises
-async-unsupported 5 the constructs the name promises
+async-unsupported 4 the constructs the name promises
 array-from-unsupported 2 the constructs the name promises
 mathops-unsupported 1 the constructs the name promises
 # One of four arms. The other three are the shapes this refusal must *not*

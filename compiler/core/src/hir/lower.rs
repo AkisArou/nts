@@ -20,8 +20,8 @@ use nts_semantic_schema::{
 
 use super::facts::Facts;
 use super::{
-    BinOp, Block, BlockId, Callee, Field, Func, HirType, Layout, ManagedType, Op, OpKind, Param,
-    ParamShape, Program, Terminator, UnOp, ValueId,
+    BinOp, Block, BlockId, Callee, Field, Func, GeneratorKind, HirType, Layout, ManagedType, Op,
+    OpKind, Param, ParamShape, Program, Terminator, UnOp, ValueId,
 };
 
 /// What a lowering produced, and what it could not.
@@ -1533,15 +1533,57 @@ fn generator_indices(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<NodeI
 fn abstract_generators(snapshot: &SemanticSnapshot) -> Vec<TypeId> {
     (0..snapshot.types.len())
         .map(|index| TypeId(u32::try_from(index).unwrap_or(u32::MAX)))
-        .filter(|ty| named(snapshot, *ty) == Some("Generator"))
+        .filter(|ty| abstract_generator_kind(snapshot, *ty).is_some())
         .collect()
+}
+
+/// Whether a type is an abstract generator, and which protocol it speaks.
+///
+/// **One derivation, used by all four places that ask.** The name was written
+/// out at each of them -- the scan above, `represent`, the `for...of` arm and
+/// the layout -- and the four had to keep agreeing about a string. Adding
+/// `AsyncGenerator` to three of four would have produced a type that
+/// represents as an object and then has no layout, which is an object type the
+/// program cannot name.
+///
+/// `Generator` and `AsyncGenerator` **alone**, deliberately: `Iterator<T>`,
+/// `IterableIterator<T>` and their async twins are satisfied by a hand-written
+/// object with a `next`, and that shape already works as a protocol object with
+/// a `{ value, done }` result. Representing those names as a frame would take
+/// the working case and give it the wrong machine value.
+fn abstract_generator_kind(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<GeneratorKind> {
+    match named(snapshot, ty)? {
+        "Generator" => Some(GeneratorKind::Sync),
+        "AsyncGenerator" => Some(GeneratorKind::Async),
+        _ => None,
+    }
 }
 
 /// The class an abstract generator is emitted as, and the resumption it
 /// declares.
-fn abstract_generator_names(index: usize) -> (String, String) {
-    let class = format!("Generator{index}");
-    let method = format!("{class}#resume");
+fn abstract_generator_names(index: usize, kind: GeneratorKind) -> (String, String) {
+    let class = match kind {
+        GeneratorKind::Sync => format!("Generator{index}"),
+        GeneratorKind::Async => format!("AsyncGenerator{index}"),
+    };
+    // **`step` for the async one, and the difference is load-bearing on one
+    // backend.** The JVM gives every frame that a promise can resume a fixed
+    // `Resumable.resume()V`, and it names a dispatch slot's forwarder after the
+    // member the layout declares. A synchronous generator has no `Suspend`
+    // operation -- a `yield` returns to a caller rather than subscribing -- so
+    // it never has both, and `#resume` was free. An async generator has both,
+    // and two `resume()V` in one class is `java.lang.ClassFormatError:
+    // Duplicate method name`, which is a load failure rather than a compile
+    // one: 17 aborts, on the lane that was green a minute earlier.
+    //
+    // It is also the better name. What the slot holds is what a consumer calls
+    // to get the *next element*, and for an async generator that is a step
+    // which may suspend several times before answering -- "resume" names what
+    // happens to the frame, and this is named for what the caller asked.
+    let method = match kind {
+        GeneratorKind::Sync => format!("{class}#resume"),
+        GeneratorKind::Async => format!("{class}#step"),
+    };
     (class, method)
 }
 
@@ -6039,7 +6081,7 @@ fn provided_representation(
     // done }` result rather than a frame. Representing those two names as a
     // frame would take the working case and give it the wrong machine value.
     // They are a subtyping question, and a separate row.
-    if named(snapshot, ty) == Some("Generator")
+    if abstract_generator_kind(snapshot, ty).is_some()
         && generator_element_type(snapshot, ty, path, subst)
             .is_some_and(|element| element != HirType::Void)
     {
@@ -10006,14 +10048,17 @@ impl<'a> FuncBuilder<'a> {
         {
             return Ok(None);
         }
-        if self
+        let kind = if self
             .node(id)
             .modifiers
             .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
         {
-            return Err(self.unsupported(id, "an `async` generator"));
-        }
-        // `Generator<T, TReturn, TNext>`, and `T` is the element. Read from the
+            GeneratorKind::Async
+        } else {
+            GeneratorKind::Sync
+        };
+        // `Generator<T, TReturn, TNext>` or `AsyncGenerator<…>`, and `T` is the
+        // element in both. Read from the
         // checker's type arguments rather than from the annotation, so an
         // unannotated `function*` works the same way -- which is how the
         // promise's payload is read three functions below.
@@ -10072,6 +10117,7 @@ impl<'a> FuncBuilder<'a> {
         self.layout_of(id, declared)?;
         let frame = super::GeneratorFrame {
             ty: super::generator_frame(index),
+            kind,
             yields,
             declared,
         };
@@ -10092,6 +10138,24 @@ impl<'a> FuncBuilder<'a> {
             .node(id)
             .modifiers
             .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+        {
+            return Ok(None);
+        }
+        // An `async function*` is `async` and settles **no** promise of its
+        // own. Calling one runs none of its body and hands back a frame, so
+        // there is nothing here to allocate: the promise an async generator
+        // settles is per *step*, it belongs to whoever asked for that step, and
+        // it is made at the consumer rather than at the declaration.
+        //
+        // Asked before the `Promise<T>` test below rather than after, because
+        // the checker types an `async function*` as `AsyncGenerator<T, …>` --
+        // not a promise -- so the test would report it as a result this
+        // lowering could not represent. It said "a function type", which is
+        // true of the declaration and says nothing about the generator.
+        if self
+            .node(id)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::GENERATOR)
         {
             return Ok(None);
         }
@@ -12798,7 +12862,17 @@ impl<'a> FuncBuilder<'a> {
     /// different thing again: the module becomes the suspending body and its
     /// exports settle when it finishes.
     fn lower_await(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
-        if self.async_result.is_none() {
+        // An `async function*` is an async context with **no promise of its
+        // own**, so `async_result` is `None` inside one and the test below read
+        // its body as module scope: the first `await` in an async generator
+        // reported `a top-level await`, which is a true sentence about a
+        // different program. What makes a body async here is the declaration,
+        // and the frame carries which kind it is.
+        let inside_an_async_generator = self
+            .generator
+            .as_ref()
+            .is_some_and(|frame| frame.kind == GeneratorKind::Async);
+        if self.async_result.is_none() && !inside_an_async_generator {
             return Err(self.unsupported(id, "a top-level `await`"));
         }
         let operand = *self
@@ -14327,6 +14401,102 @@ impl<'a> FuncBuilder<'a> {
     /// One turn of the iteration protocol: the call that advances the iterator,
     /// and the `done` it answered with.
     ///
+    /// One step of an `async function*`, which is a promise made and awaited.
+    ///
+    /// A synchronous generator's step is one call that answers `done`. This is
+    /// four things, and the shape is forced by there being **no caller standing
+    /// in front of the resumption** once it awaits:
+    ///
+    /// ```text
+    ///   p = nts_promise_new()      the promise for this step
+    ///   frame.result = p           where the resumption will find it
+    ///   retain frame               the resumption may hand it to the runtime
+    ///   resume(frame)              runs until it yields, awaits, or finishes
+    ///   done = await p != 0        the suspension, in *this* function's frame
+    /// ```
+    ///
+    /// The `await` is an ordinary [`OpKind::Await`] in the enclosing `async`
+    /// function, so the loop's own suspension machinery is the one that already
+    /// works -- this adds no second mechanism for waiting.
+    ///
+    /// **The element does not ride the promise.** It is left in `yielded`, and
+    /// the body reads it from the frame exactly as a synchronous generator's
+    /// body does, so an async walk allocates one promise per step and no
+    /// `{ value, done }` object ever.
+    ///
+    /// The retain mirrors the entry of an ordinary `async` function: a
+    /// resumption that suspends leaves the frame with the runtime, which holds
+    /// it until the subscription fires, and `give_the_frame_back` returns the
+    /// reference at every exit that is not a suspension -- each `yield`
+    /// included, because a yield ends the step.
+    fn async_generator_step(
+        &mut self,
+        id: NodeId,
+        frame: ValueId,
+        resume: Callee,
+        origin: &Origin,
+    ) -> Result<(ValueId, ValueId), Diagnostic> {
+        if self.async_result.is_none()
+            && !self
+                .generator
+                .as_ref()
+                .is_some_and(|frame| frame.kind == GeneratorKind::Async)
+        {
+            return Err(self.unsupported(
+                id,
+                "a `for await` outside an `async` function, whose step has nowhere to suspend",
+            ));
+        }
+        let promise = self.push(
+            OpKind::Call {
+                callee: Callee::External("nts_promise_new".to_owned()),
+                args: Vec::new(),
+                frame: None,
+            },
+            super::suspend::step_promise(),
+            origin.clone(),
+        );
+        self.push(
+            OpKind::FieldSet {
+                object: frame,
+                field: super::suspend::FIELD_STEP_RESULT,
+                value: promise,
+            },
+            HirType::Void,
+            origin.clone(),
+        );
+        self.push(OpKind::Retain(frame), HirType::Void, origin.clone());
+        self.push(
+            OpKind::Call {
+                callee: resume,
+                args: vec![frame],
+                frame: None,
+            },
+            HirType::Void,
+            origin.clone(),
+        );
+        let settled = self.push(
+            OpKind::Await {
+                promise,
+                rejects_to: None,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        self.record_rejection(settled);
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let done = self.push(
+            OpKind::Binary {
+                op: BinOp::Ne,
+                lhs: settled,
+                rhs: zero,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        Ok((frame, done))
+    }
+
     /// Both come from a single `next()`, and the result is handed back so the
     /// body can read the element out of the same one.
     fn protocol_step(
@@ -14335,6 +14505,15 @@ impl<'a> FuncBuilder<'a> {
         walk: &Walk,
         origin: &Origin,
     ) -> Result<(ValueId, ValueId), Diagnostic> {
+        if let Walk::Generator {
+            frame,
+            resume,
+            asynchronous: true,
+            ..
+        } = walk
+        {
+            return self.async_generator_step(id, *frame, resume.clone(), origin);
+        }
         if let Walk::Generator { frame, resume, .. } = walk {
             let (frame, resume) = (*frame, resume.clone());
             // The frame is the state and the resumption is the step, so this is
@@ -14450,10 +14629,21 @@ impl<'a> FuncBuilder<'a> {
         let Some(layout) = self.generator_element(frame) else {
             return Err(self.unsupported(sequence, "a generator whose element was not reserved"));
         };
+        // From the *type*, which is where the answer already is: a concrete
+        // frame names the abstract generator it extends, and that is either a
+        // `Generator<T, …>` or an `AsyncGenerator<T, …>`. Reading the loop's
+        // `await` keyword instead would be a second derivation of a fact the
+        // declaration settled, and the two would disagree exactly where it
+        // matters -- `for await` over a synchronous generator is legal.
+        let asynchronous = abstract_generator_kind(
+            self.snapshot,
+            self.generator_declared(frame).unwrap_or(frame),
+        ) == Some(GeneratorKind::Async);
         Ok(Walk::Generator {
             frame: value,
             resume,
             element: layout,
+            asynchronous,
         })
     }
 
@@ -14911,7 +15101,7 @@ impl<'a> FuncBuilder<'a> {
             // declare a `[Symbol.iterator]`, so that arm would match and build
             // an iterator for a value that is resumed rather than `next`ed.
             (HirType::Managed(ManagedType::Object(ty)), None)
-                if named(self.snapshot, *ty) == Some("Generator") =>
+                if abstract_generator_kind(self.snapshot, *ty).is_some() =>
             {
                 self.generator_walk(sequence, value)
             }
@@ -15213,10 +15403,26 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_for_of(&mut self, id: NodeId, over: Over) -> Result<(), Diagnostic> {
-        let children = self.children(id);
+        // `for await` carries the keyword as a **fourth child**, so the shape
+        // here is four rather than three.
+        //
+        // The keyword does not choose the step -- the sequence's type does,
+        // because an `async function*` is what makes a walk asynchronous. What
+        // it chooses is whether a *synchronous* sequence is allowed, and that
+        // is a separate question with a measured answer. This comment said the
+        // keyword need not be read at all, on the argument that it would be a
+        // second derivation of one fact; the two facts are different, and the
+        // check below is what the measurement asked for.
+        let awaiting = self
+            .children(id)
+            .into_iter()
+            .any(|child| self.kind_of(child) == Some(syntax::AWAIT_KEYWORD));
+        let children: Vec<NodeId> = self
+            .children(id)
+            .into_iter()
+            .filter(|child| self.kind_of(*child) != Some(syntax::AWAIT_KEYWORD))
+            .collect();
         let [initializer, sequence, body] = children.as_slice() else {
-            // An `await` modifier makes four. `for await` needs the async
-            // machinery rather than a different loop shape.
             return Err(self.unsupported(id, "a `for...of` of unexpected shape"));
         };
         let (initializer, sequence, body) = (*initializer, *sequence, *body);
@@ -15278,6 +15484,36 @@ impl<'a> FuncBuilder<'a> {
                 .map_err(|_| self.unsupported(id, "a `for...in` over something without named fields"))?,
         };
         let walk = self.walk_of(sequence, sequence_value, forced, wanted)?;
+        // **`for await` over a synchronous iterable awaits each element**, and
+        // that is observable rather than academic. Walking one as an ordinary
+        // `for...of` computes the same elements in the same order and takes no
+        // ticks doing it, so anything else queued runs at a different time.
+        //
+        // Measured, because a fixture reading the loop's *value* cannot tell:
+        // summing `[1, 2]` gives 3 either way. A fixture recording the **order**
+        // against a second async function gave `129` here and `912` in node --
+        // node's loop suspends before the first element, so the other work runs
+        // first, and ours ran the whole loop first. Both controls in the same
+        // file agreed: a plain `for...of`, and `for await` over an async
+        // generator.
+        //
+        // Refused rather than approximated. The elements would be right and the
+        // interleaving wrong, which is the shape of defect this compiler is
+        // least able to find later.
+        if awaiting
+            && !matches!(
+                walk,
+                Walk::Generator {
+                    asynchronous: true,
+                    ..
+                }
+            )
+        {
+            return Err(self.unsupported(
+                id,
+                "a `for await` over a synchronous sequence, which awaits every element",
+            ));
+        }
 
         let origin = self.origin(id);
         // The cursor. A double, like the counter a hand-written `for` produces,
@@ -20765,9 +21001,7 @@ impl<'a> FuncBuilder<'a> {
     /// opinion none of them held.
     fn abstract_generator_layout(&self, ty: TypeId) -> Option<Layout> {
         let slot = self.hierarchy.generator_slot?;
-        if named(self.snapshot, ty) != Some("Generator") {
-            return None;
-        }
+        let kind = abstract_generator_kind(self.snapshot, ty)?;
         // The element, from the checker's type arguments. A `Generator` with
         // none recorded is the frontend having stopped at the library boundary,
         // and a layout whose element were a guess would read a slot no `yield`
@@ -20791,14 +21025,22 @@ impl<'a> FuncBuilder<'a> {
         let index = abstract_generators(self.snapshot)
             .iter()
             .position(|other| *other == ty)?;
-        let (class, method) = abstract_generator_names(index);
+        let (class, method) = abstract_generator_names(index, kind);
         let mut methods = vec![None; self.hierarchy.table_size()];
         methods[slot as usize] = Some(method);
         Some(Layout {
             types: vec![ty],
             name: class,
             interfaces: Vec::new(),
-            fields: super::suspend::generator_prefix(&element),
+            // Four fields for an async generator and two for a synchronous
+            // one, from the same function the frames are built from. A walk
+            // reaching one through this class writes the step's promise by
+            // slot number, and a class that stopped at the prefix put it past
+            // the end.
+            fields: match kind {
+                GeneratorKind::Sync => super::suspend::generator_prefix(&element),
+                GeneratorKind::Async => super::suspend::async_generator_prefix(&element),
+            },
             methods,
             // The abstract generator is the root: a frame extends it, and it
             // extends nothing.
@@ -30581,24 +30823,13 @@ const fn logical_assignment(token: u16) -> Option<Logical> {
 /// rejection is an edge into a handler, and `lower_unguarded` synthesises the
 /// handler a `try`/`finally` never wrote.
 fn refused_by_name(snapshot: &SemanticSnapshot, id: NodeId) -> Option<&'static str> {
-    let node = snapshot.nodes.get(id.0 as usize)?;
-    let asynchronous = node
-        .modifiers
-        .contains(nts_semantic_schema::DeclarationModifiers::ASYNC);
-    if asynchronous && has_child_of_kind(snapshot, id, syntax::ASTERISK_TOKEN) {
-        return Some("an async generator");
-    }
+    snapshot.nodes.get(id.0 as usize)?;
     let mut found = None;
     walk(snapshot, id, &mut |child| {
         if found.is_some() {
             return;
         }
         let kind = kind_at(snapshot, child);
-        if kind == Some(syntax::FOR_OF_STATEMENT)
-            && has_child_of_kind(snapshot, child, syntax::AWAIT_KEYWORD)
-        {
-            found = Some("a `for await` loop");
-        }
         // The same for a `yield`, and it is **iterator closing**: a `for...of`
         // left by `break` or `return` calls `gen.return()` on the way out,
         // which resumes the generator inside its `try` and runs the `finally`.
@@ -30655,12 +30886,6 @@ fn direct_children(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
             _ => vec![*child],
         })
         .collect()
-}
-
-fn has_child_of_kind(snapshot: &SemanticSnapshot, id: NodeId, kind: u16) -> bool {
-    direct_children(snapshot, id)
-        .into_iter()
-        .any(|child| kind_at(snapshot, child) == Some(kind))
 }
 
 fn contains_kind(snapshot: &SemanticSnapshot, id: NodeId, kind: u16) -> bool {
@@ -31040,6 +31265,16 @@ enum Walk {
         /// `f__resume(frame)`, which [`super::suspend`] has not built yet.
         resume: Callee,
         element: HirType,
+        /// Whether this is an `async function*`, driven by `for await`.
+        ///
+        /// A flag on this walk rather than a variant beside it, because it *is*
+        /// this walk: the cursorless shape, the header as the latch, the
+        /// element read out of the frame and `done` deciding whether to go
+        /// round again are all the same. Only the step differs -- one call
+        /// against a promise made, a resumption run and a suspension awaited --
+        /// and a second variant would have meant an arm in each of the ten
+        /// matches that only ever said "the same as a generator".
+        asynchronous: bool,
     },
     /// The code points of a string, which are one or two units wide.
     ///
