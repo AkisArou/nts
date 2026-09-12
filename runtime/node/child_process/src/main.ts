@@ -31,7 +31,10 @@ import {
   ERR_CHILD_PROCESS_STDIO_MAXBUFFER,
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
+  ERR_CHILD_PROCESS_IPC_REQUIRED,
+  ERR_INVALID_HANDLE_TYPE,
   ERR_IPC_ONE_PIPE,
+  ERR_MISSING_ARGS,
   ERR_OUT_OF_RANGE,
   ERR_UNKNOWN_SIGNAL,
 } from "../../internal/errors.ts";
@@ -750,6 +753,23 @@ export interface SpawnOptions extends SpawnSyncOptions {
 }
 
 /** `'pipe'` is 0, `'inherit'` 1, `'ignore'` 2 -- what every other spelling reduces to. */
+/**
+ * `serialization` is one of three things or it is an error.
+ *
+ * node validates it in `ChildProcess.prototype.spawn`, which `spawn` and `fork` reach
+ * and `spawnSync` does not -- so this is called from those two and not from the sync
+ * path, which would be stricter than node rather than closer to it. The message is
+ * node's, and `advanced` is not implemented here: accepting the name and then using
+ * JSON would be the wrong half of this to get right, so that remains a separate gap
+ * rather than a silent substitution.
+ */
+function validateSerialization(value: unknown): void {
+  if (value === undefined || value === "json" || value === "advanced") return;
+  throw new ERR_INVALID_ARG_VALUE(
+    "options.serialization", value, "must be one of: undefined, 'json', 'advanced'",
+  );
+}
+
 /** A `cwd` as the binding wants it: a path, or "" for absent. */
 function cwdPath(cwd: string | URL | undefined): string {
   if (cwd === undefined || cwd === null) return "";
@@ -925,6 +945,7 @@ export function spawn(
   const opts = normalised.options as SpawnOptions;
   checkNoNullBytes(file, normalised.args, opts);
   validateAbortSignal(opts.signal, "options.signal");
+  validateSerialization((opts as { serialization?: unknown }).serialization);
 
   let command = file;
   let argv: string[];
@@ -1379,6 +1400,36 @@ export function fork(
     opts = ownOptions(options);
   }
 
+  // **`fork` requires a channel, and node says so rather than making one quietly.**
+  // An explicit `stdio` without `'ipc'` is ERR_CHILD_PROCESS_IPC_REQUIRED, and a
+  // string is expanded the way node's `stdioStringToArray` does -- four spellings and
+  // nothing else, so `{ stdio: '33' }` is ERR_INVALID_ARG_VALUE rather than three
+  // pipes named 3 and 3. Both are asserted, by test-child-process-fork-stdio and
+  // test-child-process-fork-stdio-string-variant.
+  validateSerialization((opts as { serialization?: unknown }).serialization);
+  const forkStdio = (opts as { stdio?: unknown }).stdio;
+  if (typeof forkStdio === "string") {
+    if (forkStdio !== "ignore" && forkStdio !== "overlapped"
+      && forkStdio !== "pipe" && forkStdio !== "inherit") {
+      throw new ERR_INVALID_ARG_VALUE("stdio", forkStdio);
+    }
+  } else if (Array.isArray(forkStdio) && !forkStdio.includes("ipc")) {
+    throw new ERR_CHILD_PROCESS_IPC_REQUIRED("options.stdio");
+  }
+
+  // The slots `fork` will actually have. `silent` only chooses between piping and
+  // inheriting when `stdio` said nothing; an explicit array decides it.
+  const forkMode = forkStdio === undefined
+    ? (opts.silent === true ? 0 : 0x15)
+    : stdioMode(forkStdio as string | readonly string[]);
+  // The binding takes one flag where node takes an array, so "pipe" is whether either
+  // output slot is a pipe. That is coarser than node and worth saying: a request for
+  // `['pipe','inherit','pipe','ipc']` gets both piped here. What it fixes is the case
+  // that was simply wrong -- an explicit all-pipe `stdio` was inheriting, so
+  // `child.stderr` was null and test-child-process-fork-stdio read `.on` of null.
+  const forkPipes = (forkMode & 0x3) === 0 || ((forkMode >> 2) & 0x3) === 0
+    || ((forkMode >> 4) & 0x3) === 0 ? 1 : 0;
+
   checkNoNullBytes(modulePath, list, opts);
   const execPath = opts.execPath === undefined ? nts_process_exec_path() : opts.execPath;
   const execArgv = opts.execArgv === undefined ? [] : opts.execArgv;
@@ -1392,7 +1443,7 @@ export function fork(
     argv,
     flattenEnv(opts.env),
     cwdPath(opts.cwd),
-    opts.silent === true ? 1 : 0,
+    forkPipes,
     (status: number, signal: number): void => {
       if (child !== null) child._handleExit(status, signal);
     },
@@ -1402,18 +1453,66 @@ export function fork(
   );
 
   if (handle < 0) {
-    const failed = new ChildProcess(-1, opts.silent === true ? 0 : 0x15);
+    const failed = new ChildProcess(-1, forkMode);
     failed.pid = undefined;
     failed.exitCode = handle;
     nextTickEmitError(failed, modulePath, handle);
     return failed;
   }
 
-  child = new ChildProcess(handle, opts.silent === true ? 0 : 0x15);
+  // The channel is the fork's numeric handle. Named, because `send`'s own second
+  // argument is also called a handle and means something else entirely.
+  const channel = handle;
+  // An explicit `stdio` decides the slots; `silent` only chooses between piping and
+  // inheriting when nothing was said. `fork` was ignoring the array outright, so
+  // `{ stdio: ['pipe','pipe','pipe','ipc'] }` inherited and `child.stderr` was null.
+  child = new ChildProcess(handle, forkMode);
   child.connected = true;
-  child.send = (message: unknown): boolean => {
+  child.send = (
+    message: unknown,
+    handleArg?: unknown,
+    optionsArg?: unknown,
+    callbackArg?: unknown,
+  ): boolean => {
+    // node's argument shuffle, and its order decides which error a caller gets.
+    // `send` takes (message, handle?, options?, callback?) and any of the last three
+    // may be the callback, so node walks them in that order before validating
+    // anything. test-child-process-send-type-error drives nine spellings through this
+    // and they land on three different clauses.
+    let handle = handleArg;
+    let options = optionsArg;
+    if (typeof handleArg === "function") {
+      handle = undefined;
+      options = undefined;
+    } else if (typeof optionsArg === "function") {
+      options = undefined;
+    } else if (options !== undefined) {
+      validateObject(options, "options");
+    }
+    void callbackArg;
+    // After the shuffle: `send(callback)` is only a message of undefined once the
+    // callback has been taken out of the way.
+    if (message === undefined) throw new ERR_MISSING_ARGS("message");
+    // What can cross the channel: node serialises a string, an object, a number or a
+    // boolean and rejects the rest by name. A Symbol is the case test-child-process-fork
+    // asserts, and `JSON.stringify` would have turned it into `undefined` -- the bug
+    // the comment above that assertion in node's own test still points at.
+    if (typeof message !== "string" && typeof message !== "object"
+      && typeof message !== "number" && typeof message !== "boolean") {
+      throw new ERR_INVALID_ARG_TYPE(
+        "message", ["string", "object", "number", "boolean"], message,
+      );
+    }
+    // **Every handle is unsendable here, and saying so is the point.** Handle passing
+    // over the channel is not implemented, and until it is, this argument was being
+    // *ignored*: `send(message, socket)` serialised the message and dropped the
+    // socket silently. ERR_INVALID_HANDLE_TYPE is the error node raises for a thing
+    // that cannot be sent, and it is currently true of all of them. The files that
+    // want real handle passing -- recv-handle, send-returns-boolean, fork-net-server
+    // and the rest -- fail either way; they now fail loudly.
+    if (handle !== undefined && handle !== null) throw new ERR_INVALID_HANDLE_TYPE();
     if (!child!.connected) return false;
-    return nts_child_process_send(handle, JSON.stringify(message)) === 0;
+    return nts_child_process_send(channel, JSON.stringify(message)) === 0;
   };
   child.disconnect = (): void => {
     child!.connected = false;

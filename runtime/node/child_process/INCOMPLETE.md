@@ -8,55 +8,53 @@ What is not deliberate is a failure nobody wrote down, so they are all below.
 
 ## Where it is
 
-    interpreted   119 file(s): 80 passed, 29 failed, 9 skipped, 1 not applicable
-    compiled      119 file(s):  0 passed, 109 failed, 9 skipped, 1 not applicable
+    interpreted   120 file(s): 84 passed, 26 failed, 9 skipped, 1 not applicable
+    compiled      120 file(s):  0 passed, 110 failed, 9 skipped, 1 not applicable
 
-Measured with `run.mjs --module child_process`, not added up: the same batch read 80
-on its first full run, because ten individual passes came with one regression.
+114 by `test-pattern`, 4 claimed in `extra-tests`, 2 local fixtures. 1 passed when the
+branch was parked, 42 when this work started.
 
-114 by `test-pattern`, 4 claimed in `extra-tests`, 1 local fixture. Up from 42
-passed of 114 when this session started, and from 1 passed when the branch was
-parked. The denominator moved, so the gain is by name: 21 upstream files, plus 3 of
-the 4 claims already passing.
+Measured with `run.mjs --module child_process`, not added up: an earlier batch read 80
+where ten individual passes had predicted 81, because one of them came with a
+regression.
 
-**Measured on `main`, which is not the same number the branch gave.** The
-`nodejs/child-process-wip` worktree reads 67 passed / 43 failed on byte-identical
-module sources, because it is 136 commits behind: four files pass here and fail
-there. Same lesson as the one below -- the tree is part of the number.
+## What is left: 26 files under seven named causes
 
-## What is left, by size
+The IPC channel itself **works** -- fork, `send` each way, the child's `process.send`,
+`disconnect`, exit 0, held by `local/ipc-roundtrip-local.js`. So none of these is "fork
+is broken"; each is a feature on top of a channel that carries messages.
 
-    25  fork and IPC        `fork` is the largest single block: the channel, handle
-                            passing, advanced serialization, `process.send` in the
-                            child, and disconnect. test-cluster-net-send.js is
-                            claimed here and belongs to it.
-     4  two named features  no longer "assorted" -- both are below, and neither is
-                            a small fix
+     8  handle passing over the channel     recv-handle, send-returns-boolean, fork-net,
+                                            fork-dgram, fork-getconnections,
+                                            cluster-net-send and two more. `send`'s
+                                            second argument is currently **rejected**
+                                            with ERR_INVALID_HANDLE_TYPE rather than
+                                            ignored, which is what node raises for a
+                                            thing that cannot be sent and is true of
+                                            all of them here.
+     7  channel lifecycle                  disconnect, send-after-close, send-keep-open,
+                                            internal, fork-ref2, fork-abort-signal,
+                                            fork-timeout-kill-signal
+     5  a channel on spawn, not only fork  advanced-serialization x4, stdout-ipc.
+                                            `send` is assigned in `fork`'s body, so a
+                                            child from `spawn(.., { stdio: [.., 'ipc'] })`
+                                            has none, and the spawn binding makes no
+                                            channel. `advanced` serialization is also
+                                            unimplemented -- accepting the name and
+                                            using JSON would be the wrong half to get
+                                            right, so `validateSerialization` accepts it
+                                            and nothing else pretends.
+     3  a stream as a stdio entry          pipe-dataflow, stdio-merge-stdouts-into-cat,
+                                            stdio-reuse-readable-stdio. The binding
+                                            carries stdio as a packed 6-bit mode, so a
+                                            descriptor cannot cross it.
+     1  extra stdio slots beyond three     fork-stdio wants `child.stdio[4]`
+     1  ChildProcess.prototype.spawn       constructor
+     1  a file URL for modulePath          fork-url.mjs
 
-### A stream as a stdio entry -- three files
-
-    pipe-dataflow.js                   stdio: [cat.stdout, 'pipe', 'pipe']
-    stdio-merge-stdouts-into-cat.js    stdio: ['pipe', p3.stdin, 'inherit']
-    stdio-reuse-readable-stdio.js      stdio: [p1.stdout, 'pipe', 'inherit']
-
-The binding carries stdio as a **packed 6-bit mode** -- two bits per slot for
-`'pipe'`, `'inherit'`, `'ignore'` -- so a descriptor cannot cross it at all. Passing
-one child's stream as another's stdio needs the mode replaced by a per-slot
-descriptor list and `UV_INHERIT_FD` in the C, which is a binding change rather than a
-module one.
-
-`pipe-dataflow` fails on `cat.stdout._handle` for the same reason and not a missing
-property: it asserts the **parent never reads** a stream it handed to another child,
-which is a thing this shape cannot express either way.
-
-### `ChildProcess.prototype.spawn(options)` -- one file
-
-    constructor.js
-
-node's own bootstrap calls it on a bare `new ChildProcess()`, and
-test-child-process-constructor asserts its argument validation. Exposing it means
-publishing the internal spawn surface, which is a decision rather than an omission:
-the class currently cannot exist without a handle.
+Four of the seven are the same shape: the binding's stdio is three slots and one flag
+where node's is an array. That is one change, not four, and it is the largest single
+item left in this module.
 
 ## The three I called unfixable, which pass here
 

@@ -420,6 +420,21 @@ function addNumericalSeparator(value: string): string {
 }
 
 /**
+ * `Forked processes must have an IPC channel, missing value 'ipc' in options.stdio`.
+ *
+ * A plain Error in node. `fork` requires an `'ipc'` entry in `stdio`, and a caller
+ * who spells out four pipes without one gets this rather than a child with no
+ * channel.
+ */
+export class ERR_CHILD_PROCESS_IPC_REQUIRED extends NodeError {
+  override readonly code = "ERR_CHILD_PROCESS_IPC_REQUIRED";
+
+  constructor(where: string) {
+    super(`Forked processes must have an IPC channel, missing value 'ipc' in ${where}`);
+  }
+}
+
+/**
  * `Child process can have only one IPC pipe`.
  *
  * A plain Error in node, not a TypeError or a RangeError, and thrown
