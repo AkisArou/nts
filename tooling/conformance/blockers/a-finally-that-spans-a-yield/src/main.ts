@@ -31,8 +31,29 @@
 // take before building: a narrowing that clears none is a refusal moved rather
 // than a program compiled.
 //
-// 16 refusals across `stream`, `fs`, `http`, `util`, `assert`, `buffer`,
-// `timers` and `events`.
+// # Six sites, not sixteen, and every one of them is asynchronous
+//
+// The census reports **16** and that is refusal *lines* summed over module
+// cones: a cone contains the modules it imports, so one site is counted once
+// per importing module. Printed rather than counted, they are **six distinct
+// sites**:
+//
+//     fs/src/promises.ts              export async function* watch
+//     stream/src/iter/classic-source  async function* createBatchedAsyncIterator
+//     stream/src/iter/pull.ts         async function* createAsyncPipeline
+//     stream/src/readable.ts          async function* createAsyncIterator
+//     stream/src/operators.ts         inside `map`, which returns AsyncGenerator
+//     timers/src/promises.ts          export async function* setInterval
+//
+// **All six are `async function*`**, which means they were unreachable until
+// async generators started compiling on 2026-09-12 -- they were refused as `an
+// async generator` before that and this row never saw them. So this row's
+// corpus did not grow; the refusal in front of it moved.
+//
+// The synchronous arms below are kept because they are the smaller reproduction
+// and the machinery is shared, and the asynchronous pair beside them is the
+// shape that actually occurs. Both split the same way: exhaustion agrees, the
+// `break` does not.
 
 let closed = 0;
 
@@ -76,5 +97,32 @@ export function viaCatch(n: number): number {
   closed = 0;
   let total = 0;
   for (const v of caught(n & 3)) total += v;
+  return total * 10 + closed;
+}
+
+async function* guardedAsync(limit: number): AsyncGenerator<number> {
+  try {
+    for (let i = 0; i < limit; i++) yield i;
+  } finally {
+    closed = closed + 1;
+  }
+}
+
+/** Under test, and the shape all six corpus sites have. Correct once lifted. */
+export async function asyncToExhaustion(n: number): Promise<number> {
+  closed = 0;
+  let total = 0;
+  for await (const v of guardedAsync(n & 3)) total += v;
+  return total * 10 + closed;
+}
+
+/** Under test: the same, abandoned. 0 where node gives 1, exactly as the sync pair. */
+export async function asyncLeftByBreak(n: number): Promise<number> {
+  closed = 0;
+  let total = 0;
+  for await (const v of guardedAsync(8)) {
+    if (v > (n & 3)) break;
+    total += v;
+  }
   return total * 10 + closed;
 }
