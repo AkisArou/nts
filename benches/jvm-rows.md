@@ -5482,3 +5482,59 @@ two `NtsRuntime.bounds` guards, and **no single one of the three gets there** --
 which is a more useful thing to know than any of them individually, because it
 says the row is not one change away and stops the next attempt being a fourth
 mechanism that moves nothing.
+
+### `awfy-nbody`'s residual is a bounds check the prover could remove, and the reason is two reads of one field
+
+The row is 1.19x on ART with our hot method **smaller** than the reference's in
+dex -- 167 code units against 212 -- so it is not size. `oatdump` over the
+AOT code of `NBodySystem$advance` against `Towers`-style accessors says what it
+is, and the machine code inverts the dex:
+
+    advance, AOT machine code      ours 982 bytes     reference 647
+
+    calls in it          ours                    reference
+    pTestSuspend            4                           4
+    pReadBarrierMark*       6                           4
+    call [rdi + 32]         2                           0
+    pThrowArrayBounds       2                           0
+    pResolveType            1                           0
+    pInitializeStaticStorage 1                          0
+                          ---                         ---
+                           16                           8
+
+**The arithmetic is identical** -- 19 `mul-double`, 8 `add-double`, 6
+`sub-double` on both sides -- and so are the loop counters, 3 `add-int` each. A
+hypothesis that `widen` was holding the counters as doubles and defeating ART's
+bounds-check elimination was checked here and is **wrong**; both sides count in
+`int`.
+
+What differs is that the reference reads its fields through 33
+`invoke-virtual` accessors that ART inlines to nothing, while we read fields
+directly and additionally emit **3 `invoke-static` to `NtsRuntime.bounds`**.
+Ours is the program doing less work in source and more in machine code.
+
+**And the guard is not the design being wrong; it is the prover not reaching.**
+`subscript`'s own doc has the rule right: `checked: false` means the middle end
+proved it, the JVM's mandatory check is then the only one, and ART eliminates
+that one in a counted loop -- "which is where this lane is cheaper than the
+native one". In `advance`, `hir` proves **one of three**:
+
+    %5  = field.get %0.0          %78 = field.get %0.0
+    %6  = array.len %5            %80 = array.len %78
+    %9  = field.get %0.0          %85 = array.get unchecked %78[%81]
+    %10 = array.get %9[%3]                     ^ same value, so proved
+              ^ different value, so checked
+
+`%0.0` is the same field of the same object in all four reads. Where the length
+and the element come from **one** `field.get`, the prover succeeds; where they
+come from two reads of the identical field, it compares SSA values, sees two,
+and gives up. The source is `for (i = 0; i < this.bodies.length; i++) { ...
+this.bodies[i] ... }` -- the ordinary way anyone writes it.
+
+So the lever on this row is a middle-end one: common-subexpression elimination
+of a repeated `field.get` of the same field on the same object, or a prover that
+follows the field rather than the value. **It is not this lane's**, and it would
+serve C and LLVM identically -- both emit their own checks from the same
+`checked` flag. Handed over with the numbers rather than worked around here,
+and the arm that already proves clean is the control that says the prover works
+when it can see.
