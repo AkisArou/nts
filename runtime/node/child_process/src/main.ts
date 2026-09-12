@@ -31,6 +31,7 @@ import {
   ERR_CHILD_PROCESS_STDIO_MAXBUFFER,
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
+  ERR_IPC_ONE_PIPE,
   ERR_OUT_OF_RANGE,
   ERR_UNKNOWN_SIGNAL,
 } from "../../internal/errors.ts";
@@ -406,11 +407,38 @@ function inheritedEnv(): string[] | null {
   return null;
 }
 
+/**
+ * Every enumerable key of `env`, including inherited ones.
+ *
+ * node's comment above its own loop says it outright -- "Prototype values are
+ * intentionally included" -- and it uses `for (const key in env)`. `Object.keys`
+ * sees own keys only, and test-child-process-env puts `FOO` on a prototype with
+ * `Object.setPrototypeOf` and then asserts the child received `FOO=BAR`. The chain
+ * is walked here rather than with `for...in` because no module in this profile uses
+ * that form, and a shadowed key is yielded once, by the nearest holder, which is
+ * what `for...in` does.
+ */
+function envKeys(env: Record<string, unknown>): string[] {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  let cursor: Record<string, unknown> | null = env;
+  while (cursor !== null && cursor !== (Object.prototype as unknown as Record<string, unknown>)) {
+    for (const key of Object.keys(cursor)) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+      keys.push(key);
+    }
+    cursor = Object.getPrototypeOf(cursor) as Record<string, unknown> | null;
+  }
+  return keys;
+}
+
 function flattenEnv(env: Record<string, string> | undefined): string[] | null {
   if (env === undefined) return inheritedEnv();
+  const source = env as Record<string, unknown>;
   const flat: string[] = [];
-  for (const key of Object.keys(env)) {
-    const value = env[key];
+  for (const key of envKeys(source)) {
+    const value = source[key];
     // Node drops a key whose value is undefined rather than passing "undefined".
     if (value === undefined) continue;
     flat.push(`${key}=${value}`);
@@ -709,6 +737,15 @@ function stdioMode(stdio: string | readonly string[] | undefined): number {
     const flag = stdioFlag(stdio);
     return flag | (flag << 2) | (flag << 4);
   }
+  // A second `'ipc'` is an error rather than an extra channel, and node raises it
+  // from `spawn` synchronously. `'ipc'` was not read here at all -- it fell through
+  // `stdioFlag` to 0, so `['pipe','pipe','pipe','ipc','ipc']` quietly asked for two
+  // channels and got none.
+  let ipcSeen = 0;
+  for (const entry of stdio) {
+    if (entry === "ipc") ipcSeen++;
+  }
+  if (ipcSeen > 1) throw new ERR_IPC_ONE_PIPE();
   const first = stdio.length > 0 ? stdio[0] : undefined;
   const second = stdio.length > 1 ? stdio[1] : undefined;
   const third = stdio.length > 2 ? stdio[2] : undefined;

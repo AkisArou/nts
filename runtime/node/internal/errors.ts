@@ -420,6 +420,20 @@ function addNumericalSeparator(value: string): string {
 }
 
 /**
+ * `Child process can have only one IPC pipe`.
+ *
+ * A plain Error in node, not a TypeError or a RangeError, and thrown
+ * *synchronously* from `spawn` when a second `'ipc'` appears in `stdio`.
+ */
+export class ERR_IPC_ONE_PIPE extends NodeError {
+  override readonly code = "ERR_IPC_ONE_PIPE";
+
+  constructor() {
+    super("Child process can have only one IPC pipe");
+  }
+}
+
+/**
  * `stdout maxBuffer length exceeded`.
  *
  * A **RangeError** in node, not an Error, and
