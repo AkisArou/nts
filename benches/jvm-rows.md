@@ -6098,3 +6098,37 @@ transience was the only reading left.
 Recorded here rather than left in a message because the next person to
 investigate a declined optimisation will reach for `--prepared` first, and on
 this one it will agree with them.
+
+### What the scalars-only restriction costs a lane with no reference counting: two loads
+
+MainClaude's forward was restricted to scalars after `tooling/memory` refused
+it: forwarding a load of a **reference** makes the forwarded value a second live
+reference at the moment of the overwrite, so the store owes a release and the
+object leaves the frame. `subclass-field` went 0 allocations to 17 with every
+answer identical -- 195 of 195 examples agreeing, `rc` agreeing, all three
+backends agreeing. **Only the allocation count moved.**
+
+That bug cannot exist on this lane. RFC 13 puts these objects in the platform
+collector, there is no retain, no release and no frame placement, so a
+reference forward here is a free `getfield` removed. Which raises the obvious
+question -- is a per-provider rule worth asking for -- and the answer is no:
+
+    across ten bench cases        0 scalar pairs remaining (all forwarded)
+                                  2 reference pairs remaining, both in
+                                  `optional-chain`
+
+Two loads. Not worth a second rule in a shared pass, and worth recording so
+nobody asks for one later on the strength of an intuition.
+
+**The census said zero first, and zero is what a broken matcher says.** The
+first version required the `getfield` to immediately follow the `putfield`,
+which is true of dex -- `iput` then `iget` -- and false of JVM bytecode, where
+`aload_0` sits between them to push the receiver. Ten cases reporting zero of
+both is the shape this file keeps warning about: a uniform result across every
+item means the loop found nothing, and the fix was a window plus a positive
+control that the matcher can find the pattern at all.
+
+It also mirrors what MainClaude measured on their side. Forwarding everything
+removed 216 loads across three modules, of which **214 were references it must
+not touch**; the real figure was two in `util` and none in the other two. Two
+here, two there, and the number that had been believed was a percentage.
