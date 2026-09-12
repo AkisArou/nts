@@ -5129,6 +5129,23 @@ about.** "`dex2oat` is inaccessible to the shell user" is a fact about a binary
 and a uid; "there is no way to see AOT code" is a fact about a whole toolchain,
 and the first was written down in place of the second.
 
+**And the sharper statement of it, which is MainClaude's and belongs here rather
+than in a message: a measurement is a question plus a configuration, and a
+configuration nobody stated is a question nobody asked.** `dex2oat` and
+`--release` are the same mistake one step apart in the same pipeline -- one
+concluded a whole toolchain was unavailable from a fact about a uid, and the
+other measured "the mode a shipped app runs in" while dexing the way a shipped
+app is not dexed. Neither was a wrong number. Both were a right number about a
+configuration that went unwritten, and a tally of who made which is less useful
+than noticing they are one kind.
+
+The `--release` asymmetry is worth reading the same way. It is tempting to call
+it a flaw in the harness, and it is more honest to say the harness picked the
+mode that bills this backend for a feature at a moment when nobody is using it:
+the per-instruction debug attributes are a deliberate decision in this lane, for
+the provenance chain, and debug-mode `d8` keeps every one of them alive. The
+flag did not create the asymmetry; it priced it.
+
 ### It is not devirtualisation. `dex2oat` inlines the reference's helpers and cannot afford ours
 
 The question `awfy-towers` was pointed at: is the AOT gap a devirtualisation the
@@ -5202,3 +5219,58 @@ is hot and has a profile saying so, which recovers some of an over-budget
 method; `dex2oat` compiles blind and does not. That is why the mode that ships
 is worse for us and better for the hand-written reference, and it predicts the
 gap widens on exactly the rows where our methods are largest.
+
+### `d8` defaults to debug mode, and it charges this lane for it and not the reference
+
+Found while costing the outlining above, and it is a correction to every ART
+figure in this file rather than a finding about a row.
+
+`d8` dexes in **debug** mode unless `--release` is passed. Debug mode keeps
+local-variable scopes alive and pads with `nop // spacer`. Every Android script
+here calls it without the flag: `dexes.sh`, `times-on-device.sh`,
+`bytes-on-device.sh`, `agrees-on-device.sh`, and `aot-on-device.sh` -- which was
+written *specifically* to measure the mode a shipped application runs in, and
+dexed it the way a shipped application is not dexed.
+
+`Towers$popDiskFrom` is 67 code units in debug and 51 in release. Sixteen units
+of `nop`, twelve of them on the hot path, and **the class file this backend
+emits contains no `nop` at all** -- `d8` put them there.
+
+**The flag is not symmetric, which is the part that matters:**
+
+    method         ours_dbg  ours_rel |  ref_dbg  ref_rel
+    popDiskFrom          67        51 |       27       25
+    pushDisk             84        66 |       33       33
+    moveDisks            49        21 |       21       21
+    moveTopDisk          24        15 |       14       14
+    buildTowerAt         27        17 |       15       14
+
+The hand-written reference barely moves -- 27 to 25, 33 to 33, 21 to 21, 14 to
+14. Ours moves by a quarter to a half.
+
+**Across the whole dex, split by who emitted the class:**
+
+    classes              debug      release    reduction
+    nts/gen/*              499          362        27.5%
+    the runtime jar
+      and javac output  27,925       27,145         2.8%
+
+A tenfold asymmetry, and the method *count* is identical either way -- 1143 in
+both -- so this costs `dexes.sh`'s floor nothing and is purely about size. The
+reason is a deliberate property of this backend: it emits `LineNumberTable` and `LocalVariableTable` per
+instruction for the provenance chain RFC 20 asks for, and debug-mode `d8` keeps
+all of it live. `javac`'s output carries far less, so the same flag costs the
+two sides very differently.
+
+**So a ratio does not protect against this.** Both sides pass through one `d8`
+invocation, which is exactly what makes a flag look fair when it is not -- the
+penalty is applied to both and lands on one. That is the same shape as the
+`ref-bytes-on-device.sh` missing quadrant: a comparison that cannot see the
+thing it is holding constant.
+
+`moveDisks` in release is **21 units, exactly the reference's 21**, and
+`moveTopDisk` is 15 against 14. So a good part of the size gap above is the
+harness. What survives is concentrated in the two methods with cold `throw`
+paths -- `popDiskFrom` 51 against 25, `pushDisk` 66 against 33 -- which is the
+outlining item, and better bounded for it: 51 units with a ~25-unit cold block
+taken out lands near the reference and under ART's budget.

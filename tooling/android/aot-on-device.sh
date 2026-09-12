@@ -158,7 +158,16 @@ public final class Case {
 }
 JAVA
 fi
-cp "$dir/ref.java" "$work/src-ref/Ref.java"
+# `NTS_AOT_REF` substitutes a different reference, which is how a *shape* is
+# priced without touching the backend: write the shape into the hand-written
+# Java, check in `javap` that it produced the bytecode intended, and measure.
+#
+# The check matters. This file already records a transcription of one of our
+# bytecode shapes into source costing 1.35x while fixing the emitter moved
+# 0.16% -- a transcription is not the bytecode. What makes this usable is that
+# the property under test here is **method size**, which `javap -c` reports
+# directly, so the transcription can be verified rather than assumed.
+cp "${NTS_AOT_REF:-$dir/ref.java}" "$work/src-ref/Ref.java"
 cat > "$work/src-ref/Case.java" <<'JAVA'
 public final class Case {
     public static void main(String[] argv) { Bench.measure(new Ref()); }
@@ -199,7 +208,15 @@ build_and_run() {
     set -- "$@" $(find "$work/nts-classes" -name '*.class') "$work/nts-classes/nts-runtime.jar"
   fi
   # shellcheck disable=SC2086
-  "$tools/d8" --min-api 29 --lib "$plat" --output "$work/build/dex" "$@" \
+  # **`NTS_D8_RELEASE=1` dexes the way a shipped app is dexed.** `d8` defaults
+  # to *debug* mode, which keeps local-variable scopes alive and pads with `nop
+  # // spacer`. That costs this lane far more than it costs a hand-written
+  # reference, because the classes this backend emits carry per-instruction
+  # debug attributes by design -- `Towers$popDiskFrom` is 67 code units in
+  # debug and 51 in release, where the reference's is 27 and 25. Same flag,
+  # different penalty.
+  # shellcheck disable=SC2086
+  "$tools/d8" ${NTS_D8_RELEASE:+--release} --min-api 29 --lib "$plat" --output "$work/build/dex" "$@" \
     > "$work/d8-$side.log" 2>&1 || { echo "$side: d8"; sed -n 1,3p "$work/d8-$side.log"; return 1; }
 
   # The JIT number first, from the same dex, so the two modes differ in nothing
