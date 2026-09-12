@@ -1095,7 +1095,12 @@ export class ChildProcess extends EventEmitter {
    * the default -- so this layer has no business reserialising it.
    */
   _handleMessage(message: unknown): void {
-    this.emit("message", message);
+    // A message whose `cmd` begins with `NODE_` is node's *internal* channel traffic
+    // and reaches `internalMessage` instead of `message`. That is not a curiosity: it
+    // is the whole of `cluster`'s protocol -- the worker announces itself with
+    // `{ cmd: 'NODE_CLUSTER', act: 'online' }` -- and a module that delivered it as an
+    // ordinary `message` would hand every cluster handshake to the application.
+    this.emit(isInternalMessage(message) ? "internalMessage" : "message", message);
   }
 }
 
@@ -1249,6 +1254,19 @@ function armTimeoutAndAbort(child: ChildProcess, opts: SpawnOptions): void {
       child.once("exit", (): void => { cleanup(); });
     }
   }
+}
+
+/**
+ * node's `isInternal`: a `cmd` beginning with `NODE_` and longer than the prefix.
+ *
+ * The length test is node's and it matters -- a message whose `cmd` is exactly `"NODE_"`
+ * is *not* internal, so a caller cannot reach the internal channel by naming the prefix
+ * and nothing more.
+ */
+function isInternalMessage(message: unknown): boolean {
+  if (message === null || typeof message !== "object") return false;
+  const cmd = (message as { cmd?: unknown }).cmd;
+  return typeof cmd === "string" && cmd.length > 5 && cmd.slice(0, 5) === "NODE_";
 }
 
 /** `error` must not fire before the caller has attached a listener. */

@@ -192,7 +192,10 @@ globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached,
   child.on("error", () => { entry.failed = true; });
   // A spawned child with an `'ipc'` slot has a channel, and its messages reach the
   // caller the same way a forked child's do. Only `fork` wired this.
-  if (typeof onMessage === "function") child.on("message", (message) => onMessage(message));
+  if (typeof onMessage === "function") {
+    child.on("message", (message) => onMessage(message));
+    child.on("internalMessage", (message) => onMessage(message));
+  }
   child.on("exit", (code, signal) => {
     onExit(code === null ? -1 : code, signal === null ? 0 : (hostSignalNumbers[signal] ?? 0));
   });
@@ -269,6 +272,12 @@ globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, serializa
   // clone under `serialization: "advanced"`, and re-encoding it as JSON here would
   // undo exactly what that option is for.
   child.on("message", (message) => onMessage(message));
+  // **Both events, because the host already split them.** A message whose `cmd` begins
+  // with `NODE_` never reaches the host's `message` event -- it is kept for
+  // `internalMessage` -- so listening to one of the two loses every internal message,
+  // which is the whole of cluster's handshake. The module re-applies the same test to
+  // decide which of *its* events to emit.
+  child.on("internalMessage", (message) => onMessage(message));
   child.on("exit", (code, signal) => {
     onExit(code === null ? -1 : code, signal === null ? 0 : (hostSignalNumbers[signal] ?? 0));
   });
