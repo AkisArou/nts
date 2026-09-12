@@ -4778,3 +4778,47 @@ are shared, so discarding them wants the gate lock first rather than a
 doubling ladder and the wrapper, and no policy that does not know the final size
 beats 2x. `array-predicates` is `hir::elements` and upstream. `map-and-set` at
 1.09x is inside the band this file spent a night establishing is not a verdict.
+
+## Three ways a lint lied on the way to one commit, 2026-09-12
+
+None of these is a benchmark, and all three are the same failure this file keeps
+recording about instruments: the thing that answered was not the thing I asked.
+
+**A cached diagnostic names the file you just edited.** `cargo clippy` came back
+`Finished in 0.76s` and reported `ops.rs:4226`, 101 lines, *after* the edit that
+was supposed to shorten it had landed. It had not rechecked the crate; it
+reprinted the previous run's warning. Had I believed it I would have gone
+looking for a function that no longer had that shape. **The tell is the
+`Checking <crate>` line** -- if the crate you edited is not in the output, the
+diagnostics below it are about the tree before your edit. A sub-second clippy
+across a workspace this size is not a fast pass, it is not a pass at all.
+
+This is `REBUILD BEFORE DIAGNOSING` arriving somewhere I did not expect it. The
+rule was written about a stale *binary*; a stale *diagnostic* reads far more
+convincingly, because a warning carries a file and a line number and those are
+the two things that look like evidence.
+
+**`too_many_lines` does not count comments, so deleting one costs and buys
+nothing.** My first move was to remove a four-line comment explaining why the
+four presence helpers are emitted inline rather than called. The count went from
+101 to 101. The lint counts lines that carry code, which is the correct design
+and the opposite of what I assumed while acting on it -- I traded a written
+reason for zero lines. The comment is restored and the code came out instead.
+
+**An extraction placed above a function inherits its attributes.** Putting the
+new `integer_to_string` immediately before `fn call` stranded
+
+    #[allow(clippy::too_many_arguments, reason = "...")]
+
+on the *new* function, which takes six arguments and never wanted it, and left
+`fn call` bare. Clippy then reported `too many arguments (8/7)` on `fn call` --
+which reads as a fresh problem introduced by the refactor, and is the same
+suppressed one from before, re-homed. **The tell was that no signature changed.**
+A warning about argument count from a change that touched no parameter list is
+not about the code; it is about what is attached to it.
+
+Worth stating generally, because the next person to add a method to `ops.rs`
+meets it: an attribute belongs to whatever declaration follows it, and "insert a
+function before `fn call`" and "insert a function before `fn call`'s attributes"
+are different edits that look identical in a diff. Anchor an insertion on the
+attribute when there is one.

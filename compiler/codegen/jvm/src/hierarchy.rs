@@ -233,6 +233,63 @@ pub fn declared_member(program: &Program, layout: &Layout, slot: usize) -> Optio
     Some(member_name(name))
 }
 
+/// The base-most layout above this one, which is where a field shared by a
+/// whole hierarchy belongs.
+#[must_use]
+pub fn root<'a>(program: &'a Program, layout: &'a Layout) -> &'a Layout {
+    let mut at = layout;
+    while let Some(base) = program.base_layout(at).and_then(|id| program.layouts.get(id)) {
+        at = base;
+    }
+    at
+}
+
+/// Whether this layout carries the optional-property presence word.
+///
+/// **Only a hierarchy's root does, and every class under it inherits it.** A
+/// presence call names a receiver by whatever type the expression had, which may
+/// be a base; putting the word at the root means one field answers for every
+/// receiver type in the chain, and base-first layout means the bit indices agree
+/// all the way down -- which is the assumption the compiler lane derives the
+/// index from and which `declared`'s `fields[inherited..]` slice already rests
+/// on.
+///
+/// Scanned from the operations rather than flagged on the layout, for the reason
+/// `resumes` gives: which layouts are asked about is a fact about the program's
+/// *calls*, and `object_class` sees one layout at a time. Pay-for-what-you-use
+/// falls out -- a program that never tests an optional property carries no extra
+/// field anywhere.
+#[must_use]
+pub fn holds_presence(program: &Program, layout: &Layout) -> bool {
+    if program.base_layout(layout).is_some() {
+        return false;
+    }
+    let wanted = crate::types::class_name(layout);
+    for func in &program.funcs {
+        for op in &func.values {
+            let nts_core::hir::OpKind::Call { callee, args, .. } = &op.kind else {
+                continue;
+            };
+            let nts_core::hir::Callee::External(name) = callee else { continue };
+            if !name.starts_with("nts_presence_") {
+                continue;
+            }
+            let Some(&receiver) = args.first() else { continue };
+            let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) =
+                func.values[receiver.0 as usize].ty
+            else {
+                continue;
+            };
+            if program.layout(id).map(|held| crate::types::class_name(root(program, held)))
+                == Some(wanted.clone())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Is this layout emitted as a JVM *interface* rather than as a class?
 ///
 /// True of a layout some other layout declares itself to implement. That is the

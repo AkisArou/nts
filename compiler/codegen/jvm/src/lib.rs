@@ -366,6 +366,46 @@ fn declare_fields(
     Ok(())
 }
 
+/// The optional-property presence word, where some program point asks about one
+/// of this hierarchy's classes.
+///
+/// On the root only: a receiver may be typed as any class in the chain, and one
+/// field at the root answers for all of them. See `hierarchy::holds_presence`.
+///
+/// **Refused rather than shadowed if a declared property mangles to the same
+/// name.** `declare_fields` makes that check for two *declared* properties and
+/// cannot see this one, because it is not in the layout -- so a class with a
+/// property spelled to collide would get two `$presence` fields and a
+/// `ClassFormatError` at load. That is the failure NTS4013 exists to prevent,
+/// arriving from the one direction that check does not cover.
+fn declare_presence(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    interface: bool,
+    builder: &mut ClassBuilder,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+    if interface || !hierarchy::holds_presence(program, layout) {
+        return Ok(());
+    }
+    if let Some(clash) = hierarchy::declared(program, layout)
+        .iter()
+        .find(|field| body::method_name(&field.name) == types::PRESENCE)
+    {
+        return Err(Diagnostic::error(
+            "NTS4013",
+            format!(
+                "`{}` declares `{}`, which becomes the JVM field `{}` -- the name this \
+                 backend gives an object's optional-property presence bits",
+                layout.name, clash.name, types::PRESENCE
+            ),
+            origin.location,
+        ));
+    }
+    builder.field(access::PUBLIC, types::PRESENCE.to_owned(), "I".to_owned());
+    Ok(())
+}
+
 /// The empty subclass that gives one class its own identity.
 ///
 /// It declares nothing: the layout's class holds every field, and this exists
@@ -442,6 +482,7 @@ fn object_class(
     }
     builder.source_file = Some("nts".to_owned());
     declare_fields(program, layout, plan, &mut builder, interface, &origin)?;
+    declare_presence(program, layout, interface, &mut builder, &origin)?;
     // A frame a `Suspend` names implements `NtsResumable`, with `resume()`
     // forwarding to the static body -- the same shape as a dispatch slot's
     // forwarder, and the reason promises are not blocked behind the closure

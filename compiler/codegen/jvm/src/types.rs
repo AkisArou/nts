@@ -228,6 +228,19 @@ pub fn field_descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
 /// absence has to be spelled nominally. See `NtsStringable`.
 pub const STRINGABLE: &str = "nts/rt/NtsStringable";
 
+/// The field an object carries its optional-property presence bits in.
+///
+/// `runtime/c` puts them in the header's spare flag bits -- 26 of them above
+/// `NTS_COLOR_MASK`, free because the word already exists. **There is no header
+/// here.** RFC 13 puts these objects in the platform collector's heap, so an
+/// object is a plain JVM instance with no word of ours to borrow, and the bits
+/// need a field of their own.
+///
+/// It is a full `int`, so this lane has 32 bits where C has 26. The index the
+/// lowering passes is zero-based and C adds `NTS_PRESENCE_SHIFT` to clear its
+/// own flags; nothing shares this word, so bit `i` is bit `i`.
+pub const PRESENCE: &str = "$presence";
+
 /// `Map` and `Set`, which are one table with the values left out of one of them.
 pub const MAP: &str = "nts/rt/NtsMap";
 /// A `Date`: a `double` and an identity, and the two operations that reach it.

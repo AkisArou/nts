@@ -4218,6 +4218,60 @@ impl Emitter<'_> {
         Some((swapped, (types::MAP, member, spelling.to_owned())))
     }
 
+    /// `String(n)` where `n` is provably an `i32`, answering whether it emitted.
+    ///
+    /// `hir::runtime` types `nts_number_to_string` as taking a `double`, so the
+    /// middle end widens an `i32` on the way in -- `%93 = convert %13 : f64` --
+    /// and this lane then answers with the Grisu port, which exists to print
+    /// every double node can print. For a value that came from an `i32` two
+    /// instructions ago, `Integer.toString` is exact on every input and is a
+    /// JDK intrinsic.
+    ///
+    /// The third member of a family: the array subscript (record 0138, 4.56x),
+    /// the growable length (0158), and this. Each is a helper whose only
+    /// signature answers in a `double` reached from generated code that had an
+    /// integer, and each is visible in a descriptor rather than in a profile.
+    ///
+    /// Priced before building rather than after, which is the rule 0163 arrived
+    /// at: the replacement is a JDK method that formats an `int` in tens of
+    /// instructions against a Grisu conversion in hundreds, so it is cheap
+    /// *and* priceable, and an A/B was not what it needed.
+    fn integer_to_string(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        name: &str,
+        args: &[ValueId],
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<bool, Diagnostic> {
+        if name != "nts_number_to_string" {
+            return Ok(false);
+        }
+        let Some(&only) = args.first() else {
+            return Ok(false);
+        };
+        let OpKind::Convert(inner) = self.func.values[only.0 as usize].kind else {
+            return Ok(false);
+        };
+        if !matches!(self.ty(inner), HirType::Int { bits, signed: true } if *bits <= 32) {
+            return Ok(false);
+        }
+        self.push_as(code, pool, inner, Kind::Int, origin)?;
+        code.invoke_static(
+            origin,
+            pool,
+            "java/lang/Integer",
+            "toString",
+            "(I)Ljava/lang/String;",
+        );
+        Ok(true)
+    }
+
+    // Adding a method here: put it above this attribute, not below it. An
+    // attribute belongs to the declaration that follows, so a function inserted
+    // between the two takes the allow with it and leaves `call` bare -- which
+    // surfaces as `too many arguments (8/7)` on a change that altered no
+    // signature. Happened once; the diff looked identical either way.
     #[allow(
         clippy::too_many_arguments,
         reason = "the result's own id joined seven that were already here, because \
@@ -4236,6 +4290,13 @@ impl Emitter<'_> {
         let name = match callee {
             Callee::Direct(name) => name,
             Callee::External(name) => {
+                // The presence bits are a *field* on this lane, not a header
+                // word, so these four are emitted rather than called: a method
+                // in `runtime/jvm` could not reach a generated class's field
+                // without reflection. Six instructions each and no call.
+                if name.starts_with("nts_presence_") {
+                    return self.presence(code, pool, name, args, origin);
+                }
                 let name = &if self.fused.contains(&value) {
                     crate::fuse::scalar_form(name).unwrap_or(name).to_owned()
                 } else {
@@ -4269,40 +4330,7 @@ impl Emitter<'_> {
                 // rather than a silent override.
                 let found = found
                     .or_else(|| view_helper(name, subject.as_ref(), self.ty(value)));
-                // `String(n)` where `n` is provably an `i32`.
-                //
-                // `hir::runtime` types `nts_number_to_string` as taking a
-                // `double`, so the middle end widens an `i32` on the way in --
-                // `%93 = convert %13 : f64` -- and this lane then answers with
-                // the Grisu port, which exists to print every double node can
-                // print. For a value that came from an `i32` two instructions
-                // ago, `Integer.toString` is exact on every input and is a JDK
-                // intrinsic.
-                //
-                // The third member of a family: the array subscript (record
-                // 0138, 4.56x), the growable length (0158), and this. Each is a
-                // helper whose only signature answers in a `double` reached
-                // from generated code that had an integer, and each is visible
-                // in a descriptor rather than in a profile.
-                //
-                // Priced before building rather than after, which is the rule
-                // 0163 arrived at: the replacement is a JDK method that formats
-                // an `int` in tens of instructions against a Grisu conversion
-                // in hundreds, so it is cheap *and* priceable, and an A/B was
-                // not what it needed.
-                if name == "nts_number_to_string"
-                    && let Some(&only) = args.first()
-                    && let OpKind::Convert(inner) = self.func.values[only.0 as usize].kind
-                    && matches!(self.ty(inner), HirType::Int { bits, signed: true } if *bits <= 32)
-                {
-                    self.push_as(code, pool, inner, Kind::Int, origin)?;
-                    code.invoke_static(
-                        origin,
-                        pool,
-                        "java/lang/Integer",
-                        "toString",
-                        "(I)Ljava/lang/String;",
-                    );
+                if self.integer_to_string(code, pool, name, args, origin)? {
                     return Ok(Placed::OnStack);
                 }
                 // An index this backend holds as an `int`; see `intcall`. The
@@ -4439,6 +4467,92 @@ impl Emitter<'_> {
             }
         };
         self.direct_call(code, pool, result, name, args, origin)
+    }
+
+    /// The optional-property presence bits, emitted inline.
+    ///
+    /// `runtime/c` keeps them in the object header's spare flags and reaches
+    /// them through four `static inline` helpers. There is no header here, so
+    /// they live in an `int` field on the hierarchy's root -- see
+    /// `hierarchy::holds_presence` for why the root and not the class named.
+    ///
+    /// **No shift.** C adds `NTS_PRESENCE_SHIFT` because it shares the word with
+    /// `NTS_COLOR_MASK` and three flags below it; nothing shares this field, so
+    /// the zero-based index the lowering passes is the bit number directly. That
+    /// also gives this lane 32 bits where C has 26.
+    ///
+    /// `has` answers with `(flags >>> index) & 1` rather than a compare against
+    /// zero, because that is already a `Z` on the stack and needs no branch --
+    /// the JVM has no instruction that leaves a boolean from a comparison, which
+    /// is the whole reason `body.rs` fuses one into its branch.
+    fn presence(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        name: &str,
+        args: &[ValueId],
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        let [object, index] = args else {
+            return Err(refuse(self.func, &format!("`{name}` with the wrong arity")));
+        };
+        let HirType::Managed(ManagedType::Object(id)) = self.ty(*object).clone() else {
+            return Err(refuse(self.func, &format!("`{name}` on a value that is not an object")));
+        };
+        let Some(layout) = self.program.layout(id) else {
+            return Err(refuse(self.func, &format!("`{name}` on a type with no layout")));
+        };
+        let owner = types::class_name(crate::hierarchy::root(self.program, layout));
+        let field = types::PRESENCE;
+        match name {
+            "nts_presence_has" | "nts_presence_has_fn" => {
+                self.load(code, pool, *object)?;
+                code.get_field(origin, pool, &owner, field, "I");
+                self.load(code, pool, *index)?;
+                code.bitwise(origin, insn::USHR, Kind::Int);
+                code.const_int(origin, pool, 1);
+                code.bitwise(origin, insn::AND, Kind::Int);
+                Ok(Placed::OnStack)
+            }
+            "nts_presence_init" | "nts_presence_init_fn" => {
+                self.load(code, pool, *object)?;
+                code.dup(origin);
+                code.get_field(origin, pool, &owner, field, "I");
+                // A mask, not an index: every optional property a class
+                // *declares* is present at construction, because a field
+                // declaration defines the property under ES2022 even with no
+                // initialiser. One `or` of a constant rather than a call each.
+                self.load(code, pool, *index)?;
+                code.bitwise(origin, insn::OR, Kind::Int);
+                code.put_field(origin, pool, &owner, field, "I");
+                Ok(Placed::Stored)
+            }
+            "nts_presence_set" | "nts_presence_set_fn" => {
+                self.load(code, pool, *object)?;
+                code.dup(origin);
+                code.get_field(origin, pool, &owner, field, "I");
+                code.const_int(origin, pool, 1);
+                self.load(code, pool, *index)?;
+                code.bitwise(origin, insn::SHL, Kind::Int);
+                code.bitwise(origin, insn::OR, Kind::Int);
+                code.put_field(origin, pool, &owner, field, "I");
+                Ok(Placed::Stored)
+            }
+            "nts_presence_clear" | "nts_presence_clear_fn" => {
+                self.load(code, pool, *object)?;
+                code.dup(origin);
+                code.get_field(origin, pool, &owner, field, "I");
+                code.const_int(origin, pool, 1);
+                self.load(code, pool, *index)?;
+                code.bitwise(origin, insn::SHL, Kind::Int);
+                code.const_int(origin, pool, -1);
+                code.bitwise(origin, insn::XOR, Kind::Int);
+                code.bitwise(origin, insn::AND, Kind::Int);
+                code.put_field(origin, pool, &owner, field, "I");
+                Ok(Placed::Stored)
+            }
+            other => Err(refuse(self.func, &format!("`{other}`, which is not a presence helper"))),
+        }
     }
 
     /// `invokevirtual` on the function type's abstract declaration.
