@@ -478,6 +478,26 @@ profile() {
   # one the work is about: `fs` emits 1615 functions before and after, because a
   # copy replaces the plain version wherever every call to it was specialised.
   ceiling=19200
+  # **A band, not a floor, and the difference is deliberate.**
+  #
+  # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
+  # first time another lane deletes a function from `runtime/node`, which is
+  # their ordinary work and not my regression — and a gate that punishes a peer
+  # for editing their own module is worse than one number less.
+  #
+  # So this catches a *collapse* rather than a drift: the failure it is for is a
+  # compiler change that stops emitting code, and that shape is large. The
+  # `unwrap_or` fix moved refusals by 13 and definitions by 0; the specialisation
+  # rework broke five addons and would have taken hundreds of definitions with
+  # it. A one-definition regression is not caught here and is not claimed to be
+  # — `addons` catches a module that stops building, and these two numbers are
+  # for reading together.
+  floor=17500
+  if [ "$defined" -lt "$floor" ]; then
+    printf '  ^ %s definitions, below the floor of %s -- code stopped being emitted
+'       "$defined" "$floor"
+    return 1
+  fi
   if [ "$refusals" -gt "$ceiling" ]; then
     printf '  ^ above the ceiling of %s -- reach went backwards\n' "$ceiling"
     return 1
