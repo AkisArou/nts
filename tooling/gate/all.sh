@@ -162,6 +162,16 @@ concurrently() {
   # unbound variable under `set -u` and took the whole run down after every step
   # before it had already passed. This table and that line have to agree.
   cmd_dex="dex"
+  # `dex` asks whether `d8` will accept what this backend emits; this asks
+  # whether the accepted thing then *answers the same*. Nothing else in this
+  # repository can: the `jvm` step runs on HotSpot and the differential's oracle
+  # is node, so a program that agrees with node on `java` and diverges under ART
+  # is invisible to both. It found `__@kCount@2`, and it found a driver that had
+  # been comparing the wrong program for two days.
+  #
+  # Skips with no `adb`, no device, no `ANDROID_HOME` and no build-tools, each
+  # by name and with exit 0, so a machine without an emulator is unaffected.
+  cmd_on_device="on_device"
   cmd_examples="./tooling/gate/gate.sh"
   cmd_rc="./tooling/gate/rc.sh"
   cmd_bench_agree="./tooling/gate/bench-agree.sh"
@@ -862,6 +872,18 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
 # Skips without an SDK, like `unverifiable class` reads zero without a JDK.
 # Needs no device: `d8` is a compiler, so whether it accepts a class file is a
 # question about the class file.
+# The compiled program, run on both runtimes, asked whether it answers the same.
+#
+# **Only a disagreement is fatal.** The script counts a declined case, a `javac`
+# refusal and a `d8` refusal apart from a divergence, and exits non-zero only on
+# the last -- because the first three are other ratchets' business (`dexes.sh`
+# dexes the whole corpus device-free, and `jvm` measures what the backend
+# renders) and reddening a peer's gate for one of those, on a step they cannot
+# run without an emulator, would be a false red they cannot act on.
+on_device() {
+  sh "$root/tooling/android/agrees-on-device.sh"
+}
+
 dex() {
   sh "$root/tooling/android/dexes.sh"
 }
@@ -1207,7 +1229,7 @@ blockers() {
 # Everything left, at once. `benches` is above because `bench-agree` runs the
 # cases it compiles; nothing else here depends on anything else here.
 jobs=$(( jobs > 4 ? 4 : jobs ))
-concurrently profile sweep llvm llvm-rc jvm dex bench-agree examples rc memory addons blockers
+concurrently profile sweep llvm llvm-rc jvm dex on-device bench-agree examples rc memory addons blockers
 # Every node module built as an addon and *loaded*, under eager binding.
 #
 # The gap this fills was open for the whole of 2026-09-09 and had a crash in it.

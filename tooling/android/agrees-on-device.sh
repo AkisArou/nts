@@ -64,14 +64,38 @@ adb get-state > /dev/null 2>&1 || { echo "SKIP: no device" >&2; exit 0; }
 tools=$(ls -d "$sdk"/build-tools/* 2>/dev/null | sort -V | tail -1)
 [ -n "$tools" ] || { echo "SKIP: no build-tools" >&2; exit 0; }
 
-nts=${NTS_BIN:-$root/target-jvm/release/nts}
+# `target/release` is what `tooling/gate/all.sh` builds and drives, so that is
+# the default -- the same rule `dexes.sh` states for the same reason.
+#
+# **It defaulted to `target-jvm` until this became a gate step**, which is this
+# lane's own build directory and exists on nobody else's setup. The guard below
+# is `exit 1`, so the first time either peer ran the gate it would have gone red
+# on a missing binary that is missing correctly. Caught before landing rather
+# than by them, which is not where the last two of these were caught.
+#
+# `NTS_BIN` overrides, which is how this lane runs it against `target-jvm` by
+# hand.
+nts=${NTS_BIN:-$root/target/release/nts}
 [ -x "$nts" ] || { echo "no nts at $nts -- set NTS_BIN" >&2; exit 1; }
 
 mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT INT TERM
 
 cases=${*:-"fib checksum accumulate loop array-methods symbol-keyed-map objects erasure-typed erasure-unknown"}
-bad=0
+# **Only a disagreement is fatal, and that is what makes this safe as a gate
+# step.** The other three outcomes -- the backend declining a case, `javac`
+# refusing a generated driver, `d8` refusing a class -- are real and are somebody
+# else's ratchet: `dexes.sh` dexes the whole corpus device-free, and the `jvm`
+# step measures what the backend renders. Counting them here would red a peer's
+# gate for a reason unrelated to their change, on a step they cannot run without
+# an emulator.
+#
+# What this step alone can say is: **the same program answers the same thing on
+# `java` and on `dalvikvm`.** A difference there is not reachable by any other
+# instrument in this repository.
+agreed=0
+differ=0
+noted=0
 skipped=0
 for case in $cases; do
   entry=$(grep -oE "^export function [A-Za-z0-9_]+" "$root/benches/cases/$case/case.ts" 2>/dev/null \
@@ -84,7 +108,7 @@ for case in $cases; do
   # for `tooling/bench` to use. `json-serialize` exports nothing from `case.ts`
   # at all -- its workload comes from `provider`.
   #
-  # Counted apart from `bad`. A skip and a disagreement are different results
+  # Counted apart from `differ`. A skip and a disagreement are different results
   # and the summary line said one of them for both.
   # A case whose workload the generated driver cannot synthesise ships its own
   # `driver.java`, and `elementwise` is the one that does: it hands the *same*
@@ -98,7 +122,7 @@ for case in $cases; do
   own=""
   [ -f "$root/benches/cases/$case/driver.java" ] && own=$root/benches/cases/$case/driver.java
   # `json-serialize` exports nothing from `case.ts` at all; its workload comes
-  # from `provider`. Counted apart from `bad`: a skip and a disagreement are
+  # from `provider`. Counted apart from `differ`: a skip and a disagreement are
   # different results and the summary line said one of them for both.
   [ -n "$entry" ] || { printf "%-22s case.ts exports no function\n" "$case"; skipped=$((skipped + 1)); continue; }
 
@@ -110,7 +134,7 @@ JSON
   if ! NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$out/tsconfig.json" \
     --out "$out/classes" --entry "$entry" --entry "module#init" > /dev/null 2>&1; then
     printf "%-22s the backend declined it\n" "$case"
-    bad=$((bad + 1))
+    noted=$((noted + 1))
     continue
   fi
   # Module evaluation is a root in the same sense the entry point is: nothing
@@ -161,7 +185,7 @@ JAVA
   fi
   # shellcheck disable=SC2086
   javac -nowarn -cp "$out/classes:$out/classes/nts-runtime.jar" -d "$out/classes" \
-    $sources 2> /dev/null || { printf "%-22s javac failed\n" "$case"; bad=$((bad + 1)); continue; }
+    $sources 2> /dev/null || { printf "%-22s javac failed\n" "$case"; noted=$((noted + 1)); continue; }
 
   jvm=$(java -cp "$out/classes:$out/classes/nts-runtime.jar" "$main" 2>&1 | tail -1)
   # The runtime jar goes to `d8` whole: it is the artefact the ratchets are
@@ -169,7 +193,7 @@ JAVA
   if ! "$tools/d8" --min-api 29 --output "$out/dex" \
     $(find "$out/classes" -name '*.class') "$out/classes/nts-runtime.jar" > /dev/null 2>&1; then
     printf "%-22s d8 refused it\n" "$case"
-    bad=$((bad + 1))
+    noted=$((noted + 1))
     continue
   fi
   adb push "$out/dex/classes.dex" "/data/local/tmp/nts-$case.dex" > /dev/null 2>&1
@@ -177,15 +201,27 @@ JAVA
   adb shell "rm -f /data/local/tmp/nts-$case.dex" > /dev/null 2>&1 || true
 
   if [ "$jvm" = "$art" ]; then
+    agreed=$((agreed + 1))
     printf "%-22s agree  %s\n" "$case" "$jvm"
   else
     printf "%-22s DIFFER jvm=%s art=%s\n" "$case" "$jvm" "$art"
-    bad=$((bad + 1))
+    differ=$((differ + 1))
   fi
 done
 
 echo
 [ "$skipped" = 0 ] && echo "every case was driven" \
   || echo "$skipped case(s) this driver cannot spell -- see the comment above"
-[ "$bad" = 0 ] || { echo "$bad case(s) did not agree"; exit 1; }
-echo "every case agrees between java and dalvikvm"
+[ "$noted" = 0 ] || echo "$noted case(s) did not get as far as running -- see above"
+[ "$differ" = 0 ] || { echo "$differ case(s) answered differently on the two runtimes"; exit 1; }
+# **Do not claim agreement for a comparison that did not happen.** With `javac`
+# off the PATH every case failed to build, `noted` reached nine, `differ` stayed
+# zero, and this line said "every case agrees between java and dalvikvm" -- which
+# is a statement about nine comparisons none of which ran. Green was the right
+# exit and the sentence was false, which is the worse half: a reader takes the
+# sentence, not the exit code.
+if [ "$agreed" = 0 ]; then
+  echo "nothing was compared -- no case got as far as running on both runtimes"
+else
+  echo "$agreed case(s) agree between java and dalvikvm"
+fi
