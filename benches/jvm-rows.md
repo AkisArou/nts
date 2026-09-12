@@ -6011,3 +6011,50 @@ unexplained. The remaining suspects are the ones neither dump covers, because
 a `--method-filter` shows only what it matched: the `som.Random` port, and the
 hundred allocations a round. Written down at the point it stopped rather than
 carried forward as an intuition.
+
+## The marginal band, resolved by improving the instrument rather than by counting
+
+The policy above says a row leaves the 1.00-1.01 band by the instrument
+improving. `tooling/android/aot-minima.sh` is that improvement: **minima over
+five sittings per side**, which is this repository's rule and not a preference
+-- noise on a timed run is one-sided, since nothing makes a program run faster
+than it can, so the smallest observation carries the least interference.
+
+    case           AOT min-ratio   band    per-sitting ratios
+    awfy-nbody         0.996x     0.007    0.998 1.002 1.002 0.996 0.995
+    awfy-sieve         1.003x     0.024    1.019 1.001 1.003 0.999 1.023
+    awfy-permute       1.017x     0.056    1.015 1.018 1.044 1.003 1.060
+
+**Two of the three are resolved, and one of them against us.**
+
+- **`awfy-permute` is above the bar.** All five sittings are 1.003 or higher.
+  It was 0.98/0.99 in the JIT column and 1.01 twice in AOT, which read as
+  marginal; five sittings say it is not marginal, it is over. A row leaving the
+  band in the losing direction is the outcome that makes the exercise honest.
+- **`awfy-nbody` is at parity.** The ratios straddle 1.00 with a band of 0.007
+  -- 0.995 to 1.002 -- which is the tightest measurement in this file and is
+  the answer rather than a failure to get one. Equal to hand-written Java, not
+  under it.
+- **`awfy-sieve` stays unplaceable**, as its own bimodality predicted: a band of
+  0.024 against a distance of 0.003.
+
+### And the band metric was wrong first, which is worth more than the numbers
+
+The first version computed the widest arithmetic available -- largest `ours`
+over smallest `ref`, minus smallest `ours` over largest `ref` -- drawing the
+two from **different sittings**. Each sitting measures both sides in one pass,
+so a sitting's ratio is an observation and the cross-pairing is a bound.
+
+**What cannot be said is that the old number was too big.** Corrected, it reads
+0.007 on `awfy-nbody` where the cross-pairing read 0.050, and 0.056 on
+`awfy-permute` where it read 0.032 -- but the metric and the sample were
+changed in one step, so those pairs are not controls for each other. A
+per-sitting spread is always inside the cross-paired bound *on the same data*;
+across different data it can go either way. Two variables moved, and noticing
+that is the same discipline the rest of this file is about, applied to the
+instrument built to enforce it.
+
+**So bar 1 in the AOT column reads: four at or under, one unplaceable, three
+over.** Under: `awfy-list` 0.20, `awfy-mandelbrot` 0.88, `awfy-queens` 0.92-0.94,
+`awfy-nbody` at parity. Unplaceable: `awfy-sieve`. Over: `awfy-permute` 1.017,
+`awfy-bounce` 1.12-1.15, `awfy-towers` 1.80-1.81.
