@@ -440,12 +440,22 @@ profile() {
   # `d265780c` both read 19078. So a regression of any size is visible and this
   # ceiling is worth having.
   #
-  # What is *not* explained: 19065 at `e38f0237` against 19078 at `d265780c`,
-  # whose whole diff is `benches/jvm-rows.md` and two `tooling/conformance/*.mjs`
-  # files, none of which this step reads — it runs `emit-c` per module directly.
-  # Thirteen refusals moved across a diff that cannot have moved them. Named
-  # rather than chased; if it recurs, the thing to suspect is an input the pin
-  # does not cover rather than the compiler.
+  # **And the clause above has now been exercised, which is how it was
+  # explained.** 19065 through `83c186f8`, 19078 from `5cd9ba25` onward:
+  #
+  #     83c186f8   19065
+  #     5cd9ba25   19078   <- `coerce_to_slot` stopped swallowing its refusal
+  #
+  # That commit made a store's coercion fallible. Thirteen stores had been
+  # writing an uncoerced value where `coerce` had already answered `Err`, and
+  # they now say so — a fix that makes a refusal *speak*, raising the count by
+  # exactly what it made audible. One of those thirteen was a segfault.
+  #
+  # It was briefly recorded here as unexplained, against a docs-only diff,
+  # because the pair of runs compared was the wrong pair: `e38f0237` reads 19078
+  # like every run after `5cd9ba25`, and the 19065 came from two commits earlier.
+  # Every gate log was on disk and the number was read from memory instead. Two
+  # runs at one commit had already shown the count reproduces.
   #
   # **A third cause, 2026-09-11: a copy is a body, and a body is sites.**
   # Structural specialisation emits a copy of a callee per concrete argument
