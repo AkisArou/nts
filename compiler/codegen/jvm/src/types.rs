@@ -241,6 +241,22 @@ pub const STRINGABLE: &str = "nts/rt/NtsStringable";
 /// own flags; nothing shares this word, so bit `i` is bit `i`.
 pub const PRESENCE: &str = "$presence";
 
+/// The interface a root carrying [`PRESENCE`] implements, so a value whose
+/// class is not known until run time can still be asked.
+///
+/// `nts_presence_has_value` is the one presence helper whose receiver has no
+/// declared type the backend can name -- `"k" in v` where `v` is `object`.
+/// `runtime/c` needs no class because the bits are in a header every object
+/// has; this lane's are a field whose owner differs per hierarchy. See
+/// `nts/rt/NtsPresence`.
+pub const PRESENCE_INTERFACE: &str = "nts/rt/NtsPresence";
+
+/// The accessor [`PRESENCE_INTERFACE`] declares. Not `$presence`: a field and
+/// the method that reads it cannot share a name in a class file's member table
+/// without the two being told apart by descriptor, which is the NTS4013 hazard
+/// one level over.
+pub const PRESENCE_MEMBER: &str = "ntsPresence";
+
 /// `Map` and `Set`, which are one table with the values left out of one of them.
 pub const MAP: &str = "nts/rt/NtsMap";
 /// A `Date`: a `double` and an identity, and the two operations that reach it.

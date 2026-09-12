@@ -383,6 +383,7 @@ fn declare_presence(
     layout: &nts_core::hir::Layout,
     interface: bool,
     builder: &mut ClassBuilder,
+    pool: &mut Pool,
     origin: &nts_semantic_schema::Origin,
 ) -> Result<(), Diagnostic> {
     if interface || !hierarchy::holds_presence(program, layout) {
@@ -403,6 +404,23 @@ fn declare_presence(
         ));
     }
     builder.field(access::PUBLIC, types::PRESENCE.to_owned(), "I".to_owned());
+
+    // And the same bits where `instanceof` can reach them, for the one helper
+    // whose receiver has no declared type to name. Five bytes and a method
+    // entry on a root that already carries the field.
+    builder.interfaces.push(types::PRESENCE_INTERFACE.to_owned());
+    let mut code = Code::new(vec![VType::Object(types::class_name(layout))], 1);
+    code.load(origin, Kind::Ref, 0);
+    code.get_field(origin, pool, &types::class_name(layout), types::PRESENCE, "I");
+    code.ret(origin, Some(Kind::Int));
+    let rendered = code.finish(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4008",
+            format!("the presence reader for `{}` could not be written: {error}", layout.name),
+            origin.location,
+        )
+    })?;
+    builder.method(access::PUBLIC, types::PRESENCE_MEMBER, "()I", Some(rendered));
     Ok(())
 }
 
@@ -482,7 +500,7 @@ fn object_class(
     }
     builder.source_file = Some("nts".to_owned());
     declare_fields(program, layout, plan, &mut builder, interface, &origin)?;
-    declare_presence(program, layout, interface, &mut builder, &origin)?;
+    declare_presence(program, layout, interface, &mut builder, &mut pool, &origin)?;
     // A frame a `Suspend` names implements `NtsResumable`, with `resume()`
     // forwarding to the static body -- the same shape as a dispatch slot's
     // forwarder, and the reason promises are not blocked behind the closure

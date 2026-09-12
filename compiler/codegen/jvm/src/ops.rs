@@ -4496,6 +4496,31 @@ impl Emitter<'_> {
         let [object, index] = args else {
             return Err(refuse(self.func, &format!("`{name}` with the wrong arity")));
         };
+        // **The one whose receiver has no declared type to name.** `"k" in v`
+        // where `v` is `object` asks about a value whose class arrives at run
+        // time, so there is no owner for a `getfield` -- which is what the
+        // other four have and what `runtime/c` does not need, its bits being in
+        // a header every object carries. A call, through the interface a
+        // presence-carrying root implements; see `types::PRESENCE_INTERFACE`.
+        //
+        // False for a primitive and for `null` alike, because `instanceof` is
+        // false for both, which is what lets the lowering put a plain `and`
+        // beside the class test instead of blocks for a short circuit.
+        if name == "nts_presence_has_value" {
+            self.load(code, pool, *object)?;
+            if matches!(self.ty(*object), HirType::Erased) {
+                code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+            }
+            self.push_as(code, pool, *index, Kind::Int, origin)?;
+            code.invoke_static(
+                origin,
+                pool,
+                crate::body::RUNTIME,
+                "presenceHas",
+                "(Ljava/lang/Object;I)Z",
+            );
+            return Ok(Placed::OnStack);
+        }
         let HirType::Managed(ManagedType::Object(id)) = self.ty(*object).clone() else {
             return Err(refuse(self.func, &format!("`{name}` on a value that is not an object")));
         };

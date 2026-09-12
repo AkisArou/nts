@@ -1585,4 +1585,23 @@ public final class NtsRuntime {
     public static double arrayAt(double[] a, double index) {
         int at = NtsArrays.offset(index, a.length); return at < 0 ? Double.NaN : a[at];
     }
+    /**
+     * {@code "k" in v} where {@code v}'s class is not known until run time and
+     * some type declares {@code k} optionally.
+     *
+     * <p>A call rather than an emitted sequence, which is the opposite of the
+     * other four presence helpers and for a reason: those name the receiver's
+     * declared type, so the backend knows which class owns the {@code
+     * $presence} field and reads it in six instructions. This one does not --
+     * see {@link NtsPresence}.
+     *
+     * <p><b>False for anything that is not a presence-carrying reference</b>,
+     * including {@code null} and every primitive, because {@code instanceof} is
+     * false for all of them. The caller pairs this with a class test and a
+     * value failing the first half must not fault in the second.
+     */
+    public static boolean presenceHas(Object ref, int index) {
+        return ref instanceof NtsPresence
+            && ((((NtsPresence) ref).ntsPresence() >>> index) & 1) != 0;
+    }
 }

@@ -559,6 +559,48 @@ public final class RuntimeRegression {
         testValueToString(); System.out.println("String() of every tag passed");
         testValueToNumber(); System.out.println("Number() of every tag passed");
         testReferenceKeyedTags(); System.out.println("reference-keyed map tags passed");
+        testPresenceHas(); System.out.println("presenceHas passed");
         System.out.println("PASS " + checks + " assertions");
+    }
+
+    /**
+     * `presenceHas` answers about a value whose class arrives at run time.
+     *
+     * The three arms that are not "read the bit" are the point. A primitive and
+     * a `null` must answer **false** rather than fault, because the lowering
+     * pairs this with a class test and emits a plain `and` -- a value failing
+     * the first half still evaluates the second. And a reference that is not a
+     * presence-carrying root must answer false too: `instanceof` covers all
+     * three with one test, which is why the fact lives on an interface rather
+     * than in a field every object would have to have.
+     */
+    private static void testPresenceHas() {
+        Carrier carrier = new Carrier();
+        carrier.bits = 0b1010;
+        expect("bit 1 set", NtsRuntime.presenceHas(carrier, 1), true);
+        expect("bit 3 set", NtsRuntime.presenceHas(carrier, 3), true);
+        expect("bit 0 clear", NtsRuntime.presenceHas(carrier, 0), false);
+        expect("bit 2 clear", NtsRuntime.presenceHas(carrier, 2), false);
+        expect("bit 31 clear", NtsRuntime.presenceHas(carrier, 31), false);
+
+        carrier.bits = 0x80000000;
+        expect("the top bit is readable", NtsRuntime.presenceHas(carrier, 31), true);
+
+        expect("null is false", NtsRuntime.presenceHas(null, 0), false);
+        expect("a boxed number is false", NtsRuntime.presenceHas(Double.valueOf(1), 0), false);
+        expect("a string is false", NtsRuntime.presenceHas("port", 0), false);
+        expect("a plain object is false", NtsRuntime.presenceHas(new Plain(7), 0), false);
+    }
+
+    private static void expect(String what, boolean got, boolean want) {
+        if (got != want) {
+            throw new AssertionError(what + ": got " + got + ", wanted " + want);
+        }
+    }
+
+    /** Stands in for a generated hierarchy root that carries presence bits. */
+    private static final class Carrier implements NtsPresence {
+        int bits;
+        @Override public int ntsPresence() { return bits; }
     }
 }
