@@ -1046,21 +1046,40 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # "which class owns this field slot" that had never been asked about the same
   # field until a frame gained a base.
   #
-  # It is **not** "a class token has no base". That edge was built and reverted
-  # on 2026-09-10: a token's `typeof` names a different signature layout per
-  # return type, so `Ctor_Other extends Fn3__6` against a slot declared
-  # `Fn3__1`, and the declines do not move. What is missing is that two
-  # *signature* layouts TypeScript relates are unrelated here -- covariant
-  # constructor returns -- which single inheritance cannot express and which
-  # `Layout::base` is already spent on for closures.
+  # **The edge that was reverted is not the edge that works, and this paragraph
+  # said otherwise for two days.** What was built and reverted on 2026-09-10
+  # gave a token the base of its *own* `typeof` -- which names a different
+  # signature layout per return type, so `Ctor_Other extends Fn3__6` against a
+  # slot declared `Fn3__1`, and the declines did not move. True, and it is a
+  # fact about that rule rather than about the gap.
+  #
+  # The rule that fits is the signature layout the token is **stored into**.
+  # Measured on the example rather than argued: `Ctor_Other` reaches `Fn3__1`
+  # and nothing else, derived three ways -- `nts layouts`, the refusals, and a
+  # census of every declared managed slot in the program, of which there are
+  # exactly two and one is `Server`'s receiver. There is no `Fn3__6` in that
+  # program at all: `typeof Other` is never a declared type, which is why the
+  # token has no base to begin with.
+  #
+  # The two rules **coincide** on `Ctor_Message`, whose own `typeof` and whose
+  # slot are both `Fn3__1`. That is why `81c5200e` moved the floor and why the
+  # reverted attempt read as "right but insufficient" -- same edge on one token,
+  # different edges on the other, and the reverted attempt is evidence about
+  # neither. A correct sentence about a neighbouring question stops the next
+  # person looking, which is what this one did.
+  #
+  # What remains genuinely hard is the *union* case -- `cond ? A : B`, where a
+  # token must be two signatures at once and single inheritance cannot express
+  # it. That is a representation question and is not what this example asks.
   #
   # So the two gaps are the same sentence one representation apart, and neither
   # is this lane being behind. Both swept one at a time rather than inferred
   # from a total.
   #
-  # **179 to 184 on 2026-09-12**, LLVM to 186 over the same run, and **184 to
-  # 185** when the second of the two below was closed. The ones this lane does
-  # not have are named rather than counted, because a floor that only says a
+  # **179 to 184 on 2026-09-12**, LLVM to 186 over the same run, **184 to 185**
+  # when the second of the two below was closed, and **185 to 187** when the
+  # corpus reached 188 and this lane agreed on every new example. The one it
+  # does not have is named rather than counted, because a floor that only says a
   # number cannot tell a gap from a regression:
   #
   #   a-class-stored-and-compared      the covariant-constructor-return gap
@@ -1074,7 +1093,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # same operation. The arm stayed in the example rather than being trimmed to
   # make three backends agree, which is what made it findable: trimming it would
   # have taken the only thing that asks the question.
-  backend_examples 185 "through the JVM backend" ); }
+  backend_examples 187 "through the JVM backend" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

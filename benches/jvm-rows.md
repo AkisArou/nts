@@ -5022,3 +5022,183 @@ twenty-two milliseconds. The comment justifying the time bound is already in
 the sibling. **A fix belongs to the family and not to the file it was found in**
 -- which is the second time that sentence has been written in this file about
 these two scripts, the first being `NTS_AWFY`.
+
+## Every ART timing in this file is from the JIT, and a shipped app is worse for us
+
+`times-on-device.sh` and `bytes-on-device.sh` both run `dalvikvm -cp x.dex`. A
+raw dex in `/data/local/tmp` has no `.odex`, so that is ART's interpreter and
+JIT. **An installed Android application does not run that way**: the system runs
+`dex2oat` and the app executes AOT-compiled code. So the bar's first number is
+written about Android and has only ever been measured in a mode no product
+ships, and a ratio is only fair if both sides are treated the same -- which is
+the assumption, not a finding.
+
+`dex2oat` is inaccessible to the shell user here, which is what this file
+already records as having stopped the profile. What it does not record, and is
+true, is that **`oatdump` runs fine from the shell** -- so the artefact was
+never the problem, only something to produce it. `cmd package compile -m speed
+-f` is `dex2oat` run by the one user allowed to, and `proxy-app.sh` had already
+established every step of getting an APK onto this device.
+`tooling/android/aot-on-device.sh` builds one APK per side around the *same*
+`Case.main` and the same `benches/common/Bench.java`, captures `System.out` from
+an activity rather than reimplementing the warmup, and reports both modes from
+one dex.
+
+**Predicted before it was run: the ratio would move by less than 0.10**, because
+`Bench.measure` warms up and ART's AOT compiler is the same optimizing backend
+as its JIT, so a warm JIT should already be producing comparable code. That is
+right on two rows and **wrong on the one that matters**.
+
+    case           JIT ratio          AOT ratio           move
+    awfy-queens    1.87 1.92 1.89     1.81 1.98 1.99      -0.07 +0.06 +0.10
+    awfy-towers    1.62 1.60 1.61     1.94 1.93 1.95      +0.32 +0.33 +0.34
+    awfy-sieve     0.98               1.01                +0.03
+
+`awfy-queens` moves in both directions across three runs and is noise.
+**`awfy-towers` reproduces three times within 0.02 and gets worse under AOT,
+1.61x to 1.94x** -- and its JIT control is stable to 0.01 across the same three
+runs, so this is not the emulator wandering.
+
+A fourth `awfy-towers` run, taken separately rather than in that batch, read
+**JIT 1.39x and AOT 1.94x**. The AOT figure is the same to 0.01; the JIT figure
+is 0.22 off the other three, and the reason is visible in the absolute numbers
+-- the *reference's* JIT time was 29,755 against 25,668 in the batch while ours
+barely moved. I cannot prove what that run was competing with, so it is reported
+rather than discarded, and it says something worth having on its own: **the AOT
+number is stable across four runs and the JIT number is not.** That is what
+removing tier-up from the measurement does, and it means the mode this file has
+been measuring is also the noisier one.
+
+**And the ratio understates it, because the two sides move in opposite
+directions.** In absolute nanoseconds on that row:
+
+    awfy-towers        JIT          AOT
+    ours           41,612       44,900      about 8% slower
+    reference      25,668       23,180      about 10% faster
+
+AOT *helps* the hand-written Java and *hurts* what this backend emits. That is
+the interesting half: it is not that everything is slower ahead of time, it is
+that the two programs respond to the same compiler differently. The JIT sees
+real types and branches and compiles against them; `dex2oat` with no profile
+compiles blind, and our generated code evidently depends on what a profile would
+have told it more than the reference's does.
+
+**So the ART column in this file is optimistic, not pessimistic.** Every ratio
+quoted from `times-on-device.sh` is the best case, and the mode a product ships
+in is the same or worse. Bar 1 on ART is 2 of 8 measured through the JIT, and
+nothing here suggests measuring it properly would improve that count.
+
+The next step is the one this file has said for a while it could not take, and
+it is now takeable rather than argued: `NTS_AOT_KEEP=1` leaves the package
+installed and `oatdump --method-filter` prints the AOT code for one method on
+each side. `awfy-towers` is where to point it, because it is the row where the
+mode reproducibly matters and therefore the row where the two artefacts differ
+for a reason rather than by noise.
+
+### "`dex2oat` is inaccessible" was true, and what this file concluded from it was not
+
+Worth separating, because the same shape has now cost four things in one day.
+
+This file has recorded for a while that a method-level profile is unavailable
+here: no PMU, JIT frames unsymbolized, and `dex2oat` not executable from the
+shell user. Every clause is true. What followed it -- that the artefact could
+not be had, and that the next step needed a real device -- does not follow from
+any of them. **`oatdump` runs from the shell.** `cmd package compile -m speed
+-f` is `dex2oat`, run by the one user that may run it. So the artefact was never
+unavailable; only a way to produce it was, and the note never separated those
+two claims.
+
+The other three, all on 2026-09-12:
+
+    growth-grown          "at its floor -- no policy that does not know the
+                          final size beats 2x" -- true, and the trip count
+                          there is a compile-time constant
+    all.sh's jvm()        "that edge was built and reverted" -- true of a
+                          token given its OWN typeof's layout, and silent
+                          about the layout it is stored into
+    token_base's doc      "a base cannot relate two genuinely different
+                          signatures" -- true of the union case, and not of
+                          the case in front of it
+
+Every one is a correct sentence standing where a narrower one belonged, and a
+correct sentence is worse than a wrong one here: it stops the next person
+looking. The wrong ones get checked.
+
+The rule that would have caught all four is the same: **say what the sentence is
+about.** "`dex2oat` is inaccessible to the shell user" is a fact about a binary
+and a uid; "there is no way to see AOT code" is a fact about a whole toolchain,
+and the first was written down in place of the second.
+
+### It is not devirtualisation. `dex2oat` inlines the reference's helpers and cannot afford ours
+
+The question `awfy-towers` was pointed at: is the AOT gap a devirtualisation the
+JIT makes and a blind compile does not? **No.** Both sides emit the same
+indirect call, `call [rdi + 32]`, and neither is devirtualised. `oatdump
+--method-filter=moveTopDisk` over each side's installed `.odex`:
+
+    Towers.moveTopDisk        ours    reference
+    AOT code size              116          344
+    inlined frames               0            5
+    indirect calls               2            2
+    runtime entrypoint calls     0            2
+    frame bytes                 48           64
+
+The reference's method is three times larger **because five frames were inlined
+into it**. Ours inlined nothing and kept two real calls on the hot path. The
+reference is paying for `pAllocObjectInitialized`, two read barriers and a
+bounds throw *inside* one method; we are paying two calls to reach the same
+work.
+
+**The cause is method size, in bytecode, before ART ever sees it.** ART's
+inliner has a size budget, and the helpers `moveTopDisk` calls sit on opposite
+sides of it:
+
+    method            ours   reference   ratio
+    pushDisk           178          45    4.0x
+    popDiskFrom        110          38    2.9x
+    buildTowerAt        50          26    1.9x
+    moveTopDisk         31          21    1.5x
+    moveDisks           60          48    1.25x
+
+(JVM bytecode bytes from `javap -c`; dex encodes differently, so the ratio is
+the measurement and the absolute numbers are not the threshold.)
+
+**And half of `popDiskFrom` is a cold path.** Offsets 27 to 82 of 110 -- fifty-five
+bytes, exactly half the method -- are the `throw` that runs when a pile is
+empty, emitted inline:
+
+    new nts/gen/Error; dup; invokespecial <init>
+    ldc "Attempting to remove a disk from an empty pile"; astore
+    ldc "Error"; astore
+    putfield Error.message; putfield Error.name
+    NtsRuntime.uncaught(NtsValue.ofObject(e), e.message)
+    NtsRuntime.unreachable(); athrow
+
+The reference spends **ten** bytes on the same throw: `new RuntimeException; dup;
+ldc; invokespecial; athrow`. Ours is four instructions of object construction,
+two string constants, two field stores, an erase, a field read and two runtime
+calls -- all of it on a path that never executes in a passing benchmark, and all
+of it counted by the inliner.
+
+The rest of the difference is smaller and named rather than guessed: two
+`NtsRuntime.bounds(II)I` calls guarding the `aaload`/`aastore`, which this lane
+emits deliberately so an escaping `ArrayIndexOutOfBoundsException` cannot be
+read as a refusal by the differential; the prologue's `aconst_null; astore` per
+non-parameter slot, which the StackMapTable design depends on; and
+`aconst_null; astore; aload; aload; if_acmpne` for a null test where the
+reference writes `ifnonnull`.
+
+**So the actionable item is outlining, and it is this lane's rather than the
+lowering's.** Emitting a cold `throw` block as a separate static method and
+calling it would take `popDiskFrom` from 110 bytes to about 55 and `pushDisk`
+from 178 to something near the reference, and the bytes removed are bytes that
+never run. Whether that is enough to cross ART's budget is a measurement and not
+a certainty -- but it is the first mechanism this file has found for
+`awfy-towers` that is about the row rather than about the machine, after a
+ledger of six that were not.
+
+**And it explains the direction of the whole AOT result.** The JIT compiles what
+is hot and has a profile saying so, which recovers some of an over-budget
+method; `dex2oat` compiles blind and does not. That is why the mode that ships
+is worse for us and better for the hand-written reference, and it predicts the
+gap widens on exactly the rows where our methods are largest.

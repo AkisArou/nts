@@ -19,6 +19,20 @@
 # refuses beats a rule people follow, and the rule had been followed correctly
 # a dozen times before it wasn't.
 #
+# **What this does NOT protect against, and it is worth knowing before you rely
+# on it.** It refuses to commit *files* you did not name. It says nothing about
+# the *content* of the ones you did: `git commit -- <path>` takes that path's
+# whole working-tree state, including another session's uncommitted edits to
+# the same file. On 2026-09-12 `tooling/gate/all.sh` held one session's jvm
+# floor line and another's LLVM floor lines at once, each waiting on its own
+# gate run -- naming the file would have landed both numbers under one run,
+# which is the thing separate floors exist to prevent.
+#
+# So for a shared file: `git diff <path>` before naming it, and if the diff
+# holds someone else's work, wait for them or agree who carries it. The
+# mechanism cannot see the difference between your line and theirs, because
+# they are in one file and git commits files.
+#
 # Usage: tooling/gate/commit-mine.sh -F <message-file> -- <path>...
 #        tooling/gate/commit-mine.sh -m <message>      -- <path>...
 set -eu
