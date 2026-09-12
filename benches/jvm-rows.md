@@ -5600,6 +5600,52 @@ way, so the count does not rest on it.
 
 The three above the bar, with what is known about each:
 
-    awfy-sieve    1.03-1.12  and its own two harnesses disagree by 40%
+    awfy-sieve    1.03-1.12  UNDECIDABLE -- both halves of the ratio are
+                             bimodal, 1.27x and 1.24x, so the harness cannot
+                             place it either side of 1.00x. See below.
     awfy-queens   1.17-1.18  cause unfound; six mechanisms ruled out
     awfy-towers   1.52-1.56  inlining, and three fixes priced as insufficient
+
+### `awfy-sieve` is not above the bar; it is undecidable, and both halves were already written down
+
+Two facts about this row exist in two places and neither reads the other.
+
+**The reference is bimodal.** The section above establishes it: `ref.java` runs
+at about 4.45us or about 5.74us out of one class file, a **1.27x** swing, and
+the two harnesses habitually catch different modes. That is why `tooling/bench`
+published 0.94x while `times-on-device` read 1.32x.
+
+**Our side is bimodal too, and the README says so.** Its self-disagreement
+table -- rows "measured five times from the same binary" whose "passes did not
+agree", where "each published number says which shape the JIT settled into
+rather than how fast the program is" -- lists `awfy-sieve`'s `nts (JVM)` column
+at a **1.24x** spread.
+
+So **both halves of this ratio flip**, and the product bounds what the harness
+can say: roughly 1.57x of range, against a bar the row sits 0.03 to 0.12 above.
+
+    published (README)      1.03x
+    times-on-device         1.06x  1.28x   on HotSpot
+    times-on-device         1.03x  1.12x   on ART
+
+Every one of those is inside the noise of every other. **`awfy-sieve` is not a
+row above 1.00x; it is a row whose position relative to 1.00x this harness
+cannot determine**, and no codegen change could be shown to have fixed it.
+
+That matters for how bar 1 is read. The eight rows are **five at or under, one
+undecidable, two genuinely above** — `awfy-queens` at 1.17-1.18 and
+`awfy-towers` at 1.52-1.56, both of which reproduce to 0.04 and neither of
+which appears in the README's flipped list. Counting sieve among the failures
+overstates what is known, and counting it among the passes would too.
+
+**And the shape of the mistake is today's, for the seventh time: two halves of
+one fact, each correctly recorded, in two files that do not cite each other.**
+The reference's bimodality is in this file; ours is in the README; the
+conclusion needs both. What would have caught it is the question the AOT and
+allocation surveys kept answering — *is the thing I am holding constant
+constant for both sides* — asked of a row rather than of a configuration.
+
+Before this row is worked on again it needs a harness that can measure it:
+report the spread beside the ratio, or take the minimum of enough runs that the
+fast mode is reached on both sides. Optimising against a number with 1.57x of
+play in it is how six mechanisms get refuted.
