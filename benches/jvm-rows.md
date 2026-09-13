@@ -7850,3 +7850,53 @@ comment beside it. Left as an observation rather than expanded, because adding
 cases to a gate step that needs a device has a cost three sessions pay, and that
 is a trade somebody should make on purpose rather than because a passing reader
 thought more was better.
+
+## I tried to write the missing assertion and found out why it is missing
+
+The throw-collapse sequencing is safe because **nothing asserts that every
+`core_external` mapping corresponds to a live `hir::runtime` name** -- so a
+mapping for a name the middle end does not yet emit is inert, and my half can
+land before theirs without reddening anything. MainClaude's point: that silence
+also lets a *wrong* entry sit there looking like a right one, and it is worth a
+record.
+
+So I tried to write the check. It found nothing, three times, and each time the
+finding was my instrument.
+
+    against `hir/runtime.rs` only                66 "dead"   `nts_uncaught` among them
+    against every literal in compiler/core       19 "dead"   12 are `nts_dataview_set_*`
+    after `format!("nts_dataview_set_{helper}")`  7 "dead"
+    after alternate spellings                    ~0
+
+**`nts_uncaught` was in the first list**, and I had watched it emitted in a dump
+an hour earlier -- which is the only reason I checked instead of reporting. It
+is declared in `lower.rs`, not `runtime.rs`, so the table I compared against was
+not the set.
+
+The remaining names died the same way. `nts_dataview_set_int16` and eleven
+siblings are built by `format!("nts_dataview_set_{helper}")` and appear nowhere
+as literals. `nts_array_last_index_of_ref` is matched **beside** its unsuffixed
+form at `intcall.rs:62` -- a deliberate alternate spelling, which this lane's own
+plan calls for: *"a name the middle end emits in only one spelling -- so the
+runtime provides both spellings"*.
+
+### So the assertion is not missing by oversight
+
+A live external name can be (a) a literal in `runtime.rs`, (b) a literal
+anywhere else in `lower.rs`, (c) assembled at lowering time from a helper kind,
+or (d) an alternate spelling a backend accepts defensively for a name that
+arrives in one form today and could arrive in another. **Only (a) and (b) are
+statically enumerable**, so the check I set out to write cannot be written the
+way I imagined it -- and the inert-landing property that makes tonight's
+sequencing safe is a *consequence* of that, rather than a gap to close.
+
+What could be written is narrower and would still be worth having: an assertion
+over the `runtime.rs` table alone, which is the part that *is* a list. It would
+not have caught any of the four cases above, because none of them is in it.
+
+**And the shape is the night's own tell one level up.** I have been hunting
+numbers an instrument prints without expanding; this was an instrument I wrote
+to expand one, and it printed 66, 19, 7 and 0 for the same tree in four minutes.
+A count that moves that far under successive corrections was never measuring the
+program. The first number was the most alarming and the most wrong, which is the
+usual direction.
