@@ -55,9 +55,12 @@ right for our own call sites and is what it costs a Java caller.
 
 Two other things a Java caller sees:
 
-- **Every `number` is a `double`.** `hits()` returns `2.0`, not `2`. Narrowing
-  that to `int` where the facts allow is build item 1, the brand measurement —
-  so this row is waiting on a number, not on a decision.
+- **Every `number` is a `double`.** `hits()` returns `2.0`, not `2`. The route
+  this row once pointed at is closed: narrowing to `int` was to come from the
+  brand, and brands were measured and **refused** at every position a binding
+  emits one. What would narrow it is a descriptor-level fact about the exported
+  signature, which is the `Facts::from_jvm_descriptor` patch's other direction
+  and is not built.
 - **`number[]` is `double[]`**, passed with no copy and no wrapper, which is
   the part that is already right.
 

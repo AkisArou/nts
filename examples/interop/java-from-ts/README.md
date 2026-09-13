@@ -11,21 +11,24 @@ the output against what is committed; `NTS_REGENERATE=1 ./build.sh` accepts a
 change.
 
 It began as a hand-written specification for the generator. Keeping both would
-be two answers to one question -- and the generator has already corrected the
-hand-written version once, over `find(key: int)`, which the spec omitted as
-"unreachable" and which `find(Java.asInt(3))` reaches.
+be two answers to one question -- and the generator corrected the hand-written
+version twice. First over `find(key: int)`, which the spec omitted as
+"unreachable": it is reachable, and the generator emits every overload. Then
+over *how* -- the spec reached it with a branded `int`, and brands were measured
+and refused at every position a binding emits one, so the generator renames
+instead and it is `find$int`.
 
 ## What to look at
 
 | in `main.ts` | the decision it shows |
 | --- | --- |
-| `catalog.hits = Java.asInt(3)` | a Java public field, a plain `putfield`, not one of our field ops |
+| `catalog.hits = 3` | a Java public field, a plain `putfield`, not one of our field ops |
 | `Catalog.MAX` vs `Catalog.DEFAULT_KIND` | a `ConstantValue` static inlines to `ldc`; a reference static is a real `getstatic` that runs `<clinit>` |
 | `index()`, `names()` | the Java collection itself, no copy, no wrapper |
 | `counts()` returning `Int32Array` | cost 10a: the element type **is** the TypeScript type, so the loop is integer arithmetic |
 | `bytes().subarray(0, 4)` | a view, not a copy |
 | `catalog.id()` being `bigint` | 2^53+1 does not fit a `number`, and `id + total` refusing to compile is the point |
-| `find(1.5)` | resolves to `find(double)` — the only lossless receiver. `find(int)` would truncate |
+| `find(1.5)` vs `find$int(3)` | `number` is an f64, so `find(double)` is the only lossless receiver and keeps the plain name; the truncating one is reachable under a different **name**, because a branded `int` does not lower in a class method's parameter |
 | `render("x")` | two equally lossless candidates, decided by JLS 15.12.2, the rule `javac` already runs |
 | `describe(...)` vs `name()` | `@Nullable` read from the **CLASS-retention** table; `name()` cleaned up by the overrides file |
 | `cursorAt(2)` | an inner class, constructed through the outer instance |
