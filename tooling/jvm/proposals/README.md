@@ -119,6 +119,33 @@ provably inside any array, so the bounds check has to stay. One probe in four is
 the honest figure, and it would have been easy to run only the first and claim
 the feature.
 
+### A KNOWN DEFECT — do not apply this as-is
+
+**A foreign call with an integral parameter does not emit.** Found by building
+an interop benchmark, which is the first case with an argument:
+
+```
+declined: NTS4001 emitting %11 moved the operand stack from 0 to 1
+          (in `sum`)     -- a.step(i), descriptor (I)I
+```
+
+`push_arguments` walks the descriptor and coerces callback interfaces, not
+numeric widths, so a TypeScript `number` is pushed as a `double` where the
+descriptor declares `I`. It is the exact mirror of the return-width bug already
+fixed in this patch, on the argument side, and **every probe I wrote used a
+zero-argument method**, so nothing caught it.
+
+**The fix is not a `d2i`**, which is why it is not written here.
+`runtime/jvm/src/nts/rt/NtsRuntime.java` says it out loud: *ToInt32 via
+significand bits: truncation modulo 2^32, not a saturating cast.* Java's `d2i`
+saturates and JavaScript's `ToInt32` wraps, so they disagree on exactly the
+inputs that matter, silently. `hir::runtime` already declares `nts_to_int32`
+with those semantics and is the single answer about conversions; the argument
+path has to route through it rather than invent a second one.
+
+So the boundary needs the same treatment in both directions — widen on the way
+out, `ToInt32` on the way in — and only the outward half is in this patch.
+
 ### The third one-liner: unblocked, not written
 
 `escape.rs`'s `Callee::External` arm taking a `keeps` answer **was** blocked on
