@@ -5110,3 +5110,160 @@ fn unsupported(kind: &OpKind) -> String {
         other => format!("{other:?}"),
     }
 }
+
+/// Does every runtime name this backend maps agree with `hir::runtime` about
+/// its scalar kinds?
+///
+/// # Why this direction
+///
+/// `hir::runtime`'s own header says why the table exists: a helper's signature
+/// is C's and fixed, something has to convert, and "one conversion, written in
+/// two backends, is two chances to write it differently". The failure it guards
+/// is a backend declaring `nts_array_new` takes an `int` where the table says
+/// `double` -- the middle end then inserts the wrong conversion for that
+/// backend only, and every test that runs the program still passes because the
+/// answer is right until the value is large enough.
+///
+/// The plan asks for "every name in `hir::runtime` has a Java method". That
+/// direction cannot be written: `SIGNATURES` is private and only `parameters`
+/// and `result` are exported, so the table is queryable and not enumerable.
+/// This is the reachable half and the one that catches the defect -- a name
+/// this backend maps *wrongly* is worse than one it does not map, which is a
+/// refusal.
+///
+/// # The names come from this file's own text
+///
+/// A hand-written list is a second copy of the match below and goes stale the
+/// first time somebody adds an arm -- which this lane has four records about
+/// tonight alone. `include_str!` reads the arms instead, so a new mapping is
+/// checked the moment it is written.
+#[cfg(test)]
+mod agrees_with_hir {
+    use super::core_external;
+    use nts_core::hir::{self, HirType};
+
+    /// Every `"nts_…"` literal in this file, which is every name the static
+    /// tables can match. Prefix-stripped and `format!`-assembled names are
+    /// invisible here and are not claimed.
+    fn mapped_names() -> Vec<&'static str> {
+        const SOURCE: &str = include_str!("ops.rs");
+        let mut found: Vec<&'static str> = Vec::new();
+        let bytes = SOURCE.as_bytes();
+        let mut at = 0;
+        while let Some(start) = SOURCE[at..].find("\"nts_") {
+            let open = at + start + 1;
+            let Some(len) = SOURCE[open..].find('"') else { break };
+            let name = &SOURCE[open..open + len];
+            if name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_') {
+                found.push(name);
+            }
+            at = open + len;
+            let _ = bytes;
+        }
+        found.sort_unstable();
+        found.dedup();
+        found
+    }
+
+    /// The parameter descriptors and the return descriptor of a JVM descriptor.
+    fn split(descriptor: &str) -> Option<(Vec<String>, String)> {
+        let body = descriptor.strip_prefix('(')?;
+        let close = body.find(')')?;
+        let (params, result) = (&body[..close], &body[close + 1..]);
+        let mut out = Vec::new();
+        let mut rest = params;
+        while !rest.is_empty() {
+            let take = one(rest)?;
+            out.push(rest[..take].to_owned());
+            rest = &rest[take..];
+        }
+        Some((out, result.to_owned()))
+    }
+
+    /// The length of the field descriptor starting at the front of `rest`.
+    fn one(rest: &str) -> Option<usize> {
+        let first = rest.as_bytes().first()?;
+        Some(match first {
+            b'[' => 1 + one(&rest[1..])?,
+            b'L' => rest.find(';')? + 1,
+            b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b'V' => 1,
+            _ => return None,
+        })
+    }
+
+    /// What `declared` requires of a descriptor at one position, or `None` when
+    /// the two are compatible.
+    fn disagrees(declared: Option<&HirType>, actual: &str) -> Option<String> {
+        let wanted: &[&str] = match declared {
+            // Not a scalar: a pointer or an `NtsValue`, neither converted on
+            // the way in. Anything that is not a JVM primitive will do.
+            None => {
+                return if actual.starts_with('L') || actual.starts_with('[') || actual == "V" {
+                    None
+                } else {
+                    Some(format!("a reference, and this backend takes `{actual}`"))
+                };
+            }
+            Some(HirType::Float { bits: 64 }) => &["D"],
+            Some(HirType::Float { .. }) => &["F"],
+            Some(HirType::Int { bits: 64, .. }) => &["J"],
+            // Everything narrower is an `int` on the operand stack, and a
+            // boolean is one too -- `types` says so and this must not be a
+            // second opinion about it.
+            Some(HirType::Int { .. } | HirType::Bool) => &["I", "Z", "B", "S", "C"],
+            // A kind this check has no rule for. Silence rather than a guess:
+            // asserting against a type nobody has thought about is how a test
+            // starts being maintained instead of maintaining.
+            Some(_) => return None,
+        };
+        if wanted.contains(&actual) {
+            None
+        } else {
+            Some(format!("`{}`, and this backend takes `{actual}`", wanted[0]))
+        }
+    }
+
+    #[test]
+    fn every_mapped_name_agrees_about_scalar_kinds() {
+        let mut checked = 0_usize;
+        let mut wrong: Vec<String> = Vec::new();
+        for name in mapped_names() {
+            let Some((_, _, descriptor)) = core_external(name) else { continue };
+            let Some(declared) = hir::runtime::parameters(name) else { continue };
+            let Some((params, result)) = split(descriptor) else {
+                wrong.push(format!("{name}: `{descriptor}` is not a descriptor"));
+                continue;
+            };
+            checked += 1;
+            if params.len() != declared.len() {
+                wrong.push(format!(
+                    "{name}: `hir::runtime` declares {} parameter(s) and this backend takes {}",
+                    declared.len(),
+                    params.len()
+                ));
+                continue;
+            }
+            for (at, (want, got)) in declared.iter().zip(params.iter()).enumerate() {
+                if let Some(why) = disagrees(want.as_ref(), got) {
+                    wrong.push(format!("{name}: parameter {at} should be {why}"));
+                }
+            }
+            if let Some(why) = disagrees(hir::runtime::result(name), &result) {
+                wrong.push(format!("{name}: the result should be {why}"));
+            }
+        }
+        assert!(wrong.is_empty(), "{checked} name(s) checked:\n  {}", wrong.join("\n  "));
+        // **A floor, because the interesting failure is this loop matching
+        // nothing.** `continue` on a name the table does not declare is right
+        // and is also how the whole test becomes vacuous -- a rename on either
+        // side would leave it passing over zero names, which is the shape this
+        // lane has a record about.
+        // **30**, measured 2026-09-13, and exact rather than padded, which is
+        // this repository's rule for a floor: a drop owes an explanation and
+        // then a new number, rather than fitting under a margin somebody chose.
+        // It was written as 40 first, from nothing, and the run said 30 -- so
+        // the first version of this line was the guess `dexes.sh`'s own comment
+        // forbids, in a test written to stop two tables guessing at each other.
+        assert!(checked >= 30, "only {checked} name(s) reached the comparison");
+    }
+}
