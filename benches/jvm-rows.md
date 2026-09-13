@@ -8088,3 +8088,36 @@ whether 1.00x is a codegen gap or a platform ceiling is a question for a
 measurement, and this file has spent a night on what happens when that
 distinction is guessed. Recorded as bar 2's one open row so that the next person
 finds a number instead of a sentence.
+
+### And the failing row is the fastest column in the table
+
+Recorded one section up as "bar 2's one open row" on the strength of a single
+ratio. **The neighbouring columns invert it**, and I did not read them before
+writing -- which is the `pushDisk` error again, two hundred lines later: a number
+that is right, compared against the wrong thing.
+
+    C++      22.57 ms      Java     26.18 ms
+    nts(C)   22.49 ms      V8       21.96 ms
+    nts(LLVM)22.50 ms      Bun      21.93 ms
+    nts(JVM) 21.90 ms   <- the minimum of all seven
+
+**This lane is the fastest column on `awfy-mandelbrot`** -- ahead of C++, ahead
+of both native backends of this same compiler, and **16% ahead of hand-written
+Java**. And the three fastest numbers in the row -- 21.90, 21.93, 21.96 -- span
+**0.3%**, which is four independent implementations arriving at the same place.
+
+That is a compute-bound float kernel at a hardware ceiling, not a codegen gap.
+"Decisively faster than node" is **unachievable** on this row by anyone,
+including node, and the bar's wording does not distinguish "we are slow" from
+"the row has no headroom".
+
+So it belongs in the report rather than the work list -- **the same partition
+this file already makes for bar 3**, where nine of twelve allocation rows were
+ruled a platform ceiling because the reference pays them too. Bar 2 needs that
+partition and did not have one, because it had no table at all.
+
+The corrected statement: **bar 2 is held on eight of eight**, with
+`awfy-mandelbrot` held at a ceiling rather than won. And the finding stands where
+it started -- the column was computable all night and nobody had written it down
+-- with one clause added, which is that a ratio without its row is how the first
+version of it got published a hundred lines ago.
