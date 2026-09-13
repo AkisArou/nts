@@ -15,5 +15,7 @@ public final class nts.gen.Program {
 Compiled from "nts"
 public final class nts.gen.Session {
   double $hits;
+  public double bump();
+  public double hits();
   public nts.gen.Session();
 }

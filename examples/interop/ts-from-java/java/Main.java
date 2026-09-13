@@ -6,14 +6,18 @@ public final class Main {
     public static void main(String[] args) {
         nts.gen.Session s = new nts.gen.Session();
 
-        // Not `s.bump()`. Every TypeScript method is emitted as a static on
-        // `Program` taking the receiver as its first argument, because
-        // `Callee::Direct` lowers to `invokestatic` -- fewer instance methods
-        // is faster and simpler for OUR call sites, and this is what it costs
-        // a Java caller.
-        double first = nts.gen.Program.Session$bump(s);
-        double second = nts.gen.Program.Session$bump(s);
-        double hits = nts.gen.Program.Session$hits(s);
+        // `s.bump()`, not `Program.Session$bump(s)`.
+        //
+        // Every TypeScript method still lowers to a static on `Program` --
+        // `Callee::Direct` is an `invokestatic` and our own call sites are
+        // unchanged -- but the class now carries an instance method that
+        // forwards to it. Three instructions, and `benches/interop-facade`
+        // measures the difference at nothing: 458.96 ns against 457.43 ns over
+        // four sittings, with the spread inside each arm larger than the gap
+        // between them.
+        double first = s.bump();
+        double second = s.bump();
+        double hits = s.hits();
 
         String greeting = nts.gen.Program.greet("java");
 

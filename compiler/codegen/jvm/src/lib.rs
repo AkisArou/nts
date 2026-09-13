@@ -564,6 +564,7 @@ fn object_class(
         builder.method(access::PUBLIC, "resume", "()V", Some(rendered));
     }
 
+    member_forwarders(program, layout, &mut builder, &mut pool)?;
     dispatch_forwarders(program, layout, &mut builder, &mut pool)?;
     // A field the JVM zeroes to `null` where the language's zero is
     // `undefined`.
@@ -834,6 +835,123 @@ fn dispatch_forwarders(
             );
         }
         builder.method(access::PUBLIC, member, descriptor, Some(rendered));
+    }
+    Ok(())
+}
+
+
+/// Instance methods on a layout's class, forwarding to the statics its methods
+/// were lowered to.
+///
+/// # Why this exists
+///
+/// Every TypeScript method lowers to a free function, so a Java caller had to
+/// write `Program.Session$bump(s)` rather than `s.bump()`. That is correct and
+/// it reads as internals -- `$` is the JVM's own mark for a compiler-generated
+/// name (`Outer$Inner`, `lambda$main$0`, `this$0`), so a caller typing one is
+/// typing something that looks like it was not meant for them.
+///
+/// **Measured at zero.** `benches/interop-facade` times the same static called
+/// directly against the same static called through a forwarder: minima of
+/// 458.96 ns and 457.43 ns over four sittings, with the spread *within* each arm
+/// (6.2 ns) larger than the difference between them. Three instructions that C2
+/// and ART inline away.
+///
+/// Our own call sites are untouched: they still `invokestatic` the original,
+/// because `Callee::Direct` never looks here.
+///
+/// # How ownership is recovered, without asking HIR to carry it
+///
+/// `Func` has no owner field, and `Layout.methods` is the *dispatch* table, so
+/// a non-virtual method is in neither. What the lowering does record is
+/// structural: `export func Session#bump(this: managed<obj#1>)` -- **the first
+/// parameter is named `this` and typed as the layout**, set deliberately in
+/// `lower`.
+///
+/// So ownership is read from the **type**, and the name is an independent
+/// check rather than the source of truth: the function must also be called
+/// `<layout>#<member>`. Two derivations that must agree, with the second
+/// asserting rather than computing -- and a disagreement skips the method
+/// rather than guessing, which keeps a `this`-parameter function that a user
+/// wrote by hand (TypeScript allows `function f(this: Foo)`) from being
+/// silently attached to a class as a method.
+fn member_forwarders(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+) -> Result<(), Diagnostic> {
+    use nts_core::hir::{HirType, ManagedType};
+
+    let class = types::class_name(layout);
+    let origin = program_origin(program);
+
+    for func in &program.funcs {
+        if !func.exported || func.abstract_declaration {
+            continue;
+        }
+        // The receiver, structurally: first parameter, named `this`, typed as
+        // one of this layout's types.
+        let Some(receiver) = func.params.first() else { continue };
+        if receiver.name != "this" {
+            continue;
+        }
+        let HirType::Managed(ManagedType::Object(owner)) = &receiver.ty else { continue };
+        if !layout.types.contains(owner) {
+            continue;
+        }
+        // And the name must agree. `Session#bump` for the layout `Session`.
+        let Some((declared, member)) = func.name.split_once('#') else { continue };
+        if declared != layout.name || member.is_empty() {
+            continue;
+        }
+
+        let Some(signature) = body::signature(program, func) else { continue };
+        // The forwarder's own descriptor is the static's minus the receiver.
+        let Some(rest) = signature.strip_prefix(&format!("(L{class};")) else { continue };
+        let forwarded = format!("({rest}");
+
+        let shape = types::Shape::of(program);
+        let mut locals = vec![VType::Object(class.clone())];
+        let mut slots = 1u16;
+        let mut ok = true;
+        for param in &func.params[1..] {
+            let (Some(vtype), Some(kind)) = (types::vtype(shape, &param.ty), types::kind(&param.ty))
+            else {
+                ok = false;
+                break;
+            };
+            // `Kind::words` is slots and stack words both -- "which is why the
+            // JVM calls both category". A `long` or a `double` is two.
+            slots += kind.words();
+            locals.push(vtype);
+        }
+        if !ok {
+            continue;
+        }
+
+        let mut code = Code::new(locals, slots);
+        code.load(&origin, Kind::Ref, 0);
+        let mut at = 1u16;
+        for param in &func.params[1..] {
+            let Some(kind) = types::kind(&param.ty) else { break };
+            code.load(&origin, kind, at);
+            at += kind.words();
+        }
+        code.invoke_static(&origin, pool, PROGRAM, &body::method_name(&func.name), &signature);
+        code.ret(&origin, types::kind(&func.return_type));
+
+        let rendered = code.finish(pool).map_err(|error| {
+            Diagnostic::error(
+                "NTS4009",
+                format!(
+                    "the forwarder for `{}` on `{}` could not be written: {error}",
+                    member, layout.name
+                ),
+                origin.location,
+            )
+        })?;
+        builder.method(access::PUBLIC, body::method_name(member), forwarded, Some(rendered));
     }
     Ok(())
 }
