@@ -983,14 +983,12 @@ pub fn declarations_with(
         .collect();
 
     render_methods_into(
-        &mut out,
-        &mut out_constants,
+        (&mut out, &mut table),
+        (&mut out_constants, &mut constants_table),
         class,
         resolve,
         &collapsed,
         &public_inherited,
-        &mut table,
-        &mut constants_table,
     )?;
 
     render_inherited(
@@ -1026,15 +1024,18 @@ pub fn declarations_with(
 /// methods, and what is inherited each answer a different question, and each
 /// has its own reason for choosing a buffer.
 fn render_methods_into(
-    out: &mut String,
-    out_constants: &mut String,
+    into: (&mut String, &mut Vec<Bound>),
+    constants: (&mut String, &mut Vec<Bound>),
     class: &ClassFile,
     resolve: &dyn Resolve,
     collapsed: &[(String, String)],
     public_inherited: &std::collections::BTreeSet<String>,
-    table: &mut Vec<Bound>,
-    constants_table: &mut Vec<Bound>,
 ) -> Result<(), String> {
+    // A buffer and the table that indexes it travel together -- they are one
+    // destination, and passing them as four arguments was what pushed this over
+    // the limit. Nothing else changes.
+    let (out, table) = into;
+    let (out_constants, constants_table) = constants;
     let is_interface = class.access & access::INTERFACE != 0;
     for method in class.methods.iter().filter(|m| visible(m.access) && is_api(m)) {
         // The `Signature` attribute first, because it is the one that still has
@@ -1464,7 +1465,7 @@ fn render_inherited(
             // hierarchy, which is the same class of error as the bridge.
             if method.access & ACC_PROTECTED != 0 { "protected " } else { "" },
             if method.access & access::STATIC != 0 { "static " } else { "" },
-            emitted_name(&declaring, &method, &collapsed_of(&declaring), &Default::default()),
+            emitted_name(&declaring, &method, &collapsed_of(&declaring), &std::collections::BTreeSet::default()),
             // **The method's own type parameters, which this path dropped.**
             // `<T> T[] toArray(IntFunction<T[]>)` is declared on `Collection`
             // and inherited by `AbstractCollection`, and the inherited copy
