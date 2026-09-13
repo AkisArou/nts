@@ -1,50 +1,77 @@
-// The other half: what this binding REFUSES, and the message each produces.
+// The other half: what this binding refuses, and the message each actually
+// produces.
 //
 // A set of examples that only demonstrates what works is an advertisement.
-// Every line below is commented out because it does not compile; the comment
-// above it is the diagnostic the compiler emits, verbatim.
+//
+// **Every code below was measured**, by writing the line and running
+// `nts check` over this project. An earlier version of this file quoted nine
+// `NTS41xx` codes that **do not exist in the compiler** -- invented while
+// writing the prose, and authoritative-looking in the one file whose whole job
+// is to be believed about refusals. The real diagnostics are better than the
+// invented ones in every case: they name the type and the member.
 
 import { Catalog } from "java:com.example";
 
+export function refused(catalog: Catalog): void {
+  // ---------------------------------------------------------------------
+  // Refused by the checker
+  // ---------------------------------------------------------------------
 
-export function refused(): void {
-  const catalog = new Catalog("widgets");
-
-  // NTS4101: `find` has four Java overloads and a `number` is losslessly
-  // received by exactly one of them, `find(double)`. To call `find(int)`,
-  // narrow explicitly: `find(x)`.
+  // TS2365: Operator '+' cannot be applied to types 'bigint' and '1'.
   //
-  //   catalog.find(1.5 as int);
-
-  // NTS4102: cannot mix `bigint` and `number`. `Catalog.id()` returns a
-  // `long`, which exceeds 2^53 and does not round-trip through a `number`.
-  // Convert explicitly with `Number(id)` and accept the loss, or keep it a
-  // bigint.
+  // `Catalog.id()` is a Java `long`, which exceeds 2^53 and does not
+  // round-trip through a `number`. Convert with `Number(id)` and accept the
+  // loss, or stay in bigint.
   //
   //   const wrong = catalog.id() + 1;
 
-  // NTS4103: `describe` may return null. Narrow it before use.
+  // TS2531: Object is possibly 'null'.
+  //
+  // `describe` is `@Nullable` in the Java, read from the CLASS-retention
+  // annotation table. Narrow it before use.
   //
   //   const n = catalog.describe(1).length;
 
-  // NTS4104: a Java `HashMap` is not a JavaScript `Map` and has no
-  // `forEach`. Use `keySet()` with an iterator, or `Java.toMap(h)` which
-  // COPIES -- the copy is why it is not implicit.
+  // TS2339: Property 'forEach' does not exist on type 'HashMap<string, Integer>'.
   //
-  //   catalog.index().forEach((v, k) => console.log(k, v));
+  // A Java `HashMap` is not a JavaScript `Map`, and this is what that costs at
+  // a call site. Use `keySet()` with an iterator. There is no implicit
+  // conversion because there is no cheap one: building a JS `Map` from it is
+  // O(n) plus an allocation, on every crossing.
+  //
+  //   catalog.index()!.forEach(() => {});
 
-  // NTS4105: `Catalog.Cursor` is an inner class and cannot be constructed
-  // without its outer instance. Use `catalog.cursorAt(...)`.
+  // TS2554: Expected 2 arguments, but got 1.
+  //
+  // `Catalog.Cursor` is a **true inner class**, so its constructor takes the
+  // outer instance as a synthetic first parameter -- which is exactly what
+  // `javac` emits for `outer.new Cursor(n)`, and the count is the proof. Use
+  // `catalog.cursorAt(...)`, which passes `this` for you.
   //
   //   const c = new Catalog.Cursor(0);
 
-  // NTS4106: `parse` declares `throws NumberFormatException`. A Java
-  // exception is not yet catchable by a TypeScript `try`/`catch`; it is
-  // raised as an `NtsRefusal` naming the exception and the method. Guard the
-  // input instead.
-  //
-  //   try { catalog.parse("abc"); } catch (e) { /* never reached */ }
+  // ---------------------------------------------------------------------
+  // Not refused, and worth knowing why
+  // ---------------------------------------------------------------------
 
-  // NTS4107: a value-returning callback cannot be registered on a thread
-  // with no environment. See examples/interop/android-shape.
+  // `catalog.find(1.5)` **compiles**, and picks `find(double)`.
+  //
+  // This was listed as a refusal when the plan expected a branded `int` to
+  // make the overloads distinguishable. Brands were measured and refused at
+  // every position a binding emits one, so there is nothing to reject here:
+  // a `number` is an f64, `double` receives it losslessly, and the truncating
+  // overload is reachable under a different **name** as `find$int(3)`.
+
+  // `catalog.parse("abc")` **compiles**, and fails at run time.
+  //
+  // `parse` declares `throws NumberFormatException`. The call is wrapped and
+  // the exception is raised as an `NtsRefusal` naming the Java exception and
+  // the method -- so the program *declines* rather than dying with a stack
+  // trace, which also keeps the differential harness from reading it as a
+  // defect. It is not yet catchable by a TypeScript `try`/`catch`.
+
+  // A value-returning callback on a foreign thread is refused at bind time.
+  // That one lives in `examples/interop/android-shape`, because it needs a
+  // callback interface to refuse.
+  void catalog;
 }
