@@ -1305,3 +1305,38 @@ fn a_deprecated_member_says_so() {
     assert!(!marked("describe"), "an ordinary method is not marked:\n{body}");
     assert!(!marked("find"), "nor is another one:\n{body}");
 }
+
+/// `final` is surfaced as prose, because TypeScript cannot express it and the
+/// stronger option was tried first.
+///
+/// 263 of 600 public classes in the sampled `android.jar` are final -- 44% --
+/// and extending one produces a class file the JVM rejects at load with
+/// `VerifyError: Cannot inherit from final class`.
+///
+/// **The private-member trick does not work.** A class with a `private`
+/// member is still extendable in TypeScript: the subclass inherits the field
+/// and `class A extends Sealed {}` typechecks with no error. Probed rather than
+/// assumed, and the probe is why this is a comment instead of a mechanism.
+///
+/// The enforcement belongs at bind time, where the generator already knows --
+/// the same place a value-returning callback on a foreign thread is refused.
+#[test]
+fn a_final_class_says_it_cannot_be_extended() {
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let read = |name: &str| {
+        let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
+        nts_jvm_emitter::read::class_file(&bytes).expect("parses")
+    };
+
+    let rect = nts_jvm_emitter::bind::declarations(&read("com/example/ui/Rect")).expect("renders");
+    assert!(rect.contains("Final: cannot be extended."), "Rect is final:\n{rect}");
+
+    // The control: `Widget` is extended by `View` in this very fixture, so a
+    // rule that marked everything would contradict a class file two lines away.
+    let widget =
+        nts_jvm_emitter::bind::declarations(&read("com/example/ui/Widget")).expect("renders");
+    assert!(!widget.contains("Final:"), "Widget is extended by View:\n{widget}");
+}

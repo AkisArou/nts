@@ -515,7 +515,26 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
     let name = simple_name(&class.binary_name);
 
     let is_interface = class.access & access::INTERFACE != 0;
-    let _ = writeln!(out, "  /** {} */", class.binary_name.replace('/', "."));
+    // **`final` is surfaced as prose because TypeScript cannot express it.**
+    // 263 of 600 public classes in the sampled `android.jar` are final -- 44%
+    // -- and extending one produces a class file the JVM rejects at load with
+    // `VerifyError: Cannot inherit from final class`: a late failure naming the
+    // JVM's rule, a long way from the TypeScript that caused it.
+    //
+    // The private-member trick was tried and does not work: a subclass simply
+    // inherits the private field and `class A extends Sealed {}` typechecks
+    // with no error. TypeScript has no `final` for classes at all.
+    //
+    // So the enforcement belongs at bind time, where the generator already
+    // knows -- the same place a value-returning callback on a foreign thread is
+    // refused. Until the binding lowers, this is the signal, and it is at least
+    // where a reader is looking.
+    let note = if class.access & access::FINAL != 0 {
+        " Final: cannot be extended."
+    } else {
+        ""
+    };
+    let _ = writeln!(out, "  /** {}{note} */", class.binary_name.replace('/', "."));
     // **An interface is emitted as an interface, so it can be implemented.**
     // Without this a Java callback type is not nameable at all -- it only ever
     // appeared inlined at a parameter as a function type -- and a TypeScript

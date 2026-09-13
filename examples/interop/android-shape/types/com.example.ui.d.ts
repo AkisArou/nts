@@ -7,7 +7,7 @@
 // this file must NOT import them, or it becomes a module and declares nothing.
 
 declare module "java:com.example.ui" {
-  /** com.example.ui.Loader */
+  /** com.example.ui.Loader Final: cannot be extended. */
   export class Loader {
     constructor();
     static load(a0: string, a1: Loader.OnBytes | ((a0: Uint8Array) => void)): void;
@@ -20,7 +20,7 @@ declare module "java:com.example.ui" {
     }
   }
 
-  /** com.example.ui.Rect */
+  /** com.example.ui.Rect Final: cannot be extended. */
   export class Rect {
     left: number;
     top: number;
