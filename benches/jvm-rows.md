@@ -7765,3 +7765,51 @@ as the edit, before the write, and refuse the write if the diff is non-empty.
 `git diff --quiet <path> || { echo "someone else is in here"; exit 1; }` is one
 line and it cannot be forgotten while thinking about the floor number, which is
 what was actually occupying me both times.
+
+## "9 compared nothing": the nine, enumerated for the first time
+
+MainClaude's finding tonight was that a conformance row with an **empty
+explanation cell** hid a wrong answer, and the check that would have found it was
+to *enumerate the operand positions rather than reason about the feature*. This
+step has been printing `9 compared nothing` under every run I have quoted
+tonight, including the two floor raises, and I had never listed them.
+
+    advanced   calls   classes   jsx   types
+    dates-unsupported          enum-reverse-map-unsupported
+    generator-unsupported      generic-classes-unsupported
+
+**Four are `*-unsupported`** and comparing nothing is exactly right for them:
+they exist to document a refusal. **Five are ordinary examples**, and they export
+real functions:
+
+    calls      export function widen (x3), and three consts
+    advanced   export function isFish, assertFish, identity, bounded
+    classes    export class Circle, and four consts
+
+They are not skipped for being empty. They are skipped because the differential
+drives **scalar arguments from a hostile pool**, and a type predicate
+(`isFish(pet: Fish | Bird)`), a generic (`identity<T>(x: T)`) and a class have no
+scalar surface for it to drive. That is a structural property of the harness, not
+a defect -- but it means five examples exercising type predicates, generics and
+class construction **are never compared against node by this step**, and never
+have been.
+
+**And it changes what my own floor line claims.** "198 of 198, equal to the
+corpus" is 198 of the **207** examples this step walks. The nine are counted in
+neither `passed` nor `total`, so they cannot mask a regression in the number --
+but a codegen bug confined to one of them fails nothing here. `dexes.sh` dexes
+all 263 targets and `agrees-on-device.sh` covers the bench cases, so the risk is
+bounded rather than absent, and bounded-rather-than-absent is worth writing down
+where the floor is read.
+
+**The comment beside it says "Six do."** It is now nine, and the number grew
+under a line nobody re-read -- the fourth stale narrative half this file has
+found in one night, after "188 of 188" against a floor of 192, a `not widen`
+verdict measured on the wrong method, and an index that stopped several sessions
+ago. Left uncorrected only because `all.sh` currently holds a peer's uncommitted
+floor lines and is not mine to carry.
+
+The generalisation is theirs and it transfers exactly: **a number an instrument
+prints every run, that nobody has ever expanded into its members, is a domain
+nobody has listed.** Mine printed nine every time and I quoted it twice as
+context rather than reading it as a question.
