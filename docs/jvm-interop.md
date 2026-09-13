@@ -3031,7 +3031,50 @@ Java routinely does. Measured over the generated Android SDK binding:
 So the name HIR uses cannot select among them, and the binding table is keyed by
 the declaration's position precisely so it can.
 
-### The resolution exists and is one field short of reachable
+### Correction: it is not one field short, and I read rather than probed
+
+The section below was written after reading `SignatureRecord`'s six fields,
+finding no node among them, and concluding the declaration was unreachable. It
+is reachable, one struct over:
+
+```rust
+pub struct CallTarget {
+    /// The signature the checker selected, after overload resolution.
+    pub signature: SignatureId,
+    /// The callee's declaration, when it is in the decoded program.
+    pub callee: Option<NodeId>,
+}
+```
+
+`snapshot.call_targets` is keyed by **call node**, which is the `id` `callee_for`
+already receives. `decompose` fills `callee` from the wire's
+`signature.declaration`, which tsgo sets at `session.go:313`. So the whole chain
+exists and always did.
+
+**And the doc comment says it will not work.** `callee` is documented `None`
+"for a call into a file outside the decoded set — an imported or ambient
+function", and a `java:` declaration is ambient. Probed anyway:
+
+    PROBE member=index  callee_decl=Some(NodeId(66))
+            decl at types/app.d.ts span 104..149
+
+`Some`, with a span in the `.d.ts` — which is exactly what selects a table row.
+The comment means a file outside the *decoded set*; a `.d.ts` inside the
+project's `include` is inside it, and those are not the same thing.
+
+So there is **no schema change, no version bump, no decoder change, and nothing
+in tsgo**. `callee_for` gains:
+
+```rust
+if let Some(decl) = self.snapshot.call_targets.get(&id).and_then(|it| it.callee)
+    && let Some(row) = foreign.get(&self.location(decl))
+{ return Ok(Callee::External(row.key.clone())); }
+```
+
+The measurements below stand and are why the key must be the *declaration*
+rather than the name or the arity. They no longer imply a schema change.
+
+### What reading the struct suggested, and why it was wrong
 
 `overriding_signature(call)` already hands back the `SignatureRecord` the checker
 picked **for that exact call node**, and `callee_for` already receives the node.
