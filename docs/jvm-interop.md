@@ -1002,3 +1002,117 @@ is this same question. **Android needs that constantly**: `extends Activity`,
   whether to surface type parameters or erase to `unknown` is unsettled.
 - **Lifetime.** Nothing to do — under `NoGc` the platform collector owns
   everything, which is the one place this is easier than the native lane.
+
+# Proposals for each open question
+
+One per question above, concrete enough to argue with. Where a proposal rests on
+something in the tree it says which.
+
+## 1. Foreign objects: a layout, a naming rule, and one constraint
+
+**No new `ManagedType` variant, and no flag.** A bound Java class becomes a
+`Layout` with **zero fields**, `methods` holding its Java methods, and a `name`
+carrying the binary name behind a reserved prefix. A backend seeing that prefix
+emits nothing for the class and uses the binary name at call sites.
+
+The precedent is in this tree and is explicit about why:
+
+> Whether a layout name was made by `signature_name`. **By prefix and shape
+> rather than by a flag on the layout**: `Layout` is what three backends read,
+> and a field that exists to tell two of its own names apart is a field they
+> would all have to ignore.
+
+**The constraint that makes it sound: the binding surfaces every member as a
+method, never as a field.** Then a foreign object never appears in a `FieldGet`
+or `FieldSet`, and `fields::analyze`'s soundness sentence -- *"nothing else can
+store into it: there is no FFI that writes through a pointer here"* -- stays
+true, because there is no field for a foreign write to land in.
+
+**One risk to check before building:** `same_shape` merges layouts with
+identical fields and methods, and two field-less Java classes could collide.
+That is the same hazard `signature_name` was written for, and the same answer --
+the name carries the identity — but it should be *tested*, not assumed.
+
+## 2. Imports: ambient modules, which already work here
+
+    import { Session } from "java:com.example";
+
+`declare module "java:com.example" { export class Session { … } }` is ordinary
+TypeScript and **needs no resolver change**: this tree already ships ambient
+module declarations at `runtime/react/generated/compiler-output/ambient.d.ts`.
+The generator emits one ambient module per Java package; `tsc` resolves the
+import against it; our frontend sees an ordinary import.
+
+## 3. Static constants: inline them, and reference the class not at all
+
+A `static final` primitive carries a **`ConstantValue` attribute in the class
+file**, so `View.VISIBLE` can become the literal `0` at compile time — which is
+what `javac` itself does. Zero cost, no reference to the class, no binding entry.
+
+A non-constant static becomes a `getstatic` through the binding table, which is
+the same shape as a global.
+
+## 4. Enums fall out of (3)
+
+A Java enum is a class with `static final` instances plus `values()` and
+`valueOf()`. The instances are statics, so they bind by (3); the two methods
+bind as methods.
+
+## 5. Nested classes: surface the static ones, refuse the inner ones
+
+`Map.Entry` is a static nested class -- a class whose binary name contains `$`
+-- and surfaces as `Map.Entry` in the namespace with no special handling. A
+**true inner** class captures an outer instance and has a synthetic first
+constructor parameter; **refuse those by name** until something needs one. They
+are rare in public API surface and the refusal is cheap.
+
+## 6. Varargs: surface, pack at the call site
+
+`f(String...)` **is** `f(String[])` in the class file. Surface it as
+`f(...args: string[])` and pack at the call site — which is an array
+construction, and free when the array is bare.
+
+## 7. Collisions: mangle by a written rule, recorded in the table
+
+A Java member named `constructor`, or a TypeScript keyword. One documented
+mangling, recorded in the binding table so the emitted call uses the real name.
+The rule matters more than which rule.
+
+## 8. Ambiguous overloads: refuse, naming both
+
+Where `int` and `double` are not distinguishable at a call, **the binding
+refuses and names both candidates**, rather than picking one. A wrong overload
+is a wrong answer that runs; a refusal is a message.
+
+## 9. Generated or checked in: checked in, with a drift test
+
+`runtime_jar.rs`'s shape exactly — regenerate with a JDK present and compare
+**byte for byte**, `NTS_REGENERATE=1` writes, skip without a JDK and **fail**
+when one is present and the rebuild differs. Fast for everyone, and a stale
+`.d.ts` is caught rather than believed.
+
+## 10. Transitive closure: bind what is named, refuse what is not
+
+Bind the named classes plus whatever is reachable **through surfaced
+signatures**, and stop. A type not surfaced is `unknown`, and a call on it
+refuses **by name** — so the refusal tells the user exactly what to add to the
+bind list. The `.d.ts` stays bounded and its growth is a decision rather than a
+side effect.
+
+## 11. Exceptions: bind anyway, and say what happens
+
+A `throws` clause does not prevent binding. Until a throw can cross a call on
+any backend, an escaping Java exception behaves exactly as an uncaught one does
+today — the process dies with a stack trace. That is a documented limitation
+with a named expiry, not a silent gap.
+
+## 12. Threads: the mechanism exists
+
+`NtsInbox.post(Slot, NtsResumable)` is in `runtime/jvm` today, with atomics, and
+the provider doc says only the cross-thread inbox is atomic **because one lane
+mutates everything else**. So an Android API calling back on another thread has
+somewhere to land: it posts, and the work runs on the environment's own lane.
+
+What is unbuilt is the adapter that turns a Java callback into an
+`NtsResumable`. That is a smaller thing than "threads are unsupported", which is
+what this document said before the inbox was checked.
