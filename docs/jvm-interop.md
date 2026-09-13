@@ -2786,3 +2786,90 @@ directions.
 
 So `$` is no longer awkward, because it is no longer the API: it is a synthetic
 name marked synthetic, which is what the JVM convention is for.
+
+## The binding table, and the key I chose after being wrong about the first one
+
+A `.d.ts` erases. It tells the checker that `canvas.drawText` takes a string and
+says nothing about which of four `drawText` overloads the JVM should invoke.
+`nts bind` now emits a second artefact beside it -- the binding table -- and the
+whole question is what a row is keyed by.
+
+**`(class, member)` does not work, and the count that said it did was wrong.**
+My first check reported zero duplicate method names across a generated file, so
+a name key looked sufficient. That check's class-exit rule fired on the first
+nested class and it was counting inside one class body out of sixty. Run against
+a real jar instead of the fixture, `android.graphics` renders this:
+
+    drawText(a0: Uint16Array, a1: number, ..., a5: Paint): void;
+    drawText(a0: string, a1: number, a2: number, a3: number, a4: number, a5: Paint): void;
+    drawText(a0: string, a1: number, a2: number, a3: Paint): void;
+    drawText$String$int$int$float$float$Paint(a0: string, ...): void;
+
+Three same-name TypeScript overload signatures, because TypeScript can tell them
+apart, and a mangled fourth whose parameters erase to a signature already taken.
+A name key collides on exactly the overload-heavy classes that matter most.
+
+**Mangling every overload is the smaller change and is the wrong one.** It makes
+a name key unique in five lines. It also puts `drawText$String$float$float$Paint`
+at every call site, which is the DX the `$` in a generated name was already a
+complaint about. The binding is read by people.
+
+**So: position, and it has a better property than uniqueness.** The checker has
+already done the overload resolution. TypeScript picks a signature, `lower` walks
+to that declaration, and the declaration's line selects the row. Nothing upstream
+learns what a JVM descriptor is -- which is the point, because `hir` must not
+grow a second opinion about a mapping this crate owns.
+
+### Keyed by line, and the reason is measured rather than chosen
+
+`lower`'s `location` reports a node's **end**. Five refusals in
+`com.example.d.ts` came back at columns 18, 29, 66, 44 and 33, against lines of
+length 17, 28, 65, 43 and 32. A table keyed on a declaration's *start* column
+would have missed every lookup, and the symptom -- foreign calls still refused --
+is indistinguishable from not having built the table at all.
+
+The cause is not an off-by-one. `frontend-ts`'s own
+`spans_point_at_the_text_they_name` asserts that a span for `add` is **four**
+bytes for a three-character name, because tsgo's `pos` includes leading trivia.
+`span.start` is therefore the end of the *previous* token -- for a declaration on
+its own line, the end of the previous line. The renderer uses `span.end` because
+`span.start` is unusable, and the compensation is invisible unless you look at
+the span rather than the rendered column.
+
+Which retires the question for this table rather than answering it: **a
+declaration is never split across lines**, so `span.start` and `span.end` select
+the same line whichever the caller holds. Line-keying is the choice that survives
+a convention I had not yet understood, and the column is recorded only so a
+lookup can assert it landed where it meant to.
+
+### The line comes from the text, not from a counter beside it
+
+`mark` counts the newlines already in the buffer being written. A counter kept
+alongside is a second derivation of one fact and would drift the first time a
+path wrote two lines where the counter assumed one -- which `/** Inherited. */`
+and `/** @deprecated */` both do. The merge offsets are taken inside the same
+loops that move the text, for the same reason.
+
+### What it measures
+
+60 classes of `android.graphics`: **910 rows over 1,444 lines, 0 naming the
+wrong declaration, 0 on the wrong column.** Shifted by one line the same check
+falls to 166 matches, so it discriminates. The two apparent arity mismatches were
+my checker cutting the argument list at the first `)`, which is inside a rendered
+lambda; both declarations have the parameters their descriptor says.
+
+The test carries that control rather than describing it, and sabotaging `mark`
+by one line fails 49 of 50 rows.
+
+### What is still upstream, and why it is not a one-liner
+
+`lower` refuses at `method_body`: `(None, false) => "a method without a body"`.
+The change is to resolve a call on a foreign declaration to
+`Callee::External(foreign_key(..))` instead -- and `hir::runtime::foreign_key`
+and `is_foreign_key` already exist, so the vocabulary is in place.
+
+What is not in place is **how `lower` reads the table**. It has no file access;
+the snapshot arrives from tsgo. So the table has to be loaded by the driver and
+passed in, which is an argument through a boundary rather than a line inside one,
+and it belongs to whoever owns that boundary. `ts-from-java` lowers clean today;
+`java-from-ts` and `android-shape` typecheck at zero errors and stop here.
