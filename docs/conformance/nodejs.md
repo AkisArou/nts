@@ -24122,3 +24122,52 @@ falsy, so `shape.mjs` fails on the first thing it reaches --
 prediction was right about the row and wrong about the mechanism, and the mechanism is what
 a reader would act on.
 
+## The 75 was 50: an addon that loads and publishes nothing
+
+**Correcting the number published twice tonight in this file and once in `next-goal.md`.**
+The compiled axis is **50 across 26 modules**, not 75. Twenty-five of the 75 were
+`cluster`, and all twenty-five asserted nothing.
+
+`shape.mjs` reads `exports.default`. `cluster`'s addon does not export one -- its six keys
+are `SCHED_NONE SCHED_RR isMaster isPrimary isWorker schedulingPolicy` -- so `shape` takes
+its blank-module branch and returns `{}`. Verified through the runner itself and not through
+a loader of my own:
+
+    compiled     require('cluster')  ->  KEYS=0 []        branch=NEITHER
+    interpreted  require('cluster')  ->  KEYS=12 [...]    branch=primary
+
+Nothing fails anywhere along that path. The addon loads, the shape runs, every test runs --
+and a test that selects its own subject takes neither branch:
+
+    if (cluster.isWorker) { ... } else if (cluster.isPrimary) { ... }
+
+Both guards read `undefined`, so the file passes having done nothing. That is the exact
+hollowness `cluster/shape.mjs` documents, in its own comment, for `--sabotage`: *"a blanked
+module publishes nothing"*. The compiled lane reproduced a sabotaged run without any
+sabotage, and I read that comment tonight while writing the control and did not apply it to
+the other arm.
+
+Five modules publish nothing on that lane -- `child_process`, `cluster`, `console`, `events`,
+`timers` -- and only `cluster` had passes to lose, the other four being at 0 already.
+`timers`' two are real: they reach `getTimerDuration` through `require("internal/timers")`,
+a separately substituted specifier, not through the empty `timers`.
+
+So the axis over the three measurements, honestly:
+
+    09-12 04:35   49 across 24 modules
+    09-13 02:27   50 across 26 modules   (74 as printed, tty +1, cluster's 25 hollow)
+    09-13 03:5x   50 across 26 modules   (75 as printed, same 25)
+
+**The +25 that made this look like the largest movement of the night was the hollow
+column.** Every other row reproduced. `tooling/conformance/shaped-surface.mjs` now answers
+"what does this lane publish" and `compiled-axis.sh` runs it before a module's tests, so a
+module publishing nothing prints as that rather than as N passes.
+
+### Why neither existing guard caught it
+
+`--sabotage` cannot: `cluster`'s tests branch on their own role, which is why the module has
+a break-one-thing control instead. And the control was run on the interpreted arm only --
+where the surface is 12 keys and the break genuinely bites. A control that is run on one arm
+says nothing about the other, and "both arms measured" was a sentence about counts rather
+than about what either arm was running.
+

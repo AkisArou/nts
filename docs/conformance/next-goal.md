@@ -101,16 +101,20 @@ message sites. The six that remain carry mechanisms, in `child_process/INCOMPLET
 
 **The two crypto decisions with both numbers** -- done, `80abf5da`.
 
-**The compiled axis re-measured so the 49 is a number from today** -- done, and it is 75,
-not 49 plus a guess.
+**The compiled axis re-measured so the 49 is a number from today** -- done, and it is **50**.
+It read 75 for an hour and 25 of that was hollow: `cluster`'s addon exports no `default`, so
+its `shape.mjs` takes the blank-module branch, `require('cluster')` returns an object with
+zero keys, and every test that branches on `cluster.isWorker` / `cluster.isPrimary` takes
+neither branch and passes having asserted nothing. Verified through the runner:
+`KEYS=0 []`, `branch=NEITHER`.
 
     09-12 04:35   49 across 24 modules
-    09-13 01:48   74 across 26 modules
-    09-13 02:27   75 across 26 modules
+    09-13 02:27   50 across 26 modules   (printed 74; tty +1, cluster's 25 hollow)
+    09-13 03:5x   50 across 26 modules   (printed 75; same 25)
 
-All of +25 is `cluster`, which did not exist for the first run. The rest of the tree moved
-`net` +2, `tty` -1 and `process` -1, and both minus ones were defects in the measuring
-rather than in the modules: I had deleted the runner's pty harness in a commit about
+All of the apparent +25 was `cluster` and all of it was hollow, so the honest movement over
+21 hours is `net` +2 and `tty` back to 1 -- and both of *those* minus ones were defects in
+the measuring rather than in the modules: I had deleted the runner's pty harness in a commit about
 stderr, and the compiler had begun emitting an addon that links and cannot load. Both are
 in `docs/conformance/nodejs.md` with their brackets.
 

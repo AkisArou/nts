@@ -35,6 +35,23 @@
 # **92 failed** when the truth was one `undefined symbol: module__init` repeated 92
 # times. So each artifact is loaded once before its tests run, and a failure to load is
 # printed as itself. Measured across the 26: 25 load, `process` does not.
+#
+# # And an addon that loads can still publish nothing
+#
+# Worse than not loading, because nothing fails. A `shape.mjs` reads `exports.default`
+# and several addons do not export one, so `shape` takes its blank-module branch and
+# the lane publishes `{}`. Every test then runs, and the ones that select their own
+# subject -- `if (cluster.isWorker) ... else if (cluster.isPrimary) ...` -- take
+# neither branch and pass having asserted nothing.
+#
+# `cluster` read **25 passed** that way, which was the whole of its compiled row, and
+# the figure reached a ledger and a goal file before anybody asked what
+# `require('cluster')` returns on that lane. It returns an object with zero keys. Its
+# own `shape.mjs` documents this hollowness for `--sabotage`; the compiled lane
+# reproduced it without any sabotage at all.
+#
+# So `shaped-surface.mjs` runs before the tests and a module publishing nothing is
+# printed as that, not as N passes.
 set -uo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root" || exit 1
@@ -52,6 +69,11 @@ for dir in runtime/node/*/; do
     if ! loaderr="$(node -e 'require(process.argv[1])' "$out/$module.node" 2>&1)"; then
       printf '%-20s WILL NOT LOAD -- %s\n' "$module" \
         "$(printf '%s' "$loaderr" | tr '\n' ' ' | sed 's/.*: //' | cut -c1-60)"
+      continue
+    fi
+    if ! node "$root/tooling/conformance/shaped-surface.mjs" "$out" "$module" \
+        > "$out/$module.surface.log" 2>&1; then
+      printf '%-20s PUBLISHES NOTHING -- every pass here asserts nothing\n' "$module"
       continue
     fi
     line="$(timeout 900 node "$root/tooling/conformance/run.mjs" \
