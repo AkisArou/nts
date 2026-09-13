@@ -645,6 +645,19 @@ impl Client {
         )
     }
 
+    /// The declaring symbol of a type, including one discovered by inference.
+    pub fn symbol_of_type(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<Option<SymbolResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_SYMBOL_OF_TYPE,
+            &GetTypePropertyParams { snapshot, project: project.clone(), ty },
+        )
+    }
+
     /// What a generic type reference was made from, or `None` where the type is
     /// not one. See [`proto::method::GET_TARGET_OF_TYPE`].
     pub fn target_of_type(
@@ -987,6 +1000,7 @@ impl TsgoApi {
         symbol_ids: FxHashMap<u32, SymbolId>,
         file_bases: &[(String, u32)],
         natively_implemented: &FxHashSet<u32>,
+        root: &Utf8Path,
     ) -> Result<DeepStats, TsgoError> {
         if self.decompose.is_none() && self.resolve_calls.is_none() && self.fold_constants.is_none()
         {
@@ -1029,6 +1043,7 @@ impl TsgoApi {
             interned,
             symbol_ids,
             file_bases.to_vec(),
+            root.to_owned(),
         );
         let mut stats = DeepStats::default();
         if let Some(budget) = self.decompose {
@@ -1216,6 +1231,7 @@ impl SemanticSource for TsgoApi {
             symbol_ids,
             &file_bases,
             &natively_implemented,
+            cwd,
         )?;
 
         self.stats = FrontendStats {

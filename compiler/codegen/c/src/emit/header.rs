@@ -3,7 +3,7 @@
 
 use super::{
     CodeWriter, Diagnostic, HirType, ManagedType, Origin, Program, c_global, c_identifier,
-    format_signature, layout_of, object_type_name, return_c_type, signature,
+    c_member_at, format_signature, layout_of, object_type_name, return_c_type, signature,
 };
 use rustc_hash::FxHashSet;
 
@@ -43,7 +43,8 @@ pub(super) fn emit(
             .map(|g| c_global(&g.name, program.funcs.iter().map(|f| f.name.as_str()))),
     );
     names.extend(program.layouts.iter().map(object_type_name));
-    for (internal, published) in &program.public_api {
+    let next_entries = next_exports(program, defined, &mut names);
+    for ((internal, published), next) in program.public_api.iter().zip(&next_entries) {
         let Some(func) = program
             .funcs
             .iter()
@@ -84,6 +85,17 @@ pub(super) fn emit(
                 &func.origin,
                 format!("{};", format_signature(internal, &returns, &params, true)),
             );
+            if let Some(next) = next {
+                emit_next(
+                    &mut writer,
+                    &mut names,
+                    program,
+                    next,
+                    &returns,
+                    published,
+                    &func.origin,
+                )?;
+            }
             Ok(())
         })();
         if let Err(problem) = result {
@@ -107,6 +119,92 @@ pub(super) fn emit(
     writer.text().to_owned()
 }
 
+struct NextExport<'a> {
+    generator: &'a nts_core::hir::GeneratorResumption,
+    resume: &'a nts_core::hir::Func,
+    name: String,
+}
+
+fn next_exports<'a>(
+    program: &'a Program,
+    defined: &FxHashSet<String>,
+    names: &mut FxHashSet<String>,
+) -> Vec<Option<NextExport<'a>>> {
+    program
+        .public_api
+        .iter()
+        .map(|(internal, published)| {
+            let generator = program.generators.iter().find(|generator| {
+                generator.constructor == *internal
+                    && generator.frame.kind == nts_core::hir::GeneratorKind::Sync
+                    && defined.contains(&c_identifier(&generator.resume))
+            })?;
+            let resume = program.funcs.iter().find(|f| f.name == generator.resume)?;
+            Some(NextExport {
+                generator,
+                resume,
+                name: unique_name(names, &format!("{published}_next")),
+            })
+        })
+        .collect()
+}
+
+fn emit_next(
+    writer: &mut CodeWriter,
+    names: &mut FxHashSet<String>,
+    program: &Program,
+    next: &NextExport<'_>,
+    returns: &str,
+    published: &str,
+    origin: &Origin,
+) -> Result<(), Diagnostic> {
+    let frame_ty = HirType::Managed(ManagedType::Object(next.generator.frame.ty));
+    let layout = layout_of(program, &frame_ty, origin)?;
+    let yielded = boundary_type(
+        writer,
+        names,
+        program,
+        &next.generator.frame.yields,
+        origin,
+        &format!("{published}_yield_t"),
+    )?;
+    writer.line(origin, format!("{};", signature(program, next.resume)?));
+    writer.line(origin, "/* Returns true and writes *value for a yield; false after completion, leaving *value unchanged.");
+    writer.line(origin, " * The frame is borrowed. Managed yielded values are borrowed until the next step or frame release. */");
+    writer.line(
+        origin,
+        format!(
+            "static inline bool {}({returns} frame, {yielded} *value) {{",
+            next.name
+        ),
+    );
+    writer.line(
+        origin,
+        format!(
+            "    {} *state = ({} *)frame;",
+            object_type_name(layout),
+            object_type_name(layout)
+        ),
+    );
+    writer.line(
+        origin,
+        format!(
+            "    if ({}(state)) return false;",
+            c_identifier(&next.resume.name)
+        ),
+    );
+    writer.line(
+        origin,
+        format!(
+            "    *value = state->{};",
+            c_member_at(layout, nts_core::hir::suspend::FIELD_YIELDED as usize)
+        ),
+    );
+    writer.line(origin, "    return true;");
+    writer.line(origin, "}");
+    Ok(())
+}
+
 fn boundary_type(
     writer: &mut CodeWriter,
     names: &mut FxHashSet<String>,
@@ -119,6 +217,15 @@ fn boundary_type(
         return return_c_type(program, ty, origin);
     }
     let layout = layout_of(program, ty, origin)?;
+    let alias = unique_name(names, preferred);
+    writer.line(
+        origin,
+        format!("typedef struct {} {alias};", object_type_name(layout)),
+    );
+    Ok(format!("{alias} *"))
+}
+
+fn unique_name(names: &mut FxHashSet<String>, preferred: &str) -> String {
     let base = c_identifier(preferred);
     let mut alias = base.clone();
     let mut suffix = 2;
@@ -126,9 +233,5 @@ fn boundary_type(
         alias = format!("{base}_{suffix}");
         suffix += 1;
     }
-    writer.line(
-        origin,
-        format!("typedef struct {} {alias};", object_type_name(layout)),
-    );
-    Ok(format!("{alias} *"))
+    alias
 }

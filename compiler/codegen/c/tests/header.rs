@@ -201,6 +201,84 @@ int main(void) {
 }
 
 #[test]
+fn exported_generators_step_without_a_typescript_consumer_and_stay_done() {
+    let Some(tsgo) = toolchain() else {
+        return;
+    };
+    let (dir, _) = emit(
+        &tsgo,
+        "generator-steps",
+        r"let finished = 0;
+export function completions(): number { return finished; }
+export function* counted(n: number): Generator<number, void, unknown> {
+    for (let i = 0; i < n; i++) yield i;
+    finished++;
+}
+export function* empty(): Generator<number, void, unknown> { finished++; }
+",
+    );
+    run(
+        &dir,
+        r#"#include "program.h"
+int main(void) {
+    counted_return_t *g = counted(3);
+    if (completions() != 0) return 1;
+    double value = -1;
+    for (int i = 0; i < 3; i++) {
+        if (!counted_next(g, &value) || value != i) return 2;
+    }
+    if (counted_next(g, &value) || completions() != 1) return 3;
+    value = 99;
+    if (counted_next(g, &value) || value != 99 || completions() != 1) return 4;
+    nts_release((NtsHeader *)g);
+    empty_return_t *e = empty();
+    if (completions() != 1) return 5;
+    if (empty_next(e, &value) || completions() != 2) return 6;
+    if (empty_next(e, &value) || value != 99 || completions() != 2) return 7;
+    nts_release((NtsHeader *)e);
+    return 0;
+}
+"#,
+        true,
+    );
+}
+
+#[test]
+fn generator_object_yields_can_be_retained_past_the_next_step() {
+    let Some(tsgo) = toolchain() else {
+        return;
+    };
+    for (arm, extra) in ["", "type Witness = Generator<number>;"].iter().enumerate() {
+        let (dir, _) = emit(
+            &tsgo,
+            &format!("generator-objects-{arm}"),
+            &format!(
+                "export function* objects(n: number) {{ yield {{ value: n }}; yield {{ value: n + 1 }}; }}\n{extra}"
+            ),
+        );
+        run(
+            &dir,
+            r#"#include "program.h"
+int main(void) {
+    objects_return_t *g = objects(2.5);
+    objects_yield_t *value = 0;
+    if (!objects_next(g, &value) || value->value != 2.5) return 1;
+    objects_yield_t *saved = value;
+    nts_retain((NtsHeader *)saved);
+    if (!objects_next(g, &value) || value->value != 3.5) return 2;
+    if (objects_next(g, &value)) return 3;
+    nts_release((NtsHeader *)g);
+    if (saved->value != 2.5) return 4;
+    nts_release((NtsHeader *)saved);
+    return 0;
+}
+"#,
+            true,
+        );
+    }
+}
+
+#[test]
 fn a_local_function_published_under_an_alias_has_external_linkage() {
     let Some(tsgo) = toolchain() else {
         return;

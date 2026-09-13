@@ -193,7 +193,7 @@ pub type RootNames = FxHashSet<String>;
 /// outside, because there is no outside.
 #[must_use]
 pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
-    match roots {
+    let mut names: Vec<&str> = match roots {
         Roots::Entry(names) | Roots::Declared(names) => program
             .funcs
             .iter()
@@ -225,7 +225,17 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
             })
             .map(|func| func.name.as_str())
             .collect(),
+    };
+    if !matches!(roots, Roots::Entry(_)) {
+        for generator in &program.generators {
+            if names.contains(&generator.constructor.as_str())
+                && program.funcs.iter().any(|func| func.name == generator.resume)
+            {
+                names.push(&generator.resume);
+            }
+        }
     }
+    names
 }
 
 /// Remove every function the roots cannot reach, and report how many.

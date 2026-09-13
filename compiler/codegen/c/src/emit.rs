@@ -3220,7 +3220,11 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
 fn signature(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     let returns = return_c_type(program, &func.return_type, &func.origin)?;
     let public = func.exported
-        || program.public_api.iter().any(|(name, _)| *name == func.name);
+        || program.public_api.iter().any(|(name, _)| *name == func.name)
+        || program.generators.iter().any(|generator| {
+            generator.resume == func.name
+                && program.public_api.iter().any(|(name, _)| *name == generator.constructor)
+        });
     let mut params = Vec::new();
     for (index, param) in func.params.iter().enumerate() {
         let ty = c_type_of(program, &param.ty, &param.origin)?;

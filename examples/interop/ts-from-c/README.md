@@ -12,6 +12,8 @@ add(2, 3)         = 5
 clamp(42, 0, 10)  = 10
 bool_(false)      = 1
 greetLength(7)    = 4
+greet: UTF-16 length = 6
+counted(3)       = 0 1 2; done
 makePoint(7)     = (7, 14)
 later: state before checkpoint = 0
 later: state after  checkpoint = 1
@@ -51,12 +53,23 @@ I/O also requires a host event loop.
 `later` contains an `await`, so its state changes across the checkpoint. An
 async function without a suspension can already be settled when it returns.
 
-## Remaining gaps
+## Managed inputs and generators
 
-A scalar-only library links without `nts_runtime.c`. Managed exports require
-the runtime. A small public constructor API for strings, arrays and objects is
-still needed: `greet` accepts an `NtsString *`, not a C string. The generator
-`counted` returns its frame but has no exported stepping function yet.
+C constructs strings with `nts_string_from_utf8(bytes, length)` and numeric
+arrays with `nts_array_of_numbers(length)`, accessing arrays via `NTS_ITEMS`.
+The example constructs a Unicode string and passes it through `greet`. Objects
+can be obtained through TypeScript factories such as `makePoint`.
+
+For synchronous generators, `<export>_next(frame, &value)` returns true for each
+yield and false after completion. Completion leaves the output unchanged and
+repeated calls stay completed. The frame is borrowed by next; release it when
+finished. Managed yielded values are borrowed until the next step or frame
+release; retain a value if it must outlive that interval. Like `for...of`, this
+interface discards the generator's final return value and supplies no next input.
+There is no allocation per synchronous step. Async-generator stepping is not
+exposed by this header yet.
+
+A scalar-only library links without `nts_runtime.c`; managed exports require it.
 
 Do not compile `quickjs/*.c` separately: `nts_runtime.c` includes those sources.
 The build script carries the working link command.

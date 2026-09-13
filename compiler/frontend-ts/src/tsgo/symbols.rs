@@ -238,6 +238,18 @@ fn intern(
         .map(NodeId)
         .collect();
 
+    intern_declared(snapshot, interned, response, root, declarations)
+}
+
+/// Intern a symbol with declarations already mapped to the shared node arena.
+/// Used for symbols discovered through types as well as through source nodes.
+pub(super) fn intern_declared(
+    snapshot: &mut SemanticSnapshot,
+    interned: &mut FxHashMap<u32, SymbolId>,
+    response: &SymbolResponse,
+    root: &camino::Utf8Path,
+    declarations: Vec<NodeId>,
+) -> SymbolId {
     // FxHashMap rather than a generic hasher: this map is hit once per node in a
     // program, and the point of choosing it is lost if a caller can substitute a
     // cryptographic one.

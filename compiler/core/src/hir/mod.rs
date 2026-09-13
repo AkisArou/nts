@@ -532,6 +532,16 @@ pub struct GeneratorFrame {
     pub declared: TypeId,
 }
 
+/// A generator's two entry points after suspension lowering. Kept on the
+/// program because library publication must retain the resumption even when
+/// no TypeScript caller walks the returned frame.
+#[derive(Debug, Clone)]
+pub struct GeneratorResumption {
+    pub constructor: String,
+    pub resume: String,
+    pub frame: GeneratorFrame,
+}
+
 impl Func {
     /// The op defining a value.
     #[must_use]
@@ -1763,6 +1773,7 @@ pub struct Program {
     /// And a re-export may rename, so the published name is the entry's, not
     /// the declaration's.
     pub public_api: Vec<(String, String)>,
+    pub generators: Vec<GeneratorResumption>,
     /// Exported object literals whose properties are functions, as
     /// `(exported name, [(property, emitted function)])`.
     ///

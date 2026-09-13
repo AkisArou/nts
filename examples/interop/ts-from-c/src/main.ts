@@ -82,8 +82,7 @@ export function greet(name: string): string {
   return "hi " + name;
 }
 
-/** The workaround available today: keep the managed value inside, and let the
- *  boundary stay scalar. This one C *can* call. */
+/** An all-scalar alternative that keeps the string inside TypeScript. */
 export function greetLength(n: number): number {
   return ("hi " + String(n)).length;
 }
@@ -101,11 +100,10 @@ export async function later(n: number): Promise<number> {
   return v + 1;
 }
 
-// --- spot 4: a generator hands back its frame -----------------------------
+// --- generator stepping through the generated header ---------------------
 //
-// `NtsObj_counted_frame *counted(double)` -- the suspension frame itself, with
-// `state` and `yielded` fields whose offsets are `_Static_assert`ed, and NO
-// exported `next`. So C holds a real object with no supported way to step it.
+// C uses counted_next(frame, &value): true for a yield, false on completion.
+// The frame stays completed across subsequent steps and is released by C.
 export function* counted(n: number): Generator<number> {
   for (let i = 0; i < n; i++) yield i;
 }

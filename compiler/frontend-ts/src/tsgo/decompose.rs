@@ -147,6 +147,7 @@ pub struct Decomposer<'a> {
     symbols: FxHashMap<u32, SymbolId>,
     /// Where each compiled file's nodes begin, for resolving declaration handles.
     file_bases: Vec<(String, u32)>,
+    root: camino::Utf8PathBuf,
     /// Literal segments of template literal types, kept from interning time.
     ///
     /// They arrive on the response and are gone by the time the walk decides how
@@ -176,6 +177,7 @@ impl<'a> Decomposer<'a> {
         interned: FxHashMap<u32, TypeId>,
         symbols: FxHashMap<u32, SymbolId>,
         file_bases: Vec<(String, u32)>,
+        root: camino::Utf8PathBuf,
     ) -> Self {
         Self {
             client,
@@ -185,6 +187,7 @@ impl<'a> Decomposer<'a> {
             done: FxHashSet::default(),
             symbols,
             file_bases,
+            root,
             texts: FxHashMap::default(),
         }
     }
@@ -290,6 +293,13 @@ impl<'a> Decomposer<'a> {
                 continue;
             };
 
+            // A type discovered through a signature may name a symbol that no
+            // source node mentioned. Resolve it before deciding whether this
+            // is a native type or a declaration outside the compiled files.
+            if bits & flags::OBJECT != 0 && snapshot.types[slot.0 as usize].symbol.is_none() {
+                self.resolve_type_symbol(snapshot, ty, slot)?;
+            }
+
             // An array is a type this compiler represents natively, and
             // `Array<T>` is declared in `lib.d.ts` -- so the boundary below
             // would leave `Ball[]` a placeholder for the wrong reason.
@@ -345,6 +355,31 @@ impl<'a> Decomposer<'a> {
 
         stats.round_trips = self.client.round_trips() - before;
         Ok(stats)
+    }
+
+    fn resolve_type_symbol(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        ty: u32,
+        slot: TypeId,
+    ) -> Result<(), TsgoError> {
+        let Some(response) = self.client.symbol_of_type(self.handle, &self.project, ty)? else {
+            return Ok(());
+        };
+        // The checker calls these __type/__object. Publishing those as nominal
+        // identities would make unrelated anonymous shapes appear named alike.
+        if response.flags & (symbol_flags::TYPE_LITERAL | symbol_flags::OBJECT_LITERAL) != 0 {
+            return Ok(());
+        }
+        let declarations = response.declarations.iter()
+            .filter_map(|handle| declaration_node(handle, &self.file_bases))
+            .filter(|node| (node.0 as usize) < snapshot.nodes.len())
+            .collect();
+        let symbol = super::symbols::intern_declared(
+            snapshot, &mut self.symbols, &response, &self.root, declarations,
+        );
+        snapshot.types[slot.0 as usize].symbol = Some(symbol);
+        Ok(())
     }
 
     /// Resolve one placeholder into structure.

@@ -8,8 +8,10 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 out=${1:-/tmp/ts-from-c}
+cc=${CC:-clang}
 "$root/target/release/nts" emit-c "$root/examples/interop/ts-from-c" --out "$out"
-cc -O2 -w -I"$out" -o "$out/caller" \
-   "$root/examples/interop/ts-from-c/native/caller.c" \
+"$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$out" -c \
+   "$root/examples/interop/ts-from-c/native/caller.c" -o "$out/caller.o"
+"$cc" -std=c11 -O2 -I"$out" -o "$out/caller" "$out/caller.o" \
    "$out/program.c" "$out/nts_runtime.c" -lm
 "$out/caller"

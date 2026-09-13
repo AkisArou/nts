@@ -290,11 +290,12 @@ fn crossing(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
     crossing
 }
 
-/// Whether a function has anything to suspend at.
+/// Whether a function needs a frame, including generators with no yields.
 fn suspends(func: &Func) -> bool {
-    func.values
-        .iter()
-        .any(|op| matches!(op.kind, OpKind::Await { .. } | OpKind::Yield { .. }))
+    func.frame.is_some()
+        || func.values.iter().any(|op| {
+            matches!(op.kind, OpKind::Await { .. } | OpKind::Yield { .. })
+        })
 }
 
 /// The second name a function about to be split provides.
@@ -330,6 +331,13 @@ pub fn transform(program: &mut Program) -> Vec<Diagnostic> {
                 resume,
                 layout,
             }) => {
+                if let Some(frame) = &program.funcs[index].frame {
+                    program.generators.push(super::GeneratorResumption {
+                        constructor: entry.name.clone(),
+                        resume: resume.name.clone(),
+                        frame: frame.clone(),
+                    });
+                }
                 program.funcs[index] = entry;
                 added.push(resume);
                 layouts.push(layout);
@@ -467,7 +475,7 @@ fn suspensions(func: &Func) -> Vec<(usize, usize, ValueId)> {
 
 fn rewrite(func: &Func, index: usize, layouts: &[Layout]) -> Result<Rewritten, Diagnostic> {
     let points = suspensions(func);
-    if points.is_empty() {
+    if points.is_empty() && func.frame.is_none() {
         return Err(refuse(func, "an `await`"));
     }
     let yields = |kind: &OpKind| matches!(kind, OpKind::Yield { .. });
@@ -476,7 +484,7 @@ fn rewrite(func: &Func, index: usize, layouts: &[Layout]) -> Result<Rewritten, D
     // They can disagree in one direction only -- a `yield` reached here from a
     // function the lowering did not reserve a frame for -- and that is a bug
     // rather than a program, so it is refused rather than guessed at.
-    if generator.is_some() != func.values.iter().any(|op| yields(&op.kind)) {
+    if generator.is_none() && func.values.iter().any(|op| yields(&op.kind)) {
         return Err(refuse(func, "a `yield` outside a generator"));
     }
     // **Which protocol, from the declaration rather than from the ops.** An
@@ -1065,23 +1073,8 @@ fn resume_function(
                 carry(&mut build, frame, slot_of, original);
             }
             let Some((op, awaited)) = next else {
-                let mut terminator = retarget(&block.terminator, &starts, shift);
-                // A generator's `return` is the end of the walk, and what it
-                // returns is the `TReturn` of `Generator<T, TReturn>`, which a
-                // `for...of` discards. So every finishing exit answers *done*
-                // instead, which is what the resumption's caller asked.
-                if mode == Mode::Generator && matches!(terminator, Terminator::Return(_)) {
-                    let done = build.push(OpKind::ConstBool(true), HirType::Bool);
-                    terminator = Terminator::Return(Some(done));
-                }
-                // An async generator answers nobody: the walk is holding the
-                // step's promise, so finishing means settling it with *done*
-                // rather than returning it. `TReturn` is discarded here exactly
-                // as a synchronous generator's is.
-                if mode == Mode::AsyncGenerator && matches!(terminator, Terminator::Return(_)) {
-                    settle_step(&mut build, frame, mode, true);
-                    terminator = Terminator::Return(None);
-                }
+                let terminator = retarget(&block.terminator, &starts, shift);
+                let terminator = complete_generator(&mut build, frame, terminator, mode);
                 // A terminator reads values too, and a jump's arguments are the
                 // easiest to forget: a loop's counter is a block parameter of
                 // the header, and a segment reached only from the dispatch is
@@ -1146,7 +1139,7 @@ fn resume_function(
         }
     }
 
-    let mut blocks = dispatch_chain(&mut build, frame, &resume_at);
+    let mut blocks = dispatch_chain(&mut build, frame, &resume_at, mode);
     if shared_exit {
         blocks.push(rejection_exit(&mut build, frame, mode));
     }
@@ -1159,6 +1152,32 @@ fn resume_function(
         give_the_frame_back(&mut build, &mut blocks, frame, &func.origin);
     }
     assembled_resume(name, func, frame_ty.clone(), build, blocks, mode)
+}
+
+/// Finish a generator exactly once; later resumptions observe completed state.
+/// As with for...of, the return payload is discarded and only done is reported.
+fn complete_generator(
+    build: &mut Build,
+    frame: ValueId,
+    terminator: Terminator,
+    mode: Mode,
+) -> Terminator {
+    if mode == Mode::Async || !matches!(terminator, Terminator::Return(_)) {
+        return terminator;
+    }
+    let completed = build.constant(-1);
+    build.set(frame, FIELD_STATE, completed);
+    match mode {
+        Mode::Generator => {
+            let done = build.push(OpKind::ConstBool(true), HirType::Bool);
+            Terminator::Return(Some(done))
+        }
+        Mode::AsyncGenerator => {
+            settle_step(build, frame, mode, true);
+            Terminator::Return(None)
+        }
+        Mode::Async => unreachable!("async returns are unchanged"),
+    }
 }
 
 /// Stop here, and say how to be started again.
@@ -1664,6 +1683,7 @@ fn dispatch_chain(
     build: &mut Build,
     frame: ValueId,
     resume_at: &[super::BlockId],
+    mode: Mode,
 ) -> Vec<super::Block> {
     let state = build.get(
         frame,
@@ -1696,10 +1716,24 @@ fn dispatch_chain(
             },
         });
     }
+    // The only state outside the suspension markers is completed (-1).
+    // Async functions are resumed by a single pending reaction, whereas a
+    // generator can be stepped any number of times after completion.
+    let terminator = match mode {
+        Mode::Async => Terminator::Unreachable,
+        Mode::Generator => {
+            let done = build.push(OpKind::ConstBool(true), HirType::Bool);
+            Terminator::Return(Some(done))
+        }
+        Mode::AsyncGenerator => {
+            settle_step(build, frame, mode, true);
+            Terminator::Return(None)
+        }
+    };
     blocks.push(super::Block {
         params: Vec::new(),
-        ops: Vec::new(),
-        terminator: Terminator::Unreachable,
+        ops: std::mem::take(&mut build.ops),
+        terminator,
     });
     blocks
 }

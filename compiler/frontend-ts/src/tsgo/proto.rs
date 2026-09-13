@@ -64,6 +64,7 @@ pub mod method {
     /// unchecked `AsTypeReference()` and dereferences the nil. This one tests
     /// the flags first and answers `null`, so asking it first is what makes
     /// asking the other one safe.
+    pub const GET_SYMBOL_OF_TYPE: &str = "getSymbolOfType";
     pub const GET_TARGET_OF_TYPE: &str = "getTargetOfType";
     pub const GET_TYPE_ARGUMENTS: &str = "getTypeArguments";
     pub const IS_ARRAY_TYPE: &str = "isArrayType";
@@ -522,6 +523,9 @@ pub mod check_flags {
 
 /// `ast.SymbolFlags`, for the bits decomposition reads.
 pub mod symbol_flags {
+    /// Anonymous shapes have checker-internal symbols, not declaring names.
+    pub const TYPE_LITERAL: u32 = 1 << 11;
+    pub const OBJECT_LITERAL: u32 = 1 << 12;
     /// `f(x: number): number` on a type, as against `f: (x: number) => number`.
     ///
     /// TypeScript itself draws this line and a backend has to: a method has no

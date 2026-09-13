@@ -8,22 +8,30 @@
 
 /* The generated header declares the exact C symbols and checked layouts. */
 
-/* SPOT 3 WAS WITHDRAWN. `NtsString *greet(NtsString *)` is callable from here:
- * `nts_string_from_utf8(bytes, len)` is public at `nts_runtime.h:1537`. The
- * earlier comment claimed no constructor existed; its author had searched for
- * `nts_str_from_utf8` and read a zero-hit guess as absence. `greetLength`
- * stays below as the all-scalar shape, which is a different point. */
-
-/* SPOT 4: `NtsObj_counted_frame *counted(double)` -- omitted deliberately. It
- * hands back the suspension frame itself, with `state` and `yielded` at
- * asserted offsets and no exported `next`, so there is no supported way to step
- * it from here. */
-
 int main(void) {
   printf("add(2, 3)         = %g\n", add(2.0, 3.0));
   printf("clamp(42, 0, 10)  = %g\n", clamp(42.0, 0.0, 10.0));
   printf("bool_(false)      = %d\n", (int)bool_(false));
   printf("greetLength(7)    = %g\n", greetLength(7.0));
+
+  NtsString *name = nts_string_from_utf8("\xce\xb1\xf0\x9f\x98\x80", 6);
+  NtsString *greeting = greet(name);
+  if (greeting->length != 6 || nts_str_code_point_at(greeting, 3) != 945 ||
+      nts_str_code_point_at(greeting, 4) != 128512) return 1;
+  printf("greet: UTF-16 length = %u\n", greeting->length);
+  nts_release((NtsHeader *)greeting);
+  nts_release((NtsHeader *)name);
+
+  counted_return_t *generator = counted(3);
+  double value = -1;
+  printf("counted(3)       =");
+  for (int i = 0; i < 3; i++) {
+    if (!counted_next(generator, &value) || value != i) return 2;
+    printf(" %g", value);
+  }
+  if (counted_next(generator, &value) || counted_next(generator, &value)) return 3;
+  printf("; done\n");
+  nts_release((NtsHeader *)generator);
 
   makePoint_return_t *point = makePoint(7.0);
   printf("makePoint(7)     = (%g, %g)\n", point->x, point->y);
@@ -35,6 +43,9 @@ int main(void) {
   printf("later: state after  checkpoint = %g\n", nts_promise_state(p));
   printf("later: value                   = %g\n",
          nts_value_number(nts_promise_value(p)));
+
+  nts_release((NtsHeader *)p);
+  nts_release((NtsHeader *)point);
 
   /* The `await` inside `later` is what makes the two states differ. An async
    * function with no suspension is already settled when it returns, and this
