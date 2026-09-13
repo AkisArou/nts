@@ -731,14 +731,38 @@ table says which interface. No adapter object, no wrapper, no allocation per
 crossing. A closure passed to two different Java interfaces implements both,
 which a class may do.
 
-## 9. Overload collapse — *eliminated by distinguishable types*
+## 9. Overload collapse — *eliminated, but not by the mechanism this row named*
 
-`f(int)`, `f(long)` and `f(double)` collapse to `f(number)` only if `int` and
-`long` are not distinguishable in the `.d.ts`. `long` is already distinct --
-it is `bigint`. `int` needs the brand, which is the next row. With both, the
-three are three TS overloads and resolution is the checker's.
+**This row was wrong and stayed wrong for most of a day.** It said the collapse
+is eliminated by making `int` distinguishable with a brand -- "`int` needs the
+brand, which is the next row". Brands were then measured and **refused at every
+position a binding emits one**: a declared return, a class property, and a class
+*method's* parameter. A binding is a class. The mechanism this row promised does
+not exist.
 
-Where they remain ambiguous, **the binding refuses rather than guesses**.
+What eliminates it instead is **distinguishable names**, not distinguishable
+types. `f(int)`, `f(long)` and `f(double)` all take a `number`, so the *least
+lossy* keeps the plain name -- a `number` **is** an f64, so `double` receives it
+without loss -- and the others are renamed by the generator:
+
+```ts
+find(a0: number): number;        // -> find(double), the lossless one
+find$int(a0: number): number;    // -> find(int), which truncates
+find(a0: bigint): number;        // -> find(long), already distinct
+find(a0: string): number;
+```
+
+`long` was always distinct, because it is `bigint` and TypeScript will not mix
+that with `number` -- that half of the original row survives.
+
+Where two candidates are *equally* lossless, Java's own rule decides: most
+specific applicable method, JLS 15.12.2, the algorithm `javac` runs over the
+same class-file data. **The binding refuses only where `javac` would.**
+
+The outcome is the same -- the overload set is reachable and nothing is guessed
+-- and the route is different, which is why this row is corrected rather than
+deleted. A cost list is only worth keeping if a row that claimed the wrong
+mechanism says so.
 
 ## 10a. The integer array needs no brand — TypeScript already has one
 
