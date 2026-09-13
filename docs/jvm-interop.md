@@ -484,27 +484,73 @@ research:
 - **`-sources.jar`** for hover documentation is explicitly a non-goal in the RFC
   and I would keep it that way until somebody asks.
 
-## What this document does not answer
+## The open questions, and where each is now answered
 
-Named rather than discovered later:
+**This section went stale, and the way it went stale is the thing it should be
+read for.** It was written as a list of what the document does not answer.
+Four of its five entries were then answered *further down the same document*,
+and the list kept saying they were open. Two derivations of one fact, in one
+file, disagreeing -- which is the failure this document spends a section warning
+about. So the list now points at the answer rather than restating the question.
 
-- **Exceptions crossing the boundary.** A Java method that throws has no
-  representation here, because a throw crossing a call is unimplemented on
-  *every* backend. Until that lands, a `throws` clause cannot be honoured and a
-  Java exception escaping into compiled code is undefined. This is the largest
-  unaddressed item and it is not binding-specific.
-- **Threads.** `NtsEnv` is per-environment with one atomic inbox; an Android API
-  that calls back on another thread has nowhere to land.
-- **Lifetime.** Under `NoGc` the platform collector owns everything, so there is
-  no retain to insert -- which is the one place this is *easier* than the native
-  lane's FFI would be.
-- **Generics.** The `Signature` attribute survives erasure and is readable, so
-  `List<String>` is recoverable; whether we surface type parameters or erase to
-  `unknown` is unsettled.
-- **Overload collapse.** `f(int)`, `f(long)`, `f(double)` all become
-  `f(number)`. TS overload signatures can express the declaration; which one a
-  call resolves to has to come from the binding table, and ambiguity has to be
-  an error rather than a guess.
+- **Exceptions crossing the boundary.** **Answered -- see drawback 9.** The
+  entry said a Java exception escaping into compiled code is "undefined". It is
+  not, as of `5b865f62`: the emitter has exception tables, so a throwing call is
+  wrapped and the handler raises `NtsRefusal`, which the harness already carves
+  out of its Defect rule. The case *declines*, naming the Java exception. What
+  remains open is narrower -- a Java exception becoming a TypeScript `catch` --
+  and that waits on a shared change already on MainClaude's list, not on
+  anything binding-specific.
+- **Threads.** **Answered -- see drawback 6.** The entry said an Android API
+  that calls back on another thread "has nowhere to land". `NtsEnv.CURRENT` is
+  a `ThreadLocal`, not a singleton pinned to a thread the runtime chose, so an
+  environment can be installed on the thread the callback arrives on and the
+  call is direct. `NtsInbox` handles genuinely foreign threads, and those
+  callbacks are void.
+- **Lifetime.** Never open. Under `NoGc` the platform collector owns everything,
+  which is the one place this is easier than the native lane's FFI.
+- **Generics.** **Answered below**, and it was the only genuinely open one.
+- **Overload collapse.** **Answered -- see "Ambiguous overloads mostly are not
+  ambiguous".** A TypeScript `number` *is* an f64, so `f(double)` is the only
+  non-lossy receiver and picking it is not a guess; ties go to JLS 15.12.2,
+  which is the algorithm `javac` runs over the same class-file data.
+
+### Generics: surface the type parameters, because both languages erase
+
+The `Signature` attribute carries `List<String>` through erasure and the reader
+parses it either way. The question was whether to surface the parameters or
+erase them to `unknown`.
+
+**Surface them, and the argument that settles it is that the two erasure models
+coincide exactly.** Java erases generics at runtime; so does TypeScript. A
+`List<String>` is a `List` at runtime in both languages and the parameter is a
+compile-time claim in both. So surfacing promises exactly what Java promises --
+no more -- while erasing to `unknown` throws away a guarantee we can actually
+keep. The DX difference is `list.get(0).length` against
+`(list.get(0) as string).length`, on every element access in the program.
+
+Four specifics, so this is a decision rather than a direction:
+
+- **Raw types** -- a pre-generics `List` with no parameter -- become
+  `List<unknown>`, not `List<any>`. Refuse rather than miscompile, the same rule
+  as unannotated nullability.
+- **Wildcards.** `List<? extends Number>` is a read-only view and TypeScript has
+  no wildcard; the honest mapping is `readonly` in the covariant position.
+  `? super T` in a parameter position becomes `T` for callers, which is sound
+  because any `T` is an acceptable argument.
+- **Method type variables** -- `<T> T[] toArray(T[] a)` -- map directly and need
+  nothing special.
+- **Self-bounded generics** -- `Enum<E extends Enum<E>>` -- are expressible in
+  TypeScript but noisy enough to be worth binding in erased form with a comment
+  saying so. One family, and naming it is cheaper than generating it.
+
+**The hole we inherit, stated rather than discovered.** A TypeScript generic is
+unchecked at runtime, so a `List<string>` whose Java side was sloppy can hand
+back an `Integer` and the `string` annotation is simply wrong. That is *exactly*
+Java's own exposure -- heap pollution, a `ClassCastException` at the use site,
+and the reason unchecked warnings exist. We inherit the guarantee and the hole
+together, which is the honest position and is strictly better than pretending
+`unknown` would have caught it.
 
 ## What to build first
 
@@ -1194,6 +1240,49 @@ which was the part actually costing anything.
 *Test:* a fixture whose accumulator is provably `whole` only if the descriptor
 is read; assert `nts hir --prepared` shows integer arithmetic rather than `f64`.
 
+
+#### What this does *not* mean, because the name invites the wrong reading
+
+"No optimisation through a foreign object" sounds like *calling a Java object
+costs more from our compiler than from Java*. It does not, and the distinction
+is worth stating precisely because every other reading makes the cost sound like
+a tax at the call.
+
+**At the instruction level there is no difference at all.** The `getfield` we
+emit for `rect.left` is byte-identical to the one `javac` emits for the same
+access -- same opcode, same constant-pool reference, same inline cache, same JIT
+treatment. There is no marshalling, no wrapper, no conversion. As the framing
+section above says: both sides are JVM bytecode, so there is no boundary to make
+cheap.
+
+**And `javac` does not optimise through objects either.** It emits close to
+naive bytecode and leaves everything to C2 and ART. So the compile-time
+reasoning we lack for a Java object is reasoning *`javac` never had for it
+either*. Against Java, this row is zero.
+
+The loss is against **our own objects**, and only there. For a TypeScript object
+we own the layout, so `facts.rs` can narrow a field's range, `hir::escape` can
+prove it does not escape, and `place_allocations` can keep it off the heap
+entirely. None of that is available for a class we did not lay out. So the true
+statement is:
+
+> A Java object is less optimisable than one of *our* objects. It is not less
+> optimisable than the same object in Java.
+
+What we give up is an *advantage we hold over Java*, in the one place we cannot
+hold it -- not a penalty Java avoids.
+
+**And with the descriptor fix above, most of even that comes back.** A member
+returning `I` yields `whole = true`, no NaN, no `-0`, bounded to 32 bits --
+which is most of what `facts.rs` wants -- so arithmetic on a Java `int` stays
+integral. The residue is scalar replacement alone, which needs the layout and
+genuinely cannot be had.
+
+**One prediction worth measuring rather than asserting**, since it runs the
+other way: on code that mixes Java `int`s into our arithmetic we may end up
+*ahead* of `javac`, because we fold and narrow using the descriptor before
+emitting, while `javac` emits the naive form and leaves it to the JIT. That is a
+claim about generated code and it should be a number before it is a sentence.
 **Status: mostly fixed. The residue -- no scalar replacement of a Java object --
 is correct and permanent.**
 
