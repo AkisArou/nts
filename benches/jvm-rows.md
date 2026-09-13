@@ -8470,3 +8470,65 @@ differing in one digit, run by hand end to end:
 The lesson holds and keeps needing re-learning: **a sabotage has to be watched
 landing, not assumed to have landed.** Injecting one through a `sed` puts the
 thing under test and the thing doing the testing in the same unverified edit.
+
+## The plan's remaining `✗` tests, built — and each one sabotaged to prove it can fail
+
+Three items, three commits, and each verified by breaking something on purpose
+and watching the failure name it. The verification is the part worth recording:
+this file has three entries tonight about sabotages that proved nothing.
+
+    ab110ddf  agrees-with-hir   30 names compared, 0 disagree
+    341f180b  signatures        73 calls checked, 0 missing from the jar
+    1576a4c6  execute           2 tests, answers read off the example source
+
+**`agrees_with_hir`** asks every name this backend maps whether its descriptor's
+scalar kinds match `hir::runtime`. The plan asks the other direction -- "every
+name in `hir::runtime` has a Java method" -- and that one **cannot be written**:
+`SIGNATURES` is private and only `parameters` and `result` are exported, so the
+table is queryable and not enumerable. The reachable direction is also the one
+that catches the defect, because a name mapped *wrongly* is a silent conversion
+in one backend where a name not mapped at all is a refusal.
+
+    sabotage: `nts_clear_timeout` `(D)V` -> `(I)V`
+    nts_clear_timeout: parameter 0 should be `D`, and this backend takes `I`
+
+**`signatures`** asks whether the jar declares every call this backend emits.
+The JVM resolves by class, name and descriptor, so a Java signature that moves
+without its row here gives a class that verifies, loads, and throws
+`NoSuchMethodError` on the first run of that path -- while every host Java test
+stays green, because they call `nts.rt` directly and never through an emitted
+class. Against the jar with `javap -s`, not against the sources, because the jar
+is what a `NoSuchMethodError` is about.
+
+    sabotage: `clearTimeout` -> `clearTimeoutt`
+    1 call(s) this backend emits are not in the jar:
+      nts/rt/NtsRuntime.clearTimeoutt(D)V
+
+**`execute`** is a handful rather than the C lane's 1,754 lines, and the reason
+is this file's own question asked once more. That file calls itself "the only
+place that answers the question the project actually asks"; on this lane it is
+not, because the `jvm` gate step compiles every example against node, its sweep
+drives 10,005 generated cases, and `intrinsics.rs` already compiles TypeScript
+and runs it. What was missing is construct coverage a person can run in a second
+while editing `ops.rs`.
+
+    sabotage: `BinOp::Sub => code.arithmetic(insn::ADD, kind)`
+    left:  "5.0\n5.0\n6.0\n..."     sub(2,3) answered 5
+    right: "5.0\n-1.0\n6.0\n..."
+
+### Two floors guessed, in the two tests written to stop guessing
+
+`agrees_with_hir` was written with `checked >= 40` and the run said **30**.
+`signatures` was written with `wanted.len() >= 150` and the run said **73**.
+Both are now the measured number, exact rather than padded.
+
+That is `dexes.sh`'s rule -- *"a floor is a number a run produced"* -- broken
+twice in one sitting, inside a pair of tests whose entire purpose is to stop two
+tables guessing at each other. The rule is easier to quote than to keep, and
+the reason is not carelessness: a floor is written at the moment the test is
+written, which is *before* the only run that could supply the number.
+
+**So the mechanical form is: write the floor as a value that cannot pass, run
+it, then put the answer in.** `dexes.sh` already says this -- "0 until measured"
+-- and says it because a placeholder there was left as a *word* for four
+minutes. Writing 40 is worse than writing 0, because 40 looks like a decision.
