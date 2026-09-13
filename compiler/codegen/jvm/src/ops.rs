@@ -118,7 +118,8 @@ fn bigint_operation(op: BinOp) -> Option<(&'static str, &'static str)> {
 /// `_value` and `_ref` both land on `NtsArrayL` because an `NtsValue` *is* a
 /// reference here -- what differs is the static type the caller reads back,
 /// which the `checkcast` in `call` restores from the HIR result type.
-fn growable_external(name: &str, holds: &str) -> Option<(String, &'static str, String)> {
+#[must_use]
+pub fn growable_external(name: &str, holds: &str) -> Option<(String, &'static str, String)> {
     const VALUE: &str = "Lnts/rt/NtsValue;";
     let stem = name.strip_prefix("nts_array_")?;
     let (class, element) = match holds {
@@ -206,7 +207,8 @@ fn growable_external(name: &str, holds: &str) -> Option<(String, &'static str, S
 /// enough here: `nts_array_slice` on numbers and on references are different
 /// Java methods, and picking between them is reading the array's type rather
 /// than reading the call.
-fn array_external(name: &str, element: &str) -> Option<(&'static str, &'static str, String)> {
+#[must_use]
+pub fn array_external(name: &str, element: &str) -> Option<(&'static str, &'static str, String)> {
     let (array, result, one) = match element {
         "D" => ("[D", "[D", "D"),
         "Z" => ("[Z", "[Z", "Z"),
@@ -1026,7 +1028,8 @@ fn view_external(name: &str, class: &str) -> Option<(&'static str, &'static str,
     })
 }
 
-fn external(name: &str) -> Option<(&'static str, &'static str, String)> {
+#[must_use]
+pub fn external(name: &str) -> Option<(&'static str, &'static str, String)> {
     let found = core_external(name)
         .or_else(|| global_external(name))
         .or_else(|| math_external(name))
