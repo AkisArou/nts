@@ -549,6 +549,48 @@ v == undefined       // true for a null — the loose one asks about either
 The representation cannot tell them apart; the **type** still can, and that is
 what answers it.
 
+#### A property typed *exactly* `null`, which is neither of those
+
+`T | null` is a pointer and `T | null | undefined` is erased. A property typed
+`null` on its own is a third thing — one value, carrying nothing — and it has
+**no representation**: `representation_of` has had an arm for `undefined` for as
+long as it has existed and has none for `null`. Each name has a second job and
+only one forced an answer. `undefined` doubles as the return type of a function
+that returns nothing, so returns demanded it; `null` doubles as nothing, so no
+position did.
+
+**It is a root and its count understates it.** `a property \`X\` of
+unrepresentable type (null)` is 9 things across 9 modules, and behind it an arm
+of a discriminated union carrying `value: null` has no layout, so reading the
+*discriminant* refuses:
+
+```text
+a property typed exactly `null` has no representation
+  -> that arm of the union has no layout
+     -> `kind` on a union one of whose members has no layout
+```
+
+which is `util/src/deep-equal.ts`'s `loosePrimitiveProbe` — four arms, three of
+which lower perfectly well.
+
+**Two three-character repairs were tried on 2026-09-13, measured, and
+reverted**, and what they cost is the useful part. `TypeKind::Null => Erased`
+made every example agree on all three backends and dropped refusals by 15–19 in
+each of four modules — and broke `sweep`, because after `b.f = null` the checker
+*narrows* `b.f` to type `null`, and a blanket erased representation sends the
+conversion down the tagged path while the storage is still a pointer. The
+missing arm is not an oversight; it is the absence of a single right answer.
+
+Reading a `Void` contextual type as erased fixes the twin (`value: undefined`,
+and `return undefined` from a `void` function, both refused today) and turns
+**12 of 24 addons red** with `NotDominated` inside a generator resume — a
+latent bug in a path the refusal had been standing in front of, and the second
+load-bearing over-refusal found this week after `for (var i = …)`.
+
+What it needs is for the contextual type at the literal to come from the
+**layout** the field path already decided rather than from the checker a second
+time. `blockers/a-property-typed-exactly-null` carries both measurements.
+
 One absence is also enough to answer `typeof`. Which of `"string"` and
 `"object"` a `string | null` gives depends on what the pointer holds — a runtime
 question, and the null pointer is the thing that answers it, so it is a branch
