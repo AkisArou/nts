@@ -48,6 +48,21 @@ The historical gap descriptions below record the original measurements;
 header generation, stable aliases, field visibility and checkpoint documentation
 are now implemented. Managed constructors and generator stepping remain design.
 
+## Next design: require exposure classification before publishing a boundary
+
+Proposed, not implemented: boundary publication should require an upstream
+exposure classification consumed by both numeric fact analysis and storage
+representation selection. Verify that classification against the signatures
+actually published, and use exhaustive matching so a new boundary or type
+variant requires an explicit classification. Unknown exposure or mutation must
+remain distinct from a proof that nothing can mutate.
+
+An assertion over the existing `exposed_fields` set alone cannot catch a new
+exposure path omitted from that same set. Nor is a layout check sufficient:
+a read already folded to zero can retain a perfectly correct `double` field.
+The future invariant must cover both consumers and force classification at
+publication, rather than check one analysis result against itself.
+
 ## What is already true
 
 A `declare function` with scalar parameters lowers and emits a direct call:
