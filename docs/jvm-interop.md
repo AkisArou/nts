@@ -684,7 +684,49 @@ three are three TS overloads and resolution is the checker's.
 
 Where they remain ambiguous, **the binding refuses rather than guesses**.
 
-## 10. Branded types hitting the intersection refusal — *two routes, one needs no compiler change*
+## 10a. The integer array needs no brand — TypeScript already has one
+
+**This supersedes the branded-array argument above and removes the decision it
+was waiting on.**
+
+The hazard that made branding dangerous is covariance: TypeScript makes
+`number & Brand` a *subtype* of `number`, so `Int32[]` is assignable to
+`number[]`, and an `[I` reaching a parameter typed `number[]` would be read as
+`[D`. Since the corpus contains no branded primitives at all, that boundary
+could not be measured -- it had to be decided.
+
+**`Int32Array` is not assignable to `number[]`, and the checker says so:**
+
+    TS2740 Type 'Int32Array<ArrayBuffer>' is missing the following properties
+           from type 'number[]': pop, push, concat, shift, and 6 more.
+
+So the separation the brand needed a new rule to enforce is **already enforced
+by TypeScript's own structural check**, because a typed array is not an `Array`.
+No language surface to add, no assignability decision to take, no new
+intersection rule to measure.
+
+What is left is purely representational: `Int32Array` maps today to
+`NtsViewI32`, a view over an `NtsBuffer` whose storage is a `byte[]`. A
+standalone `new Int32Array(n)` allocates its own buffer, and **if the program
+never observes `.buffer` that buffer is unobservable** -- so a bare `int[]` is
+equivalent. That is `hir::escape`'s question, and it is the same machinery the
+growable-array cliff wants.
+
+**And it is the honest binding for a Java `int[]`**, which is what this section
+of the document was originally about. `int[]` ↔ `Int32Array` is free, idiomatic
+on both sides, and needs nothing invented.
+
+**What it does not solve**, said plainly: a plain `number[]` holding only
+integers stays `double[]`. Narrowing that is inference rather than declaration,
+it is the larger prize, and it can land later without invalidating any of this.
+And the 14.2% on `awfy-queens` is only realised if the *source* says
+`Int32Array` -- which for a benchmark mirroring Java's `int[]` is arguably more
+faithful than `number[]`, but is a fixture change and should be argued as one
+rather than slipped in.
+
+## 10b. Branded types for everything else
+
+ — *two routes, one needs no compiler change*
 
 - **For the Java direction, none is needed.** The binding table carries the
   descriptor, so the compiler inserts the `d2i` itself and `int` in the `.d.ts`
