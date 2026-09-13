@@ -1,0 +1,17 @@
+// Captured from the emitted class files by build.sh. Checked in as a guard:
+// the day a generated field goes back to `public`, this diff says so out loud.
+// Regenerate with NTS_REGENERATE=1 ./build.sh
+
+Compiled from "nts"
+public final class nts.gen.Program {
+  public nts.gen.Program();
+  public static double Session$bump(nts.gen.Session);
+  public static double Session$hits(nts.gen.Session);
+  public static java.lang.String greet(java.lang.String);
+  public static double total(double[]);
+}
+Compiled from "nts"
+public final class nts.gen.Session {
+  double $hits;
+  public nts.gen.Session();
+}
