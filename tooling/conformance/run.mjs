@@ -387,6 +387,28 @@ if (!existsSync(nodePackageJson)) {
 // named tests take the wrapped path. `script` is util-linux and is not everywhere, so
 // its absence is a **skip with a reason** rather than a failure -- a missing harness
 // tool is not the profile's defect.
+// **Reap what a previous run orphaned, before starting another one.** A test that is
+// waiting rather than failing does not stop when the runner gives up on it:
+// `execFileSync`'s timeout signals the direct child, and everything that child had
+// spawned is reparented to init and keeps its memory. Idle, so no core burns and nothing
+// draws attention. 459 of them were found on 2026-09-13, about 25 hours old, holding 34 GB
+// of resident memory; clearing them returned available memory to 21 GB and dropped load
+// from 7.65 to 3.00.
+//
+// `NTS_CONFORMANCE_TIMEOUT_MS` above reduces how many get made. This reduces how long the
+// ones already made survive, and the two are different problems -- at PPID 1 an orphan
+// outlives every session that could have reaped it.
+//
+// Selecting on PPID 1 is the whole of the safety argument: three sessions run these same
+// files concurrently, so a name match would kill a peer's live test, while a live runner's
+// children always have a live parent. Failure to reap is never failure to run.
+try {
+  const reaped = execFileSync("bash", [join(HERE, "reap-orphans.sh")], { encoding: "utf8" });
+  if (!reaped.startsWith("no orphaned")) process.stderr.write(reaped);
+} catch (error) {
+  process.stderr.write(`note: could not reap orphans: ${error.message}\n`);
+}
+
 const needsPtyPath = join(moduleDir, "needs-pty");
 const needsPty = new Set(
   existsSync(needsPtyPath)
