@@ -8204,3 +8204,55 @@ reader can see it is nine.
 "7 of 60" and "five of sixty" all night, from memory, in figures I sent to
 another session. The number is now read from the tree at print time, which is
 the only reason this one cannot go stale the way "Six do" and "188 of 188" did.
+
+## The `exact` check fired, on a real regression, forty minutes after it landed
+
+The section above ends:
+
+> **end to end      NOT VERIFIED** -- needs an example that disagrees, and the
+> tree does not currently contain one
+
+It does now, and the verification was not a test:
+
+    198 of 199 examples agree with node through the JVM backend
+      9 compared nothing
+      not agreeing: the-provided-error-classes
+    FAILED: jvm
+
+**Under the constant-floor form this passes.** `198 >= 198`, green, and the only
+red in that run would have been the LLVM floors -- which a reader would
+reasonably have taken for an LLVM-specific problem. It was not: the same change
+took an example out of *agreement* on this backend and out of *compilation* on
+LLVM, and the two reds are one cause. The instrument that would have mislabelled
+it is the one I replaced, which is a better argument for the change than the one
+I made when I made it.
+
+### And the defect underneath is a warning about agreement itself
+
+MainClaude's diagnosis: `AggregateError` needs an `errors` field no other
+provided error has, stored **erased**, because a `field.set` cannot insert a
+per-element conversion. Writing works everywhere. Reading does not:
+
+    C       compiled, and agreed with node on every one of 203 cases
+    LLVM    error: '%v87' defined with type '{ i32, i64 }' but expected 'ptr'
+
+**The C lane answered correctly by coincidence.** An erased `{ i32, i64 }` read
+back and indexed as an array is not a representation this compiler means, and C
+happened to produce the right answers from it -- so *every instrument except the
+one that could not build it reported the feature working*.
+
+That is this file's own `nine comparisons none of which ran`, inverted. There, a
+line claimed agreement for comparisons that did not happen. Here, **203 real
+comparisons agreed about an emission that was invalid**. Agreement across
+backends is not independent evidence when one backend's correctness is an
+accident of representation, and nothing in the differential can see the
+difference -- it compares answers, and the answers were right.
+
+### What made the verification recognisable
+
+Writing **"not verified, and here is the event that would verify it"** is why
+this run reads as a verification rather than as a normal red. A check whose
+untested state is recorded with its triggering condition converts its first real
+firing into evidence about itself. Had I written "verified" on the strength of
+the isolated condition test, this run would have been an ordinary failure and
+told me nothing about the check.
