@@ -31,6 +31,7 @@ import { EventEmitter } from "../../events/src/main.ts";
 import { fork as forkChild } from "../../child_process/src/main.ts";
 import { createServer } from "../../net/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
+import { relative as pathRelative } from "../../path/src/posix.ts";
 import type { Server, Socket } from "../../net/src/main.ts";
 import type { ChildProcess } from "../../child_process/src/main.ts";
 
@@ -579,6 +580,27 @@ class Cluster extends EventEmitter {
       return;
     }
 
+    // **The shortest spelling of a unix socket path, which is node's own reason.**
+    //
+    //     // Find shortest path for unix sockets because of the ~100 byte limit
+    //     address = path.relative(process.cwd(), address);
+    //     if (message.address.length < address.length) address = message.address;
+    //
+    // A worker resolves a relative pipe name against **its** cwd before sending, so what
+    // arrives here is absolute and can exceed `sockaddr_un`'s 108 bytes. The primary then
+    // re-expresses it relative to its own cwd and keeps whichever is shorter.
+    //
+    // Measured on node, instrumenting `net.Server.prototype.listen` in its primary:
+    // the worker's cwd is `<tmpdir>/unix-socket-dir`, the primary's is `<tmpdir>`, and what
+    // node binds is `{"path":"unix-socket-dir/AAAA…","backlog":0}` -- 100 bytes, where the
+    // absolute form is 157 and fails. `test-cluster-net-listen-relative-path` exists for
+    // exactly this and reported `bind EINVAL AAAA…`, naming the socket and not the length.
+    let bindAddress = address;
+    if (port < 0 && address !== "") {
+      const nearer = pathRelative(nts_process_cwd(), address);
+      bindAddress = address.length < nearer.length ? address : nearer;
+    }
+
     let distribution = this.#distributions.get(key);
     if (distribution === undefined) {
       distribution = new Distribution(key);
@@ -618,7 +640,7 @@ class Cluster extends EventEmitter {
       const backlog = typeof asked.backlog === "number" ? asked.backlog : undefined;
       const where = port < 0
         ? {
-          path: address,
+          path: bindAddress,
           backlog,
           readableAll: asked.readableAll === true,
           writableAll: asked.writableAll === true,
@@ -789,6 +811,7 @@ class Cluster extends EventEmitter {
 
 declare function nts_process_argv(): string[];
 declare function nts_process_exec_argv(): string[];
+declare function nts_process_cwd(): string;
 declare function nts_process_env_keys(): string[];
 
 /** The environment as a plain object, so a fork can extend rather than replace it. */
