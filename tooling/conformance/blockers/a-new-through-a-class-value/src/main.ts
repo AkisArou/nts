@@ -89,3 +89,39 @@ export function oneClass(n: number): number {
 export function twoClasses(n: number): number {
   return make(Thing, n & 7) * 100 + make(Other, n & 7);
 }
+
+/**
+ * The provided-error route, added 2026-09-13, and it was a **wrong answer that
+ * ran** until then.
+ *
+ * The guard above was placed below `lower_new_provided`, so a class this
+ * compiler provides — which has no constructor to call and is built inline —
+ * reached the same gap without meeting it. The constructed class comes from
+ * `type_of(id)`, the type of the `new` *expression*, which the checker gives as
+ * a union and `widened` turns into one arm:
+ *
+ *     const C = (n & 1) === 0 ? TypeError : RangeError;
+ *     new C("x").name.length      // node 9 for a TypeError, this answered 10
+ *
+ * 13 of 87 cases disagreed, on C **and** LLVM. The ledger row for a union of
+ * two class values reads "comparison agrees on C and LLVM ... so checking those
+ * two reads as the feature working" — and it does. Token comparison is right;
+ * `examples/a-class-stored-and-compared` binds, returns and compares tokens on
+ * all three backends and never calls `new` on one. The feature that works and
+ * the feature that does not shared a row.
+ */
+export function throughAProvidedClass(n: number): number {
+  const C = (n & 1) === 0 ? TypeError : RangeError;
+  return new C("x").name.length;
+}
+
+/**
+ * The control: the same two classes, constructed by name.
+ *
+ * It differs from the arm above in nothing but where the choice is made — at
+ * the `new` rather than before it — and it agrees with node.
+ */
+export function byName(n: number): number {
+  const e = (n & 1) === 0 ? new TypeError("x") : new RangeError("x");
+  return e.name.length;
+}

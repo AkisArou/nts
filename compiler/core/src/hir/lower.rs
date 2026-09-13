@@ -22330,6 +22330,29 @@ impl<'a> FuncBuilder<'a> {
             .clone()
             .ok_or_else(|| self.unsupported(callee, "a computed constructor"))?;
 
+        // **Before the provided-error path, not after it.**
+        //
+        // This check has been here since `a-new-through-a-class-value` landed
+        // and it sat *below* `lower_new_provided`, so a provided error class
+        // reached through a value never met it:
+        //
+        //     const C = (n & 1) === 0 ? TypeError : RangeError;
+        //     new C("x").name.length        // node 9 for a TypeError, this 10
+        //
+        // 13 of 87 cases disagreed on C *and* LLVM. The class comes from
+        // `type_of(id)` -- the type of the `new` expression -- which the checker
+        // gives as a union and `widened` turns into one arm, and the other is
+        // built as it. A user class was refused for exactly this a day earlier;
+        // the provided ones have no constructor to call, so they took a
+        // different route to the same gap and arrived below the guard.
+        //
+        // The ledger row reads "comparison agrees on C and LLVM ... so checking
+        // those two reads as the feature working", and it does:
+        // `examples/a-class-stored-and-compared` binds, returns and compares
+        // tokens and never calls `new` on one. Token comparison works. What
+        // shares the row with it does not.
+        self.constructed_from_a_value(id, callee, &class)?;
+
         // `new Array(n)` is an allocation with a length, which is what
         // `ArrayNew` already is. It is worth taking rather than asking authors
         // to write `[]` and push: an array made at its final size allocates
@@ -22476,7 +22499,6 @@ impl<'a> FuncBuilder<'a> {
         // class with no constructor anywhere in its chain has only the field
         // initializers that already ran -- which is why `class-as-value` can
         // construct through a token whose class `extends Error` and be right.
-        self.constructed_from_a_value(id, callee, &class)?;
         // The same qualification the *definition* side already applies.
         // `class_name_for` names a member `Frame@a#constructor` whenever the
         // class name is declared in more than one file -- its own comment says
