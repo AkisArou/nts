@@ -132,6 +132,26 @@ fn named_project(rest: &[String]) -> Result<Utf8PathBuf> {
             break;
         }
     }
+    // Everything after the positional was never examined, because the loop
+    // above **breaks** at it. So `nts emit-jvm proj -o /tmp/x` took `proj`,
+    // ignored `-o /tmp/x` entirely, wrote to the default location and exited
+    // zero -- and the reader concluded the backend had emitted nothing, from an
+    // empty directory it had named itself.
+    //
+    // The same shape as the bug the comment on `TAKES_A_VALUE` records, which
+    // cost an hour: an argument silently not doing anything looks exactly like
+    // the thing it was meant to configure being broken.
+    //
+    // Only single-dash arguments are rejected here, and that is deliberate:
+    // this CLI defines no short flags but `-h`, so anything else with one dash
+    // is a mistake, while an unknown `--flag` may be one a subcommand reads for
+    // itself. Narrow enough to be certain, which is the half that matters.
+    if let Some(bad) = rest
+        .iter()
+        .find(|arg| arg.starts_with('-') && !arg.starts_with("--") && arg.as_str() != "-h")
+    {
+        bail!("`{bad}` is not an option this command takes; did you mean `--out`?");
+    }
     let path = found.unwrap_or_else(|| Utf8PathBuf::from("tsconfig.json"));
     let path = if path.is_dir() { path.join("tsconfig.json") } else { path };
     if !path.is_file() {
