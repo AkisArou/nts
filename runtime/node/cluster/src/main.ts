@@ -30,6 +30,7 @@
 import { EventEmitter } from "../../events/src/main.ts";
 import { fork as forkChild } from "../../child_process/src/main.ts";
 import { createServer } from "../../net/src/main.ts";
+import { nextTick } from "../../internal/tick.ts";
 import type { Server, Socket } from "../../net/src/main.ts";
 import type { ChildProcess } from "../../child_process/src/main.ts";
 
@@ -221,6 +222,26 @@ export class Worker extends EventEmitter {
 }
 
 class Cluster extends EventEmitter {
+  /**
+   * **`disconnect` is bound, because node's is a property and not a method.**
+   *
+   * `lib/internal/cluster/primary.js` assigns `cluster.disconnect = function (cb) {...}`
+   * over a closed-over `cluster`, so it works detached -- and three of node's own tests
+   * detach it:
+   *
+   *     unbound.on('disconnect', cluster.disconnect);
+   *     worker.on('disconnect', common.mustCall(cluster.disconnect));
+   *
+   * A class method loses its receiver there, and `Object.keys(this.workers)` becomes
+   * `Cannot convert undefined or null to object` -- a failure that names neither
+   * `disconnect` nor the call site. Binding in the constructor reproduces node's shape
+   * without giving up the class.
+   */
+  constructor() {
+    super();
+    this.disconnect = this.disconnect.bind(this);
+  }
+
   readonly SCHED_NONE = SCHED_NONE;
   readonly SCHED_RR = SCHED_RR;
   readonly Worker = Worker;
@@ -573,7 +594,12 @@ class Cluster extends EventEmitter {
     }
     for (const id of ids) {
       const worker = this.workers[id];
-      if (worker !== undefined) worker.disconnect();
+      // **node's guard, and it is load-bearing.** `worker.disconnect()` on a worker whose
+      // channel has already gone emits `error` with ERR_IPC_DISCONNECTED, and nothing is
+      // listening, so it throws as an unhandled `error` event. A worker stays in `workers`
+      // until it *exits*, and its `disconnect` fires first -- which is precisely when the
+      // three tests that chain `cluster.disconnect` off a `disconnect` event call this.
+      if (worker !== undefined && worker.isConnected()) worker.disconnect();
     }
   }
 
