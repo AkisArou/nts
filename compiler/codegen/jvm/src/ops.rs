@@ -3885,6 +3885,36 @@ impl Emitter<'_> {
             code.invoke_static(&origin, pool, types::VALUE, "truthy", "(Lnts/rt/NtsValue;)Z");
             return Ok(Placed::OnStack);
         }
+        // **`0n` is falsy, and a bigint is a reference on this lane.** So the
+        // rule below -- every other reference is truthy exactly when it is
+        // there -- is a rule about *objects*, and a bigint is not one.
+        // `NtsBigInt.of(0, 0)` is a perfectly present object, so `isPresent`
+        // answered `true` where node answers `false`, and `0n ? "T" : "F"`
+        // came out `"T"`.
+        //
+        // Found by `tooling/sweep` driven with `NTS_BACKEND=jvm` -- 18 cases
+        // in `big_truthy` and `big_truthy_param` -- against a C lane that
+        // agreed with node on all 10,005. The comment below was true of every
+        // reference anyone had considered, which is why it read as a rule.
+        //
+        // `eq` against `ZERO` rather than a new runtime entry point: both
+        // already exist, so this needs no jar regeneration and no name the
+        // other backends would have to learn.
+        if matches!(self.ty(operand), HirType::BigInt) {
+            self.load(code, pool, operand)?;
+            code.get_static(&origin, pool, types::BIGINT, "ZERO", types::BIGINT_DESCRIPTOR);
+            code.invoke_static(
+                &origin,
+                pool,
+                types::BIGINT,
+                "eq",
+                "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)Z",
+            );
+            // `eq` answers "is zero", and truthiness is its negation.
+            code.const_int(&origin, pool, 1);
+            code.bitwise(&origin, insn::XOR, Kind::Int);
+            return Ok(Placed::OnStack);
+        }
         // Every other reference is truthy exactly when it is there. An empty
         // array is truthy and so is an object with no fields -- emptiness is a
         // string rule and only a string rule, which is why that case is above

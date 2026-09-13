@@ -8256,3 +8256,68 @@ untested state is recorded with its triggering condition converts its first real
 firing into evidence about itself. Had I written "verified" on the strength of
 the isolated condition test, this run would have been an ordinary failure and
 told me nothing about the check.
+
+## `0n` was truthy on this lane, and the instrument that found it was "not built"
+
+MainClaude's two reverted repairs tonight were both **green on examples** -- 201
+of 201 on all three backends -- and caught by `sweep` and by `addons`, neither of
+which is this lane's. My `jvm` gate step *is* an examples step, so it would have
+passed both, and that is a statement about my floor's scope rather than about
+their repairs.
+
+The plan lists `tooling/sweep` through the JVM lane as **✗ not built**. It is
+not built; it already works:
+
+    NTS_BACKEND=jvm NTS_BIN=... bash tooling/sweep/run.sh <workdir>
+
+`run.sh` ends in `nts check`, and `check` honours `NTS_BACKEND`. One environment
+variable, no code. **First run: 18 disagreements**, all in `big_truthy` and
+`big_truthy_param`.
+
+**The control, run before believing it:** the same sweep through the C lane
+agreed with node on **all 10,005 cases**. So these are this backend's, not the
+middle end's.
+
+### `0n ? "T" : "F"` answered `"T"`
+
+The generated case is five lines, and the harness prints strings as
+`<length>,<charcode>` -- 84 is `T`, 70 is `F`:
+
+    const v: bigint = (n > 0 ? 1n : 0n);
+    return (v ? "T" : "F");
+
+    nts  big_truthy 21 str 1,84
+    node big_truthy 21 str 1,70
+
+Read off the bytecode rather than guessed: the truthiness test emits
+`NtsRuntime.isPresent(Ljava/lang/Object;)Z`. `NtsBigInt.of(0, 0)` is a perfectly
+present object, so `0n` is truthy on this lane.
+
+**And the cause is a comment that was true of everything anyone had considered:**
+
+> Every other reference is truthy exactly when it is there. An empty array is
+> truthy and so is an object with no fields -- **emptiness is a string rule and
+> only a string rule**, which is why that case is above this one rather than
+> folded into it.
+
+Every clause is correct about objects and arrays. A bigint is a reference on
+this lane and is not an object, and `0n` is falsy -- so the rule was complete
+over the cases in front of it and the exception arrived later, which is the
+fourth time tonight a true sentence has expired without being touched.
+
+Fixed with `NtsBigInt.eq(v, ZERO)` negated -- both already exist, so **no runtime
+change and no jar regeneration**, and no name the other backends would have to
+learn. Sweep re-run: 10,005 cases, agreed on every case. `jvm` step 200 of 200.
+
+### What this says about the floor
+
+**The examples floor was green throughout.** It was green with `0n` truthy, and
+it is green now, and nothing about the number distinguishes the two. 200 of 200
+against node is a real check over a real corpus and it does not contain a
+program that asks whether `0n` is falsy -- because nobody writes one, which is
+exactly what `sweep` is for: it writes the programs nobody would.
+
+So this lane has one instrument where it thought it had none, and the cost of
+finding that out was one environment variable. **Worth a gate step**, and worth
+the same question asked of every other `✗` in the plan: not "should this be
+built" but "is it already there and unreached".
