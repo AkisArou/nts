@@ -1022,6 +1022,22 @@ pub fn closure_method(ty: TypeId) -> String {
 /// This runs before any lowering because both sides have to agree: the
 /// enclosing function writes the captures into the object in this order, and
 /// the closure body reads them back from the same fields.
+/// What to do with a closure's capture of a name a `for` loop's head declares.
+///
+/// Three outcomes, because the question has three answers and the rule that had
+/// two got one of them wrong for every loop in the corpus. See
+/// [`FuncBuilder::rebinding_refusal`].
+#[derive(Debug, Clone, Copy)]
+enum Rebinding {
+    /// No `for` head declares this name, so none of this applies.
+    NotTheLoops,
+    /// Rebound per iteration, and copying the value is **exact** rather than an
+    /// approximation of a cell.
+    CopyIsExact,
+    /// Refused, and the message says which of the two reasons it is.
+    Refused(&'static str),
+}
+
 fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
     let probe = FuncBuilder::new(snapshot);
 
@@ -1146,13 +1162,16 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
                 let declared = probe.node(*declaration).origin.location;
                 declared.file == arrow.file && declared.span.start > arrow.span.start
             });
-            let by_reference = assigned.contains(&symbol.0) || below;
-            if by_reference && probe.is_per_iteration(record) {
-                info.refusal = Some(
-                    "a closure over a `for` loop's own variable, which JavaScript \
-                     rebinds on every iteration",
-                );
-                break;
+            let mut by_reference = assigned.contains(&symbol.0) || below;
+            if by_reference {
+                match probe.rebinding_refusal(record, symbol.0, below) {
+                    Rebinding::Refused(message) => {
+                        info.refusal = Some(message);
+                        break;
+                    }
+                    Rebinding::CopyIsExact => by_reference = false,
+                    Rebinding::NotTheLoops => {}
+                }
             }
             info.captures.push(Capture {
                 symbol: symbol.0,
@@ -7950,23 +7969,117 @@ impl<'a> FuncBuilder<'a> {
     /// anyway, so it needs nothing special; this is about the one the loop
     /// header owns, which JavaScript rebinds per iteration even though it is
     /// written once.
-    fn is_per_iteration(&self, record: &SymbolRecord) -> bool {
-        record.declarations.iter().any(|declaration| {
-            // Up from the declaration to the loop that owns it, stopping at the
-            // first block. A loop's *header* has no block between it and the
-            // declaration; a `let` in the body is inside one, and that one is a
-            // fresh declaration every time round anyway.
+    /// The loop whose *head* declares this name, where one does.
+    ///
+    /// This replaced an `is_per_iteration` returning a bool, which had exactly
+    /// one caller and that caller now wants the loop as well as the answer.
+    /// Keeping both would be two walks of one question by one rule, which is
+    /// how the two come to disagree; the bool is `.is_some()` and costs nothing
+    /// to spell at the call site.
+    ///
+    /// Up from the declaration to the loop that owns it, stopping at the first
+    /// block. A loop's header has no block between it and the declaration; a
+    /// `let` in the body is inside one, and that one is a fresh declaration
+    /// every time round anyway.
+    fn per_iteration_loop(&self, record: &SymbolRecord) -> Option<(NodeId, NodeId)> {
+        record.declarations.iter().find_map(|declaration| {
             let mut at = self.node(*declaration).parent;
             for _ in 0..8 {
-                let Some(node) = at else { return false };
+                let node = at?;
                 match self.kind_of(node) {
-                    Some(syntax::FOR_STATEMENT | syntax::FOR_OF_STATEMENT) => return true,
-                    Some(syntax::BLOCK) => return false,
+                    Some(syntax::FOR_STATEMENT | syntax::FOR_OF_STATEMENT) => {
+                        return Some((node, *declaration));
+                    }
+                    Some(syntax::BLOCK) => return None,
                     _ => at = self.node(node).parent,
                 }
             }
-            false
+            None
         })
+    }
+
+    /// What to do with a capture of a name a `for` loop's head declares.
+    ///
+    /// Three outcomes rather than two, which is the whole of the change made on
+    /// 2026-09-13 and the reason this is a function returning [`Rebinding`]
+    /// rather than a condition returning a bool.
+    ///
+    /// **Copying is exact, not an approximation.** `for (let i = …)` copies the
+    /// binding *before* each iteration and runs the increment in the copy, so
+    /// iteration k's binding keeps iteration k's value for ever. A closure made
+    /// in the body and reading `i` must see that value, and the value `i` holds
+    /// where the closure is built **is** that value.
+    ///
+    /// The rule this replaced asked whether the name was written *anywhere*. A
+    /// counter is written by its own `i++` in every loop ever written, so that
+    /// question refused every loop in order to catch the rare one:
+    ///
+    /// ```text
+    /// for (let i = 0; i < 3; i++) { fns.push(() => i); i += 10; }
+    /// ```
+    ///
+    /// where the write lands in the binding the closure is already holding, so
+    /// node answers 10 for `fns[0]()` and a copy answers 0. That is the case
+    /// the refusal was always for, and asking about the **body** is how to say
+    /// it.
+    ///
+    /// **`var` is not this, and the distinction carries the correctness.** It
+    /// has one binding for the whole loop, so every closure must see the value
+    /// the loop *ended* on -- 3 where `let` gives 0. The old rule was safe here
+    /// by accident, walking to the enclosing `for` without asking which keyword
+    /// wrote it; that over-refusal was recorded as costing nothing, with seven
+    /// ambient `var`s in `runtime/node` and none in a loop beside it. It was
+    /// the only thing between `var` and a wrong answer once `let` was narrowed.
+    /// A shared cell is probably right for `var` and is unmeasured, and with
+    /// zero sites there is nothing to check it against.
+    ///
+    /// `below` keeps its refusal: a name declared after the arrow that reads it
+    /// has no value to copy where the closure is built, whatever the loop does.
+    fn rebinding_refusal(&self, record: &SymbolRecord, symbol: u32, below: bool) -> Rebinding {
+        let Some((owner, declaration)) = self.per_iteration_loop(record) else {
+            return Rebinding::NotTheLoops;
+        };
+        if self.declaration_kind(declaration) == nts_semantic_schema::VariableKind::Var {
+            return Rebinding::Refused(
+                "a closure over a `for` loop's `var`, which JavaScript does \
+                 not rebind per iteration",
+            );
+        }
+        if below || self.written_in_the_body_of(owner, symbol) {
+            return Rebinding::Refused(
+                "a closure over a `for` loop's own variable that the loop's \
+                 body also writes, which JavaScript rebinds on every iteration",
+            );
+        }
+        Rebinding::CopyIsExact
+    }
+
+    /// `var`, `let` or `const`, from the list the declaration sits in.
+    ///
+    /// The kind lives on the enclosing `VariableDeclarationList` and the
+    /// encoder sometimes wraps that in a `VariableStatement`, so it is taken
+    /// from whichever ancestor is the list -- the same way `lower_variable`
+    /// takes it, and for the same reason.
+    fn declaration_kind(&self, declaration: NodeId) -> nts_semantic_schema::VariableKind {
+        self.ancestor(declaration, syntax::VARIABLE_DECLARATION_LIST)
+            .map_or(nts_semantic_schema::VariableKind::Var, |list| {
+                nts_semantic_schema::VariableKind::from_flags(self.node(list).flags)
+            })
+    }
+
+    /// Whether anything in the loop's **body** writes this name.
+    ///
+    /// The head is every child but the last: `for (init; cond; incr) body` puts
+    /// the body last whichever of the other three the program wrote, so this
+    /// needs no count of them and no schema knowledge beyond that.
+    fn written_in_the_body_of(&self, loop_node: NodeId, symbol: u32) -> bool {
+        let children = self.children(loop_node);
+        let Some(body) = children.last() else {
+            return false;
+        };
+        let mut written = Vec::new();
+        self.assigned_symbols(*body, &mut written);
+        written.contains(&symbol)
     }
 
     /// Whether this name is the thing being *called* rather than a value.

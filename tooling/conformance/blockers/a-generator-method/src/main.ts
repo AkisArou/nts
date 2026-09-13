@@ -41,12 +41,46 @@
 // both fields: `done` is optional in one and required in the other, and `value`
 // is `T` against `TReturn`. Probed on 2026-09-12: the same two fields written
 // as a plain `interface Step { value: number; done: boolean }` compile and
-// agree, and the lib.d.ts spelling refuses with `\`done\` on a union, whose
-// members lay their fields out differently`.
+// agree.
 //
-// **That is the census's number one row** -- 57 distinct things across all 23
-// modules -- so this row and that one are one question wearing two names, and
-// neither should be built without the other in view.
+// # Re-probed 2026-09-13, and both halves of the next sentence had moved
+//
+// The refusal is **live but narrower**, and it is **not** the census's number
+// one row any more.
+//
+// Narrower: the lib.d.ts spelling compiles when the program only ever
+// constructs *one* arm. `IteratorResult<number, number>`,
+// `IteratorResult<number, string>` built only as a yield result, and
+// `IteratorYieldResult<number>` all lower and agree with node across 116 cases.
+// It refuses only when both arms are actually built, and the message now reads
+// `\`done\` on a union one of whose members has no layout`.
+//
+// **That distinction is why the first version of this probe was wrong.** Four
+// arms compiled and agreed, and the HIR is what gave it away: `value` came out
+// `i32`, so the checker had collapsed the union to the arm the program used and
+// the probe had avoided the case it was written for. Reading the dump is what
+// found it -- see [[0296]], and the same shape as an immediately-called closure
+// in `a-closure-over-a-loop-variable` agreeing under either implementation.
+//
+// Not number one: `refusal-census.mjs` over 26 modules today has **no row with
+// that message at all**, under either wording, so the corpus reach is zero. The
+// top row is now `a \`X\` where a \`X\` is wanted, which is a pointer cast
+// between two structs that do not agree about where their shared fields are` --
+// 48 things, 66 sites, 20 modules. The 57-across-23 figure quoted here was
+// stale, and searching a census for a *quoted diagnostic* would not have shown
+// it, because the message changed while the cause did not.
+//
+// So this row and that one are **no longer one question**. `g.next()` builds
+// its own result, so it constructs exactly one arm -- which is the case that
+// already lowers. The union stays open on its own account and with nothing in
+// the corpus behind it.
+//
+// What `g.next()` needs is in `generator_walk`, which already derives the
+// resumption both ways: directly from the call that made the frame, and through
+// `generator_dispatch` when the frame arrived from somewhere else. The step
+// answers `done` and leaves the element in `frame.yielded`, which is the two
+// fields. 20 `.next(` and 7 `.return(` sites in `runtime/node`, some of them on
+// `Map`/`Set` iterators, which are deferred for other reasons.
 //
 // # What the method half cost, kept because the shape recurs
 //

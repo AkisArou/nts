@@ -168,7 +168,7 @@ counter, not by reading the emitted C.
 | ✅ | a rest parameter written as a **union of tuples** — `...given: [] \| [a: string, b?: URL]` | how this tree asks "was I called with no arguments at all", and what makes `given.length === 0` a type the checker can narrow. 13 sites across 4 modules. Positions that agree keep a concrete element and pay no tag test; positions that **disagree** are *erased*, and a read at a constant index comes back through the tag, licensed by that position's declared type. The count stays exact because a rest is gathered into a real array — `URLSearchParams#set("a")` throws where `set("a", undefined)` does not, and six sites compare `given.length < 2`. Records 0282 and 0285 |
 | ✅ | `function` expressions that do not bind their own `this` — the same closure an arrow is, with the same captures. One that *does* use `this` is still refused, and that is the whole of the difference |
 | ✅ | closures over a variable something **assigns to** — the variable moves into a cell |
-| ✗ | a closure over a `for` loop's own variable, which JavaScript rebinds per iteration | **refused, not silently wrong — established on 2026-09-12 rather than assumed.** The probe is written so the two readings give different *numbers* rather than so one crashes: four closures over `let i` sum to `0+1+2+3 = 6` under per-iteration binding and `4*4 = 16` under one shared binding, and node answers 6. Both arms refuse by name, so nothing here runs and answers 16. A `var` arm sits beside it as the control, because a compiler that got `let` right by accident would have to get `var` wrong to be distinguishable. **The refusal is broader than its message and that costs nothing:** `is_per_iteration` walks from the declaration to the enclosing `for` without asking whether it is `let` or `var`, so a `var` loop — which JavaScript does *not* rebind, and whose capture this compiler already handles — is refused too. Measured before deciding: `runtime/node` has 7 `var` declarations and **all seven are `declare global { var X }` ambients**, with none in a loop, and `examples/` has none at all. So the over-refusal is unreachable and the fix would be a change with no case behind it |
+| ◐ | a closure over a `for` loop's own variable, which JavaScript rebinds per iteration | **the common shape landed 2026-09-13; a body that writes the variable, and `var`, still refuse.** It was established on 2026-09-12 that this was refused rather than silently wrong, and the probe for that is still the right one: four closures over `let i` sum to `0+1+2+3 = 6` under per-iteration binding and `4*4 = 16` under one shared binding, and node answers 6. **Copying is exact here rather than an approximation.** The specification copies the binding before each iteration and runs the increment in the copy, so iteration k's binding keeps iteration k's value for ever — and the value `i` holds where the closure is built *is* that value. The old rule reached the opposite conclusion by asking whether the name was written **anywhere**, and a counter is written by its own `i++` in every loop ever written, so it refused every loop to catch the rare one. It now asks whether the loop's **body** writes it. `examples/a-closure-over-a-loop-variable` is 116 cases across four functions on C and LLVM, against 29 across one before. **The arm that earns it is `deferredOne`**, which calls its closure after the loop: value capture gives 0 and one shared cell gives 3, where every immediately-called arm agrees under either. Without it the example would pass under both implementations. What still refuses: a body that writes the variable — `i += 10` after the capture lands in the binding the closure holds, so node answers 10 and a copy answers 0 — and **`var`**, which has one binding for the whole loop. That second one is the row's own earlier sentence becoming load-bearing: this refusal used to cover `var` by not asking which keyword wrote it, recorded then as an over-refusal costing nothing with seven ambient `var`s and none in a loop beside it. It was the only thing between `var` and a wrong answer once `let` was narrowed, and nothing said so. A shared cell is probably right for `var` and is unmeasured, which with zero sites is not a reason to stop refusing it. `blockers/a-closure-over-a-loop-variable` and `blockers/a-closure-over-a-loop-var` hold the two, each with the same program one keyword or one statement different |
 | ✅ | a closure written *above* the declaration of a local it reads |
 | ✅ | generators (`function*`, `yield`) | the `async` state machine with a different protocol: the element goes in the frame and the suspension is an ordinary `return`, because what resumes it is the caller standing there rather than the event loop. There is no `Generator<T>` object — the **frame is the iterator** |
 
@@ -214,12 +214,20 @@ goes through it. Parameters too — `callback = asRequest(callback)` before a
 closure reads it is common in the profile, and missing that case emitted C that
 did not compile rather than a refusal.
 
-Refused, by name: a closure over a **`for` loop's own variable**. JavaScript
-gives each iteration a fresh binding, so a closure made in the body captures
-that turn's value; one cell for the whole loop hands every closure the value the
-loop ended on. Verified wrong against node before it was refused. A `let` in the
-loop *body* is a different declaration each time round and gets a cell each time
-round, which is right without special handling.
+A closure over a **`for` loop's own variable** is captured **by value** as of
+2026-09-13, which is exact rather than approximate: JavaScript copies the
+binding before each iteration and runs the increment in the copy, so iteration
+k's binding keeps iteration k's value, and that value is what `i` holds where
+the closure is built.
+
+Two shapes still refuse, each by its own message. A body that **writes** the
+variable — the write lands in the binding the closure already holds, so a copy
+is wrong. And **`var`**, which has one binding for the whole loop and so must
+hand every closure the value the loop ended on. The old rule refused all three
+by asking whether the name was written anywhere, which a counter always is.
+
+A `let` in the loop *body* is a different declaration each time round and gets a
+cell each time round, which is right without special handling.
 
 ### What a closure does not capture
 
