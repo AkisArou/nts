@@ -121,7 +121,13 @@ in `docs/conformance/nodejs.md` with their brackets.
     the compiler's own cascade list, so the cause is upstream of that cascade and unread.
   * **cluster's six uncontrolled passes**, each wanting a break: settings, the child's
     options, an error reaching the primary, `#queryServer`.
-  * **The realm seam, now five instances** -- `atob`, `URL`, the child stdio streams, the
-    advanced-serialization Buffer, and a handle received from a child. Four of the five
-    would be answered by one mechanism: a way to adopt a host object as one of ours.
+  * **The realm seam, three verified instances in two directions** -- the child stdio
+    streams and a handle received from a child need one of the host's objects to become
+    one of ours; the advanced-serialization Buffer needs one of ours to become the host's
+    on the way out. So it is two mechanisms, not one.
+
+    The count was five here an hour ago, citing `atob` and `URL`. Both are recorded in the
+    ledger as *absent from the compiled boundary* through a refusal cascade, which is not
+    the same fact, and neither was re-read before being counted. Corrected rather than
+    quietly dropped, because the wrong half of that line was the confident half.
 

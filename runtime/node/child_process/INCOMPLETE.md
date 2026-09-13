@@ -39,8 +39,13 @@ narrative had already explained away.
   `bigint` in the same message survive intact. So the channel is fine and the realm is not.
   Fixing it means converting our Buffers to the host's on the way out and back again on the
   way in, a deep walk of arbitrary structured data at the boundary, which is a decision
-  rather than an oversight. Fourth instance of this family after `atob`, `URL` and the
-  child stdio streams.
+  rather than an oversight. Third instance of this family, with the child stdio streams
+  and the handle received from a child below -- and the count is three rather than the
+  five an earlier version of this file claimed. `atob` and `URL` were cited as members
+  and are not: the ledger records both as *absent from the compiled boundary* through a
+  refusal cascade, which is a different fact from an object of ours failing an
+  `instanceof` against node's. A running tally that says "fourth instance" without
+  re-reading the first three is a claim about the sentence, not about the tree.
 
     fork-stdio.js                         a fourth stdio slot
     constructor.js                        `ChildProcess.prototype.spawn`
@@ -104,4 +109,8 @@ narrative had already explained away.
   worked all along, which is why nothing pointed here. What the parent now receives is the
   **host's** socket: the descriptor is real and its data flows, but `instanceof net.Socket`
   answers false against our `net`, because adopting it needs a host-to-ours direction `net`
-  does not expose. Fifth instance of the realm seam.
+  does not expose.
+
+  And it runs the **opposite way** to the serialization one above, which is why the two do
+  not share a fix: there, one of ours has to become the host's on the way out; here, one of
+  the host's has to become ours on the way in. Three instances, two directions.
