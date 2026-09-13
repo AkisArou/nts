@@ -58,6 +58,8 @@ declare module "java:com.example.ui" {
     /** Inherited. */
     protected onDraw(a0: Rect): void;
     /** Inherited. */
+    firstOf<T>(a0: T[]): T[] | null;
+    /** Inherited. */
     drawingOrder(a0: number): number;
     /** Inherited. */
     protected drawingOrder$int$int(a0: number, a1: number): number;
@@ -91,6 +93,7 @@ declare module "java:com.example.ui" {
     constructor();
     onMeasure(a0: number, a1: number): void;
     protected onDraw(a0: Rect): void;
+    firstOf<T>(a0: T[]): T[] | null;
     drawingOrder(a0: number): number;
     protected drawingOrder$int$int(a0: number, a1: number): number;
     setBounds(a0: number, a1: number, a2: number, a3: number): void;

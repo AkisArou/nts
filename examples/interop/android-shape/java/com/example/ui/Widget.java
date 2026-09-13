@@ -27,6 +27,16 @@ public class Widget {
      * two arities of `LayoutInflater.onCreateView` -- and none at all in this
      * fixture until it was put here on purpose.
      */
+    /**
+     * A method with a type parameter of its own, inherited by `View`.
+     *
+     * <p>`<T> T[] toArray(IntFunction<T[]>)` on `java.util.Collection` is this
+     * shape, and the inherited copy rendered without its `<T>` -- 328 errors
+     * over the closure of `android.view`, and nothing in this fixture could
+     * produce one until now.
+     */
+    public <T> T[] firstOf(T[] items) { return items; }
+
     public int drawingOrder(int index) { return index; }
 
     protected int drawingOrder(int count, int index) { return count - index; }

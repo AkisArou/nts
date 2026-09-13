@@ -1266,7 +1266,7 @@ fn render_inherited(
         );
         let _ = writeln!(
             out,
-            "    {}{}{}({rendered_arguments}): {};",
+            "    {}{}{}{}({rendered_arguments}): {};",
             // The modifier travels with the member. Without this, `View`
             // inherited `Widget`'s protected `onDraw` as a *public* one --
             // widening the visibility of something Java keeps to the
@@ -1274,6 +1274,19 @@ fn render_inherited(
             if method.access & ACC_PROTECTED != 0 { "protected " } else { "" },
             if method.access & access::STATIC != 0 { "static " } else { "" },
             emitted_name(&declaring, &method, &collapsed_of(&declaring)),
+            // **The method's own type parameters, which this path dropped.**
+            // `<T> T[] toArray(IntFunction<T[]>)` is declared on `Collection`
+            // and inherited by `AbstractCollection`, and the inherited copy
+            // rendered `toArray(a0: IntFunction<T[]>): T[]` with no `<T>` --
+            // 328 of 516 `Cannot find name 'T'` over the closure.
+            //
+            // Fifth time the declared path and this one have disagreed: the
+            // modifier, the argument list, the SAM expansion, the mangled name,
+            // and now this. Four of them were caught by
+            // `an_inherited_method_renders_exactly_as_its_declared_form`; this
+            // one was not, because the fixture had no method with a type
+            // parameter of its own until the test below added one.
+            type_parameters(method.signature.as_deref()),
             returns(&result, &method.annotations),
         );
     }
