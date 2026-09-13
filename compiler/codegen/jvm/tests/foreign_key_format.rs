@@ -81,3 +81,85 @@ fn a_source_form_owner_keeps_its_member() {
     assert_eq!(owner, "com.example.Catalog");
     assert_eq!(descriptor, "(I)I");
 }
+
+/// The escape table's keys are the same keys, built a third way.
+///
+/// `escapes::table` writes `format!("{}.{}:{}", binary_name, name, descriptor)`
+/// by hand, because `nts-jvm-emitter` cannot call `foreign_key` -- it has no
+/// dependency on HIR, deliberately. So the format now has three derivations:
+/// upstream's builder, this crate's splitter, and that formatter.
+///
+/// **The consequence if they drift is silent and costs only speed**, which is
+/// the worst kind. `foreign_keeps` returns `None` for a key it does not
+/// recognise, and `None` means "assume every argument escapes" -- always
+/// correct, never wrong, just pessimistic. A mis-built key would therefore
+/// produce a program that works and is slower, with nothing failing anywhere.
+/// `runtime.rs` says exactly this about the lookup and it is why the assertion
+/// belongs here rather than in a comment.
+#[test]
+fn the_escape_table_builds_the_same_key() {
+    let Some(ui) = fixture_classes() else {
+        eprintln!("SKIP foreign_key_format: no android-shape fixture");
+        return;
+    };
+    let bytes = std::fs::read(ui.join("com/example/ui/Widget.class")).expect("Widget");
+    let class = nts_jvm_emitter::read::class_file(&bytes).expect("parses");
+    let rows = nts_jvm_emitter::escapes::table(&class);
+    assert!(!rows.is_empty(), "the fixture must produce escape rows, or this asserts nothing");
+
+    for (key, _) in &rows {
+        let (owner, member, descriptor) = nts_jvm_emitter::bind::split_key(key)
+            .unwrap_or_else(|| panic!("the escape table built `{key}`, which does not split"));
+        // And it must equal what upstream would have built from the same parts.
+        assert_eq!(
+            *key,
+            nts_core::hir::runtime::foreign_key(owner, member, descriptor),
+            "the escape table and `foreign_key` disagree"
+        );
+        assert!(nts_core::hir::runtime::is_foreign_key(key), "`{key}` is not recognised");
+    }
+}
+
+/// Compile the android-shape fixture's sources, and return where they landed.
+///
+/// **From the committed sources rather than from `target/classes`.** The first
+/// version pointed at the build output, which exists on my machine because I
+/// had just run `build.sh` and does not exist in a clean checkout -- so the
+/// test would have skipped silently wherever nobody had built it first, which
+/// is every gate run in a fresh worktree. A test that asserts nothing and says
+/// `ok` is the failure this whole file is about.
+///
+/// Same shape as `reads.rs`'s `android_shape`: javac over checked-in `.java`,
+/// so the only thing it depends on beyond the repository is a JDK.
+fn fixture_classes() -> Option<std::path::PathBuf> {
+    static BUILT: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+    BUILT
+        .get_or_init(|| {
+            let home = std::env::var("JAVA_HOME").ok()?;
+            let javac = std::path::Path::new(&home).join("bin/javac");
+            if !javac.exists() {
+                return None;
+            }
+            let sources = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../examples/interop/android-shape/java/com/example/ui");
+            if !sources.exists() {
+                return None;
+            }
+            let out = std::env::temp_dir().join(format!("nts-fkf-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&out);
+            std::fs::create_dir_all(&out).ok()?;
+            let files: Vec<std::path::PathBuf> = std::fs::read_dir(&sources)
+                .ok()?
+                .filter_map(|it| it.ok().map(|e| e.path()))
+                .filter(|p| p.extension().is_some_and(|e| e == "java"))
+                .collect();
+            let built = std::process::Command::new(&javac)
+                .args(["--release", "8", "-nowarn", "-d"])
+                .arg(&out)
+                .args(&files)
+                .output()
+                .ok()?;
+            built.status.success().then_some(out)
+        })
+        .clone()
+}
