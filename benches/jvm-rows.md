@@ -7382,3 +7382,38 @@ arm**. The probe's `base` case is the corpus case reached through
 is a property of *this* measurement beats one that is a property of the machine,
 because it is still right when the machine is loaded for a reason nobody
 enumerated.
+
+### A real codegen gap, priced in three commands and refused
+
+Comparing our `popDiskFrom` against the reference's dex turned up something the
+size tables had not: we materialise `null` into a slot to compare against it.
+
+    ours                              reference
+    aconst_null                       aload_3
+    astore 4          -> dex:         ifnull        -> dex:
+    aload_3             const/4 v4,0                  if-eqz v3
+    aload 4             if-ne v3,v4
+    if_acmpne
+
+`branch_present` exists in the emitter and is exactly `ifnull`/`ifnonnull`. It
+is reached from one place -- `ops.rs:3334`, truthiness on a `Managed` -- and not
+from an explicit `x === null`, where the constant becomes a value like any other
+and gets a slot.
+
+**Reach, counted rather than assumed:** `if_acmpeq`/`if_acmpne` occur in **7 of
+the 60 bench cases**, 33 times in total, and not all of those compare against
+null. On `awfy-towers` it is two occurrences worth about one dex unit each --
+51 units to 49, against a row that needs 1.30x.
+
+**Refused.** Three commands to price, and the gap is real and stays written down
+rather than built: the next person to look at reference-comparison codegen finds
+the measurement instead of re-deriving it.
+
+And the temptation worth naming, because it is the night's own lesson wearing a
+new hat: our hot path is 24 units against the reference's 20, the residual is
+about 1.30x, and 24/20 is 1.20. It is *extremely* tempting to conclude the
+residual is hot-path size and that four units would nearly close it. **That is
+inferring time from size**, which is the error this file has recorded twice
+tonight already -- a try/catch that adds no instruction costs 1.32x, and four
+arms of transcription that were right about units were out by 28% on the ratio.
+Two numbers being close is not a mechanism.
