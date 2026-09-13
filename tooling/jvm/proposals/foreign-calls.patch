@@ -37,10 +37,10 @@ index 891c49cd..9f979bf3 100644
  name = "nts-diagnostics"
  version = "0.0.0"
 diff --git a/compiler/codegen/jvm/src/ops.rs b/compiler/codegen/jvm/src/ops.rs
-index 3788ee1a..9785877e 100644
+index 3788ee1a..00e0651e 100644
 --- a/compiler/codegen/jvm/src/ops.rs
 +++ b/compiler/codegen/jvm/src/ops.rs
-@@ -4416,6 +4416,110 @@ impl Emitter<'_> {
+@@ -4416,6 +4416,111 @@ impl Emitter<'_> {
                      code.invoke_static(origin, pool, owner, narrow, &format!("{arguments})I"));
                      return Ok(Placed::OnStack);
                  }
@@ -51,9 +51,10 @@ index 3788ee1a..9785877e 100644
 +                // one method twice is not an identity -- `keeps` looks up the
 +                // same string.
 +                if found.is_none() && nts_core::hir::runtime::is_foreign_key(name) {
-+                    let Some(bound) =
-+                        self.program.foreign.values().find(|it| it.key == *name)
-+                    else {
++                    // Keyed by the foreign key, which is what a backend holds.
++                    // Scanning the rows instead was O(rows) per call site
++                    // against 78,948 of them for a bound Android SDK.
++                    let Some(bound) = self.program.foreign.get(name.as_str()) else {
 +                        // Refused rather than guessed. `invokevirtual` on an
 +                        // interface is an `IncompatibleClassChangeError` at
 +                        // link time, in the user's program, which is far worse
@@ -633,15 +634,14 @@ index a68bd64d..9e9df66e 100644
              return Err(self.unsupported(
                  id,
 diff --git a/compiler/core/src/hir/mod.rs b/compiler/core/src/hir/mod.rs
-index 3f8ce000..02343a94 100644
+index 3f8ce000..7d24a0b0 100644
 --- a/compiler/core/src/hir/mod.rs
 +++ b/compiler/core/src/hir/mod.rs
-@@ -1694,6 +1694,21 @@ pub const fn is_constructor_token(ty: TypeId) -> bool {
+@@ -1694,6 +1694,27 @@ pub const fn is_constructor_token(ty: TypeId) -> bool {
  #[derive(Debug, Clone, Default)]
  pub struct Program {
      pub funcs: Vec<Func>,
-+    /// Bound foreign members, keyed by `(source, span end)` of the declaration
-+    /// they were generated from.
++    /// Bound foreign members, keyed by the **foreign key** -- `owner.member:descriptor`.
 +    ///
 +    /// **On `Program` for the same reason `classes` is.** A backend turning
 +    /// `Callee::External` into an instruction needs the invoke kind, and
@@ -650,15 +650,22 @@ index 3f8ce000..02343a94 100644
 +    /// spends it, and would force `emit`'s signature to change in two crates
 +    /// that have no stake in this.
 +    ///
-+    /// Keyed by position because the checker has already done the overload
-+    /// resolution: 4,973 of 52,171 member names in a generated Android SDK
-+    /// binding carry more than one overload, and 1,870 overload sets have two
-+    /// members at the same arity, so neither a name nor an arity selects one.
-+    pub foreign: rustc_hash::FxHashMap<(u32, u32), runtime::ForeignCall>,
++    /// **Keyed differently from `Options::foreign`, and deliberately.** The two
++    /// consumers look things up by different things: `lower` has a resolved
++    /// declaration and needs its key, so it wants `(source, span end)`; a
++    /// backend has `Callee::External(key)` and nothing else, so it wants the
++    /// key. One loaded set, each side indexed the way it actually asks.
++    ///
++    /// The first version kept one map and made the backend scan it. That is
++    /// O(rows) per call site, and the rows are not few: 78,948 for a bound
++    /// Android SDK, which is ~10^8 string comparisons across a few thousand
++    /// foreign calls -- invisible on a nine-class fixture and unusable on a
++    /// real jar.
++    pub foreign: rustc_hash::FxHashMap<String, runtime::ForeignCall>,
      /// Layouts for every object type the program uses.
      pub layouts: Vec<Layout>,
      /// The distinct classes the program declares, and the types of each.
-@@ -2532,6 +2547,9 @@ pub struct Options<'a> {
+@@ -2532,6 +2553,9 @@ pub struct Options<'a> {
      /// and [`lower::public_api`] falls back to inferring it from the import
      /// graph, which cannot be done correctly and says so.
      pub entry_files: &'a [String],
@@ -668,7 +675,7 @@ index 3f8ce000..02343a94 100644
  }
  
  impl Default for Options<'_> {
-@@ -2547,6 +2565,12 @@ impl Default for Options<'_> {
+@@ -2547,6 +2571,12 @@ impl Default for Options<'_> {
              // that knows the tsconfig should say, and the ones that do not are
              // no worse off than before this existed.
              entry_files: &[],
@@ -681,15 +688,19 @@ index 3f8ce000..02343a94 100644
          }
      }
  }
-@@ -3550,7 +3574,10 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis]) {
+@@ -3550,7 +3580,14 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis]) {
  #[must_use]
  pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
      let specialize_numbers = options.specialize_numbers;
 -    let mut lowered = lower::lower_with(snapshot, options.entry_files);
 +    let mut lowered = lower::lower_with(snapshot, options.entry_files, options.foreign);
-+    // The rows travel with the program, so every backend reads what `lower`
-+    // read -- one loaded set, not two plumbings of one fact.
-+    lowered.program.foreign = options.foreign.clone();
++    // Re-keyed by the foreign key as lowering finishes: same rows, indexed for
++    // the reader that comes next. See `Program::foreign`.
++    lowered.program.foreign = options
++        .foreign
++        .values()
++        .map(|bound| (bound.key.clone(), bound.clone()))
++        .collect();
      settle(&mut lowered);
      let mut program = lowered.program;
  

@@ -35,10 +35,18 @@ lane's:**
 
 - `hir::runtime` gains `ForeignCall { key, kind }` and `ForeignKind`, beside
   `foreign_keeps`.
-- `Program.foreign` and `Options.foreign`, keyed `(source, span end)`. On
-  `Program` for the reason `classes` is: a backend turning `Callee::External`
-  into an instruction needs the invoke kind, and `emit(&Program)` is its whole
-  input.
+- `Options.foreign` keyed `(source, span end)` and **`Program.foreign` keyed by
+  the foreign key**. On `Program` for the reason `classes` is: a backend turning
+  `Callee::External` into an instruction needs the invoke kind, and
+  `emit(&Program)` is its whole input.
+
+  The two keys are deliberate. `lower` has a resolved declaration and needs its
+  key; a backend has `Callee::External(key)` and nothing else. One loaded set,
+  re-keyed as lowering finishes, each side indexed the way it asks. The first
+  version kept one map and made the backend scan it — O(rows) per call site
+  against **78,948 rows** for a bound Android SDK, which is ~10^8 string
+  comparisons over a few thousand calls. Invisible on a nine-class fixture and
+  unusable on a real jar; caught in review by the owner of the files.
 - `FuncBuilder::new` splits into `probe` and `new`. 17 of 19 construction sites
   are probes that cannot reach a foreign call and get no table.
 - **`members_of` filters bound members out**, rather than `method_body`
