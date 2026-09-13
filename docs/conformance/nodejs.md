@@ -24420,3 +24420,25 @@ whether the parent may read a stream it hands on. Hooking `readStart` on node it
 in `ChildReadable`'s constructor is ours, not node's, and the comment justifying it describes
 our arrangement. A question that had sat open for a day was one measurement wide.
 
+## The axis after `_handle`: still 46, and `net`'s two are still hollow
+
+Re-measured on a pin from after the `_handle` change, both arms per module, no `ARM DIED` rows:
+
+    TOTAL   46 passed, 1722 failed, 4 hollow (not counted)
+
+    dns   0 real, 1 hollow      fs    3 real, 1 hollow
+    net   4 real, 2 hollow      timers  2 real (publishes nothing under its own name)
+
+**Unchanged, and `net`'s two hollow passes are unchanged for a reason worth stating.**
+`test-listen-fd-detached` and its `-inherit` variant now pass on the *interpreted* lane for a
+real reason -- `_handle` is an object and `fd` reports the host's descriptor. On the compiled
+lane there is no host object at all, so `NetNativeHandle.handle` answers `undefined` and `fd`
+answers `-1`, and the two files still pass by asserting nothing.
+
+That is the honest outcome rather than a disappointing one: the compiled lane's copy of this
+module cannot inherit a descriptor it has no host handle for, and the emptying arm says so
+instead of counting it. A fix on one lane does not make a hollow pass on the other lane real,
+and the arm is what keeps those separable.
+
+The interpreted lane moved: `net` 151 -> 154 (zero failing), `child_process` 104 -> 105.
+
