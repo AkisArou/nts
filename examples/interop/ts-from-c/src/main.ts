@@ -68,12 +68,16 @@ export function sumOfNamed(o: Pair): number {
   return o.a + o.b;
 }
 
-// --- spot 3: C can receive a managed value but cannot make one -------------
+// --- spot 3: WITHDRAWN 2026-09-14 -- C can make one after all ---------------
 //
-// `NtsString *greet(NtsString *)`. C can hold the result; it has no public
-// constructor to build the argument, because the emitted code makes literals as
-// a compile-time `static const struct { NtsHeader header; unsigned char data[] }`.
-// So `caller.c` cannot call this, and that is the gap rather than an oversight.
+// `NtsString *greet(NtsString *)`, and C **can** build the argument:
+// `nts_string_from_utf8(bytes, len)` is public at `nts_runtime.h:1537`.
+// Demonstrated on an unmodified runtime, with a control that fails.
+//
+// The earlier comment here claimed no public constructor existed. Its author
+// had searched for `nts_str_from_utf8` -- guessing from the `nts_str_*` family
+// -- found zero, and read absence. A zero-hit search for a guessed name is not
+// evidence of absence, and this comment is left as the record of that.
 export function greet(name: string): string {
   return "hi " + name;
 }

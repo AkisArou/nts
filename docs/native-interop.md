@@ -256,11 +256,10 @@ Three gaps in the direction that works, all bounded and none needing the RFC:
   `program.c` and the runtime's headers, nothing declaring `add`, so a C caller
   hand-writes prototypes — and a hand-written prototype that disagrees with the
   emitted one is the `double abs(double)` bug pointed the other way.
-- **A C caller can receive a managed value but cannot make one.** `greet`
-  compiles to `NtsString *greet(NtsString *)`; there is no public constructor,
-  because the emitted code makes literals as a compile-time
-  `static const struct { NtsHeader header; unsigned char data[N]; }`. So the
-  usable surface from C today is scalars in, scalars out.
+- **~~A C caller can receive a managed value but cannot make one.~~ FALSE,
+  withdrawn 2026-09-14.** `nts_string_from_utf8` is public at
+  `nts_runtime.h:1537` and works on an unmodified runtime. See the withdrawal
+  under "The awkward spots" for how a mistyped search became four documents.
 - **`quickjs/*.c` must not be compiled separately** — `nts_runtime.c` already
   includes them, and doing both gives `multiple definition of js_dtoa` forty
   times over. `build.sh` carries the working line.
@@ -349,13 +348,38 @@ the point of the pair is now the *measurement* — that structural merging makes
 the internal name a whole-program fact — rather than a recommendation to write
 the second one.
 
-**3. C can receive a managed value but cannot make one.** There is no public
-constructor: the emitted code builds string literals as a compile-time
-`static const struct { NtsHeader header; unsigned char data[N]; }`. So the
-usable managed surface from C is **out only**. *Fix: a small C-facing
-constructor API — `nts_str_from_utf8`, `nts_array_of_doubles`, and the object
-descriptors are already emitted with `_Static_assert`ed layouts, so a caller can
-legitimately build one if given the descriptor.*
+**3. ~~C can receive a managed value but cannot make one.~~ FALSE — withdrawn
+2026-09-14.** The runtime has published constructors all along:
+
+```c
+NtsString  *nts_string_from_utf8(const char *, size_t);   /* nts_runtime.h:1537 */
+NtsString  *nts_string_from_char_code(double);
+NtsPromise *nts_promise_new(void);
+NtsHeader  *nts_object_new(const NtsDescriptor *);
+NtsView    *nts_view_new(NtsBuffer *, ...);
+```
+
+Demonstrated on an **unmodified** runtime, with a control: `α😀` constructed from
+C bytes, round-tripped through `greet`, compared against independently computed
+UTF-16 units — equal. Change only `α` to `β` in the same executable and it
+fails. So the arm can fail, which is what makes the positive mean anything.
+
+**How the claim got here, because the mechanism matters more than the
+correction.** Its author searched for `nts_str_from_utf8`, guessing from the
+`nts_str_*` family that does exist — `nts_str_slice`, `nts_str_replace`,
+`nts_str_repeat` — found zero, and read absence. The constructor is in the
+`nts_string_*` family. **A grep for a guessed name returning zero cannot
+distinguish "it does not exist" from "my pattern is wrong"**, which is a
+standing discipline in this repository and was violated by the person writing it
+down. It then propagated into this document, the `ts-from-c` README, that
+example's source comments, and a goal file — four places, from one mistyped
+search, and it was caught only because the next person checked the premise
+before building on it.
+
+What is actually open here: **arrays** have no apparent public constructor, and
+that is *unmeasured* rather than established — saying more would repeat the
+error. Reaching the right **descriptor** for `nts_object_new` from a C caller is
+a question about the generated header rather than the runtime.
 
 **4. A generator hands back its frame.** `function*` returns
 `NtsObj_counted_frame *` — the suspension frame itself, with `state` and

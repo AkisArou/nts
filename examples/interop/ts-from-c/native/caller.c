@@ -8,12 +8,11 @@
 
 /* The generated header declares the exact C symbols and checked layouts. */
 
-/* SPOT 3: `NtsString *greet(NtsString *)` -- omitted deliberately. C can hold
- * the result and has no public constructor to build the argument, because
- * literals are emitted as compile-time
- * `static const struct { NtsHeader header; unsigned char data[N]; }`.
- * `greetLength` above is the shape that IS callable: managed inside, scalar at
- * the boundary. */
+/* SPOT 3 WAS WITHDRAWN. `NtsString *greet(NtsString *)` is callable from here:
+ * `nts_string_from_utf8(bytes, len)` is public at `nts_runtime.h:1537`. The
+ * earlier comment claimed no constructor existed; its author had searched for
+ * `nts_str_from_utf8` and read a zero-hit guess as absence. `greetLength`
+ * stays below as the all-scalar shape, which is a different point. */
 
 /* SPOT 4: `NtsObj_counted_frame *counted(double)` -- omitted deliberately. It
  * hands back the suspension frame itself, with `state` and `yielded` at
