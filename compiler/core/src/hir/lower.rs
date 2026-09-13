@@ -31275,6 +31275,111 @@ impl<'a> FuncBuilder<'a> {
     /// Numbers, strings and `bigint` are untouched: they have no `valueOf`
     /// step to skip, and a string comparison is the one this table has always
     /// answered correctly.
+    /// The operands a relational comparison actually compares.
+    ///
+    /// `a > b` where either side is an object is `ToPrimitive` on each, hint
+    /// `number` -- and for a *typed* receiver that is a static dispatch,
+    /// because `valueOf` and `toString` are members this compiler already puts
+    /// on the descriptor. Everything else is returned unchanged.
+    fn relational_operands(
+        &mut self,
+        id: NodeId,
+        op: BinOp,
+        lhs_node: NodeId,
+        rhs_node: NodeId,
+        lhs: ValueId,
+        rhs: ValueId,
+    ) -> Result<(ValueId, ValueId), Diagnostic> {
+        if !matches!(op, BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge)
+            || !self.compares_objects(lhs, rhs)
+        {
+            return Ok((lhs, rhs));
+        }
+        let converted = (
+            self.ordinary_to_primitive(lhs_node, lhs)?,
+            self.ordinary_to_primitive(rhs_node, rhs)?,
+        );
+        // Both sides have to land on one representation, and nothing here is
+        // entitled to pick. `valueOf(): number` on one and `toString(): string`
+        // on the other is a comparison between a double and a pointer, which
+        // the specification answers by converting again and this does not do.
+        let (left, right) = (
+            self.values[converted.0.0 as usize].ty.clone(),
+            self.values[converted.1.0 as usize].ty.clone(),
+        );
+        if left != right {
+            return Err(self.unsupported(
+                id,
+                "a relational comparison whose two sides convert to different \
+                 primitives, which needs the second conversion the specification \
+                 does after the first",
+            ));
+        }
+        Ok(converted)
+    }
+
+    /// `OrdinaryToPrimitive(O, "number")` -- `valueOf` first, then `toString`.
+    ///
+    /// The specification's order for a relational comparison, and for a typed
+    /// receiver it is a **static** dispatch: both names are members this
+    /// compiler already puts on the descriptor, so "does this object have a
+    /// `valueOf`" is a question about the type rather than a prototype walk.
+    /// That is what `blockers/a-relational-comparison-between-objects` predicted
+    /// when it called this "reachable machinery wanting an ordering rather than
+    /// missing machinery".
+    ///
+    /// A value that is already a primitive is returned unchanged, which is the
+    /// specification's first step and also what makes `o > 1` work without a
+    /// second path.
+    ///
+    /// **Only a primitive result is taken.** `valueOf(): Point` is legal
+    /// TypeScript and is *not* a conversion -- the specification says to try
+    /// the next method when the first returns an object, and falling through
+    /// here is that rule rather than a limitation.
+    ///
+    /// What is refused is an object with neither: JavaScript throws a
+    /// `TypeError` there, and this compiler has no cross-call throw to do it
+    /// with, so it says so at compile time instead.
+    fn ordinary_to_primitive(
+        &mut self,
+        at: NodeId,
+        value: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
+        let HirType::Managed(ManagedType::Object(type_id)) =
+            self.values[value.0 as usize].ty.clone()
+        else {
+            return Ok(value);
+        };
+        for member in ["valueOf", "toString"] {
+            let Some(returns) = self.member_returns(type_id, member) else {
+                continue;
+            };
+            if !matches!(
+                returns,
+                HirType::Managed(ManagedType::String) | HirType::Bool
+            ) && returns != HirType::NUMBER
+            {
+                continue;
+            }
+            let callee = self.callee_for(at, type_id, member)?;
+            let origin = self.origin(at);
+            return Ok(self.push(
+                OpKind::Call {
+                    callee,
+                    args: vec![value],
+                    frame: None,
+                },
+                returns,
+                origin,
+            ));
+        }
+        Err(self.unsupported(
+            at,
+            "a relational comparison against an object with neither `valueOf` nor \
+             `toString` returning a primitive, which JavaScript answers with a `TypeError`",
+        ))
+    }
+
     fn compares_objects(&self, lhs: ValueId, rhs: ValueId) -> bool {
         [lhs, rhs].iter().any(|value| {
             matches!(
@@ -31438,14 +31543,7 @@ impl<'a> FuncBuilder<'a> {
             }
         };
 
-        if matches!(op, BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge)
-            && self.compares_objects(lhs, rhs)
-        {
-            return Err(self.unsupported(
-                id,
-                "a relational comparison between objects, which is `ToPrimitive` on each and would otherwise compare their addresses",
-            ));
-        }
+        let (lhs, rhs) = self.relational_operands(id, op, *lhs_node, *rhs_node, lhs, rhs)?;
 
         let origin = self.origin(id);
         Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))

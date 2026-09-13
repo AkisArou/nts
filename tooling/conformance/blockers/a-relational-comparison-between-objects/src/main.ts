@@ -1,53 +1,54 @@
-// expect: a relational comparison between objects, which is `ToPrimitive` on each
+// expect: neither `valueOf` nor `toString` returning a primitive
 //
-// `a > b` where both are class instances is `ToPrimitive` on each — `valueOf`
-// first for a relational comparison, then `toString` — and this compiler has
-// neither.
+// `a > b` where the objects have **neither** conversion method.
 //
-// **It was a wrong answer that ran, not a refusal.** What it emitted was
-// `gt %1, %7` on two `object.new` pointers, so `a > b` was **true for every
-// input** where node answers from the degrees: 29 of 29 cases disagreed.
+// # The row this held closed on 2026-09-13
 //
-// # Why this one and not the rest of `ToPrimitive`
+// `a > b` between objects is `ToPrimitive` on each with hint `number`, and it
+// used to emit `gt` on two pointers — true for every input, 29 of 29 cases
+// disagreeing with node. It was refused by name, and is now **answered**:
+// `examples/a-comparison-through-valueof` is 87 cases across three functions on
+// C, LLVM and the JVM, including the specification's fallthrough where
+// `valueOf` returns an object and `toString` is what answers.
 //
-// TypeScript rejects most of the family before it reaches the compiler:
+// This fixture keeps the part that is still a refusal, which is one case.
 //
-//     o + 1        TS2365  Operator '+' cannot be applied to these types
-//     "1" == 1     TS2367  This comparison appears to be unintentional
-//     `${o}`               refused — a conversion to string from `Celsius`
-//     Number(o)            refused — a conversion to number from this type
+// # Why it is a refusal rather than a conversion
 //
-// **`>` between two objects is not a type error**, so it is one of the few
-// `ToPrimitive` shapes a checking program can write, and it was the only one
-// that was not already refused. That is why the row it belongs to had nothing
-// in it: the family reads as unreachable until you write the one member that
-// is reachable.
+// JavaScript throws a `TypeError` when neither method produces a primitive.
+// This compiler has no cross-call throw to do that with — a `throw` is a jump
+// within one function and `nts_uncaught` is the outer edge — so it says so at
+// compile time instead. That is the honest shape: the alternative is comparing
+// addresses, which is what this row started as.
 //
-// # What closing it needs
+// # And a second, narrower one
 //
-// `OrdinaryToPrimitive` with hint `number`: call `valueOf`, take the result if
-// it is a primitive, otherwise call `toString`, and throw `TypeError` if
-// neither is. That is a dispatch on a member this compiler does put on the
-// descriptor, so it is reachable machinery rather than missing machinery — what
-// it needs is the *ordering* and the fallback, which nothing here expresses.
+// `valueOf(): number` on one side and `toString(): string` on the other is a
+// comparison between a double and a pointer. The specification converts again
+// after the first conversion; this does not, and refuses rather than picking a
+// representation it is not entitled to pick.
 //
-// Zero corpus demand: `runtime/node` writes no relational comparison between
-// objects.
+// # Three controls, all of which compile
+//
+//     numbers            compared, and always were
+//     strings            compared, and always were
+//     explicitValueOf    the same comparison through the member it would call
+//
+// The last is the one that matters: it is the program the author would write
+// instead, so if it ever stops working the refusal has spread beyond its
+// subject.
 
-class Celsius {
-  degrees: number;
-  constructor(d: number) {
-    this.degrees = d;
-  }
-  valueOf(): number {
-    return this.degrees;
+class Opaque {
+  tag: number;
+  constructor(t: number) {
+    this.tag = t;
   }
 }
 
-/** Under test. Answered `true` for every input before it was refused. */
-export function objectsRelational(n: number): number {
-  const a = new Celsius(n & 7);
-  return (a > new Celsius(3) ? 1 : 0) + 1;
+/** Under test: neither `valueOf` nor `toString`. */
+export function neither(n: number): number {
+  const a = new Opaque(n & 7);
+  return (a > new Opaque(3) ? 1 : 0) + 1;
 }
 
 /** Control: numbers compare, and always did. */
@@ -61,8 +62,8 @@ export function strings(n: number): number {
   return (s < "m" ? 10 : 0) + (s >= "a" ? 1 : 0);
 }
 
-/** Control: the same comparison written through the member it would call. */
-export function explicitValueOf(n: number): number {
-  const a = new Celsius(n & 7);
-  return (a.degrees > 3 ? 10 : 0) + 1;
+/** Control: the same comparison written through a member it could call. */
+export function explicitTag(n: number): number {
+  const a = new Opaque(n & 7);
+  return (a.tag > 3 ? 10 : 0) + 1;
 }
