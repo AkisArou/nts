@@ -635,10 +635,75 @@ public final class RuntimeRegression {
         check(view.isEmpty() && NtsMap.size(map) == 0, "clear through the interface");
     }
 
+
+    /**
+     * A Java callback arriving on a thread we do not own runs on the lane that
+     * does.
+     *
+     * <p>This is the assertion a wrong implementation fails in the one way that
+     * matters. Calling the closure directly from the foreign thread would pass
+     * every "did the callback happen" check and mutate the lane's heap from
+     * outside it -- everything in this runtime except the inbox is confined to
+     * one lane, because the inbox is atomic *so that* the rest need not be.
+     *
+     * <p>So the test records which thread the body ran on and compares it to the
+     * thread that posted. They must differ, and the body's thread must be the
+     * one that drained.
+     */
+    private static void testForeignCallbacks() throws Exception {
+        final NtsInbox inbox = NtsInbox.withCapacity(4);
+        final String lane = Thread.currentThread().getName();
+        final String[] ranOn = new String[1];
+        final String[] postedFrom = new String[1];
+        final double[] got = new double[1];
+
+        Thread foreign = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                postedFrom[0] = Thread.currentThread().getName();
+                boolean accepted = NtsForeign.postNumber(inbox, new NtsNumberCallback() {
+                    @Override
+                    public void call(double value) {
+                        ranOn[0] = Thread.currentThread().getName();
+                        got[0] = value;
+                    }
+                }, 42.0);
+                check(accepted, "a post below the ceiling is accepted");
+            }
+        }, "foreign-lane");
+        foreign.start();
+        foreign.join();
+
+        // Nothing has run yet: posting is not calling.
+        check(ranOn[0] == null, "the callback does not run on the posting thread");
+
+        int drained = NtsInbox.drain(inbox);
+        check(drained == 1, "one completion drained, got " + drained);
+        number(got[0], 42.0, "the captured argument arrives");
+        equal(ranOn[0], lane, "the body runs on the draining lane");
+        check(!lane.equals(postedFrom[0]), "and the posting thread was a different one");
+
+        // Backpressure: `reserve` answers null at the ceiling, which is the only
+        // place it can be applied "before the OS work exists". A post that
+        // cannot be accepted says so rather than dropping silently or blocking
+        // the foreign thread.
+        final NtsInbox tiny = NtsInbox.withCapacity(1);
+        NtsCallback nothing = new NtsCallback() {
+            @Override
+            public void call() { }
+        };
+        check(NtsForeign.post(tiny, nothing), "the first post fits");
+        check(!NtsForeign.post(tiny, nothing), "the second is refused at the ceiling");
+        check(NtsInbox.drain(tiny) == 1, "and draining frees the credit");
+        check(NtsForeign.post(tiny, nothing), "so a post fits again");
+        NtsInbox.drain(tiny);
+    }
+
     public static void main(String[] args) throws Exception {
         testBigInt(); System.out.println("bigint randomized tests passed");
         testMap(); System.out.println("map randomized and cursor tests passed");
         testMapAsJavaMap(); System.out.println("NtsMap as java.util.Map passed");
+        testForeignCallbacks(); System.out.println("foreign-thread callbacks passed");
         testNumbersAndIndices(); System.out.println("numeric and index tests passed");
         testArraysAndStrings(); System.out.println("array and string tests passed");
         testPromises(); System.out.println("promise and queue tests passed");

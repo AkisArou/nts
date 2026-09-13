@@ -1266,9 +1266,31 @@ the provider doc says only the cross-thread inbox is atomic **because one lane
 mutates everything else**. So an Android API calling back on another thread has
 somewhere to land: it posts, and the work runs on the environment's own lane.
 
-What is unbuilt is the adapter that turns a Java callback into an
-`NtsResumable`. That is a smaller thing than "threads are unsupported", which is
-what this document said before the inbox was checked.
+~~What is unbuilt is the adapter that turns a Java callback into an
+`NtsResumable`.~~ **Built: `runtime/jvm/src/nts/rt/NtsForeign.java`.** The inbox
+has had `reserve`/`post`/`drain` since the promise work and a bound interface
+can be implemented by a generated closure; nothing joined the two, so a
+framework thread calling `onBytes` had a closure and no safe way to invoke it.
+
+**Every method returns `void`, and that is the design rather than an omission.**
+Posting means running *later*, so there is nobody left to return to. And every
+method returns a `boolean` *acceptance*, because `NtsInbox::reserve` answers
+`null` at the ceiling and its own comment is emphatic that this is the only
+place backpressure can be applied "before the OS work exists" -- so a refusal is
+the caller's cue to reject or delay, never to drop silently or block the foreign
+thread.
+
+The `byte[]` form **captures rather than copies**, which is the point and is
+also a constraint on the caller: the foreign side must not reuse the buffer,
+because the lane reads it later. A copy here would be a copy on every
+completion, which is the cost this document exists to avoid -- so the rule is
+stated instead of paid.
+
+The test is the one a wrong implementation fails in the way that matters: it
+records which thread the body ran on and which posted, and asserts they differ.
+Calling the closure directly would pass every "did the callback happen" check
+and mutate the lane's heap from outside it. Sabotaged to call instead of post,
+and it fails on `the callback does not run on the posting thread`.
 
 **And the inbox is not the only route, which matters for the callbacks that must
 return a value.** `NtsEnv.CURRENT` is a `ThreadLocal`, not a singleton pinned to
