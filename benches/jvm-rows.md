@@ -7813,3 +7813,40 @@ The generalisation is theirs and it transfers exactly: **a number an instrument
 prints every run, that nobody has ever expanded into its members, is a domain
 nobody has listed.** Mine printed nine every time and I quoted it twice as
 context rather than reading it as a question.
+
+### The same tell, run over this lane's other instruments
+
+Having found it twice, it is worth applying deliberately rather than waiting to
+trip over it a third time. Every count this lane's scripts print, checked for
+whether anyone has ever expanded it:
+
+    dexes.sh            "1 declined"        NEVER EXPANDED -- fixed, `6053f130`
+    agrees-on-device.sh  per-case names     names every skip and decline
+    times-on-device.sh   per-case names     names every decline
+    the `jvm` gate step  "9 compared nothing"  NEVER EXPANDED -- listed above
+
+Two of four printed a number with no members. Both have now been expanded and
+both contained something: the `jvm` step's nine hid five ordinary examples that
+have never been compared against node, and `dexes.sh`'s one hid a wrong
+attribution and two bugs on a branch that could not fire.
+
+**And one thing the audit found that is not the same shape.**
+`agrees-on-device.sh` drives a **hardcoded set of nine**:
+
+    fib checksum accumulate loop array-methods symbol-keyed-map
+    objects erasure-typed erasure-unknown
+
+The floor of 9 is correct -- it equals the set, so it cannot ratchet, only hold,
+which is this file's preferred form. The step prints `every case was driven` and
+means it. But the *set* is nine of sixty bench cases and **nothing says why
+those nine**, so 51 cases are never checked for `java` against `dalvikvm`
+agreement and the scope is invisible from the output, which truthfully reports
+completeness over a domain somebody chose.
+
+That is the milder sibling: not an unlisted domain but an **unjustified** one.
+The list is right there in the source and reads as deliberate; whether it is
+deliberate is a different question, and the honest place for its answer is a
+comment beside it. Left as an observation rather than expanded, because adding
+cases to a gate step that needs a device has a cost three sessions pay, and that
+is a trade somebody should make on purpose rather than because a passing reader
+thought more was better.
