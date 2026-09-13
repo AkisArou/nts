@@ -17,7 +17,10 @@ import {
 // `int counter_clamp(int)`. It links. It is wrong. LLVM refuses it outright,
 // which is the honest answer.
 export function clamped(n: number): number {
-  return counter_clamp(n as c_int, 0 as c_int, 10 as c_int) as number;
+  // No `as number` on the result: a branded `c_int` IS a `number`, so the
+  // outbound direction is free. Only the inbound casts are real, and the
+  // README argues they should not be either.
+  return counter_clamp(n as c_int, 0 as c_int, 10 as c_int);
 }
 
 // --- an owned handle, explicitly released ----------------------------------
@@ -27,7 +30,7 @@ export function clamped(n: number): number {
 export function named(n: number): number {
   const c = counter_new("widgets");
   if (c === null) return -1;
-  const bumped = counter_bump(c, n as c_int) as number;
+  const bumped = counter_bump(c, n as c_int);
   counter_destroy(c);          // obligation discharged; omitting it is an error
   return bumped;
 }
@@ -40,7 +43,7 @@ export function named(n: number): number {
 export function scoped(n: number): number {
   using c = counter_new("scoped");
   if (c === null) return -1;
-  return counter_bump(c, n as c_int) as number;
+  return counter_bump(c, n as c_int);
 }
 
 // --- borrowed, and the error the checker should give -----------------------
@@ -80,6 +83,6 @@ export function readOut(n: number): number {
   if (c === null) return -1;
   counter_bump(c, n as c_int);
   let out: c_int = 0 as c_int;
-  if ((counter_read_into(c, addrOf(out)) as number) !== 0) return -1;
-  return out as number;
+  if (counter_read_into(c, addrOf(out)) !== 0) return -1;
+  return out;
 }

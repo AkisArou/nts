@@ -175,6 +175,159 @@ the rows came from. A native lane has the same question with a different
 vocabulary — calling convention, variadic-ness, `errno` discipline — and the
 same answer.
 
+## Both directions, and only one of them is hard
+
+`ts-from-c` **works today**, and `examples/interop/ts-from-c` is a C program
+that calls compiled TypeScript and runs:
+
+    add(2, 3)        = 5
+    clamp(42, 0, 10) = 10
+
+No node, no napi, no runtime initialisation — a scalar export is an ordinary
+`double add(double, double)` and C calls it directly. The reason is the same one
+that makes `ts-from-java` work: **the output is already the host's native form**,
+so there is no boundary, only a function call.
+
+That asymmetry is the single most misreadable fact in this document. It is easy
+to see "interop works" and conclude the native lane is further along than it is.
+**It is not one capability with two directions; it is two capabilities, and only
+the outbound one is free.** The JVM lane has exactly the same split — 0 refusals
+one way, 48 the other.
+
+Three gaps in the direction that works, all bounded and none needing the RFC:
+
+- **No header is generated for a program's own exports.** `emit-c` writes
+  `program.c` and the runtime's headers, nothing declaring `add`, so a C caller
+  hand-writes prototypes — and a hand-written prototype that disagrees with the
+  emitted one is the `double abs(double)` bug pointed the other way.
+- **A C caller can receive a managed value but cannot make one.** `greet`
+  compiles to `NtsString *greet(NtsString *)`; there is no public constructor,
+  because the emitted code makes literals as a compile-time
+  `static const struct { NtsHeader header; unsigned char data[N]; }`. So the
+  usable surface from C today is scalars in, scalars out.
+- **`quickjs/*.c` must not be compiled separately** — `nts_runtime.c` already
+  includes them, and doing both gives `multiple definition of js_dtoa` forty
+  times over. `build.sh` carries the working line.
+
+A generated `program.h` plus a small C-facing constructor API turns "C can call
+a scalar function" into "C can use this as a library". Both are small, and the
+lessons are cheap to learn in the direction that already runs.
+
+## What a C caller actually sees, by TypeScript surface
+
+Measured by exporting one of each shape and reading the emitted prototypes.
+
+| TypeScript export | C signature | runtime needed |
+| --- | --- | --- |
+| `(a: number) => number` | `double f(double)` | **no** |
+| `(a: boolean) => boolean` | `bool bool_(bool)` | **no** |
+| `(s: string) => string` | `NtsString *f(NtsString *)` | yes |
+| `(xs: number[]) => number` | `double f(NtsArray *)` | yes |
+| `(b: Uint8Array) => number` | `double f(NtsView *)` | yes |
+| `(n: number) => Point` | `NtsObj_Point *f(double)` | yes |
+| `(o: { a: number }) => number` | `double f(NtsObj_Type25 *)` | yes |
+| `async (n: number) => Promise<number>` | `NtsPromise *f(double)` | yes |
+| `function* (n: number)` | `NtsObj_counted_frame *f(double)` | yes |
+
+**The scalar row is the important one, and it is verified rather than argued.**
+A program exporting only scalars links with **no `nts_runtime.c` at all** — I
+compiled one against `program.c` alone and it ran. So the two ways of writing
+this are genuinely two dialects, and the freestanding one is real:
+
+- **Freestanding.** Scalars, `c_int`, `Ptr`, `Ref`, `libc.d.ts`. No runtime, no
+  allocator, no collector. TypeScript as a systems language, and the output is
+  an object file like any other.
+- **Managed.** `string`, arrays, objects, `Promise`. `nts_runtime.c` is linked
+  and the collector is live.
+
+That distinction should be *visible in the toolchain* rather than discovered at
+link time — a program that believes it is freestanding and pulls in the runtime
+through one `string` has silently changed category.
+
+## The awkward spots, and what each needs
+
+**1. Names are mangled on collision, invisibly.** `export function bool` emits
+`bool_` because `bool` is taken in C. Nothing in the TypeScript says so, and a
+hand-written prototype for `bool` links against nothing. *Fix: generate
+`program.h` — the mangling stops mattering the moment the caller includes the
+real declarations.*
+
+**2. An anonymous object type's C name is a whole-program fact**, which is worse
+than "it is generated". Measured, three arms:
+
+| program | emitted C name |
+| --- | --- |
+| the anonymous type alone | `NtsObj_Type3` |
+| plus an **unused** named type of the same shape | `NtsObj_Type5` |
+| plus a **used** named type of the same shape | `NtsObj_Pair` |
+
+Layouts merge structurally, so an anonymous type borrows a named one's name —
+but only where that named type is *used*, because an unused one never gets a
+layout to merge into. And the `TypeN` number moves when unrelated declarations
+appear above it. So a generated header would change under edits touching nothing
+nearby, and a caller's source would break for a reason with no visible cause.
+
+*Fix: the generated header, which means **this is not a separate problem — it is
+a symptom of spot 1**.* An earlier draft of this document proposed refusing to
+export a signature mentioning an anonymous object type, on the grounds that a
+named `interface` costs one line. That was a compiler-writer's reflex: the
+internal name is unstable, so make the author fix it. It is the wrong trade and
+our user was right to object — we are aiming for the best DX available, and
+"declare an interface you did not want" is a restriction paying for an
+implementation detail.
+
+The header pays for it instead:
+
+```c
+/* generated program.h, regenerated every build */
+typedef struct NtsObj_Type3 sumOf_o_t;   /* alias named from the export */
+double sumOf(sumOf_o_t *o);
+```
+
+The caller writes `sumOf_o_t`, derived from the export's own name and parameter
+— both chosen by the author, so both stable. The churn stays inside, where it
+costs nobody anything, because the header is regenerated with the program.
+
+`examples/interop/ts-from-c` carries `sumOf` and `sumOfNamed` side by side, and
+the point of the pair is now the *measurement* — that structural merging makes
+the internal name a whole-program fact — rather than a recommendation to write
+the second one.
+
+**3. C can receive a managed value but cannot make one.** There is no public
+constructor: the emitted code builds string literals as a compile-time
+`static const struct { NtsHeader header; unsigned char data[N]; }`. So the
+usable managed surface from C is **out only**. *Fix: a small C-facing
+constructor API — `nts_str_from_utf8`, `nts_array_of_doubles`, and the object
+descriptors are already emitted with `_Static_assert`ed layouts, so a caller can
+legitimately build one if given the descriptor.*
+
+**4. A generator hands back its frame.** `function*` returns
+`NtsObj_counted_frame *` — the suspension frame itself, with `state` and
+`yielded` fields whose offsets are `_Static_assert`ed. There is no exported
+`next`. So a C caller holds a real object and has no supported way to step it.
+*Fix: emit a `next` shim per exported generator. The frame is already a
+first-class object; what is missing is one function per generator that resumes
+it and reports done-ness.*
+
+**5. A promise needs a checkpoint the caller must know about.** `async` returns
+`NtsPromise *`, and the runtime exposes `nts_checkpoint()`,
+`nts_promise_state()` and `nts_promise_value()`. Demonstrated end to end in
+`examples/interop/ts-from-c` — state `0` before the checkpoint, `1` after, value
+`42`. It works and it is undocumented.
+
+There is a trap in *demonstrating* it that the example now carries a note about:
+an `async` function with no `await` is **already settled** when it returns, so
+the checkpoint changes nothing and an arm written that way prints the same state
+twice. The first version of that example did exactly this.
+*Fix: document it in the generated header, and consider a blocking
+`nts_promise_join` for the common case — a C `main` that wants one answer should
+not have to know what a microtask is.*
+
+**6. Classes are better than expected and should be said so.** `NtsObj_Point` is
+a real `typedef struct` with a definition and `_Static_assert`s on its size and
+every field offset. A C caller can read `p->x` safely, and the assertions mean a
+layout change breaks the build rather than the program.
+
 ## The DX, as a file rather than a proposal
 
 `examples/interop/c-from-ts` is the native counterpart to `java-from-ts`: a
@@ -335,6 +488,54 @@ hand-audited, which is the status quo for every FFI that does this badly.
 libraries reachable. Inline arrays, `zeroed<T>`, struct-by-value and
 address-of-a-place are the second half, and `examples/interop/c-from-ts` marks
 which of its lines need which.
+
+## Can the `as c_int` casts go away?
+
+Half of them already should. Measured on a branded `c_int`:
+
+| direction | needs a cast |
+| --- | --- |
+| `c_int` result used as a `number` | **no** — a branded number *is* a number |
+| plain `number` passed where `c_int` is wanted | yes — `TS2345` |
+
+So every `as number` on a *result* is dead weight, and the example carried six
+of them. One remains and it is real. The inbound direction is the question.
+
+**There are two designs and the second is better, which weakens an argument made
+earlier in this document.**
+
+**(a) Branded parameters.** `clamp(v: c_int, …)` — every call site casts.
+TypeScript then stops you passing `3.7` where an `int` goes. That is the version
+the example currently shows, and six casts in twenty lines is the DX cost.
+
+**(b) Plain `number` parameters, ABI in the binding table.** The `.d.ts` says
+`clamp(v: number, …)` and the row beside it says the C type is `int`. No casts
+anywhere, and the compiler still knows exactly what to emit — the ABI is a fact
+about the *declaration*, and a declaration already has a table row.
+
+This is the JVM lane's architecture, which we should copy rather than reinvent:
+a `.d.ts` for the checker and a `.bind` for the machine facts, with
+`foreign_key` joining them. The key insight there was that a fact needed by the
+backend does not have to live in the *type* — and the invoke kind travelling in
+the table rather than in the key is the same decision one level down.
+
+**What (b) costs**: TypeScript stops warning that `3.7` is not an `int`. But C
+does not warn either — it truncates — so (b) is *faithful* to the target rather
+than merely lax, and a user writing a C binding has C's semantics whatever we do.
+
+**What it means for the earlier argument.** This document says exposing `c_int`
+is justified "on the ABI rather than ergonomics", because LLVM needs a typed
+`declare` and the types can only come from the TypeScript signature. That is
+true **only while there is no binding table**. With one, the ABI has a better
+home, and the scalar types become a tool for authors who *want* the checking
+rather than a requirement for the compiler to function.
+
+They are still worth having — `Ptr`, `Ref` and `Owned` have no other home,
+because assignability is exactly what they are for. But `c_int` on a parameter
+is now a choice, and the DX argument points at (b).
+
+*Open, and it is a decision: whether the generator emits (a) or (b) by default,
+and whether an author can opt into the strict form per module.*
 
 ## The questions that were open, and what investigating them found
 
