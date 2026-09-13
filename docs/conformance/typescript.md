@@ -44,6 +44,37 @@ case), and the node profile (110 files, measured for *reach* — nothing runs it
 anybody should ever fix it, and conflating them turns a list of decisions into
 a backlog.
 
+### How much of the ✅ column carries its own evidence
+
+`✅` has two clauses and a row can only show you one of them. "Lowers" is
+checkable from the row by compiling the construct. "Where it is observable the
+examples agree with node" is not — it needs an example, and the row has to say
+which. Counted 2026-09-14:
+
+| | |
+|---|---|
+| `✅` rows | 159 |
+| naming an `examples/` directory | 16 |
+| quoting a case count | 13 |
+| doing **either** | 20 |
+| doing **neither** | **139** |
+
+**This measures citation, not correctness.** A row can be perfectly true and
+say nothing about why; most of these are ordinary language constructs that many
+examples exercise incidentally. It is not a claim that 139 rows are wrong.
+
+It is a claim about what a reader can check. For 139 rows the second clause of
+`✅` is unverifiable from the ledger, and the sample so far says that is where
+the wrong ones live: this file already records three rows in two days whose
+explanation cell was empty and whose claim was wrong, and `namespace` — eleven
+characters, no evidence — was a fourth. Every row corrected this way has come
+out of the uncited 139; none has come out of the cited 20.
+
+So the honest reading of the `✅` column is **20 rows that show their work and
+139 that ask to be taken on trust**, and the cheapest way to improve the ledger
+is not to probe rows at random but to make a row cite the example that already
+covers it — which also reveals the rows where no example does.
+
 ---
 
 ## 1. Expressions and operators
