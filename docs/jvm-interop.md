@@ -758,3 +758,91 @@ And the ordering falls out of it rather than being chosen: **row 2 is first**,
 because it is the only one that pays for itself before any of this is built --
 14.2% on the worst row of the goal's open number, shared by all three backends,
 blocked on a missing `_i32` in a table that already has `_bool`.
+
+# The two caveats, and what each is actually worth fixing
+
+## The benchmark caveat must not be fixed, and that is the finding
+
+`awfy-queens` declares `queenRows: number[]`, so it is emitted `[D` and carries
+the 14.2%. Writing `Int32Array` there would take the row. **It would also stop
+measuring the thing the row exists for.**
+
+AWFY's own JavaScript, checked rather than assumed:
+
+    this.queenRows = new Array(8).fill(-1);      benchmarks/JavaScript/queens.js
+    private int[] queenRows;                     benchmarks/Java/Queens.java
+
+Our TypeScript mirrors the JavaScript; the `Java` column mirrors the Java; the
+bar is our compiled TypeScript against hand-written Java. **Rewriting our source
+to `Int32Array` would be hand-optimising the input to beat the reference**,
+which is the one thing a benchmark suite may never do -- and this file already
+has the sentence for it, about an arm that stayed in an example rather than
+being trimmed to make three backends agree.
+
+So the 14.2% is a **true cost of compiling idiomatic JavaScript to this
+platform**, and the only legitimate way to remove it is for the compiler to
+infer what the programmer did not say. That is the whole of the fix and there is
+no shortcut past it.
+
+## The DX caveat is half inherent and half the same fix
+
+`Int32Array` has no `push`, and that is JavaScript's rule rather than ours -- a
+typed array is a fixed-length window, which is *why* it can be a bare `int[]`.
+Adding `push` to it would diverge from node, and node is the oracle.
+
+So the gap is exactly **a growable integer array**, and for that the answer is
+again inference: a `number[]` that is pushed to *and* provably holds only int32
+can be an `int[]` behind the growable wrapper -- which needs an `NtsArrayI` with
+`int[] items` beside the existing `NtsArrayD`, and is a small runtime addition
+once the analysis exists.
+
+**Both caveats therefore reduce to one analysis**, which is worth saying because
+it changes what to build rather than how much.
+
+## What that analysis is, and how far the tree is from it
+
+Today the decision is one line:
+
+    pub fn arrays_can_grow(program: &Program) -> bool {
+        program.funcs.iter().any(|func| {
+            func.values.iter().any(|op| matches!(&op.kind,
+                OpKind::Call { callee: Callee::External(name), .. }
+                    if changes_array_length(name)))
+        })
+    }
+
+**One global `any`.** No per-array tracking of any kind -- one `push` anywhere
+in the program answers for every array in it. The same shape governs the
+element width, because `elements.rs` keys on the element *type* and every
+`number[]` is one type.
+
+The general answer is to **partition instead of globalise**: union-find over
+array-typed values, joined by assignment, parameter passing, return, field
+store and element store, and then ask each class rather than the program. A
+class whose members never reach a growing call stays bare; a class whose members
+only ever hold int32 becomes `int[]`.
+
+That single change would:
+
+- remove the growable cliff, which is the copy on **every** array handed to Java
+  in a program containing one `push`;
+- give `int[]` to `number[]` without any new language surface;
+- and therefore close both caveats and the interop copy together.
+
+### Three slices, cheapest first
+
+Worth stating separately because the general version is a real project and the
+first slice is not:
+
+1. **Arrays that never escape their function.** `hir::escape` already answers
+   this. No other `number[]` can alias them, so their representation is free.
+   Smallest possible slice, and it needs no new analysis at all.
+2. **Arrays reachable only through one field of one class.** `fields::analyze`
+   already "gives a field read the facts of every store into it", so the
+   machinery is adjacent. **This is the slice that covers `queenRows`**, which
+   is `this.queenRows` and therefore escapes its function.
+3. **Full equivalence classes**, as above.
+
+All three are `hir`'s rather than this lane's. What this lane can do is supply
+the number each slice is worth, which for slice 2 is already measured at 14.2%
+on the worst row of the goal's open number.
