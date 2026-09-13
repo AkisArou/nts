@@ -2,11 +2,18 @@
 //!
 //! # Why this is a test and not a wording preference
 //!
-//! Two different failures wore one sentence. A callee the checker resolved to
-//! no declaration is either a builtin this compiler has not implemented, or a
-//! name whose package published no TypeScript to compile — and the second
-//! became the common case the moment dependencies started being acquired,
-//! because most packages publish only generated JavaScript.
+//! Three different failures wore one sentence. A callee the checker resolved to
+//! no declaration is a builtin this compiler has not implemented, or a name
+//! whose package published no TypeScript to compile, or a class this compiler
+//! *does* provide that was called rather than constructed. The second became
+//! the common case the moment dependencies started being acquired, because most
+//! packages publish only generated JavaScript; the third was found on
+//! 2026-09-13 by probing a ledger row, and had been walking into the remaining
+//! `else` since the arm was first split.
+//!
+//! Each arm gets a test here, and the point of having all three is that any one
+//! of them alone can be satisfied by a compiler that says the wrong thing to
+//! everybody.
 //!
 //! Reported as a missing builtin, it sends its reader to `hir::builtin` to look
 //! for something that is not missing. The two are told apart from the *import*
@@ -59,6 +66,10 @@ fn fixture(name: &str) -> Utf8PathBuf {
          \n\
          export function fromLib(n: number): number {\n\
          \x20 return escape(String(n)).length + n;\n\
+         }\n\
+         \n\
+         export function callsProvidedClass(n: number): number {\n\
+         \x20 return TypeError(String(n)).message.length + n;\n\
          }\n",
     );
     write(
@@ -154,6 +165,48 @@ fn a_library_global_is_still_reported_as_a_builtin() {
             line.contains("a builtin this compiler does not provide"),
             "a `lib.d.ts` global has no import to blame, and this is where a \
              reader should look in `hir::builtin`: {line}"
+        );
+    }
+}
+
+/// The third cause. A class this compiler **does** provide, called without
+/// `new`.
+///
+/// `TypeError(m)` is what JavaScript defines as `new TypeError(m)` and
+/// TypeScript accepts it without complaint, so it reaches the same arm with no
+/// declaration — and wore the same sentence, which is false here in the
+/// expensive direction: `TypeError` is the second entry of
+/// `hir::builtin::ERRORS`, so its reader was sent to add a class already there.
+///
+/// **Unlike `escape` above, this one never needs swapping.** That test is
+/// pinned to a name that is genuinely absent and fails on the day it is
+/// implemented, which is the cost of testing a negative. This one is pinned to
+/// a class whose *being provided* is the whole assertion, so implementing more
+/// builtins can only make it more true.
+#[test]
+fn a_provided_class_called_without_new_says_so() {
+    let root = fixture("provided-class-called");
+    let Some(refusals) = refusals(&root) else {
+        return;
+    };
+
+    let called: Vec<&String> = refusals
+        .iter()
+        .filter(|line| line.contains("`TypeError`"))
+        .collect();
+    assert!(
+        !called.is_empty(),
+        "calling a provided class must be refused; got {refusals:#?}"
+    );
+    for line in &called {
+        assert!(
+            line.contains("called without `new`"),
+            "the class is provided, so the refusal must name the call form: {line}"
+        );
+        assert!(
+            !line.contains("a builtin this compiler does not provide"),
+            "and must not send its reader to `hir::builtin`, where `TypeError` \
+             is the second entry: {line}"
         );
     }
 }

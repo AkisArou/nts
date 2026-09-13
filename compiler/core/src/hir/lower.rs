@@ -27267,7 +27267,7 @@ impl<'a> FuncBuilder<'a> {
             return provided;
         }
         if target.callee.is_none() {
-            // Two different failures wore one sentence. A name the checker
+            // Three different failures wore one sentence. A name the checker
             // resolved to no declaration is either a builtin this compiler has
             // not implemented, or a name from a package whose implementation is
             // not in this program -- and the second is far commoner now that
@@ -27280,7 +27280,20 @@ impl<'a> FuncBuilder<'a> {
             // reads better and attributes the failure to a node outside the
             // function being walked, which costs the *caller* its own
             // diagnostic: `run` came back as "a declaration outside every walk".
-            let message = if self.imported_from(callee_node).is_some() {
+            // And a third wearing it, found by probing the ledger row for
+            // *calling* a class value rather than by a report. `TypeError(m)`
+            // is what JavaScript makes `new TypeError(m)`, TypeScript accepts
+            // it, and it arrives here with no declaration -- so it read as a
+            // builtin this compiler does not provide, which is false twice
+            // over: the class is the second entry in `hir::builtin`, and a
+            // reader sent there finds nothing missing to add.
+            //
+            // What is missing is a `call` that constructs. Only a *provided*
+            // class reaches this arm: a class the program declares is TS2348
+            // before the compiler sees it, so the list is the whole of it.
+            let message = if crate::hir::PROVIDED_ERROR_NAMES.contains(&name.as_str()) {
+                format!("`{name}`, a class this compiler provides, called without `new`")
+            } else if self.imported_from(callee_node).is_some() {
                 format!("`{name}`, an imported name whose implementation is not in this program")
             } else {
                 format!("`{name}`, a builtin this compiler does not provide")
