@@ -37,7 +37,11 @@ mod bits {
     pub const ENUM: u32 = 1 << 7 | 1 << 8; // ConstEnum | RegularEnum
     pub const METHOD: u32 = 1 << 13;
     pub const TYPE_ALIAS: u32 = 1 << 19;
-    pub const MODULE: u32 = 1 << 10 | 1 << 11; // ValueModule | NamespaceModule
+    /// `ast.SymbolFlagsValueModule` and `NamespaceModule`, `symbolflags.go:18-19`.
+    ///
+    /// Was `1 << 10 | 1 << 11`, which is `NamespaceModule | TypeLiteral`: an
+    /// instantiated module did not answer to this, and every type literal did.
+    pub const MODULE: u32 = 1 << 9 | 1 << 10;
     /// `ast.SymbolFlagsAlias`, `symbolflags.go:30`. Not mapped into the schema
     /// -- it is asked here and answered here -- but load-bearing: tsgo's
     /// `getAliasedSymbol` *panics* on a symbol that is not one ("Should only
@@ -372,4 +376,76 @@ mod tests {
     fn unmapped_flags_produce_no_kind_rather_than_a_wrong_one() {
         assert_eq!(schema_flags(1 << 30), SymbolFlags::default());
     }
+
+    /// Every constant in `bits`, against the pinned `ast.SymbolFlags`.
+    ///
+    /// Two derivations of one fact, made to disagree out loud. `MODULE` read
+    /// `1 << 10 | 1 << 11` under a comment saying `ValueModule |
+    /// NamespaceModule`, and the comment was the correct one: the constant
+    /// computed `NamespaceModule | TypeLiteral`, so an instantiated module
+    /// answered to nothing and *every type literal* answered to `MODULE`.
+    ///
+    /// Nothing local could catch that. Each constant is self-consistent, and
+    /// the one cross-check available -- the comment -- is prose. Only the pin
+    /// settles it, and the pin moves whenever the submodule does, which is
+    /// exactly when a hand-copied bit goes stale without being touched.
+    #[test]
+    fn every_flag_matches_the_pinned_tsgo_source() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../third_party/typescript-go/internal/ast/symbolflags.go"
+        );
+        // Not skipped when absent: a check that passes because it could not run
+        // is the failure this test exists to prevent.
+        let source = std::fs::read_to_string(path).unwrap_or_else(|error| {
+            panic!(
+                "the pin is what this is checked against, and it did not read: {path}: {error}\n\
+                 a fresh worktree has no submodules -- `git submodule update --init \
+                 third_party/typescript-go`. Not skipped when absent, because a check \
+                 that passes by not running is the failure this test exists to prevent."
+            )
+        });
+
+        // `\tSymbolFlagsValueModule    SymbolFlags = 1 << 9  // Instantiated module`
+        let mut shifts: FxHashMap<&str, u32> = FxHashMap::default();
+        for line in source.lines() {
+            let Some((name, rest)) = line.split_once(" SymbolFlags = 1 << ") else {
+                continue;
+            };
+            let Some(name) = name.trim().strip_prefix("SymbolFlags") else {
+                continue;
+            };
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            if let Ok(shift) = digits.parse::<u32>() {
+                shifts.insert(name, shift);
+            }
+        }
+        assert!(
+            shifts.len() > 20,
+            "parsed {} flags out of the pin, so the shape it is parsed with has moved",
+            shifts.len()
+        );
+
+        let bit = |name: &str| -> u32 {
+            let shift = shifts
+                .get(name)
+                .unwrap_or_else(|| panic!("`SymbolFlags{name}` is not in the pin any more"));
+            1u32 << shift
+        };
+
+        assert_eq!(
+            bits::VARIABLE,
+            bit("FunctionScopedVariable") | bit("BlockScopedVariable")
+        );
+        assert_eq!(bits::PROPERTY, bit("Property"));
+        assert_eq!(bits::FUNCTION, bit("Function"));
+        assert_eq!(bits::CLASS, bit("Class"));
+        assert_eq!(bits::INTERFACE, bit("Interface"));
+        assert_eq!(bits::ENUM, bit("ConstEnum") | bit("RegularEnum"));
+        assert_eq!(bits::METHOD, bit("Method"));
+        assert_eq!(bits::TYPE_ALIAS, bit("TypeAlias"));
+        assert_eq!(bits::MODULE, bit("ValueModule") | bit("NamespaceModule"));
+        assert_eq!(bits::ALIAS, bit("Alias"));
+    }
+
 }
