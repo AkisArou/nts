@@ -1152,44 +1152,330 @@ never sees it — its soundness sentence is about *its own* ops — and `rect.le
 works. The rule becomes **"a foreign member is never one of our field ops"**,
 which is about representation rather than about what may be surfaced.
 
-## The remaining drawbacks, in order of how much they cost
+## The remaining drawbacks, each with an example and a fix
 
-**2. No optimisation through a foreign object, ever.** No field narrowing, no
-scalarisation, no escape analysis inside it. This is correct — we must not
-optimise through something we do not own — but it is a real ceiling, and a
-program that puts hot data in a Java object pays it.
+Each entry below is a program that hits the drawback, what it costs, the
+proposal, and the test that would show the fix landed. Written after reading the
+code rather than from the design: **four of them are fixed by a mechanism this
+compiler already has**, and one of them turned out not to be a cost at all.
 
-**3. A bound call is opaque, so everything passed to it escapes.** `hir::escape`
-cannot see through a Java method, so an object handed to one must be assumed to
-escape. That costs frame placement on the native lanes and scalar replacement
-here.
+### 2. No optimisation through a foreign object
 
-**4. `same_shape` may merge two field-less foreign layouts.** Two Java classes
-with no fields and no methods in common would look identical. The name must
-carry the identity, which is what `signature_name` does for function types — but
-it is the specific thing to test first, not assume.
+```ts
+let total = 0;
+for (let i = 0; i < n; i++) total += rect.right - rect.left;
+```
 
-**5. Non-primitive statics cannot inline.** `Rect.CREATOR` is a
-`static final Parcelable$Creator` — no `ConstantValue` attribute, so it is a
-`getstatic` and a real reference. Only primitive and `String` constants vanish.
+`rect.right` is a foreign member, so `facts.rs` gives its result `Facts::TOP` --
+the constant whose own doc says it is "what an unanalyzed parameter or an opaque
+call returns": `lo = -inf`, `hi = +inf`, `whole = false`, `maybe_nan = true`,
+`maybe_negative_zero = true`. So `total` cannot be proved integral, the
+accumulation stays `f64`, and every operation carries NaN and `-0` handling.
 
-**6. A cross-thread callback cannot return a value.** The inbox gives a
-callback on another thread somewhere to land, but posting means it runs
-**later**. A Java listener that must answer synchronously — `onTouch` returning
-`boolean` — cannot be served that way at all. **Only void, fire-and-forget
-callbacks cross threads**; a value-returning one must be same-thread or be
-refused. This is the sharpest limit on the Android surface and it is not fixable
-by an adapter.
+**The cost is not that a Java `int` is imprecise. It is that we threw away what
+the descriptor already told us.** The fix has two halves:
 
-**7. Nullability is only as good as the annotations**, with a checked-in
-overrides file for the jars that have none.
+- **The descriptor is a fact source.** A member returning `I` has
+  `lo = -2^31`, `hi = 2^31 - 1`, `whole = true`, `maybe_nan = false`,
+  `maybe_negative_zero = false`. That is strictly tighter than `TOP`, it is free
+  -- read from the same bytes the binding table already parses -- and it is
+  **sound**, because the JVM guarantees it. Same for `B`, `S`, `C`, `Z` and `J`.
+  Only `F` and `D` give `TOP`. A Java `int` arriving in TypeScript keeps its
+  integrality and the loop above stays integer arithmetic.
+- **The repetition is the JIT's job, and only on this lane.** Two `getfield`s on
+  the same object with no call between them are hoisted by C2 and by ART's
+  optimiser. We do not need compile-time redundancy elimination through a
+  foreign object, because the platform that owns the object already does it.
 
-**8. A jar upgrade is a two-step** — regenerate, review the diff — because the
-`.d.ts` is checked in. That is the price of it being fast and greppable, and the
-drift test is what makes the staleness loud.
+So the ceiling is real but far lower than I stated: we lose *scalarisation* of a
+Java object, which we should never have had, and we keep the numeric facts,
+which was the part actually costing anything.
 
-**9. Exceptions kill the process** until a throw can cross a call on any
-backend.
+*Test:* a fixture whose accumulator is provably `whole` only if the descriptor
+is read; assert `nts hir --prepared` shows integer arithmetic rather than `f64`.
+
+**Status: mostly fixed. The residue -- no scalar replacement of a Java object --
+is correct and permanent.**
+
+### 3. A bound call is opaque, so everything passed to it escapes
+
+```ts
+const buf = new Uint8Array(4096);
+out.write(buf);          // java.io.OutputStream.write(byte[])
+```
+
+`hir::escape` cannot see through a Java method, so `buf` must be assumed
+retained: frame placement is lost and the array is heap-allocated. But
+`OutputStream.write` copies its argument out and keeps nothing.
+
+**The mechanism already exists, and it is already per-parameter.**
+`hir/escape.rs:728` reads `Callee::External(name) => runtime::keeps(name)`, and
+`keeps` returns `Option<&'static [usize]>`: `None` means "assume everything",
+`Some(&[])` means "keeps nothing", `Some(&[0])` names which parameters are
+retained. The comment above the `nts_presence_` arm records what saying so was
+worth -- two memory cases went **from 17 allocations to 0**, because without it
+"every object with an optional property somebody asks about moved to the heap".
+
+A foreign binding supplies the same answer. The binding table carries a `keeps`
+column, defaulting to `None` (everything escapes, which is always sound),
+populated three ways, cheapest first:
+
+1. **From the class file, by analysis.** We have the callee's bytecode -- it is
+   in the jar. A parameter never stored to a field, never passed on, and never
+   returned does not escape. That is a small intraprocedural pass over bytecode
+   the reader already parses.
+2. **From a checked-in overrides file**, beside the nullability one, for the hot
+   APIs where the analysis is too weak -- a `native` method has no bytecode at
+   all, and on Android a great many of them are `native`.
+3. **Never from a guess.** An absent entry is `None`.
+
+The pleasing part is that this is not new machinery. It is a second caller of a
+table whose value was already measured once.
+
+*Test:* `out.write(buf)` with the entry and without; assert the allocation count
+moves -- `tooling/memory` on the native lanes, `getThreadAllocatedBytes` here.
+
+**Status: fixed by an existing mechanism. The bytecode analysis in (1) is the
+optional half, not the load-bearing one.**
+
+### 4. `same_shape` may merge two field-less foreign layouts
+
+```ts
+import { Runnable } from "java:java.lang";
+import { Observer } from "java:java.util";
+```
+
+Both are interfaces; neither has fields. If they merge, a `Runnable` is passed
+where the verifier wants an `Observer` and the class fails to load -- or, on a
+lane with no verifier, it does not fail and the wrong method runs.
+
+I said the name must carry identity and that this should be tested rather than
+assumed. Reading it: `same_shape` **already takes `base` as a parameter** and
+compares it, with a comment explaining that it is a parameter rather than a
+caller's comparison "so that neither of them can forget it". But both of these
+have base `Object`, so the base does not separate them. The worry is real.
+
+**The fix is one line, into a function written for exactly this family.**
+`lower.rs:4615` has `nominal_name(name)` -- *"whether this layout's name is its
+identity"* -- currently `is_error || is_signature_name || is_constructor_name`.
+Record 0096 is the story of what happens without it: an empty `Ctor_Error`
+merged with an empty `Fn...` signature, and node's `path` got
+`normalizeString`'s function parameter emitted with the type of the `Error`
+constructor. A foreign layout is a **fourth member of the same family** --
+deliberately empty, nominal -- so `nominal_name` gains `is_foreign_name(name)`.
+
+The doc comment there already states the rule in the form that makes this safe:
+
+> a layout whose name is its identity does not merge with a differently-named
+> layout, whatever family the other one is in.
+
+Stated over both sides, so foreign-vs-foreign **and** foreign-vs-TypeScript are
+covered by the same line. `is_foreign_name` goes by prefix and shape, matching
+`is_signature_name`'s precedent: a foreign layout is named `java/lang/Runnable`,
+and `/` cannot appear in a TypeScript identifier.
+
+*Test:* two single-method Java interfaces in one program, asserting two layouts
+survive; plus a foreign layout against an empty TypeScript class.
+
+**Status: fixed, one line, in a function whose doc comment anticipated the
+family before the family existed.**
+
+### 5. Non-primitive statics cannot inline
+
+`Rect.CREATOR` is a `public static final Parcelable$Creator`. A primitive or
+`String` static carries a `ConstantValue` attribute and becomes an `ldc`; a
+reference static does not, and becomes a `getstatic`.
+
+**There is nothing to fix, and I overstated it.** `getstatic` is one
+instruction, three bytes, and it is exactly what `javac` emits for the same
+source. It triggers the owner's `<clinit>` on first use, which is correct Java
+semantics. Listing this as a drawback was padding.
+
+The one real consequence is a thing *not* to do: do not cache such a static in a
+TypeScript global, because that moves class initialisation to program start and
+can run Android framework `<clinit>` before the Looper exists.
+
+**Status: withdrawn. Not a cost.**
+
+### 6. A cross-thread callback cannot return a value
+
+```ts
+view.setOnTouchListener((v, e) => { handle(e); return true; });
+```
+
+`OnTouchListener.onTouch` returns `boolean`, Android calls it synchronously on
+the UI thread, and it uses the answer to decide whether the event was consumed.
+If our callback must post to `NtsInbox` and run later, there is no answer to
+return, and returning a placeholder is a **wrong answer that runs** -- the
+category this project treats as worse than a refusal.
+
+I called this unfixable by an adapter. That is still true, and the framing was
+still wrong. Reading `NtsEnv` is what corrected it:
+
+```java
+private static final ThreadLocal<NtsEnv> CURRENT = new ThreadLocal<NtsEnv>();
+```
+
+**The environment is a `ThreadLocal`, not a singleton pinned to a thread the
+runtime chose.** So "the environment thread" is not a fixed fact to work around;
+it is wherever an environment has been installed. That turns an impossibility
+into a placement decision:
+
+- **Install the environment on the thread Android will call back on.** For UI
+  work that is the main/Looper thread -- and then `onTouch` is a **direct call**.
+  The listener runs on the calling thread, computes, returns `true`, no inbox
+  involved. The problem disappears for the entire UI callback surface, which is
+  where every value-returning listener lives.
+- **`NtsInbox` is for genuinely foreign threads.** It already knows which thread
+  owns it -- `ownedBy(inbox, lane)` and `claim(inbox, lane)` take a `Thread` --
+  and those callbacks are background completions (network, disk), which are void
+  by convention because the framework has nowhere to use a return value either.
+- **A non-void callback registered where no environment lives is refused at bind
+  time**, by name, with the two-line explanation. Not at runtime, and never with
+  a placeholder.
+
+The rule: *a callback returning non-void must be invoked on a thread that has an
+environment*, and the binding generator can see which is which in the descriptor.
+That is checkable rather than hopeful.
+
+*Test:* a `boolean`-returning listener driven from the environment's own thread,
+asserting the value arrives; and the same from a foreign thread, asserting the
+refusal.
+
+**Status: fixed for the surface that matters, by placing the environment rather
+than by building an adapter. Residue: a value-returning callback genuinely
+required on a thread we do not control, which is rare and where refusing is
+correct.**
+
+### 7. Nullability is only as good as the annotations
+
+```ts
+const parent = view.getParent();   // ViewParent, or null for an unattached view
+parent.requestLayout();            // NPE that the type system said could not happen
+```
+
+I priced this as a general weakness. For the jar that matters it is far better
+than that. `javap -v` on `android.view.View` alone shows **67 `NonNull` and 77
+`Nullable`** annotations. The Android SDK is extensively annotated and has been
+since the support-annotations library.
+
+The fix, in order:
+
+1. **Read the annotations** -- `RuntimeVisibleAnnotations`,
+   `RuntimeInvisibleAnnotations`, and the type-annotation variants, across
+   `androidx.annotation`, `javax.annotation`, `org.jetbrains.annotations` and
+   JSpecify. **The invisible table is not optional**: `androidx.annotation.Nullable`
+   is `CLASS`-retention, so a reader that only looks at the visible table sees
+   none of the 77.
+2. **Honour `@NullMarked`** (JSpecify) at package or module level. It flips the
+   default inside to non-null, which is what modern libraries use, and makes an
+   unannotated return in a marked package *known* non-null rather than unknown.
+3. **Default an unannotated reference return to `T | null`.** Refuse rather than
+   miscompile -- and the reason Kotlin had to invent platform types instead of
+   guessing.
+4. **A checked-in overrides file** for unannotated jars, same format and same
+   place as the `keeps` overrides.
+
+*Test:* assert the generated `.d.ts` gives `View.getParent` a `| null` and
+`View.getContext` none, both derived from the annotations rather than a list.
+
+**Status: fixed for annotated jars, which includes the Android SDK. Residue: an
+unannotated jar is verbose to call, which is the honest state of the world, and
+the overrides file is the escape.**
+
+### 8. A jar upgrade is a two-step
+
+Bump `compileSdk` from 35 to 36 and the checked-in `android.d.ts` is stale.
+Nothing fails to compile -- a removed method is still declared -- and the call
+fails at runtime with `NoSuchMethodError`.
+
+The drift test already makes staleness loud, the same pattern as `signatures.rs`
+and the runtime jar. Two additions make the review cheap rather than merely
+possible:
+
+- **The drift test prints a member-level diff**, not "the file differs": added,
+  removed, and changed-descriptor, per class. A jar bump then produces a
+  reviewable list instead of a 40,000-line diff nobody reads.
+- **The binding table records the jar's identity** -- SDK version plus a hash of
+  the class files consumed -- so the mismatch reports as *"generated against
+  android-35, building against android-36"*, naming the cause rather than the
+  symptom.
+
+`NTS_REGENERATE=1` writes, exactly as every other generated table here does.
+
+**Status: not eliminated, and should not be. The two steps are the price of the
+`.d.ts` being a checked-in, greppable, reviewable file -- the alternative makes
+every clean build depend on a JDK and an SDK. Made cheap and loud instead.**
+
+### 9. Exceptions kill the process
+
+```ts
+const n = Integer.parseInt(userInput);   // NumberFormatException on bad input
+```
+
+Today a Java exception crossing into our frames is caught by nothing and the
+process dies with a stack trace -- which the differential harness classifies as
+a **Defect**, because `stopped_with` reads any line starting `at ` containing
+`(` that way. So one bad input does not just crash a program, it corrupts the
+instrument.
+
+I listed this as "wait until a throw can cross a call on every backend". That is
+the full fix and it is a shared-layer change I do not own. But there is a real
+fix available now, and it uses something that landed last night.
+
+1. **Now: catch at the call site and convert to a refusal.**
+   `compiler/jvm-emitter` gained exception tables in `5b865f62` --
+   `Code::try_catch(start, end, target, catch_type)` and `Code::bind_handler`,
+   with `same_locals_1_stack_item` frames. So a bound call that can throw is
+   wrapped: `try_catch` over the invoke, a handler that reads `getMessage()` and
+   raises `NtsRefusal`. **The harness already carves `NtsRefusal` out of its
+   Defect rule**, so the case is *declined* rather than *failed*, the message
+   names the Java exception and the method, and the differential stays
+   meaningful. One exception-table entry per throwing call.
+2. **Later: the same entry becomes a real TypeScript `catch`.** When a throw can
+   cross a call, the handler stops refusing and jumps to the TypeScript handler
+   block with the `Throwable` erased into the thrown value. Same table entry,
+   different target -- so stage 1 is not throwaway work.
+
+*Test:* a fixture calling `Integer.parseInt("abc")`; assert the process exits
+with an `nts:` refusal naming `NumberFormatException`, and assert the
+differential classifies it declined rather than Defect.
+
+**Status: the crash and the harness corruption are fixed now. The
+TypeScript-level catch waits on a shared change already on the list.**
+
+### What the nine came to
+
+| # | | resolution | rests on |
+| --- | --- | --- | --- |
+| 1 | Public fields | fixed | a foreign access is not a `FieldGet` |
+| 2 | No optimisation through a foreign object | mostly fixed | descriptors are a `Facts` source; the JIT owns the rest |
+| 3 | Everything escapes | fixed | `runtime::keeps`, already per-parameter |
+| 4 | Layouts merging | fixed, one line | `nominal_name`, record 0096's family |
+| 5 | Non-primitive statics | **withdrawn** | it was one instruction |
+| 6 | Cross-thread callback return | fixed for the real surface | `NtsEnv.CURRENT` is a `ThreadLocal` |
+| 7 | Nullability | fixed for annotated jars | 144 annotations on `View` alone |
+| 8 | Jar upgrade | made cheap, not removed | member-level drift diff |
+| 9 | Exceptions | crash fixed now | exception tables, `5b865f62` |
+
+Five are fixed by a mechanism the compiler already had, and one by deleting the
+drawback. **That is not luck.** It is what happens when the foreign surface is
+made to look like something the compiler already models -- an external call with
+a name -- rather than like something new. Every one of the existing mechanisms
+reached for here (`keeps`, `nominal_name`, `Facts`, `is_signature_name`) was
+built for the runtime helpers or for empty TypeScript layouts, and a Java member
+is the same question asked about a different jar.
+
+**What is left, and is permanent:** a Java object is not scalarised; a `native`
+method's escape behaviour cannot be analysed, only declared; an unannotated jar
+is verbose to call; and a value-returning callback on a thread we do not own is
+refused.
+
+**What this changes about the build order.** Three of the fixes are one-line
+changes in files I do not own -- `nominal_name` in `lower.rs`, the `keeps` arm
+in `escape.rs`, descriptor-seeded `Facts` in `facts.rs`. They go to MainClaude
+as tested patches, the way `Layout.base` did, and each is small enough to land
+ahead of the class-file reader rather than behind it.
 
 # Correcting 5 and 8: both were caution, not difficulty
 
