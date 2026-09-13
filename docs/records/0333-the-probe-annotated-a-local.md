@@ -86,8 +86,24 @@ what is blind. The gap was reachable only by following a recorded row down to
 what stops it, and a census over the ledger's own rows could never produce it,
 because the row does not exist to be counted.
 
-The general row is the one to build. Awaiting a plain value is more general than
-`for await` over an array, and closing it closes the row above it as a
-consequence rather than as a second piece of work — which is the same shape as
-every other time the narrower derivation turned out to be asking the general
-question.
+The general row is the one to build, and awaiting a plain value is more general
+than `for await` over an array. But **closing it does not close the row above
+it**, and I wrote that it would before reading what the blocker for 2023 had
+already priced:
+
+> An `await` per element in a loop whose sequence is not a generator at all — so
+> the walk keeps its cursor and its element read, and gains a suspension between
+> them. That is `hir::suspend` cutting a segment at a point the source never
+> wrote, inside machinery it did not generate, for every one of the five
+> synchronous walks.
+
+So 2023 needs two things: awaiting a plain value, *and* a suspension point cut
+inside a walk the compiler generated. The first is a prerequisite, not a
+sufficient cause. The fixture that measures 2023 had the second written down all
+along, three paragraphs below the numbers I quoted from it — I read the part that
+confirmed what I was looking for and stopped.
+
+Which is the same error as the probe at the top of this record, arriving at the
+other end of the same afternoon: there I read the arm that agreed with me and
+not the position it varied, here the paragraph that agreed with me and not the
+one below it. A fixture is not only its numbers.
