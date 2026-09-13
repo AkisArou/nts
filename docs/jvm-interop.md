@@ -1635,3 +1635,123 @@ run over the same class-file data.
 **So refuse only where `javac` itself would call it ambiguous**, which is rare
 and genuinely undecidable. That is a much smaller refusal than the one proposed,
 and it is the rule a Java programmer already expects.
+
+# Keeping the advantage: what interop must not cost us
+
+Drawback 2 ends by saying we give up an advantage we hold over Java, in the one
+place we cannot hold it. That framing is right and it is incomplete, because it
+looks only outward -- at Java objects we cannot optimise. **The larger risk
+points the other way: at our own objects, once Java can reach them.** This
+section is ordered by that, because only the first item can *lose* something we
+already have; the rest are advantages we merely fail to gain.
+
+## 1. Interop must not falsify `fields.rs`, and today it would
+
+`hir/fields.rs` is what stops every `this.count` coming back as `TOP`. Its own
+header says why that is worth having -- without it "`this.count + 1` is floating
+point, `x | 0` after it is a library call, and a loop that touches an object
+pays a double round trip per iteration for arithmetic that fits in a register",
+which is "every program that uses objects".
+
+Its soundness rests on one sentence:
+
+> A field holds what was stored into it, and nothing else can store into it:
+> **there is no FFI that writes through a pointer here**, and a program's own
+> stores are all in the HIR.
+
+**That sentence is true today and interop is exactly what falsifies it.** It is
+not wrong, and nobody will edit it when it goes false -- the change happens
+somewhere else entirely, which is the failure mode where a precondition expires
+in silence.
+
+And the door is already open. Emitting a two-field class and reading it back:
+
+```
+public final class nts.gen.Counter {
+  public int count;
+  public nts.gen.Counter();
+}
+```
+
+**`public int count`.** A Java caller holding an `nts/gen/Counter` can write that
+field with one `putfield`, with no method of ours involved and no `FieldSet` in
+the HIR. The join over reaching stores is then incomplete, and the narrowing it
+produced is unsound -- **for every instance of that layout, program-wide**,
+because `fields.rs` keys on `(layout, field)` and not on the instance that
+escaped.
+
+**The fix is to make the field unreachable and route every foreign write through
+our own code**, which costs nothing and is better than a restriction:
+
+- **Emit fields package-private rather than `public`.** Every generated class
+  lives in `nts/gen`, including the `Alpha__Beta extends Alpha` forms, so
+  package-private access is enough for all of our own code and closed to
+  everything outside it. A foreign class in `com/example` cannot touch it.
+- **Expose accessors for anything deliberately published to Java.** This is the
+  part that makes it a fix rather than a wall: a Java caller mutating our object
+  through a method of ours performs a `FieldSet` **in the HIR**, which is
+  precisely what `fields.rs` requires. The join stays complete and the narrowing
+  stays sound, while the field is still writable from Java.
+- **A per-`(layout, field)` opt-out** for anything that must be a raw public
+  field anyway: that pair joins `TOP` and nothing else changes. Precise, and it
+  costs only the classes that actually need it.
+- **And the sentence itself becomes a checked claim**, not a comment -- a test
+  asserting no generated field is `ACC_PUBLIC`. The comment is what goes stale;
+  the assertion is what fails on the day someone changes it.
+
+## 2. `ACC_FINAL` recovers real optimisation *through* a foreign object
+
+Drawback 2 called the residue permanent. Part of it is not.
+
+A Java `final` instance field cannot change after construction -- the memory
+model guarantees it -- and the class file carries `ACC_FINAL` on the field,
+which the reader parses anyway. So **a read of a `final` foreign field is pure**:
+it can be hoisted out of a loop, common-subexpression-eliminated, and kept live
+across an intervening foreign call, none of which is true for a mutable one.
+
+That is optimisation through an object we do not own, obtained from a flag we
+already have to read. It does not help `android.graphics.Rect`, whose
+`left/top/right/bottom` are deliberately mutable -- but it covers the value-like
+types, which are the ones that appear in inner loops.
+
+## 3. Unpack at the boundary, and bound the region
+
+The general form of what a Java programmer does by hand when they hoist fields
+into locals before a loop. Read the foreign object's members once into our own
+values, and every pass we own applies to those values -- because they are ours.
+
+The soundness condition is the only interesting part: **the unpacked copy is
+valid until something could write the original**, and conservatively that is the
+next foreign call reachable from the same object. Within a region containing no
+such call the unpack is exact; across one it must be re-read. That is the same
+question a C compiler answers about a possibly-aliasing pointer, and unlike the
+C case we get to see every foreign call in the HIR.
+
+## 4. Prefer the primitive overload, so the object never exists
+
+The cheapest optimisation is the one where there is nothing to optimise. Android
+routinely publishes both forms, and this is measured on the real jar rather than
+assumed:
+
+```
+  public void setBounds(android.graphics.Rect);
+  public void setBounds(int, int, int, int);
+  public void set(int, int, int, int);          // android.graphics.Rect
+  public boolean contains(int, int);
+```
+
+Where the binding table has both, **prefer the primitive form**: no object is
+constructed, nothing escapes, no copy is made, and no field analysis is needed
+because there are no fields. This is a binding-table decision, it is free, and
+it removes the problem instead of managing it.
+
+## 5. And `keeps`, from drawback 3
+
+So that our objects passed to a foreign call do not escape when the callee does
+not retain them. Listed last because it is already covered, not because it is
+least.
+
+**The ordering is the point.** Items 2 to 5 are advantages to gain, and if we
+never build them the compiler stays as good as it is today. Item 1 is an
+advantage we already have, that interop would take away silently, program-wide,
+on the day it lands -- and it is the only one with a deadline.
