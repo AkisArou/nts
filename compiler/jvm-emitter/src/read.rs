@@ -4,7 +4,7 @@
 //!
 //! The format is symmetric and the two directions share exactly the thing that
 //! is easy to get wrong twice: the constant pool's variable-width entries, and
-//! the rule that a `Long` or a `Double` occupies **two** slots. [`pool::tag`] is
+//! the rule that a `Long` or a `Double` occupies **two** slots. `pool::tag` is
 //! one table read by both, so a reader and a writer cannot disagree about what
 //! a tag byte means.
 //!

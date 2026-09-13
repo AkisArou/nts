@@ -8,16 +8,33 @@ refute and five minutes to check.
 
 ## What is already true
 
-**TS → Java already works.** `compiler/codegen/jvm/tests/execute.rs` compiles a
-`Drive.java` with `javac --release 8 -Werror` against classes this compiler
-wrote, calls `nts.gen.Program.add(double, double)`, and asserts the answer.
-javac typechecked against our class files. Nothing about that direction is
-unbuilt; what is missing is *packaging*, which is the last section here.
+**Both of these paragraphs were written before the work and both went stale;
+they are corrected here rather than deleted, because what changed is the
+substance of the document.**
 
-**Java → TS is unbuilt.** `compiler/jvm-emitter` is a writer only -- its own
-header says "It is also the class file *reader* that `nts bind` will need",
-future tense -- and there is no `bind` subcommand. The CLI is `check`, `emit-c`,
-`emit-jvm`, `hir`, `layouts`, `version`.
+**TS → Java works, and a Java caller now writes idiomatic Java.**
+`examples/interop/ts-from-java` compiles a `Main.java` against classes this
+compiler wrote and runs it under `-Xverify:all`. The surface is `s.bump()`
+rather than `Program.Session$bump(s)` -- the mangled statics are `ACC_SYNTHETIC`
+and `javac` refuses to reference them -- and a TypeScript `Map` crosses as a
+`java.util.Map` with no copy.
+
+~~what is missing is *packaging*, which is the last section here~~ -- **there
+was no such section**, a forward reference to nothing that survived the whole
+document. What "packaging" means concretely: `emit-jvm` writes loose class files
+under `nts/gen/` beside `nts-runtime.jar`, and a Java project wanting a
+dependency needs those in one jar. That is `jar --create` over the output
+directory, which every `build.sh` here does in one line, so it is a convenience
+rather than a gap -- and saying which it is, is the thing the dangling reference
+prevented.
+
+**Java → TS is built as far as this lane can take it.** `compiler/jvm-emitter`
+reads as well as writes: [`read`] parses class files, [`bind`] renders
+declarations, [`escapes`] answers which parameters a method retains. There is
+still no `bind` **subcommand** -- it is `examples/bind.rs`, driven by the
+projects' `build.sh` -- because the CLI lives in `tooling/cli`, which this lane
+does not own. The CLI is `check`, `emit-c`, `emit-jvm`, `hir`, `layouts`,
+`version`.
 
 ## The representations, measured
 

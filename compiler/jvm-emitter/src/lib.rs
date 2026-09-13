@@ -8,9 +8,16 @@
 //! hand-build a class, run it, and see. `tests/runs.rs` does exactly that, and
 //! it is why this crate has no dependency on `nts-core`.
 //!
-//! It is also the class file *reader* that `nts bind` will need to turn a jar
-//! into TypeScript declarations. The format is symmetric and the constant pool
-//! is the same table read or written, so one crate serves both directions.
+//! It is also the class file **reader** that turns a jar into TypeScript
+//! declarations -- [`read`] parses, [`bind`] renders, [`escapes`] answers which
+//! parameters a method retains. The format is symmetric and the constant pool
+//! is the same table read or written, so one crate serves both directions and
+//! `pool::tag` is one table both use.
+//!
+//! That sentence was future tense -- *"the reader that `nts bind` **will
+//! need**"* -- for as long as it took to build the reader, and stayed future
+//! tense afterwards. A comment claiming something does not exist is exactly as
+//! silent when it goes false as one claiming something does.
 //!
 //! # The two things it insists on
 //!
