@@ -80,6 +80,33 @@ A shortened ceiling is only sound if it is not itself the variable, so the intac
 re-run at 20s first: **42 passed, and the pass set byte-identical to the 60s arm, 0 files
 different**. Only then do the broken arms' counts mean anything.
 
+
+## The compiled lane publishes nothing, and its 25 passes were all hollow
+
+    interpreted   86 file(s): 42 passed, 42 failed, 2 skipped
+    compiled      86 file(s): 25 printed, and every one of them asserted nothing
+
+`shape.mjs` reads `exports.default`. The addon exports no `default` -- its six keys are
+`SCHED_NONE SCHED_RR isMaster isPrimary isWorker schedulingPolicy` -- so `shape` reaches
+its blank-module branch and returns `{}`. Through the runner:
+
+    compiled     require('cluster') -> KEYS=0 []      branch=NEITHER
+    interpreted  require('cluster') -> KEYS=12 [...]  branch=primary
+
+Every role-guarded file therefore takes neither branch. **This is the hollowness the
+`--sabotage` section above describes, arriving on a lane where nothing was sabotaged**, and
+the comment in `shape.mjs` had already named it: a blanked module publishes nothing.
+
+It is not obvious that this is fixable here. What node publishes from `lib/cluster.js` is a
+single EventEmitter **instance**, and an instance is exactly what the Node-API boundary
+declines -- the same wall `child_process`'s `send` hit with an object parameter, and
+`child_process` is likewise at 0. So the honest compiled row for this module is **0**, and a
+25 in its place was a number about the harness.
+
+The two-break control above was run on the interpreted arm. It says nothing about the
+compiled one, where the break has nothing to bite: a module with no surface cannot be
+observed losing part of it.
+
 ## What is here
 
 The handshake, and it is the whole of the module. A primary forks a child with
