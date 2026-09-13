@@ -71,6 +71,7 @@
 //! is true of any method that only throws, and it is exactly the class of body
 //! whose bytecode is not its behaviour.
 
+use crate::class::access;
 use crate::read::Member;
 
 /// What a method does with its parameters.
@@ -91,10 +92,6 @@ impl Keeps {
     }
 }
 
-/// `ACC_STATIC`. A non-static method's slot 0 is the receiver, so its declared
-/// parameters start at slot 1 -- getting this backwards reports the receiver's
-/// behaviour for parameter 0 and is silent about it.
-const ACC_STATIC: u16 = 0x0008;
 
 /// The local slot each declared parameter occupies, in order.
 ///
@@ -237,7 +234,7 @@ enum Value {
 /// Which parameters of `method` may outlive a call to it.
 #[must_use]
 pub fn of(method: &Member) -> Keeps {
-    let is_static = method.access & ACC_STATIC != 0;
+    let is_static = method.access & access::STATIC != 0;
     let Some(slots) = parameter_slots(&method.descriptor, is_static) else {
         return Keeps::unknown(0);
     };

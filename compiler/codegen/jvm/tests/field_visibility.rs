@@ -38,17 +38,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_jvm_emitter::read;
+use nts_jvm_emitter::{class::access, read};
 use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use std::path::{Path, PathBuf};
 
-/// `ACC_PUBLIC`. JVMS 4.5, table 4.5-A.
-const ACC_PUBLIC: u16 = 0x0001;
-/// `ACC_STATIC`. A static field here is a **global**, not an instance field,
-/// and globals are governed by a different rule that is already sound -- see
-/// `statics_are_globals_and_a_public_one_is_already_excluded_from_narrowing`.
-const ACC_STATIC: u16 = 0x0008;
 
 fn repository() -> PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
@@ -115,11 +109,11 @@ fn no_generated_field_is_public() {
                 if name.contains("presence") {
                     presence += 1;
                 }
-                if access & ACC_STATIC != 0 {
+                if access & access::STATIC != 0 {
                     statics += 1;
                     continue;
                 }
-                if access & ACC_PUBLIC != 0 {
+                if access & access::PUBLIC != 0 {
                     offenders.push(format!("{}.{name} in {example}", class.binary_name));
                 }
             }

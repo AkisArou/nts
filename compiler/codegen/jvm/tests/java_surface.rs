@@ -5,7 +5,7 @@
 //!
 //! - **Fields are package-private**, so `hir::fields`'s narrowing stays sound
 //!   once an object reaches Java. `field_visibility.rs` covers that.
-//! - **A method's static is `ACC_SYNTHETIC` exactly when an instance method
+//! - **A method's static is `access::SYNTHETIC` exactly when an instance method
 //!   replaces it.** `Session$bump` is not something a caller should type -- `$`
 //!   is the JVM's own mark for a generated name -- and `javac` *refuses to
 //!   reference* a synthetic member rather than merely hiding it. So the flag is
@@ -16,12 +16,9 @@
 use camino::Utf8PathBuf;
 use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
-use nts_jvm_emitter::read;
+use nts_jvm_emitter::{class::access, read};
 use std::path::{Path, PathBuf};
 
-const ACC_PUBLIC: u16 = 0x0001;
-const ACC_STATIC: u16 = 0x0008;
-const ACC_SYNTHETIC: u16 = 0x1000;
 
 fn repository() -> PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
@@ -69,7 +66,7 @@ fn emitted() -> Option<Vec<read::ClassFile>> {
 /// | the rule replaced by | fails on |
 /// | --- | --- |
 /// | `let synthetic = 0` -- nothing marked | *a replaced static is synthetic* |
-/// | `let synthetic = ACC_SYNTHETIC` -- everything marked | *a free function is the API* |
+/// | `let synthetic = access::SYNTHETIC` -- everything marked | *a free function is the API* |
 ///
 /// The second is the one worth having. Marking every static is the obvious
 /// simplification, it passes the first assertion, and it makes every free
@@ -90,9 +87,9 @@ fn a_methods_static_is_synthetic_and_a_free_functions_is_not() {
     // A class method's static: public, static, and **synthetic**, because
     // `Session.bump()` is the API and this is the implementation.
     let bump = flags("Session$bump").expect("Session$bump");
-    assert!(bump & ACC_STATIC != 0, "still a static");
+    assert!(bump & access::STATIC != 0, "still a static");
     assert!(
-        bump & ACC_SYNTHETIC != 0,
+        bump & access::SYNTHETIC != 0,
         "a replaced static is synthetic, so `javac` refuses `Program.Session$bump(s)`"
     );
 
@@ -101,9 +98,9 @@ fn a_methods_static_is_synthetic_and_a_free_functions_is_not() {
     // would make it uncallable. A rule that marked every static would pass the
     // assertion above and break every free function in the program.
     let greet = flags("greet").expect("greet");
-    assert!(greet & ACC_STATIC != 0 && greet & ACC_PUBLIC != 0, "public static");
+    assert!(greet & access::STATIC != 0 && greet & access::PUBLIC != 0, "public static");
     assert!(
-        greet & ACC_SYNTHETIC == 0,
+        greet & access::SYNTHETIC == 0,
         "a free function is the API and must stay referenceable from Java"
     );
 }
@@ -122,8 +119,8 @@ fn a_class_carries_an_instance_method_for_each_of_its_statics() {
             .iter()
             .find(|m| m.name == member)
             .unwrap_or_else(|| panic!("Session.{member}()"));
-        assert!(found.access & ACC_PUBLIC != 0, "{member} is public");
-        assert!(found.access & ACC_STATIC == 0, "{member} is an instance method");
+        assert!(found.access & access::PUBLIC != 0, "{member} is public");
+        assert!(found.access & access::STATIC == 0, "{member} is an instance method");
         // The receiver is implicit, so the forwarder takes one fewer argument
         // than the static it calls.
         assert_eq!(found.descriptor, "()D", "{member} takes no explicit receiver");

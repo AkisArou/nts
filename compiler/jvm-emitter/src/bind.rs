@@ -31,24 +31,10 @@
 //! [`crate::read::Member`], so this is a rendering gap rather than a missing
 //! input, and it is the next thing to close.
 
+use crate::class::access;
 use crate::read::ClassFile;
 use std::fmt::Write as _;
 
-/// `ACC_PUBLIC`, `ACC_STATIC`, `ACC_FINAL`. JVMS table 4.5-A.
-const ACC_PUBLIC: u16 = 0x0001;
-const ACC_STATIC: u16 = 0x0008;
-const ACC_FINAL: u16 = 0x0010;
-/// On a class it means "this is an enum"; on a field, "this is one of its
-/// constants". JVMS table 4.5-A.
-const ACC_ENUM: u16 = 0x4000;
-/// `ACC_INTERFACE`, and `ACC_ABSTRACT` on a method. JVMS table 4.5-A/4.6-A.
-const ACC_INTERFACE: u16 = 0x0200;
-const ACC_ABSTRACT: u16 = 0x0400;
-/// The method's last parameter is a varargs one. At the ABI it is still an
-/// array -- `javac` packs the arguments at the **call site** -- but a caller
-/// writes `sum(1, 2, 3)`, so the declaration has to spread or it reads
-/// `Expected 1 arguments, but got 3`.
-const ACC_VARARGS: u16 = 0x0080;
 
 /// One Java type, as TypeScript.
 ///
@@ -259,7 +245,7 @@ fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read::Membe
         }
         let Some(parent) = resolve.find(&name) else { break };
         for method in &parent.methods {
-            if method.access & ACC_PUBLIC == 0 || method.name.starts_with('<') {
+            if method.access & access::PUBLIC == 0 || method.name.starts_with('<') {
                 continue;
             }
             let key = (method.name.clone(), method.descriptor.clone());
@@ -377,13 +363,13 @@ fn parameter_binary(descriptor: &str, index: usize) -> Option<String> {
 /// not count against it, which is what makes `Comparator` still a SAM.
 fn functional_interface(binary: &str, resolve: &dyn Resolve) -> Option<String> {
     let class = resolve.find(binary)?;
-    if class.access & ACC_INTERFACE == 0 {
+    if class.access & access::INTERFACE == 0 {
         return None;
     }
     let mut abstracts = class
         .methods
         .iter()
-        .filter(|m| m.access & ACC_ABSTRACT != 0 && m.access & ACC_STATIC == 0);
+        .filter(|m| m.access & access::ABSTRACT != 0 && m.access & access::STATIC == 0);
     let only = abstracts.next()?;
     if abstracts.next().is_some() {
         return None;
@@ -422,7 +408,7 @@ fn emitted_name(
         .methods
         .iter()
         .filter(|other| {
-            other.access & ACC_PUBLIC != 0 && other.name == method.name && key(&other.descriptor) == mine
+            other.access & access::PUBLIC != 0 && other.name == method.name && key(&other.descriptor) == mine
         })
         .min_by_key(|other| lossiness(&other.descriptor[1..]))
         .map(|other| other.descriptor.clone());
@@ -435,9 +421,9 @@ fn emitted_name(
 
 /// Append every public field, with its nullability and constant-ness.
 fn render_fields(out: &mut String, class: &ClassFile) -> Result<(), String> {
-    let is_enum_class = class.access & ACC_ENUM != 0;
+    let is_enum_class = class.access & access::ENUM != 0;
 
-    for field in class.fields.iter().filter(|f| f.access & ACC_PUBLIC != 0) {
+    for field in class.fields.iter().filter(|f| f.access & access::PUBLIC != 0) {
         let Some((rendered, _)) = field
             .signature
             .as_deref()
@@ -446,8 +432,8 @@ fn render_fields(out: &mut String, class: &ClassFile) -> Result<(), String> {
         else {
             return Err(format!("{}.{}: {}", class.binary_name, field.name, field.descriptor));
         };
-        let is_static = field.access & ACC_STATIC != 0;
-        let is_final = field.access & ACC_FINAL != 0;
+        let is_static = field.access & access::STATIC != 0;
+        let is_final = field.access & access::FINAL != 0;
         // **Two fields are provably never null, and the default would have
         // made both `| null` for no reason.**
         //
@@ -455,14 +441,14 @@ fn render_fields(out: &mut String, class: &ClassFile) -> Result<(), String> {
         // file and the JVM resolves the read to an `ldc`, so there is no
         // execution in which it is null. And an enum's own constants are
         // created by its `<clinit>` before any of them is observable, which
-        // the JLS guarantees; `ACC_ENUM` on both the class and the field is
+        // the JLS guarantees; `access::ENUM` on both the class and the field is
         // how the class file says so.
         //
         // Without this, `Catalog.NAME` reads `string | null` for a compile-time
         // string literal, and every use of it needs a null check that can
         // never fire. That is the kind of noise that makes a generated binding
         // unpleasant enough to hand-edit.
-        let provably_present = field.constant || (is_enum_class && field.access & ACC_ENUM != 0);
+        let provably_present = field.constant || (is_enum_class && field.access & access::ENUM != 0);
         // `ConstantValue` is what decides `ldc` against `getstatic`, and it is
         // worth saying at the declaration because it decides whether touching
         // the member loads the class at all.
@@ -513,7 +499,7 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
     let mut out = String::new();
     let name = simple_name(&class.binary_name);
 
-    let is_interface = class.access & ACC_INTERFACE != 0;
+    let is_interface = class.access & access::INTERFACE != 0;
     let _ = writeln!(out, "  /** {} */", class.binary_name.replace('/', "."));
     // **An interface is emitted as an interface, so it can be implemented.**
     // Without this a Java callback type is not nameable at all -- it only ever
@@ -533,13 +519,13 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
     // rendering, because the decision is about the *set*: a name is only
     // ambiguous relative to its siblings.
     let mut collapsed: Vec<(String, String)> = Vec::new();
-    for method in class.methods.iter().filter(|m| m.access & ACC_PUBLIC != 0) {
+    for method in class.methods.iter().filter(|m| m.access & access::PUBLIC != 0) {
         if let Some((parameters, _)) = signature_of(&method.descriptor) {
             collapsed.push((method.name.clone(), parameters.join(",")));
         }
     }
 
-    for method in class.methods.iter().filter(|m| m.access & ACC_PUBLIC != 0) {
+    for method in class.methods.iter().filter(|m| m.access & access::PUBLIC != 0) {
         // The `Signature` attribute first, because it is the one that still has
         // the type arguments; the erased descriptor is the fallback, so an
         // exotic signature loses its generics rather than losing the method.
@@ -551,7 +537,7 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         else {
             return Err(format!("{}.{}: {}", class.binary_name, method.name, method.descriptor));
         };
-        let variadic = method.access & ACC_VARARGS != 0;
+        let variadic = method.access & access::VARARGS != 0;
         let last = parameters.len().saturating_sub(1);
         let arguments = parameters
             .iter()
@@ -626,7 +612,7 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         let _ = writeln!(
             out,
             "    {}{}{}({arguments}): {};",
-            if method.access & ACC_STATIC != 0 { "static " } else { "" },
+            if method.access & access::STATIC != 0 { "static " } else { "" },
             emitted,
             type_parameters(method.signature.as_deref()),
             returns(&result, &method.annotations),
@@ -661,7 +647,7 @@ fn inherited_fields(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read
         }
         let Some(parent) = resolve.find(&name) else { break };
         for field in &parent.fields {
-            if field.access & ACC_PUBLIC == 0 || seen.contains(&field.name) {
+            if field.access & access::PUBLIC == 0 || seen.contains(&field.name) {
                 continue;
             }
             seen.push(field.name.clone());
@@ -683,7 +669,7 @@ fn render_inherited(out: &mut String, class: &ClassFile, resolve: &dyn Resolve) 
         let _ = writeln!(
             out,
             "    /** Inherited. */\n    {}{}: {};",
-            if field.access & ACC_FINAL != 0 { "readonly " } else { "" },
+            if field.access & access::FINAL != 0 { "readonly " } else { "" },
             field.name,
             if field.constant { rendered.clone() } else { returns(&rendered, &field.annotations) },
         );
@@ -709,7 +695,7 @@ fn render_inherited(out: &mut String, class: &ClassFile, resolve: &dyn Resolve) 
         let _ = writeln!(
             out,
             "    /** Inherited. */\n    {}{}({arguments}): {};",
-            if method.access & ACC_STATIC != 0 { "static " } else { "" },
+            if method.access & access::STATIC != 0 { "static " } else { "" },
             method.name,
             returns(&result, &method.annotations),
         );
