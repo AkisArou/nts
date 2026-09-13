@@ -279,6 +279,31 @@ int main(void) {
 }
 
 #[test]
+fn library_constructor_signatures_survive_type_symbol_resolution() {
+    let Some(tsgo) = toolchain() else {
+        return;
+    };
+    let (dir, _) = emit(
+        &tsgo,
+        "library-constructor-signature",
+        r"export function read(index: number): number {
+    try {
+        const view = new DataView(new ArrayBuffer(4));
+        view.setUint8(0, 42);
+        return view.getUint8(index);
+    } catch (error) {
+        return error instanceof RangeError ? -1 : -2;
+    }
+}",
+    );
+    run(
+        &dir,
+        "#include \"program.h\"\nint main(void) { return read_(0) != 42 || read_(4) != -1; }",
+        true,
+    );
+}
+
+#[test]
 fn a_local_function_published_under_an_alias_has_external_linkage() {
     let Some(tsgo) = toolchain() else {
         return;

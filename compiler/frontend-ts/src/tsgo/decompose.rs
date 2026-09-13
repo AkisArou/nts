@@ -331,6 +331,18 @@ impl<'a> Decomposer<'a> {
             }
 
             if !array_like && !Self::is_ours(snapshot, slot) && !Self::is_carried(snapshot, slot) {
+                // Callable signatures are needed even across the library
+                // boundary (for example ErrorConstructor in instanceof).
+                // The boundary stops member graphs, not callable ABI facts.
+                let mut walk = Walk {
+                    worklist: &mut worklist,
+                    stats: &mut stats,
+                    seeded: &seeded,
+                };
+                if let Some(kind) = self.resolve_callable(snapshot, ty, &mut walk)? {
+                    snapshot.types[slot.0 as usize].kind = kind;
+                    stats.decomposed += 1;
+                }
                 // Stop at the library boundary. `Promise<void>` and a class
                 // prototype are enough to pull the standard library's whole type
                 // graph in transitively — measured at 5,773 types from a 180-node
@@ -524,6 +536,18 @@ impl<'a> Decomposer<'a> {
                 }));
         }
 
+        if let Some(kind) = self.resolve_callable(snapshot, ty, walk)? {
+            return Ok(kind);
+        }
+        self.resolve_members(snapshot, ty, bits, walk)
+    }
+
+    fn resolve_callable(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        ty: u32,
+        walk: &mut Walk<'_>,
+    ) -> Result<Option<TypeKind>, TsgoError> {
         // Call signatures before members: every backend needs a function type's
         // exact signature rather than its prototype. A JVM `method_info` cannot be
         // emitted without a descriptor at all.
@@ -532,7 +556,7 @@ impl<'a> Decomposer<'a> {
             .signatures_of_type(self.handle, &self.project, ty)?;
         if let Some(signature) = signatures.first() {
             let id = self.record_signature(snapshot, signature, walk)?;
-            return Ok(TypeKind::Function(id));
+            return Ok(Some(TypeKind::Function(id)));
         }
 
         // A `new (...) => T` type has no call signature, only a construct one.
@@ -541,10 +565,10 @@ impl<'a> Decomposer<'a> {
                 .construct_signatures_of_type(self.handle, &self.project, ty)?;
         if let Some(signature) = constructors.first() {
             let id = self.record_signature(snapshot, signature, walk)?;
-            return Ok(TypeKind::Function(id));
+            return Ok(Some(TypeKind::Function(id)));
         }
 
-        self.resolve_members(snapshot, ty, bits, walk)
+        Ok(None)
     }
 
     /// The members and index signatures of a record-like object type.

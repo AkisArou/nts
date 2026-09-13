@@ -7789,6 +7789,10 @@ impl<'a> FuncBuilder<'a> {
         if self.bindings.contains_key(&symbol.0) {
             return false;
         }
+        // Imports name their alias at the use site. Classify the declaration
+        // it denotes, so discovering a callable type does not turn a direct
+        // imported call into a closure dispatch.
+        let symbol = self.denoted_symbol(symbol);
         let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else {
             return false;
         };
