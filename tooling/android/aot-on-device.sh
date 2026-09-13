@@ -9,12 +9,17 @@
 #     NTS_D8_RELEASE=1   dex the way a shipped app is dexed; `d8` defaults to
 #                        debug and that is not symmetric between the lanes
 #     NTS_AOT_METHOD=m   which method `oatdump` prints, defaulting to the
+#                        entry point; `ALL` drops the filter for a whole-odex
+#                        dump, which is ~100,000 lines and the only way to ask
+#                        what differs *anywhere*
 #                        entry point -- usually the wrong one, since the two
 #                        lanes spell the entry differently and the hot method
 #                        is commonly named the same on both
 #     NTS_AOT_REF=f.java substitute a reference, to price a *shape* by writing
 #                        it into hand-written Java and checking in `javap`
 #                        that the intended bytecode came out
+#     NTS_AOT_DIR=d      measure a case directory outside `benches/cases`,
+#                        so a probe need not be added to the corpus
 #     NTS_AOT_KEEP=1     leave the package installed and dump its AOT code
 #                        rather than uninstalling
 #
@@ -132,7 +137,12 @@ public final class BenchActivity extends Activity {
 JAVA
 
 case=${1:-awfy-queens}
-dir=$root/benches/cases/$case
+# `NTS_AOT_DIR` measures a case that is **not in the corpus**, which is what a
+# probe wants: adding a directory under `benches/cases` to answer one question
+# moves `dexes.sh`'s method floor, adds a row to the published table, and is
+# seen by every sweep that enumerates the corpus. A probe should cost none of
+# that. The directory needs a `case.ts` and a `ref.java` exactly as a case does.
+dir=${NTS_AOT_DIR:-$root/benches/cases/$case}
 [ -f "$dir/ref.java" ] || { echo "no ref.java for $case" >&2; exit 1; }
 
 entry=$(grep -oE "^export function [A-Za-z0-9_]+" "$dir/case.ts" 2>/dev/null \
@@ -311,7 +321,23 @@ PY
       # `run` there) and the hot method usually has the same name on both:
       # ours is the static `Towers$moveTopDisk` and the reference's is the
       # instance `Towers.moveTopDisk`, and `moveTopDisk` selects both.
-      adb shell "oatdump --oat-file=$odex --method-filter=${NTS_AOT_METHOD:-$method} 2>&1" \
+      #
+      # **`NTS_AOT_METHOD=ALL` drops the filter**, which is the only way to ask
+      # "what is different anywhere" rather than "what is different here".
+      # `awfy-bounce` needed exactly that -- seven hypotheses dead and the two
+      # candidate methods at parity -- and the answer was that no filter selects
+      # everything: a filter is a substring of a method *name*, so there is no
+      # string that matches them all. Filtering on the package matched the class
+      # table and produced a dump with no disassembly in it.
+      #
+      # It is opt-in because the unfiltered dump is ~100,000 lines against ~900.
+      if [ "${NTS_AOT_METHOD:-}" = ALL ]; then
+        filter=""
+      else
+        filter="--method-filter=${NTS_AOT_METHOD:-$method}"
+      fi
+      # shellcheck disable=SC2086
+      adb shell "oatdump --oat-file=$odex $filter 2>&1" \
         | tr -d '\r' > "$work/oatdump-$side.txt" 2>&1
       echo "  $side dump: $work/oatdump-$side.txt ($(wc -l < "$work/oatdump-$side.txt") lines)" >&2
     else
