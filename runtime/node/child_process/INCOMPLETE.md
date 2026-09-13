@@ -73,6 +73,37 @@ narrative had already explained away.
 
     stdio-reuse-readable-stdio.js         who owns the read
 
+### Who owns the read: measured against node, and node reads in neither case
+
+`pipe-dataflow` and `stdio-reuse-readable-stdio` are both gated on this, and it had been
+recorded here as *a decision about who owns the read*. It is not a decision. node's behaviour
+was measurable and was measured, by hooking `child.stdout._handle.readStart` on node itself:
+
+    only an `end` listener, no `data`     end fired, close fired,
+                                          readStart called = false
+    stdout handed to another child        wc produced its answer,
+                                          readStart on cat.stdout called = false
+
+**node calls `readStart` in neither case**, and `end` and `close` still fire in the first. So
+the eager `nts_child_process_read_start` in `ChildReadable`'s constructor is not what node does,
+and the comment there -- that the eager read is needed so a killed child's stdout reaches `end`
+-- is an explanation for our arrangement rather than a description of node's.
+
+That makes the work concrete instead of open:
+
+  * the read must start on the **consumer's** first `_read`, not in the constructor
+  * `close` bookkeeping must learn the pipe is finished without reading it, which today rides
+    on the binding's EOF callback and therefore on having started a read
+  * only then does `_handle.readStart` mean anything, and only then is exposing it honest --
+    a `readStart` this profile never calls would satisfy `mustNotCall` while the constructor
+    does the very thing the test forbids, which is the hollow pass this file already warned
+    about above
+
+Not started. It is a change to when a child's output is consumed, with `test-child-process-kill`
+depending on the current arrangement, and it wants its own pass rather than the tail of another.
+
+
+
   This one is the ownership question, and it is not the same bug as `pipe-dataflow` despite
   arriving next to it: the file never mentions `_handle`. It hands `p1.stdout` to `head`,
   waits for `head` to exit, and then reads `p1.stdout` from the parent -- legal because
