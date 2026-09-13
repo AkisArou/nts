@@ -53,6 +53,7 @@ import type { URL } from "../../url/src/url.ts";
 import { Readable } from "../../stream/src/readable.ts";
 import { Writable } from "../../stream/src/writable.ts";
 
+/** @ntsAbi managed */
 declare function nts_child_process_spawn_sync(
   file: string,
   args: string[],
@@ -71,9 +72,12 @@ declare function nts_child_process_spawn_sync(
   ) => void,
 ): void;
 
+/** @ntsAbi managed */
 declare function nts_process_env(name: string): string;
+/** @ntsAbi managed */
 declare function nts_process_exec_path(): string;
 
+/** @ntsAbi managed */
 declare function nts_child_process_spawn(
   file: string,
   args: string[],
@@ -102,20 +106,26 @@ declare function nts_child_process_spawn(
   onExit: (status: number, signal: number) => void,
   onError: (code: number) => void,
 ): number;
+/** @ntsAbi managed */
 declare function nts_child_process_read_start(
   handle: number,
   which: number,
   onData: (bytes: Uint8Array) => void,
   onEnd: () => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_child_process_write(
   handle: number,
   bytes: Uint8Array,
   callback: (status: number, unused: number) => void,
 ): number;
+/** @ntsAbi managed */
 declare function nts_child_process_end_stdin(handle: number): void;
+/** @ntsAbi managed */
 declare function nts_child_process_kill(handle: number, signal: number): number;
+/** @ntsAbi managed */
 declare function nts_child_process_pid(handle: number): number;
+/** @ntsAbi managed */
 declare function nts_child_process_close(handle: number): void;
 
 /* The channel. `fork` is `spawn` plus a socketpair the child finds through
@@ -958,7 +968,20 @@ void nts_process_env;
 
 export interface SpawnOptions extends SpawnSyncOptions {
   detached?: boolean | undefined;
-  stdio?: string | readonly string[] | undefined;
+  /**
+   * **`readonly unknown[]`, not `readonly string[]`, because the implementation accepts more.**
+   *
+   * A `stdio` array may hold a file descriptor, `'ipc'` in any slot, another child's stream, or
+   * one of `net`'s handles -- `stdioSpecOf` passes all of those through and `hostStream`
+   * translates them. The narrower type said `string[]`, and `cluster` forwarding
+   * `settings.stdio` was `TS2322 Type 'readonly unknown[] | undefined' is not assignable`.
+   *
+   * That error sat in the tree uncaught, because the **interpreted lane does not typecheck**:
+   * `cluster` measured 78 of 86 with `emit-c` refusing the module outright. Widening the
+   * declaration to what the code already handles is the honest direction; narrowing `cluster`
+   * would have been a cast over a true statement.
+   */
+  stdio?: string | readonly unknown[] | undefined;
 }
 
 /**
@@ -1107,7 +1130,7 @@ function markGivenAway(spec: readonly unknown[] | null): readonly unknown[] | nu
 }
 
 function stdioSpecOf(
-  stdio: string | readonly string[] | undefined,
+  stdio: string | readonly unknown[] | undefined,
 ): readonly unknown[] | null {
   if (stdio === undefined) return null;
   if (typeof stdio === "string") return [stdio, stdio, stdio];
@@ -1149,7 +1172,7 @@ function stdioFlag(value: string | undefined): number {
   return 0;
 }
 
-function stdioMode(stdio: string | readonly string[] | undefined): number {
+function stdioMode(stdio: string | readonly unknown[] | undefined): number {
   if (stdio === undefined) return 0;
   if (typeof stdio === "string") {
     const flag = stdioFlag(stdio);
