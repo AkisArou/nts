@@ -25,6 +25,7 @@ declare module "java:com.example.ui" {
     export interface OnBytes {
       onBytes(a0: Uint8Array): void;
     }
+
   }
 
   /** com.example.ui.Rect Final: cannot be extended. */
@@ -82,6 +83,7 @@ declare module "java:com.example.ui" {
     export interface OnTouch {
       onTouch(a0: number, a1: number): boolean;
     }
+
   }
 
   /** com.example.ui.Widget */
@@ -115,6 +117,7 @@ declare module "java:com.example.ui" {
         /** Inherited. */
         const KIND: string;
     }
+
     /** com.example.ui.Widget$Task */
     export interface Task {
       run(a0: number): void;
@@ -124,6 +127,7 @@ declare module "java:com.example.ui" {
         const KIND: string;
         function none(): Widget.Task | null;
     }
+
   }
 
 }

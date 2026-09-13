@@ -49,11 +49,13 @@ declare module "java:com.example" {
       constructor(a0: Catalog, a1: number);
       owner(): string | null;
     }
+
     /** com.example.Catalog$Entry Final: cannot be extended. */
     export class Entry {
       readonly key: string | null;
       constructor(a0: string);
     }
+
   }
 
   /** com.example.Kind Final: cannot be extended. */

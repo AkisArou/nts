@@ -1304,6 +1304,62 @@ fn render_inherited(
 /// and true inner classes, and both nest the same way here; the difference
 /// between them is in the *constructor descriptor*, which already carries the
 /// outer instance for an inner one.
+/// Emit one class and everything nested inside it, to any depth.
+///
+/// **Depth, which the first version did not have.** It collected every
+/// `Outer$*` and flattened them all into one `export namespace Outer`, so
+/// `AccessibilityService$MagnificationController$OnMagnificationChangedListener`
+/// landed beside `MagnificationController` rather than inside it -- and the
+/// reference `AccessibilityService.MagnificationController.OnMagnificationChangedListener`
+/// then had nowhere to resolve. 247 errors over the closure, all of them
+/// `Cannot access '...' because '...' is a type, but not a namespace`.
+///
+/// `$` separates each level, so direct children are the ones with no further
+/// `$` after the prefix, and each recurses. Shared by `module_of` and
+/// `namespace_of` rather than written twice: five defects in this file have
+/// come from two paths rendering the same thing and drifting.
+fn emit_tree(
+    out: &mut String,
+    bound: &mut Vec<Bound>,
+    classes: &[(String, String, Vec<Bound>)],
+    binary: &str,
+    body: &str,
+    rows: &[Bound],
+    depth: usize,
+) {
+    let pad = "  ".repeat(depth);
+    let mut mine = rows.to_vec();
+    shift(&mut mine, lines_in(out), depth * 2);
+    bound.append(&mut mine);
+    for line in body.lines() {
+        if line.is_empty() {
+            out.push('\n');
+        } else {
+            let _ = writeln!(out, "{pad}{line}");
+        }
+    }
+
+    let prefix = format!("{binary}$");
+    let children: Vec<&(String, String, Vec<Bound>)> = classes
+        .iter()
+        .filter(|(inner, _, _)| {
+            inner.starts_with(&prefix) && !inner[prefix.len()..].contains('$')
+        })
+        .collect();
+    if children.is_empty() {
+        out.push('\n');
+        return;
+    }
+    // Declaration merging: the class above and this namespace are one name to
+    // TypeScript, which is what makes `Outer.Inner` read as it does in Java.
+    let _ = writeln!(out, "\n{pad}  export namespace {} {{", simple_name(binary));
+    for (inner, inner_body, inner_rows) in children {
+        emit_tree(out, bound, classes, inner, inner_body, inner_rows, depth + 1);
+    }
+    let _ = writeln!(out, "{pad}  }}");
+    out.push('\n');
+}
+
 /// The same classes as a **global namespace** rather than an ambient module --
 /// the prelude every other binding is written in.
 ///
@@ -1344,33 +1400,7 @@ pub fn namespace_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> 
 
     let mut bound: Vec<Bound> = Vec::new();
     for (binary, body, rows) in classes.iter().filter(|(binary, _, _)| !binary.contains('$')) {
-        let mut rows = rows.clone();
-        shift(&mut rows, lines_in(&out), 0);
-        bound.append(&mut rows);
-        out.push_str(body);
-
-        let simple = simple_name(binary);
-        let prefix = format!("{binary}$");
-        let nested: Vec<&(String, String, Vec<Bound>)> =
-            classes.iter().filter(|(inner, _, _)| inner.starts_with(&prefix)).collect();
-        if nested.is_empty() {
-            out.push('\n');
-            continue;
-        }
-        let _ = writeln!(out, "\n  export namespace {simple} {{");
-        for (_, body, rows) in nested {
-            let mut rows = rows.clone();
-            shift(&mut rows, lines_in(&out), 2);
-            bound.append(&mut rows);
-            for line in body.lines() {
-                if line.is_empty() {
-                    out.push('\n');
-                } else {
-                    let _ = writeln!(out, "  {line}");
-                }
-            }
-        }
-        out.push_str("  }\n\n");
+        emit_tree(&mut out, &mut bound, classes, binary, body, rows, 0);
     }
     out.push_str("}\n");
 
@@ -1443,37 +1473,7 @@ pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (St
     // inside it -- TypeScript wants the class before the namespace that merges
     // with it.
     for (binary, body, rows) in classes.iter().filter(|(binary, _, _)| !binary.contains('$')) {
-        // Taken before the push, so it is the offset this body actually lands
-        // at rather than a count kept alongside.
-        let mut rows = rows.clone();
-        shift(&mut rows, lines_in(&out), 0);
-        bound.append(&mut rows);
-        out.push_str(body);
-
-        let simple = simple_name(binary);
-        let prefix = format!("{binary}$");
-        let nested: Vec<&(String, String, Vec<Bound>)> =
-            classes.iter().filter(|(inner, _, _)| inner.starts_with(&prefix)).collect();
-        if nested.is_empty() {
-            out.push('\n');
-            continue;
-        }
-        let _ = writeln!(out, "\n  export namespace {simple} {{");
-        for (_, body, rows) in nested {
-            // Two more spaces, because the body was written for one level --
-            // and the same two columns the rows shift by.
-            let mut rows = rows.clone();
-            shift(&mut rows, lines_in(&out), 2);
-            bound.append(&mut rows);
-            for line in body.lines() {
-                if line.is_empty() {
-                    out.push('\n');
-                } else {
-                    let _ = writeln!(out, "  {line}");
-                }
-            }
-        }
-        out.push_str("  }\n\n");
+        emit_tree(&mut out, &mut bound, classes, binary, body, rows, 0);
     }
 
     out.push_str("}\n");
