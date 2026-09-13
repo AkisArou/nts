@@ -153,6 +153,75 @@ fn simple_name(binary: &str) -> String {
     after_package.rsplit('$').next().unwrap_or(after_package).to_owned()
 }
 
+/// How the generator finds a class it does not hold.
+///
+/// **A callback rather than a jar reader, deliberately.** A jar is a zip, and
+/// `Cargo.toml` says of this crate's dependencies: *"External. Deliberately
+/// small; every addition is a maintenance obligation."* Taking a zip and a
+/// deflate crate to resolve a superclass would be two, for a job the caller can
+/// already do -- it has the jar open. So the crate stays dependency-free and
+/// the caller answers questions about names.
+///
+/// Returning `None` is always allowed and always safe: the generator emits what
+/// it can see and nothing it cannot, which is how a partially-resolvable jar
+/// still produces usable declarations.
+pub trait Resolve {
+    /// The class with this binary name, e.g. `java/lang/Enum`.
+    fn find(&self, binary_name: &str) -> Option<ClassFile>;
+}
+
+/// A resolver that knows nothing, for the single-class case.
+#[derive(Debug)]
+pub struct Alone;
+
+impl Resolve for Alone {
+    fn find(&self, _binary_name: &str) -> Option<ClassFile> {
+        None
+    }
+}
+
+/// Every member a class inherits and does not itself declare.
+///
+/// Walks `super_name` upward, skipping `java/lang/Object` -- whose members
+/// (`toString`, `wait`, `notify`) are noise on every generated class and are
+/// not what a caller is reaching for.
+///
+/// **Overridden members are not duplicated**, matched on name *and* erased
+/// descriptor: a subclass narrowing a return type declares a bridge method with
+/// the same name and a different descriptor, and treating those as distinct is
+/// what keeps a covariant override from vanishing.
+fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read::Member> {
+    let mut seen: Vec<(String, String)> = class
+        .methods
+        .iter()
+        .map(|m| (m.name.clone(), m.descriptor.clone()))
+        .collect();
+    let mut found = Vec::new();
+    let mut next = class.super_name.clone();
+    // A bound rather than a visited-set: a class hierarchy cannot be cyclic
+    // (the verifier rejects it at load), so this only guards a malformed jar.
+    for _ in 0..32 {
+        let Some(name) = next.take() else { break };
+        if name == "java/lang/Object" {
+            break;
+        }
+        let Some(parent) = resolve.find(&name) else { break };
+        for method in &parent.methods {
+            if method.access & ACC_PUBLIC == 0 || method.name.starts_with('<') {
+                continue;
+            }
+            let key = (method.name.clone(), method.descriptor.clone());
+            if seen.contains(&key) {
+                continue;
+            }
+            seen.push(key);
+            found.push(method.clone());
+        }
+        next.clone_from(&parent.super_name);
+    }
+    found
+}
+
 /// Render one class as a `declare class` body.
 ///
 /// # Errors
@@ -161,6 +230,15 @@ fn simple_name(binary: &str) -> String {
 /// emitting a declaration with a hole in it. **Refuse by name, never
 /// half-emit**: a `.d.ts` that silently drops a method is one a caller trusts.
 pub fn declarations(class: &ClassFile) -> Result<String, String> {
+    declarations_with(class, &Alone)
+}
+
+/// Render one class, resolving inherited members through `resolve`.
+///
+/// # Errors
+///
+/// As [`declarations`].
+pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<String, String> {
     let mut out = String::new();
     let name = simple_name(&class.binary_name);
 
@@ -275,8 +353,44 @@ pub fn declarations(class: &ClassFile) -> Result<String, String> {
         );
     }
 
+    render_inherited(&mut out, class, resolve);
+
     out.push_str("  }\n");
     Ok(out)
+}
+
+/// Append every member this class inherits and does not redeclare.
+///
+/// Separate from [`declarations_with`] because that function was over a hundred
+/// lines with it inline, and the two halves answer different questions: what
+/// this class says, and what it gets for free.
+fn render_inherited(out: &mut String, class: &ClassFile, resolve: &dyn Resolve) {
+    for method in inherited(class, resolve) {
+        let Some((parameters, result)) = method
+            .signature
+            .as_deref()
+            .and_then(generic_signature)
+            .or_else(|| signature_of(&method.descriptor))
+        else {
+            // Skipped rather than refused: an inherited member this subset
+            // cannot render is one the caller never asked for by name, where a
+            // declared one is.
+            continue;
+        };
+        let arguments = parameters
+            .iter()
+            .enumerate()
+            .map(|(index, rendered)| format!("a{index}: {rendered}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let _ = writeln!(
+            out,
+            "    /** Inherited. */\n    {}{}({arguments}): {};",
+            if method.access & ACC_STATIC != 0 { "static " } else { "" },
+            method.name,
+            returns(&result, &method.annotations),
+        );
+    }
 }
 
 /// Wrap one or more classes in the ambient module a program imports.

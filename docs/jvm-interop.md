@@ -2274,9 +2274,17 @@ follow it.
   Knowing that `List` takes one parameter means reading `java/util/List.class`'s
   own `Signature` -- the whole jar rather than one class file, which is the same
   requirement as inherited members below.
-- **Inherited members are not surfaced.** `Kind.name()` and `Kind.ordinal()`
-  come from `java.lang.Enum` and this generator emits declared members only.
-  Walking the superclass chain needs the whole jar rather than one class file.
+- ~~**Inherited members are not surfaced.**~~ **Closed, through a resolver.**
+  `declarations_with(class, resolve)` walks `super_name` upward and emits what
+  the subclass does not declare, marked `/** Inherited. */`. `java/lang/Object`
+  is skipped -- `toString` and `wait` on every generated class is noise.
+  Overrides are matched on name **and** erased descriptor, so a covariant
+  override's bridge method does not hide the real one.
+
+  **A callback rather than a jar reader, deliberately.** A jar is a zip, and
+  this crate's `Cargo.toml` says every dependency is a maintenance obligation;
+  taking a zip *and* a deflate crate to resolve a superclass would be two, for
+  a job the caller can already do with the jar it has open.
 - **Parameter names are `a0`, `a1`.** Real names need the `MethodParameters`
   attribute, which `javac` only emits under `-parameters`, or the local
   variable table. `android.jar` has neither, so this may be as good as it gets

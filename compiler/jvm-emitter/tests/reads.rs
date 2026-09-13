@@ -480,3 +480,103 @@ fn generic_signatures_are_rendered() {
         "a raw type has no Signature and must not gain type arguments:\n{body}"
     );
 }
+
+/// Resolves a class out of a directory of compiled class files.
+struct FromDirectory(PathBuf);
+
+impl nts_jvm_emitter::bind::Resolve for FromDirectory {
+    fn find(&self, binary_name: &str) -> Option<nts_jvm_emitter::read::ClassFile> {
+        let bytes = std::fs::read(self.0.join(format!("{binary_name}.class"))).ok()?;
+        nts_jvm_emitter::read::class_file(&bytes).ok()
+    }
+}
+
+/// Inherited members, which need more than one class file.
+#[test]
+fn inherited_members_are_surfaced_through_a_resolver() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+
+    let kind = ours(&classes, "com.example.Kind");
+
+    // Without a resolver, nothing inherited appears -- the single-class case.
+    let alone = nts_jvm_emitter::bind::declarations(&kind).expect("renders");
+    assert!(!alone.contains("ordinal()"), "no resolver means no inherited members:\n{alone}");
+
+    // `java/lang/Enum` is in the JDK rather than the fixture, so a resolver
+    // that only knows the fixture directory still finds nothing. That is the
+    // control: it proves the next assertion is about resolution and not about
+    // the flag.
+    let only_fixture = nts_jvm_emitter::bind::declarations_with(&kind, &FromDirectory(classes.clone()))
+        .expect("renders");
+    assert!(
+        !only_fixture.contains("ordinal()"),
+        "java.lang.Enum is not in the fixture, so this should still find nothing:\n{only_fixture}"
+    );
+
+    assert!(only_fixture.contains("weight(): int;"), "declared members still render");
+
+    // **The positive arm, and without it the three assertions above would all
+    // pass with `inherited` returning nothing at all.** `android-shape` has a
+    // real chain -- `View extends Widget` -- so a resolver that can see
+    // `Widget` must surface its members on `View`.
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let view = {
+        let bytes = std::fs::read(ui.join("com/example/ui/View.class")).expect("View.class");
+        nts_jvm_emitter::read::class_file(&bytes).expect("parses")
+    };
+
+    let without = nts_jvm_emitter::bind::declarations(&view).expect("renders");
+    assert!(
+        !without.contains("setBounds"),
+        "`setBounds` is declared on Widget, not View, so it must be absent without a resolver:\n{without}"
+    );
+
+    let with = nts_jvm_emitter::bind::declarations_with(&view, &FromDirectory(ui)).expect("renders");
+    assert!(
+        with.contains("setBounds") && with.contains("/** Inherited. */"),
+        "with a resolver, Widget's members appear on View:\n{with}"
+    );
+    // `dispatchTouch` is declared on View itself and must NOT be marked
+    // inherited -- the control that the two sets are told apart.
+    let marked_inherited = with
+        .split("/** Inherited. */")
+        .skip(1)
+        .any(|chunk| chunk.lines().next().is_some_and(|line| line.contains("dispatchTouch")));
+    assert!(!marked_inherited, "a declared member must not be marked inherited:\n{with}");
+}
+
+/// The `android-shape` fixture, compiled. Its `View extends Widget` is the only
+/// real inheritance chain checked in to this repository's interop projects.
+fn android_shape() -> Option<PathBuf> {
+    static BUILT: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    BUILT
+        .get_or_init(|| {
+            let javac = tool("javac")?;
+            let sources = repository().join("examples/interop/android-shape/java/com/example/ui");
+            if !sources.exists() {
+                return None;
+            }
+            let out = std::env::temp_dir().join(format!("nts-ui-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&out);
+            std::fs::create_dir_all(&out).ok()?;
+            let files: Vec<PathBuf> = std::fs::read_dir(&sources)
+                .ok()?
+                .filter_map(|it| it.ok().map(|e| e.path()))
+                .filter(|p| p.extension().is_some_and(|e| e == "java"))
+                .collect();
+            let built = Command::new(&javac)
+                .args(["--release", "8", "-nowarn", "-d"])
+                .arg(&out)
+                .args(&files)
+                .output()
+                .ok()?;
+            built.status.success().then_some(out)
+        })
+        .clone()
+}
