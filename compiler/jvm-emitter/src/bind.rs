@@ -1439,6 +1439,21 @@ fn render_inherited(
         .map(|m| m.name.clone())
         .chain(inherited(class, resolve).into_iter().map(|(_, m)| m.name))
         .collect();
+    // Every name this class offers as *public*, declared or inherited, so a
+    // protected member under the same name is recognised as a mixed set no
+    // matter which side of the boundary either half came from.
+    let public_names: std::collections::BTreeSet<String> = class
+        .methods
+        .iter()
+        .filter(|m| m.access & access::PUBLIC != 0 && is_api(m))
+        .map(|m| m.name.clone())
+        .chain(
+            inherited(class, resolve)
+                .into_iter()
+                .filter(|(_, m)| m.access & access::PUBLIC != 0)
+                .map(|(_, m)| m.name),
+        )
+        .collect();
     for field in inherited_fields(class, resolve) {
         let Some((rendered, _)) = type_of(&field.descriptor) else { continue };
         // An inherited interface constant is still static -- `Pressable.KIND`
@@ -1518,7 +1533,13 @@ fn render_inherited(
             // hierarchy, which is the same class of error as the bridge.
             if method.access & ACC_PROTECTED != 0 { "protected " } else { "" },
             if method.access & access::STATIC != 0 { "static " } else { "" },
-            emitted_name(&declaring, &method, &collapsed_of(&declaring), &std::collections::BTreeSet::default()),
+            // **This class's public method names, not an empty set.** Two
+            // *inherited* members can be a mixed-visibility overload set
+            // between themselves -- `TabActivity` inherits `protected
+            // onCreate(Bundle)` from `Activity` and the public two-argument one
+            // from further up -- and passing nothing here meant neither was
+            // renamed. The last two `TS2385` in 141,367 lines were this.
+            emitted_name(&declaring, &method, &collapsed_of(&declaring), &public_names),
             // **The method's own type parameters, which this path dropped.**
             // `<T> T[] toArray(IntFunction<T[]>)` is declared on `Collection`
             // and inherited by `AbstractCollection`, and the inherited copy
