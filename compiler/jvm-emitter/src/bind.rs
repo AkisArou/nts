@@ -237,15 +237,7 @@ fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read::Membe
         .map(|m| (m.name.clone(), m.descriptor.clone()))
         .collect();
     let mut found = Vec::new();
-    let mut next = class.super_name.clone();
-    // A bound rather than a visited-set: a class hierarchy cannot be cyclic
-    // (the verifier rejects it at load), so this only guards a malformed jar.
-    for _ in 0..32 {
-        let Some(name) = next.take() else { break };
-        if name == "java/lang/Object" {
-            break;
-        }
-        let Some(parent) = resolve.find(&name) else { break };
+    for parent in supertypes(class, resolve) {
         for method in &parent.methods {
             if method.access & access::PUBLIC == 0 || method.name.starts_with('<') {
                 continue;
@@ -257,7 +249,6 @@ fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read::Membe
             seen.push(key);
             found.push(method.clone());
         }
-        next.clone_from(&parent.super_name);
     }
     found
 }
@@ -337,14 +328,22 @@ fn functional_interface(binary: &str, resolve: &dyn Resolve) -> Option<String> {
     if class.access & access::INTERFACE == 0 {
         return None;
     }
+    // **Inherited abstract methods count.** `interface Pressable extends Task`
+    // has one of its own and one from `Task`, so it is *not* a functional
+    // interface and `javac` rejects a lambda for it. Counting only the declared
+    // ones made it look like a SAM, which would have offered a closure where
+    // Java accepts none.
+    let inherited_abstracts = supertypes(&class, resolve);
     let mut abstracts = class
         .methods
         .iter()
+        .chain(inherited_abstracts.iter().flat_map(|it| it.methods.iter()))
         .filter(|m| m.access & access::ABSTRACT != 0 && m.access & access::STATIC == 0);
-    let only = abstracts.next()?;
+    let only = abstracts.next()?.clone();
     if abstracts.next().is_some() {
         return None;
     }
+    let only = &only;
     let (parameters, result) = signature_of(&only.descriptor)?;
     let arguments = parameters
         .iter()
@@ -545,6 +544,34 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
     Ok(out)
 }
 
+/// Every supertype of a class, superclass and superinterfaces alike.
+///
+/// **Both, and the interfaces were missing.** `inherited` followed `super_name`
+/// only, so `interface Pressable extends Task` surfaced `press()` and not
+/// `run()` -- a declaration that *understates the contract*, letting a
+/// TypeScript class claim `implements Pressable` while providing half of it.
+/// Java would reject the same class.
+///
+/// `java/lang/Object` is skipped: `toString` and `wait` on every generated type
+/// is noise nobody is reaching for.
+fn supertypes(class: &ClassFile, resolve: &dyn Resolve) -> Vec<ClassFile> {
+    let mut found = Vec::new();
+    let mut queue: Vec<String> =
+        class.super_name.iter().chain(class.interfaces.iter()).cloned().collect();
+    // A bound rather than a visited set: the verifier rejects a cyclic
+    // hierarchy at load, so this only guards a malformed jar.
+    for _ in 0..64 {
+        let Some(name) = queue.pop() else { break };
+        if name == "java/lang/Object" || found.iter().any(|it: &ClassFile| it.binary_name == name) {
+            continue;
+        }
+        let Some(parent) = resolve.find(&name) else { continue };
+        queue.extend(parent.super_name.iter().chain(parent.interfaces.iter()).cloned());
+        found.push(parent);
+    }
+    found
+}
+
 /// Every **field** this class inherits and does not itself declare.
 ///
 /// A separate walk from the methods, and it was missing: `Panel extends View
@@ -559,13 +586,7 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
 fn inherited_fields(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read::Member> {
     let mut seen: Vec<String> = class.fields.iter().map(|f| f.name.clone()).collect();
     let mut found = Vec::new();
-    let mut next = class.super_name.clone();
-    for _ in 0..32 {
-        let Some(name) = next.take() else { break };
-        if name == "java/lang/Object" {
-            break;
-        }
-        let Some(parent) = resolve.find(&name) else { break };
+    for parent in supertypes(class, resolve) {
         for field in &parent.fields {
             if field.access & access::PUBLIC == 0 || seen.contains(&field.name) {
                 continue;
@@ -573,7 +594,6 @@ fn inherited_fields(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read
             seen.push(field.name.clone());
             found.push(field.clone());
         }
-        next.clone_from(&parent.super_name);
     }
     found
 }

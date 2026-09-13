@@ -52,6 +52,8 @@ declare module "java:com.example.ui" {
     /** Inherited. */
     setPadding(...a0: number[]): void;
     /** Inherited. */
+    press(a0: Widget.Pressable): void;
+    /** Inherited. */
     post(a0: Widget.Task | ((a0: number) => void)): void;
     /** Inherited. */
     setBounds(a0: Rect): void;
@@ -74,11 +76,18 @@ declare module "java:com.example.ui" {
     onMeasure(a0: number, a1: number): void;
     setBounds(a0: number, a1: number, a2: number, a3: number): void;
     setPadding(...a0: number[]): void;
+    press(a0: Widget.Pressable): void;
     post(a0: Widget.Task | ((a0: number) => void)): void;
     setBounds(a0: Rect): void;
   }
 
   export namespace Widget {
+    /** com.example.ui.Widget$Pressable */
+    export interface Pressable {
+      press(): void;
+      /** Inherited. */
+      run(a0: number): void;
+    }
     /** com.example.ui.Widget$Task */
     export interface Task {
       run(a0: number): void;

@@ -1082,3 +1082,51 @@ fn an_inherited_method_renders_exactly_as_its_declared_form() {
         "a SAM parameter, declared:\n{base}"
     );
 }
+
+/// An interface inherits from its superinterfaces, and that decides whether it
+/// is a functional interface.
+///
+/// Two bugs, one cause: `inherited` followed `super_name` only, so a
+/// superinterface's methods were invisible.
+///
+/// - **The declaration understated the contract.** `interface Pressable extends
+///   Task` surfaced `press()` and not `run()`, so a TypeScript class could
+///   claim `implements Pressable` while providing half of it. `javac` rejects
+///   the same class.
+/// - **And it made a non-SAM look like a SAM.** `functional_interface` counted
+///   declared abstract methods, saw one, and offered a closure -- for an
+///   interface Java accepts no lambda for.
+#[test]
+fn a_superinterface_is_inherited_and_counted() {
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let read = |name: &str| {
+        let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
+        nts_jvm_emitter::read::class_file(&bytes).expect("parses")
+    };
+    let resolve = FromDirectory(ui.clone());
+
+    let pressable =
+        nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget$Pressable"), &resolve)
+            .expect("renders");
+    assert!(pressable.contains("press(): void;"), "its own method:\n{pressable}");
+    assert!(
+        pressable.contains("run(a0: number): void;"),
+        "and the superinterface's, or the declaration understates the contract:\n{pressable}"
+    );
+
+    // The SAM consequence, asserted as a pair so neither half can pass alone.
+    let widget = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget"), &resolve)
+        .expect("renders");
+    assert!(
+        widget.contains("post(a0: Widget.Task | ((a0: number) => void)): void;"),
+        "one abstract method: a closure is offered:\n{widget}"
+    );
+    assert!(
+        widget.contains("press(a0: Widget.Pressable): void;")
+            && !widget.contains("press(a0: Widget.Pressable |"),
+        "two abstract methods once inherited: no closure, because javac accepts none:\n{widget}"
+    );
+}

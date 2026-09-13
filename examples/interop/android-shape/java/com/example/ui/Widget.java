@@ -27,9 +27,20 @@ public class Widget {
         void run(int id);
     }
 
+    /** An interface extending another: its own method plus the parent's. */
+    public interface Pressable extends Task {
+        void press();
+    }
+
     /** Varargs, and inherited by `View` -- the intersection nothing covered. */
     public void setPadding(int... values) {
         for (int v : values) { left += v; }
+    }
+
+    /** NOT a SAM parameter: `Pressable` has two abstract methods once its
+     *  superinterface is counted, so Java accepts no lambda for it either. */
+    public void press(Pressable p) {
+        p.press();
     }
 
     /** A SAM parameter, also inherited. */
