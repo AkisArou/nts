@@ -3241,6 +3241,76 @@ static NtsArray *nts_array_splice_at(NtsArray *a, double start, double count,
   return out;
 }
 
+/* `a.length = n` -- truncation, which JavaScript does in place.
+ *
+ * `splice` is the only other helper that shortens an array, and it gets away
+ * without releasing anything because it **moves** the dropped run into the
+ * array it hands back: ownership transfers, the counts are unchanged. Here
+ * nothing is handed back, so an array of references has to give up the counts
+ * it holds on the elements it forgets, or they are leaked by a length store.
+ *
+ * The JVM lane does the same job with the opposite instruction. It has no
+ * retains -- the platform collector owns everything -- so its equivalent is a
+ * `fill(items, want, length, null)`: a stale reference left in the backing
+ * array keeps its object alive for as long as the array does. The shared fact
+ * is that **the dropped elements stop being reachable**, not that either lane
+ * calls release, and reading it the other way makes that row look like it is
+ * skipping a step.
+ *
+ * # What refuses, and the two reasons are not the same
+ *
+ * A non-integral or negative length is a `RangeError` in JavaScript, so this
+ * refuses the way `nts_bigint_from_number` refuses a non-integer: there is no
+ * `throw` to raise from here.
+ *
+ * **Growing does not throw in JavaScript** -- `xs.length = 10` on three
+ * elements is legal and produces seven holes. It refuses here because a hole is
+ * a shape this compiler has no representation for at all, so the honest answer
+ * is a refusal rather than seven zeroes that read as elements. That is our
+ * limitation rather than the language's, and it is worth the two being told
+ * apart: every one of the 62 sites in the corpus shrinks. */
+static void nts_array_set_length_at(NtsArray *a, double n, size_t width) {
+  if (!(n == nts_to_integer(n)) || n < 0) {
+    fprintf(stderr, NTS_REFUSED "%g is not a valid array length\n", n);
+    abort();
+  }
+  uint32_t want = (uint32_t)n;
+  uint32_t length = a->header.length;
+  if (want > length) {
+    fprintf(stderr,
+            NTS_REFUSED
+            "growing an array by its length would leave holes, which have no "
+            "representation here (%u to %u)\n",
+            length, want);
+    abort();
+  }
+  (void)width;
+  a->header.length = want;
+}
+
+void nts_array_set_length(NtsArray *a, double n) {
+  nts_array_set_length_at(a, n, sizeof(double));
+}
+
+/* The reference case, which is the one the comment above is about. */
+void nts_array_set_length_ref(NtsArray *a, double n) {
+  uint32_t length = a->header.length;
+  nts_array_set_length_at(a, n, sizeof(void *));
+  for (uint32_t at = a->header.length; at < length; at++) {
+    nts_release((NtsHeader *)NTS_ITEMS(a, void *)[at]);
+  }
+}
+
+/* And the tagged case, where only some of the dropped slots hold a reference
+ * and the tag is what says which. */
+void nts_array_set_length_value(NtsArray *a, double n) {
+  uint32_t length = a->header.length;
+  nts_array_set_length_at(a, n, sizeof(NtsValue));
+  for (uint32_t at = a->header.length; at < length; at++) {
+    nts_value_release(NTS_ITEMS(a, NtsValue)[at]);
+  }
+}
+
 NtsArray *nts_array_splice(NtsArray *a, double start, double count) {
   return nts_array_splice_at(a, start, count, sizeof(double));
 }

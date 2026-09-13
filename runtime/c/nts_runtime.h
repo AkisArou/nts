@@ -1726,6 +1726,16 @@ double nts_array_pop(NtsArray *a);
 double nts_array_shift(NtsArray *a);
 /* `splice(start, count)`, two arguments: the removed run, handed back as a new
  * array. See the note beside the definition. */
+/* `a.length = n`, which JavaScript uses to truncate in place. Shrinking only:
+ * growing would leave holes, which have no representation here, and a
+ * non-integral or negative length is a `RangeError`. Both refuse rather than
+ * being answered, the way `nts_bigint_from_number` does.
+ *
+ * `_ref` and `_value` release what they drop. `splice` beside them does not
+ * have to, because it *moves* the dropped run into the array it returns. */
+void nts_array_set_length(NtsArray *a, double n);
+void nts_array_set_length_ref(NtsArray *a, double n);
+void nts_array_set_length_value(NtsArray *a, double n);
 NtsArray *nts_array_splice(NtsArray *a, double start, double count);
 /* `concat(ys)`, one array argument. See the note beside the definition for what
  * the other shapes are and why they are refused instead. */

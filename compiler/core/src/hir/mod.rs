@@ -2179,6 +2179,11 @@ fn changes_array_length(name: &str) -> bool {
         "nts_array_shift",
         "nts_array_unshift",
         "nts_array_splice",
+        // Truncation. The classification test below is what makes this line
+        // non-optional: leaving it out gives a working helper and an
+        // `arrays_can_grow` of `false`, so every array in the program takes a
+        // representation that cannot change length.
+        "nts_array_set_length",
     ]
     .iter()
     .any(|family| name.starts_with(family))
