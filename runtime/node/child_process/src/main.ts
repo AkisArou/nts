@@ -1242,9 +1242,10 @@ function ownBuffers(value: unknown, seen = new Map<object, unknown>()): unknown 
 }
 
 export class ChildProcess extends EventEmitter {
-  #handle: number;
+  /** -1 until a handle is adopted; a bare `new ChildProcess()` has none. */
+  #handle = -1;
   #exited = false;
-  #stdioOpen: number;
+  #stdioOpen = 0;
 
   pid: number | undefined;
   exitCode: number | null = null;
@@ -1267,6 +1268,19 @@ export class ChildProcess extends EventEmitter {
 
   constructor(handle: number, mode: number, spec: readonly unknown[] | null = null) {
     super();
+    // A bare `new ChildProcess()` is legal -- node's own test builds one and then calls
+    // `spawn` on it -- so adopting a handle is separate from constructing.
+    //
+    // The test is `typeof handle === "number"`, **not** `handle >= 0`. A failed spawn is
+    // constructed as `new ChildProcess(-1, mode)` and still needs its shape: `pid`, the stdio
+    // objects, the close bookkeeping. Guarding on `>= 0` skipped that and cost
+    // `test-child-process-cwd` and `test-child-process-spawn-error` -- two files for one, and
+    // only the pass-set diff said so.
+    if (typeof handle === "number") this.#adopt(handle, mode, spec);
+  }
+
+  /** Everything that follows from having a live child: pid, stdio, and the close count. */
+  #adopt(handle: number, mode: number, spec: readonly unknown[] | null): void {
     this.#handle = handle;
     this.pid = nts_child_process_pid(handle);
     const wantsIn = (mode & 3) === 0;
@@ -1353,6 +1367,76 @@ export class ChildProcess extends EventEmitter {
     }
     this.emit("exit", this.exitCode, this.signalCode);
     this.#maybeClose();
+  }
+
+  /**
+   * `ChildProcess.prototype.spawn`, node's internal entry point, published because its own
+   * regression test drives it directly.
+   *
+   * `test-child-process-constructor` builds a bare `new ChildProcess()` and calls this with
+   * deliberately wrong options, then once with real ones and checks `pid` and `kill`. It takes
+   * node's *internal* option names -- `file`, `args`, `envPairs`, `cwd`, `stdio` -- not the public
+   * `spawn()`'s, which is why this is a separate surface rather than a rename.
+   *
+   * **The validation order is node's and is observable.** From
+   * `lib/internal/child_process.js`:
+   *
+   *     validateObject(options, 'options');
+   *     let stdio = options.stdio || 'pipe';  ... const ipc = stdio.ipc;
+   *     if (ipc !== undefined) { ... validateArray(options.envPairs, 'options.envPairs'); }
+   *     validateString(options.file, 'options.file');
+   *     if (options.args === undefined) ... else validateArray(options.args, 'options.args');
+   *
+   * `envPairs` is checked **only when `stdio` carries an `ipc` slot**, and **before** `file`. The
+   * test relies on both: its `envPairs` cases pass `stdio: ['ignore','ignore','ignore','ipc']`
+   * and no `file` at all, and expect the `envPairs` error rather than a missing-file one.
+   */
+  spawn(options?: unknown): void {
+    validateObject(options, "options");
+    const asked = options as {
+      file?: unknown; args?: unknown; envPairs?: unknown; cwd?: unknown; stdio?: unknown;
+    };
+    const stdio = asked.stdio === undefined || asked.stdio === null ? "pipe" : asked.stdio;
+    const slots = stdioSpecOf(stdio as string | readonly string[] | undefined);
+    const hasChannel = slots !== null && slots.includes("ipc");
+    if (hasChannel && asked.envPairs !== undefined && !Array.isArray(asked.envPairs)) {
+      throw new ERR_INVALID_ARG_TYPE("options.envPairs", "Array", asked.envPairs);
+    }
+    if (typeof asked.file !== "string") {
+      throw new ERR_INVALID_ARG_TYPE("options.file", "string", asked.file);
+    }
+    if (asked.args !== undefined && !Array.isArray(asked.args)) {
+      throw new ERR_INVALID_ARG_TYPE("options.args", "Array", asked.args);
+    }
+
+    // Past the validation, this is an ordinary spawn. `envPairs` is node's flat
+    // `KEY=value` list, which is exactly what the binding takes, so it goes through as it
+    // arrives rather than being rebuilt.
+    const file = asked.file;
+    const args = Array.isArray(asked.args) ? asked.args as string[] : [];
+    const mode = stdioMode(stdio as string | readonly string[]);
+    const handle = nts_child_process_spawn(
+      file,
+      args,
+      Array.isArray(asked.envPairs) ? asked.envPairs as string[] : null,
+      typeof asked.cwd === "string" ? asked.cwd : "",
+      mode,
+      0,
+      -1,
+      -1,
+      slots,
+      "json",
+      (message: unknown, sent?: unknown): void => { this._handleMessage(message, sent); },
+      (): void => { this._handleDisconnect(); },
+      (status: number, signal: number): void => { this._handleExit(status, signal); },
+      (): void => {},
+    );
+    if (handle < 0) {
+      this.pid = undefined;
+      this.exitCode = handle;
+      return;
+    }
+    this.#adopt(handle, mode, slots);
   }
 
   kill(signal?: string | number): boolean {
