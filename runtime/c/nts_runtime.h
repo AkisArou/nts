@@ -993,7 +993,7 @@ NTS_ALLOCATES NtsArray *nts_array_new(const NtsDescriptor *descriptor,
  * `number[]` built here can be handed to compiled code, and one built there can
  * be read here.
  *
- * `elements` is `NTS_ELEMENTS(array, double)` and `header.length` is how many
+ * `elements` is `NTS_ITEMS(array, double)` and `header.length` is how many
  * there are, exactly as for a generated one. */
 NTS_ALLOCATES NtsArray *nts_array_of_numbers(double length);
 /* The same, without zeroing the elements. Only for an allocation the compiler

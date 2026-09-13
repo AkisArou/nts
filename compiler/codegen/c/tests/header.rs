@@ -25,7 +25,7 @@ fn emit(tsgo: &Utf8Path, name: &str, source: &str) -> (Utf8PathBuf, nts_codegen_
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),
-        format!(r#"{{"extends":"{root}/examples/tsconfig.fixtures.json","files":["main.ts"]}}"#),
+        format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),
     )
     .unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
@@ -166,6 +166,36 @@ fn managed_returns_and_promises_are_callable_from_the_header() {
     run(
         &dir,
         "#include \"program.h\"\nint main(void) { makePoint_return_t *p = makePoint(7); if (p->x != 7 || p->y != 14) return 1; NtsPromise *q = later(41); if (nts_promise_state(q) != 0) return 2; nts_checkpoint(); return nts_promise_state(q) != 1 || nts_value_number(nts_promise_value(q)) != 42; }",
+        true,
+    );
+}
+
+#[test]
+fn c_constructed_numeric_arrays_cross_the_export_boundary() {
+    let Some(tsgo) = toolchain() else {
+        return;
+    };
+    let (dir, _) = emit(
+        &tsgo,
+        "array-constructor",
+        "export function sum(xs: number[]): number { let total = 0; for (let i = 0; i < xs.length; i++) total += xs[i]; return total; }",
+    );
+    run(
+        &dir,
+        r#"#include "program.h"
+int main(void) {
+    NtsArray *xs = nts_array_of_numbers(3);
+    double *values = NTS_ITEMS(xs, double);
+    values[0] = 1.25;
+    values[1] = 2.5;
+    values[2] = 3.75;
+    if (sum(xs) != 7.5) return 1;
+    values[2] = 4.75;
+    if (sum(xs) != 8.5) return 2;
+    nts_release((NtsHeader *)xs);
+    return 0;
+}
+"#,
         true,
     );
 }
