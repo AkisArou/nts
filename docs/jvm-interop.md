@@ -297,7 +297,23 @@ public final class Session implements AutoCloseable {
 }
 ```
 
-`nts bind --jar app.jar --out types/` produces:
+`nts bind --jar app.jar --out types/` produces the two files below.
+
+**That command does not exist**, and saying so here rather than leaving it
+implied: there is no `bind` subcommand on `nts` — it answers
+``unknown command `bind` `` — and the generator is an example binary that takes a
+**directory of class files**, because `nts-jvm-emitter` deliberately has no zip
+dependency and unpacking is the caller's job:
+
+```
+cargo run --release -q -p nts-jvm-emitter --example bind -- <classes-dir> <package> [class...]
+```
+
+The subcommand is the right end state and the `--jar` spelling is what the rest
+of this document assumes, so it stays written that way below. It was quoted as
+though it worked for long enough that `docs/native-interop.md` picked it up and
+credited this lane with a tool it does not have. What it produces is real; how
+you invoke it is not.
 
 ```ts
 // Generated from com/example/Session.class by `nts bind`. Do not edit.
