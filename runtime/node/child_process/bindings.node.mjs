@@ -22,6 +22,7 @@
 // module reaches through `Buffer` -- `buffer/src/blob.ts` imports `internal/uv.ts`
 // for `systemError`. Without this the module fails to load with
 // `nts_uv_err_name is not defined`, one import away from anything this file names.
+import { Buffer as HostBuffer } from "node:buffer";
 import "../internal/bindings.node.mjs";
 // `collect` arms a timeout through the timers module, the way `net` does.
 import "../timers/bindings.node.mjs";
@@ -405,6 +406,72 @@ globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, serializa
   return handle;
 };
 
+/**
+ * Replace this profile's Buffers with the host's, throughout a structured value.
+ *
+ * v8's structured clone records a `Buffer` **subclass it does not know** as a plain
+ * `Uint8Array`, and node's deserialiser re-wraps only its own. So
+ * `send({ buffer: Buffer.from('Hello!') })` came back as `{ buffer: Uint8Array }` and
+ * `test-child-process-advanced-serialization` fails its `deepStrictEqual` -- while `Map`,
+ * `bigint` and the circular reference in the same message survive untouched, which is what
+ * showed the channel was fine and the realm was not.
+ *
+ * Recognising one of ours: a `Uint8Array` that is **not** a host `Buffer` but whose constructor
+ * is named `Buffer`. The two Buffer classes live in one realm here, so the name is the only
+ * thing that separates them, and `Buffer.isBuffer` is the host's answer.
+ *
+ * The walk keeps a `Map` of what it has seen, because the test sends a value that contains
+ * itself.
+ */
+function hostBuffers(value, seen = new Map()) {
+  if (value === null || typeof value !== "object") return value;
+  if (seen.has(value)) return seen.get(value);
+  if (value instanceof Uint8Array) {
+    // **`HostBuffer`, imported explicitly, because the bare `Buffer` global may be ours.**
+    //
+    // This stand-in runs in the harness process, where the module under test is substituted. A
+    // bare `Buffer.isBuffer(ourBuffer)` answered *true* and the conversion returned early, which
+    // is why the round trip still produced a plain `Uint8Array` after the walk was written.
+    if (HostBuffer.isBuffer(value)) return value;
+    if (value.constructor?.name !== "Buffer") return value;
+    const copy = HostBuffer.from(value);
+    seen.set(value, copy);
+    return copy;
+  }
+  if (Array.isArray(value)) {
+    const out = [];
+    seen.set(value, out);
+    for (const item of value) out.push(hostBuffers(item, seen));
+    return out;
+  }
+  if (value instanceof Map) {
+    const out = new Map();
+    seen.set(value, out);
+    for (const [k, v] of value) out.set(hostBuffers(k, seen), hostBuffers(v, seen));
+    return out;
+  }
+  if (value instanceof Set) {
+    const out = new Set();
+    seen.set(value, out);
+    for (const v of value) out.add(hostBuffers(v, seen));
+    return out;
+  }
+  // Anything with its own identity that structured clone preserves -- an Error, a Date, a
+  // RegExp -- is left alone. Rebuilding those would change what the test compares.
+  // **Every other typed array, and anything with a shape of its own, is left alone.**
+  //
+  // The generic rebuild below turns an object into a plain object, and a `Float64Array` rebuilt
+  // that way becomes `{ '0': 3.141592653589793 }` -- which is what the first version of this
+  // walk did, trading the Buffer failure for a Float64Array one. Structured clone already
+  // round-trips these correctly; only our Buffer subclass needed help.
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return value;
+  if (value instanceof Error || value instanceof Date || value instanceof RegExp) return value;
+  const out = {};
+  seen.set(value, out);
+  for (const key of Object.keys(value)) out[key] = hostBuffers(value[key], seen);
+  return out;
+}
+
 globalThis.nts_child_process_send = (handle, message, sent, options, callback) => {
   const entry = live.get(handle);
   if (entry === undefined) return -32;
@@ -419,6 +486,8 @@ globalThis.nts_child_process_send = (handle, message, sent, options, callback) =
     // drains, which is knowledge only the host has. Both are forwarded rather than
     // interpreted here. Argument count matters: node reads a present third argument as
     // the options object, so the call is built from what is actually there.
+    // Our Buffers become the host's before v8 sees them; see `hostBuffers`.
+    message = hostBuffers(message);
     const rest = [];
     if (sent !== undefined && sent !== null) rest.push(hostHandle(sent));
     if (options !== undefined && options !== null) {

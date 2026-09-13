@@ -17,3 +17,4 @@
 # compiled lane has no non-hollow pass here at all, and reporting 1 was reporting
 # this file.
 test-child-process-fork-closed-channel-segfault.js: the subject is cluster, which this profile does not implement; it forks through node's own cluster and passes against an emptied module on both lanes
+test-child-process-advanced-serialization-host-objects.js: unavailable provider; the child requires `internal/test/binding` for `internalBinding('messaging')` and the file carries `// Flags: --expose-internals`, both of which the RFC rules out. The ordinary `advanced` round trip -- typed arrays, Map, bigint, a circular reference, Errors -- is covered by test-child-process-advanced-serialization.js, which passes

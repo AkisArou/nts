@@ -1181,6 +1181,66 @@ function stdioMode(stdio: string | readonly string[] | undefined): number {
  * both, which is why `nts_child_process_close` is separate from the exit
  * callback.
  */
+/**
+ * Replace the host's Buffers with this profile's, throughout a structured value.
+ *
+ * The mirror of `hostBuffers` in the stand-in. Our Buffers are converted to the host's on the
+ * way out so v8 and node's deserialiser round-trip them as Buffers at all; this turns what comes
+ * back into ours, so a caller that sent one gets one --
+ * `test-child-process-advanced-serialization` compares with `deepStrictEqual`, which reads the
+ * prototype.
+ *
+ * Recognising the host's: a `Uint8Array` whose constructor is named `Buffer` that is not one of
+ * ours. Both classes live in one realm, so the name is all there is, and a plain `Uint8Array`
+ * must stay a plain `Uint8Array` -- the same message carries one of each.
+ *
+ * Cycles are real here: the test sends a value containing itself.
+ */
+function ownBuffers(value: unknown, seen = new Map<object, unknown>()): unknown {
+  if (value === null || typeof value !== "object") return value;
+  const object = value as object;
+  if (seen.has(object)) return seen.get(object);
+  if (value instanceof Uint8Array) {
+    if (value instanceof Buffer) return value;
+    if (value.constructor?.name !== "Buffer") return value;
+    const copy = Buffer.from(value);
+    seen.set(object, copy);
+    return copy;
+  }
+  if (Array.isArray(value)) {
+    const out: unknown[] = [];
+    seen.set(object, out);
+    for (const item of value) out.push(ownBuffers(item, seen));
+    return out;
+  }
+  if (value instanceof Map) {
+    const out = new Map<unknown, unknown>();
+    seen.set(object, out);
+    for (const [k, v] of value) out.set(ownBuffers(k, seen), ownBuffers(v, seen));
+    return out;
+  }
+  if (value instanceof Set) {
+    const out = new Set<unknown>();
+    seen.set(object, out);
+    for (const v of value) out.add(ownBuffers(v, seen));
+    return out;
+  }
+  // **Every other typed array, and anything with a shape of its own, is left alone.**
+  //
+  // The generic rebuild below turns an object into a plain object, and a `Float64Array` rebuilt
+  // that way becomes `{ '0': 3.141592653589793 }` -- which is what the first version of this
+  // walk did, trading the Buffer failure for a Float64Array one. Structured clone already
+  // round-trips these correctly; only our Buffer subclass needed help.
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return value;
+  if (value instanceof Error || value instanceof Date || value instanceof RegExp) return value;
+  const out: Record<string, unknown> = {};
+  seen.set(object, out);
+  for (const key of Object.keys(value)) {
+    out[key] = ownBuffers((value as Record<string, unknown>)[key], seen);
+  }
+  return out;
+}
+
 export class ChildProcess extends EventEmitter {
   #handle: number;
   #exited = false;
@@ -1377,7 +1437,7 @@ export class ChildProcess extends EventEmitter {
     // one uses. The same realm seam as `atob`, `URL` and the advanced-serialization
     // Buffer, and written here so a caller reading `handle` knows whose it is.
     this.emit(
-      isInternalMessage(message) ? "internalMessage" : "message", message, sent,
+      isInternalMessage(message) ? "internalMessage" : "message", ownBuffers(message), sent,
     );
   }
 }
