@@ -7456,3 +7456,49 @@ inferring time from size**, which is the error this file has recorded twice
 tonight already -- a try/catch that adds no instruction costs 1.32x, and four
 arms of transcription that were right about units were out by 28% on the ratio.
 Two numbers being close is not a mechanism.
+
+## A control at one end is not a control, and it cost me a number
+
+The whole-odex dump of `awfy-towers` -- the technique that found `awfy-bounce`'s
+mechanism -- says our `moveDisks` carries **100 `movsd` and 50 `addsd`** where
+the reference's carries **none**. The pattern is unambiguous:
+
+    movsd xmm0, [rbp + 16]
+    addsd xmm0, [RIP + 0x1604]     ; + 1.0
+    movsd [rbp + 16], xmm0
+
+`movesDone` as a double, load-add-store through a stack slot, once per inlined
+frame. The reference does the same work in integer registers. A clean mechanism,
+a clean artefact, and **it is worth nothing**, for a reason that is one
+multiplication: 8,191 increments against a 42-millisecond benchmark is about
+**0.04%**. 150 instructions in a listing look like a finding; 8,191 executions
+of three of them do not survive contact with the denominator.
+
+### And the flat result needed re-measuring, because my earlier one was noise
+
+The earlier entry says `int` was "5-8% worse in both positions". That reading is
+**withdrawn**. Base, int, base in one sitting on a quiet box:
+
+    base   44558.3      control
+    int    44045.4      inside base's own spread
+    base   42970.9      control
+
+Base varies by **1,588 -- 3.7% -- against itself**, and `int` sits between its
+two readings. The change is not measurable here in either direction, and my
+"5-8% worse" was base's own variance read as an effect.
+
+**The mistake is the one I had just finished writing the rule about.** I
+introduced the control arm two sections up -- an arm whose only job is to
+reproduce a number already in this file -- and then measured `int` three times
+without ever giving it one. The clean sitting validated the *base* arm; the
+int-first run had no control at all. A control validates the arm it is, not the
+arm beside it.
+
+**So the rule needs its other half: a control at one end measures contamination,
+a control at each end measures drift.** Base-int-base is four minutes and it
+turns "int is 5-8% worse" into "the noise floor here is 3.7% and nothing is
+resolvable inside it". Without the second base I would have left a withdrawn
+number standing as a measured one.
+
+`awfy-towers` is unchanged: flat on this axis, and the double counter is ruled
+out with a number rather than an argument.
