@@ -36,6 +36,14 @@ With no visible stores, both constant folding and storage narrowing concluded
 that an incoming field was zero. Native callers invalidate that precondition:
 they can supply field values that never appear in the program's stores.
 
+Before widening a boundary, audit the assumptions its existing refusals
+protect. A refusal can keep an unsound optimization or incomplete runtime
+protocol unreachable; removing it without repairing those assumptions turns
+an unsupported program into a wrong answer. The object-parameter boundary
+required conservative field facts, and publishing generator stepping required
+persistent completion state. Test the protected behavior directly, including
+side effects and internal-only optimization controls.
+
 The implementation order for the C-facing boundary is:
 
 1. Make field facts and storage widths conservative for objects native callers
@@ -44,7 +52,8 @@ The implementation order for the C-facing boundary is:
 2. Generate the header and replace hand-written caller prototypes with it.
 3. Exercise the existing string and numeric-array constructors, and publish
    synchronous generator stepping. Both are now demonstrated by C callers.
-   A promise wait remains to be implemented.
+   `nts_promise_join` now provides a synchronous wait through optional host
+   progress, with distinct settlement, pending, and refusal outcomes.
 
 The historical gap descriptions below record the original measurements;
 header generation, stable aliases, field visibility and checkpoint documentation
