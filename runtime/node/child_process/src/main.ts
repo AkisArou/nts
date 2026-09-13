@@ -204,6 +204,16 @@ class ChildReadable extends Readable {
   readonly ntsChildSlot: number;
   /** node's is a libuv wrap; see `ChildStreamHandle` below. */
   readonly _handle: ChildStreamHandle;
+  /**
+   * Whether this stream was handed to **another child** as one of its stdio slots.
+   *
+   * `spawn('grep', ['x'], { stdio: [cat.stdout, ...] })` gives `cat`'s output to `grep`, and
+   * from then on the read is `grep`'s. We must not read it -- `pipe-dataflow` asserts that with
+   * `mustNotCall` on `readStart` -- and we must not *end* it either, which is the half that
+   * cost a file: draining an unread stream when its child exits is right for a stream nobody
+   * took and wrong for one somebody did.
+   */
+  ntsGivenAway = false;
   #started = false;
   #ended = false;
   #onEof: () => void;
@@ -214,6 +224,32 @@ class ChildReadable extends Readable {
     this.ntsChildSlot = which;
     this.#onEof = onEof;
     this._handle = new ChildStreamHandle(this);
+    // **Eagerly, as node does.** Corrected: an earlier reading of this said node calls
+    // `readStart` in neither of the two arrangements that matter. That measurement hooked
+    // `readStart` on the *instance*, after `spawn` had returned, and node calls it during
+    // `spawn`. Hooking `Pipe.prototype.readStart` before any child exists shows **2 calls**
+    // where the instance hook showed none.
+    //
+    // Which also explains why `test-child-process-pipe-dataflow` passes on node: its
+    // `mustNotCall` replaces the method on the instance, and node had already called the
+    // prototype's. The test does not prove node refrains; it proves node reads early.
+    //
+    // `test-child-process-kill` needs this -- a killed child's stdout with an `end` listener
+    // and no `data` listener still has to reach `end` -- and
+    // `test-child-process-stdio-reuse-readable-stdio` needs it too, because the output it
+    // reads after another child exits has to be somewhere.
+    // On a **next tick**, because whether this stream is ours to read is not yet known.
+    //
+    // `spawn('grep', ['x'], { stdio: [cat.stdout, ...] })` runs synchronously right after the
+    // `spawn` that created `cat`, and it is that second call which marks this stream as handed
+    // over. Reading in the constructor is too early to see it, and reading a handed-over stream
+    // is the parent stealing bytes from the child that was given them --
+    // `test-child-process-pipe-dataflow` puts 1MB through `cat | grep | wc` and counts them.
+    nextTick((): void => {
+      if (this.ntsGivenAway || this.#started || this.#ended) return;
+      this.#started = true;
+      this.ntsBeginRead();
+    });
   }
 
   /**
@@ -231,13 +267,17 @@ class ChildReadable extends Readable {
    * `test-child-process-pipe-dataflow` asserts the absence directly, replacing
    * `_handle.readStart` with `common.mustNotCall()` on a stream it hands to another child.
    */
+  /**
+   * A consumer asking explicitly, which outranks having been handed over.
+   *
+   * `test-child-process-stdio-reuse-readable-stdio` hands `p1.stdout` to `head`, waits for
+   * `head` to exit, and *then* reads it from the parent -- legal, because nobody else is
+   * reading it any more. The tick above declines to start such a stream; this starts it when
+   * the parent actually asks.
+   */
   override _read(): void {
     if (this.#started || this.#ended) return;
     this.#started = true;
-    // Through the handle, so a caller that replaced `readStart` sees the call it is watching
-    // for. Exposing a `readStart` this profile never used would satisfy `mustNotCall` while
-    // the constructor did the forbidden thing -- the hollow pass this module's record warned
-    // about for a day.
     this._handle.readStart();
   }
 
@@ -270,13 +310,6 @@ class ChildReadable extends Readable {
    * this, making the read lazy hangs every child whose output nobody consumes, which is most
    * of them.
    */
-  ntsFinishUnread(): void {
-    if (this.#started || this.#ended) return;
-    this.#ended = true;
-    this.push(null);
-    this.read(0);
-    this.#onEof();
-  }
 }
 
 /**
@@ -1057,6 +1090,22 @@ function serializationOf(opts: { serialization?: unknown }): string {
  * expose, and this keeps what the host can act on -- `'ipc'` in any slot, a descriptor,
  * another child's stream.
  */
+/**
+ * Mark every stream in a `stdio` array as belonging to the child about to receive it.
+ *
+ * The entry travels to the binding either way; this records, on **our** side, that the read
+ * has changed hands. Without it a stream handed to another child is drained when its original
+ * child exits -- reading what `pipe-dataflow` forbids us to read, and ending what the other
+ * child is still consuming.
+ */
+function markGivenAway(spec: readonly unknown[] | null): readonly unknown[] | null {
+  if (spec === null) return null;
+  for (const entry of spec) {
+    if (entry instanceof ChildReadable) entry.ntsGivenAway = true;
+  }
+  return spec;
+}
+
 function stdioSpecOf(
   stdio: string | readonly string[] | undefined,
 ): readonly unknown[] | null {
@@ -1243,16 +1292,6 @@ export class ChildProcess extends EventEmitter {
       this.emit("disconnect");
     }
     this.emit("exit", this.exitCode, this.signalCode);
-    // **Finish any stdio nobody read, now that the child has gone.**
-    //
-    // Reads are the consumer's to start, as node's are. A stream nobody asked for would
-    // otherwise never reach `end` and `close` would never fire -- which is most children,
-    // since most callers ignore stdout. node ends them anyway: hooking `readStart` on node
-    // shows `end` and `close` both firing with only an `end` listener attached and
-    // `readStart` never called.
-    for (const stream of this.stdio) {
-      if (stream !== null && stream instanceof ChildReadable) stream.ntsFinishUnread();
-    }
     this.#maybeClose();
   }
 
@@ -1392,7 +1431,7 @@ export function spawn(
     // The caller's own `stdio`, normalised only where node normalises it: a string
     // becomes three of itself. A descriptor, `'ipc'` in any slot, or another child's
     // stream goes through as written, because the packed mode cannot say those.
-    stdioSpecOf(opts.stdio),
+    markGivenAway(stdioSpecOf(opts.stdio)),
       serializationOf(opts),
       // A spawned child has a channel when `stdio` names one, and then it gets the same
       // `message` events a forked one does. Only `fork` wired this, so
