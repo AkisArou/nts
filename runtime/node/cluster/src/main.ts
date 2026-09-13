@@ -870,6 +870,23 @@ class Cluster extends EventEmitter {
    */
   #workerLeft(): void {
     if (Object.keys(this.workers).length > 0) return;
+    // **No workers left means no shared descriptor has an owner.**
+    //
+    // `#releaseShared` closes a shared handle when its own holder set empties, and that set only
+    // ever gains a worker that actually reached `queryServer`. `test-cluster-shared-leak`
+    // disconnects its second worker before that worker's `listen` completes, so the set for that
+    // key holds one worker and the release path waits on a departure that has already happened
+    // elsewhere. The primary then sits on a bound socket with nobody to serve, which reads as a
+    // timeout rather than as a leak.
+    //
+    // node closes a handle from `removeWorker` when no workers remain, which is this condition
+    // rather than the per-key one. Both are kept: the per-key close frees a descriptor as soon
+    // as its last holder goes, and this frees anything still held when the cluster is empty.
+    for (const [key, shared] of this.#shared) {
+      if (shared.id >= 0) nts_cluster_shared_handle_close(shared.id);
+      this.#sharedWorkers.delete(key);
+    }
+    this.#shared.clear();
     const owed = this.#onceEmpty;
     this.#onceEmpty = [];
     for (const settle of owed) settle();

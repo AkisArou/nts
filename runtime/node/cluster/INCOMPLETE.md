@@ -159,6 +159,30 @@ child forked by `child_process.fork` from a substituted parent that inherits our
 cluster worker does not. `inheritedEnvironment()` copies every key, so it is not something
 `cluster.fork` strips. Whatever the mechanism, the consequence above is measured.
 
+### `shared-leak`: what it is not, measured
+
+Two hypotheses tested and both dead, recorded so nobody pays for them twice.
+
+**Not "only one worker queries".** Traced, both workers reach `queryServer` and both report
+`listening`. The earlier note here said otherwise.
+
+**Not our `net` failing to notice a peer FIN.** The primary's connection never emits `close`,
+w1 holds the accepted socket it already `end`ed, and the primary will not destroy its side until
+every worker has gone -- which looked like a deadlock this profile had created. It is not:
+
+    an unread socket, peer sends FIN     ours: never closes
+                                         node: never closes
+
+Identical. Measured with the same fixture on both, after the first attempt at that comparison
+failed to load on node -- `"type": "module"` in the repo root makes `require` in a `.js` fixture
+throw, and I read the empty output as a result. A stream that was never produced looks exactly
+like a stream with nothing in it.
+
+**What is done:** a shared descriptor is now closed when the workers map empties, not only when
+its own holder set does -- node closes from `removeWorker` on the same condition. Both paths are
+kept. It does not fix this file, and the file's remaining cause is why w1 does not exit once its
+server handle is closed and its accepted socket is half-closed.
+
 ### `shared-leak`: the last shared holder never leaves
 
 Traced: both workers exit 0, the workers map reaches zero, and the primary sits holding a bound
