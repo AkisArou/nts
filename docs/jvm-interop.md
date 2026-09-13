@@ -2397,3 +2397,36 @@ Those are the foreign-layout work, the binding table, and generics in our own
 signatures -- the three things gated upstream. A `.d.ts` that typechecks and
 refuses to lower for exactly three named reasons is a much better place to hand
 over from than one that has never been compiled.
+
+
+# The three upstream patches, built and sent
+
+All three are in `compiler/core/src/hir/**`, which this lane does not own, so
+each was built and tested in a detached worktree and handed over as a diff. All
+three are **inert on landing** -- none has a caller until a binding table exists
+-- so none can move a number on anyone else's side.
+
+| | what it is | why it is sound |
+| --- | --- | --- |
+| `nominal_name` | `+ is_foreign_name(name)`, where a foreign layout is named by its JVM binary name and `/` cannot appear in a TypeScript identifier | measured: two field-less layouts *do* merge, the emitter repairs it by subclassing, and that repair works by **inventing a name** -- which is exactly what a class whose binary name is fixed by its jar cannot have |
+| `Facts::from_jvm_descriptor` | `I` gives `whole = true`, no NaN, no `-0`, 32-bit bounds | the JVM enforces it at class load, so it is a platform invariant rather than an inference. `D`, `J` and references return `None` |
+| `foreign_key` / `foreign_keeps` | a canonical `owner.member:descriptor` key, and `keeps` routing one to a separate table | needs **no `Program` change**: `Callee::External` already carries a string, so a bound call carries the key as its name and `escape.rs`'s call site is untouched |
+
+**Each carries the control that would fail if the change did nothing**, which is
+the half worth more than the feature:
+
+- `nominal_name`: `Alpha` and `Beta` must still **not** be nominal, or the rule
+  stops ordinary empty classes merging and costs the subclass repair its purpose.
+- `from_jvm_descriptor`: the result must differ from `Facts::TOP`, or the patch
+  buys nothing; and `D`/`J`/references must answer `None`, or it claims a
+  narrowing that does not exist.
+- `foreign_keeps`: every **existing** helper answer must be unchanged --
+  `nts_str_append` keeps `[0]`, `nts_concat` keeps `[]`. A routing change that
+  quietly stopped answering for the helpers would pass every new test and break
+  the thing the table was built for.
+
+The key is **one derivation** shared by the generator and the reader, because
+two would drift in the worst available way: a mismatch surfaces as a *silently
+missing* escape answer. The argument gets assumed to escape, the program stays
+correct, and the optimisation never happens -- it costs speed and reports
+nothing.
