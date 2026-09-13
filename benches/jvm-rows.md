@@ -7332,3 +7332,53 @@ register pressure, and there is no spill to win back.
 So the sweep is the wrong instrument for the finding it came from, and the right
 one counts `FpSpillMask` in hot methods. Written down before the re-measurement
 lands, so that it is a prediction rather than an explanation.
+
+### And the prediction held: `awfy-towers` is flat, so the mechanism is the spill
+
+Written above before the measurement, which is the only reason it counts as a
+prediction. The `i32` counter does **nothing** for `awfy-towers`.
+
+    ours AOT
+      base (f64 field)            41739.3    control: +2.1% on an established 40874.1
+      int  (i32 field), 2nd pos   44896.4
+      int  (i32 field), 1st pos   43680.8
+
+Measured in both positions because the first sitting had `int` running second
+with the load rising underneath it, so arm and position were confounded. They
+are not any more: `int` is 5-8% *worse* than `base` whichever way round it goes,
+and two earlier contaminated sittings agree in direction -- 46,364 and 46,728
+against 46,523 and 45,306.
+
+So `dconst_1; dadd` is the syntax and not the mechanism. What moved
+`awfy-bounce` was a **loop-carried floating-point local**: an FP register held
+across the innermost loop (`FpSpillMask:1000`) and seventeen prologue `dstore`s
+that went with it. `movesDone` is a **field**, so `iput-wide` against `iput` is
+a width difference with nothing to win back, and the `i32` version pays an `i2d`
+at the return and in `verifyResult` for it.
+
+**The specialiser question narrows from "every `let x = 0`" to "a loop-carried
+double that could have been an int"** -- which is a much smaller set and the one
+worth measuring before building. My sweep found six candidate programs and would
+have been wrong about at least five of them.
+
+### What made these four runs readable at all
+
+Every one was taken on a box with a peer's runaway `node` test at **99.7% for
+thirty minutes** -- `pgrep -x` for `nts`, `nts-bench`, `rustc` and `cargo` does
+not see `node`, and the load-average floor correctly refused to let
+`wait-idle.sh` return, which is why three attempts were killed waiting rather
+than measuring.
+
+**The device lane cannot use `wait-idle.sh` and should stop trying.** The
+Android emulator runs continuously and contributes load of its own, so a
+`load >= 2` floor can never be satisfied while the thing being measured is
+attached. That floor is right for host benchmarks and structurally unsatisfiable
+here.
+
+What works instead, and what carried all four of these numbers: **the control
+arm**. The probe's `base` case is the corpus case reached through
+`NTS_AOT_DIR`, so its value is one this file already holds, and 41,739 against
+40,874 says the run is usable while 46,523 says it is not. A discriminator that
+is a property of *this* measurement beats one that is a property of the machine,
+because it is still right when the machine is loaded for a reason nobody
+enumerated.
