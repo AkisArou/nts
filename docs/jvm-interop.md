@@ -554,12 +554,22 @@ together, which is the honest position and is strictly better than pretending
 
 ## What to build first
 
-**Reordered after the cost analysis below, which found that the first item pays
-for itself before any interop exists.** The original order led with the
-class-file reader; it is now fourth, because three things settle questions that
-change the shape of everything after them.
+**Reordered twice.** The original order led with the class-file reader; the cost
+analysis moved it down because three measurements settle questions that change
+the shape of everything after them. The audit then moved a *new* item to the
+front, on a different criterion: everything else here is an advantage to gain,
+and item 0 is an advantage we already have that interop would silently take
+away.
 
-1. **The brand measurement**, and it is first because everything numeric waits
+0. **Package-private fields, accessors for the published surface, and a test
+   asserting no generated field is `ACC_PUBLIC`.** The only item with a
+   deadline. `fields.rs` is sound because "there is no FFI that writes through a
+   pointer here"; generated fields are `public int` today, so the first object
+   that reaches Java falsifies that sentence for its whole `(layout, field)`
+   pair, program-wide. Small, self-contained, no dependencies, and it must land
+   before any object crosses in either direction. See "Keeping the advantage".
+1. **The brand measurement**, and it is first among the measurements because
+   everything numeric waits
    on it. Does *an intersection of a primitive with types declaring only phantom
    properties* survive the corpus that refuted the broader rule? One day. It
    decides three things at once: whether `int` is expressible in a `.d.ts`,
@@ -1006,6 +1016,29 @@ Three routes, and they are not equivalent:
 **Route 1 is the only one that keeps the plan's central claim**, and it is the
 first thing to settle because everything else is downstream of it.
 
+### Resolved, and route 2 is what it resolved to
+
+**This section is kept for its reasoning, but it is no longer blocking and route
+2 is the answer, not route 1.** What changed is that route 2's objection turned
+out to be avoidable: a foreign member access is *not* a `FieldGet` or
+`FieldSet`. It resolves through the binding table exactly as a method call does
+and the backend emits `getfield`/`putfield` directly, so `fields::analyze` --
+which walks `OpKind::FieldGet` -- never sees one, and its soundness sentence
+stays true **by construction rather than by promise**. That is a smaller change
+than a new `ManagedType` variant and it needs nothing from the middle end.
+
+See "Foreign objects: a layout, a naming rule, and one constraint" for the
+proposal and "What a zero-field layout is" for the drawbacks it brings.
+
+### But the sentence is falsified from the *other* direction, and that is live
+
+The objection above was that a foreign object we read could falsify
+`fields::analyze`. The direction that actually falsifies it is **our own objects
+once Java can reach them** -- and unlike this one it is not hypothetical:
+generated fields are emitted `public` today, so a Java caller can `putfield`
+into one with no `FieldSet` in the HIR at all. See "Keeping the advantage", which
+is the only item in this document with a deadline.
+
 `Layout.base` **does** exist (`hir/mod.rs:1361`), so inheritance is representable
 — but a TS class extending a Java one needs `base` to name a foreign type, which
 is this same question. **Android needs that constantly**: `extends Activity`,
@@ -1068,16 +1101,33 @@ The precedent is in this tree and is explicit about why:
 > and a field that exists to tell two of its own names apart is a field they
 > would all have to ignore.
 
-**The constraint that makes it sound: the binding surfaces every member as a
-method, never as a field.** Then a foreign object never appears in a `FieldGet`
-or `FieldSet`, and `fields::analyze`'s soundness sentence -- *"nothing else can
-store into it: there is no FFI that writes through a pointer here"* -- stays
-true, because there is no field for a foreign write to land in.
+**The constraint that makes it sound, restated after `android.graphics.Rect`
+broke the first version of it.** The original constraint was "the binding
+surfaces every member as a method, never as a field", which is not survivable:
+`Rect` has `public int left, top, right, bottom` and they are read directly all
+over Android. The constraint that works is about representation instead --
+**a foreign member access is not one of our field ops.** It resolves through the
+binding table like a method call and emits `getfield`/`putfield` directly, so a
+foreign object never appears in an `OpKind::FieldGet`, `fields::analyze` never
+sees one, and its soundness sentence stays true while `rect.left` still works.
 
-**One risk to check before building:** `same_shape` merges layouts with
-identical fields and methods, and two field-less Java classes could collide.
-That is the same hazard `signature_name` was written for, and the same answer --
-the name carries the identity — but it should be *tested*, not assumed.
+**The `same_shape` risk is now measured rather than assumed, and the result
+changed the argument.** Two field-less classes *do* merge -- `class Alpha {}`
+and `class Beta {}` produce one layout, `Alpha [1 2]` -- and identical method
+lists do not separate them either. But the JVM emitter already repairs that: the
+merged layout becomes a shared base and each original type gets a subclass
+(`nts/gen/Alpha`, with `Alpha__Alpha` and `Alpha__Beta` extending it).
+
+So merging is **not** a live hazard for TypeScript layouts. It stays fatal for
+foreign ones, for a sharper reason than the collision itself: the repair works
+precisely because we own the names and can invent `Alpha__Beta`. A
+`java.lang.Runnable` cannot be made to extend an `nts/gen/...` base -- it exists,
+its binary name **is** its identity, and its supertype chain is fixed by the jar.
+**A foreign layout is the one merge this backend cannot repair downstream.**
+
+The fix is one line into `lower.rs`'s `nominal_name`, which already lists three
+families of deliberately-empty nominal layout and whose doc comment already
+states the rule over both sides. A foreign layout is the fourth member.
 
 ## 2. Imports: ambient modules, which already work here
 
@@ -1104,13 +1154,21 @@ A Java enum is a class with `static final` instances plus `values()` and
 `valueOf()`. The instances are statics, so they bind by (3); the two methods
 bind as methods.
 
-## 5. Nested classes: surface the static ones, refuse the inner ones
+## 5. Nested classes: surface the static ones, and inner ones are deferred not refused
 
 `Map.Entry` is a static nested class -- a class whose binary name contains `$`
--- and surfaces as `Map.Entry` in the namespace with no special handling. A
-**true inner** class captures an outer instance and has a synthetic first
-constructor parameter; **refuse those by name** until something needs one. They
-are rare in public API surface and the refusal is cheap.
+-- and surfaces as `Map.Entry` in the namespace with no special handling.
+
+**A true inner class can be bound too, and the earlier "refuse it" here was
+caution rather than difficulty.** Its constructor descriptor carries a synthetic
+leading parameter for the outer instance and the `InnerClasses` attribute names
+the outer class -- both read by the same class-file reader, neither needing a
+design. `outer.newInner(...)` passes the outer instance first, which is exactly
+what `javac` emits for `outer.new Inner()`.
+
+So they are **deferred on priority**, not refused on difficulty: they are rare
+in public API surface and nothing on the Android path needs one yet. Anonymous
+and local classes stay out, because they are not API surface at all.
 
 ## 6. Varargs: surface, pack at the call site
 
@@ -1124,11 +1182,24 @@ A Java member named `constructor`, or a TypeScript keyword. One documented
 mangling, recorded in the binding table so the emitted call uses the real name.
 The rule matters more than which rule.
 
-## 8. Ambiguous overloads: refuse, naming both
+## 8. Ambiguous overloads: resolve by losslessness, refuse only where `javac` would
 
-Where `int` and `double` are not distinguishable at a call, **the binding
-refuses and names both candidates**, rather than picking one. A wrong overload
-is a wrong answer that runs; a refusal is a message.
+**Most collapsed overloads are not ambiguous, and the earlier blanket refusal
+here was wrong.** A TypeScript `number` **is** an f64, so given `f(int)`,
+`f(long)` and `f(double)`, the `double` form is the one that receives it
+*without loss* -- picking it is not a guess but the only non-lossy choice, and
+`f(int)` would truncate. That gives a written order: `number` to `double`,
+`float`, `long`, `int`; `bigint` to `long`; `string` to `String`.
+
+Where two candidates are **equally** lossless -- `f(String)` against
+`f(Object)` -- Java's own rule decides: most specific applicable method,
+JLS 15.12.2, which is the algorithm `javac` runs over the same class-file data
+we have already parsed.
+
+**Refuse only where `javac` itself would call it ambiguous**, naming both
+candidates. That is rare and genuinely undecidable, and it is the rule a Java
+programmer already expects. A wrong overload is still a wrong answer that runs;
+the point is that losslessness decides almost all of them.
 
 ## 9. Generated or checked in: checked in, with a drift test
 
@@ -1145,12 +1216,24 @@ refuses **by name** — so the refusal tells the user exactly what to add to the
 bind list. The `.d.ts` stays bounded and its growth is a decision rather than a
 side effect.
 
-## 11. Exceptions: bind anyway, and say what happens
+## 11. Exceptions: bind anyway, and catch at the call site now
 
-A `throws` clause does not prevent binding. Until a throw can cross a call on
-any backend, an escaping Java exception behaves exactly as an uncaught one does
-today — the process dies with a stack trace. That is a documented limitation
-with a named expiry, not a silent gap.
+A `throws` clause does not prevent binding.
+
+**And the "the process dies with a stack trace" that stood here is no longer the
+best available answer.** `compiler/jvm-emitter` gained exception tables in
+`5b865f62` -- `Code::try_catch` and `Code::bind_handler`, with
+`same_locals_1_stack_item` frames -- so a throwing call is wrapped, the handler
+reads `getMessage()` and raises `NtsRefusal`, and the harness already carves
+`NtsRefusal` out of its Defect rule. The case **declines** rather than failing,
+naming the Java exception and the method.
+
+That matters beyond tidiness: an escaping Java stack trace is classified as a
+**Defect** by `stopped_with`, so without this one bad input does not merely
+crash a program, it corrupts the instrument.
+
+When a throw can cross a call, the same exception-table entry gets a different
+target and becomes a real TypeScript `catch`. Stage one is not throwaway work.
 
 ## 12. Threads: the mechanism exists
 
@@ -1162,6 +1245,15 @@ somewhere to land: it posts, and the work runs on the environment's own lane.
 What is unbuilt is the adapter that turns a Java callback into an
 `NtsResumable`. That is a smaller thing than "threads are unsupported", which is
 what this document said before the inbox was checked.
+
+**And the inbox is not the only route, which matters for the callbacks that must
+return a value.** `NtsEnv.CURRENT` is a `ThreadLocal`, not a singleton pinned to
+a thread the runtime chose, so an environment can be *installed* on the thread a
+callback arrives on -- and then the callback is a direct call that can return
+`true` to `onTouch`, with no inbox and no deferral. The inbox is for genuinely
+foreign threads, whose callbacks are void because the framework has nowhere to
+put a return value either. A non-void callback registered where no environment
+lives is refused at bind time rather than served a placeholder. See drawback 6.
 
 # What a zero-field layout is, and every drawback it brings
 
@@ -1598,6 +1690,11 @@ ahead of the class-file reader rather than behind it.
 
 # Correcting 5 and 8: both were caution, not difficulty
 
+**Both corrections are now folded into proposals 5 and 8 above, which is where a
+reader looks for them.** This section is kept for the reasoning, which is worth
+more than the verdict -- but if the two disagree, the proposals are current and
+this is history.
+
 ## Inner classes can be bound, and the fix is mechanical
 
 I proposed refusing them. That was laziness dressed as caution.
@@ -1755,3 +1852,229 @@ least.
 never build them the compiler stays as good as it is today. Item 1 is an
 advantage we already have, that interop would take away silently, program-wide,
 on the day it lands -- and it is the only one with a deadline.
+
+# Three projects, and everything they have to exercise
+
+Requested so the end result can be *looked at* -- the generated `.d.ts`, the
+call sites, the ergonomics -- rather than inferred from a design document. They
+are therefore written to be **read before they are built**, and every decision
+in this document should be visible in at least one of them.
+
+**Where they live is not mine to decide.** `examples/**` belongs to another lane,
+and more sharply: the jvm gate line is `backend_examples 203 ... exact`, which
+fails on `passed != total`. Three new example directories change that number, so
+they cannot be added unilaterally -- the floor moves in the same commit or the
+gate goes red for everyone. Agreed with the owner first, or they live under a
+separate `interop/` tree that no floor counts until they are ready.
+
+## The coverage matrix, so nothing is exercised by accident
+
+| | 1. java-from-ts | 2. ts-from-java | 3. android-shape |
+| --- | --- | --- | --- |
+| `HashMap` in and out | ● | ● | |
+| `NtsMap implements java.util.Map` | | ● | |
+| `List<String>` / `string[]` | ● | ● | |
+| `int[]` / `byte[]` / subarray | ● | | ● |
+| Generics, wildcards, raw types | ● | ● | |
+| Overloads, primitive-preferred | ● | | ● |
+| Nullability, annotated and not | ● | | ● |
+| Exceptions | ● | ● | |
+| Public fields (`Rect`-shaped) | ● | | ● |
+| Accessors, not public fields | | ● | ● |
+| Static constants and enums | ● | | |
+| Nested and inner classes | ● | | |
+| Varargs | ● | | |
+| `long` / `bigint` | ● | ● | |
+| Branded `int` | ● | | ● |
+| TS implements a Java interface | | | ● |
+| TS extends a Java class | | | ● |
+| Callback returning a value, same thread | | | ● |
+| Callback void, foreign thread, via inbox | | | ● |
+| Closure as a functional interface | | ● | ● |
+
+## 1. `java-from-ts` — TypeScript consumes Java
+
+```
+interop/java-from-ts/
+  java/com/example/Catalog.java     the library being bound
+  java/com/example/Kind.java        an enum
+  build.sh                          javac -> catalog.jar
+  types/com.example.d.ts            GENERATED by `nts bind`, checked in
+  bind.overrides.json               nullability + keeps, for what annotations miss
+  src/main.ts                       the consumer
+  tsconfig.json
+```
+
+The Java side is written to be awkward on purpose -- every row of the matrix
+that this project owns appears in it:
+
+```java
+package com.example;
+
+public final class Catalog {
+    public static final int MAX = 512;              // ConstantValue -> inlined
+    public int hits;                                // a public field, Rect-shaped
+
+    public Catalog(String name) { ... }
+
+    public java.util.HashMap<String, Integer> index() { ... }
+    public java.util.List<String> names() { ... }
+    public int[] counts() { ... }
+    public long id() { ... }                        // exceeds 2^53 -> bigint
+
+    public int find(int key) { ... }                // overload set
+    public int find(long key) { ... }
+    public int find(double key) { ... }
+    public int find(String key) { ... }
+
+    public int sum(int... values) { ... }           // varargs
+
+    @Nullable public String describe(int id) { ... }
+    public String name() { ... }                    // @NullMarked package
+
+    public int parse(String s) throws NumberFormatException { ... }
+
+    public <T> java.util.List<T> repeat(T item, int times) { ... }
+    public double total(java.util.List<? extends Number> xs) { ... }
+
+    public static final class Entry { ... }         // static nested
+    public final class Cursor { ... }               // true inner
+}
+```
+
+and the generated declarations are the artefact to review:
+
+```ts
+declare module "java:com.example" {
+  export class Catalog {
+    constructor(name: string);
+
+    static readonly MAX: int;              // inlined at the call site, no getstatic
+    hits: int;                             // a real getfield/putfield, not a FieldGet
+
+    index(): java.util.HashMap<string, int>;   // stays a HashMap; no copy
+    names(): java.util.List<string>;           // stays a List
+    counts(): Int32Array;                      // no brand needed -- see cost 10a
+    id(): bigint;                              // long does not fit in a number
+
+    find(key: number): int;                    // resolves to find(double), lossless
+    find(key: bigint): int;                    // resolves to find(long)
+    find(key: string): int;
+
+    sum(...values: int[]): int;
+
+    describe(id: int): string | null;          // @Nullable, read from the CLASS-retention table
+    name(): string;                            // @NullMarked package -> non-null
+
+    parse(s: string): int;                     // throws: declines with NtsRefusal today
+
+    repeat<T>(item: T, times: int): java.util.List<T>;
+    total(xs: java.util.List<number>): number; // ? extends Number -> readonly in TS terms
+
+    static readonly Entry: { new (...): Catalog.Entry };
+    newCursor(): Catalog.Cursor;               // inner: outer instance passed first
+  }
+}
+```
+
+**What to look at, because these are the decisions rather than the syntax.**
+`find(1.5)` picking `find(double)` and not truncating. `counts()` being an
+`Int32Array` rather than a `number[]`, which is the whole of cost 10a. `id()`
+being `bigint` and therefore *unusable* in arithmetic with a `number` without a
+conversion -- correct, and worth feeling. `describe` being `| null` while `name`
+is not, from two different annotation mechanisms. And `MAX` compiling to a
+constant with **no reference to `Catalog` at all**, which is what lets a program
+use a constant without loading the class.
+
+## 2. `ts-from-java` — Java consumes TypeScript
+
+The direction with no reader involved: we emit class files, `javac` compiles
+against them, and the question is what the API *looks like* from Java.
+
+```
+interop/ts-from-java/
+  src/api.ts                 the TypeScript being published
+  java/Main.java             a plain Java consumer
+  expected/Api.javap         `javap -p -s` of what we emit, checked in
+  build.sh                   nts emit-jvm, then javac Main.java -cp out
+```
+
+```ts
+export class Session {
+  #hits: int = 0;                       // private: NOT an own enumerable key
+  get hits(): int { return this.#hits; }
+  bump(): int { this.#hits = this.#hits + 1; return this.#hits; }
+
+  tags(): Map<string, string> { ... }   // NtsMap implements java.util.Map
+  each(fn: (name: string) => void): void { ... }   // closure <- Java lambda
+}
+```
+
+```java
+public final class Main {
+  public static void main(String[] args) {
+    Session s = new Session();
+    s.bump();
+    int n = s.hits();                            // an accessor, not a public field
+    java.util.Map<String,String> t = s.tags();   // no copy, no wrapper
+    s.each(name -> System.out.println(name));    // a Java lambda as our closure
+  }
+}
+```
+
+**This project is the guard for item 0.** `expected/Api.javap` is checked in, so
+the day a generated field goes back to `public` the diff says so out loud. That
+`s.hits()` is a method and not a field is the entire difference between
+`fields.rs` being sound and being a comment that went false.
+
+And `tags()` returning something Java can use as a `java.util.Map` **without a
+copy or a wrapper** is the single most load-bearing claim in this document; it
+should be visible in twelve lines of Java rather than argued about.
+
+## 3. `android-shape` — both directions, in the shape Android actually imposes
+
+No Android SDK dependency -- plain Java interfaces with the same *shapes*, so it
+runs on a desktop JVM in the gate and on a device unchanged.
+
+```
+interop/android-shape/
+  java/com/example/ui/View.java        setOnTouch(listener) -> boolean, same thread
+  java/com/example/ui/Loader.java      load(callback) -> void, FOREIGN thread
+  java/com/example/ui/Widget.java      a class to extend; has public int fields
+  src/main.ts
+```
+
+```ts
+import { View, Loader, Widget, Rect } from "java:com.example.ui";
+
+// TS extends a Java class, which needs Layout.base to name a foreign type.
+class Panel extends Widget {
+  override onMeasure(w: int, h: int): void {
+    this.setBounds(0, 0, w, h);        // primitive overload preferred over setBounds(Rect)
+  }
+}
+
+const panel = new Panel();
+
+// Same thread: returns a value, so it is a direct call and the inbox is not involved.
+panel.setOnTouch((x: int, y: int): boolean => {
+  return x < panel.right;              // a public foreign field read
+});
+
+// Foreign thread: void, so it posts to NtsInbox and runs on our lane.
+Loader.load((bytes: Uint8Array): void => {
+  process(bytes.subarray(0, 64));      // subarray -> no copy in the common case
+});
+```
+
+**The three things to look at here are the ones nothing else in the tree can
+show.** That `setOnTouch` returns `boolean` *at all* -- which only works because
+`NtsEnv.CURRENT` is a `ThreadLocal` and an environment is installed on the
+calling thread. That `Loader.load`'s callback is `void`, and that trying to make
+it return something is **refused at bind time** rather than served a placeholder.
+And `panel.right` reading a foreign public field through the binding table, not
+through a `FieldGet`.
+
+If a fourth is wanted later, the honest one is a **negative** project: the
+constructs that are refused, each with the message it produces. A document that
+only shows what works is an advertisement.
