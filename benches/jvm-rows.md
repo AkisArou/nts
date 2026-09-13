@@ -8588,3 +8588,69 @@ mechanism that was *adjacent* to the cause, and it stood for weeks because
 nobody tried it. **A named cause that has never been applied is a hypothesis
 wearing a measurement's clothes** -- the 9.1% was real and the "because" was
 not, and the two travelled together in one sentence.
+
+## Three positions on `queenRows` in one day, and the middle one was mine
+
+The narrowing I said did not exist **exists, fires today, and is in the
+corpus**. `erasure-stored-unknown` emits, from one program:
+
+    newarray double        and        newarray long
+
+`hir::elements::representations` maps an `f64` element to an integer one, and
+`width_for` returns `HirType::Int { bits, signed: true }` -- so `int[]` is a
+target, not a wish.
+
+So the sequence, because it is worth more than any of its members:
+
+    P1  this file, for weeks   "because `hir::runtime` has no `_i32`"
+                               necessary, insufficient, and never applied
+    P2  my probe, today        added the row, nothing moved, concluded
+                               "the element type IS the TypeScript type"
+    P3  reading the pass       narrowing exists; `queenRows` is disqualified by
+                               a filter, and the filter is the blocker
+
+**P2 is the one to learn from and it is mine.** The observation was correct --
+adding the row changed nothing. The *because* I attached to it was invented on
+the spot, and I published it, corrected this file with it, and sent it to
+MainClaude as a finding. I had coined "a named cause that has never been applied
+is a hypothesis wearing a measurement's clothes" **four messages earlier** and
+then produced one.
+
+What P2 failed to do is the thing `elements.rs`' own comment says, twelve lines
+from the code I was reasoning about:
+
+> Reading the code and reading the emitted IR are two measurements and only the
+> second was right.
+
+I read the emitted IR. I did not read the pass that decides it, so I could not
+see that narrowing had been *disqualified* rather than never attempted.
+
+### What actually blocks it
+
+    .filter(|(element, _)| !borrowed.contains(*element))     <- this one
+
+`reaches_a_runtime_helper` collects the element type of **every array passed to
+any external call**, and disqualifies it:
+
+    for arg in args {
+        if let HirType::Managed(ManagedType::Array(element)) = &func.values[arg.0].ty {
+            borrowed.insert((**element).clone());
+        }
+    }
+
+`queenRows` is `new Array(8).fill(-1)`, so it reaches `nts_array_fill`, so `f64`
+enters `borrowed`, so **every `number[]` in the program** is disqualified. The
+same global-`any` shape as `arrays_can_grow`, one pass over.
+
+So the fix is two named pieces and not a project:
+
+1. `reaches_a_runtime_helper` disqualifying only where **no narrowed form of
+   that helper exists**, rather than on reaching a helper at all.
+2. The `_i32` rows that make such a form exist -- which is what P1 asked for,
+   and why P1 was necessary and could never have been sufficient alone.
+
+**And it re-scopes what I sent MainClaude.** The growable cliff is still a
+global `any` in `arrays_can_grow` and still wants partitioning. The element
+width is a *different* pessimisation with a *different* fix, and I had folded
+them into one analysis because both are global. Two global filters are not one
+problem.
