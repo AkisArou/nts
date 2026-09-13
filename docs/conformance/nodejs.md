@@ -24207,3 +24207,29 @@ in `src/main.ts`, and `promises` arrives by another spelling. The check is right
 measures and the re-export column is the warning; this is a concrete instance of it
 under-reporting, recorded here so the next reader of that 0 knows what it does not cover.
 
+## The axis, measured with the per-file hollowness test: 50
+
+    TOTAL                50 passed, 1722 failed across 26 modules
+
+    child_process        PUBLISHES NOTHING -- 0 real pass(es), 0 that survive emptying
+    cluster              PUBLISHES NOTHING -- 0 real pass(es), 25 that survive emptying
+    console              PUBLISHES NOTHING -- 0 real pass(es), 0 that survive emptying
+    events               PUBLISHES NOTHING -- 0 real pass(es), 0 that survive emptying
+    timers               PUBLISHES NOTHING -- 2 real pass(es), 0 that survive emptying
+
+`cluster`'s 25 survive emptying, so they contribute nothing. `timers`' 2 do not, so they
+count: they reach `getTimerDuration` through `require("internal/timers")`, a separately
+substituted specifier, while `timers` itself publishes nothing. **That distinction is why the
+run before this one read 48.** A key count says "this module has no surface"; the emptying
+test says "this pass is not about this module", and only the second is the question the number
+depends on.
+
+So the axis over four measurements, and what each one was actually counting:
+
+    09-12 04:35   49   24 modules, no hollowness test
+    09-13 02:27   74   26 modules, cluster's 25 counted as passes
+    09-13 03:5x   75   the same 25, plus process loading again
+    09-13 13:xx   50   26 modules, per-file emptying test
+
+The honest movement across all of it is `net` +2 and `tty` restored to 1.
+
