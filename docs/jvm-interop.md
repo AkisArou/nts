@@ -458,24 +458,37 @@ Named rather than discovered later:
 
 ## What to build first
 
-In this order, because each produces something falsifiable:
+**Reordered after the cost analysis below, which found that the first item pays
+for itself before any interop exists.** The original order led with the
+class-file reader; it is now fourth, because three things settle questions that
+change the shape of everything after them.
 
-1. **The class-file reader**, in `compiler/jvm-emitter` -- same crate as the
+1. **The array element type.** `hir::runtime` has `nts_array_fill_bool` and no
+   `_i32`, so an integer array is emitted `[D`. Adding the row and the mapping
+   beside it eliminates the `number[]` → `int[]` copy **and** is measured at
+   **14.2%** on `awfy-queens`, the worst row of the goal's open number, **and**
+   is carried by all three backends. It is the only item here that is worth
+   doing if interop is never built at all, which is why it is first.
+2. **The brand measurement.** Does *an intersection of a primitive with types
+   declaring only phantom properties* survive the corpus that refuted the
+   broader rule? One day, and it decides whether `int` is expressible in a
+   `.d.ts` at all -- which in turn decides whether overloads can be resolved or
+   must be refused.
+3. **The interop copy measurement.** One real Android API shape, an array in and
+   a `HashMap` out, measured against a binder transaction. If the copy is noise
+   next to the call, the cliff matters less than this document assumes.
+4. **The class-file reader**, in `compiler/jvm-emitter` -- same crate as the
    writer, same format from the other end. Testable immediately and with no
    design decisions: read any jar, compare against `javap -p -s`, which has been
    this lane's oracle three times this week.
-2. **The brand measurement** above, over the same corpus that refuted the
-   rejected rule. It decides whether branded types are available at all, and it
-   is a day.
-3. **The interop copy measurement.** Take one real Android API shape -- an array
-   in, a `HashMap` out -- and measure the copy against the call. If the copy is
-   noise next to a binder transaction, the cliff matters less than this document
-   assumes and the per-array analysis can wait.
-4. **`.d.ts` generation for one class**, end to end, with the overrides file and
+5. **`NtsMap implements java.util.Map`**, with the `-0` normalisation that makes
+   Java's `equals` implement SameValueZero exactly, and the primitive statics
+   kept beside the interface.
+6. **`.d.ts` generation for one class**, end to end, with the overrides file and
    the doc comments that name the copies.
 
-Nothing here should be built before (2) and (3), because both can change the
-shape of everything above them.
+Nothing after (3) should be built before it, because (2) and (3) can each change
+the shape of everything below them.
 
 # Every cost named, and what eliminates it
 
