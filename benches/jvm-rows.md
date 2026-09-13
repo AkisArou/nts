@@ -7936,3 +7936,47 @@ Four counts tonight -- 66, 19, 7, 78 -- every one of them an artefact of asking
 a pattern-matched table for its membership. The first three I corrected by
 checking a name I happened to know. The fourth I corrected because by then I
 expected it, which is the only part of this worth carrying forward.
+
+## The throw priced off the dex, and two of my own numbers were wrong
+
+MainClaude asked for the dex delta before deciding whether
+`nts_uncaught_builtin` is worth a new entry point. Read off the listing rather
+than computed from the op count, on a binary built at 04:47 against a
+`simplify.rs` edited at 05:38 -- so this is the shape **before** their
+store-forwarding lands, which is the baseline the delta needs:
+
+    0x0000-0x0017   hot path      24 units
+    0x0018-0x0032   cold block    27 units
+                    total         51 units
+
+**The cold block is 27 units, not the 17 this file has been quoting.** The 17
+came from `outlined2`, a *transcription* arm measured at 34 against a control at
+25 -- a number about a hand-written stand-in that I carried as a number about our
+emission, which is the same error as the 1.646x.
+
+**And the null-comparison fusion is worth nothing.** At `0x0009` the dex reads
+`if-eqz v0` -- **d8 already collapses** the five JVM instructions
+(`aconst_null; astore; aload; aload; if_acmpne`) into one. The section above
+that priced it at "about one dex unit each, 7 of 60 cases" was counting *JVM*
+bytecode for a budget measured in *dex*. Struck: the saving is zero.
+
+### What each change is actually worth
+
+    as emitted                                                      51 u
+    forward_stores removes `iget-object %3.message` (0x0029)        49 u
+    nts_uncaught_builtin(which, message) returning the Error        32 u
+    ART's budget                                                    32 u
+
+The helper's site cost is eight units, by the dex formats visible in this very
+listing: `const/4 which` 1, `const-string message` 2, `invoke-static` 3,
+`move-result-object` 1, `throw` 1. So `24 + 8 = 32`.
+
+**Exactly the budget, with no margin** -- and this file has already recorded what
+a route arriving with zero units to spare is worth. It would inline today and
+stop the first time anything is added to that method.
+
+**The two changes are not additive.** Store-forwarding removes the `iget-object`
+that reads the message back; the helper takes the message directly and never
+emits that load at all. So forwarding is worth 2 units *on this site* and zero
+once the helper lands -- its value is on the **608** user-defined throws the
+helper cannot serve, which is where MainClaude measured it and where it belongs.
