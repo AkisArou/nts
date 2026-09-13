@@ -1,140 +1,82 @@
 // expect: a name from an enclosing scope
 //
-// A nested function reading a local of the function that declares it.
+// What is **left** of this row after 2026-09-13: a nested function that reads a
+// local of its enclosing function **and binds its own `this`**.
 //
-//     function outer(columns) { function inner(i) { return i * columns; } }
-//                                                       ^ REFUSED
+// # The row closed for everything else
 //
-// `control` takes the same value as a parameter and does the same arithmetic,
-// so what is refused is the capture and not the multiplication. Without it the
-// diagnostic reads as "nested functions are not supported", which is false --
-// `unread` below is nested too, reads nothing from around it, and lowers.
+// A nested `function` declaration is a hoisted `const` holding a function
+// expression, and the desugaring landed:
+// `examples/a-nested-function-that-captures` runs 145 cases across five
+// functions on C, LLVM and the JVM, including a recursive one. The corpus:
 //
-// One of `path`'s six own-source roots, at `src/glob-matcher.ts:596`. `visit`
-// is a recursive matcher closing over `columns` and `memo` from the function
-// that built them; both are locals of the caller, and there is no spelling of a
-// memoised recursive match that does not read them.
+//     util   5 -> 1     net   21 -> 1     assert 4 -> 0
+//     stream 21 -> 0    http  24 -> 1
 //
-// # This message had a second cause until 2026-09-10, and it was the larger
+// Every remaining site in the corpus is the shape below: `util`'s one is
+// `promisified`, declared `function promisified(this: unknown, ...args)`.
 //
-// `is_within_a_function` did not know `ARROW_FUNCTION`, `FUNCTION_EXPRESSION`
-// or the accessors, so a `const` declared in one of those became a module-scope
-// global and its initializer was lowered in `module#init` -- where the
-// enclosing function's parameters really are out of scope. `const f = (k) =>
-// { const c = k + 1; return c; }` reported this exact sentence about `k`, the
-// arrow's own parameter.
+// # Why `this` keeps it out
 //
-// So a census grouping by message counted those together with these, and the
-// two have nothing in common: one was a wrong answer about scope and the other
-// is a capture this compiler does not lower. **This fixture was the whole of
-// what the message should ever have meant**, and it was a minority of what it
-// said. See record 0267 -- the tell was that fixing part of a message's count
-// at a different site left the rest saying the same words.
-
-// # It is a desugaring, not a feature — established 2026-09-13
+// A closure has no `this` of its own — it inherits the enclosing one, which is
+// what an arrow does and what a `function` deliberately does not. The
+// collector's test is the same one the `function` *expression* arm has always
+// used, so this is not a new restriction: it is the existing line, now reached
+// by a second form.
 //
-// The machinery is **entirely present**. The same function written as a
-// const-bound expression, or as an arrow, lowers and agrees with node:
+// Closing it means giving a closure a receiver distinct from its environment,
+// which is a representation question rather than a desugaring one.
 //
-//     function outer(columns) {
-//       function visit(i) { return i * columns }      REFUSED
-//       const visit = function (i) { return i * columns }   lowers
-//       const visit = (i) => i * columns                    lowers
+// # And use before the declaration, which is a different limit
+//
+//     function outer(n) {
+//       const base = n & 7;
+//       const first = later(2);          // hoisted in JavaScript
+//       function later(k) { return base + k }
 //     }
 //
-// 58 cases across the two working forms. So a nested `function` declaration is
-// exactly a **hoisted `const` binding to a function expression**, and what is
-// missing is the desugaring rather than any capture machinery.
+// A declaration is usable above its textual position and a `const` is not. The
+// binding is made where the declaration stands, so a call above it resolves to
+// a function that is no longer emitted and refuses as a cascade.
 //
-// # Five coordinated places, which is why it is not three lines
+// **Hoisting the allocation would not fix it**, and that is the interesting
+// part: this captures *by value*, so an allocation moved to the top of the
+// block would read locals that do not have their values yet. The limit is
+// capture-by-value, not the desugaring, and the honest fix is a cell — the same
+// machinery `a closure over a `for` loop's own variable` needed for the case it
+// still refuses.
 //
-//   1. `collect_closures`'s `is_closure` — include a nested declaration.
-//   2. `reached_by_name` — **exclude** it. That predicate returns `true` for any
-//      symbol declared by a `FUNCTION_DECLARATION`, on the reasoning that "there
-//      is one of it for the whole program, so copying a pointer to it into every
-//      closure would be storage for nothing". True at module scope and false for
-//      a nested one, which is a per-call binding.
-//   3. The named-declaration collection loop — skip it, so no top-level function
-//      is emitted for a body that now reads captures.
-//   4. The statement walk — bind the closure where the declaration stands, and
-//      **hoisted**, because a function declaration is usable before its textual
-//      position and a `const` is not.
-//   5. Call sites — resolve the name to that binding rather than to a global.
+// # Three controls
 //
-// Each of those five carries a comment explaining why it is as it is, and each
-// is right about module scope. The distinction they all lack is the same one.
+//     the same function without `this`     lowers, and agrees with node
+//     nested, capturing nothing            lowers, and always did
+//     module scope                         a plain function, never a closure
 //
-// # The corpus shape, so the lever is chosen on evidence
-//
-// 48 nested function declarations in `runtime/node`; **20 are used as a value**
-// beyond their declaration and 17 mention `this` nearby. So *lambda lifting* —
-// adding the captured values as parameters and rewriting direct calls, which
-// needs no closure at all and is cheaper at run time — reaches at most half of
-// them, and the desugaring above reaches all. `closeHandler` and `errorHandler`
-// in `events` are stored and called later; `visit` below is not.
-//
-// 20 things, 33 sites, 17 modules — the eighth cause in the refusal census.
-//
-// # Attempted 2026-09-13, reverted, and here is how far it got
-//
-// Four of the five were written and each did what it was meant to. Instrumented
-// rather than inferred, because each step's failure looked like the previous
-// step not having worked:
-//
-//     collect_closures     takes it       `visit` within=true this=false -> true
-//     bind_nested_function fires          in-closures=true
-//     lower_arrow          allocates      and pushes `used_closures`
-//     declaration loop     skips it       no top-level function is emitted
-//     the call site        STILL DIRECT   `viaDeclaration ... calls `visit`,
-//                                         which was refused above`
-//
-// So there is a **sixth** place. The call `visit(2)` still resolves to a direct
-// call to a name no longer emitted, and adding a `bindings.contains_key` test
-// beside `names_a_declared_function` in `lower_call` did not change it — which
-// means the callee's symbol at the call site is not the symbol the binding was
-// inserted under, or the call is resolved before that test. That is the next
-// thing to find, and it is one `eprintln!` away.
-//
-// The closure body is also not emitted (`Closure1` and `Closure2` exist, from
-// the two working forms; `Closure0` does not), so `wanted` is not reaching it
-// either — plausibly the same cause, since nothing calls it.
-//
-// **Reverted rather than left half-applied.** Four coordinated edits that make
-// a program refuse *differently* are worse than one that refuses the way the
-// row says, and the corpus counts did not move.
-//
-// # The obvious lever is not one, measured 2026-09-13
-//
-// `collect_closures` matches `ARROW_FUNCTION` and `FUNCTION_EXPRESSION` and not
-// `FUNCTION_DECLARATION`, so adding the third looks like the fix — a nested
-// `function` differs from a nested function *expression* only by being hoisted
-// and named, and neither is a difference about capture.
-//
-// Adding it changes **nothing**: `util` and `net` report the same refusal counts
-// to the line. A function declaration's emission path does not consult that
-// list, so making it a closure there gives it no closure to be. The work is in
-// the emission — a nested declaration that captures has to become a closure
-// object allocated in its enclosing function, with its call sites dispatching
-// through it — and `ClosureStatic` is the shape that already exists for "a named
-// function used as a value".
-//
-// Recorded because the change is three lines and reads as obviously right, so
-// the next person will try it too.
+// All three are in the example. The first is the one that matters: it differs
+// from the subject below in nothing but the receiver.
 
 export function control(columns: number, index: number): number {
   return index * columns;
 }
 
-export function unread(): number {
-  function inner(index: number): number {
-    return index * 2;
-  }
-  return inner(3);
-}
-
+/** Under test: captures, and binds its own `this`. */
 export function subject(columns: number): number {
-  function visit(index: number): number {
+  function visit(this: unknown, index: number): number {
     return index * columns;
   }
-  return visit(2);
+  return visit.call(undefined, 2);
+}
+
+/**
+ * The control that landed: the same body without a `this`.
+ *
+ * Named differently from the subject on purpose — two nested functions of one
+ * name in one file is `a second function named \`visit\``, which is a
+ * different row and would have been reported as this one.
+ */
+export function withoutThis(columns: number): number {
+  function walk(index: number): number {
+    return index * columns;
+  }
+  return walk(2);
 }

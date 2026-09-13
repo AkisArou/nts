@@ -1038,6 +1038,34 @@ enum Rebinding {
     Refused(&'static str),
 }
 
+/// Whether a declaration is lowered as a closure body rather than as a function.
+///
+/// **Only one that actually captures.** [`FuncBuilder::is_nested_closure`] takes
+/// every nested declaration, and one that reads nothing from around it is an
+/// ordinary function that was always emitted as one -- skipping those left 210
+/// `a declaration outside every walk` in `util` alone, a body nothing emitted
+/// and nothing refused.
+///
+/// Asked in two places, which is why it is a function: one side decides not to
+/// emit a function and the other decides to allocate a closure, and a
+/// disagreement between them is a name with nothing behind it.
+///
+/// Such a declaration is **not a function of this program**. Its body is
+/// lowered as a closure body and its name bound where the declaration stands,
+/// so emitting a top-level one as well would be two definitions of one thing --
+/// and the top-level one is the one that cannot work, its body reading a local
+/// of its enclosing function with nowhere to read it from. That refusal,
+/// `a name from an enclosing scope`, is what this change is about.
+fn not_a_plain_function(kind: NodeKind, closures: &[ClosureInfo], id: NodeId) -> bool {
+    kind != NodeKind::Syntax(syntax::FUNCTION_DECLARATION) || taken_as_a_closure(closures, id)
+}
+
+fn taken_as_a_closure(closures: &[ClosureInfo], id: NodeId) -> bool {
+    closures
+        .iter()
+        .any(|closure| closure.node == id && !closure.captures.is_empty())
+}
+
 fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
     let probe = FuncBuilder::new(snapshot);
 
@@ -1073,6 +1101,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
         let is_closure = match node.kind {
             NodeKind::Syntax(syntax::ARROW_FUNCTION) => true,
             NodeKind::Syntax(syntax::FUNCTION_EXPRESSION) => !probe.binds_this(id),
+            NodeKind::Syntax(syntax::FUNCTION_DECLARATION) => probe.is_nested_closure(id),
             _ => false,
         };
         if !is_closure {
@@ -4320,7 +4349,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
             continue;
         }
 
-        if node.kind != NodeKind::Syntax(syntax::FUNCTION_DECLARATION) {
+        if not_a_plain_function(node.kind, &closures, id) {
             continue;
         }
         // An `async` function is refused rather than lowered, and the reason it
@@ -8125,6 +8154,23 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// Whether a node has a function or method above it.
+    /// Whether a `function` declaration is a **closure** rather than a function
+    /// of this program.
+    ///
+    /// A nested `function` declaration is a hoisted `const` holding a function
+    /// expression, and that is not an analogy: written either of the other two
+    /// ways the same body lowers and agrees with node. Only the declaration
+    /// form was refused, for reading a local of the function that declares it.
+    ///
+    /// At **module scope** it stays a plain function -- there is one of it for
+    /// the whole program and every caller reaches it by name, so a closure
+    /// would be storage for nothing, which is the rule [`reached_by_name`]
+    /// states for exactly that case. One that binds its own `this` is not a
+    /// closure either, by the same test the `function` *expression* arm uses.
+    fn is_nested_closure(&self, id: NodeId) -> bool {
+        self.is_within_a_function(id) && !self.binds_this(id)
+    }
+
     fn is_within_a_function(&self, id: NodeId) -> bool {
         let mut at = self.node(id).parent;
         while let Some(parent) = at {
@@ -10362,6 +10408,7 @@ impl<'a> FuncBuilder<'a> {
 
         let receiver = self.push(OpKind::Param(0), receiver_ty.clone(), origin.clone());
         self.this = Some(receiver);
+        self.bind_own_name(id, receiver);
         self.in_closure = true;
         let mut params = vec![Param {
             name: "this".to_owned(),
@@ -19667,7 +19714,8 @@ impl<'a> FuncBuilder<'a> {
             // by the walk rather than here: lowered on its own it has a free
             // name, and "`base`, a name from an enclosing scope" says which.
             // That is a closure, and this is not the path that builds one.
-            Some(syntax::EMPTY_STATEMENT | syntax::FUNCTION_DECLARATION) => Ok(()),
+            Some(syntax::EMPTY_STATEMENT) => Ok(()),
+            Some(syntax::FUNCTION_DECLARATION) => self.bind_nested_function(id),
             Some(syntax::THROW_STATEMENT) => self.lower_throw(id),
             Some(syntax::TRY_STATEMENT) => self.lower_try(id),
             Some(syntax::LABELED_STATEMENT) => self.lower_labeled(id),
@@ -21841,6 +21889,48 @@ impl<'a> FuncBuilder<'a> {
     /// allocation and the stores that fill it. Everything after this treats the
     /// result as the object it is, so a closure that does not outlive the call
     /// ends up in the frame and one that does gets a reference count.
+    /// **A nested `function` declaration can call itself, and inside its own
+    /// body its name is the closure.**
+    ///
+    /// The allocating side binds the name in the *enclosing* function, which is
+    /// where the call `down(3)` resolves. A recursive `down(k - 1)` is inside
+    /// this body, where that binding does not reach -- so without this, a
+    /// capturing nested function that recurses refused as "Closure0#call ...
+    /// calls `down`", which is the shape the row's own motivating case has: "a
+    /// recursive matcher closing over `columns` and `memo`".
+    ///
+    /// The receiver *is* the closure, so the name and parameter zero are the
+    /// same value and no field is needed for it. An arrow has no name to bind
+    /// and a function expression's name is optional, which is why this sits
+    /// here rather than beside the captures.
+    fn bind_own_name(&mut self, id: NodeId, receiver: ValueId) {
+        if self.kind_of(id) == Some(syntax::FUNCTION_DECLARATION)
+            && let Some(name) = self.children(id).first()
+            && let Some(symbol) = self.node(*name).symbol
+        {
+            self.bindings.insert(symbol.0, receiver);
+        }
+    }
+
+    fn bind_nested_function(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        if !taken_as_a_closure(&self.closures, id) {
+            return Ok(());
+        }
+        // **The name child's symbol, not the declaration's.** A
+        // `FUNCTION_DECLARATION` node carries no symbol of its own -- the
+        // identifier inside it does, and that is the symbol every call site
+        // resolves to. Binding under `self.node(id).symbol` bound under `None`
+        // and returned before `lower_arrow` ever ran, so the closure body was
+        // never requested either and the only visible symptom was a call to a
+        // function that no longer existed.
+        let Some(symbol) = self.children(id).first().and_then(|name| self.node(*name).symbol) else {
+            return Ok(());
+        };
+        let value = self.lower_arrow(id)?;
+        self.bindings.insert(symbol.0, value);
+        Ok(())
+    }
+
     fn lower_arrow(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let index = self
             .closures
@@ -27520,9 +27610,14 @@ impl<'a> FuncBuilder<'a> {
         // function" and sent every cross-module call down the closure path --
         // where it was refused for reading a name from an enclosing scope.
         let declaration = self.direct_callee(target.callee, callee_node);
-        if declaration.is_none()
-            && self.is_function_typed(callee_node)
-            && !self.names_a_declared_function(callee_node)
+        let locally_bound = self
+            .node(callee_node)
+            .symbol
+            .is_some_and(|symbol| self.bindings.contains_key(&symbol.0));
+        if locally_bound
+            || (declaration.is_none()
+                && self.is_function_typed(callee_node)
+                && !self.names_a_declared_function(callee_node))
         {
             return self.lower_closure_call(id, callee_node, &arguments);
         }
