@@ -28,7 +28,7 @@ generated="$here/target/com.example.ui.d.ts"
 ( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" cargo run --release -q \
     -p nts-jvm-emitter --example bind -- \
     "$here/target/classes" com.example.ui \
-    com/example/ui/Rect com/example/ui/Widget com/example/ui/View com/example/ui/Loader \
+    com/example/ui/Rect com/example/ui/Drawable com/example/ui/Widget com/example/ui/View com/example/ui/Loader \
     'com/example/ui/View$OnTouch' 'com/example/ui/Loader$OnBytes' 'com/example/ui/Widget$Task' 'com/example/ui/Widget$Pressable' \
     ) > "$generated"
 

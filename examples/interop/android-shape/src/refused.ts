@@ -37,6 +37,28 @@ export function refused(view: View): void {
   // `ThreadLocal` and an environment installed there makes it a direct call.
 
   // ---------------------------------------------------------------------
+  // Two Java class modifiers, and TypeScript can express exactly one
+  // ---------------------------------------------------------------------
+  //
+  // TS2511: Cannot create an instance of an abstract class.
+  //
+  // `Drawable` is `abstract` in the Java, and TypeScript has `abstract class`
+  // -- so this is a compile error rather than an `InstantiationError` at run
+  // time. 26 of 491 public classes in the sampled `android.jar` are abstract
+  // *with* a public constructor, which is exactly the shape that used to
+  // typecheck and could not run.
+  //
+  //   const d = new Drawable();
+  //
+  // **`final` gets no such treatment, and not for want of trying.** `Rect` is
+  // final, so `class Mine extends Rect {}` is illegal Java -- the JVM rejects
+  // the class at load with `VerifyError: Cannot inherit from final class`. The
+  // usual TypeScript idiom for a sealed class is a private member; probed, and
+  // a subclass simply inherits it and compiles clean. TypeScript has no
+  // `final`, so the declaration says so in prose and the enforcement waits for
+  // bind time.
+
+  // ---------------------------------------------------------------------
   // Refused by the verifier, not by us
   // ---------------------------------------------------------------------
   //

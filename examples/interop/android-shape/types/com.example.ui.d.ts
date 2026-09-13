@@ -7,6 +7,13 @@
 // this file must NOT import them, or it becomes a module and declares nothing.
 
 declare module "java:com.example.ui" {
+  /** com.example.ui.Drawable */
+  export abstract class Drawable {
+    constructor();
+    alpha(): number;
+    draw(a0: Rect): void;
+  }
+
   /** com.example.ui.Loader Final: cannot be extended. */
   export class Loader {
     constructor();

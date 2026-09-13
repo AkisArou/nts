@@ -1340,3 +1340,44 @@ fn a_final_class_says_it_cannot_be_extended() {
         nts_jvm_emitter::bind::declarations(&read("com/example/ui/Widget")).expect("renders");
     assert!(!widget.contains("Final:"), "Widget is extended by View:\n{widget}");
 }
+
+/// `abstract` is enforced and `final` is described, and the difference is what
+/// TypeScript can say.
+///
+/// Both are class-level Java modifiers the generator was ignoring, and both
+/// produced declarations that typechecked and could not run. They end
+/// differently:
+///
+/// - **`abstract class`** exists in TypeScript, so `new Drawable()` is
+///   `TS2511 Cannot create an instance of an abstract class` -- a compile
+///   error replacing an `InstantiationError`. 26 of 491 public classes in the
+///   sampled `android.jar` are abstract *with* a public constructor.
+/// - **`final` does not exist** in TypeScript at all. The private-member idiom
+///   was probed and a subclass inherits the field and compiles clean, so it is
+///   prose plus a bind-time refusal later.
+#[test]
+fn abstract_is_enforced_where_final_is_only_described() {
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let read = |name: &str| {
+        let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
+        nts_jvm_emitter::read::class_file(&bytes).expect("parses")
+    };
+
+    let drawable =
+        nts_jvm_emitter::bind::declarations(&read("com/example/ui/Drawable")).expect("renders");
+    assert!(drawable.contains("export abstract class Drawable {"), "{drawable}");
+    // It still declares its constructor -- a subclass calls it -- which is why
+    // `abstract` rather than hiding the constructor is the right mechanism.
+    assert!(drawable.contains("constructor();"), "a subclass still needs it:\n{drawable}");
+
+    // The control: an ordinary class is not abstract, or the modifier would be
+    // noise and `new Rect()` would stop compiling.
+    let rect = nts_jvm_emitter::bind::declarations(&read("com/example/ui/Rect")).expect("renders");
+    assert!(rect.contains("export class Rect {"), "{rect}");
+    assert!(!rect.contains("abstract class Rect"), "Rect is instantiable:\n{rect}");
+    // And Rect carries the other modifier, in prose.
+    assert!(rect.contains("Final: cannot be extended."), "{rect}");
+}

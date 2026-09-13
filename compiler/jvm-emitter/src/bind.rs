@@ -541,11 +541,19 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
     // class could not declare that it implements one. Java accepts both a
     // lambda and an implementing object for a functional interface; the
     // TypeScript surface has to offer both for the same reason.
-    let _ = writeln!(
-        out,
-        "  export {} {name} {{",
-        if is_interface { "interface" } else { "class" }
-    );
+    // **`abstract` is enforceable where `final` was not.** TypeScript has
+    // `abstract class`, so `new Drawable()` becomes a compile error instead of
+    // an `InstantiationError` at run time. 26 of 491 public classes in the
+    // sampled `android.jar` are abstract *and* carry a public constructor,
+    // which is exactly the shape that typechecked and could not run.
+    let kind = if is_interface {
+        "interface"
+    } else if class.access & access::ABSTRACT != 0 {
+        "abstract class"
+    } else {
+        "class"
+    };
+    let _ = writeln!(out, "  export {kind} {name} {{");
 
     let mut out_constants = String::new();
     render_fields_into(&mut out, &mut out_constants, class)?;
