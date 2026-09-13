@@ -60,6 +60,7 @@ out="${NTS_ADDON_OUT:-$root/target/node}"
 mkdir -p "$out"
 total_pass=0
 total_fail=0
+total_hollow=0
 
 for dir in runtime/node/*/; do
   module="$(basename "$dir")"
@@ -100,16 +101,45 @@ for dir in runtime/node/*/; do
       total_pass=$(( total_pass + real ))
       continue
     fi
-    line="$(timeout 900 node "$root/tooling/conformance/run.mjs" \
-      --module "$module" --addon "$out/$module.node" 2>&1 | tail -1)"
-    printf '%-20s %s\n' "$module" "$line"
-    pass="$(printf '%s' "$line" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+')"
+    # **Every module gets the emptying arm, not only the ones publishing nothing.**
+    #
+    # A module with a real surface can still have hollow passes. `net` publishes 10 names and
+    # two of its six compiled passes -- `test-listen-fd-detached` and
+    # `test-listen-fd-detached-inherit` -- are **identical with the module emptied**, so they
+    # assert nothing about it. A peer's instrument flagged them as INVERTED first: passing
+    # compiled and failing interpreted, which is the tell, because both lanes are the same
+    # TypeScript and a pass on one with a failure on the other means the pass holds for a
+    # reason other than the one it states.
+    #
+    # Restricting the test to empty-surface modules was the narrower version of the right
+    # idea and it over-counted by two. Both arms for everything now: double the wall clock,
+    # against a total that is the basis of every other number in this ledger.
+    intact_p="$out/$module.intact.txt"
+    empty_p="$out/$module.empty.txt"
+    NTS_CONFORMANCE_TIMEOUT_MS="${NTS_CONFORMANCE_TIMEOUT_MS:-20000}" \
+      timeout 900 node "$root/tooling/conformance/run.mjs" --module "$module" \
+      --addon "$out/$module.node" --verbose 2>&1 | tee "$out/$module.intact.log" |
+      awk '/^ *pass  /{print $2}' | sort > "$intact_p"
+    NTS_CONFORMANCE_TIMEOUT_MS="${NTS_CONFORMANCE_TIMEOUT_MS:-20000}" \
+      timeout 900 node "$root/tooling/conformance/run.mjs" --module "$module" \
+      --addon "$out/$module.node" --empty-exports --verbose 2>&1 |
+      awk '/^ *pass  /{print $2}' | sort > "$empty_p"
+    line="$(tail -1 "$out/$module.intact.log")"
+    pass="$(comm -23 "$intact_p" "$empty_p" | sed '/^$/d' | wc -l)"
+    hollow="$(comm -12 "$intact_p" "$empty_p" | sed '/^$/d' | wc -l)"
     fail="$(printf '%s' "$line" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+')"
+    if [ "${hollow:-0}" -gt 0 ]; then
+      printf '%-20s %s real, %s hollow, %s failed\n' "$module" "$pass" "$hollow" "${fail:-0}"
+    else
+      printf '%-20s %s\n' "$module" "$line"
+    fi
     total_pass=$(( total_pass + ${pass:-0} ))
     total_fail=$(( total_fail + ${fail:-0} ))
+    total_hollow=$(( total_hollow + ${hollow:-0} ))
   else
     printf '%-20s BUILD FAILED -- see %s\n' "$module" "$out/$module.build.log"
   fi
 done
 
-printf '\n%-20s %s passed, %s failed\n' "TOTAL" "$total_pass" "$total_fail"
+printf '\n%-20s %s passed, %s failed, %s hollow (not counted)\n' \
+  "TOTAL" "$total_pass" "$total_fail" "$total_hollow"
