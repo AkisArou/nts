@@ -7900,3 +7900,39 @@ to expand one, and it printed 66, 19, 7 and 0 for the same tree in four minutes.
 A count that moves that far under successive corrections was never measuring the
 program. The first number was the most alarming and the most wrong, which is the
 usual direction.
+
+### The forward direction is the same, and that finishes the argument
+
+Having established that "which mappings are dead" is not statically answerable,
+the obvious follow-up is the direction that actually matters -- **a name
+`hir::runtime` declares and this backend does not map is a refusal**, and
+`intrinsics.rs` exists because exactly that gap was real for `web_external`:
+
+> a name missing from it is a refusal that no amount of Java testing can see.
+
+Counted the same way: 196 names in `runtime.rs`'s table, 235 literals in this
+backend, and **78 of the table's names are not mapped as literals**. Which is
+again the instrument. `ops::growable_external` does
+
+    let stem = name.strip_prefix("nts_array_")?;
+
+and then matches `"push" | "push_ref"`, so `nts_array_push` is mapped and the
+string `"nts_array_push"` appears nowhere. Prefix-stripped dispatch on one side,
+`format!`-assembled names and defensive alternate spellings on the other.
+
+**So neither direction is enumerable, and for the same reason: both tables are
+matched by shape rather than by membership.** That is a deliberate property --
+it is what lets one spelling change without a miscompile, and what keeps twelve
+`dataview` setters from being twelve entries -- and it is also what makes the
+drift test unwritable in the form either of us reached for.
+
+What covers `core_external` in practice is the **gate floor**: an example using
+an unmapped name is refused, and the floor equals the corpus, so it fails the
+day it lands. That is real coverage for every name the corpus exercises, and
+nothing for the rest -- which is the honest scope, and narrower than
+`intrinsics.rs` gives the intrinsic table, where the check is direct.
+
+Four counts tonight -- 66, 19, 7, 78 -- every one of them an artefact of asking
+a pattern-matched table for its membership. The first three I corrected by
+checking a name I happened to know. The fourth I corrected because by then I
+expected it, which is the only part of this worth carrying forward.
