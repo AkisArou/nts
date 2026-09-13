@@ -75,6 +75,34 @@
 //
 // 20 things, 33 sites, 17 modules — the eighth cause in the refusal census.
 //
+// # Attempted 2026-09-13, reverted, and here is how far it got
+//
+// Four of the five were written and each did what it was meant to. Instrumented
+// rather than inferred, because each step's failure looked like the previous
+// step not having worked:
+//
+//     collect_closures     takes it       `visit` within=true this=false -> true
+//     bind_nested_function fires          in-closures=true
+//     lower_arrow          allocates      and pushes `used_closures`
+//     declaration loop     skips it       no top-level function is emitted
+//     the call site        STILL DIRECT   `viaDeclaration ... calls `visit`,
+//                                         which was refused above`
+//
+// So there is a **sixth** place. The call `visit(2)` still resolves to a direct
+// call to a name no longer emitted, and adding a `bindings.contains_key` test
+// beside `names_a_declared_function` in `lower_call` did not change it — which
+// means the callee's symbol at the call site is not the symbol the binding was
+// inserted under, or the call is resolved before that test. That is the next
+// thing to find, and it is one `eprintln!` away.
+//
+// The closure body is also not emitted (`Closure1` and `Closure2` exist, from
+// the two working forms; `Closure0` does not), so `wanted` is not reaching it
+// either — plausibly the same cause, since nothing calls it.
+//
+// **Reverted rather than left half-applied.** Four coordinated edits that make
+// a program refuse *differently* are worse than one that refuses the way the
+// row says, and the corpus counts did not move.
+//
 // # The obvious lever is not one, measured 2026-09-13
 //
 // `collect_closures` matches `ARROW_FUNCTION` and `FUNCTION_EXPRESSION` and not
