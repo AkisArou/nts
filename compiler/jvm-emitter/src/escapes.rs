@@ -29,10 +29,24 @@
 //!   so this is nearly exact in practice and always safe.
 //! - **An unknown opcode abandons the method**, answering "everything
 //!   escapes". A misparse must not be able to produce a *permissive* answer.
+//! - **An opcode whose stack *effect* is not modelled marks the whole stack as
+//!   escaped.** Distinct from the point above, and the distinction is where the
+//!   bug was: that one is about an opcode whose *width* is unknown, so the walk
+//!   cannot continue at all; this one is about an opcode the walk steps over
+//!   correctly while not knowing what it did to the operands.
 //!
 //! The result is a yes-or-no that is only ever wrong in the direction that
 //! costs speed, never correctness -- which is the same trade `hir::escape`
 //! already makes, moved one level in.
+//!
+//! **That fourth point was missing from this list, and it is exactly where the
+//! analysis failed open.** The first version cleared the stack and pushed
+//! "something else" for an unmodelled effect, which *discards the evidence*:
+//! `FilterOutputStream.write(byte[])` calls `write(b, 0, b.length)` and came
+//! back `escaping=[]`, because `b` left the model at `arraylength` two
+//! instructions before the `invoke` that publishes it. The header enumerated
+//! the conservative choices and the one it did not enumerate is the one that
+//! was not made.
 //!
 //! # A body that always throws is not evidence, and this nearly shipped
 //!
