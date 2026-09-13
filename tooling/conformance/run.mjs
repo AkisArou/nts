@@ -447,8 +447,17 @@ const haveScript = () => {
 //
 // A small surface is not a hollow one -- `stream` publishes 2 keys compiled and its single
 // pass falls to 0 when emptied. An **absent** surface is.
+// `NTS_CONFORMANCE_ALLOW_EMPTY_SURFACE` runs the tests anyway. The guard below is a
+// blunt instrument on purpose -- 0 keys means a pass cannot be about the module -- but
+// it is blunt in both directions, and `timers` is the case that shows it: the module
+// publishes nothing under its own name, while its two local fixtures reach
+// `getTimerDuration` through `require("internal/timers")`, a *different* specifier
+// that is substituted separately. Those two passes are real, and skipping the module
+// lost them: the axis read 48 where 50 was right. So the axis pairs this override with
+// an `--empty-exports` arm and counts only the passes that do not survive emptying.
 let publishesNothing = false;
-if (addon !== null && !sabotage && !emptyExports) {
+if (addon !== null && !sabotage && !emptyExports
+  && process.env.NTS_CONFORMANCE_ALLOW_EMPTY_SURFACE !== "1") {
   let published = null;
   try {
     published = execFileSync(

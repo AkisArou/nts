@@ -73,7 +73,31 @@ for dir in runtime/node/*/; do
     fi
     if ! node "$root/tooling/conformance/shaped-surface.mjs" "$out" "$module" \
         > "$out/$module.surface.log" 2>&1; then
-      printf '%-20s PUBLISHES NOTHING -- every pass here asserts nothing\n' "$module"
+      # **A module publishing nothing still gets both arms, because the guard is blunt
+      # in both directions.** `timers` publishes nothing under its own name while its
+      # local fixtures reach `getTimerDuration` through `require("internal/timers")`, a
+      # separately substituted specifier -- two real passes that skipping the module
+      # threw away, and the axis read 48 where 50 was right.
+      #
+      # So run it, run it again emptied, and keep only the passes that do not survive
+      # emptying. That is `--sabotage`'s question asked per file, and it is exact:
+      # `cluster` keeps all 25 of its passes when emptied (hollow, contributes 0) and
+      # `timers` keeps none of its 2 (real, contributes 2).
+      intact_p="$out/$module.intact.txt"
+      empty_p="$out/$module.empty.txt"
+      NTS_CONFORMANCE_ALLOW_EMPTY_SURFACE=1 NTS_CONFORMANCE_TIMEOUT_MS=20000 \
+        timeout 900 node "$root/tooling/conformance/run.mjs" --module "$module" \
+        --addon "$out/$module.node" --verbose 2>&1 |
+        awk '/^ *pass  /{print $2}' | sort > "$intact_p"
+      NTS_CONFORMANCE_TIMEOUT_MS=20000 \
+        timeout 900 node "$root/tooling/conformance/run.mjs" --module "$module" \
+        --addon "$out/$module.node" --empty-exports --verbose 2>&1 |
+        awk '/^ *pass  /{print $2}' | sort > "$empty_p"
+      real=$(comm -23 "$intact_p" "$empty_p" | sed '/^$/d' | wc -l)
+      hollow=$(comm -12 "$intact_p" "$empty_p" | sed '/^$/d' | wc -l)
+      printf '%-20s PUBLISHES NOTHING -- %s real pass(es), %s that survive emptying\n' \
+        "$module" "$real" "$hollow"
+      total_pass=$(( total_pass + real ))
       continue
     fi
     line="$(timeout 900 node "$root/tooling/conformance/run.mjs" \
