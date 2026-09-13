@@ -266,8 +266,23 @@ Every alternative was run, not reasoned:
 | `declare module "c:stdlib" { export function abs(...) }` | compiles → `double abs(double);` |
 
 **`paths` works and is not what we ship.** It was the first answer here and the
-user declined it: a binding that only resolves because each project configured
-a mapping is a binding with a setup step, and `declare module` has none.
+user declined it: a binding that resolves only because each project configured
+a mapping carries that mapping forever.
+
+**But "no setup" was too strong, and the step that remains is the interesting
+one.** `declare module` removes the path *mapping*; it does not remove the need
+for the file to be **in the program**. The probes above only looked clean
+because the `.d.ts` sat inside `src/` and the default `include` swept it up. A
+shipped `libc.d.ts` lives in the toolchain rather than the user's tree, so today
+it must be named in `files`/`include` — one line instead of a mapping, but not
+nothing.
+
+The end state is the question that started this: **inject it the way `tsc`
+injects `lib.*.d.ts`**, so a program writing `import { abs } from "c:stdlib"`
+needs no tsconfig entry at all. "Could `c_int`, `Ptr` and `Ref` live in lib?"
+was asking exactly that, and `declare module` is what makes the answer
+reachable — a lib file may declare ambient modules and cannot declare a `paths`
+mapping. Not implemented; it is the last packaging step, not a design question.
 
 **`types` is likewise the wrong mechanism** and users add nothing per header. `types`
 admits *global* ambient packages, which would put all eleven headers' names in
