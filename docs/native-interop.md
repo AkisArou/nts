@@ -215,6 +215,49 @@ prototype in `runtime/node/internal/nts_node.h`. One counterexample was enough
 to falsify it; counting turned "the claim is too strong" into "the claim is
 inverted".
 
+## How `libc.d.ts` is packaged, decided 2026-09-14 and measured
+
+Per header, addressed by a `c:` scheme, as ES modules. Not one file, and not
+`declare namespace`. Every line below was run, not reasoned:
+
+| written | result |
+|---|---|
+| `declare namespace libc { function abs(...) }` | **refuses** — `` `libc`, a namespace `` |
+| `declare namespace libc { type c_int = number }` | compiles — types are erased |
+| `declare function abs(...)` flat, global | compiles |
+| `export declare function abs(...)` in a `.d.ts`, imported | compiles → `double abs(double);` |
+| `import * as math from "./libc/math.js"` | compiles → `math.abs(n)` |
+| `import { abs } from "c:math"` with `"paths": {"c:*": ["./libc/*.d.ts"]}` | compiles → `double abs(double);` |
+
+So the shipped form is:
+
+```json
+{ "compilerOptions": { "baseUrl": ".", "paths": { "c:*": ["./libc/*.d.ts"] } } }
+```
+```ts
+import { abs } from "c:math";
+import * as stdio from "c:stdio";   // stdio.puts("hi") — namespace ergonomics
+```
+
+**`types` is the wrong mechanism** and users add nothing per header. `types`
+admits *global* ambient packages, which would put all eleven headers' names in
+global scope whether imported or not — `time`, `abs` and `pow` among them.
+`paths` is per-import, and the mapping ships in a base tsconfig that a user
+picks up with one `extends` line.
+
+**Namespaces were wanted and are not needed.** `namespace` holding functions is
+a ✗ row (`typescript.md` §6); what it would have bought is the `stdio.printf()`
+call shape, and `import * as stdio` gives exactly that through
+`denotes_a_module`, which is already built. Where `declare namespace` *does*
+work is the pure-type headers — `stdint.h`, `stdbool.h`, `stddef.h` — so the
+branded scalars can be grouped while functions stay flat exports. **Types yes,
+values no.**
+
+What is *not* settled by any of this is the content. The probe above emits
+`double abs(double)` where C declares `int abs(int)`, so every signature needs
+the brands to be correct before this can ship. Packaging is decided; the
+prototypes wait on the branded-scalar work.
+
 ## The hazard this lane trips over: an unrelated declaration decides the answer
 
 Twice in two days, in different parts of the compiler, **a declaration that is
