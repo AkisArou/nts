@@ -149,7 +149,42 @@ export class Worker extends EventEmitter {
   id = 0;
   process!: ChildProcess;
   state = "none";
-  exitedAfterDisconnect = false;
+  /**
+   * **`undefined` until something decides, not `false`.**
+   *
+   * node writes `this.exitedAfterDisconnect = undefined` in the constructor and
+   * `test-cluster-worker-constructor` asserts exactly that, twice. The distinction is
+   * node's own: `false` would say "this worker did not exit after a disconnect", which is
+   * a claim about a worker that has not exited at all. Every reader here tests it for
+   * truthiness, so widening the type changes no behaviour.
+   */
+  exitedAfterDisconnect: boolean | undefined = undefined;
+
+  /**
+   * node's `Worker` takes an options bag -- `{ id, state, process }` -- and its own test
+   * constructs one directly to check each field lands. `fork` does not use it; it builds a
+   * bare worker and fills the fields in, which is why this went unnoticed.
+   *
+   * `options.id | 0` rather than `?? 0` is node's coercion, so `new Worker({ id: '3' })`
+   * is 3 and `new Worker({})` is 0.
+   */
+  constructor(options?: { id?: unknown; state?: unknown; process?: unknown }) {
+    super();
+    if (options === null || typeof options !== "object") return;
+    if (typeof options.state === "string" && options.state !== "") this.state = options.state;
+    this.id = Number(options.id) | 0;
+    if (options.process !== undefined && options.process !== null) {
+      this.process = options.process as ChildProcess;
+      // node forwards both from the process it was handed, so a `Worker` built around an
+      // existing child is as observable as one `fork` made.
+      this.process.on("error", (code: unknown, signal: unknown): void => {
+        this.emit("error", code, signal);
+      });
+      this.process.on("message", (message: unknown, handle?: unknown): void => {
+        this.emit("message", message, handle);
+      });
+    }
+  }
   /**
    * Whether this object is the worker the *current* process is, rather than a child the
    * primary forked. The two answer the same questions through different channels: a
@@ -340,6 +375,14 @@ class Cluster extends EventEmitter {
       this.emit("message", worker, message, handle);
     });
     child.on("exit", (code: number | null, signal: string | null): void => {
+      // **node coerces the flag the moment the worker leaves, and that is the transition
+      // from `undefined` to `false`.** `!!worker.exitedAfterDisconnect` sits at both of
+      // node's sites for the same reason: until a worker goes, "did it exit after a
+      // disconnect" has no answer, and once it has gone the answer is a boolean.
+      // `test-cluster-worker-exit` and `test-cluster-worker-kill` both assert `false` after
+      // an exit that had no disconnect, and both broke the moment the constructor started
+      // the field at `undefined` -- which is the correct start.
+      worker.exitedAfterDisconnect = worker.exitedAfterDisconnect === true;
       worker.state = "dead";
       // **A listener outlives its last worker unless this runs.** A worker that leaves by
       // exiting rather than by closing its server never sends `close`, so the primary's
@@ -354,6 +397,7 @@ class Cluster extends EventEmitter {
       this.#workerLeft();
     });
     child.on("disconnect", (): void => {
+      worker.exitedAfterDisconnect = worker.exitedAfterDisconnect === true;
       worker.state = "disconnected";
       worker.emit("disconnect");
       this.emit("disconnect", worker);

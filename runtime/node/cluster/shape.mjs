@@ -20,6 +20,29 @@ export function shape(exports) {
   // The instance is an EventEmitter and its methods live on the prototype, so the
   // published object is the instance itself with the wrong role's names removed rather
   // than a copy: a copy would lose `on`, `emit` and the listener state with them.
+  // **`Worker` is a function in node, and one of its tests calls it as one.**
+  //
+  //     worker = cluster.Worker.call({}, { id: 5 });
+  //     assert(worker instanceof cluster.Worker);
+  //
+  // node's `Worker` opens with `if (!(this instanceof Worker)) return new Worker(options)`,
+  // so it works with any receiver or none. A class cannot: *Class constructor Worker cannot
+  // be invoked without 'new'*. The class stays in `src/main.ts` -- everything this module
+  // builds internally uses it directly -- and what the module *publishes* is a plain
+  // function over it, sharing the prototype so `instanceof` answers for instances from
+  // either route.
+  const RealWorker = cluster.Worker;
+  if (typeof RealWorker === "function") {
+    const Worker = function (options) { return new RealWorker(options); };
+    Worker.prototype = RealWorker.prototype;
+    Object.defineProperty(Worker, "name", { value: "Worker", configurable: true });
+    try {
+      cluster.Worker = Worker;
+    } catch {
+      // A frozen instance would rather keep the class than lose the module.
+    }
+  }
+
   const primaryOnly = ["SCHED_NONE", "SCHED_RR", "fork", "disconnect", "schedulingPolicy",
                        "settings", "setupMaster", "setupPrimary", "workers"];
   const workerOnly = ["worker", "_getServer", "_setupWorker"];
