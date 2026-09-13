@@ -24500,3 +24500,18 @@ And the interpreted lane ran green while the module **did not typecheck** -- `#h
 `#stdioOpen` lost their initialisers and the binding call was an argument short. The compiled lane
 would have failed to build. Emitting after the edit is what caught it.
 
+## The axis reproduces at 46 after the child_process work
+
+    TOTAL   46 passed, 1722 failed, 4 hollow (not counted)
+
+Fresh pin, validated before use against a number already held (`fs`: 0 lines of "no function of
+that name was compiled", 998 of "which was refused above"). Both arms per module, **no `ARM DIED`
+rows**, and the four hollow are the same four: `dns` and `fs`'s `*-promises-exists.js` identity
+assertions, and `net`'s two `listen-fd-detached` files.
+
+Unchanged is the expected answer and worth saying why rather than leaving it implied.
+`child_process` gained three interpreted fixes and publishes **nothing** on the compiled lane, so
+it has no row to move; `net`'s two hollow passes stay hollow because the compiled lane has no host
+object for `handle` or `fd` to return. A module can improve a great deal on one lane without the
+other noticing.
+
