@@ -33,11 +33,11 @@ export function main(): void {
   // No copy anywhere on these four lines. `index()` hands back the same
   // HashMap object the Java method returned.
   const index = catalog.index();
-  const boxed = index.get(label);          // `Integer | null` -- Java's `get`
+  const boxed = index.get(label); // `Integer | null` -- Java's `get`
   const count = boxed === null ? 0 : boxed.intValue();
 
-  const names = catalog.names();           // the same java.util.List
-  const first = names.get(Java.asInt(0));  // no toArray(), so no allocation
+  const names = catalog.names(); // the same java.util.List
+  const first = names.get(Java.asInt(0)); // no toArray(), so no allocation
 
   // A Java `int[]` IS an Int32Array. Same object, and the element type narrows
   // because it is the TypeScript type -- this loop is integer arithmetic.
@@ -52,15 +52,15 @@ export function main(): void {
   const head = bytes.subarray(0, 4);
 
   // --- long is bigint, and the friction is deliberate ------------------------
-  const id = catalog.id();                 // 9007199254740993n
+  const id = catalog.id(); // 9007199254740993n
   // `id + total` does not compile: you cannot mix bigint and number. That is
   // the type system refusing to round 2^53+1 silently.
   const idAsText = id.toString();
 
   // --- overloads resolve by losslessness ------------------------------------
-  const byNumber = catalog.find(1.5);      // -> find(double). NOT find(int).
-  const byLong = catalog.find(42n);        // -> find(long)
-  const byText = catalog.find("abc");      // -> find(String)
+  const byNumber = catalog.find(1.5); // -> find(double). NOT find(int).
+  const byLong = catalog.find(42n); // -> find(long)
+  const byText = catalog.find("abc"); // -> find(String)
   // -> render(String), by JLS 15.12.2 most-specific, not by our guess.
   const rendered = catalog.render("x");
 
@@ -74,13 +74,13 @@ export function main(): void {
   const name = catalog.name();
 
   // --- generics surface -----------------------------------------------------
-  const threeNames = catalog.repeat("x", Java.asInt(3));  // List<string>
-  const sum = catalog.total([1, 2, 3]);                   // ? extends Number
-  const anything = catalog.raw();                         // List<unknown>
+  const threeNames = catalog.repeat("x", Java.asInt(3)); // List<string>
+  const sum = catalog.total([1, 2, 3]); // ? extends Number
+  const anything = catalog.raw(); // List<unknown>
 
   // --- nested and inner -----------------------------------------------------
-  const entry = new Catalog.Entry("k");    // static nested: constructs directly
-  const cursor = catalog.cursorAt(Java.asInt(2));  // inner: outer passed first
+  const entry = new Catalog.Entry("k"); // static nested: constructs directly
+  const cursor = catalog.cursorAt(Java.asInt(2)); // inner: outer passed first
   const owner = cursor.owner();
 
   console.log(
