@@ -223,22 +223,33 @@ export class Worker extends EventEmitter {
 
 class Cluster extends EventEmitter {
   /**
-   * **`disconnect` is bound, because node's is a property and not a method.**
+   * **The three node assigns as properties are bound, because a property has no receiver.**
    *
-   * `lib/internal/cluster/primary.js` assigns `cluster.disconnect = function (cb) {...}`
-   * over a closed-over `cluster`, so it works detached -- and three of node's own tests
-   * detach it:
+   * `lib/internal/cluster/primary.js` writes `cluster.setupPrimary = function (...)`,
+   * `cluster.fork = function (...)` and `cluster.disconnect = function (...)` over a
+   * closed-over `cluster`, so all three work detached -- and node's own tests detach every
+   * one of them, deliberately:
+   *
+   *     const fork = cluster.fork;
+   *     fork();  // `cluster.fork` to test that `this` is not used
    *
    *     unbound.on('disconnect', cluster.disconnect);
    *     worker.on('disconnect', common.mustCall(cluster.disconnect));
    *
-   * A class method loses its receiver there, and `Object.keys(this.workers)` becomes
-   * `Cannot convert undefined or null to object` -- a failure that names neither
-   * `disconnect` nor the call site. Binding in the constructor reproduces node's shape
-   * without giving up the class.
+   * A class method loses its receiver there. The failures name the private field it
+   * reached for and nothing else -- *Cannot read properties of undefined (reading
+   * '#nextId')* for `fork`, *Cannot convert undefined or null to object* for `disconnect`
+   * -- so neither points at the call site or at the binding. Binding here reproduces
+   * node's shape without giving up the class.
+   *
+   * `setupMaster` forwards to `setupPrimary` and is bound with them, since node kept the
+   * old spelling as its own property too.
    */
   constructor() {
     super();
+    this.setupPrimary = this.setupPrimary.bind(this);
+    this.setupMaster = this.setupMaster.bind(this);
+    this.fork = this.fork.bind(this);
     this.disconnect = this.disconnect.bind(this);
   }
 
@@ -351,7 +362,19 @@ class Cluster extends EventEmitter {
       worker.emit("error", error);
     });
 
-    this.emit("fork", worker);
+    // **On a next tick, because `fork` returns the worker the handler wants to compare.**
+    //
+    // node calls `process.nextTick(emitForkNT, worker)` here, and the reason is visible in
+    // its own test: `test-cluster-basic` keeps `const worker = cluster.fork()` and its
+    // `cluster.on('fork')` handler asserts `worker === arguments[0]`. Emitting inside the
+    // call runs that handler before the `const` is initialised -- *Cannot access 'worker'
+    // before initialization*, thrown from the test and pointing at the test.
+    //
+    // Fourth event in this module that fired inside the call producing it, after
+    // `disconnect`, `send`'s callback and `setup`. The others -- `online`, `listening`,
+    // `exit`, `message` -- arrive from the channel and are already a tick late by
+    // construction, which is why only these four were wrong.
+    nextTick((): void => { this.emit("fork", worker); });
     return worker;
   }
 
