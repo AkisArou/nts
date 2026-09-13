@@ -1257,7 +1257,17 @@ fn arguments(method: &crate::read::Member, parameters: &[String], resolve: &dyn 
                 .parameter_annotations
                 .get(index)
                 .is_some_and(|it| nullable(it));
-            let ty = if annotated && is_reference(rendered) {
+            // **Except on the variadic tail, where TypeScript forbids it.** A
+            // rest parameter must *be* an array type, and `string[] | null` is
+            // a union -- `TS2370 A rest parameter must be of an array type`.
+            // `setAutofillHints(String... hints)` is annotated `@Nullable` and
+            // rendered `...a0: string[] | null`, which does not compile.
+            //
+            // Dropping the union rather than the spread is the smaller loss:
+            // `f(null)` on a Java varargs passes a null *array*, and there is
+            // no rest syntax that expresses it either way. The spread is what a
+            // caller actually writes.
+            let ty = if annotated && is_reference(rendered) && !(variadic && index == last) {
                 format!("{rendered} | null")
             } else {
                 rendered.clone()
