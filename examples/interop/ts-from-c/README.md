@@ -18,6 +18,7 @@ makePoint(7)     = (7, 14)
 later: state before checkpoint = 0
 later: state after  checkpoint = 1
 later: value                   = 42
+later: joined value            = 42
 ```
 
 ## Using the generated header
@@ -49,6 +50,17 @@ Call the async export, run `nts_checkpoint()`, then inspect
 `nts_promise_state()` and `nts_promise_value()`. State 0 means pending, 1 means
 fulfilled, and 2 means rejected. A checkpoint drains microtasks; asynchronous
 I/O also requires a host event loop.
+
+For a synchronous C caller, `nts_promise_join(p)` drains checkpoints and drives
+single host turns until the promise settles. It returns `NTS_JOIN_FULFILLED`
+or `NTS_JOIN_REJECTED`; read the corresponding value or rejection reason.
+`NTS_JOIN_PENDING` means no registered host work remains, and
+`NTS_JOIN_UNSUPPORTED` means the host cannot be driven synchronously. These
+leave the promise pending. Join between tasks on the environment's owner
+thread: nested calls return `NTS_JOIN_REENTRANT`, foreign-thread calls return
+`NTS_JOIN_WRONG_THREAD`. Keep the promise reference alive until join returns.
+Both the test host and libuv support driving; microtask-only promises need no
+host. An unrelated repeating timer does not prevent a settled join returning.
 
 `later` contains an `await`, so its state changes across the checkpoint. An
 async function without a suspension can already be settled when it returns.

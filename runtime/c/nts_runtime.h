@@ -2339,7 +2339,13 @@ typedef struct NtsTask {
 
 typedef uint64_t NtsTimerId;
 
-/* Everything a host provides. Five operations and one opt-out. */
+typedef enum NtsHostPumpResult {
+  NTS_HOST_PUMP_IDLE,
+  NTS_HOST_PUMP_TURN,
+  NTS_HOST_PUMP_BUSY
+} NtsHostPumpResult;
+
+/* Scheduling and optional synchronous progress for an embedding host. */
 typedef struct NtsHost {
   /* Run after the current task *and* after a complete checkpoint. That
    * ordering is what `setImmediate` is built on, so it is specified here
@@ -2363,6 +2369,14 @@ typedef struct NtsHost {
    * means the host owns checkpointing: our queues and our drain are both
    * disabled, so there is one queue and one ordering (RFC 26.6). */
   void (*enqueue_microtask)(void *state, NtsTask task);
+
+  /* Optional: run one event-loop turn, blocking for registered work if
+   * necessary. TURN means a turn ran, not that a particular promise advanced;
+   * IDLE means no registered work remains. Either can settle a promise, so
+   * callers must inspect its state again. BUSY refuses recursive loop entry.
+   * NULL means synchronous driving is unavailable. A host with its own
+   * microtasks must checkpoint them before returning from a turn. */
+  NtsHostPumpResult (*pump_one)(void *state);
 
   void *state;
 } NtsHost;
@@ -2663,6 +2677,30 @@ NTS_READS_ONLY NtsValue nts_promise_reason(const NtsPromise *promise);
  * A `double` because that is the one numeric representation the lowering has to
  * hand, and converting at the boundary is one place rather than every call. */
 NTS_READS_ONLY double nts_promise_state(const NtsPromise *promise);
+
+typedef enum NtsPromiseJoinResult {
+  NTS_JOIN_PENDING,
+  NTS_JOIN_FULFILLED,
+  NTS_JOIN_REJECTED,
+  NTS_JOIN_UNSUPPORTED,
+  NTS_JOIN_WRONG_THREAD,
+  NTS_JOIN_REENTRANT
+} NtsPromiseJoinResult;
+
+/* Borrow a promise in the current environment and wait for settlement.
+ * Call between tasks on its owner's thread; calling from a task, checkpoint
+ * or another join returns REENTRANT. WRONG_THREAD is checked before reading
+ * the promise. The caller keeps its owning reference throughout this call.
+ *
+ * Drain a checkpoint, then drive individual host turns until settlement.
+ * PENDING means the host has no registered work; UNSUPPORTED means a pending
+ * promise needs a host which cannot be driven synchronously. Neither is a
+ * settlement. Future unregistered work on another thread is not loop liveness:
+ * register that work with the host, or use checkpoints after its completion.
+ * Read a fulfilled value with nts_promise_value, a rejection with
+ * nts_promise_reason. The current turn's full checkpoint finishes before
+ * returning; unrelated repeating timers do not have to stop. */
+NtsPromiseJoinResult nts_promise_join(const NtsPromise *promise);
 /* Reject with a reason that arrives erased.
  *
  * `nts_promise_reject` takes an `NtsHeader *` because a reason is always a

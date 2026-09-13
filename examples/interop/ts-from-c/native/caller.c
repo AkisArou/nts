@@ -45,6 +45,10 @@ int main(void) {
          nts_value_number(nts_promise_value(p)));
 
   nts_release((NtsHeader *)p);
+  p = later(41.0);
+  if (nts_promise_join(p) != NTS_JOIN_FULFILLED || nts_promise_number(p) != 42) return 4;
+  printf("later: joined value            = %g\n", nts_promise_number(p));
+  nts_release((NtsHeader *)p);
   nts_release((NtsHeader *)point);
 
   /* The `await` inside `later` is what makes the two states differ. An async

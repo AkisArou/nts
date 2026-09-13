@@ -102,6 +102,23 @@ fn the_checkpoint_orders_ticks_microtasks_and_macrotasks_as_node_does() {
     );
 }
 
+#[test]
+fn promise_join_stops_at_settlement_on_the_test_host() {
+    let report = run_suite("promise_join", &["-DNTS_PROVIDER_RC"]);
+    assert!(checks(&report) >= 16, "{report}");
+}
+
+#[test]
+fn promise_join_stops_at_settlement_on_libuv() {
+    let report = run_suite_with(
+        "promise_join_uv",
+        &["-DNTS_PROVIDER_RC"],
+        &["nts_uv_host.c"],
+        &["-luv"],
+    );
+    assert!(checks(&report) >= 21, "{report}");
+}
+
 /// An erased needle against an array of strings answers, rather than aborting.
 ///
 /// `validateOneOf(value: unknown, name: string, oneOf: Choices)` is one of

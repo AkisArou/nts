@@ -85,6 +85,11 @@ void nts_test_host_drain(void) {
   nts_test_len = 0;
 }
 
+static NtsHostPumpResult nts_test_pump_one(void *state) {
+  (void)state;
+  return nts_test_host_step() ? NTS_HOST_PUMP_TURN : NTS_HOST_PUMP_IDLE;
+}
+
 void nts_test_host_install(void) {
   nts_test_host_drain();
   nts_test_clock = 0.0;
@@ -98,6 +103,7 @@ void nts_test_host_install(void) {
   host.post_from_any_thread = nts_test_post_any;
   host.is_owner_thread = nts_test_is_owner;
   host.enqueue_microtask = 0; /* we are not Blink; the runtime checkpoints */
+  host.pump_one = nts_test_pump_one;
   host.state = 0;
   nts_host_install(&host);
 }

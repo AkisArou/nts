@@ -247,6 +247,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_promise_fulfill_value", returns: "void", params: &["ptr", "i32", "i64"], attributes: &[] },
     Signature { name: "nts_promise_fulfill_void", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_promise_is_rejected", returns: "zeroext i1", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_promise_join", returns: "i32", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_promise_new", returns: "ptr", params: &[], attributes: &[] },
     Signature { name: "nts_promise_number", returns: "double", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_promise_race", returns: "ptr", params: &["ptr"], attributes: &[] },

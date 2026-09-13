@@ -46,9 +46,13 @@
  */
 void nts_uv_host_install(uv_loop_t *loop);
 
-/* Run until nothing is left: no queued task, no live timer, no foreign
- * completion in flight. Returns what `uv_run` returned, which is non-zero if
- * handles are still alive -- an embedder that stopped the loop itself. */
+/* Run until no registered work remains. Foreign completions already queued
+ * are run; a worker that may post later must have registered live work on the
+ * loop to keep it running. Returns what `uv_run` returned, which is non-zero
+ * if handles are still alive -- an embedder that stopped the loop itself.
+ * Use this entry point when driving the installed loop. An embedder driving
+ * it directly must bracket callbacks into compiled code with nts_enter/leave,
+ * including calls to nts_promise_join, so recursive entry is refused. */
 int nts_uv_host_run(void);
 
 /* Close every handle this host owns and drop whatever is still queued.

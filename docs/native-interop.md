@@ -462,15 +462,28 @@ example walks `counted(3)` through `0, 1, 2` and checks repeated completion.
 `NtsPromise *`, and the runtime exposes `nts_checkpoint()`,
 `nts_promise_state()` and `nts_promise_value()`. Demonstrated end to end in
 `examples/interop/ts-from-c` — state `0` before the checkpoint, `1` after, value
-`42`. It works and it is undocumented.
+`42`. The example README documents the checkpoint form.
 
 There is a trap in *demonstrating* it that the example now carries a note about:
 an `async` function with no `await` is **already settled** when it returns, so
 the checkpoint changes nothing and an arm written that way prints the same state
 twice. The first version of that example did exactly this.
-*Fix: document it in the generated header, and consider a blocking
-`nts_promise_join` for the common case — a C `main` that wants one answer should
-not have to know what a microtask is.*
+`nts_promise_join` now offers the synchronous form. It drains a checkpoint and
+then individual host turns, returning fulfilled, rejected, pending with no
+registered work, or a named refusal (unsupported host, wrong thread, recursive
+entry). The caller retains the promise throughout. Both the deterministic and
+libuv hosts implement the optional pump capability. A live repeating timer
+does not keep a settled join waiting; draining the whole loop would never
+return in that arm. Worker threads post completions to the owner; they cannot
+join or mutate its promise directly. Already queued completions run even with
+an unreferenced async handle, while future work needs registered loop liveness.
+
+The runtime tests exercise both hosts under reference counting, including
+microtask-only settlement, the last turn settling while reporting idle,
+rejection payloads, nested entry, queued and future worker completions, and
+teardown with no managed allocations left. The public host contract states
+what one turn means; libuv's return value reports liveness, not whether a
+callback ran.
 
 **6. Classes are better than expected and should be said so.** `NtsObj_Point` is
 a real `typedef struct` with a definition and `_Static_assert`s on its size and

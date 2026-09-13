@@ -46,6 +46,7 @@ static uv_idle_t nts_uv_idle;
 static uv_async_t nts_uv_async;
 static uv_thread_t nts_uv_owner;
 static bool nts_uv_installed;
+static bool nts_uv_running;
 static uint32_t nts_uv_dropped;
 
 /* Posted by the owner thread. */
@@ -296,8 +297,7 @@ static void nts_uv_cancel_delayed(void *state, NtsTimerId id) {
   nts_uv_dropped++;
 }
 
-static void nts_uv_drain_foreign(uv_async_t *async) {
-  (void)async;
+static bool nts_uv_run_foreign(void) {
   /* Move the whole batch out under the lock, then run it without one: a task
    * runs compiled code, which can post again from this thread, and holding
    * the lock across that would deadlock on the first one. */
@@ -307,11 +307,18 @@ static void nts_uv_drain_foreign(uv_async_t *async) {
   memset(&nts_uv_foreign, 0, sizeof(nts_uv_foreign));
   uv_mutex_unlock(&nts_uv_foreign_lock);
 
+  bool ran = batch.len != 0;
   NtsTask task;
   while (nts_uv_queue_pop(&batch, &task)) {
     nts_task_run(task);
   }
   free(batch.items);
+  return ran;
+}
+
+static void nts_uv_drain_foreign(uv_async_t *async) {
+  (void)async;
+  (void)nts_uv_run_foreign();
 }
 
 static void nts_uv_post_from_any_thread(void *state, NtsTask task) {
@@ -328,6 +335,28 @@ static void nts_uv_post_from_any_thread(void *state, NtsTask task) {
 
 /* --- Installation and teardown ---------------------------------------------
  */
+
+static NtsHostPumpResult nts_uv_pump_one(void *state) {
+  (void)state;
+  nts_uv_require_owner("pump_one");
+  if (nts_uv_running) {
+    return NTS_HOST_PUMP_BUSY;
+  }
+  nts_uv_running = true;
+  // An unreferenced async handle alone cannot make uv_run dispatch even an
+  // already queued completion. Take that batch before deciding to block.
+  if (nts_uv_run_foreign()) {
+    nts_uv_running = false;
+    return NTS_HOST_PUMP_TURN;
+  }
+  if (!uv_loop_alive(nts_uv_loop)) {
+    nts_uv_running = false;
+    return NTS_HOST_PUMP_IDLE;
+  }
+  (void)uv_run(nts_uv_loop, UV_RUN_ONCE);
+  nts_uv_running = false;
+  return NTS_HOST_PUMP_TURN;
+}
 
 void nts_uv_host_install(uv_loop_t *loop) {
   if (nts_uv_installed) {
@@ -352,16 +381,17 @@ void nts_uv_host_install(uv_loop_t *loop) {
   uv_unref((uv_handle_t *)&nts_uv_async);
 
   static const NtsHost host = {
-      nts_uv_post_task,
-      nts_uv_post_delayed,
-      nts_uv_cancel_delayed,
-      nts_uv_post_from_any_thread,
-      nts_uv_is_owner,
+      .post_task = nts_uv_post_task,
+      .post_delayed = nts_uv_post_delayed,
+      .cancel_delayed = nts_uv_cancel_delayed,
+      .post_from_any_thread = nts_uv_post_from_any_thread,
+      .is_owner_thread = nts_uv_is_owner,
       /* Null: this host does not own checkpointing, so the runtime's two
        * queues and its drain are the ones that run. Only a Blink renderer
        * supplies one. */
-      0,
-      0,
+      .enqueue_microtask = 0,
+      .pump_one = nts_uv_pump_one,
+      .state = 0,
   };
   nts_host_install(&host);
   nts_uv_installed = true;
@@ -369,7 +399,14 @@ void nts_uv_host_install(uv_loop_t *loop) {
 
 int nts_uv_host_run(void) {
   nts_uv_require_owner("run");
-  return uv_run(nts_uv_loop, UV_RUN_DEFAULT);
+  if (nts_uv_running) {
+    nts_uv_fail("recursive loop entry");
+  }
+  nts_uv_running = true;
+  (void)nts_uv_run_foreign();
+  int alive = uv_run(nts_uv_loop, UV_RUN_DEFAULT);
+  nts_uv_running = false;
+  return alive;
 }
 
 /* Every timer this host started and the program never cancelled.

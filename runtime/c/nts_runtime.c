@@ -186,6 +186,8 @@ struct NtsEnvironment {
   NtsHost host;
   bool host_installed;
   uint32_t depth;
+  bool checkpoint_active;
+  bool join_active;
   NtsQueue microtask_queue;
   NtsQueue tick_queue;
   NtsMap *symbol_registry;
@@ -6976,6 +6978,8 @@ static void nts_collect_at_checkpoint(void) {
 }
 
 static void nts_process_ticks_and_rejections(void) {
+  bool previous = nts_env->checkpoint_active;
+  nts_env->checkpoint_active = true;
   NtsTask task;
   do {
     while (nts_queue_shift(&nts_env->tick_queue, &task)) {
@@ -6986,6 +6990,7 @@ static void nts_process_ticks_and_rejections(void) {
     }
   } while (nts_env->tick_queue.len != 0);
   nts_collect_at_checkpoint();
+  nts_env->checkpoint_active = previous;
 }
 
 void nts_enter(void) { nts_env->depth++; }
@@ -7025,6 +7030,44 @@ void nts_task_run(NtsTask task) {
 bool nts_is_owner_thread(void) {
   return !nts_env->host_installed || !nts_env->host.is_owner_thread ||
          nts_env->host.is_owner_thread(nts_env->host.state);
+}
+
+NtsPromiseJoinResult nts_promise_join(const NtsPromise *promise) {
+  if (!nts_is_owner_thread()) {
+    return NTS_JOIN_WRONG_THREAD;
+  }
+  if (nts_env->depth || nts_env->checkpoint_active || nts_env->join_active) {
+    return NTS_JOIN_REENTRANT;
+  }
+  nts_env->join_active = true;
+  NtsPromiseJoinResult result;
+  for (;;) {
+    nts_checkpoint();
+    double settled = nts_promise_state(promise);
+    if (settled != NTS_PROMISE_PENDING) {
+      result = settled == NTS_PROMISE_FULFILLED ? NTS_JOIN_FULFILLED
+                                               : NTS_JOIN_REJECTED;
+      break;
+    }
+    if (!nts_env->host_installed || !nts_env->host.pump_one) {
+      result = NTS_JOIN_UNSUPPORTED;
+      break;
+    }
+    NtsHostPumpResult pumped = nts_env->host.pump_one(nts_env->host.state);
+    if (pumped == NTS_HOST_PUMP_TURN) {
+      continue;
+    }
+    // The last turn can settle the promise and still report no live work.
+    nts_checkpoint();
+    settled = nts_promise_state(promise);
+    result = settled == NTS_PROMISE_FULFILLED ? NTS_JOIN_FULFILLED
+           : settled == NTS_PROMISE_REJECTED ? NTS_JOIN_REJECTED
+           : pumped == NTS_HOST_PUMP_BUSY ? NTS_JOIN_REENTRANT
+                                         : NTS_JOIN_PENDING;
+    break;
+  }
+  nts_env->join_active = false;
+  return result;
 }
 
 /* Posting is thin, and these exist for the assertion and the contract note
