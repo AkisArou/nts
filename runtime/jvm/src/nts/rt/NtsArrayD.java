@@ -136,6 +136,43 @@ public final class NtsArrayD {
         return length + 1;
     }
     /** The nonempty precondition is supplied by lowering; use popValue otherwise. */
+
+    /**
+     * `arr.length = n`, in place.
+     *
+     * <p>JavaScript uses a length assignment to truncate, and the corpus does
+     * it 62 times -- a loop writes survivors to a cursor, then cuts the tail.
+     * The obvious alternative is {@code splice(a, n, len - n)}, which hands
+     * back the removed run as a **new array**: an allocation JavaScript does
+     * not make, once per compaction, in code whose whole purpose is to avoid
+     * allocating.
+     *
+     * <p><b>Growing is refused rather than answered.</b> {@code arr.length = n}
+     * with {@code n} past the end produces holes, and a hole has no
+     * representation in this compiler at all -- so refusing is not the safer of
+     * two answers, it is the only available one until there is a hole. All 62
+     * corpus sites shrink, so the refusal costs nothing today and is here so
+     * the feature is not half-answered silently.
+     *
+     * <p>A non-integral or negative length is a {@code RangeError} in
+     * JavaScript and is refused for the same reason.
+     */
+    public static void setLength(NtsArrayD a, double n) {
+        int want = (int) n;
+        if (want != n || want < 0) {
+            throw new NtsRefusal("array length must be a non-negative integer, got " + n);
+        }
+        if (want > a.length) {
+            throw new NtsRefusal(
+                "growing an array by assigning `length` would create holes, which this compiler "
+                + "has no representation for -- length " + a.length + " to " + want);
+        }
+        if (want == a.length) {
+            return;
+        }
+        a.length = want;
+    }
+
     public static double pop(NtsArrayD a) {
         int n = a.length - 1;
         double last = a.items[n];

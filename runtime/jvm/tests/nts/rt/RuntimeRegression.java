@@ -699,11 +699,59 @@ public final class RuntimeRegression {
         NtsInbox.drain(tiny);
     }
 
+
+    /**
+     * `arr.length = n`, the in-place truncation the corpus does 62 times.
+     *
+     * <p>The reference case is the one that matters and is not a length store:
+     * dropping an element has to clear its slot, or the platform collector
+     * keeps the object alive for as long as the array does. A version that only
+     * assigned `length` would pass every other assertion here.
+     */
+    private static void testSetLength() {
+        NtsArrayD numbers = NtsArrayD.of(4);
+        for (int i = 0; i < 4; i++) { NtsArrayD.set(numbers, i, i + 1); }
+        NtsArrayD.setLength(numbers, 2);
+        check(NtsArrayD.length(numbers) == 2, "truncated");
+        number(NtsArrayD.get(numbers, 1), 2.0, "survivor kept");
+
+        NtsArrayD.setLength(numbers, 2);
+        check(NtsArrayD.length(numbers) == 2, "setting the same length does nothing");
+
+        // **The assertion a length-store-only version fails.** The dropped slot
+        // must be cleared, or the array pins an object nobody can reach.
+        NtsArrayL refs = NtsArrayL.of(2);
+        NtsArrayL.set(refs, 0, "keep");
+        NtsArrayL.set(refs, 1, "drop");
+        NtsArrayL.setLength(refs, 1);
+        check(NtsArrayL.length(refs) == 1, "reference array truncated");
+        check(refs.items[1] == null, "the dropped slot is cleared, or the collector cannot free it");
+        equal(refs.items[0], "keep", "and the survivor is untouched");
+
+        NtsArrayZ flags = NtsArrayZ.of(3);
+        NtsArrayZ.setLength(flags, 1);
+        check(NtsArrayZ.length(flags) == 1, "boolean array truncated");
+
+        // Growing is refused by name rather than producing holes.
+        boolean refusedGrow = false;
+        try { NtsArrayD.setLength(numbers, 9); } catch (NtsRefusal e) { refusedGrow = true; }
+        check(refusedGrow, "growing is refused");
+
+        boolean refusedFraction = false;
+        try { NtsArrayD.setLength(numbers, 1.5); } catch (NtsRefusal e) { refusedFraction = true; }
+        check(refusedFraction, "a non-integral length is refused");
+
+        boolean refusedNegative = false;
+        try { NtsArrayD.setLength(numbers, -1); } catch (NtsRefusal e) { refusedNegative = true; }
+        check(refusedNegative, "a negative length is refused");
+    }
+
     public static void main(String[] args) throws Exception {
         testBigInt(); System.out.println("bigint randomized tests passed");
         testMap(); System.out.println("map randomized and cursor tests passed");
         testMapAsJavaMap(); System.out.println("NtsMap as java.util.Map passed");
         testForeignCallbacks(); System.out.println("foreign-thread callbacks passed");
+        testSetLength(); System.out.println("array setLength passed");
         testNumbersAndIndices(); System.out.println("numeric and index tests passed");
         testArraysAndStrings(); System.out.println("array and string tests passed");
         testPromises(); System.out.println("promise and queue tests passed");
