@@ -7202,3 +7202,72 @@ arriving at "worth doing" from a different direction.
 `awfy-towers` stays over the bar with its mechanism now fully priced: 1.284x of
 bounds checks and 1.08x of inliner budget, and the rest -- about 1.30x -- is
 codegen quality nothing measured today touches.
+
+## `awfy-bounce`: the eighth hypothesis is the one that moved, and it is a double
+
+Seven hypotheses died on this row -- accessors, `widen`, the dex, the two
+methods' AOT code, allocation, the `som.Random` port, and interpretation. The
+eighth came from the whole-odex dump that was impossible until `7a07fb60`, and
+it was found by comparing **every** compiled method rather than the two anybody
+would pick.
+
+    method                        ours    reference      ratio
+    Ball$constructor             553 B        268 B      2.06x   <- never compared
+    Random$next                   33 B         21 B      1.57x   <- never compared
+    Ball$bounce                  204 B        188 B      1.09x   (the known pair)
+    Bounce$benchmark             580 B        552 B      1.05x   (the known pair)
+
+The two methods every earlier pass looked at are the two nearest parity. But
+none of the four sizes is the finding either. The finding is one flag:
+
+    Bounce$benchmark   ours  CodeInfo BitSize=741  FpSpillMask:1000  DexRegisters:9
+                       ref   CodeInfo BitSize=737  FpSpillMask:0     DexRegisters:7
+
+**We spill a floating-point register across the loop and the reference does
+not.** `javap` says why in one instruction: `bounces += 1` is a `dadd`, and it
+is the only one in the method, in the innermost loop, five thousand times a
+round. The reference's `bounces` is an `int`. The prologue is storing nineteen
+`dstore` defaults on top of it.
+
+This row's earlier entry says "not `widen` -- the case is integer-heavy, `int`
+fields, and both sides emit `iget`/`iput`". That was **checked on `Ball.bounce`
+and true there**: `nts.gen.Ball` really does declare four `int` fields. The
+counter lives in `Bounce$benchmark`, which that check never looked at, and the
+conclusion was carried across a method boundary it was never measured over.
+
+### Measured, on the real compiler, one expression apart
+
+`bounces = (bounces + 1) | 0` against `bounces += 1`, same program, same
+compiler, same device -- **not a transcription**, which is the trap that cost
+the `awfy-towers` projection 28% earlier tonight.
+
+    Bounce$benchmark   base   1 dadd  19 dstore   3 iadd  22 istore
+                       int    0 dadd   2 dstore   4 iadd  41 istore
+
+    AOT minima          ours      ratio to the reference minimum
+    base  (f64)      11824.1      1.110x
+    int   (i32)      10844.8      1.018x
+                     -------
+    the double counter costs       1.090x
+
+**So the row moves from 1.11x to 1.02x**, out of "clearly over" and into the
+band this file declines to chase. The JIT column was already winning and moves
+with it, 0.867x to 0.850x.
+
+**Not measured clean, and which one.** Sitting 2's `int` arm read 21,251 against
+its neighbours' 10,845 and 11,455 -- a 2x outlier -- because I ran
+`commit-mine.sh`, which runs `clippy`, while my own measurement was on the
+device. **The gate lock coordinates other sessions and does nothing about me.**
+That sitting is discarded rather than averaged in, and the minima above are over
+the two clean ones. Taking minima is what made the spoiled run harmless; an
+average would have buried it at +30%.
+
+### Whose fix it is
+
+Not this backend's. `bounces` is initialised to `0`, only ever incremented by
+one, and returned -- the middle end has every fact it needs to keep it an `i32`
+and widen once at the `dreturn`, and `| 0` proves the backend renders that well
+when told. Handed over with the two-line reproducer rather than worked around
+here, and the same question is worth asking of every `let x = 0` counter that
+reaches a `dadd`: this one cost 9% on a row where seven other things cost
+nothing measurable.
