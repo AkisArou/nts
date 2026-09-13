@@ -760,6 +760,20 @@ example_refusals() {
 backend_examples() {
   floor=$1
   said=$2
+  # **`exact` means the floor is meant to *equal* the corpus, and enforces it.**
+  #
+  # Without this the only failure is `passed < floor`, so a floor written as
+  # "equal to the corpus" stops being one the moment the corpus grows: a run
+  # reading `198 of 199 ... not agreeing: <name>` **passes** on a floor of 198.
+  # That happened on 2026-09-13 and a peer caught it, on a line whose own
+  # comment claims the opposite -- "a floor equal to the corpus cannot ratchet,
+  # only hold, and an example that does not agree fails this step on the day it
+  # lands". The prose was the invariant; the code was a constant.
+  #
+  # Opt-in because the two LLVM floors are deliberately *below* their corpus and
+  # are ratcheting, which is a different instrument and still the right one
+  # there.
+  exact=${3:-}
   results=$(mktemp)
   ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
     d=$1
@@ -879,6 +893,13 @@ backend_examples() {
   [ -n "$behind" ] && printf '  not agreeing:%s\n' "$behind"
   if [ "$passed" -lt "$floor" ]; then
     echo "  ^ fell from $floor to $passed"
+    return 1
+  fi
+  if [ -n "$exact" ] && [ "$passed" -ne "$total" ]; then
+    echo "  ^ $passed of $total, and this floor is meant to equal the corpus --" >&2
+    echo "    an example that stops agreeing fails on the day it lands, which is" >&2
+    echo "    what the floor being the corpus size is for. Raising it to $total" >&2
+    echo "    would hide the disagreement rather than record it." >&2
     return 1
   fi
   # **Raise it from a run, and never above what the tree can produce on its
@@ -1166,7 +1187,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # them agrees. A floor this lane did not earn by building anything is still a
   # floor it has to hold -- and because it equals the corpus it cannot ratchet,
   # only hold, so an example that stops agreeing fails on the day it lands.
-  backend_examples 198 "through the JVM backend" ); }
+  backend_examples 199 "through the JVM backend" exact ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

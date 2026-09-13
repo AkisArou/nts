@@ -8121,3 +8121,50 @@ The corrected statement: **bar 2 is held on eight of eight**, with
 it started -- the column was computable all night and nobody had written it down
 -- with one clause added, which is that a ratio without its row is how the first
 version of it got published a hundred lines ago.
+
+## My floor's comment was an invariant the code did not implement
+
+MainClaude caught this and it is the sharpest thing anyone found in my own
+ratchet tonight. A gate run read
+
+    198 of 199 ... not agreeing: a-closure-over-a-loop-variable
+
+and **passed**, because `backend_examples`'s only failure is `passed < floor`
+and the floor was the constant 198 while the corpus had grown to 199. The
+comment on that very line says the opposite, and I wrote it twice:
+
+> A floor equal to the corpus is a different instrument from one below it: it
+> cannot ratchet, only hold, and an example that does not agree fails this step
+> on the day it lands.
+
+**The prose was the invariant and the code was a constant.** They coincide only
+while the corpus does not grow, which is the one condition under which the
+distinction the prose draws does not matter. So the claim was true every day it
+was checkable and false the first day it mattered.
+
+Fixed with an opt-in third argument -- `backend_examples 199 "..." exact` --
+which additionally fails when `passed != total`. **Opt-in because the two LLVM
+floors are deliberately below their corpus and are ratcheting**, which is a
+different instrument and still the right one there; their call sites are
+unchanged and behave identically.
+
+### The sabotage failed to sabotage, which is the same lesson again
+
+A check that cannot fail is worth nothing, so I tried to make it fail: added
+`exact` to an LLVM floor, which sits at 198 against a corpus of 199, and ran it.
+**It passed** -- because LLVM is *also* at 199 of 199 and its floor is merely
+below the corpus rather than short of it. I had picked a case that could not
+fail, while testing for the ability to fail.
+
+So the honest statement of what is verified:
+
+    the condition   run    199/199 exact -> quiet, 198/199 exact -> FIRES,
+                           198/199 without exact -> quiet (LLVM untouched)
+    the wiring      read   `exact=${3:-}` at :776, `... exact ); }` at :1190
+    end to end      NOT VERIFIED -- needs an example that disagrees, and the
+                    tree does not currently contain one
+
+That last line is the one that matters: the check is right and has never been
+seen to fire in the harness it lives in. It will be, the first time an example
+stops agreeing -- which is precisely the event it exists for and precisely the
+event nobody can schedule.
