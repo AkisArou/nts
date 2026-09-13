@@ -37,6 +37,25 @@ public final class Copies {
         return sum;
     }
 
+    /**
+     * A call site the JIT cannot reduce to one target, allocating nothing.
+     *
+     * <p>Four implementations reached through an interface makes the site
+     * megamorphic, so there is no bimorphic guard to inline through and the
+     * dispatch is a real one. That is the cost an uninlinable *call* has. The
+     * reflective case below measures something else and says so.
+     */
+    public interface Step {
+        int of(int x);
+    }
+
+    private static final Step[] STEPS = {
+        new Step() { public int of(int x) { return x + 1; } },
+        new Step() { public int of(int x) { return x + 2; } },
+        new Step() { public int of(int x) { return x + 3; } },
+        new Step() { public int of(int x) { return x + 4; } },
+    };
+
     public static void main(String[] args) {
         String which = args.length > 0 ? args[0] : "all";
 
@@ -60,12 +79,35 @@ public final class Copies {
             });
         }
 
+        if (which.equals("mega") || which.equals("all")) {
+            // **The uninlinable call, without the boxing.** The reflective arm
+            // below allocates 28,688 bytes per op -- a boxed argument, a boxed
+            // result and a varargs array per call -- so its number is mostly
+            // allocation and its label said "a call the JIT cannot inline".
+            // This one allocates nothing, so the difference between the two is
+            // what reflection costs on top of a dispatch.
+            System.out.print("megamorphic-call    ");
+            Bench.measure(new Bench.Work() {
+                public double run() {
+                    int acc = 0;
+                    for (int i = 0; i < N; i++) { acc += STEPS[i & 3].of(INTS[i]); }
+                    return acc;
+                }
+            });
+        }
+
         if (which.equals("reflect") || which.equals("all")) {
-            // A call the JIT cannot inline, as a desktop stand-in for a foreign
-            // call that crosses into code we did not compile. A binder
-            // transaction is far more expensive than this; a plain JNI call is
-            // in this neighbourhood.
-            System.out.print("uninlinable-call    ");
+            // **Reflection, and it is named for what it is now.** This used to
+            // be called `uninlinable-call` and stand in for a foreign call
+            // crossing into code we did not compile. It allocates 28,688 bytes
+            // per op -- `Integer.valueOf` on the argument, a boxed `Integer`
+            // result, and the varargs `Object[]` that `Method.invoke` takes --
+            // so most of what it measured was allocation, not dispatch.
+            //
+            // Kept rather than deleted, because the comparison against
+            // `megamorphic-call` above is the useful thing: same work, one
+            // allocating and one not.
+            System.out.print("reflective-call     ");
             final java.lang.reflect.Method m;
             try {
                 m = Copies.class.getMethod("trivial", int.class);
