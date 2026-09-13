@@ -135,3 +135,55 @@ in `docs/conformance/nodejs.md` with their brackets.
     the same fact, and neither was re-read before being counted. Corrected rather than
     quietly dropped, because the wrong half of that line was the confident half.
 
+## Where the interpreted lane stands, later on 2026-09-13
+
+    cluster          86 file(s): 69 passed, 15 failed, 2 skipped     (from 42 this morning)
+    child_process   119 file(s): 103 passed, 6 failed, 9 skipped     (119, not 120 -- see below)
+    compiled axis    50 across 26 modules, measured with the per-file emptying test
+
+`cluster` moved 42 -> 69 on seven named causes, every one of them found by diffing the pass
+**set** rather than reading the total:
+
+  * the handshake replied with an errno *name* where `getSystemErrorName` demands a negative
+    number -- six files
+  * `SharedHandle` was unimplemented, so udp, a caller-supplied `fd` and every non-`SCHED_RR`
+    policy were answered ENOTSUP. The handle has to be the **host's**, because the worker calls
+    `close` and `getsockname` on it
+  * `worker.disconnect()` closed the channel instead of sending `{ act: 'disconnect' }`, so
+    workers kept their bound sockets and never exited
+  * `setupPrimary` never applied node's defaults and was not cumulative
+  * **four events were emitted inside the call that produced them** -- `fork`, `setup`,
+    `disconnect` and `send`'s callback. One cause wearing a TDZ error, a hang, a mustCall tally
+    and an event nobody heard
+  * `setupPrimary`, `fork` and `disconnect` were unbound, where node publishes all three as
+    properties and its own tests detach every one on purpose
+  * `exitedAfterDisconnect` started `false` where node starts `undefined` and coerces it at
+    both departure sites
+
+Two of those were introduced by the commit immediately before them, and one *correct* fix
+needed a second correct fix to stand.
+
+### The bookkeeping moved down, on purpose
+
+`child_process` is 119 files rather than 120 because `test-cluster-net-send.js` was claimed by
+two lanes and **disagreed with itself** -- a pass there, a failure under `cluster`, same tree,
+same hour, because `cluster` substitutes `net` and `child_process` does not. Its `extra-tests`
+rationale said "upstream names it for cluster, which this profile does not implement", true
+when written and false from the day `cluster` landed.
+
+`double-claimed.mjs` now finds the general case: **8 files claimed twice, 2 of them
+disagreeing.** The compiled axis is not inflated by any of them and the argument is in the
+ledger.
+
+### What is left in cluster, by cause
+
+    a fifth stdio slot          fork-stdio -- the same unimplemented feature as
+                                child_process's own fork-stdio
+    a received handle passes    net-send -- the handle arrives and no data flows when `net`
+    no data                     is ours
+    round-robin under load      disconnect, shared-leak -- two servers, echo, disconnect, repeat
+    three hangs                 bind-twice, http-pipe, send-socket-local
+    six unnamed                 backlog, ipv6only-false, relative-path, drop-connection,
+                                send-handle-twice, uncaught-exception, kill-signal,
+                                listen-fd-cluster
+
