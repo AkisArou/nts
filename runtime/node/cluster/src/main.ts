@@ -259,9 +259,33 @@ class Cluster extends EventEmitter {
   readonly #distributions = new Map<string, Distribution>();
 
   setupPrimary(options?: ClusterSettings): void {
-    const merged: ClusterSettings = { ...this.settings, ...(options ?? {}) };
+    // **Defaults, then what is already there, then the caller -- in that order.**
+    //
+    // node builds the object exactly this way, and the order is what makes repeated calls
+    // cumulative: `setupPrimary({ exec: 'x' })` then `setupPrimary({ args: [...] })` keeps
+    // the `exec`, which `test-cluster-setup-primary-cumulative` asserts four times over.
+    // Merging only `settings` and `options`, as this did, left `args` and `exec` undefined
+    // forever -- and `cluster.settings.args[args.length - 1]` is then *Cannot read
+    // properties of undefined*, a message that names neither `setupPrimary` nor `args`.
+    //
+    // The defaults are read **at call time**, not once: `test-cluster-setup-primary-argv`
+    // pushes onto `process.argv` and then calls this, and expects the last of
+    // `settings.args` to be the last of `process.argv`.
+    const argv = nts_process_argv();
+    const merged: ClusterSettings = {
+      args: argv.slice(2),
+      exec: argv.length > 1 ? argv[1] : undefined,
+      execArgv: nts_process_exec_argv(),
+      silent: false,
+      ...this.settings,
+      ...(options ?? {}),
+    };
     this.settings = merged;
-    this.emit("setup", merged);
+    // **On a next tick, because node emits it from `setupSettingsNT`.** Both
+    // `test-cluster-setup-primary` and `test-cluster-setup-primary-argv` register their
+    // listener *after* calling this, so a synchronous emit is a `setup` event nobody
+    // hears -- the same shape as the `disconnect` event two commits ago.
+    nextTick((): void => { this.emit("setup", merged); });
   }
 
   /** node kept the old spelling working and so does this. */
@@ -639,6 +663,7 @@ class Cluster extends EventEmitter {
 }
 
 declare function nts_process_argv(): string[];
+declare function nts_process_exec_argv(): string[];
 declare function nts_process_env_keys(): string[];
 
 /** The environment as a plain object, so a fork can extend rather than replace it. */

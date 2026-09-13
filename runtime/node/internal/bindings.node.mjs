@@ -44,6 +44,16 @@ globalThis.nts_process_env_keys = () => Object.keys(process.env);
 globalThis.nts_process_pid = () => process.pid;
 globalThis.nts_process_argv = () => process.argv.slice();
 globalThis.nts_process_argv0 = () => process.argv0;
+// Beside its siblings, where it was missing. `argv`, `argv0` and `execPath` were all
+// here and `execArgv` was only in `process`'s own stand-in, so `cluster.setupPrimary`
+// -- which defaults `execArgv` to `process.execArgv` -- failed on
+// `nts_process_exec_argv is not defined` in any module that had not loaded that one.
+//
+// Importing `process`'s stand-in instead is what I tried first, and it is not a
+// substitute: it installs a host `uncaughtException` relay that rethrows when no
+// process implementation is installed, which broke `test-cluster-primary-error` and
+// `test-cluster-message`. A binding wanted one global, not a module's side effects.
+globalThis.nts_process_exec_argv = () => process.execArgv.slice();
 globalThis.nts_process_exec_path = () => process.execPath;
 globalThis.nts_process_emit_warning_object = (_message, _name, _code, warning) => {
   // Preserve identity: EventEmitter warnings carry `emitter`, `type`, and
