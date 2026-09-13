@@ -7583,3 +7583,35 @@ of both recovers 22 units of a 26-and-33 unit deficit. The remaining work is not
 a fix to price -- it is making this backend emit a throw in five units instead of
 seventeen, which is a different piece of work from anything tried tonight and
 wants its own measurement before anyone starts it.
+
+### Pricing the throw itself: 48 sites, and it still does not close the row alone
+
+Every throw this backend emits is a constructed `nts.gen.Error`, two `putfield`s,
+`NtsValue.ofObject`, `NtsRuntime.uncaught`, `NtsRuntime.unreachable` and an
+`athrow` -- **seventeen dex code units**. A helper taking the message and the
+name and returning the `Error` would be `ldc; ldc; invokestatic; athrow`, about
+five.
+
+Reach, counted over the emitted corpus rather than assumed:
+
+    json-parse 20   node-utf8 6   bytes 6   awfy-towers 4
+    awfy-sieve 2   awfy-queens 2   awfy-permute 2   awfy-nbody 2
+    awfy-list 2    awfy-bounce 2
+    -- 48 throw sites across 10 of the 60 bench cases
+
+**And on its own it does not move `awfy-towers`.** Outlining alone takes
+`popDiskFrom` from 51 to 39 and `pushDisk` from 66 to 54, against a reference at
+25 and 33. Whether 39 comes under ART's budget is genuinely unknown: the budget
+is **at least 33**, since the reference's own 33-unit `pushDisk` is among the
+frames it inlines, and this file's threshold arms put it above 30. Nobody has
+measured where it actually is.
+
+So the state is: a real codegen improvement worth twelve units at forty-eight
+sites, whose effect on the one row it would serve depends on a constant this
+file has bracketed twice and never pinned. **The cheap next step is not to build
+it -- it is to find the budget**, with size arms at 33, 36, 39 and 42 units,
+which is the one use of a transcription this file has already established as
+sound: method size is checkable in `dexdump`, where a ratio is not.
+
+Recorded and not started, because that is a measurement and the machine has been
+shared three ways all night.
