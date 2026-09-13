@@ -5145,7 +5145,7 @@ mod agrees_with_hir {
     /// Every `"nts_…"` literal in this file, which is every name the static
     /// tables can match. Prefix-stripped and `format!`-assembled names are
     /// invisible here and are not claimed.
-    fn mapped_names() -> Vec<&'static str> {
+    pub(super) fn mapped_names() -> Vec<&'static str> {
         const SOURCE: &str = include_str!("ops.rs");
         let mut found: Vec<&'static str> = Vec::new();
         let bytes = SOURCE.as_bytes();
@@ -5265,5 +5265,134 @@ mod agrees_with_hir {
         // the first version of this line was the guess `dexes.sh`'s own comment
         // forbids, in a test written to stop two tables guessing at each other.
         assert!(checked >= 30, "only {checked} name(s) reached the comparison");
+    }
+}
+
+/// Does the jar actually declare every method this backend emits a call to?
+///
+/// # The failure this catches, which nothing else does
+///
+/// `core_external` names a class, a method and a descriptor. The JVM resolves a
+/// call by all three, so a Java signature that changes without its row here
+/// produces a class that verifies, loads, and throws `NoSuchMethodError` the
+/// first time that path runs. Every host Java test stays green -- they call
+/// `nts.rt` directly and never through an emitted class -- and the `jvm` gate
+/// step only sees it if some example reaches that helper.
+///
+/// `intrinsics.rs` makes exactly this argument for the networking table and
+/// found four refusals doing it. This is the same check for the table that
+/// every other call goes through.
+///
+/// # Against the jar rather than against the sources
+///
+/// `javap -s` reads the artifact the compiler will actually link against, which
+/// is the thing a `NoSuchMethodError` is about. Reading `NtsRuntime.java`
+/// instead would agree with a stale jar and say nothing.
+#[cfg(test)]
+mod signatures {
+    use super::core_external;
+    use std::collections::BTreeSet;
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    fn repository() -> PathBuf {
+        let from = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        from.canonicalize().unwrap_or(from)
+    }
+
+    fn tool(name: &str) -> Option<PathBuf> {
+        if let Ok(home) = std::env::var("JAVA_HOME") {
+            let path = PathBuf::from(home).join("bin").join(name);
+            if path.exists() {
+                return Some(path);
+            }
+        }
+        let found =
+            Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+        found.status.success().then(|| {
+            PathBuf::from(String::from_utf8_lossy(&found.stdout).trim().to_owned())
+        })
+    }
+
+    /// Every `(class, method, descriptor)` the jar declares, for the classes
+    /// asked about.
+    fn declared(javap: &PathBuf, jar: &PathBuf, classes: &BTreeSet<String>) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        let named: Vec<String> = classes.iter().map(|c| c.replace('/', ".")).collect();
+        let Ok(dump) = Command::new(javap).arg("-p").arg("-s").arg("-cp").arg(jar).args(&named).output()
+        else {
+            return out;
+        };
+        let text = String::from_utf8_lossy(&dump.stdout);
+        let (mut class, mut member) = (String::new(), String::new());
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if let Some(at) = trimmed.find(" class ").or_else(|| trimmed.find(" interface ")) {
+                let rest = &trimmed[at..];
+                if let Some(name) = rest.split_whitespace().nth(1) {
+                    class = name.split('<').next().unwrap_or(name).replace('.', "/");
+                }
+            } else if let Some(rest) = trimmed.strip_prefix("descriptor: ") {
+                if !class.is_empty() && !member.is_empty() {
+                    out.insert(format!("{class}.{member}{rest}"));
+                }
+            } else if let Some(open) = trimmed.find('(') {
+                // `public static void clearTimeout(double);` -- the identifier
+                // immediately before the parenthesis. A constructor is `<init>`
+                // in the descriptor line's own terms and is spelled as the class
+                // here, which is why the name is taken from the *descriptor*
+                // pairing rather than parsed into a signature.
+                let head = &trimmed[..open];
+                member = head.rsplit_once(' ').map_or(head, |(_, last)| last).to_owned();
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn every_call_this_backend_emits_exists_in_the_jar() {
+        let (Some(javap), jar) =
+            (tool("javap"), repository().join("runtime/jvm/nts-runtime.jar"))
+        else {
+            return;
+        };
+        if !jar.exists() {
+            return;
+        }
+        let names = super::agrees_with_hir::mapped_names();
+        let wanted: Vec<(String, String, String)> = names
+            .iter()
+            .filter_map(|name| core_external(name))
+            .map(|(class, member, descriptor)| {
+                (class.to_owned(), member.to_owned(), descriptor.to_owned())
+            })
+            .collect();
+        let classes: BTreeSet<String> = wanted.iter().map(|(c, _, _)| c.clone()).collect();
+        let have = declared(&javap, &jar, &classes);
+        assert!(!have.is_empty(), "javap named no methods -- this run compared nothing");
+
+        let mut missing: Vec<String> = Vec::new();
+        for (class, member, descriptor) in &wanted {
+            let key = format!("{class}.{member}{descriptor}");
+            if !have.contains(&key) {
+                missing.push(key);
+            }
+        }
+        missing.sort_unstable();
+        missing.dedup();
+        assert!(
+            missing.is_empty(),
+            "{} call(s) this backend emits are not in the jar:\n  {}",
+            missing.len(),
+            missing.join("\n  ")
+        );
+        // **A floor, because `filter_map` over a table that stopped matching is
+        // an empty list and a green test.** Measured, not chosen.
+        // **73**, measured 2026-09-13. Written as 150 first, from nothing, and
+        // the run said 73 -- the second floor guessed in one sitting, in the
+        // second test of a pair written to stop two tables guessing at each
+        // other. The rule is `dexes.sh`'s and it is easier to quote than to
+        // keep: a floor is a number a run produced.
+        assert!(wanted.len() >= 73, "only {} call(s) were checked", wanted.len());
     }
 }
