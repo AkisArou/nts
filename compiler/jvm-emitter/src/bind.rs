@@ -170,7 +170,12 @@ pub fn declarations(class: &ClassFile) -> Result<String, String> {
     let is_enum_class = class.access & ACC_ENUM != 0;
 
     for field in class.fields.iter().filter(|f| f.access & ACC_PUBLIC != 0) {
-        let Some((rendered, _)) = type_of(&field.descriptor) else {
+        let Some((rendered, _)) = field
+            .signature
+            .as_deref()
+            .and_then(|it| generic_type(it).map(|(rendered, _)| (rendered, 0)))
+            .or_else(|| type_of(&field.descriptor))
+        else {
             return Err(format!("{}.{}: {}", class.binary_name, field.name, field.descriptor));
         };
         let is_static = field.access & ACC_STATIC != 0;
@@ -212,7 +217,15 @@ pub fn declarations(class: &ClassFile) -> Result<String, String> {
     }
 
     for method in class.methods.iter().filter(|m| m.access & ACC_PUBLIC != 0) {
-        let Some((parameters, result)) = signature_of(&method.descriptor) else {
+        // The `Signature` attribute first, because it is the one that still has
+        // the type arguments; the erased descriptor is the fallback, so an
+        // exotic signature loses its generics rather than losing the method.
+        let Some((parameters, result)) = method
+            .signature
+            .as_deref()
+            .and_then(generic_signature)
+            .or_else(|| signature_of(&method.descriptor))
+        else {
             return Err(format!("{}.{}: {}", class.binary_name, method.name, method.descriptor));
         };
         let arguments = parameters
@@ -285,4 +298,148 @@ pub fn module(package: &str, bodies: &[String]) -> String {
     }
     out.push_str("}\n");
     out
+}
+
+// ---------------------------------------------------------------------------
+// Generic signatures
+// ---------------------------------------------------------------------------
+//
+// The `Signature` attribute (JVMS 4.7.9.1) carries what erasure removed, so
+// `names()` can surface `List<string>` rather than `List<unknown>`. Surfacing
+// it is right because **Java erases generics at runtime and so does
+// TypeScript**: a `List<String>` is a `List` in both, the parameter is a
+// compile-time claim in both, and surfacing promises exactly what Java promises
+// and no more. Erasing to `unknown` would throw away a guarantee we can keep,
+// at the cost of a cast on every element access.
+
+/// One type from a generic signature, and how many bytes it consumed.
+fn generic_type(signature: &str) -> Option<(String, usize)> {
+    let bytes = signature.as_bytes();
+    match *bytes.first()? {
+        // A type variable: `TT;` is the parameter named `T`.
+        b'T' => {
+            let end = signature.find(';')?;
+            Some((signature[1..end].to_owned(), end + 1))
+        }
+        b'[' => {
+            let (inner, used) = generic_type(&signature[1..])?;
+            let rendered = match inner.as_str() {
+                "byte" => "Uint8Array".to_owned(),
+                "short" => "Int16Array".to_owned(),
+                "char" => "Uint16Array".to_owned(),
+                "int" => "Int32Array".to_owned(),
+                "float" => "Float32Array".to_owned(),
+                "number" => "Float64Array".to_owned(),
+                "bigint" => "BigInt64Array".to_owned(),
+                other => format!("{other}[]"),
+            };
+            Some((rendered, used + 1))
+        }
+        b'L' => {
+            let mut at = 1usize;
+            let mut name = String::new();
+            let mut arguments: Vec<String> = Vec::new();
+            while at < signature.len() {
+                match signature.as_bytes()[at] {
+                    b';' => {
+                        at += 1;
+                        break;
+                    }
+                    b'<' => {
+                        at += 1;
+                        // Type arguments, until the matching `>`.
+                        while at < signature.len() && signature.as_bytes()[at] != b'>' {
+                            match signature.as_bytes()[at] {
+                                // `*` is an unbounded wildcard: `List<?>`.
+                                b'*' => {
+                                    arguments.push("unknown".to_owned());
+                                    at += 1;
+                                }
+                                // `+X` is `? extends X`, covariant and so
+                                // read-only; `-X` is `? super X`, which a
+                                // caller may pass any `X` to. Both render as
+                                // the bound -- TypeScript has no wildcard, and
+                                // the variance shows up in whether the position
+                                // is readable or writable rather than in a
+                                // syntax of its own.
+                                b'+' | b'-' => {
+                                    let (rendered, used) = generic_type(&signature[at + 1..])?;
+                                    arguments.push(rendered);
+                                    at += used + 1;
+                                }
+                                _ => {
+                                    let (rendered, used) = generic_type(&signature[at..])?;
+                                    arguments.push(rendered);
+                                    at += used;
+                                }
+                            }
+                        }
+                        at += 1; // the `>`
+                    }
+                    b'.' => {
+                        // A nested class inside a parameterised outer.
+                        name.push('.');
+                        at += 1;
+                    }
+                    other => {
+                        name.push(other as char);
+                        at += 1;
+                    }
+                }
+            }
+            let base = reference(&name);
+            if arguments.is_empty() || base == "string" || base == "unknown" {
+                Some((base, at))
+            } else {
+                Some((format!("{base}<{}>", arguments.join(", ")), at))
+            }
+        }
+        _ => type_of(signature),
+    }
+}
+
+/// The parameter and return types of a **generic** method signature.
+///
+/// Returns `None` for anything this subset does not handle, and every caller
+/// falls back to the erased descriptor -- so an exotic signature loses its type
+/// arguments rather than losing the method.
+fn generic_signature(signature: &str) -> Option<(Vec<String>, String)> {
+    // A leading `<...>` declares the method's own type parameters. Skipped:
+    // the names appear again at each use, which is where they are rendered.
+    let mut rest = signature;
+    if rest.starts_with('<') {
+        let mut depth = 0usize;
+        let mut at = 0usize;
+        for (index, byte) in rest.bytes().enumerate() {
+            match byte {
+                b'<' => depth += 1,
+                b'>' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        at = index + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        rest = &rest[at..];
+    }
+    let open = rest.find('(')?;
+    let close = rest.rfind(')')?;
+    let mut parameters = Vec::new();
+    let mut inside = &rest[open + 1..close];
+    while !inside.is_empty() {
+        let (rendered, used) = generic_type(inside)?;
+        if used == 0 || used > inside.len() {
+            return None;
+        }
+        parameters.push(rendered);
+        inside = &inside[used..];
+    }
+    // The return type, stopping before any `^ThrowsSignature`.
+    let after = &rest[close + 1..];
+    let end = after.find('^').unwrap_or(after.len());
+    let (returns, _) = generic_type(&after[..end])?;
+    Some((parameters, returns))
 }

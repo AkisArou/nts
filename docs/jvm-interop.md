@@ -2262,10 +2262,18 @@ follow it.
 
 ## The gaps, named rather than discovered
 
-- **Generics are read but not rendered.** `names()` surfaces as
-  `java.util.List | null` where the `Signature` attribute says
-  `List<String>`. The input is parsed and carried on `Member::signature`, so
-  this is a rendering gap, and it is the next thing to close.
+- ~~**Generics are read but not rendered.**~~ **Closed.** `names()` now
+  surfaces as `java.util.List<string> | null`, `index()` as
+  `java.util.HashMap<string, java.lang.Integer>`, `repeat` keeps its own type
+  variable `T`, and `List<? extends Number>` renders as its bound because
+  TypeScript has no wildcard. The control that proves the `Signature` attribute
+  is what is being read: `raw()` has the *same erased descriptor* as `names()`
+  and no `Signature`, and must stay unparameterised.
+- **A raw type cannot be given `List<unknown>`.** It renders as a bare
+  `java.util.List`, which is a TypeScript error against a generic declaration.
+  Knowing that `List` takes one parameter means reading `java/util/List.class`'s
+  own `Signature` -- the whole jar rather than one class file, which is the same
+  requirement as inherited members below.
 - **Inherited members are not surfaced.** `Kind.name()` and `Kind.ordinal()`
   come from `java.lang.Enum` and this generator emits declared members only.
   Walking the superclass chain needs the whole jar rather than one class file.

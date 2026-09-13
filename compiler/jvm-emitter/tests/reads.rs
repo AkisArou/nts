@@ -444,3 +444,39 @@ fn enum_constants_are_not_nullable() {
     assert!(!body.contains("ordinal()"), "inherited members are not surfaced yet; if this \
         starts failing, the superclass walk landed and this assertion is the one to delete");
 }
+
+/// Generics survive into the declarations, which is what makes an element
+/// access typed rather than a cast.
+#[test]
+fn generic_signatures_are_rendered() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let body = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Catalog"))
+        .expect("renders");
+    let expect = |needle: &str| assert!(body.contains(needle), "expected `{needle}` in:\n{body}");
+
+    // A parameterised return: the descriptor says `Ljava/util/List;` and only
+    // the Signature attribute still has the `String`.
+    expect("names(): java.util.List<string> | null;");
+    // Two arguments, one of them boxed because a Java map cannot hold a
+    // primitive -- Java's cost, and visible rather than hidden.
+    expect("index(): java.util.HashMap<string, java.lang.Integer> | null;");
+    // A method's own type variable, rendered by name at each use.
+    expect("repeat(a0: T, a1: int): java.util.List<T> | null;");
+    // `List<? extends Number>`: TypeScript has no wildcard, so a covariant
+    // bound renders as the bound itself.
+    expect("total(a0: java.util.List<java.lang.Number>): number;");
+
+    // **The control, and it is the one that proves the Signature attribute is
+    // what is being read.** `raw()` has the same erased descriptor as
+    // `names()` -- `()Ljava/util/List;` -- and no Signature at all. If these
+    // two rendered the same, the generics above would be coming from the
+    // descriptor, which does not contain them.
+    expect("raw(): java.util.List | null;");
+    assert!(
+        !body.contains("raw(): java.util.List<"),
+        "a raw type has no Signature and must not gain type arguments:\n{body}"
+    );
+}
