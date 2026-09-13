@@ -774,6 +774,30 @@ backend_examples() {
   # are ratcheting, which is a different instrument and still the right one
   # there.
   exact=${3:-}
+
+  # **A count from this glob is a fact about the working tree, not about a
+  # commit.** `ls examples/*/tsconfig.json` sees another session's *untracked*
+  # directory, so a floor set from such a run trips the moment that session
+  # reverts -- and it trips in the direction nobody watches, because the number
+  # went up first and that looked like progress.
+  #
+  # 2026-09-13: the jvm floor went 203 -> 204 on a run that counted an untracked
+  # `examples/a-promise-with-resolvers`, then went red when its author reverted.
+  # The hazard had been described in a message an hour earlier and the floor was
+  # still set from one of those instants.
+  #
+  # So say so at the moment the count is taken. Not fatal -- the count is still
+  # correct *about that tree*, and a session iterating on a new example needs it
+  # to run -- but a floor must never be raised off a run that printed this.
+  untracked=$(for d in examples/*/tsconfig.json; do
+                git ls-files --error-unmatch "$d" >/dev/null 2>&1 || echo "$d"
+              done)
+  if [ -n "$untracked" ]; then
+    echo "  NOT A COMMIT: untracked example(s) are in this count --"
+    echo "$untracked" | sed 's|/tsconfig.json||; s|^|    |'
+    echo "  do not move a floor from this run"
+  fi
+
   results=$(mktemp)
   ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
     d=$1
@@ -1219,7 +1243,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   status=$?
   printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
   [ "$status" -eq 0 ] || return 1
-  backend_examples 204 "through the JVM backend" exact ); }
+  backend_examples 203 "through the JVM backend" exact ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
