@@ -3624,6 +3624,20 @@ fn initializer_function(
 /// namespace-export symbol arrives without it. Testing the flag first was one
 /// line and published nothing.
 ///
+/// Re-measured 2026-09-14, because `bits::MODULE` turned out to be wrong when
+/// this was written -- it read `NamespaceModule | TypeLiteral` under a comment
+/// saying `ValueModule | NamespaceModule`, so the flag genuinely was unusable,
+/// though not for the reason given above. **Correcting it does not change this
+/// paragraph.** `posix` and `win32` still arrive `SymbolFlags(0)`. Compiling
+/// this module tsgo sets `ValueModule` on nine symbols and `NamespaceModule`
+/// on none, and not one of the nine is a namespace-export symbol: the broken
+/// constant matched nothing here and the fixed one matches those nine.
+///
+/// So the sentence above was right, and it is right for its own reason rather
+/// than by accident of the bug. The root match stays. Do not put the flag test
+/// back on the strength of the constant having been fixed -- that was the
+/// inference this note exists to stop, and it was measured wrong once already.
+///
 /// So the root match is the whole test rather than a confirmation of it. That
 /// is also the stronger claim: a symbol declared by a module's root node *is*
 /// that module, whatever any flag says.
