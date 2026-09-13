@@ -27,6 +27,24 @@ fields now retain their declared widths and unknown contents, including nested
 objects. A same-program control checks that exposed numeric fields remain
 `double` while a private counter still narrows to `int32_t`; both execute.
 
+Conservative field facts also have a code-generation cost. In the scanner
+control added by `b873741c`, changing only `export class Scanner` to
+`class Scanner` changes one checked `nts_str_char_code_at` call to one unchecked
+`nts_unit` call. Independently reproduced with the same compiler binary in
+both arms: published = 1 checked / 0 unchecked; internal = 0 checked / 1
+unchecked. A native caller can mutate the published object's position, so
+TypeScript's stores alone cannot establish its lower bound. This measures
+emitted calls, not elapsed time or a cost for every exported class. The earlier
+memory gate and unchanged `field-widths` output do not measure this cost.
+
+The conformance fixtures `a-position-field-only-ever-increased` and
+`a-position-field-decreased-behind-a-guard` now preserve the internal optimization;
+`a-position-field-published-to-c` guards the checked published case. All carry
+the checker's literal `Kept as a guard` marker. Describing a fixture as a guard
+in other words had classified a lost optimization as a fixed blocker instead
+of a failed expectation. Future ABI controls must assert both that the tested
+operation was emitted and that its expected behavior holds.
+
 The original precondition in `compiler/core/src/hir/fields.rs` stated:
 
 > there is no FFI that writes through a pointer here
