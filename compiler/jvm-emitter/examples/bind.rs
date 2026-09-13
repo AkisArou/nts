@@ -60,7 +60,7 @@ fn main() {
     names.sort();
 
     let resolve = FromDirectory(root.clone());
-    let mut bodies = Vec::new();
+    let mut bodies: Vec<(String, String)> = Vec::new();
     for name in &names {
         let path = root.join(format!("{name}.class"));
         let Ok(bytes) = std::fs::read(&path) else {
@@ -77,12 +77,12 @@ fn main() {
         // Refuse by name, never half-emit: a declaration file that silently
         // dropped a member is one a caller trusts.
         match bind::declarations_with(&class, &resolve) {
-            Ok(body) => bodies.push(body),
+            Ok(body) => bodies.push((name.clone(), body)),
             Err(why) => {
                 eprintln!("bind: refused {why}");
                 std::process::exit(1);
             }
         }
     }
-    print!("{}", bind::module(package, &bodies));
+    print!("{}", bind::module_of(package, &bodies));
 }

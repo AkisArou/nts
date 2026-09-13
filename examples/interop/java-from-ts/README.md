@@ -67,10 +67,7 @@ both produced output that **would not compile**:
   inside `declare module "java:com.example"` refers to a `com` namespace that
   does not exist -- the module's own members are in scope unqualified.
 
-### The gap that is still open
-
-`Catalog.Cursor` and `Catalog.Entry` are emitted as **top-level** `Cursor` and
-`Entry`, while `cursorAt` correctly refers to `Catalog.Cursor`. Nesting them
-under a `namespace Catalog` is what closes it. It is a rendering change, not a
-reading one -- `InnerClasses` already tells the generator which classes are
-nested inside which.
+- **Nested classes were emitted top-level.** `cursorAt` returns
+  `Catalog.Cursor`, while `Cursor` was declared beside `Catalog` rather than
+  inside it. They now go in an `export namespace Catalog` after the class, which
+  is the order TypeScript wants for a declaration merge.

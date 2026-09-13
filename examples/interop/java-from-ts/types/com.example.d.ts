@@ -38,17 +38,18 @@ declare module "java:com.example" {
     cursorAt(a0: int): Catalog.Cursor | null;
   }
 
-  /** com.example.Catalog$Cursor */
-  export class Cursor {
-    at: int;
-    constructor(a0: Catalog, a1: int);
-    owner(): string | null;
-  }
-
-  /** com.example.Catalog$Entry */
-  export class Entry {
-    readonly key: string | null;
-    constructor(a0: string);
+  export namespace Catalog {
+    /** com.example.Catalog$Cursor */
+    export class Cursor {
+      at: int;
+      constructor(a0: Catalog, a1: int);
+      owner(): string | null;
+    }
+    /** com.example.Catalog$Entry */
+    export class Entry {
+      readonly key: string | null;
+      constructor(a0: string);
+    }
   }
 
   /** com.example.Kind */

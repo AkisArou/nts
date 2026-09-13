@@ -363,7 +363,8 @@ fn the_generator_produces_declarations_for_the_fixture() {
     assert!(!rendered.contains(": any"), "`any` must never be generated");
 
     // And the module wrapper produces something importable.
-    let module = nts_jvm_emitter::bind::module("com.example", &[body]);
+    let module =
+        nts_jvm_emitter::bind::module_of("com.example", &[("com/example/Catalog".to_owned(), body)]);
     assert!(module.contains("declare module \"java:com.example\""));
     assert!(module.starts_with("// GENERATED"), "the header says not to edit it");
 }

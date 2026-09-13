@@ -2318,6 +2318,9 @@ Neither was going to be caught by a test written from the design, because both
 are properties of the *whole file* rather than of a member. The thing that found
 them was printing it and reading it.
 
-**Still open:** nested classes are emitted top-level, so `Catalog.Cursor` in a
-return type has nothing to refer to. `InnerClasses` already says which classes
-are nested inside which, so it is a rendering change rather than a reading one.
+**And a third, closed the same way:** nested classes were emitted top-level, so
+`Catalog.Cursor` in a return type referred to nothing. They now go inside an
+`export namespace Catalog` emitted after the class, which is the order
+TypeScript requires for a declaration merge. `module` is deleted rather than
+kept beside `module_of` -- a second way of doing one thing is worse than
+changing the one caller.
