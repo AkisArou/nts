@@ -20775,7 +20775,7 @@ impl<'a> FuncBuilder<'a> {
                     types: vec![ty],
                     name: class.to_owned(),
                     interfaces: Vec::new(),
-                    fields: super::builtin::error_fields(),
+                    fields: super::builtin::error_fields(class),
                     methods: vec![None; self.hierarchy.table_size()],
                     // No base. `TypeError extends Error` is spelled where
                     // `instanceof` needs it, and a program that never named
@@ -20835,11 +20835,11 @@ impl<'a> FuncBuilder<'a> {
             .flatten();
         let layout = Layout {
             types: vec![ty],
-            name,
             interfaces: Vec::new(),
-            fields: super::builtin::error_fields(),
+            fields: super::builtin::error_fields(&name),
             methods: vec![None; self.hierarchy.table_size()],
             base,
+            name,
         };
         self.layouts.push(layout.clone());
         Some(layout)
@@ -20907,6 +20907,59 @@ impl<'a> FuncBuilder<'a> {
             .iter()
             .find(|property| property.name == member)
             .map(|property| property.ty)
+    }
+
+    /// `AggregateError.errors` is **stored and not readable**, and the asymmetry
+    /// is deliberate rather than unfinished.
+    ///
+    /// The field holds the array *erased*, because an array of pointers is not
+    /// an array of tagged values and a `field.set` is not entitled to insert a
+    /// per-element conversion. Reading it back therefore yields an erased value
+    /// where the checker says `any[]`, and the narrowing cannot bridge that: the
+    /// emission loaded `{ i32, i64 }` and then indexed it as a `ptr`.
+    ///
+    /// **Refused because of what the two backends did with it**, which is the
+    /// whole argument:
+    ///
+    /// ```text
+    /// C       compiled, and agreed with node on every case
+    /// LLVM    error: '%v87' defined with type '{ i32, i64 }' but expected 'ptr'
+    /// ```
+    ///
+    /// One backend refusing to compile is loud. The other answering correctly
+    /// **by coincidence** is the shape that survives, and it did not merely
+    /// compile — it agreed on 203 cases, so every instrument except the one that
+    /// could not build it reported the feature working. Before this class was
+    /// provided the read was unreachable, so leaving it would have been a path
+    /// introduced and handed to clang.
+    ///
+    /// The write half is what the field exists for: three sites construct one
+    /// with an errors array, and a constructor argument accepted and discarded
+    /// is a wrong answer that runs. That is precisely what [`builtin::OMITTED`]
+    /// cannot express — it names a member so that *reading* it says why it is
+    /// absent, and says nothing about writing.
+    fn no_aggregate_errors_read(
+        &self,
+        id: NodeId,
+        ty: TypeId,
+        layout: &Layout,
+        field: u32,
+        member: &str,
+    ) -> Result<(), Diagnostic> {
+        let erased = layout
+            .fields
+            .get(field as usize)
+            .is_some_and(|field| matches!(field.ty, HirType::Erased));
+        let on_an_error = named(self.snapshot, ty).is_some_and(super::builtin::is_error)
+            || self.provided_error_base(ty).is_some();
+        if member == "errors" && erased && on_an_error {
+            return Err(self.unsupported(
+                id,
+                "`errors` on an `AggregateError`, which is stored erased because its \
+                 elements are thrown values and read back as an array by nothing here",
+            ));
+        }
+        Ok(())
     }
 
     /// Why a property is not on a layout.
@@ -20979,10 +21032,26 @@ impl<'a> FuncBuilder<'a> {
         provided: &str,
         arguments: &[NodeId],
     ) -> Result<(), Diagnostic> {
-        // `new Error(message, { cause })`. The second argument is an options
-        // object whose only member is `cause`, which this compiler does not
-        // provide -- see `super::builtin`.
-        if arguments.len() > 1 {
+        // **`AggregateError` puts its message second**, and everything in this
+        // function was written for a signature where it is first:
+        //
+        //     new Error(message?, options?)
+        //     new AggregateError(errors, message?, options?)
+        //
+        // Taking `arguments.first()` for both would store the errors *array* in
+        // the `message` field. Worth naming even though the checker would catch
+        // that one, because the failure it resembles is the one nothing catches:
+        // a second signature quietly sharing the first's argument positions.
+        let aggregate = provided == "AggregateError";
+        // `new Error(message, { cause })`. The options object's only member is
+        // `cause`, which this compiler does not provide -- see `super::builtin`.
+        //
+        // Counted from where the options argument actually is rather than from
+        // a constant. This was `arguments.len() > 1`, which is the same number
+        // only while every provided class takes one argument before its
+        // options, and it refused `new AggregateError(errors, message)` as "an
+        // `Error` with options" the moment one did not.
+        if arguments.len() > 1 + usize::from(aggregate) {
             return Err(self.unsupported(id, "an `Error` with options"));
         }
         let HirType::Managed(ManagedType::Object(type_id)) =
@@ -20993,9 +21062,10 @@ impl<'a> FuncBuilder<'a> {
         let layout = self.layout_of(id, type_id)?;
         let origin = self.origin(id);
         let text = HirType::Managed(ManagedType::String);
-        let message = match arguments.first() {
+        let message = match arguments.get(usize::from(aggregate)) {
             Some(argument) => self.lower_expression(*argument)?,
-            // `new Error()` has an empty message, not an absent one.
+            // `new Error()` has an empty message, not an absent one, and
+            // `new AggregateError(errors)` is the same for the same reason.
             None => self.push(
                 OpKind::ConstString(String::new()),
                 text.clone(),
@@ -21012,6 +21082,26 @@ impl<'a> FuncBuilder<'a> {
                 continue;
             };
             self.field_set(receiver, field, value, &origin);
+        }
+        // The errors it aggregates, which is why it is a separate class at all.
+        //
+        // Stored rather than dropped. Nothing in `runtime/node` *reads*
+        // `.errors`, so discarding it would have cost nothing a reader could
+        // see -- and three sites construct one with it, which is a constructor
+        // argument accepted and thrown away. That is the shape `builtin::OMITTED`
+        // cannot express: it names a member so that reading one says why it is
+        // absent, and says nothing about writing.
+        if aggregate {
+            let Some(first) = arguments.first() else {
+                return Err(self.unsupported(
+                    id,
+                    "an `AggregateError` with no errors, which its signature requires",
+                ));
+            };
+            let errors = self.lower_expression(*first)?;
+            if let Some(field) = layout.index_of("errors") {
+                self.field_set(receiver, field, errors, &origin);
+            }
         }
         Ok(())
     }
@@ -21103,10 +21193,9 @@ impl<'a> FuncBuilder<'a> {
         // `cause?` are in the list and are not fields here. What the class
         // declares itself is marked `own`, which is exactly the remainder.
         let provided = self.provided_error_base(ty);
-        let mut fields = if provided.is_some() {
-            super::builtin::error_fields()
-        } else {
-            Vec::new()
+        let mut fields = match provided.as_deref() {
+            Some(base) => super::builtin::error_fields(base),
+            None => Vec::new(),
         };
         for property in properties {
             if provided.is_some() && !property.own {
@@ -24513,6 +24602,7 @@ impl<'a> FuncBuilder<'a> {
                 }
                 return Err(self.absent_member(id, type_id, member_name));
             };
+            self.no_aggregate_errors_read(id, type_id, &layout, field, member_name)?;
             let ty = layout.fields[field as usize].ty.clone();
             let origin = self.origin(id);
             // An erased field read where the checker narrowed is the same

@@ -59,7 +59,31 @@ pub(super) const ERRORS: &[&str] = &[
     // the expensive way.
     "EvalError",
     "ReferenceError",
+    // **Appended, not inserted**, because the paragraph above says an insertion
+    // renames every class after it -- the type and the token are both this
+    // list's index.
+    //
+    // It is here for what its absence *cascaded* into rather than for the sites
+    // that throw one. `NodeAggregateError extends AggregateError`, so without a
+    // layout for the base the subclass had none, and reading `.code` across the
+    // five `instanceof`-narrowed arms of `knownErrorCode` refused as `code` on a
+    // union one of whose members has no layout -- in `internal/errors.ts`, which
+    // every module imports. Traced rather than guessed: a user class carrying an
+    // array field compiles and reads through a union perfectly well, so it was
+    // the base being unprovided and not the array.
+    "AggregateError",
 ];
+
+/// The extra field `AggregateError` holds, beyond what every error holds.
+///
+/// **A real field rather than an omission**, and the difference is a wrong
+/// answer that runs. `errors` is read nowhere in `runtime/node`, so leaving it
+/// out would have cost nothing a reader could see -- but three sites
+/// *construct* one with it, `new NodeAggregateError([outer, inner], message,
+/// code)` among them, and a constructor argument that is accepted and discarded
+/// is exactly the shape [`OMITTED`] cannot express. `OMITTED` names a member so
+/// that *reading* it says why it is absent; it says nothing about writing.
+const AGGREGATE_ERRORS_FIELD: &str = "errors";
 
 /// Members of the declared `Error` that this compiler does not provide.
 ///
@@ -138,8 +162,8 @@ pub(super) fn omitted(name: &str) -> Option<&'static str> {
 /// Neither is `readonly`: `e.message = ...` is legal JavaScript, and a
 /// `readonly` field here would be a claim about the program rather than about
 /// the type.
-pub(super) fn error_fields() -> Vec<Field> {
-    ["message", "name"]
+pub(super) fn error_fields(class: &str) -> Vec<Field> {
+    let mut fields: Vec<Field> = ["message", "name"]
         .into_iter()
         .map(|name| Field {
             name: name.to_owned(),
@@ -147,7 +171,39 @@ pub(super) fn error_fields() -> Vec<Field> {
             readonly: false,
             declared_by: None,
         })
-        .collect()
+        .collect();
+    // **After the shared two, which is what keeps base-first layout true.**
+    // `AggregateError extends Error` in the specification, so an `Error` reaching
+    // a slot declared for it must find `message` and `name` at the same indices,
+    // and a subclass of `AggregateError` must find all three. Putting `errors`
+    // first would have been correct only for programs that never mix them.
+    if class == "AggregateError" {
+        fields.push(Field {
+            name: AGGREGATE_ERRORS_FIELD.to_owned(),
+            // **The array erased, not an array of erased values**, and the
+            // difference is a representation change rather than a cast.
+            //
+            // `Array(Erased)` was the first spelling and the verifier rejected
+            // it: `new AggregateError([new Error("x")], "m")` passes an
+            // `Array(Object(Error))`, and an array of pointers is not an array
+            // of tagged values, so storing one in the other is a per-element
+            // conversion that nothing here is entitled to insert. `Erased`
+            // takes the whole array in one `Erase`, which is the operation this
+            // compiler already has for exactly this.
+            //
+            // The cost is stated rather than hidden: reading `.errors` gets an
+            // erased value and refuses to be an array until something casts it
+            // back. Nothing in `runtime/node` reads it -- checked, zero sites --
+            // and the point of storing it at all is that three sites *write*
+            // one. A constructor argument accepted and discarded is a wrong
+            // answer that runs; a value stored and not yet readable is a
+            // refusal with a name on it.
+            ty: HirType::Erased,
+            readonly: false,
+            declared_by: None,
+        });
+    }
+    fields
 }
 
 /// What each typed array stores, if the name is one.
