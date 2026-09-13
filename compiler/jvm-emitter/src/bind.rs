@@ -1235,9 +1235,13 @@ pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (St
         }
     }
     for row in &mut bound {
-        let Some(&line_start) = starts.get(row.line - 1) else { continue };
-        let line_end = starts.get(row.line).map_or(out.len(), |next| next - 1);
-        row.end = line_end;
+        if row.line == 0 || row.line > starts.len() {
+            continue;
+        }
+        // `starts[line]` is where the NEXT line begins, so one before it is the
+        // newline that ends this one -- which is the first offset past the
+        // declaration's `;`, and what `span.end` carries.
+        row.end = starts.get(row.line).map_or(out.len(), |next| next - 1);
     }
     (out, bound)
 }
