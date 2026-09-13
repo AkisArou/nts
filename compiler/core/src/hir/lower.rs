@@ -4616,6 +4616,36 @@ fn nominal_name(name: &str) -> bool {
     super::builtin::is_error(name)
         || is_signature_name(name)
         || super::builtin::is_constructor_name(name)
+        || is_foreign_name(name)
+}
+
+/// Whether this layout stands for a class we did not lay out.
+///
+/// A **fourth** member of the family above, and it arrives for the same reason
+/// the other three did: a foreign layout is deliberately field-less -- the
+/// binding surfaces its members through the binding table rather than as our
+/// field ops -- so shape cannot tell two of them apart.
+///
+/// **By prefix and shape rather than by a flag**, matching
+/// [`is_signature_name`]: a foreign layout is named by its JVM binary name,
+/// `java/lang/Runnable`, and `/` cannot appear in a TypeScript identifier.
+///
+/// # Why this one cannot be repaired downstream, where the others can
+///
+/// Measured on 2026-09-13: `class Alpha {}` and `class Beta {}` **do** merge --
+/// `nts layouts` prints one line, `Alpha [1 2]` -- and identical method lists do
+/// not separate them either. The JVM emitter then repairs it, by making the
+/// merged layout a shared base and giving each original type a subclass:
+/// `nts/gen/Alpha`, with `Alpha__Alpha` and `Alpha__Beta` extending it.
+///
+/// **That repair works precisely because we own the names and can invent
+/// `Alpha__Beta`.** A `java.lang.Runnable` cannot be made to extend an
+/// `nts/gen/...` base: it already exists, its binary name *is* its identity, and
+/// its supertype chain is fixed by the jar. So a foreign layout is the one merge
+/// no backend can undo, which is a stronger argument than "a collision is
+/// possible" and is why this belongs here rather than in a backend.
+fn is_foreign_name(name: &str) -> bool {
+    name.contains('/')
 }
 
 /// Every `InstanceOf` names classes this program has a layout for, and no
@@ -32576,6 +32606,32 @@ enum Branch {
 
 #[cfg(test)]
 mod tests {
+    /// A foreign layout's name is its identity, like the three families beside
+    /// it in `nominal_name`.
+    ///
+    /// **The control is the pair that must still merge.** Two field-less
+    /// TypeScript classes *do* merge today -- measured, `class Alpha {}` and
+    /// `class Beta {}` produce one layout -- and the JVM emitter repairs that by
+    /// subclassing. Nothing here should change it. What must not merge is a
+    /// layout standing for a class we did not lay out, because the repair works
+    /// by inventing a name and a foreign class's binary name is fixed by its
+    /// jar.
+    #[test]
+    fn a_foreign_layout_name_is_its_identity() {
+        assert!(super::is_foreign_name("java/lang/Runnable"));
+        assert!(super::is_foreign_name("android/view/View"));
+        assert!(super::nominal_name("java/util/Observer"));
+
+        // A TypeScript identifier cannot contain `/`, so no layout of ours is
+        // ever mistaken for a foreign one. Without this the rule would stop two
+        // ordinary empty classes from merging and cost the subclass repair its
+        // whole purpose.
+        assert!(!super::is_foreign_name("Alpha"));
+        assert!(!super::is_foreign_name("Beta"));
+        assert!(!super::nominal_name("Alpha"));
+        assert!(!super::nominal_name("Point"));
+    }
+
     use super::{closure_type, parse_number};
 
     /// The synthetic id bands do not overlap.

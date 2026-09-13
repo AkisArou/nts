@@ -276,8 +276,66 @@ pub fn result(name: &str) -> Option<&'static HirType> {
 /// `None` is the honest default and means every argument. An entry is a promise
 /// about a function in this repository, checked by nothing but the reading of
 /// it, so the list is short and only grows where a measurement asks.
+/// The canonical name of a bound Java member, used as a `Callee::External`
+/// name.
+///
+/// `java/io/OutputStream.write:([B)V` -- owner, member, descriptor, in the
+/// spelling the class file uses.
+///
+/// **One derivation, because two would drift.** The binding generator writes
+/// this key and [`keeps`] reads it; if each built its own, a disagreement would
+/// surface as a silently-missing escape answer -- the argument would be assumed
+/// to escape, the program would stay correct, and the optimisation would just
+/// never happen. That is the worst kind of divergence: it costs speed and
+/// reports nothing.
+///
+/// **Keyed by descriptor rather than by a resolved id**, which is the JVM
+/// lane's call and the reason is that a descriptor is what the class file
+/// guarantees where an id is a fact about our loader. It also has to be the
+/// descriptor because an overload set shares a name: without it there is no way
+/// to say that `write([B)V` keeps nothing while `write([BII)V` does.
+#[must_use]
+pub fn foreign_key(owner: &str, member: &str, descriptor: &str) -> String {
+    format!("{owner}.{member}:{descriptor}")
+}
+
+/// Whether a `Callee::External` name is a bound Java member rather than one of
+/// our runtime helpers.
+///
+/// By shape rather than by a flag, matching `is_signature_name`'s precedent in
+/// `lower`: a runtime helper is a C identifier and can contain neither `/` nor
+/// `:`, and a JVM binary name always contains a `/` for anything outside the
+/// default package.
+#[must_use]
+pub fn is_foreign_key(name: &str) -> bool {
+    name.contains(':') && name.contains('/')
+}
+
+/// What a **bound Java member** retains, if anything is known about it.
+///
+/// Always `None` today, and that is the sound default: an absent entry means
+/// "assume every argument escapes", which is never wrong, only pessimistic.
+/// The entries arrive from two places, neither of which exists yet -- a
+/// bytecode analysis over the callee, and a checked-in overrides file for the
+/// `native` methods that have no bytecode to analyse.
+///
+/// Separate from [`keeps`] rather than folded into it, because the two have
+/// different lifetimes: that table is a fact about a header this repository
+/// owns, and this one is a fact about somebody else's jar.
+#[must_use]
+pub fn foreign_keeps(_key: &str) -> Option<&'static [usize]> {
+    None
+}
+
 #[must_use]
 pub fn keeps(name: &str) -> Option<&'static [usize]> {
+    // A bound Java member is not in the table below and never will be: that
+    // table is this repository's own helpers. Asking the foreign table first
+    // keeps `escape`'s single call site unchanged -- it already asks `keeps`
+    // and already treats `None` as "everything escapes".
+    if is_foreign_key(name) {
+        return foreign_keeps(name);
+    }
     match name {
         // Both read, neither kept: the result is a fresh string.
         "nts_concat" | "nts_string_eq" | "nts_str_index_of" | "nts_str_last_index_of"
@@ -451,5 +509,48 @@ mod tests {
                 pair[1].0
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod foreign_key_tests {
+    use super::{foreign_key, is_foreign_key, keeps};
+
+    #[test]
+    fn the_key_carries_the_descriptor_because_overloads_share_a_name() {
+        let one = foreign_key("java/io/OutputStream", "write", "([B)V");
+        let three = foreign_key("java/io/OutputStream", "write", "([BII)V");
+        assert_eq!(one, "java/io/OutputStream.write:([B)V");
+        // The whole reason the descriptor is in the key: these are different
+        // methods with one name, and they can retain different arguments.
+        assert_ne!(one, three);
+    }
+
+    #[test]
+    fn a_foreign_key_is_told_from_a_helper_by_shape() {
+        assert!(is_foreign_key("java/io/OutputStream.write:([B)V"));
+        assert!(is_foreign_key("android/view/View.setOnTouchListener:(L;)V"));
+
+        // A runtime helper is a C identifier: no `/`, no `:`. These are the
+        // names already in `keeps`, and treating one as foreign would route it
+        // to a table that knows nothing and silently lose its answer.
+        assert!(!is_foreign_key("nts_str_append"));
+        assert!(!is_foreign_key("nts_presence_get"));
+        assert!(!is_foreign_key("nts_concat"));
+    }
+
+    #[test]
+    fn routing_a_foreign_key_does_not_disturb_the_helpers() {
+        // The control, and it is the one that matters: every existing answer
+        // must be unchanged. `nts_str_append` keeps its left argument and
+        // `nts_concat` keeps nothing, both from the table below.
+        assert_eq!(keeps("nts_str_append"), Some(&[0][..]));
+        assert_eq!(keeps("nts_concat"), Some(&[][..]));
+        assert_eq!(keeps("nts_presence_has"), Some(&[][..]));
+        assert_eq!(keeps("something_unknown"), None);
+
+        // And a foreign key answers `None` -- assume everything escapes, which
+        // is sound and is what happens until a binding table exists.
+        assert_eq!(keeps("java/io/OutputStream.write:([B)V"), None);
     }
 }

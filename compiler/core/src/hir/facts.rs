@@ -75,6 +75,46 @@ pub struct Facts {
     pub maybe_negative_zero: bool,
 }
 
+/// What a JVM field or method descriptor guarantees about a numeric value.
+///
+/// # Why this is worth having
+///
+/// Without it a value arriving from a bound Java member is [`Facts::TOP`] --
+/// whose own doc says it is "what an unanalyzed parameter or an opaque call
+/// returns": unbounded, possibly `NaN`, possibly `-0`. So `rect.right -
+/// rect.left` cannot be proved integral, the accumulation stays `f64`, and every
+/// operation carries NaN and `-0` handling.
+///
+/// **The cost was never that a Java `int` is imprecise. It was that we threw
+/// away what the descriptor already told us.** An `I` is a 32-bit signed
+/// integer *by the JVM's own guarantee*, enforced by the verifier at class
+/// load, so this is sound in the strongest sense available here -- not an
+/// inference, a platform invariant.
+///
+/// Returns `None` where the descriptor says nothing useful: `D` is an f64 and
+/// is exactly `TOP`, and a reference type is not a number at all.
+///
+/// `J` is deliberately absent. A Java `long` exceeds 2^53 and surfaces as a
+/// `bigint` rather than a `number`, so it never becomes an `f64` whose range
+/// this type describes.
+#[must_use]
+pub fn from_jvm_descriptor(descriptor: &str) -> Option<Facts> {
+    let whole = |lo: f64, hi: f64| Some(Facts::new(lo, hi, true, false, false));
+    match descriptor {
+        "Z" => whole(0.0, 1.0),
+        "B" => whole(-128.0, 127.0),
+        "S" => whole(-32_768.0, 32_767.0),
+        // `char` is unsigned: a UTF-16 code unit, never negative.
+        "C" => whole(0.0, 65_535.0),
+        "I" => whole(-2_147_483_648.0, 2_147_483_647.0),
+        // A `float` is finite-ranged but not integral, and it CAN be NaN -- so
+        // the only thing gained over TOP is the bound, and `maybe_nan` stays
+        // true. Saying so is the difference between a fact and a wish.
+        "F" => Some(Facts::new(f64::from(f32::MIN), f64::from(f32::MAX), false, true, true)),
+        _ => None,
+    }
+}
+
 impl Facts {
     /// Anything at all: what an unanalyzed parameter or an opaque call returns.
     pub const TOP: Self = Self {
@@ -1101,5 +1141,74 @@ mod tests {
         let known = Facts::new(1.0, 5.0, true, false, false);
         assert_eq!(known.join(Facts::BOTTOM), known);
         assert_eq!(Facts::BOTTOM.join(known), known);
+    }
+}
+
+#[cfg(test)]
+mod jvm_descriptor_tests {
+    use super::{from_jvm_descriptor, Facts};
+
+    #[test]
+    fn an_integer_descriptor_is_strictly_tighter_than_top() {
+        let int = from_jvm_descriptor("I").expect("`I` is a number");
+        assert!(int.whole, "a Java `int` is integral by the JVM's own guarantee");
+        assert!(!int.maybe_nan, "an `int` cannot be NaN");
+        assert!(!int.maybe_negative_zero, "an `int` has no -0");
+        assert_eq!(int.lo, -2_147_483_648.0);
+        assert_eq!(int.hi, 2_147_483_647.0);
+
+        // The control: this must be strictly better than what an opaque call
+        // gives, or the patch buys nothing.
+        assert_ne!(int, Facts::TOP);
+        // Stated against `int` rather than against `TOP` alone. Written as
+        // `assert!(Facts::TOP.maybe_nan && !Facts::TOP.whole)` it is an
+        // assertion on a constant -- clippy says so, and it is right: a
+        // constant cannot fail, so the line documents the baseline without
+        // testing anything. Comparing the two says the same thing and is an
+        // assertion about the descriptor, which is the thing under test.
+        let top = Facts::TOP;
+        assert!(
+            int.whole && !top.whole,
+            "`I` is whole and TOP is not -- that difference is what the patch buys"
+        );
+        assert!(
+            !int.maybe_nan && top.maybe_nan,
+            "`I` cannot be NaN and TOP must assume it can"
+        );
+    }
+
+    #[test]
+    fn char_is_unsigned_and_boolean_is_two_valued() {
+        let ch = from_jvm_descriptor("C").expect("`C` is a number");
+        assert_eq!(ch.lo, 0.0, "a `char` is a UTF-16 code unit and is never negative");
+        assert_eq!(ch.hi, 65_535.0);
+
+        let yes = from_jvm_descriptor("Z").expect("`Z` is a number");
+        assert_eq!((yes.lo, yes.hi), (0.0, 1.0));
+    }
+
+    #[test]
+    fn a_float_gains_a_bound_and_nothing_else() {
+        let float = from_jvm_descriptor("F").expect("`F` is a number");
+        // The honest part: a `float` is bounded but is NOT integral and CAN be
+        // NaN. Claiming otherwise would be the kind of fact that is wrong on
+        // exactly the inputs that matter.
+        assert!(!float.whole);
+        assert!(float.maybe_nan);
+        assert!(float.hi < f64::INFINITY, "but it is bounded, which TOP is not");
+    }
+
+    #[test]
+    fn what_the_descriptor_cannot_answer_says_so() {
+        // A `double` IS an f64: there is nothing to add, and returning a Facts
+        // here would imply a narrowing that does not exist.
+        assert_eq!(from_jvm_descriptor("D"), None);
+        // A `long` surfaces as `bigint`, never as an f64 whose range this
+        // describes.
+        assert_eq!(from_jvm_descriptor("J"), None);
+        // A reference is not a number.
+        assert_eq!(from_jvm_descriptor("Ljava/lang/String;"), None);
+        assert_eq!(from_jvm_descriptor("[I"), None);
+        assert_eq!(from_jvm_descriptor("V"), None);
     }
 }
