@@ -119,9 +119,26 @@ provably inside any array, so the bounds check has to stay. One probe in four is
 the honest figure, and it would have been easy to run only the first and claim
 the feature.
 
-### What it still does not do
+### The third one-liner: unblocked, not written
 
-`escape.rs`'s `Callee::External` arm does not take a `keeps` answer from the
-table. It cannot yet: `escapes::table` computes the answers and the `.bind` rows
-do not carry them, so that one needs a column in the table before it needs a
-line in `escape.rs`. Named in the same plan, untouched here.
+`escape.rs`'s `Callee::External` arm taking a `keeps` answer **was** blocked on
+this lane and is not any more. The `.bind` rows now carry what each member keeps
+(`3db5aa33`), read from its own bytecode by `escapes::table` and keyed by the
+same `owner.member:descriptor` the rows already use:
+
+    56 rows in android-shape:  37 not analysed
+                               12 proved nothing escapes
+                                7 keep something
+
+`-` and `.` are opposite claims and the format keeps them apart. `-` is "could
+not read this method" — assume every argument escapes, always sound, only
+pessimistic. `.` is "proved: nothing escapes", which is a claim. Writing the
+second for the first turns ignorance into permission.
+
+**What is left is one line and a signature, and it is not this lane's.**
+`escape.rs:728` asks `runtime::keeps(name)`, which returns `&'static [usize]` —
+and per-compilation rows are not `'static`, so the table has to reach
+`gone_into_the_unknown`. That is two levels: `analyze_program` has the `Program`,
+`analyze` does not, and **`analyze` already takes seven arguments**, which is
+clippy's limit. Threading one more means restructuring a function in somebody
+else's file for this lane's feature, so it is proposed rather than done.
