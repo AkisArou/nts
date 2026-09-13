@@ -1626,3 +1626,52 @@ fn a_binding_table_round_trips() {
     let good = "# fine\n12 3 5 field com/example/ui/Rect.left:I\n";
     assert_eq!(nts_jvm_emitter::bind::read_table(good).expect("parses").len(), 1);
 }
+
+/// A foreign key splits back into the parts an invoke needs, including the ones
+/// that break a naive split.
+///
+/// `hir::runtime::foreign_key` builds `owner.member:descriptor` and the backend
+/// has to take it apart to emit an instruction. The cases below are the ones a
+/// left-to-right split gets wrong, which is why the function splits from the
+/// right.
+#[test]
+fn a_foreign_key_splits_back_into_its_parts() {
+    let cases = [
+        // The ordinary shape.
+        ("com/example/Catalog.find:(I)I", "com/example/Catalog", "find", "(I)I"),
+        // **A descriptor naming a class contains `/` and `;`.** Taking the
+        // descriptor off at the *last* colon rather than the first would be
+        // fine here, but taking the owner off at the first `.` is not, and this
+        // is the case that shows it.
+        (
+            "java/util/HashMap.get:(Ljava/lang/Object;)Ljava/lang/Object;",
+            "java/util/HashMap",
+            "get",
+            "(Ljava/lang/Object;)Ljava/lang/Object;",
+        ),
+        // A constructor: the member name carries angle brackets.
+        ("com/example/Catalog.<init>:(Ljava/lang/String;)V", "com/example/Catalog", "<init>", "(Ljava/lang/String;)V"),
+        // A nested class: the owner carries a `$`.
+        ("com/example/Catalog$Cursor.next:()Z", "com/example/Catalog$Cursor", "next", "()Z"),
+        // The default package: no `/` in the owner at all.
+        ("Demo.run:()V", "Demo", "run", "()V"),
+    ];
+    for (key, owner, member, descriptor) in cases {
+        let got = nts_jvm_emitter::bind::split_key(key)
+            .unwrap_or_else(|| panic!("`{key}` did not split"));
+        assert_eq!(got, (owner, member, descriptor), "for `{key}`");
+    }
+
+    // Refused rather than guessed: a caller that emitted an invoke against a
+    // name it had to repair would be inventing a call site.
+    for bad in ["", "no-separators", "com/example/Catalog.find", "find:(I)I", ".x:()V", "a.:()V", "a.b:"] {
+        assert!(nts_jvm_emitter::bind::split_key(bad).is_none(), "`{bad}` should not split");
+    }
+
+    // Arity, which tells a static call from an instance one. The control is the
+    // pair that would look identical without it.
+    assert_eq!(nts_jvm_emitter::bind::declared_arity("(Lnts/rt/NtsArrayD;D)V"), Some(2));
+    assert_eq!(nts_jvm_emitter::bind::declared_arity("(D)V"), Some(1));
+    assert_eq!(nts_jvm_emitter::bind::declared_arity("()Ljava/lang/Object;"), Some(0));
+    assert_eq!(nts_jvm_emitter::bind::declared_arity("not a descriptor"), None);
+}

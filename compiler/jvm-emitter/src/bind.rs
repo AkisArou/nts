@@ -1522,3 +1522,58 @@ pub fn write_table(package: &str, rows: &[Bound]) -> String {
     }
     out
 }
+
+/// Split a foreign key into the three parts an invoke instruction needs.
+///
+/// The inverse of `hir::runtime::foreign_key`, which builds
+/// `owner.member:descriptor`. Lives here beside the writer for the reason
+/// `read_table` does: one file, both directions, no chance of two crates
+/// disagreeing about where the separators go.
+///
+/// **Both splits are unambiguous on a well-formed key, and I wrote a paragraph
+/// claiming otherwise before testing it.** A descriptor contains no `:`, and a
+/// *binary* owner separates packages with `/` rather than `.` -- so
+/// `com/example/Catalog.find` holds exactly one dot and `split_once` and
+/// `rsplit_once` agree. Changing this line to `split_once` and re-running the
+/// tests was how I found that out: nothing failed, because nothing in the suite
+/// could tell them apart.
+///
+/// `rsplit_once` is still the right one, for the case that *does* separate
+/// them: an owner mistakenly passed in **source** form, `com.example.Catalog`.
+/// Splitting from the left takes `com` as the owner and
+/// `example.Catalog.find` as the member -- two plausible-looking strings and an
+/// invoke against a class that does not exist. From the right the member is
+/// still `find`, which is recoverable. `a_source_form_owner_keeps_its_member`
+/// is that case, and it fails if this line changes.
+///
+/// # Errors
+///
+/// Returns `None` for a key that is not in that shape at all, so a caller
+/// refuses rather than emitting an invoke against a name it guessed.
+#[must_use]
+pub fn split_key(key: &str) -> Option<(&str, &str, &str)> {
+    // `:` first: a descriptor can contain `.`? No -- but it can contain `;` and
+    // `/`, and taking the descriptor off first means the `.` search runs over
+    // the owner and member only, which is the part with the guarantee.
+    let (owner_and_member, descriptor) = key.split_once(':')?;
+    let (owner, member) = owner_and_member.rsplit_once('.')?;
+    if owner.is_empty() || member.is_empty() || descriptor.is_empty() {
+        return None;
+    }
+    Some((owner, member, descriptor))
+}
+
+/// How many arguments a descriptor declares, for telling a static call from an
+/// instance one.
+///
+/// An instance call arrives with the receiver as its first argument -- the
+/// shape every runtime helper already has -- so `args == parameters + 1` says
+/// instance and `args == parameters` says static. **A caller must still take
+/// the kind from the table rather than from this**: the count cannot tell
+/// `invokevirtual` from `invokeinterface`, and getting that wrong is an
+/// `IncompatibleClassChangeError` at link time in the user's program rather
+/// than a verifier error in ours. This is the cross-check, not the answer.
+#[must_use]
+pub fn declared_arity(descriptor: &str) -> Option<usize> {
+    Some(crate::descriptor::parameters(descriptor)?.len())
+}
