@@ -192,7 +192,19 @@ fn reference(binary: &str) -> String {
                 // worse to read than Java. Generating the prelude gets both.
                 //
                 // A default package has nothing to import from and stays bare.
-                if owner.starts_with("java/") || owner.is_empty() {
+                // **`javax` too, and it is not a prefix accident.** A prelude
+                // is a global namespace and therefore cannot import anything --
+                // `namespace_of` has no import section by construction -- so a
+                // `java.*` prelude referring to `javax.crypto.SecretKey` had no
+                // way to name it and rendered an alias nothing declared. Every
+                // remaining `Cannot find namespace` over the closure was that:
+                // `javax_security_auth`, `javax_crypto`, and their siblings.
+                //
+                // `javax` is the JDK as much as `java` is, so it belongs on the
+                // same side of this line. Note `starts_with("java/")` does not
+                // already catch it: `javax/` is `j-a-v-a-x`, and the fifth byte
+                // is not the slash.
+                if owner.starts_with("java/") || owner.starts_with("javax/") || owner.is_empty() {
                     return other.replace(['/', '$'], ".");
                 }
                 IMPORTS.with(|it| it.borrow_mut().insert(owner.to_owned()));
