@@ -244,6 +244,19 @@ export function makeCommon(pipePath, nodeCommonDirectory = "", spawn) {
     // Three tests spread it into `spawn(...common.pwdCommand, ...)`, and a missing
     // one is `undefined is not iterable` rather than a named absence.
     pwdCommand: ["pwd", []],
+    // node's own, verbatim: `SIGCONT` to a live process is a no-op and to a dead one
+    // throws. `test-cluster-primary-error` and `test-cluster-primary-kill` both call it
+    // to check that killing the primary takes its workers with it, and a missing helper
+    // is `common.isAlive is not a function` -- a failure that names the harness and reads
+    // as if it named `cluster`.
+    isAlive(pid) {
+      try {
+        hostProcess.kill(pid, "SIGCONT");
+        return true;
+      } catch {
+        return false;
+      }
+    },
     isWindows: false,
     isLinux: hostProcess.platform === "linux",
     isMainThread: true,

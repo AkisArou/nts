@@ -33,6 +33,25 @@ import { createServer } from "../../net/src/main.ts";
 import type { Server, Socket } from "../../net/src/main.ts";
 import type { ChildProcess } from "../../child_process/src/main.ts";
 
+/**
+ * **The errno a `NODE_CLUSTER` reply carries is a number, and a negative one.**
+ *
+ * node's `internal/cluster/child.js` hands `message.errno` straight to
+ * `util.getSystemErrorName`, which rejects anything else: *The "err" argument must be
+ * of type number. Received type string ('EACCES')*. Six files failed on that one
+ * sentence -- the two privileged-port ones, the two dgram ones, the relative-path
+ * listen and the shared-handle bind error -- because this module replied with
+ * `error.code`, which is the name.
+ *
+ * The negative spelling is libuv's and is what `getSystemErrorName` reads:
+ * `getSystemErrorName(-95)` is `ENOTSUP`. Our own `net` already puts exactly that on a
+ * bind error -- measured against node, `code=EACCES errno=-13` on both -- so the
+ * error's own `errno` is preferred, and these two exist only for the replies that have
+ * no error to read one from.
+ */
+const UV_ENOTSUP = -95;
+const UV_EADDRINUSE = -98;
+
 declare function nts_process_env(name: string): string;
 /**
  * The current process's channel, which a worker answers through.
@@ -304,7 +323,7 @@ class Cluster extends EventEmitter {
     }
     const seq = seqOf(message);
     if (seq !== undefined) {
-      worker.send({ cmd: "NODE_CLUSTER", ack: seq, errno: "ENOTSUP" });
+      worker.send({ cmd: "NODE_CLUSTER", ack: seq, errno: UV_ENOTSUP });
     }
   }
 
@@ -333,7 +352,7 @@ class Cluster extends EventEmitter {
     // not implement the shared-descriptor path either, so it says so.
     if (addressType === "udp4" || addressType === "udp6" || fd >= 0) {
       if (seq !== undefined) {
-        worker.send({ cmd: "NODE_CLUSTER", ack: seq, key, errno: "ENOTSUP" });
+        worker.send({ cmd: "NODE_CLUSTER", ack: seq, key, errno: UV_ENOTSUP });
       }
       return;
     }
@@ -347,8 +366,8 @@ class Cluster extends EventEmitter {
         this.#handoffNext(distribution!);
       });
       distribution.server = server;
-      server.on("error", (error: Error & { code?: string }): void => {
-        const errno = error.code ?? "EADDRINUSE";
+      server.on("error", (error: Error & { code?: string; errno?: number }): void => {
+        const errno = error.errno ?? UV_EADDRINUSE;
         const waiting = distribution!.bound;
         distribution!.bound = [];
         this.#distributions.delete(key);
@@ -376,7 +395,7 @@ class Cluster extends EventEmitter {
 
     const share = distribution;
     share.all.set(worker.id, worker);
-    const reply = (errno: string | undefined): void => {
+    const reply = (errno: number | undefined): void => {
       if (seq === undefined) return;
       if (errno !== undefined) {
         worker.send({ cmd: "NODE_CLUSTER", ack: seq, key, errno });
@@ -527,7 +546,7 @@ class Distribution {
   /** Replies owed by workers, by the sequence number they must quote back. */
   readonly waiting = new Map<number, () => void>();
   /** Callbacks to run once the address is bound, or its error reported. */
-  bound: ((errno: string | undefined) => void)[] = [];
+  bound: ((errno: number | undefined) => void)[] = [];
   /** The connection handed out under each sequence number, so a refusal can undo it. */
   readonly handedTo = new Map<number, Socket>();
 
