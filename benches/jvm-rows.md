@@ -8358,3 +8358,51 @@ as a checklist:
   jar and drift-tested.
 - **`execute.rs`** -- compile an example, run it, assert on output; the C lane's
   is 1,754 lines.
+
+## The sweep is a gate step now, it costs one second, and the sabotage fired
+
+    jvm sweep   1s     10,005 cases, 345 functions
+    c sweep    41s     the same generator, almost all of it clang
+
+Measured both rather than assumed, because *"the JVM will be slower, it needs a
+compiler"* is exactly the shape this file has a record about. `emit-jvm` writes
+class files from Rust and `java` starts once; the C lane pays clang on one large
+generated file. So the step that found `0n` truthy costs a second, and it is in
+`jvm()` -- which already exports `NTS_BACKEND=jvm` -- with its own work
+directory, because the `sweep` step uses `target/sweep` and the two run
+concurrently.
+
+### And this time the sabotage had a trigger I knew
+
+Two sections up I tried to prove the `exact` check could fail by applying it to a
+call site that **could not** trigger it, and recorded that as unverified. This
+one had a known trigger: disable the `BigInt` arm, rebuild, run.
+
+    checked 10005 cases across 345 function(s)
+    Error: 18 case(s) disagree between the compiled program and node
+    FAILED: jvm
+
+**A guard whose failure path has been walked.** The difference between this and
+the last attempt is not care -- it is that the trigger was *known* rather than
+assumed, which is what "state which input makes it fire, then check your case
+has it" means in practice.
+
+### The restore did not restore, and `cp` said so in the only way it does
+
+    cp: overwrite '.../ops.rs.bak'?
+    cp: overwrite 'compiler/codegen/jvm/src/ops.rs'?
+
+`cp` is aliased to `-i` in this shell. Both the backup **and** the restore
+prompted, read EOF, copied nothing -- so the sabotage was still in the working
+tree and the "backup" I was diffing against was a stale file from hours earlier,
+which is why the diff came back enormous and unreadable rather than empty.
+
+**What caught it was diffing against `git` instead of against the backup.** A
+backup is a second copy of the thing you are unsure about; the commit is the
+thing itself. `git diff <path>` came back empty after one `sed`, and that is
+proof in a way `diff file file.bak` never was -- the backup could be wrong, and
+was.
+
+This is written down in this repository as "use `command cp -f`", and the
+failure was not forgetting it. It was **reaching for a backup at all** when the
+file was already committed.

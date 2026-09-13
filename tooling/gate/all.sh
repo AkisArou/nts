@@ -1197,6 +1197,26 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # them agrees. A floor this lane did not earn by building anything is still a
   # floor it has to hold -- and because it equals the corpus it cannot ratchet,
   # only hold, so an example that stops agreeing fails on the day it lands.
+  # **The sweep, through this backend, and it costs one second.**
+  #
+  # The `sweep` step above runs the same generator through the C lane and takes
+  # 41s, almost all of it clang on one large generated file. `emit-jvm` writes
+  # class files from Rust and `java` starts once, so the same 10,005 cases cost
+  # **1s** here. Measured both, because "the JVM will be slower, it needs a
+  # compiler" is exactly the kind of thing this file has a record about.
+  #
+  # It earns its place on its first run rather than in principle: it found `0n`
+  # truthy on this lane -- `NtsRuntime.isPresent` on an `NtsBigInt`, which is a
+  # perfectly present object -- while the examples floor below was green, and
+  # stayed green, because no corpus program asks whether `0n` is falsy. Nobody
+  # writes one. That is what a generated cross-product is for.
+  #
+  # Its own work directory: the `sweep` step uses `target/sweep` and the two run
+  # concurrently.
+  out=$(./tooling/sweep/run.sh "$PWD/target/sweep-jvm" 2>&1)
+  status=$?
+  printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
+  [ "$status" -eq 0 ] || return 1
   backend_examples 200 "through the JVM backend" exact ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
