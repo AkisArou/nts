@@ -30,6 +30,12 @@ public class Widget {
         String KIND = "task";
 
         void run(int id);
+
+        /** A static method on an interface, legal since Java 8 -- and also not
+         *  something a TypeScript interface can carry. */
+        static Task none() {
+            return new Task() { public void run(int id) { } };
+        }
     }
 
     /** A static on the base class. `View.defaultPadding()` is legal Java, and

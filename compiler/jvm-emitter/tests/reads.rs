@@ -1177,3 +1177,52 @@ fn an_interface_constant_becomes_a_merged_namespace() {
         "a class needs no namespace for its statics:\n{widget}"
     );
 }
+
+/// An interface's **fields** are inherited and its **static methods** are not,
+/// and the generator has to get both right rather than one rule for members.
+///
+/// Confirmed with `javac` rather than cited from the JLS:
+///
+/// ```text
+/// Widget.Pressable.KIND     accepted
+/// Widget.Pressable.none()   error: cannot find symbol -- method none()
+/// ```
+///
+/// This surfaced as `TS1070 'static' modifier cannot appear on a type member`
+/// on `Pressable`. The TypeScript error was the symptom; diverting the method
+/// to a namespace would have silenced it and offered a call Java rejects. The
+/// Java rule is the reason, and it makes the declaration *smaller* rather than
+/// differently-spelled.
+#[test]
+fn an_interface_inherits_constants_but_not_static_methods() {
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let read = |name: &str| {
+        let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
+        nts_jvm_emitter::read::class_file(&bytes).expect("parses")
+    };
+    let resolve = FromDirectory(ui.clone());
+
+    let pressable =
+        nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget$Pressable"), &resolve)
+            .expect("renders");
+
+    // The field is inherited -- `javac` accepts `Pressable.KIND`.
+    assert!(pressable.contains("const KIND: string;"), "an interface field is inherited:\n{pressable}");
+    // The static method is not -- `javac` rejects `Pressable.none()`.
+    assert!(
+        !pressable.contains("none("),
+        "a static interface method is not inherited, so it must not be offered:\n{pressable}"
+    );
+    // And the instance method is, which is the control: a rule that dropped
+    // everything from a supertype interface would pass the assertion above.
+    assert!(pressable.contains("run(a0: number): void;"), "{pressable}");
+
+    // On the declaring interface itself the static is still reachable, as a
+    // namespace function -- `Task.none()` is legal Java.
+    let task = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget$Task"), &resolve)
+        .expect("renders");
+    assert!(task.contains("function none()"), "the declarer still offers it:\n{task}");
+}

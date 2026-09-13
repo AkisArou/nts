@@ -238,8 +238,23 @@ fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read::Membe
         .collect();
     let mut found = Vec::new();
     for parent in supertypes(class, resolve) {
+        let from_interface = parent.access & access::INTERFACE != 0;
         for method in &parent.methods {
             if method.access & access::PUBLIC == 0 || method.name.starts_with('<') {
+                continue;
+            }
+            // **A static interface method is not inherited.** JLS 9.4.1:
+            // neither a subinterface nor an implementor gets it, so
+            // `Pressable.none()` is illegal Java and must be written
+            // `Task.none()`. A class's statics *are* inherited --
+            // `View.defaultPadding()` is legal -- which is why this turns on
+            // the parent's kind rather than on the modifier alone.
+            //
+            // Found because emitting it produced `TS1070` on an interface. The
+            // TypeScript error was the symptom; the Java rule is the reason,
+            // and diverting it to a namespace would have made the declaration
+            // compile while offering a call Java rejects.
+            if from_interface && method.access & access::STATIC != 0 {
                 continue;
             }
             let key = (method.name.clone(), method.descriptor.clone());
@@ -510,8 +525,8 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         if is_interface { "interface" } else { "class" }
     );
 
-    let mut constants = String::new();
-    render_fields_into(&mut out, &mut constants, class)?;
+    let mut out_constants = String::new();
+    render_fields_into(&mut out, &mut out_constants, class)?;
 
     // Which methods collapse onto one TypeScript signature. Computed before
     // rendering, because the decision is about the *set*: a name is only
@@ -556,24 +571,38 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
                 method.throws.iter().map(|it| it.replace('/', ".")).collect::<Vec<_>>().join(", ")
             );
         }
+        // **A static method on an interface goes to the namespace too.**
+        // Java 8 allows them and TypeScript does not carry them on a type --
+        // the same `TS1070` the constants gave, one member kind over, which the
+        // fix for those did not cover. In a namespace it is a `function`.
+        let is_static = method.access & access::STATIC != 0;
+        if is_interface && is_static {
+            let _ = writeln!(
+                out_constants,
+                "    function {emitted}{}({rendered_arguments}): {};",
+                type_parameters(method.signature.as_deref()),
+                returns(&result, &method.annotations),
+            );
+            continue;
+        }
         let _ = writeln!(
             out,
             "    {}{}{}({rendered_arguments}): {};",
-            if method.access & access::STATIC != 0 { "static " } else { "" },
+            if is_static { "static " } else { "" },
             emitted,
             type_parameters(method.signature.as_deref()),
             returns(&result, &method.annotations),
         );
     }
 
-    render_inherited(&mut out, class, resolve, &mut constants);
+    render_inherited(&mut out, class, resolve, &mut out_constants);
 
     out.push_str("  }\n");
-    if !constants.is_empty() {
+    if !out_constants.is_empty() {
         // Declaration merging: `interface Task` and `namespace Task` are one
         // type to TypeScript, so `Task.KIND` resolves as it does in Java.
         let _ = writeln!(out, "  export namespace {name} {{");
-        for line in constants.lines() {
+        for line in out_constants.lines() {
             let _ = writeln!(out, "  {line}");
         }
         out.push_str("  }\n");

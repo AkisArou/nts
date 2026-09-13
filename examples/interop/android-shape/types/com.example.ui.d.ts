@@ -102,6 +102,7 @@ declare module "java:com.example.ui" {
     export namespace Task {
         /** Inlined at the call site: the class is never loaded for this. */
         const KIND: string;
+        function none(): Widget.Task | null;
     }
   }
 
