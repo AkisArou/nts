@@ -914,3 +914,91 @@ after this lane coined the phrase for exactly that failure -- and with
 `elements.rs`' own warning twelve lines from the code being reasoned about:
 **"reading the code and reading the emitted IR are two measurements and only the
 second was right."** The IR was read. The pass was not.
+
+# Open questions, reviewed before building anything
+
+A design review of this document against the tree, done deliberately rather than
+discovered during implementation. Grouped by whether they **block**, whether
+they are a **decision**, or whether they are **deferrable** — because the first
+group changes what gets built and the others only change what it looks like.
+
+## Blocking: HIR cannot represent a foreign object
+
+**The largest gap in this plan and it was not in it until now.**
+
+    pub enum ManagedType {
+        String, Object(TypeId), Array, Promise, Map, Table,
+        Set, Date, Buffer, View, AnyView, DataView, Symbol,
+    }
+
+Thirteen variants and **every one is a type this compiler knows structurally**.
+`Object(TypeId)` is one of *our* layouts — fields the compiler knows, owns and
+reasons about. A `com.example.Session` instance is none of these: we cannot see
+its fields, we do not own its layout, and we must not pretend to.
+
+So **there is today no type a bound Java object could have.** Everything else in
+this document — the method calls, the `HashMap` surface, the closure
+implementing a listener — assumes a value that can be typed and passed, and
+nothing can type it.
+
+Three routes, and they are not equivalent:
+
+1. **A new `ManagedType::Foreign(binary name)`.** Honest: an opaque reference
+   the compiler may pass, store and call methods on, and may never look inside.
+   It is a middle-end change and therefore not this lane's.
+2. **A synthetic `Layout` marked opaque.** Reuses `Object(TypeId)`, so nothing
+   downstream changes — and risks every pass that reasons about fields
+   reasoning about fields we do not own. `fields::analyze` joins over "every
+   `FieldSet` that can reach a field", and its soundness argument is *"nothing
+   else can store into it: there is no FFI that writes through a pointer here"*.
+   **A foreign object falsifies that sentence**, which is the kind of
+   precondition this repository has a record about.
+3. **Erase to `NtsValue`.** Works today and destroys the property the whole
+   document rests on — every crossing becomes a box, and "there is no boundary"
+   stops being true.
+
+**Route 1 is the only one that keeps the plan's central claim**, and it is the
+first thing to settle because everything else is downstream of it.
+
+`Layout.base` **does** exist (`hir/mod.rs:1361`), so inheritance is representable
+— but a TS class extending a Java one needs `base` to name a foreign type, which
+is this same question. **Android needs that constantly**: `extends Activity`,
+`implements OnClickListener`.
+
+## Decisions, not research
+
+- **How does user code name a Java class?** The generated `.d.ts` declares
+  `namespace com.example`, and **nothing in this document says how a program
+  references it.** `import { Session } from "java:com.example"`? An ambient
+  global? This is the primary DX question and it is unanswered.
+- **Static fields and constants.** `View.VISIBLE`, `Integer.MAX_VALUE`. Fields
+  rather than methods, and not addressed anywhere above.
+- **Java enums.** Classes with static instances plus `values()` and `valueOf()`.
+- **Nested and inner classes.** `Map.Entry` is static; `View.OnClickListener` is
+  an interface; a true inner class captures an outer instance and has a
+  synthetic constructor parameter.
+- **Varargs.** `f(String...)` is `f(String[])` with a call-site convention.
+- **Name collisions.** A Java member called `constructor`, or a TypeScript
+  keyword.
+- **Ambiguous overloads.** Stated above as "the binding refuses rather than
+  guesses" — that is a rule and should be written as one, with the error text.
+- **Generated or checked in?** Generated at build is reproducible and slow;
+  checked in is fast and goes stale. `runtime_jar.rs` is the model for detecting
+  staleness — rebuild and compare byte for byte — and the same shape works for a
+  `.d.ts` against its jar.
+- **Transitive closure.** Binding `android.jar` wholesale is enormous; binding
+  on demand makes the `.d.ts` grow as the program uses more, which is a strange
+  thing for a checked-in file to do.
+
+## Deferrable, and named so they are not discovered
+
+- **Exceptions crossing a call** — unimplemented on *every* backend, so a Java
+  method that throws has no representation. Not binding-specific and the largest
+  of these.
+- **Threads.** `NtsEnv` is per-environment with one atomic inbox. **An Android
+  API that calls back on another thread has nowhere to land**, which is most of
+  the interesting Android surface.
+- **Generics.** The `Signature` attribute survives erasure and is readable;
+  whether to surface type parameters or erase to `unknown` is unsettled.
+- **Lifetime.** Nothing to do — under `NoGc` the platform collector owns
+  everything, which is the one place this is easier than the native lane.
