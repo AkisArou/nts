@@ -751,3 +751,62 @@ fn a_body_that_only_throws_is_not_evidence() {
         "a body that returns normally is still analysed"
     );
 }
+
+/// The direction the analysis fails in, pinned on a method whose behaviour is
+/// not in dispute.
+///
+/// `FilterOutputStream.write(byte[])` calls `write(b, 0, b.length)`, so `b` is
+/// demonstrably passed on. An earlier version answered `escaping=[]` for it --
+/// a **permissive** wrong answer about the textbook case -- because the
+/// unmodelled-opcode arm cleared the stack, losing the parameter at
+/// `arraylength` two instructions before the `invoke` that publishes it.
+///
+/// Skips without a JDK holding `java.base`, because the SDK cannot supply this:
+/// `android.jar` has no bodies at all, which is the point of the test beside it.
+#[test]
+fn an_unmodelled_instruction_fails_closed() {
+    let Some(java_home) = std::env::var("JAVA_HOME").ok().map(PathBuf::from) else {
+        eprintln!("SKIP reads/fail-closed: no JAVA_HOME");
+        return;
+    };
+    let Some(jmod) = tool("jmod") else {
+        eprintln!("SKIP reads/fail-closed: no jmod");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-jb-{}", std::process::id()));
+    if !out.join("classes/java/io/FilterOutputStream.class").exists() {
+        let _ = std::fs::create_dir_all(&out);
+        let extracted = Command::new(&jmod)
+            .args(["extract", "--dir"])
+            .arg(&out)
+            .arg(java_home.join("jmods/java.base.jmod"))
+            .output();
+        if !extracted.is_ok_and(|it| it.status.success()) {
+            eprintln!("SKIP reads/fail-closed: could not extract java.base");
+            return;
+        }
+    }
+    let Ok(bytes) = std::fs::read(out.join("classes/java/io/FilterOutputStream.class")) else {
+        eprintln!("SKIP reads/fail-closed: no FilterOutputStream");
+        return;
+    };
+    let class = nts_jvm_emitter::read::class_file(&bytes).expect("parses");
+    let of = |descriptor: &str| {
+        let method = class
+            .methods
+            .iter()
+            .find(|m| m.name == "write" && m.descriptor == descriptor)
+            .unwrap_or_else(|| panic!("write{descriptor}"));
+        nts_jvm_emitter::escapes::of(method)
+    };
+
+    // Passed to another method: escapes. This is the assertion that was wrong.
+    assert_eq!(of("([B)V").escaping, vec![0], "a byte[] passed on must escape");
+    assert_eq!(of("([BII)V").escaping, vec![0], "likewise with an offset and length");
+
+    // **The control, and without it "everything escapes" would pass.**
+    // `write(int)` has no reference parameter to escape, so the answer must be
+    // empty -- a fail-closed default that marked everything would fail here.
+    assert!(of("(I)V").escaping.is_empty(), "a primitive parameter escapes nothing");
+    assert!(of("(I)V").analysed, "and it was actually analysed");
+}

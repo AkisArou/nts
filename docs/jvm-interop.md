@@ -2475,13 +2475,46 @@ The control is the other column: our own fixture, whose bodies are real, is
 **unchanged at 23.1%**. A guard that rejected everything would have collapsed
 both.
 
-## What the 1% settles
+## And then the same failure again, one level down
 
-**For Android, the overrides file is the mechanism and the analysis is not.**
-The plan listed bytecode analysis first and the overrides file as the fallback
-for `native` methods; on the SDK that ordering is backwards, because the SDK
-ships no bodies at all. The analysis earns its keep on jars that ship real code
--- an ordinary library dependency -- and on the SDK it should not be run.
+The first corrected numbers were **still** inflated, by the same sign. The
+unmodelled-opcode arm cleared the stack and pushed "something else" -- which
+*discards the evidence* and reports non-escaping. `FilterOutputStream.write
+(byte[])` calls `write(b, 0, b.length)` and came back `escaping=[]`: the
+textbook escape, answered permissively, because `b` left the model at
+`arraylength` two instructions before the `invoke` that publishes it.
 
-That is worth more than the analysis itself: it is the difference between a
-curated list being a stopgap and being the answer.
+An instruction whose effect is not modelled **might have published what it
+consumed**, so the safe reading is that it did. Four one-pop-one-push
+instructions are now modelled exactly -- `arraylength`, `getfield`, `checkcast`,
+`instanceof` -- because they are what stand between a parameter and the call
+that publishes it, and everything else fails closed.
+
+| corpus | before | after |
+| --- | --- | --- |
+| `java.base` (real code) | 25.6% | **4.5%** |
+| our fixture | 23.1% | **7.7%** |
+| `android.jar` (declarations) | 1.0% | **0.0%** |
+
+The control that it has not simply become "everything escapes": 348 methods of
+`java.base` still prove non-escaping, including `String.rangeCheck([CII)` -- a
+pure validator over a `char[]` -- and `String(String)`, which copies rather than
+retains.
+
+## What 4.5% settles, and it is not what 25.6% would have
+
+**The overrides file is the mechanism for every jar, not just for Android.** The
+analysis proves non-escape for about **one in twenty-two** reference-taking
+methods even on a jar that is nothing but real code. That is worth having and it
+is not a substitute for a curated list.
+
+The earlier conclusion -- "the analysis earns its keep on jars that ship real
+code" -- was drawn from the inflated 25.6% and is withdrawn.
+
+**And the generalisation is about a class of input rather than about Android.**
+Any jar of *declarations* is unanalysable by construction, and an analysis that
+answers confidently about one is answering about the absence of code. The tell
+is now unambiguous: `android.jar` proves non-escape for **zero** methods and
+demonstrates escape for 52, where `java.base` demonstrates escape for 6,551. A
+corpus where almost nothing demonstrably escapes is a corpus where almost
+nothing is implemented.

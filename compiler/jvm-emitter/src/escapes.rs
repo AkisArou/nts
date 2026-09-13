@@ -267,17 +267,46 @@ pub fn of(method: &Member) -> Keeps {
             0xb5 => mark(&mut stack, &mut escaped, 2),
             0x53 => mark(&mut stack, &mut escaped, 3),
             0xb3 | 0xb0 => mark(&mut stack, &mut escaped, 1),
-            // **Any invoke escapes the whole stack.** See the module header:
-            // resolving the callee's arity is possible and its behaviour is
-            // not, so this is the honest over-approximation.
-            0xb6..=0xba => {
+            // Instructions whose stack effect is modelled exactly, because
+            // they are the ones that stand between a parameter and the call
+            // that publishes it.
+            //
+            // `arraylength`, `getfield`, `checkcast` and `instanceof` each pop
+            // one and push one: without them, `write(b, 0, b.length)` loses
+            // `b` from the model at `arraylength` and the `invoke` two
+            // instructions later sees an empty stack.
+            0xbe | 0xb4 | 0xc0 | 0xc1 => {
+                stack.pop();
+                stack.push(Value::Other);
+            }
+            // dup, and the constant/primitive pushes: they add an operand that
+            // is certainly not a parameter reference.
+            0x59 => {
+                let top = stack.last().copied().unwrap_or(Value::Other);
+                stack.push(top);
+            }
+            0x01..=0x14 | 0x1a..=0x29 | 0xbb => stack.push(Value::Other),
+            // pop, and the primitive stores: they consume one operand.
+            0x57 | 0x36..=0x38 | 0x3b..=0x4a => {
+                stack.pop();
+            }
+            // **Any invoke, and everything else, fails CLOSED.**
+            //
+            // For an invoke: resolving the callee's arity is possible and its
+            // *behaviour* is not, so the whole stack is assumed published.
+            // For anything unmodelled: an instruction whose effect is unknown
+            // might have published what it consumed, so the safe reading is
+            // that it did. The two arms do the same thing for the same reason,
+            // which is why they are one arm.
+            //
+            // The first version cleared the stack and pushed `Other` here,
+            // which is the *opposite* -- it discarded the evidence and reported
+            // non-escaping. `FilterOutputStream.write([B)V` calls
+            // `write(b, 0, b.length)` and came back `escaping=[]`, which is a
+            // permissive wrong answer about the textbook case.
+            _ => {
                 let depth = stack.len();
                 mark(&mut stack, &mut escaped, depth);
-            }
-            // Everything else: whatever it produced is not a parameter.
-            _ => {
-                stack.clear();
-                stack.push(Value::Other);
             }
         }
         at += step;
