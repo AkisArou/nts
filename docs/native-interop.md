@@ -42,11 +42,37 @@ The implementation order for the C-facing boundary is:
    can supply or mutate. This is a prerequisite for accepting object parameters;
    the existing Node-API wrapper declines them and does not expose this defect.
 2. Generate the header and replace hand-written caller prototypes with it.
-3. Add managed constructors and generator stepping, which remain unimplemented.
+3. Exercise the existing string and numeric-array constructors, and publish
+   synchronous generator stepping. Both are now demonstrated by C callers.
+   A promise wait remains to be implemented.
 
 The historical gap descriptions below record the original measurements;
 header generation, stable aliases, field visibility and checkpoint documentation
-are now implemented. Managed constructors and generator stepping remain design.
+are now implemented. C callers can also construct strings and numeric arrays,
+and step synchronous exported generators through `<export>_next(frame, &value)`.
+This returns true for a yield, false after completion, and leaves the output
+unchanged when done. Managed yielded values are borrowed until the next step or
+frame release. The interface follows `for...of`: no sent input or final return
+payload. Async-generator stepping is not exposed by the C header yet.
+An empty generator with a representable declared yield type works. Inferred
+`Generator<never>` still has an unrepresentable yielded field and is refused;
+it needs a separate representation for a frame with no possible yield value.
+
+Publishing a generator requires retaining its resumption even without a
+TypeScript consumer. Suspension lowering now records that relation explicitly;
+library roots consume it, while executable roots retain their existing pruning.
+Empty generators also receive frames, and completion stores a persistent done
+state. The C control has a completion side effect: omitting only that state
+store makes repeated stepping fail, although every done flag still looks right.
+
+Inferred generator types also exposed a frontend identity gap. Without a
+syntactic reference to `Generator`, a return type discovered through a signature
+lost its declaring symbol and was laid out as an ordinary interface. Adding an
+unused `type Witness = Generator<number>` made the same object-yield program
+compile. The frontend now resolves missing declaring symbols before native-type
+classification, while keeping anonymous type/object literals anonymous. The
+same C caller tests both programs and retains an object yield past stepping and
+frame release.
 
 ## Next design: require exposure classification before publishing a boundary
 
@@ -134,6 +160,46 @@ There are **450 `declare function` sites** in `runtime/node`. Every one names an
 `nts_*` helper resolved through `hir::runtime`'s hand-maintained signature
 table. That is the mechanism working exactly as designed, for a closed set the
 compiler ships. It is not an FFI.
+
+## The hazard this lane trips over: an unrelated declaration decides the answer
+
+Twice in two days, in different parts of the compiler, **a declaration that is
+never referenced changed whether an unrelated function compiles.** Both arms
+below were run against an unchanged binary, so they are facts about the
+compiler rather than about anyone's fix.
+
+    inferred object generator, alone                 -> exit 1, BrokenBase
+    + `type Witness = Generator<number>;`  (UNUSED)  -> exit 0
+
+    generic foreign class in return position, alone  -> "a class this compiler
+                                                        has no type for"
+    + an unrelated export taking one as a PARAMETER  -> compiles
+
+One mechanism: **behaviour depends on what was interned or specialised, and that
+depends on what was *named* anywhere in the program.** In the first, writing the
+name `Generator` once interns its symbol, and `is_natively_represented` is keyed
+on a name — no symbol, no name, no match, so the type decomposes as an ordinary
+interface and `suspend` extends the wrong layout. In the second, a parameter
+position requests a specialisation and a return position does not.
+
+**In both cases the failing site is not the deciding site**, which has two
+consequences that matter more than the bugs:
+
+- **Minimising removes the trigger.** Reducing a failing program to its essence
+  deletes the unrelated declaration that was causing it, and the reproduction
+  stops reproducing — for a reason that has nothing to do with the defect.
+- **Adding removes the symptom.** Growing a probe to "make it more realistic"
+  can make the failure vanish, which reads as "fixed" or as "my probe is
+  broken".
+
+So a probe here can lie in **either direction**, and being careful does not
+help — care makes you more confident in whichever reading you started with. On
+2026-09-13 this produced four diagnoses for one defect within an hour, each true
+about arms that differed in something uncontrolled.
+
+**The defence, and it is the only one:** both arms present in **one program**,
+differing in exactly one thing, and run in both directions. If the arms are two
+programs, a whole-program fact sits outside both and neither can see it.
 
 ## The asymmetry that decides everything: a header is not a type system
 
@@ -376,18 +442,21 @@ example's source comments, and a goal file — four places, from one mistyped
 search, and it was caught only because the next person checked the premise
 before building on it.
 
-What is actually open here: **arrays** have no apparent public constructor, and
-that is *unmeasured* rather than established — saying more would repeat the
-error. Reaching the right **descriptor** for `nts_object_new` from a C caller is
-a question about the generated header rather than the runtime.
+**Numeric arrays are also demonstrated:** `nts_array_of_numbers(3)` and
+`NTS_ITEMS(array, double)` build a value an exported sum reads as `7.50`.
+Changing one element produces `8.50`; the expected-value control fails. The
+constructor's old comment directed callers to `NTS_ELEMENTS`, which addresses
+string storage and overwrites array metadata. That comment is fixed and a C
+roundtrip test is checked in.
 
-**4. A generator hands back its frame.** `function*` returns
-`NtsObj_counted_frame *` — the suspension frame itself, with `state` and
-`yielded` fields whose offsets are `_Static_assert`ed. There is no exported
-`next`. So a C caller holds a real object and has no supported way to step it.
-*Fix: emit a `next` shim per exported generator. The frame is already a
-first-class object; what is missing is one function per generator that resumes
-it and reports done-ness.*
+Generated object descriptors remain file-local: including the header does not
+declare them, and adding an `extern` fails at link. Use exported TypeScript
+factories such as `makePoint` to obtain managed objects.
+
+**4. A generator hands back its frame.** The generated header now supplies a
+synchronous `<export>_next(frame, &value)` shim. The frame remains owned by the
+caller, each step borrows it, and no iteration-result object is allocated. The
+example walks `counted(3)` through `0, 1, 2` and checks repeated completion.
 
 **5. A promise needs a checkpoint the caller must know about.** `async` returns
 `NtsPromise *`, and the runtime exposes `nts_checkpoint()`,
