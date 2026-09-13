@@ -2911,3 +2911,73 @@ the snapshot arrives from tsgo. So the table has to be loaded by the driver and
 passed in, which is an argument through a boundary rather than a line inside one,
 and it belongs to whoever owns that boundary. `ts-from-java` lowers clean today;
 `java-from-ts` and `android-shape` typecheck at zero errors and stop here.
+
+## Where a `java:` binding actually stops, ranked, and the second item is generics
+
+Measured on `examples/interop/java-from-ts`, which typechecks at zero TypeScript
+errors and does not lower:
+
+    35  a method without a body
+    10  a member of `HashMap`, a class this compiler has no type for
+     2  a parameter of unrepresentable type (the type parameter `T`)
+     1  a method `get` with no declaration in the hierarchy
+
+**The 35 is the whole of the first problem and it has a rule already working at
+scale.** `runtime/node` has 397 bodyless `declare function`s that lower to
+`Callee::External` today, with no notion of foreignness anywhere. The rule that
+is already true is not "this is foreign" but *"this has no body here, so it is
+provided elsewhere"* — a statement about this compilation rather than about
+provenance, which is the difference between something `lower` can see and
+something it cannot. A method with no body in an ambient declaration is the same
+statement one member kind over.
+
+That keeps `java:` out of the middle end entirely: `bind.rs` is the only place
+the string appears and should stay so.
+
+### The 10 is not the same problem, and I was wrong about it twice
+
+First reading: the prelude is a `declare namespace` and a generated binding is a
+`declare module "java:…"`, so a rule keyed on the module specifier covers the 35
+and misses the 10. The shapes really are different — `java.d.ts` has **zero**
+`declare module "java:"` — but that is not what produces the refusal.
+
+The refusal is **generics**, isolated with two arms differing in one thing:
+
+```ts
+class HashMap { get(key: string): number | null; size(): number; }
+//  -> 3x "a method without a body"
+
+class HashMap<K = unknown, V = unknown> { /* the same two members */ }
+//  -> 2x "a member of HashMap, a class this compiler has no type for"
+//     1x "a method `size` with no declaration in the hierarchy"
+```
+
+The type parameters are **unused** in the second arm. Adding `<K, V>` and
+changing nothing else produces the refusal, and both arms are inside the same
+`declare module "java:java.util"`, so the shape is constant across the
+experiment. A generic class has no single layout, so a member has no class to
+belong to.
+
+Getting there took two probes whose arms differed in two things each — the
+return type and the declaration together, then the type parameters and the
+member signatures together. The second of those looked like a clean answer and
+was not one.
+
+### Which the erasure argument already answers
+
+`bind.rs` surfaces generic signatures on this reasoning: *Java erases generics at
+runtime and so does TypeScript — a `List<String>` is a `List` in both, and the
+parameter is a compile-time claim in both.* If that holds, a foreign generic
+class should take the **erased** layout. `HashMap<K,V>` and `HashMap` are one
+class in the jar, one class in the JVM, and want to be one layout here; the type
+parameters are for the checker and are nothing to the backend.
+
+Whether `is_foreign_name`'s merge protection permits that is an upstream
+question and is not settled here.
+
+### The reproduction
+
+`scratchpad/probe-prelude` is two declaration files and one function — no jar,
+no `javac`, no fixture build — and it produces every category in the ranking
+above. A rule that works there works on the real project, and stepping through
+four refusals beats stepping through forty-eight.
