@@ -24171,3 +24171,39 @@ where the surface is 12 keys and the break genuinely bites. A control that is ru
 says nothing about the other, and "both arms measured" was a sentence about counts rather
 than about what either arm was running.
 
+## Five modules cannot publish on the compiled lane, and it is a ceiling rather than a backlog
+
+Having found that five modules publish `{}` there, the next question is whether any of them
+could publish anything. Asked of each, against the compiler's own words:
+
+    child_process   every export declined -- the addon exports literally nothing
+    cluster         `default`: is exported as a value of type `an object`, which does not
+                    cross                    (its surface is one EventEmitter instance)
+    console         needs `globalConsole` ?? `default` -- both objects
+    events          `EventEmitter`: is exported and is not a function this backend can name,
+                    and `EventEmitter#constructor: takes an object`
+    timers          needs `promises`, a namespace object -- and the wrapper does not decline
+                    it by name at all
+
+**One wall, five times: an object, an instance, a class or a namespace crossing the Node-API
+boundary.** Not one of the five is waiting on a refusal cascade, a missing lowering, or work
+in this directory. So the compiled axis has a ceiling of **21 of 26 modules**, and 0 is the
+honest permanent row for the other five until a module's surface can be an object.
+
+That is the same wall the boundary census already counts from the other side -- 31 `is
+exported as a value of type X, which does not cross`, 16 `takes an object`, 6 `returns an
+object`. Those 53 lines and these five zero rows are one mechanism, and naming what would
+unlock them is a single sentence: **a way to build an object at a Node-API parameter or
+return.** `child_process`'s `send` hit it with a parameter, `tty`'s `isatty` hit it with
+`unknown`, and `cluster` hits it with the module itself.
+
+### One census gap found on the way
+
+`timers` exports `promises` and the wrapper emits no `no wrapper for promises` line -- so it
+is neither published nor declined by name, which is exactly the case
+`unaccounted-exports.sh` exists to catch, and it reports 0 for `timers`. The reason is the
+limit that file already documents: the declared set is read from `export function|class|const`
+in `src/main.ts`, and `promises` arrives by another spelling. The check is right about what it
+measures and the re-export column is the warning; this is a concrete instance of it
+under-reporting, recorded here so the next reader of that 0 knows what it does not cover.
+
