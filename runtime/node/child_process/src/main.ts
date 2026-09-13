@@ -902,7 +902,21 @@ function attachChannel(child: ChildProcess, channel: number): void {
     }
     child.connected = false;
     nts_child_process_disconnect(channel);
-    child.emit("disconnect");
+    // **On a next tick, because node's `disconnect` comes from the channel closing.**
+    //
+    // Emitting it inside the call makes it unobservable to the caller that just made it:
+    //
+    //     unbound.disconnect();
+    //     unbound.on('disconnect', cluster.disconnect);   // too late, here
+    //
+    // which is `test-cluster-disconnect-unshared-udp` exactly. That file read as a hang
+    // with no output, and the hang was two layers down from where it looked: `cluster`
+    // never saw the event, so it never ran the rest of the test. Measured against node --
+    // one event on both, and `syncEmit` YES here against no there.
+    //
+    // `_handleDisconnect` guards on `connected`, which is already false above, so the
+    // host's own forwarded disconnect cannot turn this into two.
+    nextTick((): void => { child.emit("disconnect"); });
   };
 }
 

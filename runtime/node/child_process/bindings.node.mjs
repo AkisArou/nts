@@ -127,6 +127,17 @@ const hostSignalNumbers = hostOsConstants.signals;
  */
 function hostHandle(sent) {
   if (sent === null || typeof sent !== "object") return sent;
+  // **A registry rather than a second named global.** Our `net.Socket` is resolved by
+  // `_handle` below; `cluster` needs to pass a handle node's own factories built, and it
+  // registers a resolver rather than being special-cased here -- `child_process` should
+  // not have to know what `cluster` is. Two ad-hoc globals is where the list earns itself.
+  const resolvers = globalThis.nts_host_handle_resolvers;
+  if (Array.isArray(resolvers)) {
+    for (const resolve of resolvers) {
+      const found = resolve(sent);
+      if (found !== undefined) return found;
+    }
+  }
   const handle = sent._handle;
   if (typeof handle !== "number") return sent;
   if (typeof globalThis.nts_net_host_socket !== "function") return sent;

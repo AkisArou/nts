@@ -63,6 +63,39 @@ declare function nts_process_env(name: string): string;
 declare function nts_cluster_self_connected(): boolean;
 declare function nts_cluster_self_disconnect(): void;
 declare function nts_cluster_self_send(message: unknown): boolean;
+/**
+ * **A handle the primary binds once and every worker then shares.**
+ *
+ * node's `SharedHandle` is the other half of `cluster`: `RoundRobinHandle` accepts in the
+ * primary and hands sockets out, while a shared handle is *bound* in the primary and the
+ * descriptor itself goes to each worker, which accepts on it directly. node picks it for
+ * `udp4`/`udp6` -- a datagram address has no connections to distribute -- and for any
+ * policy that is not `SCHED_RR`.
+ *
+ * It cannot be built from this side. What has to cross to a worker is a **host** handle,
+ * because the worker is real node and `internal/cluster/child.js` hands what arrives
+ * straight to its own `shared()`. So the stand-in calls node's own
+ * `net._createServerHandle` or `dgram._createSocketHandle` and keeps the result; this
+ * returns a positive id for it, or a **negative errno** exactly as node's `SharedHandle`
+ * constructor does when the bind fails.
+ */
+declare function nts_cluster_shared_handle(
+  address: string,
+  port: number,
+  addressType: string,
+  fd: number,
+  flags: number,
+): number;
+/**
+ * Close a shared handle once the last worker holding it is gone.
+ *
+ * Without this the primary keeps a bound descriptor alive, its event loop never empties,
+ * and the process hangs after the test has already made all its assertions -- which
+ * reads as a timeout and not as a leak. It is the same trap `#releaseWorker` was written
+ * for on the round-robin side, and `test-cluster-disconnect-unshared-udp` is the file
+ * that names it.
+ */
+declare function nts_cluster_shared_handle_close(id: number): void;
 declare function nts_process_env_has(name: string): boolean;
 
 /** `undefined` rather than `""` for a name nothing set, which is what node's env does. */
@@ -163,13 +196,26 @@ export class Worker extends EventEmitter {
   }
 
   disconnect(): this {
+    // **Ask the worker to close its handles; it closes the channel when it is done.**
+    //
+    // Closing the channel from here looks like the same thing and is not. node sends
+    // `{ act: 'disconnect' }` and the worker's own `child.js` closes every handle it
+    // holds and *then* calls `process.disconnect()`. A worker told only that the channel
+    // is gone keeps whatever it had bound, so its loop never empties and it never exits
+    // -- `test-cluster-disconnect-unshared-udp` hangs exactly there, holding a datagram
+    // socket, after every assertion it makes has already passed.
+    //
+    // The channel is still closed from here when the message cannot be sent, because a
+    // worker with no channel cannot be asked anything.
     this.exitedAfterDisconnect = true;
     if (this.isSelf) {
       nts_cluster_self_disconnect();
       return this;
     }
-    const disconnect = this.process.disconnect;
-    if (disconnect !== undefined) disconnect();
+    if (this.send({ cmd: "NODE_CLUSTER", act: "disconnect" }) !== true) {
+      const disconnect = this.process.disconnect;
+      if (disconnect !== undefined) disconnect();
+    }
     return this;
   }
 }
@@ -249,6 +295,7 @@ class Cluster extends EventEmitter {
       delete this.workers[`${id}`];
       worker.emit("exit", code, signal);
       this.emit("exit", worker, code, signal);
+      this.#workerLeft();
     });
     child.on("disconnect", (): void => {
       worker.state = "disconnected";
@@ -334,11 +381,16 @@ class Cluster extends EventEmitter {
    * when the port is 0 -- because port 0 means "any port" and two workers asking for it
    * want two different listeners rather than a share of one.
    */
+  /** Shared handles by node's key, and which workers hold each one. */
+  #shared = new Map<string, { id: number; errno: number }>();
+  #sharedWorkers = new Map<string, Map<number, Worker>>();
+
   #queryServer(worker: Worker, message: unknown): void {
     if (worker.exitedAfterDisconnect) return;
     const seq = seqOf(message);
     const asked = message as {
-      address?: unknown; port?: unknown; addressType?: unknown; fd?: unknown; index?: unknown;
+      address?: unknown; port?: unknown; addressType?: unknown; fd?: unknown;
+      index?: unknown; flags?: unknown;
     };
     const address = typeof asked.address === "string" ? asked.address : "";
     const port = typeof asked.port === "number" ? asked.port : -1;
@@ -347,13 +399,41 @@ class Cluster extends EventEmitter {
     const key = `${address}:${port}:${String(addressType)}:${fd}`
       + (port === 0 ? `:${String(asked.index)}` : "");
 
-    // A datagram address is not shared out: there are no connections to distribute, which
-    // is node's own reason for exempting udp4 and udp6 from round robin. This profile does
-    // not implement the shared-descriptor path either, so it says so.
-    if (addressType === "udp4" || addressType === "udp6" || fd >= 0) {
-      if (seq !== undefined) {
-        worker.send({ cmd: "NODE_CLUSTER", ack: seq, key, errno: UV_ENOTSUP });
+    // **The shared path, which is node's choice for three cases and not a fallback.**
+    //
+    // A datagram address has no connections to distribute, so node binds it once in the
+    // primary and gives every worker the descriptor; the same is true for a policy that is
+    // not `SCHED_RR`, and for a caller that brought its own `fd`. `internal/cluster/child.js`
+    // decides which half it is in by whether a **handle** arrived with the reply, so the
+    // difference here is one extra argument to `send` and not a different message.
+    if (addressType === "udp4" || addressType === "udp6" || fd >= 0
+      || schedulingPolicy !== SCHED_RR) {
+      if (seq === undefined) return;
+      let shared = this.#shared.get(key);
+      if (shared === undefined) {
+        const flags = typeof asked.flags === "number" ? asked.flags : 0;
+        const rval = nts_cluster_shared_handle(
+          address, port, typeof addressType === "string" ? addressType : String(addressType),
+          fd, flags,
+        );
+        // node's `SharedHandle` constructor keeps a negative return as `this.errno` and a
+        // positive one as the handle. Reproduced rather than paraphrased, because the
+        // worker reads the two differently: an errno makes `listen` fail with that code,
+        // while a handle with errno 0 is a working socket.
+        shared = rval < 0 ? { id: -1, errno: rval } : { id: rval, errno: 0 };
+        this.#shared.set(key, shared);
       }
+      const holders = this.#sharedWorkers.get(key) ?? new Map<number, Worker>();
+      holders.set(worker.id, worker);
+      this.#sharedWorkers.set(key, holders);
+      if (shared.errno !== 0) {
+        worker.send({ cmd: "NODE_CLUSTER", ack: seq, key, errno: shared.errno });
+        return;
+      }
+      worker.send(
+        { cmd: "NODE_CLUSTER", ack: seq, key, errno: 0 },
+        { ntsClusterHandle: shared.id },
+      );
       return;
     }
 
@@ -474,22 +554,44 @@ class Cluster extends EventEmitter {
 
   /** Ask every worker to leave, and call back when the last one has. */
   disconnect(callback?: () => void): void {
+    // **Settled by the workers map emptying, not by an `exit` listener per worker.**
+    //
+    // Waiting for each worker's `exit` looks equivalent and is not: by the time this runs
+    // a worker may have exited already, and `once("exit")` on a dead child never fires, so
+    // the count never reaches zero and the callback never comes. That is exactly the
+    // sequence in `test-cluster-disconnect-unshared-udp` -- one worker is disconnected,
+    // and `cluster.disconnect` is chained off *its* `disconnect` event, by which time it
+    // is gone. node has the same shape for the same reason: it emits on an internal
+    // emitter from wherever a worker leaves the map, rather than subscribing per worker.
     const ids = Object.keys(this.workers);
-    let outstanding = ids.length;
-    if (outstanding === 0) {
-      if (callback !== undefined) callback();
-      return;
+    if (callback !== undefined) {
+      if (ids.length === 0) {
+        nextTick(callback);
+      } else {
+        this.#onceEmpty.push(callback);
+      }
     }
     for (const id of ids) {
       const worker = this.workers[id];
-      if (worker === undefined) continue;
-      worker.process.once("exit", (): void => {
-        outstanding -= 1;
-        if (outstanding === 0 && callback !== undefined) callback();
-      });
-      worker.disconnect();
+      if (worker !== undefined) worker.disconnect();
     }
   }
+
+  /** Callbacks owed to `disconnect()` once the last worker has left `workers`. */
+  #onceEmpty: (() => void)[] = [];
+
+  /**
+   * Called wherever a worker leaves `workers`. A departure is a departure however it
+   * happened -- disconnected, killed, or exited on its own -- and the one place that can
+   * say "there are none left" is here.
+   */
+  #workerLeft(): void {
+    if (Object.keys(this.workers).length > 0) return;
+    const owed = this.#onceEmpty;
+    this.#onceEmpty = [];
+    for (const settle of owed) settle();
+  }
+
 
   /**
    * The worker's request for a server handle, which is the half of `cluster` this
