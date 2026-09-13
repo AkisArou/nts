@@ -220,8 +220,26 @@ pub fn emit(program: &Program) -> Emitted {
         }
         match render(program, func, &plan, &mut pool) {
             Ok((name, signature, rendered)) => {
+                // **Synthetic exactly when an instance method replaces it.**
+                //
+                // `Session$bump` is not something a caller should type: `$` is
+                // the JVM's own mark for a generated name, and `ACC_SYNTHETIC`
+                // is what tells a debugger or decompiler to hide one --
+                // `class.rs` carries it with that comment.
+                //
+                // Measured before relying on it, and the measurement set the
+                // order: `javac` does not merely *hide* a synthetic member, it
+                // **refuses to reference** one. So this is safe only because
+                // `member_forwarders` gives Java `s.bump()` instead. A free
+                // function like `greet` has no forwarder and stays plain
+                // public, because `Program.greet(...)` IS its API.
+                let synthetic = if method_of(program, func).is_some() {
+                    access::SYNTHETIC
+                } else {
+                    0
+                };
                 builder.method(
-                    access::PUBLIC | access::STATIC,
+                    access::PUBLIC | access::STATIC | synthetic,
                     name,
                     signature,
                     Some(rendered),
@@ -840,6 +858,46 @@ fn dispatch_forwarders(
 }
 
 
+
+/// The layout this function is a method of, if it is one.
+///
+/// **One derivation, used twice**: the static's access flags ask it, and the
+/// forwarder emission asks it. Two copies of this condition would drift into a
+/// static marked synthetic with no instance method to replace it -- which is
+/// not a wrong answer that runs, it is TypeScript becoming uncallable from
+/// Java, because `javac` refuses to reference a synthetic member.
+///
+/// Ownership is read from the **type**: the lowering emits
+/// `Session#bump(this: managed<obj#1>)` with the first parameter named `this`
+/// and typed as the layout. The **name** is then an independent check rather
+/// than the source of truth -- `<layout>#<member>` must agree -- and a
+/// disagreement answers `None` rather than guessing, which keeps a
+/// hand-written `function f(this: Foo)`, which TypeScript allows, from being
+/// silently attached to a class.
+fn method_of<'a>(
+    program: &'a Program,
+    func: &nts_core::hir::Func,
+) -> Option<(&'a nts_core::hir::Layout, String)> {
+    use nts_core::hir::{HirType, ManagedType};
+    if !func.exported || func.abstract_declaration {
+        return None;
+    }
+    let receiver = func.params.first()?;
+    if receiver.name != "this" {
+        return None;
+    }
+    let HirType::Managed(ManagedType::Object(owner)) = &receiver.ty else { return None };
+    let (declared, member) = func.name.split_once('#')?;
+    if member.is_empty() {
+        return None;
+    }
+    let layout = program
+        .layouts
+        .iter()
+        .find(|layout| layout.types.contains(owner) && layout.name == declared)?;
+    Some((layout, member.to_owned()))
+}
+
 /// Instance methods on a layout's class, forwarding to the statics its methods
 /// were lowered to.
 ///
@@ -881,28 +939,12 @@ fn member_forwarders(
     builder: &mut ClassBuilder,
     pool: &mut Pool,
 ) -> Result<(), Diagnostic> {
-    use nts_core::hir::{HirType, ManagedType};
-
     let class = types::class_name(layout);
     let origin = program_origin(program);
 
     for func in &program.funcs {
-        if !func.exported || func.abstract_declaration {
-            continue;
-        }
-        // The receiver, structurally: first parameter, named `this`, typed as
-        // one of this layout's types.
-        let Some(receiver) = func.params.first() else { continue };
-        if receiver.name != "this" {
-            continue;
-        }
-        let HirType::Managed(ManagedType::Object(owner)) = &receiver.ty else { continue };
-        if !layout.types.contains(owner) {
-            continue;
-        }
-        // And the name must agree. `Session#bump` for the layout `Session`.
-        let Some((declared, member)) = func.name.split_once('#') else { continue };
-        if declared != layout.name || member.is_empty() {
+        let Some((owner, member)) = method_of(program, func) else { continue };
+        if owner.name != layout.name {
             continue;
         }
 
@@ -945,13 +987,13 @@ fn member_forwarders(
             Diagnostic::error(
                 "NTS4009",
                 format!(
-                    "the forwarder for `{}` on `{}` could not be written: {error}",
-                    member, layout.name
+                    "the forwarder for `{member}` on `{}` could not be written: {error}",
+                    layout.name
                 ),
                 origin.location,
             )
         })?;
-        builder.method(access::PUBLIC, body::method_name(member), forwarded, Some(rendered));
+        builder.method(access::PUBLIC, body::method_name(&member), forwarded, Some(rendered));
     }
     Ok(())
 }
