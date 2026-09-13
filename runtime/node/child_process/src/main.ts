@@ -202,39 +202,101 @@ class ChildReadable extends Readable {
    */
   readonly ntsChildHandle: number;
   readonly ntsChildSlot: number;
+  /** node's is a libuv wrap; see `ChildStreamHandle` below. */
+  readonly _handle: ChildStreamHandle;
+  #started = false;
+  #ended = false;
+  #onEof: () => void;
 
   constructor(handle: number, which: number, onEof: () => void) {
     super();
     this.ntsChildHandle = handle;
     this.ntsChildSlot = which;
+    this.#onEof = onEof;
+    this._handle = new ChildStreamHandle(this);
+  }
+
+  /**
+   * **The read starts when a consumer asks for it, which is what node does.**
+   *
+   * This used to start in the constructor. Measured against node, by hooking
+   * `child.stdout._handle.readStart` on node itself in the two arrangements that matter:
+   *
+   *     only an `end` listener, no `data`   end fired, close fired, readStart = false
+   *     stdout handed to another child      the consumer got its answer, readStart = false
+   *
+   * **node calls it in neither case.** So the eager read was this profile's invention, and the
+   * comment that used to justify it -- that a killed child's stdout would not otherwise reach
+   * `end` -- described our arrangement rather than node's.
+   * `test-child-process-pipe-dataflow` asserts the absence directly, replacing
+   * `_handle.readStart` with `common.mustNotCall()` on a stream it hands to another child.
+   */
+  override _read(): void {
+    if (this.#started || this.#ended) return;
+    this.#started = true;
+    // Through the handle, so a caller that replaced `readStart` sees the call it is watching
+    // for. Exposing a `readStart` this profile never used would satisfy `mustNotCall` while
+    // the constructor did the forbidden thing -- the hollow pass this module's record warned
+    // about for a day.
+    this._handle.readStart();
+  }
+
+  /** The binding call itself, reached through the handle so the handle is not decoration. */
+  ntsBeginRead(): void {
     nts_child_process_read_start(
-      handle,
-      which,
+      this.ntsChildHandle,
+      this.ntsChildSlot,
       (bytes: Uint8Array): void => {
         this.push(Buffer.from(bytes));
       },
       (): void => {
+        this.#ended = true;
         this.push(null);
-        // A `Readable` nobody reads never reaches `end` on its own -- node's plain
-        // `Readable` does not either, measured both ways. Node's child stdio is a
-        // socket that reads eagerly, and `read(0)` is what kicks the end
-        // machinery; it fires `end` only once the buffer is drained, so a killed
-        // `cat` whose stdout has an `end` listener and no `data` listener still
-        // ends, and buffered bytes are not dropped.
+        // `read(0)` kicks the end machinery: a `Readable` fires `end` only once its buffer has
+        // drained, so this ends a stream whose consumer has stopped without dropping bytes.
         this.read(0);
-        // The **binding's** EOF, not the stream's `end` event.
-        //
-        // A `Readable` does not emit `end` until something has read it to
-        // completion, so a child whose output nobody consumes would never
-        // report its stdio closed and `close` would never fire. Node tracks the
-        // underlying handle rather than the JavaScript stream, and so does this.
-        // Attaching to `end` instead cost every `exec` test its callback.
-        onEof();
+        // The **binding's** EOF, not the stream's `end` event. A stream nobody finished
+        // reading would otherwise never report its stdio closed and `close` would never fire.
+        this.#onEof();
       },
     );
   }
 
-  override _read(): void {}
+  /**
+   * The child has gone and nobody ever read this stream.
+   *
+   * node's end anyway -- measured above, `end` and `close` both fire with only an `end`
+   * listener attached -- so an unread pipe is finished here rather than left open. Without
+   * this, making the read lazy hangs every child whose output nobody consumes, which is most
+   * of them.
+   */
+  ntsFinishUnread(): void {
+    if (this.#started || this.#ended) return;
+    this.#ended = true;
+    this.push(null);
+    this.read(0);
+    this.#onEof();
+  }
+}
+
+/**
+ * What `child.stdout._handle` is, so a caller can watch or replace `readStart`.
+ *
+ * node's is a libuv wrap and its suite reaches into it. A number answered nothing here and
+ * `undefined` threw under `'use strict'`. The same shape as `net`'s `NetNativeHandle` and
+ * `zlib`'s `ZlibNativeHandle`: a small object over the stream, with a method that does the
+ * thing rather than reporting it.
+ */
+class ChildStreamHandle {
+  readonly #stream: ChildReadable;
+
+  constructor(stream: ChildReadable) {
+    this.#stream = stream;
+  }
+
+  readStart(): void {
+    this.#stream.ntsBeginRead();
+  }
 }
 
 /** A child's stdin. */
@@ -1142,8 +1204,22 @@ export class ChildProcess extends EventEmitter {
     this.#maybeClose();
   }
 
+  #closeEmitted = false;
+
   #maybeClose(): void {
     if (!this.#exited || this.#stdioOpen > 0) return;
+    // **Once, and the guard was missing rather than unnecessary.**
+    //
+    // node emits `close` exactly once. This emitted whenever `exited && stdioOpen === 0`, and
+    // that condition could only be met once by accident: whichever of the exit and the last
+    // stdio EOF arrived second crossed the line, and nothing crossed it again.
+    //
+    // Finishing unread streams on exit creates a second crossing -- the loop drives the count
+    // to zero and emits, then the `#maybeClose()` after it emits again --
+    // and `test-child-process-spawn-shell` read `close` twice. A latent bug the change
+    // exposed rather than one it introduced.
+    if (this.#closeEmitted) return;
+    this.#closeEmitted = true;
     nts_child_process_close(this.#handle);
     this.emit("close", this.exitCode, this.signalCode);
   }
@@ -1167,6 +1243,16 @@ export class ChildProcess extends EventEmitter {
       this.emit("disconnect");
     }
     this.emit("exit", this.exitCode, this.signalCode);
+    // **Finish any stdio nobody read, now that the child has gone.**
+    //
+    // Reads are the consumer's to start, as node's are. A stream nobody asked for would
+    // otherwise never reach `end` and `close` would never fire -- which is most children,
+    // since most callers ignore stdout. node ends them anyway: hooking `readStart` on node
+    // shows `end` and `close` both firing with only an `end` listener attached and
+    // `readStart` never called.
+    for (const stream of this.stdio) {
+      if (stream !== null && stream instanceof ChildReadable) stream.ntsFinishUnread();
+    }
     this.#maybeClose();
   }
 
