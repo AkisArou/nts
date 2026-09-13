@@ -1675,3 +1675,51 @@ fn a_foreign_key_splits_back_into_its_parts() {
     assert_eq!(nts_jvm_emitter::bind::declared_arity("()Ljava/lang/Object;"), Some(0));
     assert_eq!(nts_jvm_emitter::bind::declared_arity("not a descriptor"), None);
 }
+
+/// A name that is public at one arity and protected at another compiles.
+///
+/// Java allows it; TypeScript does not -- `TS2385 Overload signatures must all
+/// be public, private or protected` -- and the whole declaration file fails to
+/// compile, not just the member.
+///
+/// **Neither uniform answer is right**, which is why the protected one is
+/// renamed rather than re-marked. Emitting both public widens the visibility of
+/// something Java keeps to the hierarchy, which is the error
+/// `protected_is_surfaced_and_travels_with_inheritance` exists to prevent.
+/// Emitting both protected turns a legitimate public call into a compile error.
+/// The mangled name is a *surface* name: the binding table row still carries
+/// `drawingOrder:(II)I`, so an override emits the member Java declared.
+///
+/// Found on the real `android.jar` -- four sets in 191 classes of
+/// `android.view`, and zero in this fixture until this method was added.
+#[test]
+fn an_overload_set_of_mixed_visibility_stays_compilable() {
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let bytes = std::fs::read(ui.join("com/example/ui/Widget.class")).expect("Widget");
+    let class = nts_jvm_emitter::read::class_file(&bytes).expect("parses");
+    let (body, rows) =
+        nts_jvm_emitter::bind::declarations_with(&class, &FromDirectory(ui)).expect("renders");
+
+    // The public one keeps the plain name: it is what an outside caller writes.
+    assert!(body.contains("drawingOrder(a0: number): number;"), "{body}");
+    assert!(!body.contains("protected drawingOrder(a0: number): number;"), "{body}");
+
+    // The protected one is renamed, and is still protected.
+    assert!(
+        body.contains("protected drawingOrder$int$int(a0: number, a1: number): number;"),
+        "the protected arity must be renamed and stay protected:\n{body}"
+    );
+
+    // **The control that makes the rename safe.** A renamed member is only
+    // sound because the table still names the real one; without this the
+    // assertions above would pass on a binding that had invented a method.
+    let real = rows.iter().find(|row| row.key.ends_with("drawingOrder:(II)I"));
+    assert!(
+        real.is_some(),
+        "the table must still carry the Java member the renamed declaration stands for: {:?}",
+        rows.iter().map(|r| r.key.as_str()).collect::<Vec<_>>()
+    );
+}

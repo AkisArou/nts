@@ -230,7 +230,26 @@ impl Resolve for Alone {
 /// descriptor: a subclass narrowing a return type declares a bridge method with
 /// the same name and a different descriptor, and treating those as distinct is
 /// what keeps a covariant override from vanishing.
-fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read::Member> {
+/// Which of a class's methods collapse onto one TypeScript signature.
+///
+/// Extracted so the declared path and the inherited path ask the same question.
+/// They did not: `emitted_name` was reached only from the declared side, so an
+/// inherited member rendered under its raw Java name while the class that
+/// declared it rendered a mangled one -- caught by
+/// `an_inherited_method_renders_exactly_as_its_declared_form`, which is the
+/// fourth time that test has found this shape.
+fn collapsed_of(class: &ClassFile) -> Vec<(String, String)> {
+    class
+        .methods
+        .iter()
+        .filter(|m| visible(m.access) && is_api(m))
+        .filter_map(|m| {
+            signature_of(&m.descriptor).map(|(parameters, _)| (m.name.clone(), parameters.join(",")))
+        })
+        .collect()
+}
+
+fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<(ClassFile, crate::read::Member)> {
     let mut seen: Vec<(String, String)> = class
         .methods
         .iter()
@@ -262,7 +281,7 @@ fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read::Membe
                 continue;
             }
             seen.push(key);
-            found.push(method.clone());
+            found.push((parent.clone(), method.clone()));
         }
     }
     found
@@ -384,6 +403,40 @@ fn emitted_name(
         signature_of(descriptor).map(|(parameters, _)| parameters.join(",")).unwrap_or_default()
     };
     let mine = key(&method.descriptor);
+
+    // **Mixed visibility across an overload set, which TypeScript cannot
+    // express and Java allows.** `ViewGroup.getChildDrawingOrder(int)` is
+    // public and `getChildDrawingOrder(int, int)` is protected; so are
+    // `generateLayoutParams` and two arities of `LayoutInflater.onCreateView`.
+    // TypeScript answers `TS2385 Overload signatures must all be public,
+    // private or protected`, and the file does not compile.
+    //
+    // Found by pointing `bind.sh` at the real `android.jar` -- four sets in 191
+    // classes of `android.view`, and **zero** in the nine-class fixture this
+    // generator had been validated against until tonight. The `protected`
+    // support that produced them landed hours earlier and looked clean.
+    //
+    // Neither uniform answer is right. Emitting them all public widens the
+    // visibility of something Java keeps to the hierarchy, which is the error
+    // the inherited-member fix already refused. Emitting them all protected
+    // makes a legitimate public call a compile error.
+    //
+    // So the protected ones take a mangled name, which is the machinery already
+    // here for overloads that erase alike. The name is a *surface* name: the
+    // binding table row carries `getChildDrawingOrder:(II)I`, so an override
+    // still emits the member Java declared. That is the same contract
+    // `find$int` has had since brands were removed.
+    if method.access & ACC_PROTECTED != 0
+        && class.methods.iter().any(|other| {
+            other.name == method.name
+                && other.access & access::PUBLIC != 0
+                && is_api(other)
+                && other.descriptor != method.descriptor
+        })
+    {
+        return format!("{}{}", method.name, suffix(&method.descriptor));
+    }
+
     let twins =
         collapsed.iter().filter(|(name, other)| name == &method.name && other == &mine).count();
     if twins <= 1 {
@@ -704,12 +757,8 @@ pub fn declarations_with(
     // Which methods collapse onto one TypeScript signature. Computed before
     // rendering, because the decision is about the *set*: a name is only
     // ambiguous relative to its siblings.
-    let mut collapsed: Vec<(String, String)> = Vec::new();
-    for method in class.methods.iter().filter(|m| visible(m.access) && is_api(m)) {
-        if let Some((parameters, _)) = signature_of(&method.descriptor) {
-            collapsed.push((method.name.clone(), parameters.join(",")));
-        }
-    }
+    // One derivation, shared with the inherited path -- see `collapsed_of`.
+    let collapsed = collapsed_of(class);
 
     render_methods_into(
         &mut out,
@@ -1103,7 +1152,7 @@ fn render_inherited(
             if field.constant { rendered.clone() } else { returns(&rendered, &field.annotations) },
         );
     }
-    for method in inherited(class, resolve) {
+    for (declaring, method) in inherited(class, resolve) {
         let Some((parameters, result)) = method
             .signature
             .as_deref()
@@ -1141,7 +1190,7 @@ fn render_inherited(
             // hierarchy, which is the same class of error as the bridge.
             if method.access & ACC_PROTECTED != 0 { "protected " } else { "" },
             if method.access & access::STATIC != 0 { "static " } else { "" },
-            method.name,
+            emitted_name(&declaring, &method, &collapsed_of(&declaring)),
             returns(&result, &method.annotations),
         );
     }

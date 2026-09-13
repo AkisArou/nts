@@ -18,6 +18,20 @@ public class Widget {
     protected void onDraw(Rect bounds) { }
 
     /**
+     * Public at one arity and protected at another, which Java allows and
+     * TypeScript cannot express: `TS2385 Overload signatures must all be
+     * public, private or protected`.
+     *
+     * <p>Four of these in 191 classes of the real `android.view` --
+     * `ViewGroup.getChildDrawingOrder`, `ViewGroup.generateLayoutParams` and
+     * two arities of `LayoutInflater.onCreateView` -- and none at all in this
+     * fixture until it was put here on purpose.
+     */
+    public int drawingOrder(int index) { return index; }
+
+    protected int drawingOrder(int count, int index) { return count - index; }
+
+    /**
      * The primitive overload pair Android publishes constantly. Preferring the
      * four-int form means no `Rect` is constructed, nothing escapes, and there
      * is nothing to copy.
