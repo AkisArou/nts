@@ -169,7 +169,7 @@ fn build_and_run_hosted(
     // runtime defines and reported it as an undefined reference inside the
     // *generated* function that called it.
     let mut runtime: Vec<std::path::PathBuf> = Vec::new();
-    for file in nts_codegen_c::support_files(emitted.needs_unicode()) {
+    for file in emitted.support_files() {
         let written = file.write(&dir).expect("write support file");
         if file.compiled {
             runtime.push(written);

@@ -3534,8 +3534,13 @@ fn devirtualize_closures(program: &mut Program) -> usize {
     fields::devirtualize(program, &held)
 }
 
-fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis]) {
-    let widths = fields::representations(program, analyses);
+fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis], roots: reachable::Roots<'_>) {
+    let outward = reachable::root_names(program, roots)
+        .into_iter()
+        .chain(reachable::callback_names(program))
+        .collect();
+    let exposed = fields::exposed_fields(program, &outward);
+    let widths = fields::representations(program, analyses, &exposed);
     fields::narrow(program, &widths);
 
     // A global had no analysis at all until this, so every read of one was TOP
@@ -3595,7 +3600,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         }
 
         let analyses = interprocedural::analyze_program(&program, options.roots);
-        narrow_storage(&mut program, &analyses);
+        narrow_storage(&mut program, &analyses, options.roots);
 
         // And the same for what an array holds. An element that arrives as an
         // integer is what lets a `switch` over one become a jump table, and it

@@ -136,6 +136,7 @@ fn settle(
         .map(|(index, func)| (func.name.as_str(), index))
         .collect();
 
+    let exposed_fields = super::fields::exposed_fields(program, outward);
     let mut crossing = Crossing {
         params: seed(program, outward),
         // BOTTOM rather than absent, for the same reason parameters start
@@ -151,7 +152,7 @@ fn settle(
         // Not empty: an absent entry reads as TOP at the use, and a field
         // whose value depends on its own then settles at TOP in round one and
         // never moves. See `fields::initial`.
-        fields: super::fields::initial(program),
+        fields: super::fields::initial(program, &exposed_fields),
         elements: FxHashMap::default(),
         globals: FxHashMap::default(),
         param_lengths: no_lengths(program),
@@ -203,7 +204,7 @@ fn settle(
         // In the same fixpoint as parameters and returns, because they feed
         // each other: a field is written with a value a call produced, and read
         // to make an argument for the next one.
-        let fields = super::fields::analyze(program, &analyses);
+        let fields = super::fields::analyze(program, &analyses, &exposed_fields);
         let elements = super::elements::analyze(program, &analyses, outward);
         let globals = super::globals::analyze(program, &analyses);
         let param_lengths = if growable {

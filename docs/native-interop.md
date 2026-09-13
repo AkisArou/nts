@@ -4,8 +4,49 @@ The counterpart to `jvm-interop.md`, for the native lane. It is much shorter,
 because much less of it is true yet — and the parts that *are* true are true for
 a reason that does not generalise.
 
-Everything in "What is already true" was measured on 2026-09-13 against the tree
-at `79bf7358`. Everything after it is proposed.
+The original measurements below were made on 2026-09-13 against the tree at
+`79bf7358`. The implementation notes immediately below supersede the historical
+gap descriptions; the remaining design sections are proposals.
+
+## Implemented since the measurements below
+
+`emit-c --out` now generates `program.h` with the entry modules' emitted
+function declarations, the exact C symbols, stable object aliases named
+`<export>_<parameter>_t` / `<export>_return_t`, and checked struct layouts.
+The C example includes it and reads the fields of `makePoint_return_t`.
+The header also describes the promise checkpoint and declares module
+initialization when present. Generated aliases receive a numeric suffix if
+needed to avoid a C identifier collision.
+
+Header tests compile and run the same caller across the three anonymous-layout
+arms below. A conflicting `int add(int, int)` declaration fails compilation.
+They also found and fixed an optimizer assumption: numeric fields exposed to
+native callers were treated as if only TypeScript could write them, so an
+accessor with no internal stores returned constant zero. Boundary-exposed
+fields now retain their declared widths and unknown contents, including nested
+objects. A same-program control checks that exposed numeric fields remain
+`double` while a private counter still narrows to `int32_t`; both execute.
+
+The original precondition in `compiler/core/src/hir/fields.rs` stated:
+
+> there is no FFI that writes through a pointer here
+
+It therefore joined only visible TypeScript stores and the allocator's zero.
+With no visible stores, both constant folding and storage narrowing concluded
+that an incoming field was zero. Native callers invalidate that precondition:
+they can supply field values that never appear in the program's stores.
+
+The implementation order for the C-facing boundary is:
+
+1. Make field facts and storage widths conservative for objects native callers
+   can supply or mutate. This is a prerequisite for accepting object parameters;
+   the existing Node-API wrapper declines them and does not expose this defect.
+2. Generate the header and replace hand-written caller prototypes with it.
+3. Add managed constructors and generator stepping, which remain unimplemented.
+
+The historical gap descriptions below record the original measurements;
+header generation, stable aliases, field visibility and checkpoint documentation
+are now implemented. Managed constructors and generator stepping remain design.
 
 ## What is already true
 

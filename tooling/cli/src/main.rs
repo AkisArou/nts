@@ -1997,14 +1997,14 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
             eprintln!("no wrapper for {}: {}", skipped.function, skipped.reason);
         }
         println!(
-            "wrote program.c, {}, {} to {out}",
+            "wrote program.c, program.h, {}, {} to {out}",
             extra.join(", "),
             nts_codegen_napi::ADDON_SOURCE_NAME
         );
         return Ok(());
     }
 
-    println!("wrote program.c, {} to {out}", extra.join(", "));
+    println!("wrote program.c, program.h, {} to {out}", extra.join(", "));
     // The provider is half a runtime decision. Reference counting needs each
     // object to be its own allocation so that the last release can hand it back;
     // the bump allocator the default uses cannot free anything. Compiling the

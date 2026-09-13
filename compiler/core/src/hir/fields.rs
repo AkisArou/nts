@@ -12,10 +12,9 @@
 //!
 //! # Why it is sound
 //!
-//! A field holds what was stored into it, and nothing else can store into it:
-//! there is no FFI that writes through a pointer here, and a program's own
-//! stores are all in the HIR. So the join over every `FieldSet` that can reach
-//! a field is an over-approximation of what a `FieldGet` can read.
+//! Internal fields hold the join of this program's stores. Fields reachable
+//! across the native boundary can also be written by callers; their contents
+//! are unknown and their numeric storage must retain its declared width.
 //!
 //! Zero is joined in as well, because that is what an allocation leaves. A
 //! well-typed TypeScript program cannot read a field before its constructor
@@ -30,7 +29,7 @@
 //! including it, because that is precisely when a pointer to one is a pointer
 //! to the other with the same offsets.
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::facts::Facts;
 use super::flow::Analysis;
@@ -75,15 +74,20 @@ pub type FieldFacts = FxHashMap<(super::TypeId, u32), Facts>;
 /// there: an absent entry reads as TOP at the use, and a function whose result
 /// depends on its own result then converges to TOP."
 #[must_use]
-pub fn initial(program: &Program) -> FieldFacts {
+pub(super) fn initial(program: &Program, exposed: &FxHashSet<(usize, u32)>) -> FieldFacts {
     let mut facts: FieldFacts = FxHashMap::default();
     for (at, layout) in program.layouts.iter().enumerate() {
         for field in 0..u32::try_from(layout.fields.len()).unwrap_or(0) {
             if !is_number(program, at, field) {
                 continue;
             }
+            let held = if exposed.contains(&(at, field)) {
+                Facts::TOP
+            } else {
+                Facts::constant(0.0)
+            };
             for ty in &layout.types {
-                facts.insert((*ty, field), Facts::constant(0.0));
+                facts.insert((*ty, field), held);
             }
         }
     }
@@ -91,7 +95,11 @@ pub fn initial(program: &Program) -> FieldFacts {
 }
 
 #[must_use]
-pub fn analyze(program: &Program, analyses: &[Analysis]) -> FieldFacts {
+pub(super) fn analyze(
+    program: &Program,
+    analyses: &[Analysis],
+    exposed: &FxHashSet<(usize, u32)>,
+) -> FieldFacts {
     // By layout while collecting, because a store names one type and the
     // aliasing question is about layouts. Expanded to types at the end.
     let mut stored: FxHashMap<(usize, u32), Facts> = FxHashMap::default();
@@ -128,7 +136,11 @@ pub fn analyze(program: &Program, analyses: &[Analysis]) -> FieldFacts {
                 continue;
             }
             // Zero, because that is what the allocator leaves.
-            let mut facts = Facts::constant(0.0);
+            let mut facts = if exposed.contains(&(at, field)) {
+                Facts::TOP
+            } else {
+                Facts::constant(0.0)
+            };
             for (other, candidate) in program.layouts.iter().enumerate() {
                 if !shares_storage(layout, candidate, field) {
                     continue;
@@ -171,7 +183,11 @@ pub fn analyze(program: &Program, analyses: &[Analysis]) -> FieldFacts {
 /// fraction, a NaN, an infinity, or a negative zero keeps its double — `-0`
 /// especially, because an integer slot cannot hold it and `1 / -0` can tell.
 #[must_use]
-pub fn representations(program: &Program, analyses: &[Analysis]) -> FieldWidths {
+pub(super) fn representations(
+    program: &Program,
+    analyses: &[Analysis],
+    exposed: &FxHashSet<(usize, u32)>,
+) -> FieldWidths {
     // What every store into each field, by layout, is worth.
     let mut stored: FxHashMap<(usize, u32), Facts> = FxHashMap::default();
     for (index, func) in program.funcs.iter().enumerate() {
@@ -201,7 +217,9 @@ pub fn representations(program: &Program, analyses: &[Analysis]) -> FieldWidths 
     let mut narrowed = FxHashMap::default();
     for (at, layout) in program.layouts.iter().enumerate() {
         for field in 0..u32::try_from(layout.fields.len()).unwrap_or(0) {
-            if !matches!(layout.fields[field as usize].ty, HirType::Float { .. }) {
+            if exposed.contains(&(at, field))
+                || !matches!(layout.fields[field as usize].ty, HirType::Float { .. })
+            {
                 continue;
             }
             // Zero, because that is what the allocator leaves -- and a whole
@@ -227,6 +245,62 @@ pub fn representations(program: &Program, analyses: &[Analysis]) -> FieldWidths 
         }
     }
     narrowed
+}
+
+/// Fields a native caller can supply or mutate, including nested objects and
+/// containers. Compute once per analysis, outside its numeric fixpoint.
+#[must_use]
+pub(super) fn exposed_fields(program: &Program, outward: &FxHashSet<&str>) -> FxHashSet<(usize, u32)> {
+    let mut pending = Vec::new();
+    for func in &program.funcs {
+        if outward.contains(func.name.as_str()) {
+            pending.extend(func.params.iter().map(|param| &param.ty));
+            pending.push(&func.return_type);
+        }
+        for op in &func.values {
+            if let OpKind::Call {
+                callee: super::Callee::External(_), args, ..
+            } = &op.kind {
+                pending.push(&op.ty);
+                pending.extend(args.iter().map(|arg| &func.values[arg.0 as usize].ty));
+            }
+        }
+    }
+    let mut seen = FxHashSet::default();
+    let mut exposed = FxHashSet::default();
+    while let Some(ty) = pending.pop() {
+        if !seen.insert(ty) {
+            continue;
+        }
+        match ty {
+            HirType::Managed(ManagedType::Object(_)) => {
+                let Some(at) = layout_of(program, ty) else {
+                    continue;
+                };
+                let layout = &program.layouts[at];
+                for (index, field) in layout.fields.iter().enumerate() {
+                    let field_id = u32::try_from(index).unwrap_or(u32::MAX);
+                    pending.push(&field.ty);
+                    // A base pointer can address a derived prefix, and structurally
+                    // compatible layouts must retain the same storage widths.
+                    for (other, candidate) in program.layouts.iter().enumerate() {
+                        if shares_storage(layout, candidate, field_id) {
+                            exposed.insert((other, field_id));
+                        }
+                    }
+                }
+            }
+            HirType::Managed(
+                ManagedType::Array(element) | ManagedType::Set(element) | ManagedType::Promise(element),
+            ) => pending.push(element),
+            HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => {
+                pending.push(key);
+                pending.push(value);
+            }
+            _ => {}
+        }
+    }
+    exposed
 }
 
 /// The width a field's contents fit in, if any.
