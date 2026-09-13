@@ -119,137 +119,98 @@ same way, the other small compiled surfaces are real: `stream`'s single pass and
 surface is not by itself a hollow one -- an absent one is.
 
 
-## The six that remain, with what each one is
+## The six that remain, each with a cause and a price
 
-    http-pipe                    `http` over a distributed pipe; plain `net` over the
-                                 same pipe works in every direction
-    net-send                     a child's socket is ours; node's `send` refuses it
-    net-server-drop-connection   three workers, ten connections, a disconnect mid-flight
-    shared-leak                  the last shared holder never leaves
-    uncaught-exception           wants `process` in `uses`, priced at 11 files above
-    listen-fd-cluster            ENOTSOCK from `bind` inside the worker's own `rr()`
+    interpreted   86 file(s): 78 passed, 6 failed, 2 skipped
 
-### `net-send`: the child's socket is one of ours, and node cannot send it
+### `http-pipe` -- `http` over a **distributed** pipe, isolated to three arms
 
-This file was claimed by two lanes and **disagreed with itself** -- a pass under
-`child_process`, a failure here -- which is why `child_process/extra-tests` released it. The
-entry that replaced it here said the handle arrived and no data flowed. **That was wrong**, and
-the correct account is narrower and worse:
+    plain `net` over a distributed pipe, primary -> worker   served, data flows
+    plain `net` over a distributed pipe, worker -> itself     served, data flows
+    `http` over a **plain** pipe, no cluster                  response 200
+    `http` over a distributed pipe                           request handler never runs
 
-    plain message from the child      arrives
-    message carrying a handle         never arrives at all
+So the handoff works, pipes work, and `http` works; only the combination fails. `http` is node's
+own in this lane -- `uses` is `child_process events net` -- so what is missing is something node's
+`http` server wants from a connection this module handed it that a plain `net` consumer does not.
+
+**Price:** one more arm, comparing what node's `http` server reads off a connection it accepted
+itself against one delivered as a `newconn` handle. Not the pipe's length, which was measured away
+(`common.PIPE` is 54 bytes here against node's 33, both far inside `sockaddr_un`'s 108), and not
+flakiness -- the failing arm fails identically on repeat.
+
+### `net-send` -- the child holds one of *our* sockets and node's `send` refuses it
 
 The child's `process.send('handle', socket)` throws before anything crosses:
 
-    TypeError [ERR_INVALID_HANDLE_TYPE]: This handle type cannot be sent
-        at target._send (node:internal/child_process:848:15)
-        at callable.eval (.../msgonly-local.js:22:15)
-        at #completeConnection (.../runtime/node/net/src/main.ts:1189:10)
+    ERR_INVALID_HANDLE_TYPE: This handle type cannot be sent
+      at target._send (node:internal/child_process:848)
+      at #completeConnection (runtime/node/net/src/main.ts:1189)
 
-The last frame is the whole finding: the socket the child created came from **this profile's
-`net`**, and node's own `send` only accepts node's handle types. Under `child_process`'s lane
-`net` is not substituted, the child's socket is node's, and the same file passes.
+The bottom frame is the finding: the socket came from **this profile's `net`**, which `cluster`'s
+lane substitutes and `child_process`'s does not -- the same file passes there.
 
-**A cluster worker is not affected**, and that was worth checking rather than assuming, because
-this module's design rests on it: a worker reports `typeof globalThis.nts_cluster_self_send ===
-'undefined'` and carries node's own `_getServer`, so the worker half really is node's. It is a
-child forked by `child_process.fork` from a substituted parent that inherits ours.
+node dispatches on identity and nothing else:
 
-**Open, and deliberately not guessed at:** why that child inherits the substitution when a
-cluster worker does not. `inheritedEnvironment()` copies every key, so it is not something
-`cluster.fork` strips. Whatever the mechanism, the consequence above is measured.
+    if (handle instanceof net.Socket) ... else if (handle instanceof net.Server) ...
+    else if (handle instanceof TCP || handle instanceof Pipe) ...
+    else throw new ERR_INVALID_HANDLE_TYPE();
 
-### `shared-leak`: what it is not, measured
+**Price: patching the host's `net.Socket[Symbol.hasInstance]`** so node's `instanceof` accepts one
+of ours. The child is real node and its `process.send` is node's own, so there is no seam of ours
+to intervene at -- the only lever is changing what the host's `instanceof` answers, for all host
+code, from a stand-in. That is a larger change to someone else's semantics than the file is worth,
+and it is why this is recorded rather than done.
 
-Two hypotheses tested and both dead, recorded so nobody pays for them twice.
+A cluster *worker* is unaffected and that was checked rather than assumed, since this module's
+design rests on it: a worker reports `nts_cluster_self_send` undefined and carries node's own
+`_getServer`.
 
-**Not "only one worker queries".** Traced, both workers reach `queryServer` and both report
-`listening`. The earlier note here said otherwise.
+### `listen-fd-cluster` -- ENOTSOCK inside the worker's own `rr()`
 
-**Not our `net` failing to notice a peer FIN.** The primary's connection never emits `close`,
-w1 holds the accepted socket it already `end`ed, and the primary will not destroy its side until
-every worker has gone -- which looked like a deadlock this profile had created. It is not:
+`{ fd, backlog }` is now the first of the three listen branches, as node has it, so a
+caller-supplied descriptor reaches `RoundRobinHandle` rather than the shared path. The worker then
+fails in node's own `rr()` with `bind ENOTSOCK`.
 
-    an unread socket, peer sends FIN     ours: never closes
-                                         node: never closes
+**Price:** the descriptor the worker is given is not a socket by the time it binds. Establishing
+whether the primary sends the wrong handle or the worker receives a dup of the wrong fd is one
+instrumented run of node's `rr` against ours -- the same method that settled the relative-path
+question in one command.
 
-Identical. Measured with the same fixture on both, after the first attempt at that comparison
-failed to load on node -- `"type": "module"` in the repo root makes `require` in a `.js` fixture
-throw, and I read the empty output as a result. A stream that was never produced looks exactly
-like a stream with nothing in it.
+### `net-server-drop-connection` -- a disconnect mid-handoff
 
-**What is done:** a shared descriptor is now closed when the workers map empties, not only when
-its own holder set does -- node closes from `removeWorker` on the same condition. Both paths are
-kept. It does not fix this file, and the file's remaining cause is why w1 does not exit once its
-server handle is closed and its accepted socket is half-closed.
+Three workers on one pipe, ten connections, and the workers disconnected while connections are
+still being counted. The single-worker pipe case works.
 
-### `shared-leak`: the last shared holder never leaves
+**Price:** `#handoff` parks a socket against its sequence number so a refusal can put it back, and
+**no passing test exercises that path**. Pricing it means writing the control first -- a fixture
+that refuses a handoff deliberately -- because a fix to an unexercised path cannot be shown to
+work.
 
-Traced: both workers exit 0, the workers map reaches zero, and the primary sits holding a bound
-socket. `#releaseShared` closes a shared descriptor when its last holder goes -- and only **one**
-worker ever queries, because the second is disconnected before its `listen` completes. So the
-`holders` map for that key never empties through the path that closes it.
+### `shared-leak` -- w1 does not exit, and two hypotheses are dead
 
-Two real fixes came out of chasing it and are committed: the scheduling policy is frozen from
-`cluster.schedulingPolicy` as node does, and `#releaseShared` exists at all -- it had been
-written three commits earlier and **never applied**, because the edit matched on the wrong
-indentation and nothing asserted that it had.
+Both workers reach `queryServer` and report `listening`; w2 exits 0; the workers map reaches zero;
+the primary sits on a bound socket. Two explanations tested and refuted:
 
-## `test-cluster-uncaught-exception` needs `process` in `uses`, and that costs 11 files
+  * **Not "only one worker queries."** Traced; both do. An earlier note here said otherwise.
+  * **Not our `net` missing a peer FIN.** An unread socket does not close on a peer FIN -- *on node
+    either*, measured with one fixture on both lanes.
 
-The test installs `process.on('uncaughtException')` in a cluster primary, throws, and expects
-its handler to exit 42. Through this harness the same branch exits **0** where plain node
-exits 42, because `run-one.mjs` catches a module's escaped exception and only hands it on to a
-module that declares the hook:
+**Price:** why w1 does not exit once its server handle is closed and its accepted socket is
+half-closed. A shared descriptor is now closed when the workers map empties, which is node's
+`removeWorker` condition, and it did not move this file -- so the remaining hold is inside the
+worker, which is node's own code, and pricing it means instrumenting node's `child.js` rather than
+ours.
 
-    // A module that owns uncaught-exception dispatch gets first refusal.
-    if (!dispatchEscapedException(e)) { reportFailure(e); return; }
+### `uncaught-exception` -- priced at eleven files, and refused
 
-`process` owns it, and `process` is not in this module's `uses` -- so nothing claims the
-exception and the harness reports the failure the test is about.
+`run-one.mjs` hands an escaped exception only to a module that declares the hook, and `process`
+owns it. Adding `process` to this module's `uses`:
 
-**Measured rather than assumed.** Adding `process` to `uses`:
+    86 file(s): 66 passed, 18 failed    (against 78 / 6)
 
-    86 file(s): 66 passed, 18 failed    (against 77 / 7)
-
-**Eleven files lost, none gained** -- `bind-twice`, `eaddrinuse`, `fork-env`,
-`fork-windowsHide`, `message`, `primary-error`, `primary-kill`, `rr-domain-listen`,
-`setup-primary-argv`, `worker-events`, `worker-exit`. Substituting `process` changes what a
-primary *is* far more than it changes what one throw does. Reverted.
-
-So this file is not a defect in `cluster`: it is one test's price against eleven others', and
-the price is recorded rather than guessed at.
-
-
-### `http-pipe`: plain `net` over a distributed pipe works, `http` does not
-
-Worth separating, because "a hang in cluster's pipe distribution" would have been the wrong
-place to look. Probed in three arrangements:
-
-    primary connects to the worker's distributed pipe, plain net    accepted, data flows
-    worker connects to its **own** distributed pipe, plain net      accepted, data flows
-    worker serves `http` over that same pipe                        request handler never runs
-
-So the primary binds the pipe, the handoff delivers, and both directions of a plain socket are
-served. The `listening` message even arrives with the right address --
-`{"address":"/tmp/...sock","port":-1,"addressType":-1}` -- and `fs.existsSync` on the path is
-true from the primary.
-
-`http` is **node's own** in this lane, since `uses` is `child_process events net`. So whatever
-is missing is something node's `http` server wants from a connection this module handed it that
-a plain `net` consumer does not.
-
-Not the pipe's length, which was the first guess and was measured away: `common.PIPE` is 54
-bytes here against node's 33, both far inside `sockaddr_un`'s 108. Not flakiness either -- the
-failing arrangement fails identically on repeat.
-
-### `net-server-drop-connection`: three workers, ten connections, and a disconnect mid-flight
-
-Three workers listen on one pipe, ten connections are made, and the workers are disconnected
-while connections are still being counted. The single-worker pipe case above works, so this is
-either the multi-worker rotation or the disconnect-during-handoff -- `#handoff` parks a socket
-against its sequence number so a refusal can put it back, and that path has never been
-exercised by a passing test.
+**Eleven files lost, none gained.** Substituting `process` changes what a primary *is* far more
+than it changes what one throw does. Reverted; the price is the record.
 
 ## What is here
 
