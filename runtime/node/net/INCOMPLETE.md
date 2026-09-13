@@ -1,16 +1,23 @@
 # `net`: what is not here, and why
 
-## `_handle` is a number, and node's is an object
+## Nothing, on the interpreted lane, as of 2026-09-13
 
-    ours   typeof server._handle === 'number'   value 1
-    node   typeof server._handle === 'object'   constructor TCP
+    185 file(s): 154 passed, 0 failed, 7 skipped, 24 not applicable
 
-Measured both ways. The number is this module's own handle id, which the binding owns; node's
-is a libuv wrap with `close`, `readStart`, `getsockname` and the rest on it.
+All three failures this file was written to describe are fixed. The account of the `_handle`
+seam is kept below because the reasoning outlived the bug: it explains why `_handle` is an
+object, why both dependents had to move with it, and one trap that is easy to walk back into.
 
-### What it costs, and how it was found
+## `_handle` is an object, as node's is -- and `fd` must be the real descriptor
 
-Two files fail on the interpreted lane and **pass hollowly on the compiled one**:
+    ours (before)  typeof server._handle === 'number'   value 1
+    ours (now)     NetNativeHandle { identifier, server, fd, handle, close, ... }
+    node           typeof server._handle === 'object'   constructor TCP
+
+### What it cost, and how it was found
+
+Three files failed on the interpreted lane, two of them also **passing hollowly on the
+compiled one**:
 
     test-listen-fd-detached.js           compiled: 1 passed   emptied: 1 passed
     test-listen-fd-detached-inherit.js   compiled: 1 passed   emptied: 1 passed
@@ -33,7 +40,7 @@ passed is the **number 1** -- which the host reads as *file descriptor 1*, the p
 The child then listens on a descriptor that is not a socket and the test's HTTP request to the
 reported port never completes: `anonymous was called 0 times, expected 1`, naming nothing.
 
-### Why it is not a small fix
+### Why it was not a small fix
 
 **The representation is ambiguous, not merely wrong.** `stdio: [0, 1, 2]` is a legitimate
 descriptor array, and a bare number cannot be distinguished from one. A resolver keyed on the
@@ -48,13 +55,20 @@ shape, not an addition. Things already read it as a number:
   * `child_process`'s `hostHandle` tests `typeof sent._handle === "number"` to recognise one
     of our sockets at all.
 
-So the object would need the number inside it and both of those updated in the same change,
-and every other reader of `_handle` in this module's 185 files re-measured. It is worth doing
-and it is not worth doing halfway: an object that answers `close` but not `getsockname` trades
-one confusing failure for another.
+Both were updated in the same commit, which was not optional: either left alone stops
+recognising every socket, and an unrecognised socket is sent as itself.
 
-### The smaller thing that is true regardless
+### The trap, which cost a commit and is easy to walk back into
 
-The two compiled passes should not be counted. `compiled-axis.sh` runs the emptying arm for
-every module now rather than only for modules that publish nothing, which is what let these
-two through -- `net` publishes 10 names, so it was exempt from the test that catches them.
+node's `getValidStdio` tests `typeof stdio.fd === 'number'` **before** it tests for a handle
+wrap. So a wrapper answering `fd` with its internal identifier is read as *that descriptor* and
+the handle branch is never reached -- reproducing the exact bug the wrapper exists to fix.
+Measured: `fstatSync(3).isFIFO()` true with the wrapper's id, `isSocket()` true with the host
+handle. **`fd` must be the real descriptor**, and `-1` where there is no host object.
+
+### The two compiled passes are still not counted
+
+`compiled-axis.sh` runs the emptying arm for every module now rather than only for modules that
+publish nothing, which is what let those two through -- `net` publishes 10 names, so it was
+exempt from the test that catches them. They pass interpreted for a real reason now; whether
+they pass compiled for one is a separate question the emptying arm still answers.
