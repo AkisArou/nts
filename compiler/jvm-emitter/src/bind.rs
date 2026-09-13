@@ -555,7 +555,22 @@ pub enum Call {
 /// it names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bound {
-    /// 1-based line in the assembled module file.
+    /// Byte offset just past the declaration's last character -- the value
+    /// `lower`'s `location.span.end` carries for this declaration.
+    ///
+    /// **This is what a consumer matches on, and the line is not.** `SourceFile`
+    /// carries `uri`, `digest` and `display_path` and *no text*, so the lowering
+    /// cannot convert a byte offset into a line even if it wanted to. I keyed
+    /// this table by line first and read the struct afterwards.
+    ///
+    /// `end` rather than `start` because tsgo's `pos` includes leading trivia:
+    /// a declaration's `span.start` is the end of the *previous* token, which
+    /// for a declaration on its own line is the previous line. `span.end` is the
+    /// first offset past the `;` and is the same under either convention.
+    pub end: usize,
+    /// 1-based line in the assembled module file. For a person reading the
+    /// table, and for the test that asserts the offset landed on the right
+    /// declaration.
     pub line: usize,
     /// 1-based column of the declaration's first character. Recorded so a
     /// lookup can assert rather than trust; see the note above on why the line
@@ -585,6 +600,9 @@ fn mark(
     call: Call,
 ) {
     table.push(Bound {
+        // Filled in by `module_of`, from the assembled text. A row's offset is
+        // derived from the file it points into, so it cannot disagree with it.
+        end: 0,
         line: buf.bytes().filter(|byte| *byte == b'\n').count() + 1,
         column,
         key: format!("{owner}.{member}:{descriptor}"),
@@ -1203,6 +1221,24 @@ pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (St
     }
 
     out.push_str("}\n");
+
+    // **The byte offsets, resolved from the assembled file itself.** Not
+    // tracked through the merges beside the line numbers: re-indenting a nested
+    // body adds two bytes to *every* line, so an offset carried along would
+    // have to be shifted by a per-line amount, and the arithmetic is exactly
+    // the kind that is wrong once and silent afterwards. Reading them back out
+    // of the finished text is one derivation and cannot disagree with it.
+    let mut starts = vec![0usize];
+    for (at, byte) in out.bytes().enumerate() {
+        if byte == b'\n' {
+            starts.push(at + 1);
+        }
+    }
+    for row in &mut bound {
+        let Some(&line_start) = starts.get(row.line - 1) else { continue };
+        let line_end = starts.get(row.line).map_or(out.len(), |next| next - 1);
+        row.end = line_end;
+    }
     (out, bound)
 }
 

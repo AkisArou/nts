@@ -1537,6 +1537,29 @@ fn every_bound_row_names_the_declaration_on_its_line() {
         assert!(row.line > 0 && seen.insert(row.line), "two rows on line {}", row.line);
     }
 
+    // **The byte offset is what a consumer actually matches on**, so it gets
+    // the same treatment as the line. `SourceFile` carries no text, so the
+    // lowering cannot convert an offset to a line -- keying this table by line
+    // alone would have been unusable by the only caller it has.
+    //
+    // Verified against the real thing rather than against itself: running
+    // `emit-jvm` over `java-from-ts` with a probe at the refusal site printed
+    // 26 spans in the generated file, and all 26 equalled a row's `end`. The
+    // nine others were `java.d.ts`, which is hand-written and has no table.
+    for row in &bound {
+        assert!(row.end > 0, "every row needs a byte offset: {row:?}");
+        let text = lines[row.line - 1];
+        assert!(
+            module[..row.end].ends_with(text),
+            "row {:?} ends at {} but that offset is not the end of its line",
+            row.key,
+            row.end
+        );
+        // One past the last character, not one past the newline -- `span.end`
+        // for a declaration is the offset after its `;`.
+        assert_eq!(module.as_bytes()[row.end], b'\n', "offset {} is not at a line end", row.end);
+    }
+
     // **The control.** Shift every row by one line and the same check must
     // fail; otherwise it is a check whose answer does not depend on its input.
     // Measured on `android.graphics`: a one-line shift takes 910 matches to 166.
