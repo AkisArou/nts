@@ -1301,17 +1301,26 @@ fn the_enum_shape_that_is_refused_is_named() {
     // access the same literal type it gives the literal and the interned static
     // was already there. Record 0110.
     //
-    // What survives is the reverse mapping, and it is named rather than called
-    // "an enum" for the reason 0074 records for a different family: a message
-    // covering a supported feature and an unsupported one ranks neither and
-    // reads as the whole feature being absent.
+    // What survives is the reverse mapping **at a computed index**, and the
+    // narrowing is the point: the constant form lowers as of 2026-09-13, since
+    // `Colour[1]` is a string the compiler already holds. What is left is the
+    // form that names no value, which is `undefined` for an index no member has
+    // while the expression's type here is `string`.
+    //
+    // It is named rather than called "an enum" for the reason 0074 records for
+    // a different family: a message covering a supported feature and an
+    // unsupported one ranks neither and reads as the whole feature being
+    // absent. That is exactly what happened to this row -- it read as "the
+    // reverse mapping", and half of it was answerable.
     let messages: Vec<&str> = lowered
         .diagnostics
         .iter()
         .map(|d| d.message.as_str())
         .collect();
     assert!(
-        messages.iter().any(|m| m.contains("the reverse mapping")),
+        messages
+            .iter()
+            .any(|m| m.contains("reverse mapping at a computed index")),
         "the reverse mapping should be named: {messages:?}",
     );
     assert!(

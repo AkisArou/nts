@@ -46,12 +46,64 @@ if [ "${1-}" = "--self-test" ]; then
   exit $?
 fi
 
+# **A compile is the loudest thing that happens on this box and this could not
+# see it.** Two executable names is the right shape for the self-match trap and
+# the wrong scope for the question: `rustc` forks to the core count, and a
+# `cargo build` in one session put three of them at 674%, 566% and 469% with a
+# load average of 8.47 while another session was measuring. Both of its arms
+# came back about 12% slow, and the only reason anyone noticed is that its base
+# arm failed to reproduce a figure already in the file -- 46,523 against an
+# established 40,874.
+#
+# So the set is what a *measurement* is disturbed by rather than what this
+# project happens to run: the compiler, the harness, and the toolchain that
+# builds them. `cargo` is here as well as `rustc` because a build spends real
+# time resolving and linking under the cargo process itself.
+#
+# And a load-average floor beside the names, because the names are a list and a
+# list is never complete. `wait-idle` is used before taking a number, so the
+# honest test is "is this machine quiet", not "is it running something I
+# thought of". `uptime`'s one-minute figure is a decaying average, so it lags a
+# burst by tens of seconds -- which is the right direction for this: it keeps
+# waiting after the last `rustc` exits, which is when the caches are still cold.
+#
+# The threshold is 2.0 on a machine with far more cores than that, so it is a
+# floor against *other work* rather than a claim about capacity.
+busy() {
+  pgrep -x nts > /dev/null 2>&1 && return 0
+  pgrep -x nts-bench > /dev/null 2>&1 && return 0
+  pgrep -x rustc > /dev/null 2>&1 && return 0
+  pgrep -x cargo > /dev/null 2>&1 && return 0
+  # `cut` rather than `awk $1`: the field is `load average: 8.47, 6.12, 4.03`
+  # and the comma has to go before the comparison, or every load reads as zero
+  # and the check silently never fires.
+  load=$(uptime | sed 's/.*load average: *//' | cut -d, -f1 | tr -d ' ')
+  # Integer compare, because `sh` has no floats: 2.0 becomes 2.
+  [ "${load%%.*}" -ge 2 ] 2>/dev/null && return 0
+  return 1
+}
+
+# **Order matters at the caller, and the fix above makes the wrong order more
+# tempting rather than less.**
+#
+#     wait for quiet  ->  with-lock --wait  ->  measure       WRONG
+#     with-lock --wait  ->  wait for quiet  ->  measure       RIGHT
+#
+# Waiting for quiet *before* taking the lock passes the check, then blocks
+# behind whoever holds it, and starts measuring the instant their gate finishes
+# -- which is the hottest the machine gets and the coldest the caches are. The
+# wait is not merely wasted, it makes the run look disciplined while
+# guaranteeing the worst moment. The lagging load average this script relies on
+# is exactly why: it is still decaying when the lock is handed over.
+#
+# So the quiet-wait goes *inside* the lock. Reported by the JVM lane, who walked
+# into it within ten minutes of this script learning to see compiles.
 quiet_for=${1:-45}
 waited=0
 interval=5
 
 while :; do
-  if pgrep -x nts > /dev/null 2>&1 || pgrep -x nts-bench > /dev/null 2>&1; then
+  if busy; then
     waited=0
   else
     waited=$((waited + interval))

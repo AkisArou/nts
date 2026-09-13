@@ -22855,6 +22855,9 @@ impl<'a> FuncBuilder<'a> {
         {
             return self.lower_optional_element(id, *object, *index);
         }
+        if let Some(name) = self.enum_reverse_member(id)? {
+            return Ok(name);
+        }
         if self.names_a_property(id) {
             return self.lower_property_access(id);
         }
@@ -22863,6 +22866,121 @@ impl<'a> FuncBuilder<'a> {
         }
         let (array, index) = self.element_access_parts(id)?;
         self.element_of(id, array, index)
+    }
+
+    /// `Colour[1]`, which is the enum's **reverse mapping**.
+    ///
+    /// A numeric enum emits a table alongside its members mapping each value
+    /// back to the member's name, so `Colour[1]` is `"Green"`. A *string* enum
+    /// emits none -- the specification says so, and it is why the arm below
+    /// tests the member's folded value rather than the enum's declaration.
+    ///
+    /// # The constant index only, and the reason is `undefined`
+    ///
+    /// At a constant index this is a string the compiler already knows, and
+    /// folding it is exact. At a **computed** one it is not: `Colour[n]` for an
+    /// `n` no member has answers `undefined` in JavaScript, and TypeScript
+    /// types the expression `string` regardless -- so a lookup that answered
+    /// the declared type would be wrong precisely where the program is asking
+    /// the question. That half refuses by its own name.
+    ///
+    /// The same split as `Object.hasOwn` against `Object.keys`, and as
+    /// `Array.from` over an iterable against over an array-like: the form that
+    /// names its key is answerable and the form that computes one is a
+    /// different feature.
+    ///
+    /// `None` rather than a refusal where this is not an enum at all, because
+    /// every other element access reaches here too.
+    fn enum_reverse_member(&mut self, id: NodeId) -> Result<Option<ValueId>, Diagnostic> {
+        let [object, index] = self.children(id)[..] else {
+            return Ok(None);
+        };
+        let Some(symbol) = self.node(object).symbol else {
+            return Ok(None);
+        };
+        let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else {
+            return Ok(None);
+        };
+        if !record.flags.contains(SymbolFlags::ENUM) {
+            return Ok(None);
+        }
+        // `constant_value` rather than `snapshot.constants`, and the difference
+        // is the whole of what made this refuse its own motivating case:
+        // `constants` holds enum members and the sites that *read* them, so a
+        // plain `1` written at the access has no entry, and `Colour[1]`
+        // reported itself as a computed index.
+        let Some(wanted) = self.constant_value(index, &rustc_hash::FxHashMap::default()) else {
+            return Err(self.unsupported(
+                id,
+                "an enum's reverse mapping at a computed index, which is `undefined` for a value no member has",
+            ));
+        };
+        let declarations = record.declarations.clone();
+        for declaration in declarations {
+            // TypeScript's own numbering: a member with an initializer takes it,
+            // and one without takes the previous value plus one, starting at
+            // zero. So `enum E { A, B = 5, C }` is 0, 5, 6 -- which is why this
+            // is a running total rather than a position.
+            let mut next = 0.0;
+            for member in self.children(declaration) {
+                if self.kind_of(member) != Some(syntax::ENUM_MEMBER) {
+                    continue;
+                }
+                let children = self.children(member);
+                let Some(name) = children
+                    .first()
+                    .filter(|child| self.kind_of(**child) == Some(syntax::IDENTIFIER))
+                    .and_then(|child| self.node(*child).text.clone())
+                else {
+                    continue;
+                };
+                let value = match children.get(1) {
+                    // **A string member means this enum has no reverse map at
+                    // all**, and the specification says so rather than this
+                    // being a limit: only a numeric member gets an entry, and an
+                    // enum with a string member is one a program cannot index
+                    // backwards. Refused here rather than skipped, because
+                    // skipping would answer from the *other* members and be
+                    // wrong about which enum this is.
+                    Some(initializer) => {
+                        match self.constant_value(*initializer, &rustc_hash::FxHashMap::default())
+                        {
+                            Some(value) => value,
+                            None => {
+                                return Err(self.unsupported(
+                                    id,
+                                    "an enum with a member this compiler cannot fold, which has \
+                                     no reverse mapping",
+                                ));
+                            }
+                        }
+                    }
+                    None => next,
+                };
+                next = value + 1.0;
+                // Exact equality is the comparison this wants, and clippy's
+                // objection is to the usual case rather than to this one: an
+                // enum member's value is a number the checker folded and the
+                // index is a number the program wrote, and JavaScript's own
+                // property lookup is exact. A tolerance would answer `Red` to
+                // `Colour[0.9999999]`.
+                #[allow(clippy::float_cmp, reason = "a property key is matched exactly")]
+                let found = value == wanted;
+                if !found {
+                    continue;
+                }
+                let origin = self.origin(id);
+                return Ok(Some(self.push(
+                    OpKind::ConstString(name),
+                    HirType::Managed(ManagedType::String),
+                    origin,
+                )));
+            }
+        }
+        Err(self.unsupported(
+            id,
+            "an enum's reverse mapping at a value no member has, which is `undefined`",
+        ))
     }
 
     /// What every arm of a tuple union declares at the index this access reads.

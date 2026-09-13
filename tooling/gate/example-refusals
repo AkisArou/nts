@@ -49,3 +49,4 @@ library 1 a parameter of intersection type
 module-evaluation 1 a regular expression literal
 calls 1 an erased value where a concrete representation is wanted
 jsx 2 a jsx self closing element
+enum-reverse-map-unsupported 2 the constructs the name promises

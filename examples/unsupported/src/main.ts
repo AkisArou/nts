@@ -88,7 +88,12 @@ enum Shade {
 }
 
 export function reverseMapping(n: number): number {
-  return (Shade[1] === "Dark" ? 1 : 0) + n;
+  // A **computed** index. The constant form lowers as of 2026-09-13 — it is a
+  // string the compiler already holds — and this one does not, because
+  // `Shade[n]` for an `n` no member has is `undefined` in JavaScript while the
+  // expression's type here is `string`. `examples/an-enums-reverse-mapping`
+  // holds the half that works.
+  return (Shade[n & 1] === "Dark" ? 1 : 0) + n;
 }
 
 // A module-scope `let` holding a function.
