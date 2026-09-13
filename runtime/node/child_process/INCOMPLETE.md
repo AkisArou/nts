@@ -8,8 +8,8 @@ What is not deliberate is a failure nobody wrote down, so they are all below.
 
 ## Where it is
 
-    interpreted   120 file(s): 104 passed, 6 failed, 9 skipped, 1 not applicable
-    compiled      120 file(s):  0 passed, 110 failed, 9 skipped, 1 not applicable
+    interpreted   119 file(s): 103 passed, 6 failed, 9 skipped, 1 not applicable
+    compiled      119 file(s):   PUBLISHES NOTHING on that lane -- see below
 
 114 by `test-pattern`, 4 claimed in `extra-tests`, 2 local fixtures. 1 passed when the
 branch was parked, 42 when this work started.
@@ -87,7 +87,7 @@ narrative had already explained away.
 
     send-returns-boolean.js   fixed -- and the first fix caused it
     send-keep-open.js         fixed -- `options` was validated and discarded
-    test-cluster-net-send.js  fixed -- the received handle was dropped
+    test-cluster-net-send.js  fixed here, and then given up to `cluster`
 
   `send-keep-open`: `send(message, handle, options, callback)` validated `options` and then
   never passed it on. Silent for every caller except the one that means it --
@@ -103,7 +103,17 @@ narrative had already explained away.
   send into an error. The callback is now forwarded to the host, which is the only side that
   knows when a message has gone.
 
-  `test-cluster-net-send`: `process.send(msg, socket)` in a child arrives as two values and
+  `test-cluster-net-send` **is no longer counted here.** It was claimed through
+  `extra-tests` on the stated grounds that "upstream names it for cluster, which this profile
+  does not implement" -- true when written, false since `cluster` landed. It was then claimed
+  by both lanes and disagreed with itself: a pass here and a failure under `cluster`, same
+  file, same tree, same hour, because `cluster`'s lane substitutes `net` and this one does
+  not. A file contributing a pass to one denominator and a failure to another makes both
+  numbers ambiguous, so the claim is released and the count moved the honest way: **120 files
+  and 104 passes became 119 and 103.** The fix below is still this module's and still stands;
+  what changed is who counts the file.
+
+  `process.send(msg, socket)` in a child arrives as two values and
   the stand-in forwarded one, at all four of its message sites -- so `assert.ok(handle)`
   failed on a message that had otherwise arrived intact. Sending a handle *to* a child had
   worked all along, which is why nothing pointed here. What the parent now receives is the

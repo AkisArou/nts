@@ -118,6 +118,32 @@ same way, the other small compiled surfaces are real: `stream`'s single pass and
 `querystring`'s single pass both fall to **0** when their module is emptied, so a small
 surface is not by itself a hollow one -- an absent one is.
 
+
+## `test-cluster-net-send.js` was claimed by two lanes, and passed in one of them
+
+`child_process/extra-tests` claimed it with this reason:
+
+    upstream names it for cluster, which this profile does not implement
+
+That was true when it was written and stopped being true when this module landed. Since then
+the file has been claimed **twice** -- by `child_process` through `extra-tests` and by this
+module through `test-pattern` -- and it does not agree with itself:
+
+    child_process lane   1 file(s): 1 passed
+    cluster lane         1 file(s): 1 failed
+
+Same file, same tree, same hour. The difference is what each lane substitutes: `cluster` uses
+`child_process events net`, so the primary's `net` is this profile's, while `child_process`
+uses `buffer events stream` and leaves `net` as node's. The handle arrives in both -- it is a
+host socket either way -- and under this module's lane no data flows through it, so
+`assert.ok(called)` fails in the `exit` handler.
+
+**A file contributing a pass to one denominator and a failure to another makes both numbers
+ambiguous**, so the stale claim is released: `child_process` drops it, this module keeps it,
+and the count moves the honest way rather than the flattering one. The residual cause -- data
+not flowing through a received handle when `net` is ours -- is a real defect and is recorded
+here rather than in the module that was passing it.
+
 ## What is here
 
 The handshake, and it is the whole of the module. A primary forks a child with
