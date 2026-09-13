@@ -1,4 +1,5 @@
 {
+  "//": "This reaches the repository ROOT tsconfig.base.json, which sets `erasableSyntaxOnly` -- and that is not the config nts programs use. Everything this repository compiles *with nts* uses tsconfig.fixtures.json, which does not set it. Under `erasableSyntaxOnly`, a `namespace` holding a value, an `enum`, a parameter property and `import =` are TS1294 **before the compiler sees them**, so a fixture written here to record what the COMPILER refuses would silently record what TypeScript refuses instead. Audited 2026-09-14: no existing fixture uses any of that syntax, so nothing is currently mismeasured. If you write one that does, give it its own tsconfig extending ../../../../tsconfig.fixtures.json and say why in the file -- `a-namespace-holding-a-value` is the worked example.",
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "composite": false,
