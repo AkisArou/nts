@@ -2293,11 +2293,24 @@ follow it.
   TypeScript has no wildcard. The control that proves the `Signature` attribute
   is what is being read: `raw()` has the *same erased descriptor* as `names()`
   and no `Signature`, and must stay unparameterised.
-- **A raw type cannot be given `List<unknown>`.** It renders as a bare
-  `java.util.List`, which is a TypeScript error against a generic declaration.
-  Knowing that `List` takes one parameter means reading `java/util/List.class`'s
-  own `Signature` -- the whole jar rather than one class file, which is the same
-  requirement as inherited members below.
+- **A raw type renders as a bare `java.util.List`** rather than
+  `List<unknown>`. **Priced and refused**, rather than left as a gap:
+
+  The resolver added for inherited members could answer it -- a class's own
+  `Signature` declares its type parameters, so the arity is readable. But
+  `reference` has six call sites and the two renderers have fifteen between
+  them, and none takes a resolver; threading one through is twenty-one edits,
+  and the alternative is another `thread_local`, which the package one already
+  is and which should not become a habit.
+
+  **And the symptom does not exist.** `raw(): java.util.List | null` typechecks
+  with **zero** TypeScript errors today, because the prelude declares
+  `List<T = unknown>` and a defaulted parameter may be omitted. It becomes real
+  only when the prelude is itself generated from `java.base` -- which is not
+  built, and would be the change that pays for the plumbing.
+
+  So the cost is twenty-one call sites for a case that does not occur. Recorded
+  here with the condition that makes it worth doing, rather than built now.
 - ~~**Inherited members are not surfaced.**~~ **Closed, through a resolver.**
   `declarations_with(class, resolve)` walks `super_name` upward and emits what
   the subclass does not declare, marked `/** Inherited. */`. `java/lang/Object`
