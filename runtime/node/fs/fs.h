@@ -97,10 +97,10 @@ NtsString *nts_uv_err_message(double code);
  * Node accepts a Buffer wherever it accepts a string path, and a POSIX filename
  * is a byte sequence that need not decode as UTF-8. Routing such a path through
  * the string form would rewrite it -- `readdir` hands back replacement
- * characters, and the name that comes out no longer opens the file that went in.
- * Thirteen public `fs` functions rejected a Buffer before these existed, and
- * none of node's 260 `fs` test files passes one, so nothing upstream could have
- * caught it. See `runtime/node/fs/test/byte-path-static.js`.
+ * characters, and the name that comes out no longer opens the file that went
+ * in. Thirteen public `fs` functions rejected a Buffer before these existed,
+ * and none of node's 260 `fs` test files passes one, so nothing upstream could
+ * have caught it. See `runtime/node/fs/test/byte-path-static.js`.
  */
 double nts_fs_unlink_bytes(NtsArray *path);
 double nts_fs_mkdir_bytes(NtsArray *path, double mode);
@@ -122,11 +122,108 @@ double nts_fs_watch_start(NtsString *path, bool recursive, bool persistent,
 void nts_fs_watch_stop(double handle);
 void nts_fs_watch_ref(double handle);
 void nts_fs_watch_unref(double handle);
-double nts_fs_watchfile_start(NtsString *path, double interval,
-                              bool persistent, bool bigint,
-                              NtsHeader *callback);
+double nts_fs_watchfile_start(NtsString *path, double interval, bool persistent,
+                              bool bigint, NtsHeader *callback);
 void nts_fs_watchfile_stop(double handle);
 void nts_fs_watchfile_ref(double handle);
 void nts_fs_watchfile_unref(double handle);
+
+/* Async operations retain a managed callback until completion. These
+ * prototypes are checked against the definitions by fs.c including this file.
+ */
+void nts_fs_access_async(NtsString *path, double mode, NtsHeader *callback);
+void nts_fs_access_bytes_async(NtsArray *path, double mode,
+                               NtsHeader *callback);
+void nts_fs_chmod_async(NtsString *path, double mode, NtsHeader *callback);
+void nts_fs_chmod_async_bytes(NtsArray *path, double mode, NtsHeader *callback);
+void nts_fs_chown_async(NtsString *path, double uid, double gid,
+                        NtsHeader *callback);
+void nts_fs_chown_async_bytes(NtsArray *path, double uid, double gid,
+                              NtsHeader *callback);
+void nts_fs_close_async(double descriptor, NtsHeader *callback);
+void nts_fs_copyfile_async(NtsString *from, NtsString *to, double flags,
+                           NtsHeader *callback);
+void nts_fs_copyfile_async_bytes(NtsArray *from, NtsArray *to, double flags,
+                                 NtsHeader *callback);
+void nts_fs_fchmod_async(double fd, double mode, NtsHeader *callback);
+void nts_fs_fchown_async(double fd, double uid, double gid,
+                         NtsHeader *callback);
+void nts_fs_fdatasync_async(double fd, NtsHeader *callback);
+void nts_fs_fsync_async(double fd, NtsHeader *callback);
+void nts_fs_ftruncate_async(double fd, double length, NtsHeader *callback);
+void nts_fs_futimes_async(double fd, double atime, double mtime,
+                          NtsHeader *callback);
+void nts_fs_lchown_async(NtsString *path, double uid, double gid,
+                         NtsHeader *callback);
+void nts_fs_lchown_bytes_async(NtsArray *path, double uid, double gid,
+                               NtsHeader *callback);
+void nts_fs_link_async(NtsString *from, NtsString *to, NtsHeader *callback);
+void nts_fs_link_async_bytes(NtsArray *from, NtsArray *to, NtsHeader *callback);
+void nts_fs_lutimes_async(NtsString *path, double atime, double mtime,
+                          NtsHeader *callback);
+void nts_fs_rename_async(NtsString *from, NtsString *to, NtsHeader *callback);
+void nts_fs_rename_async_bytes(NtsArray *from, NtsArray *to,
+                               NtsHeader *callback);
+void nts_fs_rmdir_async(NtsString *path, NtsHeader *callback);
+void nts_fs_rmdir_async_bytes(NtsArray *path, NtsHeader *callback);
+void nts_fs_symlink_async(NtsString *target, NtsString *at, double flags,
+                          NtsHeader *callback);
+void nts_fs_symlink_bytes_async(NtsArray *target, NtsArray *at, double flags,
+                                NtsHeader *callback);
+void nts_fs_unlink_async(NtsString *path, NtsHeader *callback);
+void nts_fs_unlink_async_bytes(NtsArray *path, NtsHeader *callback);
+void nts_fs_utimes_async(NtsString *path, double atime, double mtime,
+                         NtsHeader *callback);
+void nts_fs_utimes_async_bytes(NtsArray *path, double atime, double mtime,
+                               NtsHeader *callback);
+void nts_fs_open_async(NtsString *path, double flags, double mode,
+                       NtsHeader *callback);
+void nts_fs_open_bytes_async(NtsArray *path, double flags, double mode,
+                             NtsHeader *callback);
+void nts_fs_stat_async(NtsString *path, bool follow, NtsHeader *callback);
+void nts_fs_stat_bytes_async(NtsArray *path, bool follow, NtsHeader *callback);
+void nts_fs_stat_bigint_async(NtsString *path, bool follow,
+                              NtsHeader *callback);
+void nts_fs_stat_bigint_bytes_async(NtsArray *path, bool follow,
+                                    NtsHeader *callback);
+void nts_fs_fstat_async(double fd, NtsHeader *callback);
+void nts_fs_fstat_bigint_async(double fd, NtsHeader *callback);
+void nts_fs_statfs_async(NtsString *path, NtsHeader *callback);
+void nts_fs_statfs_bytes_async(NtsArray *path, NtsHeader *callback);
+void nts_fs_statfs_bigint_async(NtsString *path, NtsHeader *callback);
+void nts_fs_statfs_bigint_bytes_async(NtsArray *path, NtsHeader *callback);
+void nts_fs_mkdtemp_async(NtsString *template_path, NtsHeader *callback);
+void nts_fs_mkdtemp_bytes_async(NtsArray *template_path, NtsHeader *callback);
+void nts_fs_readlink_async(NtsString *path, NtsHeader *callback);
+void nts_fs_readlink_async_bytes(NtsArray *path, NtsHeader *callback);
+void nts_fs_realpath_async(NtsString *path, NtsHeader *callback);
+void nts_fs_realpath_bytes_async(NtsArray *path, NtsHeader *callback);
+void nts_fs_write_async(double fd, NtsArray *bytes, double position,
+                        NtsHeader *callback);
+void nts_fs_writev_async(double fd, NtsArray *bytes, NtsArray *lengths,
+                         double position, NtsHeader *callback);
+void nts_fs_mkdir_async(NtsString *path, double mode, bool recursive,
+                        NtsHeader *callback);
+void nts_fs_mkdir_async_bytes(NtsArray *path, double mode, bool recursive,
+                              NtsHeader *callback);
+void nts_fs_read_async(double descriptor, double length, double position,
+                       NtsHeader *callback);
+void nts_fs_read_bigint_async(double fd, double length, double position,
+                              NtsHeader *callback);
+void nts_fs_readv_async(double fd, NtsArray *lengths, double position,
+                        NtsHeader *callback);
+void nts_fs_scandir_async(NtsString *path, NtsHeader *callback);
+void nts_fs_scandir_bytes_async(NtsArray *path, NtsHeader *callback);
+void nts_fs_opendir_async(NtsString *path, NtsHeader *callback);
+void nts_fs_opendir_bytes_async(NtsArray *path, NtsHeader *callback);
+void nts_fs_dir_read_async(double identifier, double buffer_size,
+                           NtsHeader *callback);
+void nts_fs_dir_close_async(double identifier, NtsHeader *callback);
+void nts_fs_rm_async(NtsString *path, bool recursive, bool force,
+                     double max_retries, double retry_delay,
+                     NtsHeader *callback);
+void nts_fs_rm_async_bytes(NtsArray *path, bool recursive, bool force,
+                           double max_retries, double retry_delay,
+                           NtsHeader *callback);
 
 #endif
