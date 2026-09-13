@@ -333,7 +333,7 @@ fn the_generator_produces_declarations_for_the_fixture() {
         assert!(body.contains(needle), "expected `{needle}` in:\n{body}");
     };
 
-    expect("static readonly MAX: int;");       // I -> branded int
+    expect("static readonly MAX: number;");    // every integral width is `number` now
     // A `ConstantValue` field IS its constant, so it is provably never null --
     // without this it read `string | null` for a compile-time string literal.
     expect("static readonly NAME: string;");
@@ -342,11 +342,13 @@ fn the_generator_produces_declarations_for_the_fixture() {
     // control: a rule that made every static non-null would pass the line
     // above and fail this one.
     expect("static readonly DEFAULT_KIND: Kind | null;");
-    expect("hits: int;");                            // a public mutable field
+    expect("hits: number;");                         // a public mutable field
     expect("id(): bigint;");                         // J -> bigint, never number
     expect("counts(): Int32Array");                  // [I -> a typed array, not int[]
     expect("bytes(): Uint8Array");                   // [B
-    expect("sum(a0: Int32Array): int;");             // varargs are an array at the ABI
+    // Varargs spread at the call site; the ABI type is still the array, which
+    // is what `javac` packs into.
+    expect("sum(...a0: number[]): number;");
     expect("constructor(a0: string");                // <init> becomes a constructor
 
     // `ConstantValue` is surfaced, because it decides whether touching the
@@ -395,7 +397,7 @@ fn nullability_is_asymmetric_between_returns_and_arguments() {
     // The control: `find(a0: number)` proves a primitive argument is untouched
     // by either rule, so the two assertions above are about nullability rather
     // than about parameters in general.
-    assert!(body.contains("find(a0: number): int;"), "a primitive argument is unchanged:\n{body}");
+    assert!(body.contains("find(a0: number): number;"), "a primitive argument is unchanged:\n{body}");
 }
 
 /// Print the generated declarations, for reading rather than asserting.
@@ -431,7 +433,7 @@ fn enum_constants_are_not_nullable() {
 
     // The control: an unannotated reference return on the SAME class is still
     // nullable, so this is about `ACC_ENUM` rather than about the class.
-    assert!(body.contains("weight(): int;"), "{body}");
+    assert!(body.contains("weight(): number;"), "{body}");
     assert!(
         body.contains("static valueOf(a0: string): Kind | null;"),
         "an unannotated return is still nullable on an enum:\n{body}"
@@ -468,7 +470,7 @@ fn generic_signatures_are_rendered() {
     // `<T>` the generated file does not compile: the `T` in the body would
     // refer to nothing. Found by running the generator on the real jar and
     // reading the output, not by reasoning about it.
-    expect("repeat<T>(a0: T, a1: int): java.util.List<T> | null;");
+    expect("repeat<T>(a0: T, a1: number): java.util.List<T> | null;");
     // The control: a method with no type parameters of its own gains no angle
     // brackets, so this is about the `<...>` block rather than about every
     // method.
@@ -525,7 +527,7 @@ fn inherited_members_are_surfaced_through_a_resolver() {
         "java.lang.Enum is not in the fixture, so this should still find nothing:\n{only_fixture}"
     );
 
-    assert!(only_fixture.contains("weight(): int;"), "declared members still render");
+    assert!(only_fixture.contains("weight(): number;"), "declared members still render");
 
     // **The positive arm, and without it the three assertions above would all
     // pass with `inherited` returning nothing at all.** `android-shape` has a

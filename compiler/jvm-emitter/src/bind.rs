@@ -41,6 +41,11 @@ const ACC_FINAL: u16 = 0x0010;
 /// On a class it means "this is an enum"; on a field, "this is one of its
 /// constants". JVMS table 4.5-A.
 const ACC_ENUM: u16 = 0x4000;
+/// The method's last parameter is a varargs one. At the ABI it is still an
+/// array -- `javac` packs the arguments at the **call site** -- but a caller
+/// writes `sum(1, 2, 3)`, so the declaration has to spread or it reads
+/// `Expected 1 arguments, but got 3`.
+const ACC_VARARGS: u16 = 0x0080;
 
 /// One Java type, as TypeScript.
 ///
@@ -51,34 +56,34 @@ fn type_of(descriptor: &str) -> Option<(String, usize)> {
     match *bytes.first()? {
         b'V' => Some(("void".to_owned(), 1)),
         b'Z' => Some(("boolean".to_owned(), 1)),
-        b'B' => Some(("byte".to_owned(), 1)),
-        b'S' => Some(("short".to_owned(), 1)),
-        b'C' => Some(("char".to_owned(), 1)),
-        b'I' => Some(("int".to_owned(), 1)),
+        // **Every integral width is `number`, and the brands are gone.**
+        //
+        // Measured 2026-09-13, and it refutes the earlier design. A branded
+        // intersection lowers in exactly one position -- a **free** declared
+        // function's parameter -- and is refused as a return, as a class
+        // property, and as a class *method's* parameter. Bindings are classes,
+        // so the brand does not survive anywhere this generator emits one. The
+        // first measurement used `declare function`, which is the one shape a
+        // binding never takes.
+        //
+        // What the brand was for -- telling `f(int)` from `f(double)` when both
+        // collapse to one TypeScript name -- is done by `disambiguate` below
+        // instead, by giving the lossy overloads different names.
+        b'B' | b'S' | b'C' | b'I' | b'F' | b'D' => Some(("number".to_owned(), 1)),
         // A `long` exceeds 2^53. `number` would be a lie.
         b'J' => Some(("bigint".to_owned(), 1)),
         // `float` is branded because passing a `number` to it loses precision,
         // and that is worth a cast at the call site. `double` IS `number` and
         // gets no brand -- a brand that is never the distinguishing one is
         // noise everywhere it appears.
-        b'F' => Some(("float".to_owned(), 1)),
-        b'D' => Some(("number".to_owned(), 1)),
         b'[' => {
             let (inner, used) = type_of(&descriptor[1..])?;
             // A Java primitive array IS the matching typed array: same object,
             // no copy, and the element type narrows.
-            let rendered = match inner.as_str() {
-                "byte" => "Uint8Array".to_owned(),
-                "short" => "Int16Array".to_owned(),
-                "char" => "Uint16Array".to_owned(),
-                "int" => "Int32Array".to_owned(),
-                "float" => "Float32Array".to_owned(),
-                "number" => "Float64Array".to_owned(),
-                // `long[]` has a typed array but `boolean[]` does not, and an
-                // array of references is an ordinary TypeScript array.
-                "bigint" => "BigInt64Array".to_owned(),
-                other => format!("{other}[]"),
-            };
+            // An array keeps its exact width, because a typed array IS a
+            // distinct TypeScript type -- this is the one place the element
+            // width survives without a brand, which is cost 10a's whole point.
+            let rendered = typed_array(&descriptor[1..], &inner);
             Some((rendered, used + 1))
         }
         b'L' => {
@@ -100,6 +105,27 @@ fn type_of(descriptor: &str) -> Option<(String, usize)> {
 // reading the output, not by reasoning about it.
 thread_local! {
     static PACKAGE: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+/// The typed array for a Java array's element descriptor.
+///
+/// Keyed on the **descriptor** rather than on the rendered name, because every
+/// integral width renders as `number` now and only the descriptor still says
+/// which one. `[I` is an `Int32Array` and `[B` a `Uint8Array`; getting that from
+/// the rendered type would be impossible.
+fn typed_array(element: &str, rendered: &str) -> String {
+    match element.as_bytes().first() {
+        Some(b'B') => "Uint8Array".to_owned(),
+        Some(b'S') => "Int16Array".to_owned(),
+        Some(b'C') => "Uint16Array".to_owned(),
+        Some(b'I') => "Int32Array".to_owned(),
+        Some(b'F') => "Float32Array".to_owned(),
+        Some(b'D') => "Float64Array".to_owned(),
+        Some(b'J') => "BigInt64Array".to_owned(),
+        // `boolean[]` has no typed array, and an array of references is an
+        // ordinary TypeScript array.
+        _ => format!("{rendered}[]"),
+    }
 }
 
 /// A reference type's binary name, as TypeScript.
@@ -245,36 +271,108 @@ fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read::Membe
     found
 }
 
-/// Render one class as a `declare class` body.
+/// How lossy it is to receive a TypeScript `number` as this Java type.
 ///
-/// # Errors
-///
-/// Returns the member's name when a descriptor cannot be rendered, rather than
-/// emitting a declaration with a hole in it. **Refuse by name, never
-/// half-emit**: a `.d.ts` that silently drops a method is one a caller trusts.
-pub fn declarations(class: &ClassFile) -> Result<String, String> {
-    declarations_with(class, &Alone)
+/// Lower is better. A `number` **is** an f64, so `double` receives it without
+/// loss and is the only non-lossy choice; everything below truncates or rounds.
+/// This is the same order `find(1.5)` resolving to `find(double)` rests on, and
+/// it is the rule a Java programmer already expects.
+fn lossiness(descriptor: &str) -> u8 {
+    match descriptor.as_bytes().first() {
+        Some(b'D') => 0,
+        Some(b'J') => 1,
+        Some(b'F') => 2,
+        Some(b'I') => 3,
+        Some(b'S') => 4,
+        Some(b'C') => 5,
+        Some(b'B') => 6,
+        _ => 7,
+    }
 }
 
-/// Render one class, resolving inherited members through `resolve`.
+/// A short suffix naming a method's Java parameter types, for the overloads
+/// that collapse onto one TypeScript signature.
 ///
-/// # Errors
+/// **This is what replaced the brands.** `f(int)`, `f(long)` and `f(double)`
+/// all take a `number` now, so two of the three need different *names* or the
+/// declaration has duplicate members. `find$int` is greppable, needs no
+/// compiler change, and says at the call site which one you meant -- which is
+/// exactly the job the brand was doing, done with a mechanism that lowers.
+fn suffix(descriptor: &str) -> String {
+    let Some(open) = descriptor.find('(') else { return String::new() };
+    let Some(close) = descriptor.find(')') else { return String::new() };
+    let mut names = Vec::new();
+    let mut rest = &descriptor[open + 1..close];
+    while !rest.is_empty() {
+        let used = match rest.as_bytes()[0] {
+            b'L' => rest.find(';').map_or(rest.len(), |it| it + 1),
+            b'[' => {
+                let mut at = 0;
+                while rest.as_bytes().get(at) == Some(&b'[') {
+                    at += 1;
+                }
+                if rest.as_bytes().get(at) == Some(&b'L') {
+                    rest[at..].find(';').map_or(rest.len(), |it| at + it + 1)
+                } else {
+                    at + 1
+                }
+            }
+            _ => 1,
+        };
+        let part = &rest[..used];
+        names.push(match part.as_bytes()[0] {
+            b'B' => "byte".to_owned(),
+            b'S' => "short".to_owned(),
+            b'C' => "char".to_owned(),
+            b'I' => "int".to_owned(),
+            b'J' => "long".to_owned(),
+            b'F' => "float".to_owned(),
+            b'D' => "double".to_owned(),
+            b'Z' => "boolean".to_owned(),
+            _ => simple_name(part.trim_start_matches(['[', 'L']).trim_end_matches(';')),
+        });
+        rest = &rest[used..];
+    }
+    format!("${}", names.join("$"))
+}
+
+/// The name a method is emitted under, renaming it when an overload collapses.
 ///
-/// As [`declarations`].
-pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<String, String> {
-    // The package this class lives in, so its siblings render unqualified.
-    let package = class
-        .binary_name
-        .rsplit_once('/')
-        .map_or_else(String::new, |(package, _)| package.replace('/', "."));
-    PACKAGE.with(|it| it.replace(package));
+/// If another public method of the class renders the same name with the same
+/// TypeScript parameter list, the two are indistinguishable and one must be
+/// renamed. The **least lossy** keeps the plain name, because a caller writing
+/// `find(x)` with a `number` means the overload that does not truncate.
+fn emitted_name(
+    class: &ClassFile,
+    method: &crate::read::Member,
+    collapsed: &[(String, String)],
+) -> String {
+    let key = |descriptor: &str| {
+        signature_of(descriptor).map(|(parameters, _)| parameters.join(",")).unwrap_or_default()
+    };
+    let mine = key(&method.descriptor);
+    let twins =
+        collapsed.iter().filter(|(name, other)| name == &method.name && other == &mine).count();
+    if twins <= 1 {
+        return method.name.clone();
+    }
+    let best = class
+        .methods
+        .iter()
+        .filter(|other| {
+            other.access & ACC_PUBLIC != 0 && other.name == method.name && key(&other.descriptor) == mine
+        })
+        .min_by_key(|other| lossiness(&other.descriptor[1..]))
+        .map(|other| other.descriptor.clone());
+    if best.as_deref() == Some(method.descriptor.as_str()) {
+        method.name.clone()
+    } else {
+        format!("{}{}", method.name, suffix(&method.descriptor))
+    }
+}
 
-    let mut out = String::new();
-    let name = simple_name(&class.binary_name);
-
-    let _ = writeln!(out, "  /** {} */", class.binary_name.replace('/', "."));
-    let _ = writeln!(out, "  export class {name} {{");
-
+/// Append every public field, with its nullability and constant-ness.
+fn render_fields(out: &mut String, class: &ClassFile) -> Result<(), String> {
     let is_enum_class = class.access & ACC_ENUM != 0;
 
     for field in class.fields.iter().filter(|f| f.access & ACC_PUBLIC != 0) {
@@ -323,6 +421,50 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
             if provably_present { rendered.clone() } else { returns(&rendered, &field.annotations) },
         );
     }
+    Ok(())
+}
+
+/// Render one class as a `declare class` body.
+///
+/// # Errors
+///
+/// Returns the member's name when a descriptor cannot be rendered, rather than
+/// emitting a declaration with a hole in it. **Refuse by name, never
+/// half-emit**: a `.d.ts` that silently drops a method is one a caller trusts.
+pub fn declarations(class: &ClassFile) -> Result<String, String> {
+    declarations_with(class, &Alone)
+}
+
+/// Render one class, resolving inherited members through `resolve`.
+///
+/// # Errors
+///
+/// As [`declarations`].
+pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<String, String> {
+    // The package this class lives in, so its siblings render unqualified.
+    let package = class
+        .binary_name
+        .rsplit_once('/')
+        .map_or_else(String::new, |(package, _)| package.replace('/', "."));
+    PACKAGE.with(|it| it.replace(package));
+
+    let mut out = String::new();
+    let name = simple_name(&class.binary_name);
+
+    let _ = writeln!(out, "  /** {} */", class.binary_name.replace('/', "."));
+    let _ = writeln!(out, "  export class {name} {{");
+
+    render_fields(&mut out, class)?;
+
+    // Which methods collapse onto one TypeScript signature. Computed before
+    // rendering, because the decision is about the *set*: a name is only
+    // ambiguous relative to its siblings.
+    let mut collapsed: Vec<(String, String)> = Vec::new();
+    for method in class.methods.iter().filter(|m| m.access & ACC_PUBLIC != 0) {
+        if let Some((parameters, _)) = signature_of(&method.descriptor) {
+            collapsed.push((method.name.clone(), parameters.join(",")));
+        }
+    }
 
     for method in class.methods.iter().filter(|m| m.access & ACC_PUBLIC != 0) {
         // The `Signature` attribute first, because it is the one that still has
@@ -336,6 +478,8 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         else {
             return Err(format!("{}.{}: {}", class.binary_name, method.name, method.descriptor));
         };
+        let variadic = method.access & ACC_VARARGS != 0;
+        let last = parameters.len().saturating_sub(1);
         let arguments = parameters
             .iter()
             .enumerate()
@@ -354,6 +498,22 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
                 } else {
                     rendered.clone()
                 };
+                if variadic && index == last {
+                    // The ABI type is the array; the call site spreads. A
+                    // typed array is not spreadable as elements, so the
+                    // element type comes back out of it.
+                    let element = match ty.as_str() {
+                        // Every integral width is `number` now, so the element
+                        // type of a numeric typed array is `number` -- the
+                        // width lives in the typed array, and a spread has no
+                        // typed array to live in.
+                        "Int32Array" | "Uint8Array" | "Int16Array" | "Uint16Array"
+                        | "Float32Array" | "Float64Array" => "number[]".to_owned(),
+                        "BigInt64Array" => "bigint[]".to_owned(),
+                        other => other.to_owned(),
+                    };
+                    return format!("...a{index}: {element}");
+                }
                 format!("a{index}: {ty}")
             })
             .collect::<Vec<_>>()
@@ -363,6 +523,8 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
             let _ = writeln!(out, "    constructor({arguments});");
             continue;
         }
+
+        let emitted = emitted_name(class, method, &collapsed);
         if method.name == "<clinit>" {
             continue;
         }
@@ -378,7 +540,7 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
             out,
             "    {}{}{}({arguments}): {};",
             if method.access & ACC_STATIC != 0 { "static " } else { "" },
-            method.name,
+            emitted,
             type_parameters(method.signature.as_deref()),
             returns(&result, &method.annotations),
         );
@@ -441,8 +603,22 @@ pub fn module_of(package: &str, classes: &[(String, String)]) -> String {
     let mut out = String::new();
     out.push_str("// GENERATED by `nts bind`. Do not edit.\n//\n");
     out.push_str("// Every comment below is emitted, not written by hand: where a member costs an\n");
-    out.push_str("// allocation or loads a class, the declaration is where a reader is looking.\n\n");
-    out.push_str("import type { int, short, byte, char, float } from \"./java\";\n\n");
+    out.push_str("// allocation or loads a class, the declaration is where a reader is looking.\n//\n");
+    // **No top-level `import` here, and that is load-bearing rather than
+    // stylistic.** A `.d.ts` containing a top-level import or export is a
+    // *module*, and a `declare module "x"` inside a module file is a module
+    // **augmentation** -- it adds to a module that must already exist, and
+    // declares nothing on its own. The result is
+    // `TS2307 Cannot find module 'java:com.example'` at every import site.
+    //
+    // With no top-level import the file is a global script and the block is an
+    // ambient declaration, which is what an import can resolve to. The brands
+    // and the `java.*` namespace come from `java.d.ts`, which is global for the
+    // same reason.
+    //
+    // Found by compiling the output. Reading it three times did not.
+    out.push_str("// The brands and the `java.*` namespace come from java.d.ts, which is global --\n");
+    out.push_str("// this file must NOT import them, or it becomes a module and declares nothing.\n\n");
     let _ = writeln!(out, "declare module \"java:{package}\" {{");
 
     // Outer classes first, each followed by a namespace holding whatever nests

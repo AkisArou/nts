@@ -2324,3 +2324,76 @@ them was printing it and reading it.
 TypeScript requires for a declaration merge. `module` is deleted rather than
 kept beside `module_of` -- a second way of doing one thing is worse than
 changing the one caller.
+
+# Compiling the generated file refuted the brand design outright
+
+Item 1 measured the brand and concluded it "survives exactly where it needs no
+representation", validating the `.d.ts`. **That conclusion was drawn from the
+wrong shape**, and typechecking the generated declarations against the call
+sites is what exposed it.
+
+The first probe used `declare function f(x: int)`. A binding is never a free
+function -- it is a **class**. Re-measured across every position a generator
+actually emits:
+
+| position | brand |
+| --- | --- |
+| a **free** declared function's parameter | ✓ lowers |
+| a declared **return** | ✗ refused |
+| a declared **class property** | ✗ refused |
+| a declared **class method's** parameter | ✗ refused |
+
+So the brand was refused at *every* position this generator emits one, and the
+single position where it works is the one a binding never takes. The earlier
+measurement was correct about what it measured and its scope was drawn by the
+design it was checking -- the same failure the compiler lane hit the same day
+with `withResolvers`, arriving here by my own hand.
+
+## What replaced it
+
+**Every Java integral width is `number`, and a colliding overload is renamed.**
+`find(int)`, `find(long)` and `find(double)` all take a `number`, so the
+*least lossy* keeps the plain name -- a `number` **is** an f64, so `double`
+receives it without loss -- and the others become `find$int`, `find$long`. That
+is greppable, needs no compiler change, and says at the call site which one you
+meant, which is the entire job the brand was doing.
+
+**Arrays keep their width for free**, and this is cost 10a's point arriving
+intact: `[I` is an `Int32Array`, a distinct TypeScript type that needs no brand
+to be one. The width survives exactly where it was always going to.
+
+## Five generator bugs, three found by compiling and two by lowering
+
+None was reachable by reading the file, and three of them produce TypeScript
+that does not compile:
+
+1. **A top-level `import` made the file a module**, so `declare module
+   "java:com.example"` was a module *augmentation* -- it augments a module that
+   must already exist and declares nothing. Every import site read `TS2307
+   Cannot find module`. The generated file and the prelude are both global
+   scripts now, and the comment in `module_of` says why so it does not get
+   "tidied" back.
+2. **Declared type parameters were dropped** -- `repeat(a0: T)` using a `T`
+   nothing introduced.
+3. **Nested classes were emitted top-level**, so `Catalog.Cursor` referred to
+   nothing.
+4. **Varargs were not spread** -- `sum(a0: Int32Array)` called as `sum(1, 2, 3)`
+   is `TS2554 Expected 1 arguments, but got 3`. `ACC_VARARGS` says which method,
+   and the ABI type stays the array because `javac` packs at the call site.
+5. **The brands, above**, which compiled and then refused in the lowering.
+
+## Where it stops, and it is a precise work list
+
+With zero TypeScript errors, what remains are lowering refusals that each name
+what the binding needs and does not have:
+
+```
+a member of `HashMap`, a class this compiler has no type for
+a method without a body
+a parameter of unrepresentable type (the type parameter `T`)
+```
+
+Those are the foreign-layout work, the binding table, and generics in our own
+signatures -- the three things gated upstream. A `.d.ts` that typechecks and
+refuses to lower for exactly three named reasons is a much better place to hand
+over from than one that has never been compiled.

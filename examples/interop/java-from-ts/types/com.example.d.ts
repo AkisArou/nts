@@ -2,47 +2,48 @@
 //
 // Every comment below is emitted, not written by hand: where a member costs an
 // allocation or loads a class, the declaration is where a reader is looking.
-
-import type { int, short, byte, char, float } from "./java";
+//
+// The brands and the `java.*` namespace come from java.d.ts, which is global --
+// this file must NOT import them, or it becomes a module and declares nothing.
 
 declare module "java:com.example" {
   /** com.example.Catalog */
   export class Catalog {
     /** Inlined at the call site: the class is never loaded for this. */
-    static readonly MAX: int;
+    static readonly MAX: number;
     /** Inlined at the call site: the class is never loaded for this. */
     static readonly NAME: string;
     /** A real `getstatic`, and it runs the owner's `<clinit>`. */
     static readonly DEFAULT_KIND: Kind | null;
-    hits: int;
+    hits: number;
     constructor(a0: string);
     index(): java.util.HashMap<string, java.lang.Integer> | null;
     names(): java.util.List<string> | null;
     counts(): Int32Array | null;
     bytes(): Uint8Array | null;
     id(): bigint;
-    find(a0: int): int;
-    find(a0: bigint): int;
-    find(a0: number): int;
-    find(a0: string): int;
+    find$int(a0: number): number;
+    find(a0: bigint): number;
+    find(a0: number): number;
+    find(a0: string): number;
     render(a0: string): string | null;
     render(a0: unknown): string | null;
-    sum(a0: Int32Array): int;
-    describe(a0: int): string | null;
+    sum(...a0: number[]): number;
+    describe(a0: number): string | null;
     name(): string | null;
     /** Throws java.lang.NumberFormatException. Caught at the call site and raised as an `NtsRefusal`; not catchable by a TypeScript `try` yet. */
-    parse(a0: string): int;
-    repeat<T>(a0: T, a1: int): java.util.List<T> | null;
+    parse(a0: string): number;
+    repeat<T>(a0: T, a1: number): java.util.List<T> | null;
     total(a0: java.util.List<java.lang.Number>): number;
     raw(): java.util.List | null;
-    cursorAt(a0: int): Catalog.Cursor | null;
+    cursorAt(a0: number): Catalog.Cursor | null;
   }
 
   export namespace Catalog {
     /** com.example.Catalog$Cursor */
     export class Cursor {
-      at: int;
-      constructor(a0: Catalog, a1: int);
+      at: number;
+      constructor(a0: Catalog, a1: number);
       owner(): string | null;
     }
     /** com.example.Catalog$Entry */
@@ -62,7 +63,7 @@ declare module "java:com.example" {
     static readonly LARGE: Kind;
     static values(): Kind[] | null;
     static valueOf(a0: string): Kind | null;
-    weight(): int;
+    weight(): number;
   }
 
 }
