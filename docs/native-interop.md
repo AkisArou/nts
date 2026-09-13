@@ -245,9 +245,28 @@ code reports. All 63 are in `fs`, which is the module that *does* build and
 load an addon.
 
 The repair is a prototype, not a refusal: declare them in `fs.h` and siblings
-and the header-derived registry covers 341 of 354, leaving only the 13. That is
-a **node-lane** change — `runtime/node` is corpus to both the native and JVM
-lanes, neither of which may edit it.
+and the header-derived registry covers 341 of 354, leaving only the 13.
+
+**It is prophylactic, not a repair — corrected 2026-09-14 by the node lane, and
+the correction is about which translation unit the controls covered.** The
+native lane's two controls were both about `fs.c`: a corrupted prototype makes
+it fail, and old-versus-new headers give byte-identical objects. Both sound, and
+neither answers the question, because **the prototypes are consumed by the
+generated `addon.c`, not by `fs.c`**. Byte-identical `fs.c` objects show the
+header did not perturb `fs.c`.
+
+The control that answers it is building the addon, which the node lane did:
+`fs.node` links, 1144312 bytes, with the new header in the translation unit. A
+disagreement between an inferred declaration in `addon.c` and a prototype in
+`fs.h` is a conflicting-types error, so **the build succeeding is the evidence
+that all 63 inferences already agreed**.
+
+So no wrong calling convention was running. The honest statement is not "63
+prototypes added to close a wrong-calling-convention hazard", which reads as a
+bug fixed; it is **a hazard that had not yet fired is now structurally
+impossible**. The hazard was real — nothing compared the guess to the
+definition — and it happened to be unrealised, which only a build of the right
+translation unit could have shown.
 
 Two things here were mine and wrong first. I claimed all 76 were JS-only,
 having sampled *two* names, found both in `bindings.node.mjs`, and generalised
