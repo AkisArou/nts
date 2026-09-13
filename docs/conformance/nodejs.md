@@ -24515,3 +24515,54 @@ it has no row to move; `net`'s two hollow passes stay hollow because the compile
 object for `handle` or `fd` to return. A module can improve a great deal on one lane without the
 other noticing.
 
+## A peer edited this lane's headers, and the control that mattered was not theirs
+
+`c6bbc9ec`, from the native-interop session with the user's permission: 63 prototypes added to
+`fs/fs.h` for functions that already existed, and `net/net.h` deleted because it and `nts_net.h`
+**both defined `NTS_NODE_NET_H`**, so whichever came second was skipped in silence.
+
+Verified here rather than relayed:
+
+    commit touches                      exactly those two files
+    consumers of net.h outside target/  none
+    the duplicated guard                real; nts_net.h still defines it at line 29
+    net build / fs build                ok, 911568 and 1144312 bytes
+    net interpreted                     185 files: 154 passed, 0 failed  (unchanged)
+    declared nts_* bridges              354, matching their count exactly
+
+My first bridge count said **340**, from a glob that missed nested sources. Two derivations of one
+fact disagreeing is usually where the interesting thing is; here the narrower one was simply wrong.
+
+### The hazard had not fired, and saying so matters
+
+Their controls were both about `fs.c`: corrupting a prototype makes it fail to compile, and old
+versus new headers give byte-identical objects. Sound, but neither answers the question --
+**the prototypes are consumed by the generated `addon.c`, not by `fs.c`.** Byte-identical `fs.c`
+objects show the header did not perturb `fs.c`.
+
+The control for the real question is building the addon, and `fs.node` links with the new header in
+the translation unit. A disagreement between `emit-c`'s inferred declaration and a prototype is a
+conflicting-types error, so the build succeeding **is** the evidence that all 63 inferences already
+agreed.
+
+So the change is **prophylactic, not a repair**: no wrong calling convention was running. Worth
+stating, because "63 prototypes added to close a wrong-calling-convention hazard" reads as a bug
+fixed, and the honest version is that a hazard which had not yet fired is now structurally
+impossible.
+
+### The 13 without prototypes are this ledger's five silent zeros
+
+The 13 bridges with no C prototype have no C implementation -- they are this profile's stand-in
+shims. Sampled four, each with 0 C files and one or two `globalThis.` definitions; four of the 13
+were written on 2026-09-13.
+
+They are the same population as two boundaries already named here: `child_process`'s `send`, whose
+object parameter has no representation at a Node-API parameter, and `tty`'s `isatty(fd: unknown)`.
+In both the compiled lane *declines the binding*, and what a reader sees is a module publishing
+nothing rather than a refusal -- `child_process` is one of **five** modules at exactly that, its
+compiled row 0 of 110.
+
+If those 13 were classified so the compiler refused rather than inferred, the visible effect here
+would be five compiled rows becoming a stated refusal instead of a silent zero. That is worth more
+to this ledger than the zero is.
+
