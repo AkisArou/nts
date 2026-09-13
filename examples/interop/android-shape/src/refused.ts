@@ -59,6 +59,20 @@ export function refused(view: View): void {
   // bind time.
 
   // ---------------------------------------------------------------------
+  // Protected, enforced in both directions
+  // ---------------------------------------------------------------------
+  //
+  // TS2445: Property 'onDraw' is protected and only accessible within class
+  // 'View' and its subclasses.
+  //
+  //   view.onDraw(bounds);
+  //
+  // `Panel` in `main.ts` overrides the same method, which is what it is for:
+  // 215 protected methods in the sampled `android.jar` sit on a class you can
+  // extend, and `onDraw`, `onLayout` and `onSizeChanged` are all of them.
+  // Surfacing only `public` made a custom view inexpressible.
+
+  // ---------------------------------------------------------------------
   // Refused by the verifier, not by us
   // ---------------------------------------------------------------------
   //

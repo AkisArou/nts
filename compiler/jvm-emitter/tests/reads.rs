@@ -1381,3 +1381,42 @@ fn abstract_is_enforced_where_final_is_only_described() {
     // And Rect carries the other modifier, in prose.
     assert!(rect.contains("Final: cannot be extended."), "{rect}");
 }
+
+/// `protected` reaches the declaration, and travels with an inherited member.
+///
+/// 215 protected methods in the sampled `android.jar` sit on a class you can
+/// extend, and the Android custom-view idiom is entirely overriding them --
+/// `onDraw`, `onLayout`, `onSizeChanged`. A binding that surfaced only `public`
+/// could not express a custom view at all.
+///
+/// TypeScript enforces it in both directions, which the fixture exercises:
+/// `Panel` overrides `onDraw`, and calling `view.onDraw(...)` from outside is
+/// `TS2445 Property 'onDraw' is protected`.
+#[test]
+fn protected_is_surfaced_and_travels_with_inheritance() {
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let read = |name: &str| {
+        let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
+        nts_jvm_emitter::read::class_file(&bytes).expect("parses")
+    };
+    let resolve = FromDirectory(ui.clone());
+
+    let widget = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget"), &resolve)
+        .expect("renders");
+    assert!(widget.contains("protected onDraw(a0: Rect): void;"), "declared:\n{widget}");
+
+    // **The modifier travels.** Without it, `View` inherited a protected member
+    // as a public one -- widening the visibility of something Java keeps to the
+    // hierarchy, which is the same class of error as emitting a bridge.
+    let view = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/View"), &resolve)
+        .expect("renders");
+    assert!(view.contains("protected onDraw(a0: Rect): void;"), "inherited:\n{view}");
+
+    // The control: a public method beside it must not acquire the modifier, or
+    // every call site outside the hierarchy stops compiling.
+    assert!(widget.contains("onMeasure(a0: number, a1: number): void;"), "{widget}");
+    assert!(!widget.contains("protected onMeasure"), "a public method stays public:\n{widget}");
+}

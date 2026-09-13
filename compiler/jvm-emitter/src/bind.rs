@@ -240,7 +240,7 @@ fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read::Membe
     for parent in supertypes(class, resolve) {
         let from_interface = parent.access & access::INTERFACE != 0;
         for method in &parent.methods {
-            if method.access & access::PUBLIC == 0 || method.name.starts_with('<') || !is_api(method) {
+            if !visible(method.access) || method.name.starts_with('<') || !is_api(method) {
                 continue;
             }
             // **A static interface method is not inherited.** JLS 9.4.1:
@@ -421,7 +421,7 @@ fn render_fields_into(
 ) -> Result<(), String> {
     let is_enum_class = class.access & access::ENUM != 0;
 
-    for field in class.fields.iter().filter(|f| f.access & access::PUBLIC != 0) {
+    for field in class.fields.iter().filter(|f| visible(f.access)) {
         let Some((rendered, _)) = field
             .signature
             .as_deref()
@@ -562,13 +562,13 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
     // rendering, because the decision is about the *set*: a name is only
     // ambiguous relative to its siblings.
     let mut collapsed: Vec<(String, String)> = Vec::new();
-    for method in class.methods.iter().filter(|m| m.access & access::PUBLIC != 0 && is_api(m)) {
+    for method in class.methods.iter().filter(|m| visible(m.access) && is_api(m)) {
         if let Some((parameters, _)) = signature_of(&method.descriptor) {
             collapsed.push((method.name.clone(), parameters.join(",")));
         }
     }
 
-    for method in class.methods.iter().filter(|m| m.access & access::PUBLIC != 0 && is_api(m)) {
+    for method in class.methods.iter().filter(|m| visible(m.access) && is_api(m)) {
         // The `Signature` attribute first, because it is the one that still has
         // the type arguments; the erased descriptor is the fallback, so an
         // exotic signature loses its generics rather than losing the method.
@@ -625,7 +625,8 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         }
         let _ = writeln!(
             out,
-            "    {}{}{}({rendered_arguments}): {};",
+            "    {}{}{}{}({rendered_arguments}): {};",
+            if method.access & ACC_PROTECTED != 0 { "protected " } else { "" },
             if is_static { "static " } else { "" },
             emitted,
             type_parameters(method.signature.as_deref()),
@@ -656,6 +657,23 @@ fn into_note(out: &mut String, constants: &mut String, class: &ClassFile, note: 
         out.push_str(note);
     }
 }
+
+/// Whether a member is reachable by a caller or by a subclass.
+///
+/// **`protected` was missing, and on Android it is the whole idiom.** 215
+/// protected methods in the sampled `android.jar` sit on a class you can
+/// extend, and `onDraw`, `onLayout` and `onSizeChanged` are all of them --
+/// overriding one is the entire point of subclassing a `View`. A binding that
+/// surfaces only `public` cannot express a custom view at all.
+///
+/// TypeScript has `protected`, so this is exact rather than prose: a subclass
+/// may override it, and nothing outside the hierarchy may call it.
+fn visible(access: u16) -> bool {
+    access & (crate::class::access::PUBLIC | ACC_PROTECTED) != 0
+}
+
+/// `ACC_PROTECTED`. JVMS table 4.5-A.
+const ACC_PROTECTED: u16 = 0x0004;
 
 /// Whether a member carries `@Deprecated`.
 ///
@@ -736,7 +754,7 @@ fn inherited_fields(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read
     let mut found = Vec::new();
     for parent in supertypes(class, resolve) {
         for field in &parent.fields {
-            if field.access & access::PUBLIC == 0 || seen.contains(&field.name) {
+            if !visible(field.access) || seen.contains(&field.name) {
                 continue;
             }
             seen.push(field.name.clone());
@@ -869,7 +887,12 @@ fn render_inherited(
         let rendered_arguments = arguments(&method, &parameters, resolve);
         let _ = writeln!(
             out,
-            "    /** Inherited. */\n    {}{}({rendered_arguments}): {};",
+            "    /** Inherited. */\n    {}{}{}({rendered_arguments}): {};",
+            // The modifier travels with the member. Without this, `View`
+            // inherited `Widget`'s protected `onDraw` as a *public* one --
+            // widening the visibility of something Java keeps to the
+            // hierarchy, which is the same class of error as the bridge.
+            if method.access & ACC_PROTECTED != 0 { "protected " } else { "" },
             if method.access & access::STATIC != 0 { "static " } else { "" },
             method.name,
             returns(&result, &method.annotations),

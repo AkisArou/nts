@@ -16,6 +16,12 @@ import { View, Loader, Rect } from "java:com.example.ui";
 class Panel extends View {
   measured: number = 0;
 
+  /** Overriding a PROTECTED Java method -- the Android custom-view idiom, and
+   *  inexpressible until the binding surfaced `protected` at all. */
+  protected override onDraw(bounds: Rect): void {
+    this.measured = bounds.width();
+  }
+
   override onMeasure(width: number, height: number): void {
     // The primitive overload, so no `Rect` is constructed at all.
     this.setBounds(0, 0, width, height);

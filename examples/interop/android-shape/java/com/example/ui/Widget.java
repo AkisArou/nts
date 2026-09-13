@@ -11,6 +11,13 @@ public class Widget {
     public void onMeasure(int width, int height) { }
 
     /**
+     * Protected, and the shape the whole Android custom-view idiom takes:
+     * `onDraw`, `onLayout`, `onSizeChanged` are all protected, and overriding
+     * them is the entire point of subclassing a View.
+     */
+    protected void onDraw(Rect bounds) { }
+
+    /**
      * The primitive overload pair Android publishes constantly. Preferring the
      * four-int form means no `Rect` is constructed, nothing escapes, and there
      * is nothing to copy.

@@ -56,6 +56,8 @@ declare module "java:com.example.ui" {
     /** Inherited. */
     onMeasure(a0: number, a1: number): void;
     /** Inherited. */
+    protected onDraw(a0: Rect): void;
+    /** Inherited. */
     setBounds(a0: number, a1: number, a2: number, a3: number): void;
     /** Inherited. */
     static defaultPadding(): number;
@@ -84,6 +86,7 @@ declare module "java:com.example.ui" {
     bottom: number;
     constructor();
     onMeasure(a0: number, a1: number): void;
+    protected onDraw(a0: Rect): void;
     setBounds(a0: number, a1: number, a2: number, a3: number): void;
     static defaultPadding(): number;
     setPadding(...a0: number[]): void;
