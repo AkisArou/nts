@@ -24045,3 +24045,51 @@ load, `process` does not, and it is the only one with an undefined `*__init`.
 `build.sh` is deliberately left alone: making it fail here would red-gate every peer building
 all modules until the emitter is fixed, and that is not this session's call to make.
 
+## 495 exports the compiler declined to wrap, and 238 of them name no cause
+
+`process`'s unloadable addon was one body dropped by a cascade the emitter did not record.
+Once the shape was known the obvious question was how much else is missing, and the answer
+was already being printed on every build and read by nobody. Across the 26 modules'
+`emit-c` logs there are **495 `no wrapper for X` lines**, and they split in two:
+
+    238   the export exists and its function does not
+            105  is exported and no function of that name was compiled
+             92  is a namespace member whose function was not compiled
+             41  is a class whose constructor was not compiled
+
+    257   a boundary decline that states its reason
+             63  is not a function this backend can name
+             31  is exported as a value of type `X`, which does not cross
+             22  a parameter of unrepresentable type (a union ...)
+             16  takes an object
+            ...
+
+The second column is the profile working as designed: a surface that cannot cross says so,
+by name, and `INCOMPLETE.md` files quote those sentences. The first column is different in
+kind -- it reports the *consequence* and not the cause, and the cause is upstream, in a body
+that was refused or dropped. Per module, first column then second:
+
+    fs      80 / 43     stream 55 / 18    zlib  18 / 48    util 17 / 17
+    http    10 / 11     url    10 / 3     timers 7 / 22    net   5 / 5
+    readline 5 / 9      others under five each
+
+**These are not the same 66 the compiler's cascade list now records**, and the comparison is
+the useful part: `process` is 2 here against 16 there, `fs` is 80 against 12, `stream` 55
+against 3. The cascade list is one cause; this column is every cause, seen from the boundary.
+Neither is a subset of the other, because a dropped body with no export is in the cascade
+list and not here, and a body refused directly is here and not in the cascade list.
+
+`unaccounted-exports.sh` already subtracts "what the wrapper declined by name" as a single
+term. That term is the 495, and treating it as one number hides that 238 of it is a pointer
+to somewhere else.
+
+### The axis, re-measured twice in one night
+
+    09-12 04:35   49 passed across 24 modules
+    09-13 01:48   74 passed across 26 modules   (+25 cluster, +2 net, -1 process, -1 tty)
+    09-13 02:27   75 passed across 26 modules   (tty restored; process reported WILL NOT LOAD)
+
+The failed column moved 2004 -> 1911 between the last two, and that is not 93 files fixed:
+92 of it is `process` no longer contributing a row at all, and 1 is `tty`. A total whose
+denominator moved is two numbers wearing one.
+
