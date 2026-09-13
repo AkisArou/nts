@@ -197,6 +197,35 @@ fn width(code: &[u8], at: usize) -> Option<usize> {
     })
 }
 
+
+/// Whether the instruction walk lands **exactly** on the end of the code.
+///
+/// # Why this is the only available check on the width table
+///
+/// [`width`] is a transcription of JVMS 6.5, and a transcription is a second
+/// derivation of something this crate cannot otherwise verify: a wrong width
+/// for a *known* opcode does not fail, it **desynchronises**. The walk resumes
+/// a byte or two off, reads an operand as an opcode, and -- if that byte
+/// happens to be a valid instruction, which at 200-odd assigned opcodes it
+/// usually is -- keeps going confidently over nonsense.
+///
+/// An exact landing is a strong check for the same reason a checksum is: every
+/// instruction's width has to be right for the total to come out, and being
+/// wrong in one place almost never cancels against being wrong in another.
+/// `tests/reads.rs` runs it over every method of `java.base`, which is
+/// thousands of real methods `javac` produced and this table has to agree with.
+fn walks_cleanly(code: &[u8]) -> bool {
+    let mut at = 0usize;
+    while at < code.len() {
+        let Some(step) = width(code, at) else { return false };
+        if step == 0 {
+            return false;
+        }
+        at += step;
+    }
+    at == code.len()
+}
+
 /// One entry on the abstract stack.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Value {
@@ -217,6 +246,13 @@ pub fn of(method: &Member) -> Keeps {
         // different from saying "nothing escapes".
         return Keeps::unknown(slots.len());
     };
+
+    // **Fail closed on a desynchronised walk.** If the instruction widths do
+    // not add up to the code length exactly, this table disagrees with the
+    // bytecode somewhere and every offset after that point is a guess.
+    if !walks_cleanly(&code.bytes) {
+        return Keeps::unknown(slots.len());
+    }
 
     // Every offset that is a branch target, so the stack can be reset there.
     let mut targets = Vec::new();

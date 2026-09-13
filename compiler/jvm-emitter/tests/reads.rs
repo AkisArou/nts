@@ -893,3 +893,105 @@ fn a_java_interface_is_emitted_as_an_interface() {
     assert!(rendered.contains("export class Rect {"), "{rendered}");
     assert!(rendered.contains("constructor("), "a class still declares one:\n{rendered}");
 }
+
+/// The opcode width table, checked against every method `javac` wrote in
+/// `java.base`.
+///
+/// `escapes::width` is a transcription of JVMS 6.5, and a transcription is a
+/// second derivation this crate cannot otherwise verify: a wrong width for a
+/// *known* opcode does not fail, it **desynchronises**. The walk resumes a byte
+/// off, reads an operand as an opcode, and -- at 200-odd assigned opcodes --
+/// usually finds a valid one and keeps going over nonsense.
+///
+/// An exact landing is a checksum: every width has to be right for the total to
+/// come out, and being wrong in one place almost never cancels another.
+///
+/// **And the failure is permissive, which is why the assertion is worth its
+/// runtime.** Measured by changing one 3-byte width to 4: methods analysed fell
+/// 89.1% -> 34.4%, and the proportion *proved non-escaping* **rose**, 4.5% ->
+/// 8.5%. A desynchronised walk loses track of the parameter and reports that
+/// nothing published it -- so the table being wrong makes the analysis look
+/// better.
+#[test]
+fn the_width_table_walks_real_bytecode_exactly() {
+    let Some(classes) = java_base() else {
+        eprintln!("SKIP reads/widths: java.base is not available");
+        return;
+    };
+
+    let mut walked = 0usize;
+    let mut bodies = 0usize;
+    let mut files = Vec::new();
+    collect_classes(&classes, &mut files);
+
+    for path in &files {
+        let Ok(bytes) = std::fs::read(path) else { continue };
+        let Ok(class) = nts_jvm_emitter::read::class_file(&bytes) else { continue };
+        for method in &class.methods {
+            if method.code.is_none() {
+                continue;
+            }
+            bodies += 1;
+            // `of` fails closed on a desynchronised walk, so `analysed` is the
+            // observable: a body whose widths do not add up is refused.
+            if nts_jvm_emitter::escapes::of(method).analysed {
+                walked += 1;
+            }
+        }
+    }
+
+    assert!(bodies > 5_000, "expected thousands of real bodies, got {bodies}");
+    // Not 100%: a body that only throws is refused by design, and so is one
+    // whose descriptor this subset cannot parse. The bar is set well above the
+    // 34.4% a single wrong width produced and well below the 89.1% that is
+    // correct, so it fails on a desynchronised table and passes on a correct one.
+    let rate = (walked * 100) / bodies;
+    assert!(
+        rate > 70,
+        "only {rate}% of {bodies} real method bodies walked cleanly -- a width in \
+         `escapes::width` disagrees with the bytecode `javac` emits"
+    );
+}
+
+/// Every `.class` under a directory.
+fn collect_classes(at: &Path, found: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(at) else { return };
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_classes(&path, found);
+        } else if path.extension().is_some_and(|it| it == "class") {
+            found.push(path);
+        }
+    }
+}
+
+/// `java.base`'s classes, extracted once. The JDK is the only corpus to hand
+/// with real bodies in it -- `android.jar` is stubs, which is its own test.
+fn java_base() -> Option<PathBuf> {
+    static BUILT: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    BUILT
+        .get_or_init(|| {
+            let home = PathBuf::from(std::env::var("JAVA_HOME").ok()?);
+            let jmod = home.join("jmods/java.base.jmod");
+            if !jmod.exists() {
+                return None;
+            }
+            let out = std::env::temp_dir().join("nts-java-base-widths");
+            let classes = out.join("classes");
+            if !classes.exists() {
+                let _ = std::fs::create_dir_all(&out);
+                let ran = Command::new(tool("jmod")?)
+                    .args(["extract", "--dir"])
+                    .arg(&out)
+                    .arg(&jmod)
+                    .output()
+                    .ok()?;
+                if !ran.status.success() {
+                    return None;
+                }
+            }
+            classes.exists().then_some(classes)
+        })
+        .clone()
+}
