@@ -22,6 +22,21 @@ public class Widget {
         this.bottom = bottom;
     }
 
+    /** A single-abstract-method interface declared on the base class. */
+    public interface Task {
+        void run(int id);
+    }
+
+    /** Varargs, and inherited by `View` -- the intersection nothing covered. */
+    public void setPadding(int... values) {
+        for (int v : values) { left += v; }
+    }
+
+    /** A SAM parameter, also inherited. */
+    public void post(Task task) {
+        task.run(left);
+    }
+
     public void setBounds(Rect bounds) {
         setBounds(bounds.left, bounds.top, bounds.right, bounds.bottom);
     }

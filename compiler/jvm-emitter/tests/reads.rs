@@ -1030,3 +1030,55 @@ fn both_renderers_agree_about_a_primitive_array() {
         "`[I` is an Int32Array in both renderers, not a Float64Array:\n{body}"
     );
 }
+
+/// A method renders the same whether it is reached as declared or as inherited.
+///
+/// This is the general form of the bug, not two examples of it. The declared
+/// path and `render_inherited` each built their own argument list, and the
+/// inherited one was the plain `a{index}: {rendered}` it started as -- so it
+/// silently lacked varargs spreading, parameter nullability and functional
+/// interfaces, all three of which the declared path had gained since.
+///
+/// The same method then rendered two ways depending on which class you reached
+/// it through: `view.setPadding(1, 2, 3)` was a type error while
+/// `widget.setPadding(1, 2, 3)` compiled.
+#[test]
+fn an_inherited_method_renders_exactly_as_its_declared_form() {
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let read = |name: &str| {
+        let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
+        nts_jvm_emitter::read::class_file(&bytes).expect("parses")
+    };
+    let resolve = FromDirectory(ui.clone());
+
+    let base = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget"), &resolve)
+        .expect("Widget renders");
+    let derived = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/View"), &resolve)
+        .expect("View renders");
+
+    // Every member `Widget` declares, as `Widget` renders it, must appear in
+    // `View`'s inherited section character for character.
+    let mut checked = 0usize;
+    for line in base.lines().map(str::trim) {
+        if !line.ends_with(';') || line.starts_with("constructor") || line.contains(':') && !line.contains('(')
+        {
+            continue;
+        }
+        assert!(
+            derived.lines().map(str::trim).any(|it| it == line),
+            "`{line}` renders differently when inherited:\n{derived}"
+        );
+        checked += 1;
+    }
+
+    // Vacuity: the loop must actually have compared the interesting ones.
+    assert!(checked >= 3, "only {checked} methods compared");
+    assert!(base.contains("setPadding(...a0: number[]): void;"), "varargs, declared:\n{base}");
+    assert!(
+        base.contains("post(a0: Widget.Task | ((a0: number) => void)): void;"),
+        "a SAM parameter, declared:\n{base}"
+    );
+}

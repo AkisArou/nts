@@ -508,62 +508,11 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         else {
             return Err(format!("{}.{}: {}", class.binary_name, method.name, method.descriptor));
         };
-        let variadic = method.access & access::VARARGS != 0;
-        let last = parameters.len().saturating_sub(1);
-        let arguments = parameters
-            .iter()
-            .enumerate()
-            .map(|(index, rendered)| {
-                // A parameter annotated `@Nullable` accepts null; an
-                // unannotated one does NOT get `| null` added, because the
-                // rule for an argument runs the other way from a return -- a
-                // caller passing null where the callee did not say it accepts
-                // one is the error this keeps.
-                let annotated = method
-                    .parameter_annotations
-                    .get(index)
-                    .is_some_and(|it| nullable(it));
-                let ty = if annotated && is_reference(rendered) {
-                    format!("{rendered} | null")
-                } else {
-                    rendered.clone()
-                };
-                // A functional interface parameter takes a closure, not an
-                // object with a method on it.
-                if let Some(binary) = parameter_binary(&method.descriptor, index)
-                    && let Some(signature) = functional_interface(&binary, resolve)
-                {
-                    // Both forms, because Java accepts both: a lambda, and an
-                    // object that implements the interface. Surfacing only the
-                    // function type makes `class Handler implements OnTouch`
-                    // inexpressible; surfacing only the interface makes an
-                    // arrow function inexpressible.
-                    return format!("a{index}: {rendered} | ({signature})");
-                }
-                if variadic && index == last {
-                    // The ABI type is the array; the call site spreads. A
-                    // typed array is not spreadable as elements, so the
-                    // element type comes back out of it.
-                    let element = match ty.as_str() {
-                        // Every integral width is `number` now, so the element
-                        // type of a numeric typed array is `number` -- the
-                        // width lives in the typed array, and a spread has no
-                        // typed array to live in.
-                        "Int32Array" | "Uint8Array" | "Int16Array" | "Uint16Array"
-                        | "Float32Array" | "Float64Array" => "number[]".to_owned(),
-                        "BigInt64Array" => "bigint[]".to_owned(),
-                        other => other.to_owned(),
-                    };
-                    return format!("...a{index}: {element}");
-                }
-                format!("a{index}: {ty}")
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
+    let rendered_arguments = arguments(method, &parameters, resolve);
 
         if method.name == "<init>" {
             if !is_interface {
-                let _ = writeln!(out, "    constructor({arguments});");
+                let _ = writeln!(out, "    constructor({rendered_arguments});");
             }
             continue;
         }
@@ -582,7 +531,7 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         }
         let _ = writeln!(
             out,
-            "    {}{}{}({arguments}): {};",
+            "    {}{}{}({rendered_arguments}): {};",
             if method.access & access::STATIC != 0 { "static " } else { "" },
             emitted,
             type_parameters(method.signature.as_deref()),
@@ -629,6 +578,80 @@ fn inherited_fields(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read
     found
 }
 
+/// The rendered argument list of a method: nullability, functional interfaces
+/// and varargs, all three.
+///
+/// **One function, because there were two and they drifted.** The declared path
+/// and [`render_inherited`] each built this list, and the inherited copy was
+/// the plain `a{index}: {rendered}` it started as -- so the *same method*
+/// rendered two ways depending on whether you reached it through the class that
+/// declares it or a subclass that inherits it:
+///
+/// ```text
+/// setPadding(a0: Int32Array)                     inherited -- wrong
+/// setPadding(...a0: number[])                    declared  -- right
+/// post(a0: Widget.Task)                          inherited -- wrong
+/// post(a0: Widget.Task | ((a0: number) => void)) declared  -- right
+/// ```
+///
+/// `view.setPadding(1, 2, 3)` was a type error while `widget.setPadding(1, 2, 3)`
+/// compiled. Nothing caught it because it needs a method that is *both*
+/// inherited and variadic, and the fixture had none.
+fn arguments(method: &crate::read::Member, parameters: &[String], resolve: &dyn Resolve) -> String {
+    let variadic = method.access & access::VARARGS != 0;
+    let last = parameters.len().saturating_sub(1);
+    parameters
+        .iter()
+        .enumerate()
+        .map(|(index, rendered)| {
+            // A parameter annotated `@Nullable` accepts null; an
+            // unannotated one does NOT get `| null` added, because the
+            // rule for an argument runs the other way from a return -- a
+            // caller passing null where the callee did not say it accepts
+            // one is the error this keeps.
+            let annotated = method
+                .parameter_annotations
+                .get(index)
+                .is_some_and(|it| nullable(it));
+            let ty = if annotated && is_reference(rendered) {
+                format!("{rendered} | null")
+            } else {
+                rendered.clone()
+            };
+            // A functional interface parameter takes a closure, not an
+            // object with a method on it.
+            if let Some(binary) = parameter_binary(&method.descriptor, index)
+                && let Some(signature) = functional_interface(&binary, resolve)
+            {
+                // Both forms, because Java accepts both: a lambda, and an
+                // object that implements the interface. Surfacing only the
+                // function type makes `class Handler implements OnTouch`
+                // inexpressible; surfacing only the interface makes an
+                // arrow function inexpressible.
+                return format!("a{index}: {rendered} | ({signature})");
+            }
+            if variadic && index == last {
+                // The ABI type is the array; the call site spreads. A
+                // typed array is not spreadable as elements, so the
+                // element type comes back out of it.
+                let element = match ty.as_str() {
+                    // Every integral width is `number` now, so the element
+                    // type of a numeric typed array is `number` -- the
+                    // width lives in the typed array, and a spread has no
+                    // typed array to live in.
+                    "Int32Array" | "Uint8Array" | "Int16Array" | "Uint16Array"
+                    | "Float32Array" | "Float64Array" => "number[]".to_owned(),
+                    "BigInt64Array" => "bigint[]".to_owned(),
+                    other => other.to_owned(),
+                };
+                return format!("...a{index}: {element}");
+            }
+            format!("a{index}: {ty}")
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 /// Append every member this class inherits and does not redeclare.
 ///
 /// Separate from [`declarations_with`] because that function was over a hundred
@@ -657,15 +680,10 @@ fn render_inherited(out: &mut String, class: &ClassFile, resolve: &dyn Resolve) 
             // declared one is.
             continue;
         };
-        let arguments = parameters
-            .iter()
-            .enumerate()
-            .map(|(index, rendered)| format!("a{index}: {rendered}"))
-            .collect::<Vec<_>>()
-            .join(", ");
+        let rendered_arguments = arguments(&method, &parameters, resolve);
         let _ = writeln!(
             out,
-            "    /** Inherited. */\n    {}{}({arguments}): {};",
+            "    /** Inherited. */\n    {}{}({rendered_arguments}): {};",
             if method.access & access::STATIC != 0 { "static " } else { "" },
             method.name,
             returns(&result, &method.annotations),
