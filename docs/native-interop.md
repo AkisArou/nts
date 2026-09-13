@@ -22,14 +22,36 @@ export function useLibc(n: number): number { return abs(n & 3); }
 | LLVM | `NTS3001 a call to abs, which the runtime declares only as a static inline` |
 | JVM | `NTS4001 a call to abs, which this backend has no name for` |
 
-**The C column is not a feature, and reading it as one is the first mistake
-available here.** It works because the C backend emits C, so symbol resolution
-is deferred to the C compiler and the linker. The compiler knows nothing about
-`abs`: not its real signature, not whether it allocates, not who owns what it
-returns. LLVM is the honest measure of what is actually known, and it refuses.
+**The C column is not a feature. It is a silent ABI mismatch**, and that is
+stronger than "untyped". Read what it emits:
 
-Anything shipped as native code goes through LLVM. So **the C backend's FFI is a
-mirage**, and a native-interop story that relies on it has not started.
+```c
+double abs(double);          /* emitted */
+int    abs(int);             /* libc's actual signature */
+```
+
+The compiler emits a declaration that **contradicts the real one**. With the
+real header absent, the double goes into an SSE register and `abs` reads an
+integer one; the answer is garbage and nothing reports it. That is the same
+defect `codegen/llvm/src/signatures.rs` records against the runtime's own
+helpers — `nts_tag_name` takes a `uint32_t`, the lowering handed it a double,
+and `typeof v` answered `"undefined"` — pointed at user code instead.
+
+The callback case is worse, because it compiles and crashes:
+
+```ts
+declare function counter_on_change(cb: (v: number) => void): void;
+```
+```c
+void counter_on_change(NtsHeader *);        /* emitted */
+counter_on_change((NtsHeader *)v1);         /* a managed closure object */
+```
+
+C is handed a **garbage-collected object where it expects a code address**. It
+will call it.
+
+So **LLVM refusing is correct**, and the C column is the bug. A native-interop
+story that relies on it has not started — it has started wrongly.
 
 What does cross the C boundary today, measured one signature at a time:
 
@@ -153,6 +175,23 @@ the rows came from. A native lane has the same question with a different
 vocabulary — calling convention, variadic-ness, `errno` discipline — and the
 same answer.
 
+## The DX, as a file rather than a proposal
+
+`examples/interop/c-from-ts` is the native counterpart to `java-from-ts`: a
+small C library with one of each shape that matters (a scalar whose C types are
+not TypeScript's, an owned handle, a borrowed accessor, a callback, an
+out-parameter), the binding sketch `nts bind --header` should produce, and the
+consumer file somebody would actually write.
+
+It does not compile, and **how** it fails is the useful part:
+
+    39 TypeScript errors, of which 37 are `TS2304 Cannot find name`
+
+`c_int`, `Owned`, `Ref`, `CFn`, `Ptr`, `CStr`, `addrOf`. It never reaches the
+compiler, so there is nothing to refuse — the program is not yet *expressible*.
+Anyone pricing this work should know it is a language-surface task first and a
+lowering task second.
+
 ## The one refusal to remove first
 
 ```
@@ -191,9 +230,19 @@ this project's work goes best under.
    is not visible until the thing above it is fixed.
 
 1. **Opaque handles** (above). Unblocks every binding; refuses everything unsafe.
-2. **The LLVM signature path for declared externs.** Today LLVM refuses any
-   symbol not in its table. Until a `declare function` reaches LLVM, nothing
-   here ships native.
+2. **A second source of `declare` lines in LLVM, beside the generated one.**
+   The existing table does **not** go away and is not the obstacle: it is 311
+   rows *generated from clang's report of the runtime header*, drift-tested,
+   and it exists because LLVM has no implicit conversion — reading a signature
+   off the call site gave `nts_tag_name` a double where it takes a `uint32_t`
+   and made `typeof v` answer `"undefined"`. That is the runtime's ABI and it
+   stays.
+
+   What lands beside it is a second source for the *user's* foreign functions,
+   whose types come from the TypeScript signature rather than from a header.
+   Which is why step 1's scalar types are a prerequisite for this one and not a
+   nicety: a `declare` line cannot be emitted from a signature that says
+   `number` where C says `int`.
 3. **GObject reference counting as the first `ResourceFlow` client.** Not the
    general ownership language — one foreign runtime with one discipline
    (`g_object_ref` / `g_object_unref`), which gives the analysis a real consumer
@@ -219,18 +268,77 @@ GTK is C, on this machine, with a real library to test against, and
 variadic call whose signature depends on the selector — which is the RFC's
 hardest open question, met on the first day rather than the hundredth.
 
-## Open questions
+## Should `Ptr`, `Ref` and the rest be exposed to TypeScript?
 
-- **Does an opaque handle participate in reference counting at all?** The RFC
-  says foreign objects stay foreign. Then a handle is a raw word this compiler
-  never traces, and a leak is the user's. That is the honest answer and it
-  should be stated rather than discovered.
-- **What does a C callback look like from this side?** GTK is signal-driven, so
-  `g_signal_connect` is not optional. A function pointer into compiled
-  TypeScript needs a stable ABI entry and a decision about what happens when it
-  throws.
-- **Where do the rows come from?** The JVM lane settled this for jars: read at
-  compile time, threaded through `Options`, `hir::runtime` stays pure. A native
-  lane has no equivalent artefact to read, because there is no header importer —
-  so the first version's ownership facts are hand-written, and the format should
-  admit that rather than pretend to be generated.
+**Yes, and the reason is the ABI rather than ergonomics.**
+
+The argument that settles it is the `double abs(double)` measurement above. LLVM
+requires a typed `declare` for every symbol it calls, and the runtime's own
+signatures are **generated from clang's report of the C header** precisely
+because reading them off the call site was unsound. A foreign function needs the
+same thing — and the only place its types can come from is the TypeScript
+signature, because there is no header importer and no class file.
+
+`number` is an f64. It cannot say `int`, `long`, `size_t`, `float`, or "pointer
+to the first of n". So without `c_int` and friends, a foreign declaration cannot
+carry an ABI, and the compiler is left to guess — which is what it does today,
+wrongly.
+
+`Ptr` / `Ref` / `Owned` are the same argument one level up. A header cannot say
+which `Counter *` is owned and which is borrowed:
+
+```c
+Counter    *counter_new(const char *name);    /* owned: caller destroys */
+const char *counter_name(const Counter *c);   /* borrowed: do NOT free */
+```
+
+Same C type, opposite obligations. The distinction has to live in the
+TypeScript signature or nowhere — and "nowhere" means every binding is
+hand-audited, which is the status quo for every FFI that does this badly.
+
+**What this does not justify** is exposing the whole RFC surface at once.
+`c_int`, an opaque handle, `Owned`/`Ref`, and `CFn` are what make ordinary C
+libraries reachable. Inline arrays, `zeroed<T>`, struct-by-value and
+address-of-a-place are the second half, and `examples/interop/c-from-ts` marks
+which of its lines need which.
+
+## The questions that were open, and what investigating them found
+
+**Does an opaque handle participate in reference counting?** No, and it must
+not. `docs/RFC.md` already commits to this — GObject, UIKit, AppKit and WinRT
+objects "remain owned by" their runtimes, each with its own reference
+discipline. So a handle is a word this compiler never traces, and the
+obligation is expressed in the *type* (`Owned` vs `Ref`) rather than in the
+collector. That also settles why `ResourceFlow` has to be a checker and not a
+runtime mechanism: there is no runtime that could do it.
+
+**What does a C callback look like?** Measured: today a TypeScript function
+passed to a `declare function` is emitted as `NtsHeader *` — a managed closure
+object where C expects a code address. So the question is not "how do we add
+callbacks", it is "how do we stop emitting a wrong one". `CFn<...>` has to be a
+distinct type from a TypeScript function, and the consequence is that **a C
+callback cannot capture**: a closure has an environment, a C function pointer
+has no room for one, and every C API that takes a callback also takes a `void *
+user` for exactly this reason. That is why `counter_on_change` in the example
+carries one.
+
+**Where do the ownership rows come from?** They are hand-written, and the format
+should say so. The JVM lane reads a generated binding table because a jar can be
+read; a header cannot yield ownership, so there is nothing to generate *from*.
+A header importer can produce signatures and must not be trusted for
+obligations — which is the argument for building it **last**, after the
+ownership language exists, rather than first.
+
+## What is deliberately still open
+
+Two, and both are decisions rather than investigations:
+
+- **What happens when a callback throws?** A C frame is between the throw and
+  any handler, and there is nothing to unwind with. The options are to refuse a
+  throwing callback statically, or to trap. This needs a choice, not a
+  measurement.
+- **Whether `c_int` is a branded `number` or a distinct type.** Branded keeps
+  arithmetic working and leaks into inference; distinct is safer and noisier.
+  The JVM lane settled the analogous question — `Int32Array` is already
+  distinguishable and needed no brand — so the precedent is available but the
+  shapes differ.

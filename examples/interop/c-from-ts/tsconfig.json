@@ -1,0 +1,7 @@
+{
+  "extends": "../../../tsconfig.fixtures.json",
+  "include": [
+    "src",
+    "types"
+  ]
+}
