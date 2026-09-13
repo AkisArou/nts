@@ -361,7 +361,7 @@ fn declare_fields(
         } else {
             descriptor
         };
-        builder.field(access::PUBLIC, body::method_name(&field.name), descriptor);
+        builder.field(access::PACKAGE, body::method_name(&field.name), descriptor);
     }
     Ok(())
 }
@@ -403,7 +403,7 @@ fn declare_presence(
             origin.location,
         ));
     }
-    builder.field(access::PUBLIC, types::PRESENCE.to_owned(), "I".to_owned());
+    builder.field(access::PACKAGE, types::PRESENCE.to_owned(), "I".to_owned());
 
     // And the same bits where `instanceof` can reach them, for the one helper
     // whose receiver has no declared type to name. Five bytes and a method

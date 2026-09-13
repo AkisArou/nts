@@ -26,6 +26,29 @@ use crate::pool::Pool;
 pub mod access {
     pub const PUBLIC: u16 = 0x0001;
     pub const PRIVATE: u16 = 0x0002;
+    /// No visibility bit at all: reachable from `nts/gen` and from nowhere else.
+    ///
+    /// **This is what keeps `hir::fields` sound once Java can hold one of our
+    /// objects.** That analysis narrows a field to a machine type by joining
+    /// over every `FieldSet` that can reach it, and its soundness argument is
+    /// that nothing else can store there -- *"there is no FFI that writes
+    /// through a pointer here, and a program's own stores are all in the HIR"*.
+    /// A `public` field makes that sentence false the moment a foreign caller
+    /// holds the object: one `putfield` from Java lands a value no `FieldSet`
+    /// ever wrote, and the narrowing is wrong for **every** instance of the
+    /// layout, because `fields` keys on `(layout, field)` and not on the
+    /// instance that escaped.
+    ///
+    /// Package-private closes it by construction rather than by convention:
+    /// every generated class is `nts/gen/...` (`symbols::jvm_class_name` has no
+    /// other branch), so our own access is unaffected and a class in any other
+    /// package cannot reach the field to begin with. A foreign caller that must
+    /// mutate goes through a method of ours, which performs a `FieldSet` *in
+    /// the HIR* -- exactly what the analysis requires.
+    ///
+    /// Spelled as a named zero because `builder.field(0, ...)` reads as an
+    /// oversight, and this is the opposite of one.
+    pub const PACKAGE: u16 = 0x0000;
     pub const STATIC: u16 = 0x0008;
     pub const FINAL: u16 = 0x0010;
     /// A method the compiler generated to make a covariant override dispatch.
