@@ -8018,3 +8018,32 @@ So the corrected statement is not "the route is available" either. It is: **the
 route is one change, it is not mine, and it is worth what one of three terms of
 `awfy-towers` is worth** -- which is still unmeasured, and which I have twice
 tonight been tempted to infer from a size.
+
+### Correcting my own sizing: forwarding does not reach the 608
+
+I wrote that store-forwarding is worth 2 units at a throw site and "zero once
+the helper lands -- its value is the 608". **The second half is wrong and
+MainClaude measured it rather than arguing it.** A user-defined error class
+stores its message inside its own constructor, so the prepared HIR is
+
+    %6 = call Coded#constructor(%3, %4, %5)
+    %8 = field.get %3.0          <- kept
+
+and a `call` between the store and the load clears the aliasing map, correctly,
+because a call can write any field. So the 608 **keep** their load, forwarding
+reaches the same **109** the helper would, and at a throw site the two changes
+are fully non-additive -- which is what I concluded, by a route that was wrong.
+
+Its independent value is everything that is **not** a throw, and that dominates:
+`fs` 1995 -> 1778 loads, `stream` 1596 -> 1413, `http` 2139 -> 1934. `fs` has 43
+provided-error throws and loses 217 loads, so whatever the rest are they are not
+throws.
+
+**Which matters to this lane directly and is worth measuring here.** Fewer loads
+is smaller methods, and this file has just spent a night establishing that
+method size is the thing ART's inliner budget reads. `popDiskFrom` goes 51 -> 49
+on its own account; what the other 48 methods of `awfy-towers` do is not
+something to infer from that, for the reason recorded four sections up.
+
+The dex **method** floor is unaffected -- a load is not a method -- so `4832`
+stands whatever forwarding does.
