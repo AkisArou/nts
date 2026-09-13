@@ -4022,6 +4022,98 @@ fn frame_capacity(func: &Func, value: ValueId) -> Option<u32> {
 mod tests {
     use super::*;
 
+    /// Every `nts_array_` helper is classified for whether it changes a length.
+    ///
+    /// [`changes_array_length`] is a literal list of five prefixes, and
+    /// [`arrays_can_grow`] feeds it to the JVM backend's representation choice
+    /// **whole-program** -- `types.rs` builds its `grows` flag from it once per
+    /// program. So a sixth length-changing helper left off that list does not
+    /// fail at the list: the helper works, and every array in the program gets a
+    /// representation that cannot change length. On the JVM that is a bare
+    /// `[D`, which has no way to express a truncation at all, and it surfaces as
+    /// an emission failure or a verifier rejection a long way from the one line
+    /// that caused it.
+    ///
+    /// The prefix match is what has hidden this. `nts_array_splice_ref` is
+    /// caught by `starts_with("nts_array_splice")` for free, so every `_ref`
+    /// variant ever added passed through without anyone touching the list -- it
+    /// has looked maintained because it has never needed maintaining, and a
+    /// genuinely new family is exactly the case a prefix cannot cover.
+    ///
+    /// So the list is asserted against the signature table rather than trusted
+    /// beside it. A new `nts_array_` helper fails here, naming both places, in
+    /// preference to succeeding into a wrong representation.
+    #[test]
+    fn every_array_helper_says_whether_it_changes_a_length() {
+        // Helpers that demonstrably do not change a length. Adding a name here
+        // is a claim about its contract, so it belongs beside the reason.
+        const KEEPS_ITS_LENGTH: &[&str] = &[
+            // Reads. The `_ref`/`_str`/`_value` families are the same
+            // operation at another element type, and the header marks several
+            // `NTS_READS_ONLY` and takes `const NtsArray *`, which is the
+            // contract rather than the name.
+            "nts_array_at",
+            "nts_array_at_ref",
+            "nts_array_at_value",
+            "nts_array_element",
+            "nts_array_index_of",
+            "nts_array_index_of_ref",
+            "nts_array_index_of_str",
+            "nts_array_index_of_str_value",
+            "nts_array_last_index_of",
+            "nts_array_includes",
+            "nts_array_includes_ref",
+            "nts_array_includes_str",
+            "nts_array_includes_str_value",
+            "nts_array_join",
+            // Whole-array producers: the *result* is new, the receiver is not
+            // resized.
+            "nts_array_concat",
+            "nts_array_concat_ref",
+            "nts_array_concat_value",
+            "nts_array_slice",
+            "nts_array_slice_ref",
+            "nts_array_slice_value",
+            "nts_array_new",
+            "nts_array_new_uninitialized",
+            "nts_array_from",
+            // In-place, same length.
+            "nts_array_fill",
+            "nts_array_fill_bool",
+            "nts_array_fill_ref",
+            "nts_array_fill_value",
+            "nts_array_reverse",
+            "nts_array_sort",
+            "nts_array_set",
+            "nts_array_get",
+            "nts_array_copy_within",
+            // `extend` grows `dst`, but its callers build a literal whose size
+            // is known -- see the note on the declaration. It is listed here
+            // deliberately rather than omitted, so the claim is visible.
+            "nts_array_extend",
+            "nts_array_extend_ref",
+        ];
+        let mut unclassified = Vec::new();
+        for name in crate::hir::runtime::declared_names() {
+            if !name.starts_with("nts_array_") {
+                continue;
+            }
+            if changes_array_length(name) || KEEPS_ITS_LENGTH.contains(&name) {
+                continue;
+            }
+            unclassified.push(name);
+        }
+        assert!(
+            unclassified.is_empty(),
+            "these `nts_array_` helpers are classified nowhere: {unclassified:?}. \
+             Add each to `changes_array_length` if it resizes the receiver, or to \
+             `KEEPS_ITS_LENGTH` above with the reason it does not. Leaving one out \
+             does not fail where it is used -- it makes `arrays_can_grow` answer \
+             `false` and every array in the program take a representation that \
+             cannot change length."
+        );
+    }
+
     fn layout(name: &str, id: u32, fields: Vec<Field>) -> Layout {
         Layout {
             types: vec![TypeId(id)],

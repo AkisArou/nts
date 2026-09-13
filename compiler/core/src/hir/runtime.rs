@@ -245,6 +245,18 @@ fn declared(name: &str) -> Option<&'static Declared> {
         .map(|at| &SIGNATURES[at])
 }
 
+/// Every helper name this table declares, in its sorted order.
+///
+/// Exposed so a classification elsewhere can be **asserted against the table**
+/// rather than hand-maintained beside it. `hir::changes_array_length` is the
+/// case that motivated it: a literal list of five prefixes whose omission does
+/// not fail at the list, because a helper missing from it produces a working
+/// helper and a whole-program array representation that cannot express what it
+/// does.
+pub fn declared_names() -> impl Iterator<Item = &'static str> {
+    SIGNATURES.iter().map(|it| it.0)
+}
+
 /// What `name` declares its parameters to be, if the runtime declares it.
 #[must_use]
 pub fn parameters(name: &str) -> Option<&'static [Option<HirType>]> {
