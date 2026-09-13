@@ -8047,3 +8047,44 @@ something to infer from that, for the reason recorded four sections up.
 
 The dex **method** floor is unaffected -- a load is not a method -- so `4832`
 stands whatever forwarding does.
+
+## Bar 2 tabulated for the first time, and one row fails it
+
+This file states the bar in its own second paragraph -- *"`jvm/Java` at or under
+1.00x, **and decisively** faster than node. 0.9x node is not a win"* -- and then
+has thirty-odd sections about the first number and **no table of the second**.
+Bar 1 has tables on HotSpot and on ART. Bar 3 has one. Bar 2 has scattered
+sentences: `awfy-nbody`'s "7.69 ms against node's 78.25" and a line about the
+nine `json-*` cases.
+
+Taken from the published table, `nts (JVM)` against `V8`:
+
+    awfy-nbody       10.11x
+    awfy-bounce       2.87x
+    awfy-sieve        2.31x
+    awfy-list         2.04x
+    awfy-permute      1.78x
+    awfy-towers       1.73x
+    awfy-queens       1.58x
+    awfy-mandelbrot   1.00x     <- 21.90 ms against node's 21.96 ms
+
+**Seven of eight are decisively faster. `awfy-mandelbrot` is at parity**, and
+parity is the case the bar's own wording rules out.
+
+And it is not a row anyone was watching: `awfy-mandelbrot` is **0.84x against
+hand-written Java**, so it passes bar 1 comfortably and sits in the
+"at or under 1.00x, best first" list four places from the top. A row can be
+among this lane's better results on the number everyone reads and still fail the
+other number in the same sentence.
+
+**The finding is the absence of the table, not the row.** Everything above was
+computable from a file in the repository at any point tonight; what was missing
+was anyone writing the column down. That is the fourth shape again -- a quantity
+displayed constantly, never expanded -- except here it was never displayed at
+all, which is worse: `9 compared nothing` at least printed a nine.
+
+Not chased tonight. `awfy-mandelbrot` is float-heavy and V8 is good at it;
+whether 1.00x is a codegen gap or a platform ceiling is a question for a
+measurement, and this file has spent a night on what happens when that
+distinction is guessed. Recorded as bar 2's one open row so that the next person
+finds a number instead of a sentence.
