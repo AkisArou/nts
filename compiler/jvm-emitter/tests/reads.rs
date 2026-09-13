@@ -341,7 +341,7 @@ fn the_generator_produces_declarations_for_the_fixture() {
     // because the class file genuinely cannot prove it. That pair is the
     // control: a rule that made every static non-null would pass the line
     // above and fail this one.
-    expect("static readonly DEFAULT_KIND: com.example.Kind | null;");
+    expect("static readonly DEFAULT_KIND: Kind | null;");
     expect("hits: int;");                            // a public mutable field
     expect("id(): bigint;");                         // J -> bigint, never number
     expect("counts(): Int32Array");                  // [I -> a typed array, not int[]
@@ -424,15 +424,15 @@ fn enum_constants_are_not_nullable() {
     // `ACC_ENUM` on both the class and the field. The JLS guarantees `<clinit>`
     // creates every constant before any is observable, so `| null` here would
     // be a check that can never fire.
-    assert!(body.contains("static readonly SMALL: com.example.Kind;"), "{body}");
-    assert!(body.contains("static readonly LARGE: com.example.Kind;"), "{body}");
-    assert!(!body.contains("SMALL: com.example.Kind | null"), "an enum constant is never null");
+    assert!(body.contains("static readonly SMALL: Kind;"), "{body}");
+    assert!(body.contains("static readonly LARGE: Kind;"), "{body}");
+    assert!(!body.contains("SMALL: Kind | null"), "an enum constant is never null");
 
     // The control: an unannotated reference return on the SAME class is still
     // nullable, so this is about `ACC_ENUM` rather than about the class.
     assert!(body.contains("weight(): int;"), "{body}");
     assert!(
-        body.contains("static valueOf(a0: string): com.example.Kind | null;"),
+        body.contains("static valueOf(a0: string): Kind | null;"),
         "an unannotated return is still nullable on an enum:\n{body}"
     );
 
@@ -463,8 +463,16 @@ fn generic_signatures_are_rendered() {
     // Two arguments, one of them boxed because a Java map cannot hold a
     // primitive -- Java's cost, and visible rather than hidden.
     expect("index(): java.util.HashMap<string, java.lang.Integer> | null;");
-    // A method's own type variable, rendered by name at each use.
-    expect("repeat(a0: T, a1: int): java.util.List<T> | null;");
+    // A method's own type variable, **declared** as well as used. Without the
+    // `<T>` the generated file does not compile: the `T` in the body would
+    // refer to nothing. Found by running the generator on the real jar and
+    // reading the output, not by reasoning about it.
+    expect("repeat<T>(a0: T, a1: int): java.util.List<T> | null;");
+    // The control: a method with no type parameters of its own gains no angle
+    // brackets, so this is about the `<...>` block rather than about every
+    // method.
+    expect("total(a0: java.util.List<java.lang.Number>): number;");
+    assert!(!body.contains("total<"), "a non-generic method declares no parameters:\n{body}");
     // `List<? extends Number>`: TypeScript has no wildcard, so a covariant
     // bound renders as the bound itself.
     expect("total(a0: java.util.List<java.lang.Number>): number;");

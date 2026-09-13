@@ -5,9 +5,15 @@ The Java under `java/` is deliberately awkward: every row of this project's
 column in the coverage matrix appears in it, so the declarations beside it are a
 real artefact rather than a sketch of a pleasant case.
 
-**The `.d.ts` is hand-written today and is the *specification* for `nts bind`,
-not its output.** It is checked in and read for exactly that reason. `build.sh`
-names the command that will replace it.
+**The `.d.ts` is GENERATED**, as of the `bind` example existing. `./build.sh`
+compiles the Java, runs the generator over the resulting class files, and diffs
+the output against what is committed; `NTS_REGENERATE=1 ./build.sh` accepts a
+change.
+
+It began as a hand-written specification for the generator. Keeping both would
+be two answers to one question -- and the generator has already corrected the
+hand-written version once, over `find(key: int)`, which the spec omitted as
+"unreachable" and which `find(Java.asInt(3))` reaches.
 
 ## What to look at
 
@@ -48,3 +54,23 @@ workaround, it is what `javac` emits for `outer.new Cursor(n)`.
 level further is invisible to it, so these can be read and iterated on without
 turning the gate red for the other two sessions. They get surfaced deliberately,
 with the floor moved in the same commit, once they compile.
+
+## What running it exposed
+
+Both of these were invisible until the generator ran on real class files, and
+both produced output that **would not compile**:
+
+- **A method's own type parameters were used but not declared.** `repeat` came
+  out as `repeat(a0: T, ...)`, where `T` refers to nothing. The `<...>` block at
+  the head of a generic signature is now read and rendered.
+- **A sibling class was fully qualified.** `DEFAULT_KIND: com.example.Kind`
+  inside `declare module "java:com.example"` refers to a `com` namespace that
+  does not exist -- the module's own members are in scope unqualified.
+
+### The gap that is still open
+
+`Catalog.Cursor` and `Catalog.Entry` are emitted as **top-level** `Cursor` and
+`Entry`, while `cursorAt` correctly refers to `Catalog.Cursor`. Nesting them
+under a `namespace Catalog` is what closes it. It is a rendering change, not a
+reading one -- `InnerClasses` already tells the generator which classes are
+nested inside which.

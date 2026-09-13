@@ -90,6 +90,18 @@ fn type_of(descriptor: &str) -> Option<(String, usize)> {
     }
 }
 
+// The package a rendering is happening inside, so a sibling class can be named
+// unqualified.
+//
+// **Without this the output does not compile.** Inside
+// `declare module "java:com.example"`, a field rendered as `com.example.Kind`
+// refers to a `com` namespace that does not exist -- the module's own members
+// are in scope under their simple names. Found by running the generator and
+// reading the output, not by reasoning about it.
+thread_local! {
+    static PACKAGE: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
 /// A reference type's binary name, as TypeScript.
 fn reference(binary: &str) -> String {
     match binary {
@@ -98,7 +110,18 @@ fn reference(binary: &str) -> String {
         "java/lang/Object" => "unknown".to_owned(),
         // A nested class is `Outer$Inner` in the class file and `Outer.Inner`
         // in a namespace, which is how `Catalog.Entry` reads at a call site.
-        other => other.replace(['/', '$'], "."),
+        other => {
+            let dotted = other.replace(['/', '$'], ".");
+            // A class in the package being generated is in scope unqualified.
+            PACKAGE.with(|package| {
+                let package = package.borrow();
+                if package.is_empty() {
+                    return dotted.clone();
+                }
+                let prefix = format!("{package}.");
+                dotted.strip_prefix(&prefix).map_or_else(|| dotted.clone(), str::to_owned)
+            })
+        }
     }
 }
 
@@ -239,6 +262,13 @@ pub fn declarations(class: &ClassFile) -> Result<String, String> {
 ///
 /// As [`declarations`].
 pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<String, String> {
+    // The package this class lives in, so its siblings render unqualified.
+    let package = class
+        .binary_name
+        .rsplit_once('/')
+        .map_or_else(String::new, |(package, _)| package.replace('/', "."));
+    PACKAGE.with(|it| it.replace(package));
+
     let mut out = String::new();
     let name = simple_name(&class.binary_name);
 
@@ -346,9 +376,10 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         }
         let _ = writeln!(
             out,
-            "    {}{}({arguments}): {};",
+            "    {}{}{}({arguments}): {};",
             if method.access & ACC_STATIC != 0 { "static " } else { "" },
             method.name,
+            type_parameters(method.signature.as_deref()),
             returns(&result, &method.annotations),
         );
     }
@@ -512,33 +543,76 @@ fn generic_type(signature: &str) -> Option<(String, usize)> {
     }
 }
 
+/// Split a signature's leading `<...>` type-parameter block from the rest.
+///
+/// Returns the remainder and the parameter **names**. The names matter: a
+/// method declaring `<T>` and using `T` must render as `repeat<T>(...)`, or the
+/// `T` in its body refers to nothing and the generated file does not compile.
+/// That was the first thing running the generator on a real jar exposed.
+fn split_type_parameters(signature: &str) -> (&str, Vec<String>) {
+    if !signature.starts_with('<') {
+        return (signature, Vec::new());
+    }
+    let mut depth = 0usize;
+    let mut end = 0usize;
+    for (index, byte) in signature.bytes().enumerate() {
+        match byte {
+            b'<' => depth += 1,
+            b'>' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = index + 1;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    // Inside, each parameter is `Name:Bound` and the bounds are ignored -- a
+    // TypeScript `extends` clause for a Java bound is a separate decision and
+    // an unbounded parameter is never *wrong*, only looser.
+    let inside = &signature[1..end.saturating_sub(1)];
+    let mut names = Vec::new();
+    let mut depth = 0usize;
+    let mut current = String::new();
+    for ch in inside.chars() {
+        match ch {
+            '<' => {
+                depth += 1;
+                current.clear();
+            }
+            '>' => depth -= 1,
+            ':' if depth == 0 => {
+                if !current.is_empty() {
+                    names.push(std::mem::take(&mut current));
+                }
+            }
+            ';' if depth == 0 => current.clear(),
+            _ if depth == 0 => current.push(ch),
+            _ => {}
+        }
+    }
+    (&signature[end..], names)
+}
+
+/// The type parameters a method declares, as a rendered `<T, U>` or empty.
+fn type_parameters(signature: Option<&str>) -> String {
+    let Some(signature) = signature else { return String::new() };
+    let (_, names) = split_type_parameters(signature);
+    if names.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", names.join(", "))
+    }
+}
+
 /// The parameter and return types of a **generic** method signature.
 ///
 /// Returns `None` for anything this subset does not handle, and every caller
 /// falls back to the erased descriptor -- so an exotic signature loses its type
 /// arguments rather than losing the method.
 fn generic_signature(signature: &str) -> Option<(Vec<String>, String)> {
-    // A leading `<...>` declares the method's own type parameters. Skipped:
-    // the names appear again at each use, which is where they are rendered.
-    let mut rest = signature;
-    if rest.starts_with('<') {
-        let mut depth = 0usize;
-        let mut at = 0usize;
-        for (index, byte) in rest.bytes().enumerate() {
-            match byte {
-                b'<' => depth += 1,
-                b'>' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        at = index + 1;
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-        rest = &rest[at..];
-    }
+    let (rest, _) = split_type_parameters(signature);
     let open = rest.find('(')?;
     let close = rest.rfind(')')?;
     let mut parameters = Vec::new();

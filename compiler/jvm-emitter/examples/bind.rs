@@ -1,0 +1,88 @@
+//! `nts bind`, as far as this crate can take it: a directory of class files in,
+//! TypeScript declarations out.
+//!
+//! ```text
+//! cargo run --release -p nts-jvm-emitter --example bind -- <classes-dir> <package> [class...]
+//! ```
+//!
+//! **A directory rather than a jar, and an example rather than a binary.** A jar
+//! is a zip, and this crate's `Cargo.toml` says every dependency is a
+//! maintenance obligation -- taking a zip and a deflate crate to open one would
+//! be two. `unzip -o` costs nothing and the caller already has it, so the
+//! extraction is the shell's job and this reads what it produced. When `nts
+//! bind` becomes a real subcommand it will live wherever the CLI does and call
+//! the same two functions this does.
+#![allow(clippy::print_stdout, clippy::print_stderr, clippy::exit)]
+
+use nts_jvm_emitter::{bind, read};
+use std::path::{Path, PathBuf};
+
+/// Resolves a superclass out of the same directory, so inherited members work.
+struct FromDirectory(PathBuf);
+
+impl bind::Resolve for FromDirectory {
+    fn find(&self, binary_name: &str) -> Option<read::ClassFile> {
+        let bytes = std::fs::read(self.0.join(format!("{binary_name}.class"))).ok()?;
+        read::class_file(&bytes).ok()
+    }
+}
+
+/// Every `.class` under `root`, as binary names, sorted so the output is stable.
+fn every_class(root: &Path, at: &Path, found: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(at) else { return };
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_dir() {
+            every_class(root, &path, found);
+        } else if path.extension().is_some_and(|it| it == "class")
+            && let Ok(relative) = path.strip_prefix(root)
+        {
+            found.push(relative.with_extension("").to_string_lossy().replace('\\', "/"));
+        }
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let (Some(directory), Some(package)) = (args.first(), args.get(1)) else {
+        eprintln!("usage: bind <classes-dir> <package> [class...]");
+        std::process::exit(2);
+    };
+    let root = PathBuf::from(directory);
+
+    let mut names: Vec<String> = if args.len() > 2 {
+        args[2..].iter().map(|it| it.replace('.', "/")).collect()
+    } else {
+        let mut found = Vec::new();
+        every_class(&root, &root, &mut found);
+        found
+    };
+    names.sort();
+
+    let resolve = FromDirectory(root.clone());
+    let mut bodies = Vec::new();
+    for name in &names {
+        let path = root.join(format!("{name}.class"));
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!("bind: cannot read {}", path.display());
+            std::process::exit(1);
+        };
+        let class = match read::class_file(&bytes) {
+            Ok(class) => class,
+            Err(why) => {
+                eprintln!("bind: {}: {why}", path.display());
+                std::process::exit(1);
+            }
+        };
+        // Refuse by name, never half-emit: a declaration file that silently
+        // dropped a member is one a caller trusts.
+        match bind::declarations_with(&class, &resolve) {
+            Ok(body) => bodies.push(body),
+            Err(why) => {
+                eprintln!("bind: refused {why}");
+                std::process::exit(1);
+            }
+        }
+    }
+    print!("{}", bind::module(package, &bodies));
+}

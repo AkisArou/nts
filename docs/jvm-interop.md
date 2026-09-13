@@ -2292,3 +2292,32 @@ follow it.
 - **An array return gets `| null`.** Correct -- a Java method can return a null
   array -- and noisy. The overrides file is the answer for the APIs where it
   matters.
+
+
+# The generator runs, and running it found two things reasoning had not
+
+`compiler/jvm-emitter/examples/bind.rs` takes a directory of class files and a
+package and prints the declarations. A directory rather than a jar, and an
+example rather than a binary, for the same reason the resolver is a callback: a
+jar is a zip, and the crate's dependencies are a maintenance obligation.
+`examples/interop/java-from-ts/build.sh` now generates its `.d.ts` and diffs it
+against what is committed, so the hand-written specification has been *replaced
+by* the generator's output rather than kept beside it.
+
+**Two bugs that only appeared when the output was read**, both producing
+TypeScript that would not compile:
+
+- **Declared type parameters were dropped.** `repeat` rendered as
+  `repeat(a0: T, ...)` -- using a `T` that nothing introduced. The `<...>` block
+  at the head of a generic signature is now parsed and rendered.
+- **A sibling class was fully qualified.** `DEFAULT_KIND: com.example.Kind`
+  inside `declare module "java:com.example"` names a `com` namespace that does
+  not exist; the module's own members are in scope unqualified.
+
+Neither was going to be caught by a test written from the design, because both
+are properties of the *whole file* rather than of a member. The thing that found
+them was printing it and reading it.
+
+**Still open:** nested classes are emitted top-level, so `Catalog.Cursor` in a
+return type has nothing to refer to. `InnerClasses` already says which classes
+are nested inside which, so it is a rendering change rather than a reading one.
