@@ -94,14 +94,24 @@ function run(module, addon) {
  * Exported functions in a module whose signature carries an optional or
  * defaulted parameter.
  *
- * **The second gate this instrument cannot otherwise see.** "To gain" counts
- * files that would pass if the named export *appeared*. An export that appears
- * still publishes its optional parameters as required, so
- * `dgram.createSocket("udp4")` throws `the compiled function requires 2
- * arguments` -- and node's own dgram tests call it that way fourteen times, plus
- * three with no arguments at all. `net.createServer` has both parameters
- * optional and is the largest prize in the profile. Without this, the table
- * ranks those two first and says nothing about the second thing they need.
+ * **A second gate this instrument cannot otherwise see -- which was fixed on
+ * 2026-09-13, and this note is kept as a watch rather than as a claim.** "To
+ * gain" counts files that would pass if the named export *appeared*. An export
+ * that appeared *used to* publish its optional parameters as required, so
+ * `dgram.createSocket("udp4")` threw `the compiled function requires 2
+ * arguments` -- node's own dgram tests call it that way fourteen times, plus
+ * three with no arguments at all.
+ *
+ * That is no longer true. `blockers/optional-parameter-at-the-wrapper` reads
+ * "FIXED, kept as a guard", and against the live addon
+ * `path.basename("/a/b.txt")` answers `"b.txt"` -- the exact call the blocker
+ * records as having thrown.
+ *
+ * The list below is therefore **a syntactic property of a TypeScript
+ * signature**, which is all this function can see, and not a statement about
+ * what the compiler does today. It was printed as the latter for every sweep
+ * after the fix landed, including for `createServer` and `createSocket`, which
+ * are not published at all and so cannot reach a second gate.
  *
  * Found only because `path` began publishing and the compiled differential ran:
  * `basename("/a/b.txt")` throws where node answers `"b"`. It is a syntactic
@@ -208,11 +218,18 @@ for (const module of modules) {
   rows.push({ module, ip, cp, gain: gain.length, inverted: inverted.length, names });
 
   console.log(`\n${module}: ${ip} interpreted, ${cp} compiled, ${gain.length} to gain`);
-  for (const g of gain.slice(0, 8)) {
+  // Eight is a readable default, not a measurement. The reasons are all
+  // computed above; only the printing was capped, so ranking causes across a
+  // whole sweep read 134 of 1934 failures -- 6.9% -- and looked like a ranking.
+  // `NTS_PRIZE_ROWS=0` prints every one.
+  const cap = process.env.NTS_PRIZE_ROWS === undefined
+    ? 8
+    : Number(process.env.NTS_PRIZE_ROWS) || gain.length;
+  for (const g of gain.slice(0, cap)) {
     console.log(`  ${g.verdict.padEnd(4)} ${g.file}`);
     if (g.reason !== "") console.log(`         ${g.reason.slice(0, 96)}`);
   }
-  if (gain.length > 8) console.log(`  … ${gain.length - 8} more`);
+  if (gain.length > cap) console.log(`  … ${gain.length - cap} more`);
   for (const v of inverted) {
     console.log(`  INVERTED  ${v.file}`);
     console.log(`            passes compiled, ${v.verdict} interpreted: ${v.reason.slice(0, 78)}`);
@@ -227,7 +244,8 @@ for (const module of modules) {
     console.log(`  names mentioned: ${ranked.join(", ")}`);
     const gated = [...names.keys()].filter((n) => optional.has(n));
     if (gated.length > 0) {
-      console.log(`  second gate: ${gated.join(", ")} take an optional parameter, which publishes as required`);
+      console.log(`  second gate: ${gated.join(", ")} take an optional parameter (signature only --`);
+      console.log("               the publishes-as-required defect was fixed 2026-09-13)");
       console.log(`               -- appearing is not enough; see optional-parameter-at-the-wrapper`);
     }
   }

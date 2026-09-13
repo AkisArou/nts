@@ -320,7 +320,7 @@ impl<'a> Decomposer<'a> {
                 continue;
             }
 
-            if !array_like && !Self::is_ours(snapshot, slot) {
+            if !array_like && !Self::is_ours(snapshot, slot) && !Self::is_carried(snapshot, slot) {
                 // Stop at the library boundary. `Promise<void>` and a class
                 // prototype are enough to pull the standard library's whole type
                 // graph in transitively — measured at 5,773 types from a 180-node
@@ -974,6 +974,57 @@ impl<'a> Decomposer<'a> {
                         | "Date"
                 )
             })
+    }
+
+    /// Library types decomposed anyway, because stopping at them costs more
+    /// than carrying them does.
+    ///
+    /// The boundary above exists for a real reason -- `Promise<void>` and a
+    /// class prototype pull 5,773 types from a 180-node file -- and this is not
+    /// an argument against it. It is a named exception for a type whose own
+    /// members are small and whose *absence* is expensive.
+    ///
+    /// `PromiseWithResolvers<T>` is `{ promise, resolve, reject }`: one
+    /// natively-represented `Promise` and two function values. Left as a
+    /// placeholder it has no representation, so **every property holding one
+    /// refuses**, which is the same failure `ReadonlyMap` had before it was
+    /// carried -- there `#uniqueHeaders` alone was 89 of `http`'s 154.
+    ///
+    /// Measured across the three highest-yield modules, baseline against this:
+    ///
+    /// ```text
+    ///            NTS1001 root      union-typed      NTS1003 cascade
+    ///   fs       2033 -> 1858      444 -> 216       839 -> 936
+    ///   stream   1617 -> 1468      329 -> 143       490 -> 557
+    ///   net      1450 -> 1334      287 -> 134       542 -> 603
+    /// ```
+    ///
+    /// Corpus-wide, both arms against one corpus frozen at `dfa53fcc`: roots
+    /// 20,000 -> 18,291 and cascades 6,820 -> 7,673. Measured that way because
+    /// the first attempt compared two gate runs two hours apart, across sixteen
+    /// commits to `runtime/node` from another lane, and was therefore this
+    /// change plus someone else's corpus growth in unknown proportion.
+    ///
+    /// **No correctness control exists yet.** `PromiseWithResolvers` appears in
+    /// no example or bench, and it cannot be given one: `Promise.withResolvers`
+    /// is itself unimplemented, so no program can construct the type. This
+    /// removes refusals and breaks nothing the gate can see; it is not known to
+    /// unblock a single working export. The cascades **rise**, which is the shape to
+    /// expect and not a regression: a function that used to stop at an
+    /// unrepresentable property now gets further and stops at the next thing,
+    /// so it moves out of the root column and into the cascade one.
+    ///
+    /// Matched by name rather than by shape deliberately. A rule like "carry
+    /// any library interface whose members are representable" is the version
+    /// that sounds principled and pulls the graph in through the first type
+    /// whose members happen to qualify; a name is a decision that can be read.
+    fn is_carried(snapshot: &SemanticSnapshot, slot: TypeId) -> bool {
+        snapshot
+            .types
+            .get(slot.0 as usize)
+            .and_then(|record| record.symbol)
+            .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
+            .is_some_and(|declared| matches!(declared.name.as_str(), "PromiseWithResolvers"))
     }
 
     fn is_ours(snapshot: &SemanticSnapshot, slot: TypeId) -> bool {
