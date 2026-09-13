@@ -27,11 +27,18 @@
 //! and would miss any future path to a field that does not spell it that way.
 //! Shelling to `javap` would make the test skip wherever no JDK is installed --
 //! and a guard that skips on the machine where somebody changes the thing is
-//! not a guard. Parsing the constant pool is forty lines and is owed to the
-//! class-file reader anyway, which is the next item in this lane's plan.
+//! not a guard.
+//!
+//! It reads them with [`nts_jvm_emitter::read`]. **This file used to carry its
+//! own fifty-three-line constant-pool walk**, written before that reader
+//! existed and kept afterwards -- two parsers for one format inside one crate's
+//! tests, which is the duplication this project refuses everywhere else. The
+//! reader is also better tested than the copy was: it walks 62,070 real method
+//! bodies in `java.base` and checks it consumed every byte of every class.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
+use nts_jvm_emitter::read;
 use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use std::path::{Path, PathBuf};
@@ -48,67 +55,6 @@ fn repository() -> PathBuf {
     from.canonicalize().unwrap_or(from)
 }
 
-/// Every `(name, access_flags)` this class declares as a field.
-///
-/// A hand-rolled walk to the field table: the constant pool has to be stepped
-/// over entry by entry because its entries are variable width, and `Long` and
-/// `Double` take **two** slots each -- the one rule in this format that a
-/// reader gets wrong first and notices last.
-fn fields(bytes: &[u8]) -> Vec<(String, u16)> {
-    let mut at = 0usize;
-    let u2 = |at: &mut usize, bytes: &[u8]| {
-        let v = u16::from_be_bytes([bytes[*at], bytes[*at + 1]]);
-        *at += 2;
-        v
-    };
-
-    assert_eq!(&bytes[0..4], &[0xCA, 0xFE, 0xBA, 0xBE], "not a class file");
-    at += 8; // magic, minor, major
-
-    let count = u2(&mut at, bytes);
-    let mut utf8: Vec<String> = vec![String::new(); count as usize];
-    let mut index = 1u16;
-    while index < count {
-        let tag = bytes[at];
-        at += 1;
-        match tag {
-            1 => {
-                let len = u2(&mut at, bytes) as usize;
-                utf8[index as usize] = String::from_utf8_lossy(&bytes[at..at + len]).into_owned();
-                at += len;
-            }
-            7 | 8 | 16 | 19 | 20 => at += 2,
-            15 => at += 3,
-            3 | 4 | 9 | 10 | 11 | 12 | 17 | 18 => at += 4,
-            5 | 6 => {
-                at += 8;
-                index += 1; // a Long or a Double eats the following slot
-            }
-            other => panic!("unknown constant pool tag {other}"),
-        }
-        index += 1;
-    }
-
-    at += 6; // access_flags, this_class, super_class
-    let interfaces = u2(&mut at, bytes) as usize;
-    at += interfaces * 2;
-
-    let mut found = Vec::new();
-    let fields = u2(&mut at, bytes);
-    for _ in 0..fields {
-        let access = u2(&mut at, bytes);
-        let name = u2(&mut at, bytes);
-        let _descriptor = u2(&mut at, bytes);
-        let attributes = u2(&mut at, bytes);
-        for _ in 0..attributes {
-            let _name = u2(&mut at, bytes);
-            let len = u32::from_be_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]);
-            at += 4 + len as usize;
-        }
-        found.push((utf8[name as usize].clone(), access));
-    }
-    found
-}
 
 /// Examples chosen to reach both kinds of generated field: the declared ones,
 /// and the `$presence` word an optional property adds.
@@ -158,7 +104,13 @@ fn no_generated_field_is_public() {
         .expect("prepared HIR should verify");
 
         for class in &nts_codegen_jvm::emit(&prepared.program).classes {
-            for (name, access) in fields(&class.bytes) {
+            // Reading our own output back through the reader is also a
+            // round-trip: a class this writer produced that the reader cannot
+            // parse means one of the two is wrong, and the JVM verifier
+            // agreeing with both would not say which.
+            let parsed = read::class_file(&class.bytes).expect("our own output parses");
+            for field in &parsed.fields {
+                let (name, access) = (field.name.clone(), field.access);
                 seen += 1;
                 if name.contains("presence") {
                     presence += 1;
