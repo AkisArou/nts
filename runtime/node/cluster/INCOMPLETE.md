@@ -34,19 +34,51 @@ select their own subject cannot be measured by removing the subject.
 
 ## So the control breaks one thing instead of blanking everything
 
-The handshake wiring was skipped -- `fork` returns a worker whose channel is never
-listened to -- and the 25 were re-run:
+Re-run on 2026-09-13 against the current lane -- **86 files: 42 passed, 42 failed, 2
+skipped** -- and with two breaks rather than one, because one break left too much
+uncontrolled once round-robin distribution landed.
 
-    22 of 25 stop passing
-     3 still pass: setup-primary-emit, setup-primary-multiple, eaddrinuse
+    break A   the handshake wiring: `fork` returns a worker whose internal
+              channel is never listened to
+                  31 of 42 stop passing
 
-The three are not vacuous: their subject is `setupPrimary` and the `setup` event, which
-this break does not touch. They would need their own break to be controlled, and that is
-a gap in the control rather than in them.
+    break B   the worker's own lifecycle: no `dead` or `disconnected` state and
+              no `exit` or `disconnect` events. `#releaseWorker` and the
+              workers-map delete stay, so nothing wedges for a reason unrelated
+              to the subject
+                  26 of 42 stop passing
 
-**So 22 of the 25 passes are demonstrated to depend on this module working**, which is
-what the hollow requirement is actually asking, arrived at the way the rules say: control
-it by breaking the subject.
+    A or B    36 of 42 stop passing
+
+**Six passes are controlled by neither, and each is named with the break it would need**,
+because an uncontrolled pass that nobody lists is indistinguishable from a hollow one:
+
+    setup-primary-emit, setup-primary-multiple   subject is `setupPrimary` and the
+                                                 `setup` event -- wants a break in
+                                                 settings
+    cwd, fork-env                                subject is what `fork` passes down --
+                                                 wants a break in the child's options
+    eaddrinuse                                   subject is an error reaching the
+                                                 primary
+    rr-handle-keep-loop-alive                    subject is distribution holding the
+                                                 loop open -- wants a break in
+                                                 `#queryServer`
+
+So 36 of the 42 passes are demonstrated to depend on this module working. The earlier
+figure in this file was 22 of 25 against a 25-pass lane, from break A alone; break A now
+accounts for 31 and the gap it leaves is 11, which is why there are two.
+
+### The control had to be made cheap before it could be re-run
+
+Break A does not make its tests *fail*, it makes them **wait**: the primary never acks, so
+every worker hangs to the per-test ceiling. At 60s that is 80 minutes for a number decided
+in the first few seconds, and worse, each timeout leaked its driver -- 26 `run-one.mjs`
+processes were alive at once with their forked workers behind them, on a box where long node
+runs die. `run.mjs` now reads `NTS_CONFORMANCE_TIMEOUT_MS`.
+
+A shortened ceiling is only sound if it is not itself the variable, so the intact arm was
+re-run at 20s first: **42 passed, and the pass set byte-identical to the 60s arm, 0 files
+different**. Only then do the broken arms' counts mean anything.
 
 ## What is here
 

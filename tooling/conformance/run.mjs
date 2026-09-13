@@ -439,7 +439,16 @@ for (const test of tests) {
         : [process.execPath, argv]),
       {
         encoding: "utf8",
-        timeout: 60_000,
+        // **A per-test ceiling, overridable, because a control can need a cheap one.**
+        // Breaking a handshake on purpose does not make its tests fail -- it makes them
+        // *wait*, and 86 files at 60s each is 80 minutes for a number that is decided in
+        // the first few seconds. Worse, each timeout leaks its driver: 26 `run-one.mjs`
+        // processes were alive at once, with the forked workers behind them.
+        //
+        // A shortened ceiling is only sound if it is not itself the variable, so the
+        // intact arm must be re-run at the same value and reproduce its own count before
+        // the broken arm's count means anything.
+        timeout: Number(process.env.NTS_CONFORMANCE_TIMEOUT_MS ?? 60_000),
         stdio: ["ignore", "pipe", "pipe"],
         // Node's own runner starts each test from the checkout root. A few
         // upstream tests intentionally resolve `./test/...`; launching them
