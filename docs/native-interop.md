@@ -209,6 +209,55 @@ compiler ships and the open set the corpus authors are two different
 populations, and only the first has signatures.** The second is the real FFI
 surface in this tree today, and it is unclassified.
 
+### Where the 354 actually have prototypes, and the 63 that do not
+
+Counted twice by two methods that agree — `awk` over the headers here, a clang
+AST dump in the native lane:
+
+| | |
+|---|---|
+| prototype in `runtime/node`'s own headers | 277 |
+| prototype in `runtime/c`'s headers (`nts_checkpoint`) | 1 |
+| **prototype nowhere** | **76** |
+
+And the 76 are not one thing. Intersecting them against the 420 `nts_*` names
+appearing in `runtime/node`'s `.c` files:
+
+| | |
+|---|---|
+| defined in a `.c` file, no prototype anywhere | **63** |
+| in no `.c` file — genuinely JS-only shims | 13 |
+
+The 63 are the `fs` async family. **They are the hazard**, and they are worse
+than a refusal would be:
+
+    fs.c:1891     void nts_fs_access_async(NtsString *path, double mode, NtsHeader *callback)
+    async.ts:271  declare function nts_fs_access_async(
+                    path: string, mode: number, callback: (errno: number) => void,
+                  ): void;
+
+A real definition, a real call, and **no prototype connecting them** — so
+`emit-c` guesses one from the call operands and nothing checks the guess
+against the definition sitting in the same link. That pair happens to
+correspond. A pair that did not would be neither a refusal nor a link error; it
+would be a wrong calling convention that runs, which is the one outcome no exit
+code reports. All 63 are in `fs`, which is the module that *does* build and
+load an addon.
+
+The repair is a prototype, not a refusal: declare them in `fs.h` and siblings
+and the header-derived registry covers 341 of 354, leaving only the 13. That is
+a **node-lane** change — `runtime/node` is corpus to both the native and JVM
+lanes, neither of which may edit it.
+
+Two things here were mine and wrong first. I claimed all 76 were JS-only,
+having sampled *two* names, found both in `bindings.node.mjs`, and generalised
+from two to seventy-six; the native lane falsified it with `fs.c:1891`. And a
+combined parse of all 13 headers undercounted, because
+`runtime/node/net/net.h` and `nts_net.h` **both define `NTS_NODE_NET_H`** — so
+the second is skipped silently and 28 declarations vanish. That include-guard
+collision is a live defect in the corpus, found by parsing the headers
+separately and noticing the totals disagreed with the combined run.
+
 Found by the codex session, which produced `nts_process_env` as a
 counterexample — absent from `hir/runtime.rs` and from `runtime/c`, with its
 prototype in `runtime/node/internal/nts_node.h`. One counterexample was enough
