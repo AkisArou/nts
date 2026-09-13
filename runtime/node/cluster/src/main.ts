@@ -220,15 +220,32 @@ export class Worker extends EventEmitter {
    * was first and `kill` reads better beside `process.kill`.
    */
   destroy(signal?: string | number): void {
-    this.exitedAfterDisconnect = true;
-    if (this.isConnected()) {
-      this.process.once("disconnect", (): void => {
-        this.process.kill(signal);
-      });
-      this.disconnect();
+    // **node has two `destroy`s and this class is both roles, so it needs both.**
+    //
+    // `internal/cluster/primary.js` is three lines -- default the signal, kill the process
+    // -- and `internal/cluster/child.js` is the disconnect dance. This had only the child's
+    // version, applied in the primary, which is why `test-cluster-worker-kill-signal` saw
+    // neither the `disconnect` nor the `exit` it waits for: `kill('SIGKILL')` went through a
+    // graceful disconnect instead of a signal, and `exitedAfterDisconnect` was set to `true`
+    // where the test asserts `false`.
+    //
+    // A primary killing a worker is not a worker retiring itself, and the flag is the tell:
+    // the primary sets nothing, because being killed is not exiting after a disconnect.
+    if (!this.isSelf) {
+      this.process.kill(signal ?? "SIGTERM");
       return;
     }
-    this.process.kill(signal);
+    // The worker's own, from `child.js`: announce the intent, disconnect, exit when the
+    // channel goes. `state` guards re-entry there and here.
+    if (this.state === "destroying") return;
+    this.exitedAfterDisconnect = true;
+    if (!this.isConnected()) {
+      nts_cluster_self_disconnect();
+      return;
+    }
+    this.state = "destroying";
+    this.send({ cmd: "NODE_CLUSTER", act: "exitedAfterDisconnect" });
+    nts_cluster_self_disconnect();
   }
 
   disconnect(): this {
