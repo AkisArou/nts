@@ -7544,3 +7544,42 @@ now has a candidate with artefact evidence behind it, and no measurement.
 And it is the second time tonight a number came from an instrument's limit
 rather than the program: `0 lines` of an odex dump because both sides install as
 one package, and now `622` because a window was shorter than the record.
+
+### Why `awfy-towers` cannot reach the reference's inlining, in four numbers
+
+    method          ours   reference   ratio
+    moveTopDisk       15          14   1.07x
+    popDiskFrom       51          25   2.04x
+    pushDisk          66          33   2.00x
+    moveDisks          -          21
+
+**`moveTopDisk` is at parity, and it is the one method with neither a cold block
+nor a bounds guard.** The 2x is not a property of this backend's codegen in
+general; it is confined to the two methods that carry both, and it is almost
+exactly 2x in each.
+
+That matters because ART's inliner budget is per-callee and this chain is
+recursive: `moveDisks` inlines `moveTopDisk` inlines `popDiskFrom` and
+`pushDisk`, and a chain inlines *deeper* the smaller its callees are. The
+reference gets 1,128 frames out of it; we get 674.
+
+**And the two reductions this file knows about do not close it:**
+
+    reduction                       popDiskFrom    pushDisk
+    as emitted                          51 u          66 u
+    drop the integral guards       -10  41 u    -10   56 u
+    outline the cold throw block   -12  29 u    -12   44 u
+    the reference                       25 u          33 u
+
+`popDiskFrom` at 29 would plausibly come under -- the measured threshold is above
+30, and the reference's own `pushDisk` at 33 inlines, so the budget is at least
+33. `pushDisk` at 44 would not. So the best available pair buys one of the two
+callees, and the guards half of it is the one blocked on the harness.
+
+**So `awfy-towers` closes as characterised rather than as solved**, with a
+structural reason rather than a missing idea: our two hot callees are twice the
+size of the reference's, the gap is cold-path and guard code, and removing all
+of both recovers 22 units of a 26-and-33 unit deficit. The remaining work is not
+a fix to price -- it is making this backend emit a throw in five units instead of
+seventeen, which is a different piece of work from anything tried tonight and
+wants its own measurement before anyone starts it.
