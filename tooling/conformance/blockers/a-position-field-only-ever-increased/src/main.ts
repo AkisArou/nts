@@ -30,8 +30,29 @@
 // What remains unestablished is whether `json/parse.ts`'s own `at - 1` -- on a
 // throw path, where the position is at least one for reasons no explicit guard
 // states -- is provable. That is a real question and it is not this one.
+//
+// **2026-09-14: the class is deliberately not exported, and that is the point.**
+// It was `export class Scanner` and both halves of this pair went quiet --
+// reported as `FIXED ... no longer emits it`, which is the reassuring word for
+// the wrong outcome. The unchecked read had been lost.
+//
+// Exporting a class publishes its layout: `program.h` emits `struct
+// NtsObj_Scanner` with `_Static_assert(offsetof(NtsObj_Scanner, at) == 32u)`,
+// so a C caller can write the field at a documented offset, and the field's
+// facts must widen to whatever C might store. That is correct and it is
+// `a-position-field-published-to-c` beside this file, which asserts it.
+//
+// It is also a *different property* from the one this fixture is for. Measured
+// on one binary, one variable changed:
+//
+//     export class Scanner   ->  nts_str_char_code_at 1, nts_unit 0
+//            class Scanner   ->  nts_unit 1, nts_str_char_code_at 0
+//
+// So the boundary effect swamped the join it was written to measure. Dropping
+// `export` restores the measurement; `run` is still exported, so the class is
+// still reached and still lowered. Kept as a guard.
 
-export class Scanner {
+class Scanner {
   readonly source: string;
   at = 0;
 
