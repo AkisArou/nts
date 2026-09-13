@@ -2231,13 +2231,20 @@ All rows are **1024 elements** or **64 map entries** per operation, on HotSpot:
 
 | | ns/op | bytes/op |
 | --- | --- | --- |
-| `inlinable-call` (1024 calls) | 170.0 | 0 |
-| `uninlinable-call` (1024 calls) | 3511.7 | 28688 |
-| `pass-array-no-copy` (read 1024 doubles) | 332.5 | **0** |
-| `copy-double-to-int` | **316.6** | **4112** |
-| `copy-int-to-double` | 529.9 | 8208 |
-| `build-hashmap-64` | 371.5 | 3120 |
-| `reuse-hashmap-64` | 119.5 | 0 |
+| `inlinable-call` (1024 calls) | 169.4 | 0 |
+| `megamorphic-call` (1024 calls) | 1744.0 | **0** |
+| `reflective-call` (1024 calls) | 3488.1 | 28688 |
+| `pass-array-no-copy` (read 1024 doubles) | 333.0 | **0** |
+| `copy-double-to-int` | **322.1** | **4112** |
+| `copy-int-to-double` | 544.2 | 8208 |
+| `build-hashmap-64` | 374.8 | 3120 |
+| `reuse-hashmap-64` | 112.8 | 0 |
+
+Re-taken under the gate lock, after a first run came back with every row roughly
+doubled — 333.0 became 730.1 on a row that had changed in neither
+direction — because a peer had started a gate. Every row that existed before
+agrees with its earlier value to within about a percent, which is what makes the
+new row comparable rather than merely present.
 
 The allocation column is exact and worth reading first: `copy-double-to-int` is
 **4112 bytes**, which is 1024 × 4 plus a 16-byte header — *precisely one
@@ -2247,8 +2254,8 @@ all rather than nearly nothing.
 
 ## The finding, which is not the one the sentence expected
 
-**A 1024-element `double`→`int` copy costs 316.6 ns. Merely *reading* the same
-array once costs 332.5 ns.** The copy is *cheaper than one pass over the data it
+**A 1024-element `double`→`int` copy costs 322.1 ns. Merely *reading* the same
+array once costs 333.0 ns.** The copy is *cheaper than one pass over the data it
 copies* — same memory traffic, one extra store per element, and the allocation
 is a young-gen bump.
 
@@ -2268,16 +2275,31 @@ That is a sharper design rule than the document had, and it says where to spend:
 
 ## Against a call, which is the comparison the sentence asked for
 
-One 1024-element copy costs about **92 uninlinable calls** (3511.7 / 1024 =
-3.43 ns each). So next to a *single* foreign call a bulk copy is not noise — it
-is two orders of magnitude more.
+One 1024-element copy costs about **189 uninlinable calls** (1744.0 / 1024 =
+1.70 ns each). So next to a *single* foreign call a bulk copy is not noise — it
+is more than two orders of magnitude more.
 
-Two honest caveats on that ratio:
+**That number was 92 until the stand-in was measured rather than assumed.** The
+row it came from was called `uninlinable-call` and was reflection: an
+`Integer.valueOf` on the argument, a boxed result and the varargs `Object[]`
+that `Method.invoke` takes, at **28688 bytes/op**, which is 28 bytes per call.
+Its label said dispatch and four parts of what it measured were allocation.
 
-- **Reflection is a desktop stand-in for "a call the JIT cannot inline", and it
-  is a generous one.** It boxes every argument — 28688 bytes/op says so — where
-  a plain JNI call does not. A real JNI call is *cheaper* than this, which makes
-  the copy relatively **more** expensive than 92-to-1, not less.
+`megamorphic-call` is the arm it should have had — four implementations behind
+an interface, a site the JIT cannot reduce to one target, **0 bytes/op**. A
+genuinely uninlinable call is **1.70 ns**, reflection is 3.41 ns, and an
+inlinable one is 0.17 ns.
+
+The previous version of this section predicted this and could not size it: it
+said a real JNI call is cheaper than reflection, so the copy had to be
+*relatively more* expensive than 92-to-1. That was right, and the factor is two.
+
+Two honest caveats remain on the ratio:
+
+- **A megamorphic dispatch is a stand-in too.** It is the cost of a call the JIT
+  cannot devirtualise, which is the shape a foreign call has, but it crosses no
+  boundary. A JNI call does cross one and costs more than this, so reflection's
+  3.41 ns is the better bracket from above and the true number is between them.
 - **A binder transaction is not measured here and cannot be on a desktop.** It
   is IPC and is orders of magnitude above any row in this table, so for the
   Android APIs that cross a process the copy genuinely is noise. That is the one
