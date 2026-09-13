@@ -744,6 +744,22 @@ public final class RuntimeRegression {
         boolean refusedNegative = false;
         try { NtsArrayD.setLength(numbers, -1); } catch (NtsRefusal e) { refusedNegative = true; }
         check(refusedNegative, "a negative length is refused");
+
+        boolean refusedNaN = false;
+        try { NtsArrayD.setLength(numbers, Double.NaN); } catch (NtsRefusal e) { refusedNaN = true; }
+        check(refusedNaN, "NaN is refused -- node throws RangeError for it too");
+
+        // **The two refusals must not be reachable by each other's rule.** Both
+        // of these decline, so a test that only asked "did it throw" would pass
+        // on an implementation that classified them backwards. Checked against
+        // node: 2^32-1 is a length it accepts and grows to, 2^32 is one it
+        // rejects, and the boundary between them is not Integer.MAX_VALUE --
+        // which is where a plain `(int)` cast puts it.
+        String tooBig = refusalFrom(() -> NtsArrayD.setLength(numbers, 4294967296.0));
+        check(tooBig.contains("RangeError"), "2^32 is the language's objection, got: " + tooBig);
+        String holes = refusalFrom(() -> NtsArrayD.setLength(numbers, 4294967295.0));
+        check(holes.contains("holes"), "2^32-1 is a valid length we decline, got: " + holes);
+        check(!holes.contains("RangeError"), "and it must not claim the language refused it");
     }
 
     public static void main(String[] args) throws Exception {
@@ -790,6 +806,16 @@ public final class RuntimeRegression {
         expect("a boxed number is false", NtsRuntime.presenceHas(Double.valueOf(1), 0), false);
         expect("a string is false", NtsRuntime.presenceHas("port", 0), false);
         expect("a plain object is false", NtsRuntime.presenceHas(new Plain(7), 0), false);
+    }
+
+    /** The message of the refusal a body throws, or "" if it did not throw. */
+    private static String refusalFrom(Runnable body) {
+        try {
+            body.run();
+            return "";
+        } catch (NtsRefusal e) {
+            return e.getMessage();
+        }
     }
 
     private static void expect(String what, boolean got, boolean want) {

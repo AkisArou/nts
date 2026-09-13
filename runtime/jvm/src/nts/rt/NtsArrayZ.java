@@ -148,15 +148,33 @@ public final class NtsArrayZ {
      * JavaScript and is refused for the same reason.
      */
     public static void setLength(NtsArrayZ a, double n) {
-        int want = (int) n;
-        if (want != n || want < 0) {
-            throw new NtsRefusal("array length must be a non-negative integer, got " + n);
+        // **The bound is 2^32-1, not Integer.MAX_VALUE, and the difference is a
+        // real input.** JavaScript's rule is that `ToUint32(n)` must equal `n`,
+        // so `xs.length = 4294967295` is a *valid* length node accepts -- it
+        // grows and makes holes. Casting straight to `int` saturates at
+        // 2147483647, which then fails the `want != n` test and refuses it as a
+        // RangeError: the right outcome reached by the wrong rule, and reported
+        // as the language's objection when it is ours. Checked against node,
+        // which throws for 1.5, -1, NaN and 2^32, and accepts 2^32-1.
+        if (!(n >= 0 && n <= 4294967295.0) || n != Math.floor(n)) {
+            // **JavaScript's rule, not ours.** `xs.length = 1.5` and
+            // `xs.length = -1` throw `RangeError` in node, so refusing here is
+            // spec compliance and the message says whose rule it is. The growth
+            // refusal below is the opposite: node accepts it happily and
+            // produces holes, and we decline because a hole has no
+            // representation in this backend at all. Conflating the two would
+            // make a deliberate boundary read as conformance.
+            throw new NtsRefusal(
+                "RangeError: invalid array length -- `length` must be a non-negative integer, got "
+                + n);
         }
-        if (want > a.length) {
+        long want64 = (long) n;
+        if (want64 > a.length) {
             throw new NtsRefusal(
                 "growing an array by assigning `length` would create holes, which this compiler "
-                + "has no representation for -- length " + a.length + " to " + want);
+                + "has no representation for -- length " + a.length + " to " + want64);
         }
+        int want = (int) want64;
         if (want == a.length) {
             return;
         }
