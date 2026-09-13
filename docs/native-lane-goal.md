@@ -221,3 +221,37 @@ Also open for that tree, found while measuring the above and belonging to
 whoever owns it: `runtime/node/net/net.h` and `nts_net.h` **both define
 `NTS_NODE_NET_H`**, so whenever both are included the second is skipped in
 silence and 28 declarations vanish.
+
+### Paths the native lane is taking in `runtime/node` — for the node lane
+
+Recorded here rather than sent, because no node-lane peer is reachable over
+orcode: `list_peers` shows one peer in this project. Whoever owns that tree
+should read this before their next edit there.
+
+**Being edited by the native lane, as of 2026-09-14:**
+
+- `runtime/node/fs/fs.h` — gaining prototypes for the **63** already-defined
+  async functions (`nts_fs_access_async` and siblings), copied from their
+  definitions in `fs.c` and checked by compiling `fs.c` against them. These are
+  declarations for code that already exists; no implementation changes.
+- `runtime/node/net/net.h` and `runtime/node/net/nts_net.h` — **both define
+  `NTS_NODE_NET_H`**, so whenever both are included the second is skipped in
+  silence and 28 declarations vanish. Being consolidated if one is redundant,
+  renamed otherwise. No compatibility wrapper either way.
+
+Swept the rest: 22 `.h` files across `runtime/node` and `runtime/c`, 21 carry a
+guard, this is the **only** duplicated pair, and the single guardless file is
+`runtime/c/quickjs/libunicode-table.h`, vendored table data that does not want
+one.
+
+**Why it is the native lane doing it.** Those 63 are the reason: a declared
+bridge with a definition and no prototype leaves `emit-c` inferring the
+signature from call operands, and nothing compares the inference to the
+definition in the same link. A disagreement there is neither a refusal nor a
+link error — it is a calling convention that runs. All 63 are in `fs`, which
+builds and loads an addon.
+
+**The control being used**, so it can be checked rather than trusted: corrupt
+one prototype in a scratch header, compile the unchanged implementation
+against it, and require a conflicting-types failure. A header that cannot
+produce that failure is decoration.
