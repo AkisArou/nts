@@ -1571,3 +1571,58 @@ fn every_bound_row_names_the_declaration_on_its_line() {
         bound.len()
     );
 }
+
+/// The table survives a round trip, and a malformed one is refused by name.
+///
+/// Two directions of one format, asserted rather than trusted. They live in the
+/// same file for the reason the class-file reader lives beside the writer -- a
+/// disagreement about field order between two crates is found by a wrong answer
+/// at run time, and between two functions by this test.
+#[test]
+fn a_binding_table_round_trips() {
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let resolve = FromDirectory(ui.clone());
+    let mut bodies = Vec::new();
+    for name in ["com/example/ui/Rect", "com/example/ui/Widget", "com/example/ui/View"] {
+        let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
+        let class = nts_jvm_emitter::read::class_file(&bytes).expect("parses");
+        let (body, rows) =
+            nts_jvm_emitter::bind::declarations_with(&class, &resolve).expect("renders");
+        bodies.push((name.to_owned(), body, rows));
+    }
+    let (_, bound) = nts_jvm_emitter::bind::module_of("com.example.ui", &bodies);
+    assert!(!bound.is_empty(), "the fixture must produce rows, or this asserts nothing");
+
+    let text = nts_jvm_emitter::bind::write_table("com.example.ui", &bound);
+    let back = nts_jvm_emitter::bind::read_table(&text).expect("reads what it wrote");
+    assert_eq!(back, bound, "a table did not survive a round trip");
+
+    // Every call kind must round trip, not just whichever the fixture happens
+    // to use -- otherwise a mis-spelled arm in one direction is invisible until
+    // a jar uses it. This asserts the fixture covers them rather than assuming.
+    let kinds: std::collections::BTreeSet<_> = bound.iter().map(|row| row.call).collect();
+    assert!(
+        kinds.len() >= 4,
+        "the fixture exercises only {} call kinds, so the round trip says little about the \
+         others: {kinds:?}",
+        kinds.len()
+    );
+
+    // **Refused by name, not skipped.** Silently dropping a bad row makes the
+    // call it described fall back to "refused", which is indistinguishable from
+    // the feature not being built.
+    let bad = "# fine\n12 3 5 wobbly com/example/ui/Rect.left:I\n";
+    let why = nts_jvm_emitter::bind::read_table(bad).expect_err("an unknown call kind is refused");
+    assert!(why.contains("wobbly") && why.contains("line 2"), "{why}");
+
+    let short = "1 2 3\n";
+    assert!(nts_jvm_emitter::bind::read_table(short).is_err(), "a truncated row is refused");
+
+    // The control: the *well-formed* version of the same row must parse, or the
+    // two assertions above would pass on a function that refuses everything.
+    let good = "# fine\n12 3 5 field com/example/ui/Rect.left:I\n";
+    assert_eq!(nts_jvm_emitter::bind::read_table(good).expect("parses").len(), 1);
+}
