@@ -7271,3 +7271,64 @@ when told. Handed over with the two-line reproducer rather than worked around
 here, and the same question is worth asking of every `let x = 0` counter that
 reaches a `dadd`: this one cost 9% on a row where seven other things cost
 nothing measurable.
+
+## The quiet-check cannot see a compile, which is the loudest thing here
+
+`wait-idle.sh` is `pgrep -x nts` and `pgrep -x nts-bench`. The exact-name match
+is the right fix for the `pgrep -f` self-match trap the script was written about
+and documents at length. **It also means the quiet-check is blind to
+`cargo`**, and a build is by a wide margin the loudest thing that happens on
+this machine.
+
+Four `awfy-towers` arms were measured with three `rustc` at 674%, 566% and 469%
+and a load average of **8.47**. Both sides came back about 12% slow, so the
+*ratios* looked plausible -- 1.88x, 2.00x, 1.92x, 1.95x against a recorded 1.80
+-- and nothing in the output said the machine was busy.
+
+**The tell was the control, not the ratio.** The probe's `base` arm is the
+corpus case compiled through `NTS_AOT_DIR`, so its number is one I already have:
+it read **46,523 against an established 40,874**. The `awfy-bounce` probe's base
+arm had reproduced its corpus reading to within noise an hour earlier, which is
+what made the discrepancy legible rather than a surprising result.
+
+So: **every probe gets an arm whose only job is to reproduce a number already in
+this file.** Not a control for the hypothesis -- a control for the *session*.
+Without it, a spoiled run is a finding.
+
+Two contaminations in one night, from opposite directions, and the same
+instrument missed both: one I caused by running `commit-mine.sh` (which runs
+clippy) during my own measurement, one a peer caused by building while a
+measurement was live. `with-lock.sh --wait` coordinates gate runs and
+`wait-idle.sh` watches two executable names; neither sees a compile, and the
+lock does nothing about the session holding it.
+
+The check that would have caught both is `pgrep -x rustc` and a load-average
+floor, which is four lines. `tooling/gate/wait-idle.sh` is not this lane's file,
+so it is reported rather than edited, and my own runs wait on that condition
+inline.
+
+## And my generalisation used the table instead of the flag
+
+Within twenty minutes of finding that `bounce`'s cost was `FpSpillMask` rather
+than any of the four size ratios I had just tabulated, I swept the corpus for
+**`dconst_1; dadd`** -- the size-shaped proxy -- and handed the hit list on as a
+generalisation.
+
+    json-parse 34   node-utf8 16   json-stringify-doc 10   json-scan 7
+    awfy-mandelbrot 4   awfy-towers 2   awfy-permute 2   awfy-bounce 2
+
+`awfy-towers` is the natural test: `public double movesDone` where the reference
+has `private int movesDone`, incremented **8,191 times a round** in the hottest
+method, and `| 0` specialises the field all the way to `int` with `moveTopDisk`
+going `dadd` to `iadd` and no conversion round trip. A better-looking candidate
+than `bounce` on every count the sweep measures.
+
+**And there is a mechanism-level reason to expect nothing from it.** What moved
+`bounce` was a loop-carried floating-point *local* holding a register across the
+innermost loop, whose removal also took seventeen prologue `dstore`s with it.
+`movesDone` is a *field*: `iput-wide` against `iput` is a width difference, not
+register pressure, and there is no spill to win back.
+
+So the sweep is the wrong instrument for the finding it came from, and the right
+one counts `FpSpillMask` in hot methods. Written down before the re-measurement
+lands, so that it is a prediction rather than an explanation.
