@@ -217,8 +217,42 @@ inverted".
 
 ## How `libc.d.ts` is packaged, decided 2026-09-14 and measured
 
-Per header, addressed by a `c:` scheme, as ES modules. Not one file, and not
-`declare namespace`. Every line below was run, not reasoned:
+**One file of `declare module "c:*"` blocks.** No tsconfig `paths`, no `types`,
+no per-header files, and no namespace feature. This supersedes a first answer
+in this section's own history that reached for `paths`; the user rejected it and
+the better form turned out to need nothing from the compiler at all.
+
+```ts
+// libc.d.ts, shipped
+declare module "c:stdint" {
+  export type c_int = number & { readonly __c_int: unique symbol };
+}
+declare module "c:math" {
+  export function sqrt(x: number): number;
+  export function pow(b: number, e: number): number;
+}
+declare module "c:stdlib" {
+  import type { c_int } from "c:stdint";
+  export function abs(v: c_int): c_int;
+  export function labs(v: number): number;
+}
+```
+```ts
+import { labs } from "c:stdlib";
+import * as math from "c:math";     // math.pow(n, 2)
+```
+
+Compiles clean today. Named imports and `import * as` both resolve, and a
+cross-module `import type` works inside a block.
+
+**Why this works where `declare namespace` refuses**, which is the distinction
+worth keeping: `declare module "c:stdlib"` is an *ambient module declaration*,
+so its members resolve through the ordinary import path — alias-following and
+`denotes_a_module`, both already built. `declare namespace` asks for a namespace
+**object** at runtime and nothing constructs one. The same upstream AST kind,
+opposite requirements. So the `namespace` ✗ row does **not** block this file.
+
+Every alternative was run, not reasoned:
 
 | written | result |
 |---|---|
@@ -229,17 +263,13 @@ Per header, addressed by a `c:` scheme, as ES modules. Not one file, and not
 | `import * as math from "./libc/math.js"` | compiles → `math.abs(n)` |
 | `import { abs } from "c:math"` with `"paths": {"c:*": ["./libc/*.d.ts"]}` | compiles → `double abs(double);` |
 
-So the shipped form is:
+| `declare module "c:stdlib" { export function abs(...) }` | compiles → `double abs(double);` |
 
-```json
-{ "compilerOptions": { "baseUrl": ".", "paths": { "c:*": ["./libc/*.d.ts"] } } }
-```
-```ts
-import { abs } from "c:math";
-import * as stdio from "c:stdio";   // stdio.puts("hi") — namespace ergonomics
-```
+**`paths` works and is not what we ship.** It was the first answer here and the
+user declined it: a binding that only resolves because each project configured
+a mapping is a binding with a setup step, and `declare module` has none.
 
-**`types` is the wrong mechanism** and users add nothing per header. `types`
+**`types` is likewise the wrong mechanism** and users add nothing per header. `types`
 admits *global* ambient packages, which would put all eleven headers' names in
 global scope whether imported or not — `time`, `abs` and `pow` among them.
 `paths` is per-import, and the mapping ships in a base tsconfig that a user
