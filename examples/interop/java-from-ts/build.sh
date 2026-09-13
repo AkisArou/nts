@@ -35,10 +35,21 @@ generated="$out/com.example.d.ts"
     -p nts-jvm-emitter --example bind -- \
     "$out/classes" com.example ) > "$generated"
 
+# The binding table: the half the compiler reads. The `.d.ts` tells the checker
+# what `index()` returns; this says which instruction the call becomes. Keyed by
+# line in the file beside it, because the checker has already picked the
+# overload and the declaration it picked selects the row.
+table="$out/com.example.bind"
+( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" NTS_BIND_TABLE=1 \
+    cargo run --release -q -p nts-jvm-emitter --example bind -- \
+    "$out/classes" com.example ) > "$table"
+
 if [ "${NTS_REGENERATE:-}" = "1" ]; then
   cp "$generated" "$here/types/com.example.d.ts"
-  echo "regenerated types/com.example.d.ts"
-elif ! diff -u "$here/types/com.example.d.ts" "$generated"; then
+  cp "$table" "$here/types/com.example.bind"
+  echo "regenerated types/com.example.d.ts and types/com.example.bind"
+elif ! diff -u "$here/types/com.example.d.ts" "$generated" \
+  || ! diff -u "$here/types/com.example.bind" "$table"; then
   echo
   echo "the generated declarations changed. If that was intended:"
   echo "  NTS_REGENERATE=1 $0"

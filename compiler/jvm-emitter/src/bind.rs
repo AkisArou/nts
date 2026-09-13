@@ -418,6 +418,8 @@ fn render_fields_into(
     out: &mut String,
     constants: &mut String,
     class: &ClassFile,
+    table: &mut Vec<Bound>,
+    constants_table: &mut Vec<Bound>,
 ) -> Result<(), String> {
     let is_enum_class = class.access & access::ENUM != 0;
 
@@ -465,6 +467,15 @@ fn render_fields_into(
         let interface = class.access & access::INTERFACE != 0;
         let into = if interface { &mut *constants } else { &mut *out };
         into.push_str(note);
+        mark(
+            if interface { &mut *constants_table } else { &mut *table },
+            into,
+            5,
+            &class.binary_name,
+            &field.name,
+            &field.descriptor,
+            if is_static { Call::StaticField } else { Call::Field },
+        );
         // A namespace member is a `const`. `static readonly` is class syntax
         // and is `TS1128 Declaration or statement expected` here -- the second
         // thing wrong with an interface constant, after `static` on a member.
@@ -487,6 +498,115 @@ fn render_fields_into(
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// The binding table
+// ---------------------------------------------------------------------------
+//
+// The second output `nts bind` produces, and the half that makes a foreign call
+// an *instruction*. A `.d.ts` erases: it tells the checker that `canvas.drawText`
+// takes a string, and says nothing about which of four `drawText` overloads the
+// JVM should invoke. The table answers that, and it is keyed by **position in
+// the generated file**.
+//
+// **Why position rather than a name.** A method name is not unique -- measured,
+// not assumed: `android.graphics.Canvas` renders three same-name `drawText`
+// overload signatures, because TypeScript can tell them apart, and mangles only
+// the fourth, whose parameters erase to a signature already taken. Keying by
+// `(class, name)` would therefore collide on exactly the overload-heavy classes
+// that matter. Mangling *every* overload would make the key unique and is the
+// cheaper change -- and it was rejected, because `drawText$String$float$float$Paint`
+// at every call site is the DX the `$` in a generated name was already a
+// complaint about.
+//
+// Position has a better property than uniqueness: **the checker has already done
+// the overload resolution.** TypeScript picks a signature, `lower` walks to that
+// declaration, and the declaration's position selects the row. Nothing upstream
+// has to know what a JVM descriptor is, which is the point -- `hir` must not
+// grow a second opinion about a type mapping this crate already owns.
+//
+// **Keyed by line, not by line and column**, and that is measured too: `lower`'s
+// `location` reports a node's *end* -- five refusals in `com.example.d.ts` came
+// back at columns 18, 29, 66, 44 and 33 against lines of length 17, 28, 65, 43
+// and 32. A table keyed by a declaration's start column would miss every lookup,
+// and the symptom would be indistinguishable from the foreign call simply still
+// being refused. The column is recorded anyway, so a lookup can *assert* it
+// landed on the row it meant to -- one declaration per line is what makes the
+// line sufficient, and `every_bound_row_is_alone_on_its_line` is what keeps it
+// true.
+
+/// How a bound member is invoked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Call {
+    /// `invokestatic` -- a `static` method, or an interface's `static`.
+    Static,
+    /// `invokevirtual` -- an instance method on a class.
+    Virtual,
+    /// `invokeinterface` -- an instance method reached through an interface.
+    Interface,
+    /// `invokespecial` -- a constructor.
+    Special,
+    /// `getfield` / `putfield`.
+    Field,
+    /// `getstatic` / `putstatic`.
+    StaticField,
+}
+
+/// One row: a declaration's position in the generated file, and the JVM member
+/// it names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bound {
+    /// 1-based line in the assembled module file.
+    pub line: usize,
+    /// 1-based column of the declaration's first character. Recorded so a
+    /// lookup can assert rather than trust; see the note above on why the line
+    /// is what selects the row.
+    pub column: usize,
+    /// `owner.member:descriptor`, the shape `hir::runtime::foreign_key` builds.
+    pub key: String,
+    /// Which instruction this becomes.
+    pub call: Call,
+}
+
+/// Record a row against the buffer it was just written into.
+///
+/// **The line comes from the text itself** rather than from a counter kept
+/// beside it. A counter is a second derivation of the same fact and would drift
+/// the first time a render path wrote two lines where the counter assumed one --
+/// which is exactly what the `/** Inherited. */` prefix and the `@deprecated`
+/// line both do. Counting the newlines already in the buffer cannot disagree
+/// with the buffer.
+fn mark(
+    table: &mut Vec<Bound>,
+    buf: &str,
+    column: usize,
+    owner: &str,
+    member: &str,
+    descriptor: &str,
+    call: Call,
+) {
+    table.push(Bound {
+        line: buf.bytes().filter(|byte| *byte == b'\n').count() + 1,
+        column,
+        key: format!("{owner}.{member}:{descriptor}"),
+        call,
+    });
+}
+
+/// Move a table by the offset its text was moved by when it was merged into a
+/// larger buffer. Called from the same loop that does the merging, so the two
+/// cannot disagree.
+fn shift(table: &mut [Bound], lines: usize, columns: usize) {
+    for row in table {
+        row.line += lines;
+        row.column += columns;
+    }
+}
+
+/// The number of lines already in a buffer, for use as a merge offset.
+fn lines_in(buf: &str) -> usize {
+    buf.bytes().filter(|byte| *byte == b'\n').count()
+}
+
 /// Render one class as a `declare class` body.
 ///
 /// # Errors
@@ -494,7 +614,7 @@ fn render_fields_into(
 /// Returns the member's name when a descriptor cannot be rendered, rather than
 /// emitting a declaration with a hole in it. **Refuse by name, never
 /// half-emit**: a `.d.ts` that silently drops a method is one a caller trusts.
-pub fn declarations(class: &ClassFile) -> Result<String, String> {
+pub fn declarations(class: &ClassFile) -> Result<(String, Vec<Bound>), String> {
     declarations_with(class, &Alone)
 }
 
@@ -503,7 +623,12 @@ pub fn declarations(class: &ClassFile) -> Result<String, String> {
 /// # Errors
 ///
 /// As [`declarations`].
-pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<String, String> {
+pub fn declarations_with(
+    class: &ClassFile,
+    resolve: &dyn Resolve,
+) -> Result<(String, Vec<Bound>), String> {
+    let mut table: Vec<Bound> = Vec::new();
+    let mut constants_table: Vec<Bound> = Vec::new();
     // The package this class lives in, so its siblings render unqualified.
     let package = class
         .binary_name
@@ -556,7 +681,7 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
     let _ = writeln!(out, "  export {kind} {name} {{");
 
     let mut out_constants = String::new();
-    render_fields_into(&mut out, &mut out_constants, class)?;
+    render_fields_into(&mut out, &mut out_constants, class, &mut table, &mut constants_table)?;
 
     // Which methods collapse onto one TypeScript signature. Computed before
     // rendering, because the decision is about the *set*: a name is only
@@ -568,6 +693,58 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         }
     }
 
+    render_methods_into(
+        &mut out,
+        &mut out_constants,
+        class,
+        resolve,
+        &collapsed,
+        &mut table,
+        &mut constants_table,
+    )?;
+
+    render_inherited(
+        &mut out,
+        class,
+        resolve,
+        &mut out_constants,
+        &mut table,
+        &mut constants_table,
+    );
+
+    out.push_str("  }\n");
+    if !out_constants.is_empty() {
+        // Declaration merging: `interface Task` and `namespace Task` are one
+        // type to TypeScript, so `Task.KIND` resolves as it does in Java.
+        let _ = writeln!(out, "  export namespace {name} {{");
+        // The offset is taken here, in the loop that does the moving, and the
+        // `  ` prefix below is the same two columns the shift adds.
+        shift(&mut constants_table, lines_in(&out), 2);
+        for line in out_constants.lines() {
+            let _ = writeln!(out, "  {line}");
+        }
+        out.push_str("  }\n");
+        table.append(&mut constants_table);
+    }
+    Ok((out, table))
+}
+
+/// Render this class's own methods, into the class body or the merged namespace.
+///
+/// Split out of [`declarations_with`] because that function was doing three
+/// separate things and the clippy line limit is a fair proxy for it: fields,
+/// methods, and what is inherited each answer a different question, and each
+/// has its own reason for choosing a buffer.
+fn render_methods_into(
+    out: &mut String,
+    out_constants: &mut String,
+    class: &ClassFile,
+    resolve: &dyn Resolve,
+    collapsed: &[(String, String)],
+    table: &mut Vec<Bound>,
+    constants_table: &mut Vec<Bound>,
+) -> Result<(), String> {
+    let is_interface = class.access & access::INTERFACE != 0;
     for method in class.methods.iter().filter(|m| visible(m.access) && is_api(m)) {
         // The `Signature` attribute first, because it is the one that still has
         // the type arguments; the erased descriptor is the fallback, so an
@@ -584,20 +761,29 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
 
         if method.name == "<init>" {
             if !is_interface {
+                mark(
+                    &mut *table,
+                    out,
+                    5,
+                    &class.binary_name,
+                    "<init>",
+                    &method.descriptor,
+                    Call::Special,
+                );
                 let _ = writeln!(out, "    constructor({rendered_arguments});");
             }
             continue;
         }
 
-        let emitted = emitted_name(class, method, &collapsed);
+        let emitted = emitted_name(class, method, collapsed);
         if method.name == "<clinit>" {
             continue;
         }
         if deprecated(&method.annotations) {
             let target = if is_interface && method.access & access::STATIC != 0 {
-                &mut out_constants
+                &mut *out_constants
             } else {
-                &mut out
+                &mut *out
             };
             target.push_str("    /** @deprecated */\n");
         }
@@ -615,14 +801,38 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         // fix for those did not cover. In a namespace it is a `function`.
         let is_static = method.access & access::STATIC != 0;
         if is_interface && is_static {
-            let _ = writeln!(
+            mark(
+                &mut *constants_table,
                 out_constants,
+                5,
+                &class.binary_name,
+                &method.name,
+                &method.descriptor,
+                Call::Static,
+            );
+            let _ = writeln!(
+                &mut *out_constants,
                 "    function {emitted}{}({rendered_arguments}): {};",
                 type_parameters(method.signature.as_deref()),
                 returns(&result, &method.annotations),
             );
             continue;
         }
+        mark(
+            &mut *table,
+            out,
+            5,
+            &class.binary_name,
+            &method.name,
+            &method.descriptor,
+            if is_static {
+                Call::Static
+            } else if is_interface {
+                Call::Interface
+            } else {
+                Call::Virtual
+            },
+        );
         let _ = writeln!(
             out,
             "    {}{}{}{}({rendered_arguments}): {};",
@@ -633,20 +843,7 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
             returns(&result, &method.annotations),
         );
     }
-
-    render_inherited(&mut out, class, resolve, &mut out_constants);
-
-    out.push_str("  }\n");
-    if !out_constants.is_empty() {
-        // Declaration merging: `interface Task` and `namespace Task` are one
-        // type to TypeScript, so `Task.KIND` resolves as it does in Java.
-        let _ = writeln!(out, "  export namespace {name} {{");
-        for line in out_constants.lines() {
-            let _ = writeln!(out, "  {line}");
-        }
-        out.push_str("  }\n");
-    }
-    Ok(out)
+    Ok(())
 }
 
 /// Push a note into whichever buffer this class's fields are going to.
@@ -848,6 +1045,8 @@ fn render_inherited(
     class: &ClassFile,
     resolve: &dyn Resolve,
     constants: &mut String,
+    table: &mut Vec<Bound>,
+    constants_table: &mut Vec<Bound>,
 ) {
     for field in inherited_fields(class, resolve) {
         let Some((rendered, _)) = type_of(&field.descriptor) else { continue };
@@ -856,9 +1055,23 @@ fn render_inherited(
         // too, and on a class it keeps its `static`.
         let is_interface = class.access & access::INTERFACE != 0;
         let into = if is_interface { &mut *constants } else { &mut *out };
+        into.push_str("    /** Inherited. */\n");
+        // The owner is **this** class, not the one that declared the field.
+        // `getfield` names the static type the call site had, and the JVM walks
+        // the hierarchy -- which is what `javac` emits and is why an inherited
+        // member needs no separate resolution step here.
+        mark(
+            if is_interface { &mut *constants_table } else { &mut *table },
+            into,
+            5,
+            &class.binary_name,
+            &field.name,
+            &field.descriptor,
+            if field.access & access::STATIC != 0 { Call::StaticField } else { Call::Field },
+        );
         let _ = writeln!(
             into,
-            "    /** Inherited. */\n    {}{}: {};",
+            "    {}{}: {};",
             if is_interface {
                 "const ".to_owned()
             } else {
@@ -885,9 +1098,25 @@ fn render_inherited(
             continue;
         };
         let rendered_arguments = arguments(&method, &parameters, resolve);
+        out.push_str("    /** Inherited. */\n");
+        mark(
+            table,
+            out,
+            5,
+            &class.binary_name,
+            &method.name,
+            &method.descriptor,
+            if method.access & access::STATIC != 0 {
+                Call::Static
+            } else if class.access & access::INTERFACE != 0 {
+                Call::Interface
+            } else {
+                Call::Virtual
+            },
+        );
         let _ = writeln!(
             out,
-            "    /** Inherited. */\n    {}{}{}({rendered_arguments}): {};",
+            "    {}{}{}({rendered_arguments}): {};",
             // The modifier travels with the member. Without this, `View`
             // inherited `Widget`'s protected `onDraw` as a *public* one --
             // widening the visibility of something Java keeps to the
@@ -913,7 +1142,8 @@ fn render_inherited(
 /// between them is in the *constructor descriptor*, which already carries the
 /// outer instance for an inner one.
 #[must_use]
-pub fn module_of(package: &str, classes: &[(String, String)]) -> String {
+pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (String, Vec<Bound>) {
+    let mut bound: Vec<Bound> = Vec::new();
     let mut out = String::new();
     out.push_str("// GENERATED by `nts bind`. Do not edit.\n//\n");
     out.push_str("// Every comment below is emitted, not written by hand: where a member costs an\n");
@@ -938,23 +1168,29 @@ pub fn module_of(package: &str, classes: &[(String, String)]) -> String {
     // Outer classes first, each followed by a namespace holding whatever nests
     // inside it -- TypeScript wants the class before the namespace that merges
     // with it.
-    for (binary, body) in classes.iter().filter(|(binary, _)| !binary.contains('$')) {
+    for (binary, body, rows) in classes.iter().filter(|(binary, _, _)| !binary.contains('$')) {
+        // Taken before the push, so it is the offset this body actually lands
+        // at rather than a count kept alongside.
+        let mut rows = rows.clone();
+        shift(&mut rows, lines_in(&out), 0);
+        bound.append(&mut rows);
         out.push_str(body);
 
         let simple = simple_name(binary);
         let prefix = format!("{binary}$");
-        let nested: Vec<&String> = classes
-            .iter()
-            .filter(|(inner, _)| inner.starts_with(&prefix))
-            .map(|(_, body)| body)
-            .collect();
+        let nested: Vec<&(String, String, Vec<Bound>)> =
+            classes.iter().filter(|(inner, _, _)| inner.starts_with(&prefix)).collect();
         if nested.is_empty() {
             out.push('\n');
             continue;
         }
         let _ = writeln!(out, "\n  export namespace {simple} {{");
-        for body in nested {
-            // Two more spaces, because the body was written for one level.
+        for (_, body, rows) in nested {
+            // Two more spaces, because the body was written for one level --
+            // and the same two columns the rows shift by.
+            let mut rows = rows.clone();
+            shift(&mut rows, lines_in(&out), 2);
+            bound.append(&mut rows);
             for line in body.lines() {
                 if line.is_empty() {
                     out.push('\n');
@@ -967,7 +1203,7 @@ pub fn module_of(package: &str, classes: &[(String, String)]) -> String {
     }
 
     out.push_str("}\n");
-    out
+    (out, bound)
 }
 
 

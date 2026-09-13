@@ -7,7 +7,7 @@
 // this file must NOT import them, or it becomes a module and declares nothing.
 
 declare module "java:com.example" {
-  /** com.example.Catalog */
+  /** com.example.Catalog Final: cannot be extended. */
   export class Catalog {
     /** Inlined at the call site: the class is never loaded for this. */
     static readonly MAX: number;
@@ -43,20 +43,20 @@ declare module "java:com.example" {
   }
 
   export namespace Catalog {
-    /** com.example.Catalog$Cursor */
+    /** com.example.Catalog$Cursor Final: cannot be extended. */
     export class Cursor {
       at: number;
       constructor(a0: Catalog, a1: number);
       owner(): string | null;
     }
-    /** com.example.Catalog$Entry */
+    /** com.example.Catalog$Entry Final: cannot be extended. */
     export class Entry {
       readonly key: string | null;
       constructor(a0: string);
     }
   }
 
-  /** com.example.Kind */
+  /** com.example.Kind Final: cannot be extended. */
   export class Kind {
     /** A real `getstatic`, and it runs the owner's `<clinit>`. */
     static readonly SMALL: Kind;
