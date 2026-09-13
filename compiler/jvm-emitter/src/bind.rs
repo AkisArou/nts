@@ -582,6 +582,7 @@ fn emitted_name(
     class: &ClassFile,
     method: &crate::read::Member,
     collapsed: &[(String, String)],
+    public_inherited: &std::collections::BTreeSet<String>,
 ) -> String {
     let key = |descriptor: &str| {
         signature_of(descriptor).map(|(parameters, _)| parameters.join(",")).unwrap_or_default()
@@ -610,13 +611,22 @@ fn emitted_name(
     // binding table row carries `getChildDrawingOrder:(II)I`, so an override
     // still emits the member Java declared. That is the same contract
     // `find$int` has had since brands were removed.
+    //
+    // **And the public sibling may be inherited rather than declared**, which
+    // the first version of this missed because it scanned `class.methods`
+    // alone. `ActivityGroup` declares `protected onCreate(Bundle)` and inherits
+    // `public onCreate(Bundle, PersistableBundle)` from `Activity`; that is a
+    // mixed set just the same, and TypeScript objects just the same. Sixth
+    // defect in this file from a declared path and an inherited path
+    // disagreeing.
     if method.access & ACC_PROTECTED != 0
-        && class.methods.iter().any(|other| {
-            other.name == method.name
-                && other.access & access::PUBLIC != 0
-                && is_api(other)
-                && other.descriptor != method.descriptor
-        })
+        && (public_inherited.contains(&method.name)
+            || class.methods.iter().any(|other| {
+                other.name == method.name
+                    && other.access & access::PUBLIC != 0
+                    && is_api(other)
+                    && other.descriptor != method.descriptor
+            }))
     {
         return format!("{}{}", method.name, suffix(&method.descriptor));
     }
@@ -964,6 +974,13 @@ pub fn declarations_with(
     // ambiguous relative to its siblings.
     // One derivation, shared with the inherited path -- see `collapsed_of`.
     let collapsed = collapsed_of(class);
+    // Names this class inherits as public, so a protected member it *declares*
+    // under the same name is recognised as a mixed set.
+    let public_inherited: std::collections::BTreeSet<String> = inherited(class, resolve)
+        .iter()
+        .filter(|(_, member)| member.access & access::PUBLIC != 0)
+        .map(|(_, member)| member.name.clone())
+        .collect();
 
     render_methods_into(
         &mut out,
@@ -971,6 +988,7 @@ pub fn declarations_with(
         class,
         resolve,
         &collapsed,
+        &public_inherited,
         &mut table,
         &mut constants_table,
     )?;
@@ -1013,6 +1031,7 @@ fn render_methods_into(
     class: &ClassFile,
     resolve: &dyn Resolve,
     collapsed: &[(String, String)],
+    public_inherited: &std::collections::BTreeSet<String>,
     table: &mut Vec<Bound>,
     constants_table: &mut Vec<Bound>,
 ) -> Result<(), String> {
@@ -1047,7 +1066,7 @@ fn render_methods_into(
             continue;
         }
 
-        let emitted = emitted_name(class, method, collapsed);
+        let emitted = emitted_name(class, method, collapsed, public_inherited);
         if method.name == "<clinit>" {
             continue;
         }
@@ -1445,7 +1464,7 @@ fn render_inherited(
             // hierarchy, which is the same class of error as the bridge.
             if method.access & ACC_PROTECTED != 0 { "protected " } else { "" },
             if method.access & access::STATIC != 0 { "static " } else { "" },
-            emitted_name(&declaring, &method, &collapsed_of(&declaring)),
+            emitted_name(&declaring, &method, &collapsed_of(&declaring), &Default::default()),
             // **The method's own type parameters, which this path dropped.**
             // `<T> T[] toArray(IntFunction<T[]>)` is declared on `Collection`
             // and inherited by `AbstractCollection`, and the inherited copy
