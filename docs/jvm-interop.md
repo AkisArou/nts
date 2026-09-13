@@ -2078,3 +2078,69 @@ through a `FieldGet`.
 If a fourth is wanted later, the honest one is a **negative** project: the
 constructs that are refused, each with the message it produces. A document that
 only shows what works is an advertisement.
+
+# Build item 1, measured: the brand survives exactly where it needs no representation
+
+Run before anything downstream of it, because it was placed first and it
+refutes part of what was written above.
+
+Six arms, each differing from its control in one thing, against
+`target-jvm/release/nts` at `161d2fa4`:
+
+| where the brand appears | result |
+| --- | --- |
+| a **declared** (foreign) signature parameter | ✓ lowers, nothing refused |
+| the same, passed a plain `number` | ✓ **`TS2345`** — the checker enforces it |
+| a **local** scalar | ✓ lowers, nothing refused |
+| **our own** function's parameter | ✗ `NTS1001` a parameter of unrepresentable type (an intersection) |
+| `int[]` as a parameter | ✗ `NTS1001` an array of an intersection |
+| `int[]` as a local array literal | ✗ `NTS1001` an array literal of unrepresentable type |
+
+And the control that says where representation *does* come from:
+
+| | |
+| --- | --- |
+| `number[]` | `managed<[f64]>`, `array.get … : f64` |
+| **`Int32Array`** | **`managed<view<i32>>`, `array.get … : i32`**, nothing refused |
+
+**The rule, and it is sharper than the question that was asked.** A brand
+survives wherever the compiler never has to choose a representation for it, and
+is refused wherever it must. A foreign declaration is never lowered, so a brand
+there is free; a local scalar erases to its primitive; a parameter of ours and
+any array both need a representation, and an intersection has none.
+
+## What this settles, in the order the build depends on it
+
+**1. The `.d.ts` design is validated for consuming Java, and needs no compiler
+change.** This is the direction that matters most and it works today. The
+binding declares `find(key: int)`, the call site must write
+`find(Java.asInt(x))`, and `TS2345` is what makes that mandatory rather than
+advisory — which is the whole mechanism that keeps `find(int)` and `find(double)`
+apart. Measured, not assumed.
+
+**2. `int[]` is impossible by branding, and the plan already had the right
+answer for the wrong reason.** Cost 10a says an integer array is spelled
+`Int32Array` because "the element type **is** the TypeScript type, so a branded
+array would not narrow". That reasoning predicted this exactly, and the measured
+form is stronger: a branded array does not *lower at all*. `Int32Array` gives a
+real `i32` view, so `counts(): Int32Array` in the generated declarations is
+right and is now checked.
+
+**3. A limit on the other direction, which is new.** `ts-from-java` cannot
+publish a function that takes an `int` — our own parameter of intersection type
+is refused. So a TypeScript API exported to Java takes `double` for every
+number, which is exactly what `expected/Api.javap` already shows. That is a real
+constraint on that project rather than a gap in it.
+
+**4. What it does *not* unlock, and saying so is the point.** Build item 2 reads
+"the array element type, once (1) says an integer type is expressible", measured
+at 14.2% on `awfy-queens`. **(1) says no**, so that route is closed — and the
+`Int32Array` result must not be mistaken for an opening. `awfy-queens` holds a
+`number[]`, and rewriting it to an `Int32Array` would be editing the benchmark
+to win the row, which this repository does not do. The 14.2% still needs
+ordinary `number[]` elements to narrow, which is the element-width work upstream
+and is unchanged by anything here.
+
+`Int32Array` is available to a programmer who writes it and to a **binding**,
+where a Java `int[]` genuinely *is* 32-bit — and that second one is the whole
+reason this measurement mattered to interop.
