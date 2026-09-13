@@ -1564,7 +1564,7 @@ The whole global object, host additions excluded. `∅` rows are §13, not backl
 | value properties | `Infinity`, `NaN`, `undefined` | | `globalThis` |
 | function properties | `isNaN`, `isFinite` | `parseInt`, `parseFloat`, `encodeURI(Component)`, `decodeURI(Component)` | `eval` |
 | fundamental | `String` (as a function), `Number` | `Object` ◐, `Boolean`, `Symbol` | `Function`, `Proxy`, `Reflect` |
-| errors | `Error`, `TypeError`, `RangeError`, `URIError` | `ReferenceError`, `SyntaxError`, `EvalError`, `AggregateError`, `SuppressedError` | |
+| errors | `Error`, `TypeError`, `RangeError`, `URIError`, `ReferenceError`, `SyntaxError`, `EvalError` | `AggregateError`, `SuppressedError` | |
 | numbers, dates | `Math` ◐, `Number` ◐, `Date` ◐ | `BigInt` | |
 | text | `String.prototype` ◐ | `RegExp` | |
 | indexed | `Array` ◐, eight typed arrays ◐ | `Array` statics, `Uint8ClampedArray`, `Float16Array`, `BigInt64Array`, `BigUint64Array` | |
@@ -1573,6 +1573,22 @@ The whole global object, host additions excluded. `∅` rows are §13, not backl
 | memory | | `WeakRef`, `FinalizationRegistry` | |
 | control | `Promise` ◐ — the constructor, `all`, `race` | `Iterator`, generator objects | |
 | internationalization | | | `Intl` — ECMA-402, a separate specification |
+
+The errors row was wrong in the direction that makes the gap look bigger, and was corrected on 2026-09-13 by throwing all nine and reading what refused: **seven compile, two do not.** `ReferenceError`, `SyntaxError` and `EvalError` had been listed as gaps while sitting in `hir::builtin::ERRORS` — a second derivation of that list, disagreeing with it.
+
+**The two that remain share one reason and it is the list's own premise**: its members hold `{ message, name }` and nothing else, so a class with a third field cannot join it. `AggregateError` carries `errors`, `SuppressedError` carries `error` and `suppressed`.
+
+`AggregateError`'s absence is not confined to where it is thrown, and `hir::builtin` says so in its own comment — *a class absent from this list does not merely fail where it is thrown; it refuses its caller, and its caller's caller*. Followed to the end, measured rather than argued:
+
+```text
+AggregateError absent from builtin::ERRORS
+  -> NodeAggregateError extends it, so has no layout
+     -> `value.code` over five instanceof-narrowed arms refuses, as
+        `code` on a union one of whose members has no layout
+        internal/errors.ts:1256, and that file is imported by every module
+```
+
+`refusal-census.mjs --top=204` reads that message at 6 things, 7 sites, 24 modules. The 24 is cone-reach rather than 24 independent problems, which is how the census's own header says to read it. A probe ruled out the obvious alternative first: a user class carrying an array field compiles and reads `.code` through a union perfectly well, so it is **the base being unprovided** and not the array.
 
 ### `Object` is two halves
 
