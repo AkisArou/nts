@@ -130,6 +130,8 @@ export interface ClusterSettings {
   cwd?: string | undefined;
   silent?: boolean | undefined;
   serialization?: string | undefined;
+  /** Extra stdio slots for every worker; see the forwarding in `fork`. */
+  stdio?: readonly unknown[] | undefined;
 }
 
 /**
@@ -407,6 +409,14 @@ class Cluster extends EventEmitter {
       silent: settings.silent,
       execArgv: settings.execArgv === undefined ? undefined : [...settings.execArgv],
       serialization: settings.serialization,
+      // **`stdio` from the settings, which node forwards and this did not.**
+      //
+      // `cluster.setupPrimary({ stdio: ['pipe','pipe','pipe','ipc','pipe'] })` is how a
+      // caller asks its workers for extra streams, and `test-cluster-fork-stdio` then
+      // reads `worker.process.stdio[4]`. Dropped, the slot is `undefined` and the
+      // failure is *Cannot read properties of undefined (reading 'setEncoding')* -- a
+      // message about the stream, from a test about `stdio`, caused by a settings key.
+      stdio: settings.stdio,
     });
     worker.process = child;
     this.workers[`${id}`] = worker;

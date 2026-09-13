@@ -167,7 +167,10 @@ function hostStream(entry) {
   const owner = live.get(entry.ntsChildHandle);
   if (owner === undefined) return entry;
   const slot = entry.ntsChildSlot;
-  return (slot === 0 ? owner.child.stdin : slot === 1 ? owner.child.stdout : owner.child.stderr)
+  return (slot === 0 ? owner.child.stdin
+    : slot === 1 ? owner.child.stdout
+    : slot === 2 ? owner.child.stderr
+    : owner.child.stdio?.[slot])
     ?? entry;
 }
 
@@ -252,7 +255,16 @@ globalThis.nts_child_process_spawn = (file, args, env, cwd, stdioMode, detached,
 globalThis.nts_child_process_read_start = (handle, which, onData, onEnd) => {
   const entry = live.get(handle);
   if (entry === undefined) return;
-  const stream = which === 1 ? entry.child.stdout : entry.child.stderr;
+  // **Any slot, by index, because a child can have more than three.**
+  //
+  // `stdio: ['pipe','pipe','pipe','ipc','pipe']` gives the parent a fifth stream at
+  // `child.stdio[4]`, and both `test-child-process-fork-stdio` and
+  // `test-cluster-fork-stdio` read exactly that. Special-casing 1 and 2 answered
+  // `stderr` for every other index, so slot 4 silently read slot 2 -- a wrong stream
+  // rather than a missing one, which is the harder failure to see.
+  const stream = which === 1 ? entry.child.stdout
+    : which === 2 ? entry.child.stderr
+    : entry.child.stdio?.[which];
   if (!stream) return;
   stream.on("data", (chunk) => onData(new Uint8Array(chunk)));
   stream.on("end", () => onEnd());
@@ -262,6 +274,16 @@ globalThis.nts_child_process_write = (handle, bytes, callback) => {
   const entry = live.get(handle);
   if (entry === undefined || !entry.child.stdin) return -32;
   entry.child.stdin.write(Buffer.from(bytes), () => callback(0, 0));
+  return 0;
+};
+
+globalThis.nts_child_process_write_slot = (handle, slot, bytes, done) => {
+  const entry = live.get(handle);
+  const stream = entry?.child.stdio?.[slot];
+  // A slot the caller did not ask for as a pipe has no stream, and writing to it is the
+  // caller's mistake rather than something to paper over.
+  if (stream === undefined || stream === null || typeof stream.write !== "function") return -32;
+  stream.write(Buffer.from(bytes), () => done(0));
   return 0;
 };
 
@@ -294,10 +316,20 @@ globalThis.nts_process_exec_path = () => process.execPath;
 // and parsing, which is the part a test can observe.
 import { fork as nodeFork } from "node:child_process";
 
-globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, serialization, onExit, onMessage, onDisconnect) => {
+globalThis.nts_child_process_fork = (execPath, args, env, cwd, silent, serialization, onExit, onMessage, onDisconnect, stdioSpec) => {
   const [, ...rest] = args;
   const modulePath = rest.shift();
   const options = { execPath, silent: silent !== 0, serialization };
+  // **`stdio` when the caller gave one, because `silent` cannot say five slots.**
+  //
+  // `fork(file, args, { stdio: [0, 'ignore', 'pipe', 'ipc', 'pipe'] })` is a five-slot
+  // child and this binding took only `silent`, so the host created three slots plus the
+  // channel and fd 4 in the child was whatever happened to be there --
+  // `Unsupported fd type: UNKNOWN` from `new net.Socket({ fd: 4 })`, thrown in the child,
+  // where the parent only ever sees a non-zero exit code.
+  if (stdioSpec !== null && stdioSpec !== undefined) {
+    options.stdio = stdioSpec.map(hostStream);
+  }
   if (env !== null) {
     options.env = Object.fromEntries(env.map((entry) => {
       const at = entry.indexOf("=");

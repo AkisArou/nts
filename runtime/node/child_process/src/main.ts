@@ -133,6 +133,7 @@ declare function nts_child_process_fork(
   onExit: (status: number, signal: number) => void,
   onMessage: (message: unknown, sent?: unknown) => void,
   onDisconnect: () => void,
+  stdioSpec: readonly unknown[] | null,
 ): number;
 /**
  * `sent` is a socket or a server travelling to the child, and it crosses as itself.
@@ -153,6 +154,20 @@ declare function nts_child_process_send(
   callback?: unknown,
 ): number;
 declare function nts_child_process_disconnect(handle: number): void;
+/**
+ * Write to a stdio slot other than stdin.
+ *
+ * A **new** binding rather than a fourth parameter on `nts_child_process_write`: that
+ * contract has been broken twice this session by editing one side of it, and stdin's write
+ * is on every `exec` path there is. This one is reached only by a child that was given more
+ * than three slots.
+ */
+declare function nts_child_process_write_slot(
+  handle: number,
+  slot: number,
+  bytes: Uint8Array,
+  done: (status: number) => void,
+): number;
 
 /** Node's signal names, in the direction the binding needs them. */
 // Every signal `os.constants.signals` names on this platform, in its order --
@@ -223,6 +238,48 @@ class ChildReadable extends Readable {
 }
 
 /** A child's stdin. */
+/**
+ * A stdio slot past the third, which node gives back as a duplex `net.Socket`.
+ *
+ * `stdio: ['pipe','pipe','pipe','ipc','pipe']` is a five-slot child.
+ * `test-child-process-fork-stdio` **writes** to `child.stdio[4]` and
+ * `test-cluster-fork-stdio` **reads** from it, so one file in each of two modules needs a
+ * different half of the same stream -- which is why this is a duplex and not the
+ * `ChildReadable` the first attempt used. That attempt failed as
+ * `child.stdio[4].write is not a function`, which at least named the missing half.
+ *
+ * Readable through `ChildReadable`'s machinery and writable through the slot binding. It is
+ * not a `net.Socket`: no `address`, no `remoteFamily`, nothing the pipe has no answer for.
+ */
+class ChildDuplexSlot extends ChildReadable {
+  #slotHandle: number;
+  #slot: number;
+
+  constructor(handle: number, slot: number, onEof: () => void) {
+    super(handle, slot, onEof);
+    this.#slotHandle = handle;
+    this.#slot = slot;
+  }
+
+  write(chunk: unknown, encodingOrCallback?: unknown, maybeCallback?: unknown): boolean {
+    const callback = typeof encodingOrCallback === "function"
+      ? encodingOrCallback as (error?: Error | null) => void
+      : typeof maybeCallback === "function"
+      ? maybeCallback as (error?: Error | null) => void
+      : undefined;
+    const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk as Uint8Array;
+    const status = nts_child_process_write_slot(
+      this.#slotHandle, this.#slot, bytes, (): void => { callback?.(null); },
+    );
+    return status === 0;
+  }
+
+  end(chunk?: unknown): this {
+    if (chunk !== undefined && chunk !== null) this.write(chunk);
+    return this;
+  }
+}
+
 class ChildWritable extends Writable {
   /** As `ChildReadable`: slot 0, so another child can be given this as its input. */
   readonly ntsChildHandle: number;
@@ -1037,7 +1094,7 @@ export class ChildProcess extends EventEmitter {
   stderr: ChildReadable | null = null;
   readonly stdio: (ChildWritable | ChildReadable | null)[] = [];
 
-  constructor(handle: number, mode: number) {
+  constructor(handle: number, mode: number, spec: readonly unknown[] | null = null) {
     super();
     this.#handle = handle;
     this.pid = nts_child_process_pid(handle);
@@ -1050,6 +1107,34 @@ export class ChildProcess extends EventEmitter {
     if (wantsOut) this.stdout = new ChildReadable(handle, 1, (): void => this.#stdioEnded());
     if (wantsErr) this.stderr = new ChildReadable(handle, 2, (): void => this.#stdioEnded());
     this.stdio.push(this.stdin, this.stdout, this.stderr);
+    // **Slots past the third, when the caller asked for them.**
+    //
+    // `stdio: ['pipe','pipe','pipe','ipc','pipe']` is a five-slot child, and
+    // `child.stdio[4]` is the fifth stream -- read by `test-child-process-fork-stdio`
+    // and by `test-cluster-fork-stdio`, one file in each of two modules on one feature.
+    // The packed `mode` carries three slots and cannot say anything about a fourth, so
+    // the caller's array comes through beside it.
+    //
+    // node's own `stdio` puts **null** at the `'ipc'` slot and a stream at each `'pipe'`,
+    // and anything else -- `'ignore'`, `'inherit'`, a descriptor, a stream -- has no
+    // object on this side either.
+    //
+    // **A narrowing, stated rather than buried:** node hands back a duplex `Socket` for an
+    // extra pipe and this is a `ChildReadable`. Both tests only read, so both are satisfied;
+    // a caller that writes to `child.stdio[4]` is not, and will find no `write` rather than
+    // a broken one.
+    if (spec !== null) {
+      for (let slot = 3; slot < spec.length; slot += 1) {
+        if (spec[slot] === "pipe") {
+          this.#stdioOpen += 1;
+          this.stdio.push(
+            new ChildDuplexSlot(handle, slot, (): void => this.#stdioEnded()),
+          );
+        } else {
+          this.stdio.push(null);
+        }
+      }
+    }
   }
 
   #stdioEnded(): void {
@@ -1261,7 +1346,7 @@ export function spawn(
     nextTickEmitError(failed, file, handle);
     return failed;
   }
-  child = new ChildProcess(handle, mode);
+  child = new ChildProcess(handle, mode, stdioSpecOf(opts.stdio));
   // node emits `spawn` on a nextTick after a successful spawn, before any stdio
   // event -- test-child-process-spawn-event asserts both the event and that
   // nothing else has fired before it.
@@ -1727,6 +1812,23 @@ export function fork(
   const forkPipes = (forkMode & 0x3) === 0 || ((forkMode >> 2) & 0x3) === 0
     || ((forkMode >> 4) & 0x3) === 0 ? 1 : 0;
 
+  // **`fork`'s spec is not `spawn`'s, because a fork always has a channel.**
+  //
+  // node expands a string with `stdioStringToArray(stdio, 'ipc')` -- three of that name plus
+  // the channel -- and takes an array as given, having already refused one without `'ipc'`
+  // above. Handing the raw option to the binding dropped the channel for `{ stdio: 'pipe' }`
+  // and the failure was `child.send is not a function`: the whole IPC surface gone, reported
+  // as one missing method.
+  //
+  // `undefined` stays `null` on purpose. That is the path `silent` decides, it is what every
+  // `fork` test but two exercises, and replacing it is how this change also cost
+  // `test-child-process-server-close`.
+  const forkSpec: readonly unknown[] | null = typeof forkStdio === "string"
+    ? [forkStdio, forkStdio, forkStdio, "ipc"]
+    : Array.isArray(forkStdio)
+    ? forkStdio as readonly unknown[]
+    : null;
+
   checkNoNullBytes(modulePathString, list, opts);
   const execPath = opts.execPath === undefined ? nts_process_exec_path() : opts.execPath;
   const execArgv = opts.execArgv === undefined ? [] : opts.execArgv;
@@ -1751,6 +1853,7 @@ export function fork(
     (): void => {
       if (child !== null) child._handleDisconnect();
     },
+    forkSpec,
   );
 
   if (handle < 0) {
@@ -1764,7 +1867,7 @@ export function fork(
   // An explicit `stdio` decides the slots; `silent` only chooses between piping and
   // inheriting when nothing was said. `fork` was ignoring the array outright, so
   // `{ stdio: ['pipe','pipe','pipe','ipc'] }` inherited and `child.stderr` was null.
-  child = new ChildProcess(handle, forkMode);
+  child = new ChildProcess(handle, forkMode, forkSpec);
   // `fork` had neither a timeout nor an abort signal: `fork(file, { signal })` ran a
   // child nothing could stop.
   armTimeoutAndAbort(child, opts as SpawnOptions);
