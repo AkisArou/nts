@@ -24408,17 +24408,33 @@ is never reached. Measured with two arms one line apart: `fstatSync(3).isFIFO()`
 wrapper, `isSocket()` true with the host handle passed directly. **An object with one wrong
 property is a number with extra steps.**
 
-### And who owns the read was never a decision
+### And who owns the read: the first measurement was unsound
 
 `pipe-dataflow` and `stdio-reuse-readable-stdio` were recorded as gated on a decision about
-whether the parent may read a stream it hands on. Hooking `readStart` on node itself:
+whether the parent may read a stream it hands on. I hooked `readStart` on node, read
 
-    only an `end` listener, no `data`   end fired, close fired, readStart called = false
-    stdout handed to another child      wc produced its answer, readStart called = false
+    only an `end` listener, no `data`   readStart called = false
+    stdout handed to another child      readStart called = false
 
-**node calls it in neither case**, and `end`/`close` still fire in the first. So the eager read
-in `ChildReadable`'s constructor is ours, not node's, and the comment justifying it describes
-our arrangement. A question that had sat open for a day was one measurement wide.
+and concluded node reads in neither case. **That was wrong, and the error is the shape of the
+instrument.** The hook replaced `readStart` on the *instance*, after `spawn` had returned, and
+node calls it during `spawn`. Hooking `Pipe.prototype.readStart` before any child exists reads
+**2 calls in each arrangement**.
+
+So node reads eagerly, and the comment I deleted as "describing our arrangement rather than
+node's" was correct.
+
+It also explains why `test-child-process-pipe-dataflow` passes on node: its `mustNotCall`
+replaces the method on the instance and node had already called the prototype's. **The test does
+not prove node refrains from reading; it proves node reads early.** A test passing on the oracle
+is not a statement about behaviour until you know which mechanism made it pass -- the same
+lesson as a hollow pass, one level up.
+
+What the tree does now is neither of my two attempts: eager, on a **next tick**, and skipped for
+a stream handed to another child -- the tick because the second `spawn` is what marks the stream,
+and an explicit `_read` outranking the mark because a consumer asking differs from nobody asking.
+Same 105 and the same pass set as the unsound design, which is why the number could not tell them
+apart.
 
 ## The axis after `_handle`: still 46, and `net`'s two are still hollow
 
