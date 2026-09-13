@@ -3,7 +3,7 @@ Your goal is to take `child_process` to zero failing on the interpreted lane, th
 **Where it stands, 2026-09-13.**
 
     net           185 files: 154 passed, 0 failed, 7 skipped, 24 n/a
-    child_process 119 files: 105 passed, 4 failed, 9 skipped
+    child_process 119 files: 107 passed, 1 failed, 9 skipped, 2 n/a
     cluster        86 files:  78 passed, 6 failed, 2 skipped
     compiled axis  46 across 26 modules, emptying arm on every module
     ceiling        21 of 26; five publish nothing compiled, since an object,

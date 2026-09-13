@@ -24458,3 +24458,45 @@ and the arm is what keeps those separable.
 
 The interpreted lane moved: `net` 151 -> 154 (zero failing), `child_process` 104 -> 105.
 
+## `child_process` reaches one failing, on three fixes and one exclusion
+
+    child_process 119 file(s): 107 passed, 1 failed, 9 skipped, 2 n/a   (was 105 / 4)
+    net           185 file(s): 154 passed, 0 failed                     (unchanged)
+    cluster        86 file(s):  78 passed, 6 failed                     (unchanged)
+
+**Our Buffers cross the advanced channel as the host's and come back as ours.** v8's structured
+clone records a `Buffer` subclass it does not know as a plain `Uint8Array`, and node's deserialiser
+re-wraps only its own. Both directions are unambiguous because the two Buffer classes share one
+realm, so the constructor's *name* separates them and a plain `Uint8Array` stays one.
+
+Three wrong turns in that walk, each caught by a different file, and each worth keeping:
+
+  * a `Float64Array` rebuilt generically becomes `{ '0': 3.14159… }` -- the fallback copies own
+    keys, right for a plain object and wrong for anything with a shape
+  * `Buffer.isBuffer(ourBuffer)` answered **true** inside the stand-in, because that file runs in
+    the harness process where the bare `Buffer` global is the substituted one; the host's is
+    imported as `HostBuffer` now
+  * the helper was inserted at `s.index('class ChildProcess')`, which is *inside*
+    `export class ChildProcess` -- the class stopped being exported and
+    `test-child-process-promisified` failed on `instanceof child_process.ChildProcess`, pointing at
+    the test
+
+**`ChildProcess.prototype.spawn` is published**, with node's validation order: `envPairs` only when
+`stdio` carries an `ipc` slot, and before `file`. Its own test relies on both, passing no `file` at
+all in the `envPairs` cases.
+
+**`advanced-serialization-host-objects` is not applicable**: its child requires
+`internal/test/binding` and the file carries `// Flags: --expose-internals`, the ground nine other
+modules exclude 21 files on.
+
+### The guard that cost two files for one
+
+`if (typeof handle === "number" && handle >= 0)` for adopting a handle. A *failed* spawn is
+constructed as `new ChildProcess(-1, mode)` and still needs its shape, so `>= 0` skipped it and
+cost `test-child-process-cwd` and `test-child-process-spawn-error`. The right test admits `-1` and
+excludes only `undefined`.
+
+And the interpreted lane ran green while the module **did not typecheck** -- `#handle` and
+`#stdioOpen` lost their initialisers and the binding call was an argument short. The compiled lane
+would have failed to build. Emitting after the edit is what caught it.
+
