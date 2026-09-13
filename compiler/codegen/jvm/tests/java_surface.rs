@@ -63,6 +63,18 @@ fn emitted() -> Option<Vec<read::ClassFile>> {
     )
 }
 
+/// **Proven to fail in both directions**, because a test that only rejects one
+/// kind of wrong is half a test. Sabotaged on 2026-09-13:
+///
+/// | the rule replaced by | fails on |
+/// | --- | --- |
+/// | `let synthetic = 0` -- nothing marked | *a replaced static is synthetic* |
+/// | `let synthetic = ACC_SYNTHETIC` -- everything marked | *a free function is the API* |
+///
+/// The second is the one worth having. Marking every static is the obvious
+/// simplification, it passes the first assertion, and it makes every free
+/// function in the program uncallable from Java -- silently, because
+/// `javac` reports a missing symbol rather than a visibility error.
 #[test]
 fn a_methods_static_is_synthetic_and_a_free_functions_is_not() {
     let Some(classes) = emitted() else { return };
