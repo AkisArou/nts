@@ -2623,3 +2623,79 @@ The two available routes are parsing the name for `#` -- a second derivation of
 a fact the lowering already had, which is the hazard this document keeps
 hitting -- or an owner on `Func`, which is a middle-end change and therefore
 goes upstream as a patch rather than being built here on a string prefix.
+
+
+# `s.bump()`, and the order the two halves had to come in
+
+The DX question was answered by building it, and the answer is that the surface
+sugars to zero cost.
+
+```java
+nts.gen.Session s = new nts.gen.Session();
+double first = s.bump();
+```
+
+**The intention behind the static is unchanged.** `Callee::Direct` still lowers
+to `invokestatic`, and our own call sites never look at the class. What the
+class gained is one instance method per exported method, forwarding to the
+static.
+
+**Measured, because "without performance cost" is a claim about generated
+code.** `benches/interop-facade` times the same static called directly against
+the same static through a forwarder:
+
+| | minimum over four sittings |
+| --- | --- |
+| `static-call` | 458.96 ns |
+| `through-facade` | **457.43 ns** |
+
+The forwarder is nominally faster -- which is to say the difference is noise,
+and the spread *inside* each arm (6.2 ns) is larger than the gap between them.
+Both arms return the same checksum and both read from an array the JIT cannot
+fold, because an earlier benchmark in this tree read 0.3554 ns for 1024 calls by
+being foldable.
+
+## Ownership, without asking HIR to carry it
+
+`Func` has no owner and `Layout.methods` is the *dispatch* table, so a
+non-virtual method is in neither. What the lowering does record is structural:
+
+```
+export func Session#bump(this: managed<obj#1>) -> f64
+```
+
+First parameter named `this`, typed as the layout, set deliberately in `lower`.
+So ownership is read from the **type**, and the name is an independent check --
+`<layout>#<member>` must agree, and a disagreement skips rather than guesses.
+That keeps a hand-written `function f(this: Foo)`, which TypeScript allows, from
+being silently attached to a class.
+
+One predicate answers it, asked by both the forwarder emission and the access
+flags below. Two copies would drift into a static marked synthetic with no
+instance method to replace it -- which is not a wrong answer that runs, it is an
+API that vanishes.
+
+## And then the statics go synthetic, which could not have come first
+
+`ACC_SYNTHETIC` tells a debugger or decompiler to hide a member. `javac` proves
+it took effect:
+
+```
+error: cannot find symbol
+    nts.gen.Program.Session$bump(s)
+  symbol: method Session$bump(Session)
+```
+
+**The order was forced by a measurement, not chosen.** `javac` does not merely
+*hide* a synthetic member -- it refuses to reference one. Marking these before
+the forwarders existed would have made TypeScript **uncallable from Java**
+rather than merely tidier.
+
+The control is the half that matters: a free function has **no** forwarder, so
+`Program.greet(...)` *is* its API and marking it synthetic would make it
+uncallable. A rule that marked every static would pass the first assertion and
+break every free function in the program. `tests/java_surface.rs` asserts both
+directions.
+
+So `$` is no longer awkward, because it is no longer the API: it is a synthetic
+name marked synthetic, which is what the JVM convention is for.
