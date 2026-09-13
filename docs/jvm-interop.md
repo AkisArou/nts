@@ -2557,3 +2557,69 @@ A jar whose escape table is nearly empty is a jar with nearly no code in it.
 That reading needs no threshold and no heuristic: the artefact's own size says
 which class of input it came from, which is what makes the next stub jar
 recognisable before it produces a number.
+
+
+# `Session$bump` — why the `$` is awkward, and the order the fix has to come in
+
+Raised as DX feedback on `ts-from-java`, which is what that project is for.
+
+**The `$` is correct as a mangling rule and wrong as an API.** It comes from
+`symbols::jvm_member_name`, which replaces every non-alphanumeric ASCII
+character because DEX forbids them -- so HIR's `Session#bump` becomes
+`Session$bump`. The rule is right and the comment above it earned itself: an
+earlier hand-written list of six characters was missing `@` and twenty-one
+others, a space among them, which `class C { "a b": number }` produces from four
+lines of legal TypeScript.
+
+And `$` is the JVM's **own** convention for compiler-generated names:
+`Outer$Inner`, `lambda$main$0`, `this$0`. Seeing one means *"synthetic, not
+yours to call"*. So the character is not the problem. The problem is that this
+name is currently **the public API**, and a name that looks synthetic should not
+be the thing a caller types.
+
+## Two fixes, and one of them cannot come first
+
+**The signal.** `ACC_SYNTHETIC` on the mangled statics tells IDEs and
+decompilers to hide them, which is exactly what the flag is for --
+`class.rs` already carries it with the comment *"Debuggers and decompilers use
+it to decide what to show a human."*
+
+**Measured before proposing it, and it inverts the order.** `javac` does not
+merely hide a synthetic member -- it **refuses to reference one**. Patching
+`ACC_SYNTHETIC` onto an ordinary static and compiling a caller against it:
+
+```
+error: cannot find symbol
+    System.out.println(Lib.helper(1));
+                          ^
+  symbol: method helper(int)
+```
+
+So marking the statics synthetic *today* would make TypeScript **uncallable from
+Java at all**. It is the right end state and it is only safe once something else
+is callable.
+
+**The facade, which has to come first.** An instance method per exported method,
+forwarding to the static:
+
+```java
+public double bump() { return Program.Session$bump(this); }
+```
+
+Three instructions, inlined to nothing by C2 and ART, emitted only on exported
+classes. Our own call sites keep `invokestatic` and lose nothing; the Java
+caller writes `s.bump()` and never sees the static. **Then `$` is not awkward,
+because it is no longer the API** -- it is a synthetic name marked synthetic,
+which is what the convention is for.
+
+## Why the facade is a patch and not a commit
+
+It needs to know **which layout a method belongs to**, and HIR does not say.
+`Func` carries `name`, `params`, `return_type` and `exported`; there is no
+owner. `Layout.methods` is the *dispatch* table, so a non-virtual method like
+`Session.bump` is not in it either.
+
+The two available routes are parsing the name for `#` -- a second derivation of
+a fact the lowering already had, which is the hazard this document keeps
+hitting -- or an owner on `Func`, which is a middle-end change and therefore
+goes upstream as a patch rather than being built here on a string prefix.
