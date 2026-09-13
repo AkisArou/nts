@@ -79,6 +79,21 @@ pub struct Member {
     /// makes a `static final` primitive or `String` inline to an `ldc` instead
     /// of a `getstatic`.
     pub constant: bool,
+    /// The method's bytecode, when it has any.
+    ///
+    /// `None` for a field, for an `abstract` method and for a `native` one --
+    /// and that third case is why an escape analysis over a jar can never be
+    /// the whole answer: a great deal of `android.jar` is `native`, and a
+    /// method with no body cannot be analysed, only declared.
+    pub code: Option<Code>,
+}
+
+/// A method's `Code` attribute: enough of it to walk the instructions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Code {
+    pub max_stack: u16,
+    pub max_locals: u16,
+    pub bytes: Vec<u8>,
 }
 
 /// One parsed class file.
@@ -228,6 +243,7 @@ struct Attributes {
     constant: bool,
     inner_classes: Vec<(String, String)>,
     parameter_annotations: Vec<Vec<String>>,
+    code: Option<Code>,
 }
 
 fn attributes(reader: &mut Reader, pool: &Pool) -> Result<Attributes, Error> {
@@ -273,6 +289,19 @@ fn attributes(reader: &mut Reader, pool: &Pool) -> Result<Attributes, Error> {
                         found.parameter_annotations[index].push(name);
                     }
                 }
+            }
+            "Code" => {
+                let max_stack = reader.u2()?;
+                let max_locals = reader.u2()?;
+                let length = reader.u4()? as usize;
+                if reader.at + length > reader.bytes.len() {
+                    return fail("the Code attribute runs past the end of the class file");
+                }
+                let bytes = reader.bytes[reader.at..reader.at + length].to_vec();
+                // The exception table and the nested attributes are stepped
+                // over by the outer `reader.at = end`, which every attribute
+                // arm relies on.
+                found.code = Some(Code { max_stack, max_locals, bytes });
             }
             "InnerClasses" => {
                 let n = reader.u2()?;
@@ -357,6 +386,7 @@ fn members(reader: &mut Reader, pool: &Pool) -> Result<Vec<Member>, Error> {
             annotations: extra.annotations,
             parameter_annotations: extra.parameter_annotations,
             constant: extra.constant,
+            code: extra.code,
         });
     }
     Ok(found)

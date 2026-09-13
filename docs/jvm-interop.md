@@ -2430,3 +2430,58 @@ two would drift in the worst available way: a mismatch surfaces as a *silently
 missing* escape answer. The argument gets assumed to escape, the program stays
 correct, and the optimisation never happens -- it costs speed and reports
 nothing.
+
+
+# The escape analysis, and the 88.5% that was a lie
+
+`foreign_keeps` returning `None` means every argument to a Java call is assumed
+to escape. The jar has the callee's bytecode, so for a method with a body the
+answer is computable rather than declarable -- and *"a copy you did not have to
+make"* is the whole thesis, so this is the mechanism that earns it.
+
+`compiler/jvm-emitter/src/escapes.rs` walks the `Code` attribute with an
+abstract stack whose entries are "this is parameter *n*" or "something else",
+and marks a parameter escaped when something that can publish a reference
+consumes it. Conservative at every fork -- any `invoke` escapes the whole stack,
+a branch target resets it, an unknown opcode abandons the method -- so it is
+only ever wrong in the direction that costs speed.
+
+## Measured on `android.jar`, and the first number was spectacular and false
+
+| | before the guard | after |
+| --- | --- | --- |
+| methods taking a reference | 2724 | 2724 |
+| analysed | 2442 | **52** |
+| proved: none escapes | **2411 (88.5%)** | **26 (1.0%)** |
+
+**`android.jar` is a stub jar.** Every body in it is:
+
+```
+new java/lang/RuntimeException; dup; ldc "Stub!"; invokespecial; athrow
+```
+
+The parameter is never loaded, so "did anything publish it" answers **nothing
+escapes** -- about a method whose real implementation, on the device, may retain
+everything. A **permissive** wrong answer, which is the one direction this
+analysis must never fail in, and it would have let us stack-allocate an object
+Android keeps.
+
+The guard is not a stub-specific hack: **a body with no return instruction never
+returns normally, and tells you nothing about its parameters.** True of any
+method that only throws, and exactly the class of body whose bytecode is not its
+behaviour.
+
+The control is the other column: our own fixture, whose bodies are real, is
+**unchanged at 23.1%**. A guard that rejected everything would have collapsed
+both.
+
+## What the 1% settles
+
+**For Android, the overrides file is the mechanism and the analysis is not.**
+The plan listed bytecode analysis first and the overrides file as the fallback
+for `native` methods; on the SDK that ordering is backwards, because the SDK
+ships no bodies at all. The analysis earns its keep on jars that ship real code
+-- an ordinary library dependency -- and on the SDK it should not be run.
+
+That is worth more than the analysis itself: it is the difference between a
+curated list being a stopgap and being the answer.

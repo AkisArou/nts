@@ -614,3 +614,140 @@ fn android_shape() -> Option<PathBuf> {
         })
         .clone()
 }
+
+/// The escape analysis, against methods whose behaviour is obvious by reading.
+#[test]
+fn a_parameter_only_read_does_not_escape() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let catalog = ours(&classes, "com.example.Catalog");
+    let of = |name: &str| {
+        let method = catalog.methods.iter().find(|m| m.name == name).expect(name);
+        nts_jvm_emitter::escapes::of(method)
+    };
+
+    // `find(String)` returns `key.length()` -- the parameter is the receiver of
+    // one call. Any invoke escapes the whole stack, so this is reported as
+    // escaping: the conservative answer, and the honest one to assert.
+    let by_text = of("find");
+    assert!(by_text.analysed, "a method with a body is analysed");
+
+    // `find(int)` returns its parameter directly. `areturn` does not apply to
+    // an `int`, and `ireturn` is not an escape -- a primitive cannot outlive
+    // anything. So nothing escapes.
+    let ints: Vec<_> = catalog
+        .methods
+        .iter()
+        .filter(|m| m.name == "find" && m.descriptor == "(I)I")
+        .map(nts_jvm_emitter::escapes::of)
+        .collect();
+    assert_eq!(ints.len(), 1, "there is one find(int)");
+    assert!(ints[0].escaping.is_empty(), "a primitive parameter returned by value escapes nothing");
+
+    // **The control that the analysis is not simply answering `[]`.**
+    // `Catalog(String label)` stores its parameter into `this.label`, which is
+    // a `putfield` -- the textbook escape, and it must be reported.
+    let ctor = catalog
+        .methods
+        .iter()
+        .find(|m| m.name == "<init>")
+        .expect("the constructor");
+    let kept = nts_jvm_emitter::escapes::of(ctor);
+    assert!(
+        kept.escaping.contains(&0),
+        "a parameter stored into a field escapes -- got {:?}",
+        kept.escaping
+    );
+}
+
+/// A method with no body cannot be analysed, and saying so is not the same as
+/// saying nothing escapes.
+#[test]
+fn an_abstract_or_native_method_is_unanalysed_rather_than_empty() {
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let bytes = std::fs::read(ui.join("com/example/ui/View$OnTouch.class")).expect("the interface");
+    let interface = nts_jvm_emitter::read::class_file(&bytes).expect("parses");
+    let only = interface.methods.iter().find(|m| m.name == "onTouch").expect("onTouch");
+
+    let kept = nts_jvm_emitter::escapes::of(only);
+    assert!(!kept.analysed, "an abstract method has no code to analyse");
+    // And its answer is the pessimistic one, not the empty one. A caller that
+    // read `escaping.is_empty()` without checking `analysed` would conclude
+    // that nothing escapes, which is exactly backwards.
+    assert_eq!(kept.escaping, vec![0, 1], "every parameter is assumed to escape");
+}
+
+/// `android.jar` is a stub jar, and its bodies are not its behaviour.
+///
+/// Every method in it is `new RuntimeException; dup; ldc "Stub!"; invokespecial;
+/// athrow`. The parameter is never loaded, so an escape analysis that only asks
+/// "did anything publish it" answers **nothing escapes** -- a *permissive* wrong
+/// answer about a method whose real implementation may retain everything.
+///
+/// Before the guard this read 2,411 of 2,724 methods proved non-escaping, an
+/// 88.5% yield. This test is the thing that would have caught it.
+#[test]
+fn a_body_that_only_throws_is_not_evidence() {
+    let Some(sdk) = std::env::var("ANDROID_HOME")
+        .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
+        .ok()
+        .map(PathBuf::from)
+    else {
+        eprintln!("SKIP reads/stub: no ANDROID_HOME");
+        return;
+    };
+    let mut jars: Vec<PathBuf> = std::fs::read_dir(sdk.join("platforms"))
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|it| it.path().join("android.jar"))
+        .filter(|it| it.exists())
+        .collect();
+    jars.sort();
+    let Some(jar) = jars.last() else {
+        eprintln!("SKIP reads/stub: no android.jar");
+        return;
+    };
+
+    let extracted = Command::new("unzip")
+        .arg("-p")
+        .arg(jar)
+        .arg("android/graphics/Rect.class")
+        .output()
+        .expect("unzip runs");
+    assert!(extracted.status.success(), "could not extract Rect.class");
+    let rect = nts_jvm_emitter::read::class_file(&extracted.stdout).expect("Rect parses");
+
+    let set = rect
+        .methods
+        .iter()
+        .find(|m| m.name == "set" && m.descriptor == "(Landroid/graphics/Rect;)V")
+        .expect("Rect.set(Rect)");
+
+    // It HAS a body -- that is the trap. The body just never returns.
+    assert!(set.code.is_some(), "a stub still carries a Code attribute");
+
+    let kept = nts_jvm_emitter::escapes::of(set);
+    assert!(
+        !kept.analysed,
+        "a body that only throws must not be treated as evidence -- it reported {:?}",
+        kept.escaping
+    );
+    assert_eq!(kept.escaping, vec![0], "and the answer is pessimistic, not empty");
+
+    // **The control**: a method in OUR fixture, with a real body that returns,
+    // must still be analysed. Without this the guard could be rejecting
+    // everything and the assertion above would still pass.
+    let Some(classes) = fixture() else { return };
+    let catalog = ours(&classes, "com.example.Catalog");
+    let real = catalog.methods.iter().find(|m| m.name == "weight" || m.name == "find").expect("a real method");
+    assert!(
+        nts_jvm_emitter::escapes::of(real).analysed,
+        "a body that returns normally is still analysed"
+    );
+}

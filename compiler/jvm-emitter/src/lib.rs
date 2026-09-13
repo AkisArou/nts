@@ -39,6 +39,7 @@ pub mod bind;
 pub mod class;
 pub mod code;
 pub mod descriptor;
+pub mod escapes;
 pub mod frames;
 pub mod insn;
 pub mod pool;
