@@ -62,13 +62,27 @@
 // found it -- see [[0296]], and the same shape as an immediately-called closure
 // in `a-closure-over-a-loop-variable` agreeing under either implementation.
 //
-// Not number one: `refusal-census.mjs` over 26 modules today has **no row with
-// that message at all**, under either wording, so the corpus reach is zero. The
-// top row is now `a \`X\` where a \`X\` is wanted, which is a pointer cast
-// between two structs that do not agree about where their shared fields are` --
-// 48 things, 66 sites, 20 modules. The 57-across-23 figure quoted here was
-// stale, and searching a census for a *quoted diagnostic* would not have shown
-// it, because the message changed while the cause did not.
+// Not number one: today's `refusal-census.mjs` over 26 modules has a different
+// top row -- `a \`X\` where a \`X\` is wanted, which is a pointer cast between
+// two structs that do not agree about where their shared fields are`, 48 things,
+// 66 sites, 20 modules -- so the 57-across-23 figure quoted here is stale.
+//
+// **A first version of this paragraph said the corpus reach was zero, and that
+// was wrong.** The census prints the top 25 of 204 distinct roots and said so
+// nowhere, so I searched a truncated list, did not find the message, and read
+// absence from the table as absence from the corpus. The cause was in
+// `internal/errors.ts` the whole time, wearing a different member name:
+//
+//     internal/errors.ts:1256  `code` on a union one of whose members has no layout
+//
+// The total is not established here and is not guessed at. `refusal-census.mjs`
+// now reports how many roots it left out and takes `--top=`, which is the change
+// that makes "it is not in the table" mean something.
+//
+// Two separate reasons the old quotation could not be checked by searching, and
+// only one of them was the search's fault: the **message changed** while the
+// cause did not, and the **table was capped** while claiming only that unparsed
+// lines made it a floor.
 //
 // So this row and that one are **no longer one question**. `g.next()` builds
 // its own result, so it constructs exactly one arm -- which is the case that

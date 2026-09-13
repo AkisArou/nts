@@ -2,6 +2,13 @@
 //
 //   NTS_BIN=<a pinned copy> node tooling/conformance/refusal-census.mjs
 //   NTS_BIN=<a pinned copy> node tooling/conformance/refusal-census.mjs fs stream
+//   NTS_BIN=<a pinned copy> node tooling/conformance/refusal-census.mjs --top=204
+//
+// **The table is a ranked floor, not the set.** It prints the top 25 of two
+// hundred-odd distinct roots and now says how many it left out, because it did
+// not, and reading absence from it as absence from the corpus put a wrong
+// sentence into a fixture. `--top=` raises the cap; a module's own `nts hir`
+// output is what settles a question about one message.
 //
 // # Why not just count the diagnostics
 //
@@ -237,12 +244,33 @@ const filedAs = (message) => {
   return hit === undefined ? "" : hit[0];
 };
 
+/* How many rows to print.
+ *
+ * **This was a bare `slice(0, 25)` and the truncation was silent**, which on
+ * 2026-09-13 cost a wrong sentence in a checked-in fixture. I searched this
+ * table for a message, did not find it, and wrote "no row with that message at
+ * all, so the corpus reach is zero" into `blockers/a-generator-method`. The
+ * table holds 25 of 204 distinct roots. The message was in the other 179, and
+ * the cause was sitting in `internal/errors.ts` the whole time.
+ *
+ * The file already warns that unparsed lines make the table a floor. It did
+ * not warn about the cap, so the table was a floor for two reasons and said so
+ * for one. */
+const top = Number(
+  (process.argv.slice(2).find((a) => a.startsWith("--top=")) ?? "--top=25").slice(6),
+);
 console.log(`  ${"things".padStart(6)} ${"sites".padStart(6)} ${"mods".padStart(5)}  root`);
-for (const [key, v] of roots.slice(0, 25)) {
+for (const [key, v] of roots.slice(0, top)) {
   const filed = filedAs(key);
   console.log(`  ${String(v.things.size).padStart(6)} ${String(v.sites.size).padStart(6)} ` +
     `${String(v.modules.size).padStart(5)}  ${key.replace(/^NTS1001 /, "").slice(0, 62)}` +
     (filed === "" ? "" : `\n  ${" ".repeat(19)}filed as ${filed}`));
+}
+if (roots.length > top) {
+  console.log(`\n  ${roots.length - top} more root message(s) not shown, of ${roots.length}.`);
+  console.log("  **Absence from this table is not absence from the corpus.** Pass");
+  console.log(`  --top=${roots.length} to see them, or grep a module's own \`nts hir\` output`);
+  console.log("  for the message you are asking about, which is what settles it.");
 }
 if (unparsed > 0) {
   console.log(`\n  ${unparsed} line(s) carried a diagnostic code and could not be read.`);
