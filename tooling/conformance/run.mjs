@@ -431,8 +431,50 @@ const haveScript = () => {
   return ptyAvailable;
 };
 
+// **A lane that publishes nothing runs no tests, because its passes would be hollow.**
+//
+// `shape.mjs` reads `exports.default` and several addons export none, so `shape` reaches
+// its blank-module branch and returns `{}`. Nothing fails: the addon loads, the shape runs,
+// all 86 files run, and every file that selects its own subject --
+// `if (cluster.isWorker) ... else if (cluster.isPrimary) ...` -- takes neither branch and
+// passes having asserted nothing. `cluster` printed **25 passed** on the compiled lane that
+// way and the figure reached a ledger, a goal file and three messages to a peer before
+// anybody asked what `require('cluster')` returns there. It returns zero keys. Proof in the
+// instrument's own terms: intact and `--empty-exports` are identical in all three columns.
+//
+// Deliberate blanking is exempt, because that is the point of it: `--sabotage` and
+// `--empty-exports` *want* an empty module and want the tests run against it.
+//
+// A small surface is not a hollow one -- `stream` publishes 2 keys compiled and its single
+// pass falls to 0 when emptied. An **absent** surface is.
+let publishesNothing = false;
+if (addon !== null && !sabotage && !emptyExports) {
+  let published = null;
+  try {
+    published = execFileSync(
+      process.execPath,
+      [join(HERE, "shaped-surface.mjs"), dirname(resolvePath(addon)), moduleName],
+      { encoding: "utf8" },
+    );
+  } catch (error) {
+    // A non-zero exit is this check's way of saying "something publishes nothing",
+    // so the output is what matters and the status is not an error here.
+    published = `${error.stdout ?? ""}${error.stderr ?? ""}`;
+  }
+  publishesNothing = published.includes("PUBLISHES NOTHING");
+}
+
 const rows = [];
-for (const test of tests) {
+if (publishesNothing) {
+  for (const test of tests) {
+    rows.push({
+      name: test.name,
+      kind: "n/a",
+      why: `${moduleName} publishes nothing on this lane, so a pass here would assert nothing`,
+    });
+  }
+}
+for (const test of publishesNothing ? [] : tests) {
   const { name } = test;
   let result;
   const shortName = name.split("/").pop();
