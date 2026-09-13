@@ -167,3 +167,57 @@ exactly as it treats yours.
 
 Send it claims, not questions. A question invites an opinion; a claim with arms
 invites a check, and the check is the part that has value.
+
+## 2026-09-14: `runtime/node` is open to this lane, by the user
+
+The original scope said nothing about `runtime/node`, and the Claude session
+read that silence as *not* permission and declined to grant it — correctly, as
+it was never that session's to give. Asked directly, the user granted it:
+**this lane may edit `runtime/node`.**
+
+The request came from a real blocker rather than convenience. The host bridges
+split three ways:
+
+| | |
+|---|---|
+| prototype in `runtime/node`'s headers | 277 |
+| prototype in `runtime/c`'s headers | 1 |
+| defined in a `.c` file, prototype nowhere | **63** |
+| in no `.c` file — genuinely JS-only shims | 13 |
+
+and the 63 are C functions whose only defect is a missing declaration.
+`fs.c:1891` defines `void nts_fs_access_async(NtsString *, double,
+NtsHeader *)`; nothing declares it; `emit-c` guesses the prototype from call
+operands and nothing compares the guess to the definition in the same link.
+
+**Recommended sequencing, which is advice and not a boundary.** Add those 63
+declarations to `fs.h` and its siblings first. It puts them in the same
+mechanism as the other 277, invents no representation, and leaves 13 names to
+classify instead of 76 — and 13 shims may not need an architecture at all.
+Decide the manifest-versus-annotation question against the 13, not the 76.
+
+**What permission does not change.** A third session owns that tree and works
+in it. So:
+
+- commit with **explicit paths** (`git commit -- <paths>`) — three sessions
+  share one index and a path-scoped commit is the only kind that cannot sweep
+  in someone else's work;
+- pin before measuring across an edit — `tooling/gate/pinned.sh <sha>`, with
+  `NTS_GATE_TREE`/`NTS_GATE_TARGET` to stay off the default tree;
+- expect the addon sweep to have an opinion. It builds and **loads** all 22
+  modules under `RTLD_NOW`, and `fs` is the module those 63 prototypes touch —
+  that step is where a declaration disagreeing with its definition surfaces;
+- write the commit message so the node lane can read the diff as a *repair*:
+  the definitions already existed, only the declarations were missing, and
+  `fs.c:1891` is the citation that says so.
+
+**One control survives the grant and matters more because of it.** A bridge
+whose authored ABI facts disagree with its C definition must fail loudly. With
+both sides now editable, nothing stops the two being reconciled by changing
+whichever is convenient; the arm that proves the mechanism works is the one
+where they deliberately disagree and something notices.
+
+Also open for that tree, found while measuring the above and belonging to
+whoever owns it: `runtime/node/net/net.h` and `nts_net.h` **both define
+`NTS_NODE_NET_H`**, so whenever both are included the second is skipped in
+silence and 28 declarations vanish.
