@@ -5,7 +5,7 @@ package com.example.ui;
  * plan's first constraint: it surfaces its geometry as public mutable fields,
  * read directly all over Android.
  */
-public final class Rect {
+public final class Rect implements Comparable<Rect> {
     public int left;
     public int top;
     public int right;
@@ -18,6 +18,13 @@ public final class Rect {
         this.top = top;
         this.right = right;
         this.bottom = bottom;
+    }
+
+    /** A generic override: `javac` emits a synthetic bridge
+     *  `compareTo(Object)` beside this, which is not API. */
+    @Override
+    public int compareTo(Rect other) {
+        return Integer.compare(width(), other.width());
     }
 
     public int width() { return right - left; }

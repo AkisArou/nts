@@ -240,7 +240,7 @@ fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read::Membe
     for parent in supertypes(class, resolve) {
         let from_interface = parent.access & access::INTERFACE != 0;
         for method in &parent.methods {
-            if method.access & access::PUBLIC == 0 || method.name.starts_with('<') {
+            if method.access & access::PUBLIC == 0 || method.name.starts_with('<') || !is_api(method) {
                 continue;
             }
             // **A static interface method is not inherited.** JLS 9.4.1:
@@ -532,13 +532,13 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
     // rendering, because the decision is about the *set*: a name is only
     // ambiguous relative to its siblings.
     let mut collapsed: Vec<(String, String)> = Vec::new();
-    for method in class.methods.iter().filter(|m| m.access & access::PUBLIC != 0) {
+    for method in class.methods.iter().filter(|m| m.access & access::PUBLIC != 0 && is_api(m)) {
         if let Some((parameters, _)) = signature_of(&method.descriptor) {
             collapsed.push((method.name.clone(), parameters.join(",")));
         }
     }
 
-    for method in class.methods.iter().filter(|m| m.access & access::PUBLIC != 0) {
+    for method in class.methods.iter().filter(|m| m.access & access::PUBLIC != 0 && is_api(m)) {
         // The `Signature` attribute first, because it is the one that still has
         // the type arguments; the erased descriptor is the fallback, so an
         // exotic signature loses its generics rather than losing the method.
@@ -608,6 +608,28 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         out.push_str("  }\n");
     }
     Ok(out)
+}
+
+/// Whether a member is something a Java *caller* can name.
+///
+/// `ACC_BRIDGE` and `ACC_SYNTHETIC` are compiler-generated. A bridge is the
+/// erased twin `javac` emits beside a generic override -- `Rect implements
+/// Comparable<Rect>` produces `compareTo(Rect)` and `compareTo(Object)` -- and
+/// `javap -p` shows both, so a reader that trusts the class file offers both.
+///
+/// **`javac` does not**, which is the check that settles it:
+///
+/// ```text
+/// r.compareTo((Object) "not a Rect")
+/// error: incompatible types: Object cannot be converted to Rect
+/// ```
+///
+/// Emitting the bridge was worse than noise. Its parameter is `unknown`, so
+/// `rect.compareTo("hello")` typechecked and would have thrown
+/// `ClassCastException` from inside a method the source never declared -- a
+/// declaration that *widens* what the real signature narrows.
+fn is_api(member: &crate::read::Member) -> bool {
+    member.access & (access::BRIDGE | access::SYNTHETIC) == 0
 }
 
 /// Every supertype of a class, superclass and superinterfaces alike.

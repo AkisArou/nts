@@ -28,6 +28,7 @@ declare module "java:com.example.ui" {
     bottom: number;
     constructor();
     constructor(a0: number, a1: number, a2: number, a3: number);
+    compareTo(a0: Rect): number;
     width(): number;
     height(): number;
   }

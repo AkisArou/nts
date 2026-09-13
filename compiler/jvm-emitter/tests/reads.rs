@@ -1226,3 +1226,50 @@ fn an_interface_inherits_constants_but_not_static_methods() {
         .expect("renders");
     assert!(task.contains("function none()"), "the declarer still offers it:\n{task}");
 }
+
+/// A bridge method is not API, and emitting it widens what the real signature
+/// narrows.
+///
+/// `javac` emits an erased twin beside a generic override: `Rect implements
+/// Comparable<Rect>` produces `compareTo(Rect)` **and** `compareTo(Object)`.
+/// `javap -p` shows both, so a reader that trusts the class file offers both.
+///
+/// `javac` does not:
+///
+/// ```text
+/// r.compareTo((Object) "not a Rect")
+/// error: incompatible types: Object cannot be converted to Rect
+/// ```
+///
+/// And the generated declaration was worse than noise: the bridge's parameter
+/// is `unknown`, so `rect.compareTo("hello")` typechecked and would have thrown
+/// `ClassCastException` from a method the source never declared.
+///
+/// Scale, measured: **816 of 9,991** public methods in `java.base`'s io and
+/// util packages are bridge or synthetic -- one in twelve. `android.jar` has
+/// 16 of 6,801, which understates it, because a stub jar's surface is less
+/// generic than a real collections library's.
+#[test]
+fn a_bridge_method_is_not_part_of_the_api() {
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let bytes = std::fs::read(ui.join("com/example/ui/Rect.class")).expect("Rect");
+    let rect = nts_jvm_emitter::read::class_file(&bytes).expect("parses");
+
+    // The class file really does carry both -- otherwise this test is about
+    // nothing, and `Rect` stopped implementing `Comparable`.
+    let compare_to: Vec<&str> =
+        rect.methods.iter().filter(|m| m.name == "compareTo").map(|m| m.descriptor.as_str()).collect();
+    assert_eq!(compare_to.len(), 2, "javac emits the real method and its bridge: {compare_to:?}");
+    assert!(compare_to.contains(&"(Ljava/lang/Object;)I"), "one of them is the bridge");
+
+    // And only one reaches the declaration.
+    let body = nts_jvm_emitter::bind::declarations(&rect).expect("renders");
+    assert!(body.contains("compareTo(a0: Rect): number;"), "the real one:\n{body}");
+    assert!(
+        !body.contains("compareTo(a0: unknown)"),
+        "the bridge widens what the real signature narrows, and javac refuses it:\n{body}"
+    );
+}
