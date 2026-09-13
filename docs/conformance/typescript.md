@@ -1960,7 +1960,7 @@ nothing fails loudly when they are.
 | ✅ | module evaluation order, and the temporal dead zone as an error |
 | ✅ | abrupt completion through `finally`, including one that replaces the completion leaving it |
 | ✗ | iterator closing on an abrupt completion |
-| ✗ | conversion side effects (`valueOf`, `toString`) in operand position |
+| ✗ | conversion side effects (`valueOf`, `toString`) in operand position | **this row was empty, and probing it found a wrong answer that ran.** Most of the family is rejected by TypeScript before the compiler sees it — `o + 1` is TS2365, `"1" == 1` is TS2367 — and the two that typecheck, `` `${o}` `` and `Number(o)`, were already refused by name. **`a > b` between two objects is not a type error**, so it is the one shape of this family a checking program can write, and it emitted `gt %1, %7` on two `object.new` pointers: `class Celsius { valueOf() { return this.degrees } }` answered `a > b` **true for every input**, disagreeing with node on 29 of 29 cases. Refused by name as of 2026-09-13. So the family read as unreachable precisely because its one reachable member was the one nobody had written down. Closing it is `OrdinaryToPrimitive` with hint `number` — `valueOf`, then `toString`, then `TypeError` — a dispatch on members this compiler does put on the descriptor, so it is reachable machinery wanting an ordering rather than missing machinery. `blockers/a-relational-comparison-between-objects` holds it with three controls: numbers, strings, and the same comparison written through the member it would have called. Zero corpus demand |
 | ∅ | getter, setter and `Proxy` side effects in operand position — §13 |
 
 ## 12. The runtime

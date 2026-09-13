@@ -30924,6 +30924,33 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(OpKind::ConstUndefined, HirType::Void, origin))
     }
 
+    /// **A relational operator over objects compared their addresses**, and
+    /// it was a wrong answer that ran rather than a refusal.
+    ///
+    /// `a > b` where both are class instances is `ToPrimitive` on each --
+    /// `valueOf` first for a relational comparison, then `toString` -- and
+    /// this compiler has neither. What it emitted was `gt %1, %7` on two
+    /// `object.new` pointers: `class Celsius { valueOf() { return this.degrees } }`
+    /// answered `a > b` **true for every input** where node answers from the
+    /// degrees, disagreeing on 29 of 29 cases.
+    ///
+    /// TypeScript permits it -- `>` between two objects is not a type error
+    /// the way `o + 1` (TS2365) and `"1" == 1` (TS2367) are -- so this is one
+    /// of the few `ToPrimitive` shapes a checking program can even write, and
+    /// the only one that was not already refused.
+    ///
+    /// Numbers, strings and `bigint` are untouched: they have no `valueOf`
+    /// step to skip, and a string comparison is the one this table has always
+    /// answered correctly.
+    fn compares_objects(&self, lhs: ValueId, rhs: ValueId) -> bool {
+        [lhs, rhs].iter().any(|value| {
+            matches!(
+                self.values[value.0 as usize].ty,
+                HirType::Managed(ManagedType::Object(_))
+            )
+        })
+    }
+
     fn lower_binary(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let children = self.children(id);
         let [lhs_node, operator, rhs_node] = children.as_slice() else {
@@ -31077,6 +31104,15 @@ impl<'a> FuncBuilder<'a> {
                 );
             }
         };
+
+        if matches!(op, BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge)
+            && self.compares_objects(lhs, rhs)
+        {
+            return Err(self.unsupported(
+                id,
+                "a relational comparison between objects, which is `ToPrimitive` on each and would otherwise compare their addresses",
+            ));
+        }
 
         let origin = self.origin(id);
         Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))

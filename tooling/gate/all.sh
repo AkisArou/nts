@@ -771,7 +771,33 @@ backend_examples() {
     if [ $? -eq 0 ]; then
       if [ "${out#*nothing to check}" != "$out" ]; then
         # Nothing for the differential to drive, so it exits 0 without comparing
-        # an answer -- and would count as agreement in either backend. Six do.
+        # an answer -- and would count as agreement in either backend.
+        #
+        # **Nine do, and the number had read `Six` since before anyone counted.**
+        # It is printed on every run and was never expanded, which is what made
+        # it invisible: a figure an instrument states unchanged every time stops
+        # being read as a question. The JVM lane enumerated theirs after the
+        # same shape turned up in a ledger row with an empty cell.
+        #
+        # Four are `*-unsupported` and comparing nothing is exactly right --
+        # they exist to document a refusal:
+        #
+        #     dates-unsupported   enum-reverse-map-unsupported
+        #     generator-unsupported   generic-classes-unsupported
+        #
+        # **Five are ordinary examples that export real functions**: `advanced`
+        # (`isFish`, `assertFish`, `identity`, `bounded`), `calls` (`widen`
+        # three times), `classes` (`class Circle`), `jsx` and `types`. They are
+        # skipped because the differential drives *scalar* arguments from a
+        # hostile pool, and a type predicate, a generic and a class have no
+        # scalar surface -- which is structural rather than a defect, and means
+        # five examples exercising precisely type predicates, generics and class
+        # construction have never been compared against node by this step.
+        #
+        # They are in neither `passed` nor `total`, so they cannot mask a
+        # regression in the floor; a codegen bug confined to one of them fails
+        # nothing here. Bounded rather than absent, and worth knowing wherever
+        # the floor is quoted as "equal to the corpus".
         echo "bare $n"
       else
         echo "ok $n"
