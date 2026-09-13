@@ -31,6 +31,24 @@
 // said. See record 0267 -- the tell was that fixing part of a message's count
 // at a different site left the rest saying the same words.
 
+// # The obvious lever is not one, measured 2026-09-13
+//
+// `collect_closures` matches `ARROW_FUNCTION` and `FUNCTION_EXPRESSION` and not
+// `FUNCTION_DECLARATION`, so adding the third looks like the fix — a nested
+// `function` differs from a nested function *expression* only by being hoisted
+// and named, and neither is a difference about capture.
+//
+// Adding it changes **nothing**: `util` and `net` report the same refusal counts
+// to the line. A function declaration's emission path does not consult that
+// list, so making it a closure there gives it no closure to be. The work is in
+// the emission — a nested declaration that captures has to become a closure
+// object allocated in its enclosing function, with its call sites dispatching
+// through it — and `ClosureStatic` is the shape that already exists for "a named
+// function used as a value".
+//
+// Recorded because the change is three lines and reads as obviously right, so
+// the next person will try it too.
+
 export function control(columns: number, index: number): number {
   return index * columns;
 }
