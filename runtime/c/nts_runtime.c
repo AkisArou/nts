@@ -3270,7 +3270,15 @@ static NtsArray *nts_array_splice_at(NtsArray *a, double start, double count,
  * limitation rather than the language's, and it is worth the two being told
  * apart: every one of the 62 sites in the corpus shrinks. */
 static void nts_array_set_length_at(NtsArray *a, double n, size_t width) {
-  if (!(n == nts_to_integer(n)) || n < 0) {
+  /* The bound is `ToUint32`, not whatever the cast below happens to saturate
+   * at. `4294967295` is a length JavaScript accepts; `4294967296` is a
+   * `RangeError`. Getting this from the cast instead would be the right outcome
+   * by the wrong rule at one end and a **wrong answer** at the other:
+   * `(uint32_t)4294967296` is 0, so the growth check would see a shrink to
+   * empty and truncate the array silently. Caught because the JVM lane asked
+   * node rather than asserting, and found its own bound was
+   * `Integer.MAX_VALUE`. */
+  if (!(n == nts_to_integer(n)) || n < 0 || n > 4294967295.0) {
     fprintf(stderr, NTS_REFUSED "%g is not a valid array length\n", n);
     abort();
   }

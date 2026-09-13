@@ -18355,6 +18355,52 @@ impl<'a> FuncBuilder<'a> {
     /// Once is the whole point. `xs[next()] += 1` calls `next` a single time in
     /// JavaScript, so the index cannot be lowered again for the store -- and a
     /// compound assignment that re-lowered its target would call it twice.
+    /// A `static` field, which is a global, so writing one is a global write.
+    ///
+    /// The same resolution the read side does, and it has to happen before the
+    /// receiver is lowered for the same reason: the receiver is a class *name*,
+    /// lowering it asks for a class value, and `Counter.count = n` reported
+    /// "`Counter`, a class used as a value" -- a message about a construct the
+    /// assignment never wanted. See `collect_static_fields`.
+    ///
+    /// `None` when the member is not a static field, so the caller carries on.
+    fn static_field_place(
+        &mut self,
+        target: NodeId,
+        member: NodeId,
+    ) -> Option<Result<Place, Diagnostic>> {
+        let symbol = self.node(member).symbol?;
+        if !is_static_member_symbol(self.snapshot, symbol) {
+            return None;
+        }
+        if let Some(reason) = self.module.unsupported.get(&symbol.0) {
+            let reason = reason.clone();
+            return Some(Err(self.unsupported(target, &reason)));
+        }
+        let global = self.module.variables.get(&symbol.0).copied()?;
+        Some(Ok(Place::Global(global)))
+    }
+
+    /// `xs.length = n` on an array, which is not a field store.
+    ///
+    /// Asked before the `Object` requirement in [`Self::place_of`], because an
+    /// array is not one and would be refused by it. `None` for everything else,
+    /// so the rest of that function is untouched -- and that includes
+    /// `state.length -= size` in `stream`, an ordinary object field whose name
+    /// happens to be `length`.
+    fn array_length_place(&mut self, object: ValueId, member: NodeId) -> Option<Place> {
+        if !matches!(
+            self.values[object.0 as usize].ty,
+            HirType::Managed(ManagedType::Array(_))
+        ) {
+            return None;
+        }
+        if self.literal_name(member).as_deref() != Some("length") {
+            return None;
+        }
+        Some(Place::ArrayLength(object))
+    }
+
     fn place_of(&mut self, target: NodeId) -> Result<Place, Diagnostic> {
         if self.names_a_property(target) {
             let children = self.children(target);
@@ -18371,17 +18417,13 @@ impl<'a> FuncBuilder<'a> {
             //
             // Before the receiver, so it is never lowered. See
             // `collect_static_fields`.
-            if let Some(symbol) = self.node(*member).symbol
-                && is_static_member_symbol(self.snapshot, symbol)
-            {
-                if let Some(reason) = self.module.unsupported.get(&symbol.0) {
-                    return Err(self.unsupported(target, reason));
-                }
-                if let Some(global) = self.module.variables.get(&symbol.0).copied() {
-                    return Ok(Place::Global(global));
-                }
+            if let Some(place) = self.static_field_place(target, *member) {
+                return place;
             }
             let object = self.lower_expression(*object_node)?;
+            if let Some(place) = self.array_length_place(object, *member) {
+                return Ok(place);
+            }
             let HirType::Managed(ManagedType::Object(type_id)) =
                 self.values[object.0 as usize].ty.clone()
             else {
@@ -18533,6 +18575,17 @@ impl<'a> FuncBuilder<'a> {
                 // number, and the declaration says `number | undefined`.
                 let read = self.push(OpKind::FieldGet { object, field }, ty, origin);
                 self.narrowed(id, read)?
+            }
+            // `xs.length -= 1` reads before it writes. Refused by name rather
+            // than answered, and narrow: every one of the 62 `length =` sites
+            // in the corpus is a plain assignment, and the eight compound ones
+            // are `state.length` -- an ordinary object field whose name happens
+            // to be `length`, which never reaches here.
+            Place::ArrayLength(_) => {
+                return Err(self.unsupported(
+                    id,
+                    "reading an array's `length` as part of assigning to it",
+                ));
             }
             // `o.x += 1` and `o.x ??= 1` where `x` is an accessor read
             // through the *getter* and write through the setter, and this place
@@ -19199,6 +19252,10 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let want = match *place {
             Place::Element { array, .. } => return Ok(self.coerce_element(id, array, value)),
+            // The runtime takes the new length as a `double`, like every other
+            // array helper that carries an index or a count. `Some`, because
+            // the arms here answer with an optional declared width.
+            Place::ArrayLength(_) => Some(HirType::NUMBER),
             Place::Field { object, field } => {
                 let HirType::Managed(ManagedType::Object(ty)) =
                     self.values[object.0 as usize].ty.clone()
@@ -19355,6 +19412,23 @@ impl<'a> FuncBuilder<'a> {
         match *place {
             Place::Field { object, field } => {
                 self.field_set(object, field, value, &origin);
+            }
+            // `xs.length = n`. The variant follows the element, the same way
+            // every other array helper's does -- and it is the whole point
+            // here rather than a detail: the reference and tagged forms have to
+            // give up what they drop, and a scalar array has nothing to give up.
+            Place::ArrayLength(array) => {
+                let HirType::Managed(ManagedType::Array(element)) =
+                    self.values[array.0 as usize].ty.clone()
+                else {
+                    return Err(self.unsupported(id, "an array length on something else"));
+                };
+                let helper = match *element {
+                    HirType::Managed(_) => "nts_array_set_length_ref",
+                    HirType::Erased => "nts_array_set_length_value",
+                    _ => "nts_array_set_length",
+                };
+                self.runtime_call(helper, vec![array, value], HirType::Void, origin);
             }
             Place::Setter {
                 object,
@@ -32367,6 +32441,14 @@ enum Place {
         object: ValueId,
         field: u32,
     },
+    /// `xs.length = n` on an **array**, which JavaScript uses to truncate in
+    /// place. Not a field store: the element run has to stop being reachable,
+    /// so it is the runtime's `nts_array_set_length` family.
+    ///
+    /// Only for an array receiver. `state.length -= size` in `stream` is an
+    /// ordinary object field whose name happens to be `length`, and the type
+    /// check is what keeps the two apart.
+    ArrayLength(ValueId),
     /// A setter. `o.x = v` where `x` is one runs code, so this is a call with
     /// the receiver and the value as its two arguments.
     ///
