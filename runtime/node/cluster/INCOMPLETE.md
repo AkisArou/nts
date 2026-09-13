@@ -107,6 +107,17 @@ The two-break control above was run on the interpreted arm. It says nothing abou
 compiled one, where the break has nothing to bite: a module with no surface cannot be
 observed losing part of it.
 
+And `--sabotage`'s own instrument settles it, on the lane where it *can* be applied
+meaningfully, because the module is already blank there:
+
+    compiled, intact           86 file(s): 25 passed, 60 failed, 1 skipped
+    compiled, --empty-exports  86 file(s): 25 passed, 60 failed, 1 skipped
+
+Identical in all three columns. The module contributes nothing to that row. Controlled the
+same way, the other small compiled surfaces are real: `stream`'s single pass and
+`querystring`'s single pass both fall to **0** when their module is emptied, so a small
+surface is not by itself a hollow one -- an absent one is.
+
 ## What is here
 
 The handshake, and it is the whole of the module. A primary forks a child with
