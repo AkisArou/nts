@@ -348,19 +348,34 @@ fn bindings_on_supertypes(class: &ClassFile) -> std::collections::BTreeMap<Strin
     // Skip this class's own parameters: what follows is the superclass and then
     // each interface, each possibly with type arguments.
     let (rest, _) = split_type_parameters(signature);
+    // **One supertype at a time, not a scan for `<`.** The first version looked
+    // for the next `<` and took everything before it as the owner, which is
+    // right only while every supertype is generic. `Enum` is
+    // `Ljava/lang/Object;Ljava/lang/Comparable<TE;>;` -- `Object` has no
+    // arguments, so the scan read the owner as
+    // `java/lang/Object;Ljava/lang/Comparable` and bound nothing. Every enum in
+    // the JDK inherits `compareTo` through exactly that shape, which is why 37
+    // `Cannot find name` survived three rounds of fixing the composition.
     let mut at = rest;
-    while let Some(open) = at.find('<') {
-        let Some(close) = matching_angle(&at[open..]) else { break };
-        let owner = at[1..open].to_owned();
-        let arguments: Vec<String> = arguments_of(&at[open + 1..open + close]);
-        map.insert(owner, arguments.join(","));
-        at = &at[open + close + 1..];
-        // Step past the `;` that closes this supertype.
-        if let Some(semi) = at.find(';') {
-            at = &at[semi + 1..];
-        } else {
+    while at.starts_with('L') {
+        // The name runs to the first `<` or `;`, whichever comes first.
+        let open = at.find('<');
+        let semi = at.find(';');
+        let (owner_end, arguments, after) = match (open, semi) {
+            (Some(open), Some(semi)) if open < semi => {
+                let Some(close) = matching_angle(&at[open..]) else { break };
+                (open, Some(&at[open + 1..open + close]), open + close + 2)
+            }
+            (_, Some(semi)) => (semi, None, semi + 1),
+            _ => break,
+        };
+        if let Some(inside) = arguments {
+            map.insert(at[1..owner_end].to_owned(), arguments_of(inside).join(""));
+        }
+        if after > at.len() {
             break;
         }
+        at = &at[after..];
     }
     map
 }
@@ -1411,6 +1426,19 @@ fn render_inherited(
     table: &mut Vec<Bound>,
     constants_table: &mut Vec<Bound>,
 ) {
+    // Every method name visible on this class, declared or inherited -- the
+    // same question `render_fields_into` asks, asked from the other path.
+    // Without it `Calendar` rendered `isSet$field` and `GregorianCalendar`
+    // inherited the very same field as `isSet`, colliding with the `isSet(int)`
+    // it also inherits. Seventh defect in this file from a declared path and an
+    // inherited path answering one question differently.
+    let shadowed: std::collections::BTreeSet<String> = class
+        .methods
+        .iter()
+        .filter(|m| visible(m.access) && is_api(m))
+        .map(|m| m.name.clone())
+        .chain(inherited(class, resolve).into_iter().map(|(_, m)| m.name))
+        .collect();
     for field in inherited_fields(class, resolve) {
         let Some((rendered, _)) = type_of(&field.descriptor) else { continue };
         // An inherited interface constant is still static -- `Pressable.KIND`
@@ -1444,7 +1472,11 @@ fn render_inherited(
                     if field.access & access::FINAL != 0 { "readonly " } else { "" }
                 )
             },
-            field.name,
+            if shadowed.contains(&field.name) {
+                format!("{}$field", field.name)
+            } else {
+                field.name.clone()
+            },
             if field.constant { rendered.clone() } else { returns(&rendered, &field.annotations) },
         );
     }
