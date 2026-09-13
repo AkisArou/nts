@@ -57,7 +57,7 @@ real traversal**; a conversion is an instruction.
 | `T[]` (growing program) | any `T[]` | **a copy.** The wrapper's `items` is longer than its `length`, so even the same-width case cannot be passed through |
 | `Uint8Array` spanning a whole buffer | `byte[]` | **nothing** -- `NtsBuffer.storage` is the array |
 | `Uint8Array` that is a subarray | `byte[]` | **a copy**, unless the callee takes `(byte[], int off, int len)` |
-| `Map` / `Set` | `java.util.Map` / `Set` | **a copy, always.** `NtsMap` is not a `java.util` structure and cannot be made into one without rebuilding it |
+| `Map` / `Set` | `java.util.Map` / `Set` | **a copy today, and avoidable** -- `NtsMap` can implement the interface. See "Avoiding the copy entirely" |
 | an object | a Java interface | **nothing**, if the generated class implements the interface |
 | a closure | a Java functional interface | **nothing**, if `Fn$<hash>` implements it; otherwise one adapter object per crossing |
 
@@ -98,6 +98,115 @@ explicit conversion. A binding layer whose costs are invisible is the thing
 every FFI is criticised for, and it is avoidable here because we generate both
 sides.
 
+## Avoiding the copy entirely, which is mostly possible
+
+**Corrected 2026-09-13, and the correction is the most useful thing in this
+file.** The section below originally argued that a JS `Map` can never be a
+`java.util.Map` because the key semantics differ. The semantics claim was right
+and the conclusion drawn from it was wrong.
+
+### The measurement that changes it
+
+    Double.equals(NaN, NaN)   = true      agrees with SameValueZero
+    Double.equals(+0, -0)     = false     disagrees
+    LinkedHashMap{NaN, NaN, +0, -0}.size() = 3
+    the same with -0 normalised to +0      = 2   <- SameValueZero's own answer
+
+`-0` is the **only** disagreement, and SameValueZero's rule for it is that `+0`
+and `-0` are the same key. So normalising `-0` to `+0` **at insertion** is not a
+compromise: it is what SameValueZero means, and it makes Java's
+`equals`/`hashCode` implement it exactly. `NaN` already agrees, because
+`Double.equals` compares `doubleToLongBits` and every `NaN` canonicalises.
+
+### So: `NtsMap implements java.util.Map`
+
+**Every operation on `NtsMap` is a `public static` method** taking the map as
+its first argument -- `NtsMap.get(map, key)`, never `map.get(key)`. Adding an
+interface therefore costs the JavaScript side **nothing**: the emitted code goes
+on calling the statics, and the interface methods exist only for a Java caller.
+An interface a class does not call through is itable entries and no
+instructions.
+
+The pieces are already there:
+
+- `getObject(NtsMap, Object)` -- an object-keyed path exists
+- `nextI` / `keyAtI` / `valueAt` -- an index-based iteration contract, which is
+  exactly what `entrySet()` is
+- `size`, `has`, `set`, `delete`, `clear` -- the rest of `Map`
+
+So the work is an `entrySet()` view plus overrides of the hot methods, with
+`Object` ↔ `NtsValue` conversion **at the boundary only**. A Java caller pays a
+box per lookup; the JS side pays nothing; **the map itself is never copied.**
+
+Three things to check before building it, because each could make it wrong:
+
+1. **`equals` and `hashCode` change meaning.** `AbstractMap` defines them
+   structurally. If anything in this runtime uses an `NtsMap` as a key, or
+   relies on identity comparison of two maps, that breaks. Grep before writing.
+2. **Iteration order.** JS `Map` is insertion-ordered and `java.util.Map`
+   promises nothing, so providing order is a *stronger* guarantee and safe. A
+   caller who wanted `HashMap`'s order gets better.
+3. **Object keys.** JS keys objects by identity; Java by `equals`. Our objects
+   are generated `final class`es that do not override `equals`, so the two
+   coincide -- but that is a property of what we generate and should be asserted
+   rather than assumed.
+
+### Where the idea comes from
+
+**Kotlin does not have collections.** `kotlin.collections.List` *is*
+`java.util.List` at run time; `MutableList` is too, with the read-only/mutable
+split existing only in the compiler. `kotlin.String` is `java.lang.String`.
+Kotlin calls these **mapped types**, and the consequence is that Kotlin never
+converts a collection when calling Java -- there is nothing to convert. It buys
+that by inheriting Java's semantics wholesale, which it can afford because
+Kotlin's `==` on a `Double` *is* Java's.
+
+We cannot inherit Java's semantics, because ours are JavaScript's. **But the
+measurement above says the two coincide once `-0` is normalised**, which means
+we can take Kotlin's answer anyway for the one structure where it looked
+impossible.
+
+**Scala keeps its own collections and wraps.** `scala.jdk.CollectionConverters`
+`asJava` returns a *view* -- one allocation, delegating calls, O(1) rather than
+O(n). That is the fallback where being the platform type is not available.
+
+**Clojure's persistent collections implement `java.util.Map` and `List`
+directly**, read-only, mutators throwing. Same trick as the one proposed above,
+in a language whose data structures are nothing like Java's internally.
+
+**GraalVM's Truffle** goes further: a shared `InteropLibrary` protocol where
+every language exposes `readMember` / `getArraySize` and nothing is ever
+converted. It is the right answer when N languages must interoperate and an
+expensive one when there are two.
+
+### The revised cost table
+
+| TS value | Java parameter | today | achievable |
+| --- | --- | --- | --- |
+| `string` | `String` | free | free |
+| `T[]`, non-growing | `T[]` same width | free | free |
+| `Uint8Array`, whole buffer | `byte[]` | free | free |
+| `Uint8Array`, subarray | `byte[]` | copy | **free** as `ByteBuffer.wrap(storage, off, len)` where the API takes a buffer; copy where it insists on `byte[]` |
+| `Map` / `Set` | `java.util.Map` / `Set` | copy | **free**, by implementing the interface |
+| object | a Java interface | free | free |
+| closure | a functional interface | free | free |
+| `T[]`, growing program | `T[]` | copy | **free when `items.length == length`** -- see below |
+| `number[]` | `int[]` | copy | copy. Different element widths; nothing avoids it |
+| `bigint` | `BigInteger` | copy | copy. Arbitrary precision from 128 bits is a construction |
+
+### The growable-array case, which is the one left
+
+The wrapper holds `items` and a `length`, and `items` is usually longer. But
+**when they are equal the wrapper's `items` is already exactly the array Java
+wants**, and it can be passed with no copy at all.
+
+That suggests a cheap answer short of the per-array analysis: a `trim()` that
+reallocates once so that every subsequent crossing is free. An array built by
+`push` in a loop and then handed to Java repeatedly pays one copy instead of
+one per call. Whether that is worth having is a measurement -- how many
+crossings per array -- and it is the kind of number this document should not
+guess at.
+
 ## Java data structures stay Java
 
 Your instinct is right and it is stronger than "not compatible": a JS `Map` and
@@ -115,7 +224,12 @@ the C table "because JS keys by SameValueZero where `Double.equals` disagrees on
 `-0`".
 
 **So `HashMap` is surfaced as `java.util.HashMap`, with its own methods, and is
-not a `Map`.** Same for `List`, `Set`, `Optional`, `Iterator`. They appear in
+not a `Map`.** This is the *inbound* direction and it does not contradict the
+section above: a `java.util.HashMap` handed to us keeps Java's key semantics and
+must not be dressed up as a JS `Map`, while an `NtsMap` handed to Java can
+implement `java.util.Map` faithfully. The asymmetry is real -- SameValueZero is
+the *stricter* rule once `-0` is normalised, so our map satisfies Java's
+contract and a Java map does not satisfy ours. Same for `List`, `Set`, `Optional`, `Iterator`. They appear in
 the generated `.d.ts` as themselves, in a `java.util` namespace, and a TS
 program that wants JS semantics converts explicitly and pays for it visibly.
 
