@@ -31,6 +31,50 @@
 // said. See record 0267 -- the tell was that fixing part of a message's count
 // at a different site left the rest saying the same words.
 
+// # It is a desugaring, not a feature — established 2026-09-13
+//
+// The machinery is **entirely present**. The same function written as a
+// const-bound expression, or as an arrow, lowers and agrees with node:
+//
+//     function outer(columns) {
+//       function visit(i) { return i * columns }      REFUSED
+//       const visit = function (i) { return i * columns }   lowers
+//       const visit = (i) => i * columns                    lowers
+//     }
+//
+// 58 cases across the two working forms. So a nested `function` declaration is
+// exactly a **hoisted `const` binding to a function expression**, and what is
+// missing is the desugaring rather than any capture machinery.
+//
+// # Five coordinated places, which is why it is not three lines
+//
+//   1. `collect_closures`'s `is_closure` — include a nested declaration.
+//   2. `reached_by_name` — **exclude** it. That predicate returns `true` for any
+//      symbol declared by a `FUNCTION_DECLARATION`, on the reasoning that "there
+//      is one of it for the whole program, so copying a pointer to it into every
+//      closure would be storage for nothing". True at module scope and false for
+//      a nested one, which is a per-call binding.
+//   3. The named-declaration collection loop — skip it, so no top-level function
+//      is emitted for a body that now reads captures.
+//   4. The statement walk — bind the closure where the declaration stands, and
+//      **hoisted**, because a function declaration is usable before its textual
+//      position and a `const` is not.
+//   5. Call sites — resolve the name to that binding rather than to a global.
+//
+// Each of those five carries a comment explaining why it is as it is, and each
+// is right about module scope. The distinction they all lack is the same one.
+//
+// # The corpus shape, so the lever is chosen on evidence
+//
+// 48 nested function declarations in `runtime/node`; **20 are used as a value**
+// beyond their declaration and 17 mention `this` nearby. So *lambda lifting* —
+// adding the captured values as parameters and rewriting direct calls, which
+// needs no closure at all and is cheaper at run time — reaches at most half of
+// them, and the desugaring above reaches all. `closeHandler` and `errorHandler`
+// in `events` are stored and called later; `visit` below is not.
+//
+// 20 things, 33 sites, 17 modules — the eighth cause in the refusal census.
+//
 // # The obvious lever is not one, measured 2026-09-13
 //
 // `collect_closures` matches `ARROW_FUNCTION` and `FUNCTION_EXPRESSION` and not
