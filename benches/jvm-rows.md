@@ -7663,3 +7663,40 @@ the guards half still blocked on the harness rather than on the contract.
 The 1.08x measured earlier stands as what that comparison measured. This section
 pins a constant and identifies a target; it does not price the prize, and after
 tonight that distinction is the whole discipline.
+
+### A route to 32 that does not need the blocked half
+
+With the budget pinned, the arithmetic can be done on measured quantities rather
+than on hope. Every term below was measured tonight or earlier in this file:
+
+    popDiskFrom, as emitted                          51 u
+      outline the cold throw      17 u -> ~5 u       39 u    measured 51->34
+      CSE the second bounds guard      -5 u          34 u    a guard is 5 u, read off the dex
+      fuse the null comparison         -2 u          32 u    measured, 7 of 60 cases
+    ART's budget                                     32 u
+
+**None of those three is the blocked one.** The guards stay; only the *second*
+of two goes, and it goes because `popDiskFrom` checks the same array and the
+same index twice -- a read then a write with nothing between them that can
+change either. That is a redundancy this backend can prove, not a contract it
+has to renegotiate, so it needs no site table, no boundary catch and no
+conversation with the middle end.
+
+**And it lands exactly on the number**, which is the part to be honest about: 32
+against a budget of 32, with no margin and with the boundary's inclusivity
+unmeasured -- the arms bracket it to (30, 33) and say nothing about whether 32
+itself passes. A route that arrives with zero units to spare is a route that one
+future `putfield` undoes.
+
+So it is written down as a route and not started. The three pieces are worth
+different amounts on their own -- the cold-throw outlining is 48 sites of real
+codegen quality across the corpus, the other two are worth 7 units on one
+method -- and **the honest order is to build the one that pays independently and
+re-measure**, rather than to build three changes whose justification is a sum
+that only works if all three land.
+
+That is the opposite of the mistake this file recorded at the start of the
+night, where two fixes were each refused for not clearing a threshold neither
+could clear alone. The correction is not "always price fixes in combination". It
+is to notice when a combination is the *only* justification, and to distrust it
+exactly then.
