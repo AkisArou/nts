@@ -142,15 +142,17 @@ fn reference(binary: &str) -> String {
 
 /// The parameter types and return type of a method descriptor.
 fn signature_of(descriptor: &str) -> Option<(Vec<String>, String)> {
-    let open = descriptor.find('(')?;
-    let close = descriptor.find(')')?;
-    let mut parameters = Vec::new();
-    let mut rest = &descriptor[open + 1..close];
-    while !rest.is_empty() {
-        let (rendered, used) = type_of(rest)?;
-        parameters.push(rendered);
-        rest = &rest[used..];
+    // Split with `descriptor::parameters`, which is the walker `call_effect`
+    // uses. Three functions in this file used to find `(` and `)` and step the
+    // types themselves, which is four derivations of "where does one parameter
+    // end" in a crate that already had one -- and its own doc says that is
+    // "the whole reason this module parses rather than being told".
+    let split = crate::descriptor::parameters(descriptor)?;
+    let mut parameters = Vec::with_capacity(split.len());
+    for part in split {
+        parameters.push(type_of(part)?.0);
     }
+    let close = descriptor.rfind(')')?;
     let (returns, _) = type_of(&descriptor[close + 1..])?;
     Some((parameters, returns))
 }
@@ -288,27 +290,9 @@ fn lossiness(descriptor: &str) -> u8 {
 /// compiler change, and says at the call site which one you meant -- which is
 /// exactly the job the brand was doing, done with a mechanism that lowers.
 fn suffix(descriptor: &str) -> String {
-    let Some(open) = descriptor.find('(') else { return String::new() };
-    let Some(close) = descriptor.find(')') else { return String::new() };
-    let mut names = Vec::new();
-    let mut rest = &descriptor[open + 1..close];
-    while !rest.is_empty() {
-        let used = match rest.as_bytes()[0] {
-            b'L' => rest.find(';').map_or(rest.len(), |it| it + 1),
-            b'[' => {
-                let mut at = 0;
-                while rest.as_bytes().get(at) == Some(&b'[') {
-                    at += 1;
-                }
-                if rest.as_bytes().get(at) == Some(&b'L') {
-                    rest[at..].find(';').map_or(rest.len(), |it| at + it + 1)
-                } else {
-                    at + 1
-                }
-            }
-            _ => 1,
-        };
-        let part = &rest[..used];
+    let Some(split) = crate::descriptor::parameters(descriptor) else { return String::new() };
+    let mut names = Vec::with_capacity(split.len());
+    for part in split {
         names.push(match part.as_bytes()[0] {
             b'B' => "byte".to_owned(),
             b'S' => "short".to_owned(),
@@ -320,7 +304,6 @@ fn suffix(descriptor: &str) -> String {
             b'Z' => "boolean".to_owned(),
             _ => simple_name(part.trim_start_matches(['[', 'L']).trim_end_matches(';')),
         });
-        rest = &rest[used..];
     }
     format!("${}", names.join("$"))
 }
@@ -328,20 +311,8 @@ fn suffix(descriptor: &str) -> String {
 /// The binary name of a method descriptor's parameter at `index`, if it is a
 /// reference type. Needed because the *rendered* type has already lost it.
 fn parameter_binary(descriptor: &str, index: usize) -> Option<String> {
-    let open = descriptor.find('(')?;
-    let close = descriptor.find(')')?;
-    let mut rest = &descriptor[open + 1..close];
-    let mut at = 0usize;
-    while !rest.is_empty() {
-        let (_, used) = type_of(rest)?;
-        if at == index {
-            let part = &rest[..used];
-            return part.strip_prefix('L').and_then(|it| it.strip_suffix(';')).map(str::to_owned);
-        }
-        rest = &rest[used..];
-        at += 1;
-    }
-    None
+    let part = *crate::descriptor::parameters(descriptor)?.get(index)?;
+    part.strip_prefix('L').and_then(|it| it.strip_suffix(';')).map(str::to_owned)
 }
 
 /// A Java **functional interface** as a TypeScript function type.

@@ -99,31 +99,17 @@ impl Keeps {
 /// pool has for `Long` and `Double` and is wrong in the same invisible way: a
 /// method taking `(JI)V` has its `int` at slot 3, not slot 2.
 fn parameter_slots(descriptor: &str, is_static: bool) -> Option<Vec<u16>> {
-    let open = descriptor.find('(')?;
-    let close = descriptor.find(')')?;
+    // `descriptor::parameters` is the walker `call_effect` uses. This function
+    // used to step the types itself, which made it a fourth derivation of
+    // "where does one parameter end" inside a crate that already had one.
     let mut slot: u16 = u16::from(!is_static);
     let mut slots = Vec::new();
-    let mut rest = &descriptor[open + 1..close];
-    while !rest.is_empty() {
+    for part in crate::descriptor::parameters(descriptor)? {
         slots.push(slot);
-        let wide = matches!(rest.as_bytes()[0], b'J' | b'D');
-        let used = match rest.as_bytes()[0] {
-            b'L' => rest.find(';').map_or(rest.len(), |it| it + 1),
-            b'[' => {
-                let mut at = 0;
-                while rest.as_bytes().get(at) == Some(&b'[') {
-                    at += 1;
-                }
-                if rest.as_bytes().get(at) == Some(&b'L') {
-                    rest[at..].find(';').map_or(rest.len(), |it| at + it + 1)
-                } else {
-                    at + 1
-                }
-            }
-            _ => 1,
-        };
-        slot += if wide { 2 } else { 1 };
-        rest = &rest[used..];
+        // A `long` or a `double` takes **two** slots -- the same rule the
+        // constant pool has for `Long` and `Double`, wrong in the same
+        // invisible way: a method taking `(JI)V` has its `int` at slot 3.
+        slot += if matches!(part.as_bytes().first(), Some(b'J' | b'D')) { 2 } else { 1 };
     }
     Some(slots)
 }
