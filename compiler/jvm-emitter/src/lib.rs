@@ -41,6 +41,7 @@ pub mod descriptor;
 pub mod frames;
 pub mod insn;
 pub mod pool;
+pub mod read;
 pub mod text;
 
 pub use class::{Class, ClassBuilder, FieldFromStatic, MAJOR_JAVA_5, MAJOR_JAVA_8, access};

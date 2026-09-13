@@ -1,0 +1,312 @@
+//! The reader against `javap`, on class files this project did not write.
+//!
+//! Reading back what we emitted would only prove the two halves of this crate
+//! agree with each other. The inputs here come from `javac`, and the oracle is
+//! `javap -p -s`, which is what the JDK thinks the same bytes mean. That
+//! pairing has caught three things in this lane already.
+//!
+//! The fixture is `examples/interop/java-from-ts`, which is checked in and
+//! deliberately awkward -- statics with and without `ConstantValue`, a public
+//! field, generics, a wildcard, varargs, a `throws` clause, an enum, a static
+//! nested class and a true inner one. Sharing it means the binding project and
+//! the reader cannot drift apart about what a hard case is.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use nts_jvm_emitter::read;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+fn repository() -> PathBuf {
+    let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    from.canonicalize().unwrap_or(from)
+}
+
+fn tool(name: &str) -> Option<PathBuf> {
+    if let Ok(home) = std::env::var("JAVA_HOME") {
+        let path = PathBuf::from(home).join("bin").join(name);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    found
+        .status
+        .success()
+        .then(|| PathBuf::from(String::from_utf8_lossy(&found.stdout).trim().to_owned()))
+}
+
+/// Compile the checked-in fixture once, and hand every test the same directory.
+///
+/// **A `OnceLock` rather than a call per test, because the first version was a
+/// race.** The directory was keyed on the process id, which is the same for
+/// every test in one binary, and each test began by deleting and recreating it
+/// -- so with `cargo test`'s default parallelism one test removed the class
+/// files another was midway through reading. It passed with five tests and
+/// broke on the sixth, reporting `the class file ends inside a value`, which
+/// reads exactly like a reader bug and is not one.
+fn fixture() -> Option<PathBuf> {
+    static BUILT: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    BUILT.get_or_init(build_fixture).clone()
+}
+
+fn build_fixture() -> Option<PathBuf> {
+    let javac = tool("javac")?;
+    let sources = repository().join("examples/interop/java-from-ts/java/com/example");
+    if !sources.exists() {
+        eprintln!("SKIP reads: the fixture is missing at {}", sources.display());
+        return None;
+    }
+    let out = std::env::temp_dir().join(format!("nts-reads-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).expect("a temp dir");
+
+    let files: Vec<PathBuf> = std::fs::read_dir(&sources)
+        .expect("the fixture directory")
+        .filter_map(|it| it.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|e| e == "java"))
+        .collect();
+
+    let built = Command::new(&javac)
+        .args(["--release", "8", "-Xlint:all,-options", "-d"])
+        .arg(&out)
+        .args(&files)
+        .output()
+        .expect("javac runs");
+    assert!(built.status.success(), "javac: {}", String::from_utf8_lossy(&built.stderr));
+    Some(out)
+}
+
+/// Every `name descriptor` pair `javap -p -s` prints for a class.
+///
+/// `javap` prints the signature line then an indented `descriptor:` line, so
+/// the descriptors arrive in declaration order and the names are recoverable
+/// from them alone -- which is what makes this a comparison of two *readings*
+/// rather than of one reading and a regex.
+fn javap_descriptors(javap: &Path, classes: &Path, class: &str) -> BTreeSet<String> {
+    let listed = Command::new(javap)
+        .args(["-p", "-s", "-cp"])
+        .arg(classes)
+        .arg(class)
+        .output()
+        .expect("javap runs");
+    assert!(listed.status.success(), "javap: {}", String::from_utf8_lossy(&listed.stderr));
+    String::from_utf8_lossy(&listed.stdout)
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("descriptor: "))
+        .map(str::to_owned)
+        .collect()
+}
+
+fn ours(classes: &Path, class: &str) -> read::ClassFile {
+    let path = classes.join(format!("{}.class", class.replace('.', "/")));
+    let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    read::class_file(&bytes).expect("the class file should parse")
+}
+
+#[test]
+fn every_descriptor_agrees_with_javap() {
+    let (Some(classes), Some(javap)) = (fixture(), tool("javap")) else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+
+    let mut checked = 0usize;
+    for class in ["com.example.Catalog", "com.example.Kind", "com.example.Catalog$Entry", "com.example.Catalog$Cursor"] {
+        let mine: BTreeSet<String> = ours(&classes, class)
+            .fields
+            .iter()
+            .chain(ours(&classes, class).methods.iter())
+            .map(|m| m.descriptor.clone())
+            .collect();
+        let theirs = javap_descriptors(&javap, &classes, class);
+        assert!(!theirs.is_empty(), "javap printed no descriptors for {class}");
+        assert_eq!(mine, theirs, "descriptors disagree for {class}");
+        checked += theirs.len();
+    }
+    // Vacuity guard: an empty comparison is an agreement about nothing.
+    assert!(checked > 20, "only {checked} descriptors compared, which is too few to mean anything");
+}
+
+/// The inner-class fact the plan first got wrong, read out of the bytes.
+#[test]
+fn an_inner_class_takes_its_outer_instance_first() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let cursor = ours(&classes, "com.example.Catalog$Cursor");
+
+    let ctor = cursor
+        .methods
+        .iter()
+        .find(|m| m.name == "<init>")
+        .expect("the inner class has a constructor");
+    assert_eq!(
+        ctor.descriptor, "(Lcom/example/Catalog;I)V",
+        "a true inner class's constructor takes the outer instance as its synthetic first \
+         parameter -- this is what makes `outer.newInner(n)` mechanical rather than a workaround"
+    );
+
+    // And `InnerClasses` names the outer, which is how the generator tells a
+    // true inner class from a static nested one.
+    assert!(
+        cursor
+            .inner_classes
+            .iter()
+            .any(|(inner, outer)| inner == "com/example/Catalog$Cursor" && outer == "com/example/Catalog"),
+        "InnerClasses should name the outer class, got {:?}",
+        cursor.inner_classes
+    );
+
+    // The static nested one has no outer instance in its descriptor, which is
+    // the control: without it this test would pass for a reader that put a
+    // leading parameter on everything.
+    let entry = ours(&classes, "com.example.Catalog$Entry");
+    let entry_ctor =
+        entry.methods.iter().find(|m| m.name == "<init>").expect("a constructor");
+    assert_eq!(entry_ctor.descriptor, "(Ljava/lang/String;)V");
+}
+
+/// `ConstantValue` is what decides `ldc` against `getstatic`.
+#[test]
+fn only_primitive_and_string_statics_carry_a_constant_value() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let catalog = ours(&classes, "com.example.Catalog");
+    let field = |name: &str| {
+        catalog.fields.iter().find(|f| f.name == name).unwrap_or_else(|| panic!("no field {name}"))
+    };
+
+    assert!(field("MAX").constant, "an `int` static inlines");
+    assert!(field("NAME").constant, "a `String` static inlines");
+    assert!(
+        !field("DEFAULT_KIND").constant,
+        "a reference static has no ConstantValue, so it is a real getstatic and runs <clinit>"
+    );
+    assert!(!field("hits").constant, "an instance field never has one");
+}
+
+/// Generics survive erasure in `Signature`, which is what lets the binding
+/// surface `List<String>` rather than `List<unknown>`.
+#[test]
+fn the_signature_attribute_carries_generics_the_descriptor_lost() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let catalog = ours(&classes, "com.example.Catalog");
+    let names = catalog.methods.iter().find(|m| m.name == "names").expect("names()");
+
+    assert_eq!(names.descriptor, "()Ljava/util/List;", "the descriptor is erased");
+    assert_eq!(
+        names.signature.as_deref(),
+        Some("()Ljava/util/List<Ljava/lang/String;>;"),
+        "and the Signature attribute still has the parameter"
+    );
+
+    // The raw method is the control: same erased descriptor, and no Signature,
+    // which is exactly how a raw type is told from a generic one.
+    let raw = catalog.methods.iter().find(|m| m.name == "raw").expect("raw()");
+    assert_eq!(raw.descriptor, "()Ljava/util/List;");
+    assert_eq!(raw.signature, None, "a raw List has no Signature, so it becomes List<unknown>");
+}
+
+/// A `throws` clause is readable, which is what tells the generator which call
+/// sites need an exception handler.
+#[test]
+fn a_throws_clause_is_readable() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let catalog = ours(&classes, "com.example.Catalog");
+    let parse = catalog.methods.iter().find(|m| m.name == "parse").expect("parse()");
+    assert_eq!(parse.throws, vec!["java/lang/NumberFormatException".to_owned()]);
+
+    let names = catalog.methods.iter().find(|m| m.name == "names").expect("names()");
+    assert!(names.throws.is_empty(), "a method with no throws clause has none");
+}
+
+/// The Android SDK, which is the input this reader exists for.
+///
+/// Skips without an SDK, because most machines do not have one -- but it does
+/// **not** skip quietly on a machine that does, and the numbers below are the
+/// ones `javap -v` reports for the same class.
+///
+/// The load-bearing assertion is the invisible table. `androidx.annotation`
+/// is `CLASS`-retention, so a reader that walks only `RuntimeVisibleAnnotations`
+/// finds **zero** nullability on `android.view.View` and every generated
+/// declaration silently loses its `| null`. That is the failure this test
+/// exists to make loud.
+#[test]
+fn android_view_carries_its_nullability_in_the_invisible_table() {
+    let Some(sdk) = std::env::var("ANDROID_HOME")
+        .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
+        .ok()
+        .map(PathBuf::from)
+    else {
+        eprintln!("SKIP reads/android: no ANDROID_HOME");
+        return;
+    };
+    let platforms = sdk.join("platforms");
+    let Ok(entries) = std::fs::read_dir(&platforms) else {
+        eprintln!("SKIP reads/android: no platforms at {}", platforms.display());
+        return;
+    };
+    let mut jars: Vec<PathBuf> =
+        entries.filter_map(Result::ok).map(|it| it.path().join("android.jar")).filter(|it| it.exists()).collect();
+    jars.sort();
+    let Some(jar) = jars.last() else {
+        eprintln!("SKIP reads/android: no android.jar under {}", platforms.display());
+        return;
+    };
+
+    let extracted = Command::new("unzip")
+        .args(["-p"])
+        .arg(jar)
+        .arg("android/view/View.class")
+        .output()
+        .expect("unzip runs");
+    assert!(extracted.status.success(), "could not extract View.class from {}", jar.display());
+
+    let view = read::class_file(&extracted.stdout).expect("android.view.View should parse");
+    assert_eq!(view.binary_name, "android/view/View");
+
+    // Member annotations AND parameter annotations. On this class the second
+    // is the larger half -- 79 sites against 38 -- so counting only the first
+    // reads 38 where the truth is 142, which is how the gap was found.
+    let count = |needle: &str| {
+        view.methods
+            .iter()
+            .chain(view.fields.iter())
+            .flat_map(|m| m.annotations.iter().chain(m.parameter_annotations.iter().flatten()))
+            .filter(|a| a.ends_with(needle))
+            .count()
+    };
+    let nullable = count("/Nullable");
+    let nonnull = count("/NonNull");
+
+    // `javap -v` on android-36 resolves **76** `android.annotation.Nullable`
+    // and **66** `NonNull` annotation sites on this class, counted as sites
+    // rather than as string occurrences -- an earlier count of the same thing
+    // via `grep -oE` over the whole verbose dump was inflated by the constant
+    // pool's own Utf8 entries.
+    //
+    // The bound is well below those and well above 38, which is what this
+    // reader returns when parameter annotations are skipped. So it fails both
+    // ways it can be wrong: zero if the invisible table is skipped, and ~38 if
+    // the parameter tables are.
+    assert!(
+        nullable >= 60 && nonnull >= 55,
+        "expected ~76 @Nullable and ~66 @NonNull sites on android.view.View, got {nullable} and \
+         {nonnull} -- near zero means RuntimeInvisibleAnnotations is unread, and near 38 means \
+         RuntimeInvisibleParameterAnnotations is"
+    );
+
+    // And the class parses far enough to be worth generating from.
+    assert!(view.methods.len() > 100, "View should have many methods, got {}", view.methods.len());
+    assert_eq!(view.super_name.as_deref(), Some("java/lang/Object"));
+}

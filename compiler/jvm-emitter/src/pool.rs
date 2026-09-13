@@ -20,18 +20,40 @@
 use rustc_hash::FxHashMap;
 
 /// The tag byte that introduces each kind of entry. JVMS 4.4, table 4.4-B.
-mod tag {
-    pub(super) const UTF8: u8 = 1;
-    pub(super) const INTEGER: u8 = 3;
-    pub(super) const FLOAT: u8 = 4;
-    pub(super) const LONG: u8 = 5;
-    pub(super) const DOUBLE: u8 = 6;
-    pub(super) const CLASS: u8 = 7;
-    pub(super) const STRING: u8 = 8;
-    pub(super) const FIELDREF: u8 = 9;
-    pub(super) const METHODREF: u8 = 10;
-    pub(super) const INTERFACE_METHODREF: u8 = 11;
-    pub(super) const NAME_AND_TYPE: u8 = 12;
+///
+/// **One table, read by both directions.** `crate::read` walks pools this crate
+/// never wrote -- every jar on the Android SDK -- so it needs tags the writer
+/// has no reason to emit. Giving the reader its own copy would be two
+/// derivations of a table frozen since 1997, and the failure would be a
+/// misparse of somebody else's class file rather than a compile error here.
+pub(crate) mod tag {
+    pub(crate) const UTF8: u8 = 1;
+    pub(crate) const INTEGER: u8 = 3;
+    pub(crate) const FLOAT: u8 = 4;
+    pub(crate) const LONG: u8 = 5;
+    pub(crate) const DOUBLE: u8 = 6;
+    pub(crate) const CLASS: u8 = 7;
+    pub(crate) const STRING: u8 = 8;
+    pub(crate) const FIELDREF: u8 = 9;
+    pub(crate) const METHODREF: u8 = 10;
+    pub(crate) const INTERFACE_METHODREF: u8 = 11;
+    pub(crate) const NAME_AND_TYPE: u8 = 12;
+
+    // Below here the writer emits nothing: this backend has zero
+    // `invokedynamic` by design and a ratchet that asserts it. The reader meets
+    // all of them in the first jar it opens.
+    /// JVMS 4.4.8. One `u1` reference kind then a `u2` index.
+    pub(crate) const METHOD_HANDLE: u8 = 15;
+    /// JVMS 4.4.9.
+    pub(crate) const METHOD_TYPE: u8 = 16;
+    /// JVMS 4.4.10, since Java 11.
+    pub(crate) const DYNAMIC: u8 = 17;
+    /// JVMS 4.4.10.
+    pub(crate) const INVOKE_DYNAMIC: u8 = 18;
+    /// JVMS 4.4.11, module-info only.
+    pub(crate) const MODULE: u8 = 19;
+    /// JVMS 4.4.12, module-info only.
+    pub(crate) const PACKAGE: u8 = 20;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

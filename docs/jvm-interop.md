@@ -1566,8 +1566,9 @@ parent.requestLayout();            // NPE that the type system said could not ha
 ```
 
 I priced this as a general weakness. For the jar that matters it is far better
-than that. `javap -v` on `android.view.View` alone shows **67 `NonNull` and 77
-`Nullable`** annotations. The Android SDK is extensively annotated and has been
+than that. `javap -v` on `android.view.View` alone resolves **66 `NonNull` and 76
+`Nullable`** annotation *sites* -- and the reader built since agrees with it
+exactly, which is how the numbers here became measured rather than grepped. The Android SDK is extensively annotated and has been
 since the support-annotations library.
 
 The fix, in order:
@@ -1665,7 +1666,7 @@ TypeScript-level catch waits on a shared change already on the list.**
 | 4 | Layouts merging | fixed, one line; premise **measured** | `nominal_name` -- and a merge is the one thing the emitter cannot repair for a class it does not own |
 | 5 | Non-primitive statics | **withdrawn** | it was one instruction |
 | 6 | Cross-thread callback return | fixed for the real surface | `NtsEnv.CURRENT` is a `ThreadLocal` |
-| 7 | Nullability | fixed for annotated jars | 144 annotations on `View` alone |
+| 7 | Nullability | fixed for annotated jars | 142 annotation sites on `View` alone, **most of them on parameters** |
 | 8 | Jar upgrade | made cheap, not removed | member-level drift diff |
 | 9 | Exceptions | crash fixed now | exception tables, `5b865f62` |
 
