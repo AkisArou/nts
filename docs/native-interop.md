@@ -180,8 +180,9 @@ same answer.
 `examples/interop/c-from-ts` is the native counterpart to `java-from-ts`: a
 small C library with one of each shape that matters (a scalar whose C types are
 not TypeScript's, an owned handle, a borrowed accessor, a callback, an
-out-parameter), the binding sketch `nts bind --header` should produce, and the
-consumer file somebody would actually write.
+out-parameter), the binding sketch a generator *should* produce — written by
+hand today, because no importer exists — and the consumer file somebody would
+actually write.
 
 It does not compile, and **how** it fails is the useful part:
 
@@ -219,18 +220,34 @@ this project's work goes best under.
 
 ## What comes after, in order
 
-0. **A prelude with types behind it.** Measured on `java-from-ts`, the second
+**The end state is an automatic generator with the DX of `@types/node`:** point
+it at a header, get a `.d.ts` a person would have been willing to write, and
+never think about the boundary again. Everything below is ordered so that the
+generator is built when it can produce something *safe*, rather than early when
+it can only produce signatures. The order is also the one
+`examples/interop/c-from-ts/README.md` tabulates against the lines it blocks, so
+the two agree by construction.
+
+0. **The scalar types, branded.** `c_int`, `c_long`, `c_size_t` and the rest, as
+   branded `number`s (see **Decided**). First because nothing else can be
+   emitted without them: LLVM needs a typed `declare`, and a signature that says
+   `number` where C says `int` cannot produce one. Blocks `clamped` in the
+   example, and silently mis-emits today.
+
+1. **`libc.d.ts`, shipped and curated.** Measured on `java-from-ts`, the second
    item after `method_body` is **10 refusals of "a member of `HashMap`, a class
    this compiler has no type for"** — because `java.d.ts` is hand-written, so
    even once declarations stop being refused, every call into a JDK collection
-   still has nothing behind it. The native lane's equivalent is `libc`, and the
-   lesson transfers exactly: **a binder that emits declarations for the user's
-   own library still needs a prelude for the platform's**, and the prelude is
-   the part nobody budgets for. Named zeroth because it is not optional and it
-   is not visible until the thing above it is fixed.
+   still has nothing behind it. **A binder that emits declarations for the
+   user's own library still needs a prelude for the platform's**, and the
+   prelude is the part nobody budgets for. It is not optional and it is not
+   visible until the item above it is fixed.
 
-1. **Opaque handles** (above). Unblocks every binding; refuses everything unsafe.
-2. **A second source of `declare` lines in LLVM, beside the generated one.**
+2. **Opaque handles.** Unblocks every binding; refuses everything unsafe. This
+   is the `NTS2006` refusal, and it is the single smallest change with the
+   largest reach.
+
+3. **A second source of `declare` lines in LLVM, beside the generated one.**
    The existing table does **not** go away and is not the obstacle: it is 311
    rows *generated from clang's report of the runtime header*, drift-tested,
    and it exists because LLVM has no implicit conversion — reading a signature
@@ -240,19 +257,36 @@ this project's work goes best under.
 
    What lands beside it is a second source for the *user's* foreign functions,
    whose types come from the TypeScript signature rather than from a header.
-   Which is why step 1's scalar types are a prerequisite for this one and not a
+   Which is why step 0's scalar types are a prerequisite for this one and not a
    nicety: a `declare` line cannot be emitted from a signature that says
    `number` where C says `int`.
-3. **GObject reference counting as the first `ResourceFlow` client.** Not the
+
+4. **GObject reference counting as the first `ResourceFlow` client.** Not the
    general ownership language — one foreign runtime with one discipline
    (`g_object_ref` / `g_object_unref`), which gives the analysis a real consumer
    and a corpus that can refute it.
-4. **Structs by value, and `addrOf`.** The RFC's core, once something is using
-   the handles.
-5. **A header importer**, last rather than first, because it can only ever
-   produce *signatures* — and the ownership annotations it cannot produce are
-   the part that makes bindings safe. An importer built before the ownership
-   language would bake in the assumption that a signature is enough.
+5. **`CFn`, `Ptr` and `addrOf`.** Callbacks and out-parameters — the shapes
+   that make *ordinary* C libraries reachable rather than only simple ones.
+   Blocks `watched` and `readOut` in the example.
+
+6. **Structs by value and the rest of the RFC's value surface.** Once something
+   real is using the handles.
+
+7. **The generator — `nts bind --header`.** A name for a thing that does not
+   exist, said plainly because the JVM lane's plan carried `nts bind --jar` for
+   weeks and an earlier draft of *this* document repeated it as fact. Last, and
+   the reason is the whole argument of this document: a header yields **signatures** and cannot yield
+   **obligations**. `counter_new` and `counter_name` both return `Counter *`;
+   one is an obligation and one is an alias, and no importer can tell them
+   apart. Built before the ownership language exists, it would bake in the
+   assumption that a signature is enough — and every binding it ever emitted
+   would carry that assumption forward.
+
+   Built last, it emits `Owned`/`Ref` where an annotation or an overrides file
+   says so and **refuses to guess** elsewhere, which is the difference between a
+   generator that saves work and one that manufactures unsafe bindings at scale.
+   The JVM lane's `bind.overrides.json` is the precedent: the generated artefact
+   plus a small hand-written file for the facts the artefact cannot carry.
 
 ## Why not iOS/macOS first
 
@@ -331,14 +365,40 @@ ownership language exists, rather than first.
 
 ## What is deliberately still open
 
-Two, and both are decisions rather than investigations:
+One, and it is a decision rather than an investigation:
 
 - **What happens when a callback throws?** A C frame is between the throw and
   any handler, and there is nothing to unwind with. The options are to refuse a
   throwing callback statically, or to trap. This needs a choice, not a
   measurement.
-- **Whether `c_int` is a branded `number` or a distinct type.** Branded keeps
-  arithmetic working and leaks into inference; distinct is safer and noisier.
-  The JVM lane settled the analogous question — `Int32Array` is already
-  distinguishable and needed no brand — so the precedent is available but the
-  shapes differ.
+
+## Decided
+
+**`c_int` and the other scalars are branded `number`s.** So
+`type c_int = number & { readonly __c_int: unique symbol }`: arithmetic keeps
+working, `Math.abs` still accepts one, and existing numeric code compiles
+unchanged. The cost is accepted with open eyes — a branded `number` is a
+**subtype** of `number`, so a `c_int` flows into a `double` parameter without
+complaint and inference spreads it where nobody wrote it.
+
+That is the same assignability leak that made the JVM lane's branded-`Int32[]`
+proposal unsound, and the difference is what makes it tolerable here: there, the
+brand had to *separate* two array representations and covariance defeated it;
+here the brand only has to *narrow* what a declaration means at the boundary,
+and a `c_int` reaching a `double` parameter is a widening C already performs.
+Where that is not true — a pointer, an owned handle — the type is **not** a
+branded number and the leak does not arise.
+
+Revisit if a measurement shows the leak reaching a foreign `declare` line, which
+is the one place it would be wrong rather than merely loose.
+
+**`libc.d.ts` ships with the compiler.** Curated and hand-written, and it must
+say so in its own header. Three reasons: ISO C is standardised and stable, so a
+snapshot does not rot the way a third-party library's would; generating it needs
+the header importer, which is deliberately last, so shipping is what makes a
+walking skeleton possible at all; and the JVM lane's `java.d.ts` is the
+cautionary case — hand-written under a header claiming it was generated, which
+is why nobody noticed it was the second-largest blocker in the module.
+
+Third-party libraries are **not** shipped and never will be. `GTK`, `sqlite`,
+`libcurl` are generated per project.
