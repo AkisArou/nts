@@ -24322,3 +24322,49 @@ in `cluster`'s lane and not in `child_process`'s -- and node's own `process.send
 handle type it does not recognise. `double-claimed.mjs` found eight such files, two of which
 disagree.
 
+## The compiled axis is 46, and the four it lost are two mechanisms
+
+    TOTAL   46 passed, 1722 failed, 4 hollow (not counted)   across 26 modules
+
+The emptying arm now runs for **every** module rather than only the ones publishing nothing,
+which was the narrower version of the right idea. It found four passes that survive emptying:
+
+    dns   test-dns-promises-exists.js
+    fs    test-fs-promises-exists.js
+    net   test-listen-fd-detached.js
+    net   test-listen-fd-detached-inherit.js
+
+### An identity assertion passes when both sides are absent
+
+    const fsPromises = require('fs/promises');
+    assert.strictEqual(fsPromises, fs.promises);
+
+Empty the module and both sides are `undefined`, so the assertion holds. The test asks whether
+two spellings name **the same object** and never asks whether either exists -- so it is
+satisfied by mutual absence. `dns`' equivalent is the same three lines. Neither file is a bad
+test; upstream it runs against a module that certainly has both.
+
+This is a different mechanism from `cluster`'s 25, where the test branched on its own role and
+took neither branch. Two ways to assert nothing, and no key count finds either.
+
+### And `net`'s two were found from the other side
+
+A peer's instrument flagged them **INVERTED** -- passing compiled, failing interpreted -- and
+the reasoning is the part worth keeping: both lanes are built from the same TypeScript, so a
+pass on one with a failure on the other means the pass holds for a reason other than the one it
+states, and the **passing** half is the suspicious one. Their interpreted failure is real and is
+now recorded in `net/INCOMPLETE.md`: `server._handle` is a number where node's is an object, so
+`stdio: [..., server._handle]` passes file descriptor 1.
+
+### The axis over five measurements, and what each was counting
+
+    09-12 04:35   49   24 modules, no hollowness test at all
+    09-13 02:27   74   26 modules, cluster's 25 hollow passes counted
+    09-13 03:5x   75   the same 25, plus process loading again
+    09-13 13:xx   50   emptying arm, but only for modules publishing nothing
+    09-13 2x:xx   46   emptying arm for every module
+
+Four of the five were wrong and each was wrong in the same direction. The honest movement from
+49 across the whole day is `tty` +1, `net` +2, and **six hollow passes removed** -- two found
+by a peer, four by generalising the guard.
+

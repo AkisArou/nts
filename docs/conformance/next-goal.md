@@ -2,9 +2,9 @@ Your goal is to close node's conformance gap in `runtime/node`, measured against
 
 **Where it stands, 2026-09-13. A stale number here is a diff, not a re-paste.**
 
-    cluster          86 files: 70 passed, 14 failed, 2 skipped   (42 that morning)
-    child_process   119 files: 103 passed, 6 failed, 9 skipped
-    compiled axis    50 across 26 modules, per-file emptying test
+    cluster          86 files: 78 passed, 6 failed, 2 skipped    (42 that morning)
+    child_process   119 files: 104 passed, 5 failed, 9 skipped
+    compiled axis    46 across 26 modules, emptying arm on every module
     ceiling          21 of 26 modules; five publish nothing compiled because an
                      object/instance/class cannot cross the Node-API boundary
 
