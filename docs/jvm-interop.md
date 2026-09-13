@@ -2518,3 +2518,42 @@ is now unambiguous: `android.jar` proves non-escape for **zero** methods and
 demonstrates escape for 52, where `java.base` demonstrates escape for 6,551. A
 corpus where almost nothing demonstrably escapes is a corpus where almost
 nothing is implemented.
+
+
+# The table, which is where the analysis stops being unobservable
+
+`escapes::table(class)` emits one row per method the analysis could read, keyed
+in `hir::runtime::foreign_key`'s format -- `owner.member:descriptor` -- so the
+generator and `keeps` share **one** derivation of the key. `NTS_BIND_KEEPS=1`
+on the `bind` example prints it.
+
+```json
+"com/example/Catalog.find:(I)I": [],
+"com/example/Catalog.find:(Ljava/lang/String;)I": [0],
+```
+
+**That pair is the test that matters**, and it is not "this key answers `[0]`".
+It is *"this key answers `[0]` and a key differing only in descriptor does
+not"* -- because a lookup that ignored the descriptor would pass the first and
+fail the second. Two overloads sharing a name is exactly why the descriptor is
+in the key, pointed at the test rather than at the format.
+
+## Methods the analysis could not read are **absent**, not empty
+
+An absent entry means "assume every argument escapes", which is always sound.
+An empty entry is a *claim* that nothing does. A table that wrote `[]` for an
+`abstract` method would turn ignorance into permission -- which is the failure
+this analysis has now made twice, so the table is built so it cannot be made a
+third time.
+
+## The table size is itself the declarations-jar signal
+
+| | methods | rows |
+| --- | --- | --- |
+| `java.base` (real code) | 15,309 | **11,523** |
+| `android.jar` (declarations) | 7,402 | **97** |
+
+A jar whose escape table is nearly empty is a jar with nearly no code in it.
+That reading needs no threshold and no heuristic: the artefact's own size says
+which class of input it came from, which is what makes the next stub jar
+recognisable before it produces a number.

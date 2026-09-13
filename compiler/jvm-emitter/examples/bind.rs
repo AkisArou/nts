@@ -14,7 +14,7 @@
 //! the same two functions this does.
 #![allow(clippy::print_stdout, clippy::print_stderr, clippy::exit)]
 
-use nts_jvm_emitter::{bind, read};
+use nts_jvm_emitter::{bind, escapes, read};
 use std::path::{Path, PathBuf};
 
 /// Resolves a superclass out of the same directory, so inherited members work.
@@ -83,6 +83,29 @@ fn main() {
                 std::process::exit(1);
             }
         }
+    }
+    if std::env::var("NTS_BIND_KEEPS").is_ok() {
+        // The escape table rather than the declarations. Emitted as its own
+        // artefact because it is consumed by the compiler, not by a person --
+        // and because a jar of declarations produces an empty one, which is
+        // the signal that the analysis had nothing to read.
+        println!("{{");
+        let mut first = true;
+        for name in &names {
+            let Ok(bytes) = std::fs::read(root.join(format!("{name}.class"))) else { continue };
+            let Ok(class) = read::class_file(&bytes) else { continue };
+            for (key, escaping) in escapes::table(&class) {
+                if !first {
+                    println!(",");
+                }
+                first = false;
+                let list =
+                    escaping.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ");
+                print!("  \"{key}\": [{list}]");
+            }
+        }
+        println!("\n}}");
+        return;
     }
     print!("{}", bind::module_of(package, &bodies));
 }

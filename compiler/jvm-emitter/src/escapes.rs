@@ -321,3 +321,34 @@ pub fn of(method: &Member) -> Keeps {
         analysed: true,
     }
 }
+
+/// The `keeps` table for a whole class, as the binding table will carry it.
+///
+/// One line per method the analysis could say something about, in the key
+/// format `hir::runtime::foreign_key` defines -- `owner.member:descriptor` --
+/// so the generator and `keeps` share **one** derivation of the key rather than
+/// two that can drift.
+///
+/// **Methods the analysis could not read are omitted, not recorded as empty.**
+/// An absent entry means "assume every argument escapes", which is always
+/// sound; an empty entry means "proved: nothing escapes", which is a claim. A
+/// table that wrote `[]` for an `abstract` method would turn ignorance into
+/// permission, which is the failure this analysis has already made twice.
+#[must_use]
+pub fn table(class: &crate::read::ClassFile) -> Vec<(String, Vec<usize>)> {
+    let mut rows = Vec::new();
+    for method in &class.methods {
+        if method.name.starts_with('<') {
+            continue;
+        }
+        let kept = of(method);
+        if !kept.analysed {
+            continue;
+        }
+        rows.push((
+            format!("{}.{}:{}", class.binary_name, method.name, method.descriptor),
+            kept.escaping,
+        ));
+    }
+    rows
+}

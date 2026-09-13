@@ -810,3 +810,50 @@ fn an_unmodelled_instruction_fails_closed() {
     assert!(of("(I)V").escaping.is_empty(), "a primitive parameter escapes nothing");
     assert!(of("(I)V").analysed, "and it was actually analysed");
 }
+
+/// The table the binding carries, and the property that makes it worth keying
+/// by descriptor.
+///
+/// The test that matters for the `keeps` routing is not "this key answers `[0]`"
+/// -- it is **"this key answers `[0]` and a key differing only in descriptor
+/// does not"**. Without that, a lookup that ignored the descriptor entirely
+/// would pass.
+#[test]
+fn the_keeps_table_distinguishes_overloads_by_descriptor() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let table = nts_jvm_emitter::escapes::table(&ours(&classes, "com.example.Catalog"));
+    let get = |key: &str| {
+        table.iter().find(|(name, _)| name == key).map(|(_, escaping)| escaping.clone())
+    };
+
+    // Same name, different descriptors, different answers.
+    assert_eq!(
+        get("com/example/Catalog.find:(I)I"),
+        Some(vec![]),
+        "a primitive parameter escapes nothing"
+    );
+    assert_eq!(
+        get("com/example/Catalog.find:(Ljava/lang/String;)I"),
+        Some(vec![0]),
+        "a String handed to a call is assumed to escape"
+    );
+
+    // **Methods the analysis could not read are absent, not empty.** An absent
+    // entry means "assume everything escapes", which is sound; an empty entry
+    // is a *claim* that nothing does. A table that recorded `[]` for an
+    // unreadable method would turn ignorance into permission.
+    assert!(
+        !table.iter().any(|(name, _)| name.contains("<init>")),
+        "constructors are not in the table"
+    );
+
+    // And the key format is the one `hir::runtime::foreign_key` defines, so
+    // the generator and the reader share one derivation rather than two.
+    assert!(
+        table.iter().all(|(name, _)| name.contains('/') && name.contains(':')),
+        "every key is owner.member:descriptor"
+    );
+}
