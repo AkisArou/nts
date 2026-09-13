@@ -274,7 +274,7 @@ public final class Session implements AutoCloseable {
 
 ```ts
 // Generated from com/example/Session.class by `nts bind`. Do not edit.
-import type { int, long } from "nts:jvm";
+import type { int } from "nts:jvm";
 
 declare namespace java.util {
   /**
@@ -315,7 +315,8 @@ declare namespace com.example {
     /** `byte[]`. No copy when the result is used as a whole `Uint8Array`. */
     read(n: int): Uint8Array;
 
-    id(): long;
+    /** Java `long`. `bigint`, not `number`: 64 bits do not fit in an f64. */
+    id(): bigint;
     score(): number;
     isOpen(): boolean;
     close(): void;
@@ -335,6 +336,55 @@ Points that example is chosen to make:
   not a binding decision yet.
 - **Nullability is not shown** on `getName()`, and that is a lie the next
   section has to fix.
+
+## Inbound is not outbound, and the asymmetry decides the signatures
+
+Two questions that look like one:
+
+- **Can our `Map` be a `java.util.Map`?** Yes, free -- every `NtsMap` operation
+  is a `public static`, so nothing calls through the interface.
+- **Can a `java.util.HashMap` be our `Map`?** That is a different change and a
+  much worse one.
+
+**For a Java collection to serve as a JS one, our operations would have to go
+through an interface** rather than statics on the concrete class -- every JS
+`Map` read in every program becoming an `invokeinterface`, to serve the programs
+that talk to Java. That is the wrong trade at the wrong scale.
+
+And two semantics fail inbound that hold outbound:
+
+- **Iteration order.** JS `Map` guarantees insertion order. `HashMap`
+  guarantees none; `LinkedHashMap` does. Outbound we satisfy `Map`'s contract by
+  being *stronger*; inbound a declared `HashMap` cannot satisfy ours. This is
+  not an edge case -- it is every `for (const [k, v] of m)`.
+- **`-0`.** Outbound we control insertion and normalise, so SameValueZero holds
+  exactly. Inbound, Java may already have stored `+0` and `-0` as two keys, and
+  no JS `Map` can represent that.
+
+So `headers()` stays `java.util.HashMap<string, string>`. A declared
+`LinkedHashMap` is the one case where `Map` would be defensible, and only if the
+interface-dispatch cost were acceptable, which it is not.
+
+### Arrays: the Java type matters more than the Java-ness
+
+Measured, not argued:
+
+    export function tags(): string[]    ->  public static java.lang.String[] tags()
+    export function nums(): number[]    ->  public static double[] nums()
+    export function flags(): boolean[]  ->  public static boolean[] flags()
+
+**A TS `string[]` *is* a `java.lang.String[]`** -- free in both directions, which
+is why `tags(): string[]` in the example above is right and costs nothing coming
+back from Java either.
+
+**`List<String>` is not an array and cannot be made one.** `toArray` is a copy;
+backing a JS array with a `List` would make every index an `invokeinterface`,
+and a bare array's one-instruction `aaload` is the reason the array rows are
+what they are. So `cookies()` stays `java.util.List<string>`.
+
+**Which gives the generator a rule:** where a Java API offers both a `String[]`
+and a `List<String>` form -- and many do -- **bind the array one.** It is free
+and the other is not.
 
 ## Nullability, which Java cannot tell us
 
