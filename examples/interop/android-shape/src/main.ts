@@ -23,8 +23,30 @@ class Panel extends View {
   }
 }
 
+// --- TypeScript implementing a Java interface -----------------------------
+//
+// The other half of a functional interface. A Java SAM accepts **both** a
+// lambda and an object that implements it, so the binding surfaces both:
+// `setOnTouch` takes `View.OnTouch | ((x, y) => boolean)`.
+//
+// A closure is the right choice when there is no state. This is the shape for
+// when there is -- a listener that counts, which a closure would have to
+// capture a cell for.
+class TouchCounter implements View.OnTouch {
+  seen: number = 0;
+
+  onTouch(x: number, y: number): boolean {
+    this.seen = this.seen + 1;
+    return x >= 0 && y >= 0;
+  }
+}
+
 export function main(): void {
   const panel = new Panel();
+
+  // An implementing object, passed where Java wants the interface.
+  const counter = new TouchCounter();
+  panel.setOnTouch(counter);
 
   // --- same thread, returns a value ---------------------------------------
   // Runs on the calling thread and its answer is used immediately. Possible

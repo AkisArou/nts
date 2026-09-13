@@ -568,12 +568,15 @@ fn inherited_members_are_surfaced_through_a_resolver() {
         "and not without a resolver, or the assertion above is about nothing:\n{without}"
     );
 
-    // A functional interface parameter takes a closure rather than an object
-    // with a method on it -- cost 8, and the whole reason `setOnTouch` is
-    // callable with an arrow function.
+    // A functional interface parameter takes **both** forms, because Java
+    // accepts both: a lambda, and an object implementing the interface.
+    // Surfacing only the function type makes `class Handler implements
+    // View.OnTouch` inexpressible; surfacing only the interface makes an arrow
+    // function inexpressible. Cost 8 is the first half; the second half is what
+    // makes the matrix's "TS implements a Java interface" row reachable at all.
     assert!(
-        with.contains("setOnTouch(a0: (a0: number, a1: number) => boolean): void;"),
-        "a single-abstract-method interface surfaces as a function type:\n{with}"
+        with.contains("setOnTouch(a0: View.OnTouch | ((a0: number, a1: number) => boolean)): void;"),
+        "a SAM parameter takes the interface or a closure:\n{with}"
     );
 
     // `dispatchTouch` is declared on View itself and must NOT be marked
@@ -856,4 +859,37 @@ fn the_keeps_table_distinguishes_overloads_by_descriptor() {
         table.iter().all(|(name, _)| name.contains('/') && name.contains(':')),
         "every key is owner.member:descriptor"
     );
+}
+
+/// A Java interface is emitted as a TypeScript `interface`, so it can be
+/// implemented.
+///
+/// Before this it was not nameable at all -- it only ever appeared inlined at a
+/// parameter as a function type -- so a TypeScript class could not declare that
+/// it implements one, and the coverage matrix's row for it was satisfied by a
+/// **comment** mentioning `implements`. A grep for a keyword is not coverage.
+#[test]
+fn a_java_interface_is_emitted_as_an_interface() {
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let bytes = std::fs::read(ui.join("com/example/ui/View$OnTouch.class")).expect("the interface");
+    let class = nts_jvm_emitter::read::class_file(&bytes).expect("parses");
+    let body = nts_jvm_emitter::bind::declarations(&class).expect("renders");
+
+    assert!(body.contains("export interface OnTouch {"), "an interface, not a class:\n{body}");
+    assert!(body.contains("onTouch(a0: number, a1: number): boolean;"), "{body}");
+    // An interface has no constructor, and emitting one is a syntax error in
+    // TypeScript -- which is the control that this is not just a renamed class.
+    assert!(!body.contains("constructor("), "an interface declares no constructor:\n{body}");
+
+    // The control on the other side: a real class still emits as a class with
+    // its constructor, so the branch is about `ACC_INTERFACE` rather than about
+    // every type.
+    let rect = std::fs::read(ui.join("com/example/ui/Rect.class")).expect("Rect");
+    let rect = nts_jvm_emitter::read::class_file(&rect).expect("parses");
+    let rendered = nts_jvm_emitter::bind::declarations(&rect).expect("renders");
+    assert!(rendered.contains("export class Rect {"), "{rendered}");
+    assert!(rendered.contains("constructor("), "a class still declares one:\n{rendered}");
 }

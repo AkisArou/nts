@@ -88,3 +88,29 @@ methods only cannot express the surface it exists for.
 Both were found by **compiling** `src/main.ts` against the generated
 declarations. The Java compiles cleanly either way, and reading the `.d.ts` did
 not show either one.
+
+## The matrix row that a grep said was covered and was not
+
+"TS implements a Java interface" was matched by a **comment** containing the
+word `implements`. The row was not covered: a Java interface was not *nameable*
+at all — it only ever appeared inlined at a parameter as a function type, so no
+TypeScript class could declare that it implements one.
+
+A Java functional interface accepts **both** a lambda and an implementing
+object, so the binding now surfaces both:
+
+```ts
+setOnTouch(a0: View.OnTouch | ((a0: number, a1: number) => boolean)): void;
+```
+
+and the interface itself is emitted as an interface:
+
+```ts
+export interface OnTouch {
+  onTouch(a0: number, a1: number): boolean;
+}
+```
+
+`src/main.ts` uses both — a closure where there is no state, and
+`class TouchCounter implements View.OnTouch` where there is, which a closure
+would need a captured cell for.

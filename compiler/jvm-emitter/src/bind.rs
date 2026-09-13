@@ -513,8 +513,19 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
     let mut out = String::new();
     let name = simple_name(&class.binary_name);
 
+    let is_interface = class.access & ACC_INTERFACE != 0;
     let _ = writeln!(out, "  /** {} */", class.binary_name.replace('/', "."));
-    let _ = writeln!(out, "  export class {name} {{");
+    // **An interface is emitted as an interface, so it can be implemented.**
+    // Without this a Java callback type is not nameable at all -- it only ever
+    // appeared inlined at a parameter as a function type -- and a TypeScript
+    // class could not declare that it implements one. Java accepts both a
+    // lambda and an implementing object for a functional interface; the
+    // TypeScript surface has to offer both for the same reason.
+    let _ = writeln!(
+        out,
+        "  export {} {name} {{",
+        if is_interface { "interface" } else { "class" }
+    );
 
     render_fields(&mut out, class)?;
 
@@ -565,7 +576,12 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
                 if let Some(binary) = parameter_binary(&method.descriptor, index)
                     && let Some(signature) = functional_interface(&binary, resolve)
                 {
-                    return format!("a{index}: {signature}");
+                    // Both forms, because Java accepts both: a lambda, and an
+                    // object that implements the interface. Surfacing only the
+                    // function type makes `class Handler implements OnTouch`
+                    // inexpressible; surfacing only the interface makes an
+                    // arrow function inexpressible.
+                    return format!("a{index}: {rendered} | ({signature})");
                 }
                 if variadic && index == last {
                     // The ABI type is the array; the call site spreads. A
@@ -589,7 +605,9 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
             .join(", ");
 
         if method.name == "<init>" {
-            let _ = writeln!(out, "    constructor({arguments});");
+            if !is_interface {
+                let _ = writeln!(out, "    constructor({arguments});");
+            }
             continue;
         }
 

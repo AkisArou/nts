@@ -29,6 +29,7 @@ generated="$here/target/com.example.ui.d.ts"
     -p nts-jvm-emitter --example bind -- \
     "$here/target/classes" com.example.ui \
     com/example/ui/Rect com/example/ui/Widget com/example/ui/View com/example/ui/Loader \
+    'com/example/ui/View$OnTouch' 'com/example/ui/Loader$OnBytes' \
     ) > "$generated"
 
 if [ "${NTS_REGENERATE:-}" = "1" ]; then

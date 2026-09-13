@@ -10,7 +10,14 @@ declare module "java:com.example.ui" {
   /** com.example.ui.Loader */
   export class Loader {
     constructor();
-    static load(a0: string, a1: (a0: Uint8Array) => void): void;
+    static load(a0: string, a1: Loader.OnBytes | ((a0: Uint8Array) => void)): void;
+  }
+
+  export namespace Loader {
+    /** com.example.ui.Loader$OnBytes */
+    export interface OnBytes {
+      onBytes(a0: Uint8Array): void;
+    }
   }
 
   /** com.example.ui.Rect */
@@ -28,7 +35,7 @@ declare module "java:com.example.ui" {
   /** com.example.ui.View */
   export class View {
     constructor();
-    setOnTouch(a0: (a0: number, a1: number) => boolean): void;
+    setOnTouch(a0: View.OnTouch | ((a0: number, a1: number) => boolean)): void;
     dispatchTouch(a0: number, a1: number): boolean;
     /** Inherited. */
     left: number;
@@ -44,6 +51,13 @@ declare module "java:com.example.ui" {
     setBounds(a0: number, a1: number, a2: number, a3: number): void;
     /** Inherited. */
     setBounds(a0: Rect): void;
+  }
+
+  export namespace View {
+    /** com.example.ui.View$OnTouch */
+    export interface OnTouch {
+      onTouch(a0: number, a1: number): boolean;
+    }
   }
 
   /** com.example.ui.Widget */
