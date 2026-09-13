@@ -325,6 +325,7 @@ class Cluster extends EventEmitter {
   /** The worker this process *is*, present only in a worker. */
   worker: Worker | undefined = undefined;
 
+  #initialized = false;
   #nextId = 0;
   #seq = 0;
   readonly #distributions = new Map<string, Distribution>();
@@ -352,6 +353,26 @@ class Cluster extends EventEmitter {
       ...(options ?? {}),
     };
     this.settings = merged;
+    // **The policy is frozen here, from the public field, on the first call only.**
+    //
+    // `cluster.schedulingPolicy` is what a caller assigns -- `test-cluster-shared-leak` and
+    // three others do exactly that -- and the value `#queryServer` branches on is a module
+    // variable. node reconciles them by re-reading the field once, at first `setupPrimary`,
+    // with the comment `// Freeze policy.`; later calls leave it alone, so a policy change
+    // after the first fork is ignored rather than honoured half-way.
+    //
+    // Without this, assigning `SCHED_NONE` changed an instance field nothing read, every
+    // address went round-robin, and the shared-handle path was unreachable from a test. It
+    // failed as a **timeout**, because a round-robin listener the primary never closes
+    // keeps its loop alive -- which is the shape of a leak, not of a wrong branch.
+    if (!this.#initialized) {
+      this.#initialized = true;
+      const chosen = this.schedulingPolicy;
+      if (chosen !== SCHED_NONE && chosen !== SCHED_RR) {
+        throw new Error(`Bad cluster.schedulingPolicy: ${chosen}`);
+      }
+      schedulingPolicy = chosen;
+    }
     // **On a next tick, because node emits it from `setupSettingsNT`.** Both
     // `test-cluster-setup-primary` and `test-cluster-setup-primary-argv` register their
     // listener *after* calling this, so a synchronous emit is a `setup` event nobody
@@ -365,6 +386,9 @@ class Cluster extends EventEmitter {
   }
 
   fork(env?: Record<string, string>): Worker {
+    // node's `fork` opens with `cluster.setupPrimary()`, which is what freezes the
+    // scheduling policy. A `fork` that skipped it would read a policy nobody had committed.
+    if (!this.#initialized) this.setupPrimary();
     this.#nextId += 1;
     const id = this.#nextId;
     const worker = new Worker();
@@ -728,7 +752,29 @@ class Cluster extends EventEmitter {
   }
 
   /** Drop a departed worker from every address, closing any listener left with none. */
+  /**
+   * The shared half of `#releaseWorker`: a descriptor the **primary** bound outlives every
+   * worker unless somebody closes it, and then the primary's loop never empties and it
+   * hangs after the test has made all its assertions.
+   *
+   * `test-cluster-shared-leak` is the file. Traced, both workers exit 0 and the workers map
+   * reaches zero -- and the primary sits there holding a bound socket nobody owns. Same
+   * trap `#releaseWorker` was written for on the round-robin side, one handle kind over.
+   */
+  #releaseShared(worker: Worker): void {
+    for (const [key, holders] of this.#sharedWorkers) {
+      if (!holders.delete(worker.id)) continue;
+      if (holders.size > 0) continue;
+      this.#sharedWorkers.delete(key);
+      const shared = this.#shared.get(key);
+      this.#shared.delete(key);
+      if (shared !== undefined && shared.id >= 0) nts_cluster_shared_handle_close(shared.id);
+    }
+  }
+
+
   #releaseWorker(worker: Worker): void {
+    this.#releaseShared(worker);
     for (const [key, share] of this.#distributions) {
       if (!share.all.delete(worker.id)) continue;
       share.free = share.free.filter((candidate) => candidate.id !== worker.id);
