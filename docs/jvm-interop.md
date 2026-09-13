@@ -2369,7 +2369,7 @@ follow it.
   override's bridge method does not hide the real one.
 
   **A callback rather than a jar reader, deliberately.** A jar is a zip, and
-  this crate's `Cargo.toml` says every dependency is a maintenance obligation;
+  the workspace `Cargo.toml` says every external dependency is a maintenance obligation;
   taking a zip *and* a deflate crate to resolve a superclass would be two, for
   a job the caller can already do with the jar it has open.
 - **Parameter names are `a0`, `a1`.** Real names need the `MethodParameters`

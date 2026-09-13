@@ -6,7 +6,7 @@
 //! ```
 //!
 //! **A directory rather than a jar, and an example rather than a binary.** A jar
-//! is a zip, and this crate's `Cargo.toml` says every dependency is a
+//! is a zip, and the workspace `Cargo.toml` says every external dependency is a
 //! maintenance obligation -- taking a zip and a deflate crate to open one would
 //! be two. `unzip -o` costs nothing and the caller already has it, so the
 //! extraction is the shell's job and this reads what it produced. When `nts

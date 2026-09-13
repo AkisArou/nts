@@ -208,7 +208,7 @@ fn simple_name(binary: &str) -> String {
 /// How the generator finds a class it does not hold.
 ///
 /// **A callback rather than a jar reader, deliberately.** A jar is a zip, and
-/// `Cargo.toml` says of this crate's dependencies: *"External. Deliberately
+/// the **workspace** `Cargo.toml` says of the external ones: *"External. Deliberately
 /// small; every addition is a maintenance obligation."* Taking a zip and a
 /// deflate crate to resolve a superclass would be two, for a job the caller can
 /// already do -- it has the jar open. So the crate stays dependency-free and
