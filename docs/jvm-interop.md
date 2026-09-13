@@ -463,17 +463,16 @@ for itself before any interop exists.** The original order led with the
 class-file reader; it is now fourth, because three things settle questions that
 change the shape of everything after them.
 
-1. **The array element type.** `hir::runtime` has `nts_array_fill_bool` and no
-   `_i32`, so an integer array is emitted `[D`. Adding the row and the mapping
-   beside it eliminates the `number[]` → `int[]` copy **and** is measured at
-   **14.2%** on `awfy-queens`, the worst row of the goal's open number, **and**
-   is carried by all three backends. It is the only item here that is worth
-   doing if interop is never built at all, which is why it is first.
-2. **The brand measurement.** Does *an intersection of a primitive with types
-   declaring only phantom properties* survive the corpus that refuted the
-   broader rule? One day, and it decides whether `int` is expressible in a
-   `.d.ts` at all -- which in turn decides whether overloads can be resolved or
-   must be refused.
+1. **The brand measurement**, and it is first because everything numeric waits
+   on it. Does *an intersection of a primitive with types declaring only phantom
+   properties* survive the corpus that refuted the broader rule? One day. It
+   decides three things at once: whether `int` is expressible in a `.d.ts`,
+   whether Java overloads resolve or must be refused, and -- because the element
+   type **is** the TypeScript type -- whether an array can ever be an `int[]`.
+2. **The array element type**, once (1) says an integer type is expressible.
+   Measured at **14.2%** on `awfy-queens`, the worst row of the goal's open
+   number, and carried by all three backends. A `hir::runtime` `_i32` row is
+   part of it and was tested alone and does nothing; the type is the blocker.
 3. **The interop copy measurement.** One real Android API shape, an array in and
    a `HashMap` out, measured against a binder transaction. If the copy is noise
    next to the call, the cliff matters less than this document assumes.
@@ -532,10 +531,34 @@ This is the same defect as the worst Bar 1 row on ART, already measured in
     B  double[]  + instance methods   9995.5 ns    +14.2%
     ours                             10970.7 ns    +25.3%
 
-**The element type alone is 14.2%.** The named blocker is small: `hir::runtime`
-has `nts_array_fill_bool` and **no `_i32`**, so an integer array falls back to
-`f64`. A `double[]` is eight bytes an element against four, an `i2d` per store
-and a `d2i` per read.
+**The element type alone is 14.2%.** A `double[]` is eight bytes an element
+against four, an `i2d` per store and a `d2i` per read.
+
+**And the blocker is not what this file first said it was.** It read "the named
+blocker is small: `hir::runtime` has `nts_array_fill_bool` and no `_i32`".
+Tested on 2026-09-13 by adding that row with the backend mapping beside it:
+**nothing moved**, and `arrayFillInt` was called zero times. The row is
+necessary and nowhere near sufficient.
+
+The real blocker is one line of the case's own source:
+
+    freeMaxs: boolean[] | null;     ->  [Z
+    queenRows: number[] | null;     ->  [D
+
+**The element type is the TypeScript type.** `boolean[]` is `[Z` because
+TypeScript *has* a `boolean`; `number[]` is `[D` because its only numeric type
+is an f64. The `_bool` helper exists **because** `boolean[]` exists -- the
+helper follows the type, not the other way round.
+
+So `int[]` needs TypeScript to be able to *say* "array of 32-bit integers".
+`number[]` cannot: `elements.rs` notes that "any `number[]` can be passed
+anywhere another is expected, so every array with the same element type has to
+be treated as one", which is why narrowing one array and not another breaks
+assignability. `Int32Array` is distinguishable and is not this either -- it maps
+to `NtsViewI32`, a view over an `NtsBuffer` whose storage is a `byte[]`.
+
+**This is why the branded type is row 1 and not a DX nicety.** It is the only
+mechanism on the table by which an array can be an `int[]` at all.
 
 So one change -- carrying integer-ness into the array's element type --
 
