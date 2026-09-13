@@ -24093,3 +24093,32 @@ The failed column moved 2004 -> 1911 between the last two, and that is not 93 fi
 92 of it is `process` no longer contributing a row at all, and 1 is `tty`. A total whose
 denominator moved is two numbers wearing one.
 
+## The axis on the fixed compiler: 75, and `process` is honest rather than good
+
+`module__init` is recorded by the cascade now, so `addon.c` no longer declares or calls it
+and the artifact loads. Measured, pin from the fixed compiler:
+
+    09-13 03:5x   75 passed, 2003 failed across 26 modules
+                  process  154 file(s): 0 passed, 92 failed, 62 not applicable  (loads)
+                  tty        2 file(s): 1 passed
+                  cluster   86 file(s): 25 passed
+                  net      185 file(s): 6 passed
+
+The total is unchanged from the run where `process` was excluded for not loading, and the
+failed column moved 1911 -> 2003, which is `process`'s 92 returning as a row rather than as
+an absence. Same three numbers, two different meanings; this is the second time in one night
+that this axis's denominator moved while its total stood still.
+
+`process` passing 0 with a loadable addon was the prediction and it is what happened, but
+**not for the reason predicted.** I expected `process.env` to be unpopulated because
+`module#init` is still genuinely refused -- the `EventEmitter#on` cascade is real. What
+actually happens is a layer earlier: the addon exports **exactly one name**, `env`, and it is
+falsy, so `shape.mjs` fails on the first thing it reaches --
+
+    TypeError: underTest._fatalException is not a function
+      at runtime/node/process/shape.mjs:102
+
+-- which is the same cascade seen from a different side and a different sentence. The
+prediction was right about the row and wrong about the mechanism, and the mechanism is what
+a reader would act on.
+
