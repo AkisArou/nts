@@ -2144,3 +2144,78 @@ and is unchanged by anything here.
 `Int32Array` is available to a programmer who writes it and to a **binding**,
 where a Java `int[]` genuinely *is* 32-bit — and that second one is the whole
 reason this measurement mattered to interop.
+
+# Build item 3, measured: a copy is noise if you were going to read the data
+
+The plan prices several copies and then says *"if the copy is noise next to the
+call, the cliff matters less than this document assumes"*. That sentence had no
+number under it. `benches/interop-copy` puts one there, through the same warmup,
+time bound and best-of-five the rest of the suite uses.
+
+All rows are **1024 elements** or **64 map entries** per operation, on HotSpot:
+
+| | ns/op | bytes/op |
+| --- | --- | --- |
+| `inlinable-call` (1024 calls) | 170.0 | 0 |
+| `uninlinable-call` (1024 calls) | 3511.7 | 28688 |
+| `pass-array-no-copy` (read 1024 doubles) | 332.5 | **0** |
+| `copy-double-to-int` | **316.6** | **4112** |
+| `copy-int-to-double` | 529.9 | 8208 |
+| `build-hashmap-64` | 371.5 | 3120 |
+| `reuse-hashmap-64` | 119.5 | 0 |
+
+The allocation column is exact and worth reading first: `copy-double-to-int` is
+**4112 bytes**, which is 1024 × 4 plus a 16-byte header — *precisely one
+`int[1024]` and nothing else*. Passing the array instead is **0**. So the copy's
+entire cost is one array allocation, and the no-copy path allocates nothing at
+all rather than nearly nothing.
+
+## The finding, which is not the one the sentence expected
+
+**A 1024-element `double`→`int` copy costs 316.6 ns. Merely *reading* the same
+array once costs 332.5 ns.** The copy is *cheaper than one pass over the data it
+copies* — same memory traffic, one extra store per element, and the allocation
+is a young-gen bump.
+
+So the rule is not "copies are noise" or "copies are the cliff". It is:
+
+> **A copy is noise if you were going to touch the data anyway, and it is the
+> whole cost if you were not.**
+
+Where TypeScript iterates an array it received, the copy disappears into the
+iteration — one extra pass against the N passes the program was already going to
+make. Where an array is handed to Java untouched, a buffer written by the
+callee and never read on our side, the copy *is* the entire operation and
+zero-copy earns all of it.
+
+That is a sharper design rule than the document had, and it says where to spend:
+**the pass-through paths**, not the compute paths.
+
+## Against a call, which is the comparison the sentence asked for
+
+One 1024-element copy costs about **92 uninlinable calls** (3511.7 / 1024 =
+3.43 ns each). So next to a *single* foreign call a bulk copy is not noise — it
+is two orders of magnitude more.
+
+Two honest caveats on that ratio:
+
+- **Reflection is a desktop stand-in for "a call the JIT cannot inline", and it
+  is a generous one.** It boxes every argument — 28688 bytes/op says so — where
+  a plain JNI call does not. A real JNI call is *cheaper* than this, which makes
+  the copy relatively **more** expensive than 92-to-1, not less.
+- **A binder transaction is not measured here and cannot be on a desktop.** It
+  is IPC and is orders of magnitude above any row in this table, so for the
+  Android APIs that cross a process the copy genuinely is noise. That is the one
+  case the original sentence was right about, and confirming it needs
+  `tooling/android` and a device.
+
+## What it changes
+
+Nothing is retracted. The eliminations in the cost list stay worth having —
+4112 bytes/op is 4112 bytes/op, and `pass-array-no-copy` allocating **zero**
+rather than a little is the kind of difference that shows up in a GC pause
+rather than in a mean.
+
+What changes is the *order* to do them in. The copies worth eliminating first
+are the ones on data TypeScript never reads, because those are the ones where
+the copy is 100% of the cost rather than 49% of one pass.
