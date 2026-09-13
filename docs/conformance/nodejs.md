@@ -24605,3 +24605,49 @@ unclosed group. Escaping the paren reproduced the 51 / 7 / 1 exactly. A pattern 
 matches nothing looks the same as a tree that contains nothing -- the third instance of that family
 in two days, after a filter over a stream that was never produced and a fixture that failed to load.
 
+## The ABI-annotation migration: per-declaration, because four of five files mix
+
+The native-interop lane is adding declaration-local `/** @ntsAbi managed */` metadata, which implies
+every bridge declaration in this tree acquires an annotation. Asked whether a file-level or
+block-level form would serve as well. Measured:
+
+    declaration lines                          397   across 47 files
+    distinct names                             354
+    with a C prototype                         341
+    without                                     13
+
+The 13 without live in **five** files, and **four of the five mix**:
+
+    child_process/src/main.ts     4 of 14 have no prototype
+    cluster/src/main.ts           5 of 11
+    net/src/main.ts               1 of 31
+    internal/async-hooks.ts       2 of 7
+    internal/tick.ts              1 of 1     (the only homogeneous one)
+
+So the mixing is concentrated **exactly** in the files where the convention differs. A file-level
+form would brand those 13 as managed -- wrong, they have no C to call -- or strip the brand from the
+56 C-backed declarations sharing those files. A file-level form covering the 42 homogeneous files
+while per-declaration is still needed for 5 is more machinery, not less.
+
+### The cost, and the part of it that is not mechanical
+
+    declarations with no leading comment   323   clean insert
+    already carrying a doc comment          74   must merge into existing trivia
+
+The 74 are not evenly spread, and they matter more than their count suggests: **this lane keeps its
+reasoning in leading trivia.** `nts_child_process_send`'s comment is the only written account of why
+an object parameter has no representation at a Node-API parameter -- a boundary this ledger cites
+repeatedly. If the decoder reads the whole trivia block rather than requiring the annotation to own
+it, the 74 cost the same as the 323. If it does not, the migration trades 74 explanations for 74
+brands.
+
+### The 13 want their own brand, and it buys five rows
+
+Unannotated-refuses is a safe default, but **"refuses because nobody annotated it" and "refuses
+because it has no native half" are different facts**, and only the second is worth reading.
+
+`child_process`, `cluster`, `console`, `events` and `timers` publish nothing on the compiled lane
+today; `child_process`'s row is 0 of 110. If the shim-only population carried an explicit no-native
+brand, those five rows become a **stated refusal instead of a silent zero** -- the same number and
+different information, which is the failure this ledger keeps finding in itself.
+
