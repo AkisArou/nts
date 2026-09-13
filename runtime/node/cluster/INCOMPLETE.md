@@ -121,9 +121,10 @@ surface is not by itself a hollow one -- an absent one is.
 
 ## The six that remain, with what each one is
 
-    http-pipe                    hang, uncharacterised
+    http-pipe                    `http` over a distributed pipe; plain `net` over the
+                                 same pipe works in every direction
     net-send                     a child's socket is ours; node's `send` refuses it
-    net-server-drop-connection   hang, uncharacterised
+    net-server-drop-connection   three workers, ten connections, a disconnect mid-flight
     shared-leak                  the last shared holder never leaves
     uncaught-exception           wants `process` in `uses`, priced at 11 files above
     listen-fd-cluster            ENOTSOCK from `bind` inside the worker's own `rr()`
@@ -194,6 +195,37 @@ primary *is* far more than it changes what one throw does. Reverted.
 
 So this file is not a defect in `cluster`: it is one test's price against eleven others', and
 the price is recorded rather than guessed at.
+
+
+### `http-pipe`: plain `net` over a distributed pipe works, `http` does not
+
+Worth separating, because "a hang in cluster's pipe distribution" would have been the wrong
+place to look. Probed in three arrangements:
+
+    primary connects to the worker's distributed pipe, plain net    accepted, data flows
+    worker connects to its **own** distributed pipe, plain net      accepted, data flows
+    worker serves `http` over that same pipe                        request handler never runs
+
+So the primary binds the pipe, the handoff delivers, and both directions of a plain socket are
+served. The `listening` message even arrives with the right address --
+`{"address":"/tmp/...sock","port":-1,"addressType":-1}` -- and `fs.existsSync` on the path is
+true from the primary.
+
+`http` is **node's own** in this lane, since `uses` is `child_process events net`. So whatever
+is missing is something node's `http` server wants from a connection this module handed it that
+a plain `net` consumer does not.
+
+Not the pipe's length, which was the first guess and was measured away: `common.PIPE` is 54
+bytes here against node's 33, both far inside `sockaddr_un`'s 108. Not flakiness either -- the
+failing arrangement fails identically on repeat.
+
+### `net-server-drop-connection`: three workers, ten connections, and a disconnect mid-flight
+
+Three workers listen on one pipe, ten connections are made, and the workers are disconnected
+while connections are still being counted. The single-worker pipe case above works, so this is
+either the multi-worker rotation or the disconnect-during-handoff -- `#handoff` parks a socket
+against its sequence number so a refusal can put it back, and that path has never been
+exercised by a passing test.
 
 ## What is here
 
