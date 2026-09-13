@@ -3016,3 +3016,56 @@ question and is not settled here.
 no `javac`, no fixture build — and it produces every category in the ranking
 above. A rule that works there works on the real project, and stepping through
 four refusals beats stepping through forty-eight.
+
+## What actually blocks a foreign call, and it is not the lowering
+
+`callee_for` is the single place a method call becomes a `Callee`, and it builds
+`Callee::Direct(format!("{owner}#{member_name}"))` — **from a name**. TypeScript
+cannot have two implementations of one name, so HIR never needed more than that.
+
+Java routinely does. Measured over the generated Android SDK binding:
+
+    52,171 member names
+     4,973 carry more than one overload      9.5% of the surface
+
+So the name HIR uses cannot select among them, and the binding table is keyed by
+the declaration's position precisely so it can.
+
+### The resolution exists and is one field short of reachable
+
+`overriding_signature(call)` already hands back the `SignatureRecord` the checker
+picked **for that exact call node**, and `callee_for` already receives the node.
+The right answer is sitting there. But:
+
+```rust
+pub struct SignatureRecord {
+    parameters, return_type, type_parameters,
+    is_async, is_construct, type_predicate,
+}
+```
+
+There is **no declaration node**. The snapshot records which signature won and
+not where it was declared, so there is no route from the resolved overload to its
+position in the `.d.ts`, and therefore none to the table row. One
+`Option<NodeId>` closes it.
+
+### Arity is not a substitute, and that is measured rather than assumed
+
+`parameters.len()` is available without any schema change, so it is the obvious
+thing to reach for. Of **5,061 overload sets, 1,870 have two overloads at the
+same arity** — it disambiguates 63% and silently picks wrong on the rest.
+`BrailleDisplayController.connect(BluetoothDevice, …)` and
+`connect(UsbDevice, …)` are three arguments each.
+
+### The alternative, and why it is not taken
+
+Mangling *every* overload makes the name unique and needs no schema change. It
+also turns ~10% of the Android API into
+`drawText$String$int$int$float$float$Paint`, which is the DX a single `$` was
+already objected to for. The generator mangles only the 238 that erase alike, and
+that stays the rule.
+
+**So the order is schema, then lowering.** Writing the lowering against a name
+first would produce something that works on 90% of the surface and picks the
+wrong overload on the rest, which is the failure mode this document exists to
+avoid.
