@@ -79,8 +79,24 @@ globalThis.nts_cluster_shared_handle = (address, port, addressType, fd, flags) =
 globalThis.nts_host_handle_resolvers ??= [];
 globalThis.nts_host_handle_resolvers.push((sent) => {
   if (sent === null || typeof sent !== "object") return undefined;
-  if (typeof sent.ntsClusterHandle !== "number") return undefined;
-  return sharedHandles.get(sent.ntsClusterHandle);
+  if (typeof sent.ntsClusterHandle === "number") {
+    return sharedHandles.get(sent.ntsClusterHandle);
+  }
+  // The **raw** handle behind one of this profile's sockets, which is what a `newconn`
+  // carries. It crosses as `net.Native` and the worker's `net` builds a `Socket` around
+  // it; a `net.Socket` in its place crosses as one and the worker then wraps a socket in
+  // a socket. See the comment at the `#handoff` call for the stack that produces.
+  if (typeof sent.ntsRawHandleOf === "number") {
+    const socket = globalThis.nts_net_host_socket?.(sent.ntsRawHandleOf);
+    if (socket === undefined) {
+      throw new Error(
+        `nts: socket handle ${sent.ntsRawHandleOf} has no host socket, so it has no raw ` +
+        "handle to distribute",
+      );
+    }
+    return socket._handle;
+  }
+  return undefined;
 });
 
 globalThis.nts_cluster_shared_handle_close = (id) => {

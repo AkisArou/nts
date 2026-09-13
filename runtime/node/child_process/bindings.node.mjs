@@ -141,7 +141,24 @@ function hostHandle(sent) {
   const handle = sent._handle;
   if (typeof handle !== "number") return sent;
   if (typeof globalThis.nts_net_host_socket !== "function") return sent;
-  return globalThis.nts_net_host_socket(handle) ?? sent;
+  const host = globalThis.nts_net_host_socket(handle);
+  if (host !== undefined) return host;
+  // **Falling back to `sent` here is how a numeric `_handle` reaches node's `net`.**
+  //
+  // An object with a numeric `_handle` is one of this profile's sockets, and the host's
+  // `send` needs the host's. Returning ours when the lookup misses hands node an object
+  // whose `_handle` is a number, and node then calls `_handle.close()` on it deep inside
+  // `new Socket` -- *self._handle.close is not a function*, from
+  // `closeSocketHandle (node:net:360)` by way of `Object.onconnection (node:net:2735)`, in
+  // the *worker*. Nothing in that stack names the parent, the socket, or the lookup.
+  //
+  // A miss means the socket was never adopted or has already been closed and swept, and
+  // either way sending it is wrong. Saying so costs one line and turns a stack in someone
+  // else's module into a sentence about this one.
+  throw new Error(
+    `nts: a socket with handle ${handle} has no host socket to send; ` +
+    "it was never adopted, or it closed before it crossed",
+  );
 }
 
 function hostStream(entry) {

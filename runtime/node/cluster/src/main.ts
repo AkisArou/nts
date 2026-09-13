@@ -708,7 +708,23 @@ class Cluster extends EventEmitter {
     share.waiting.set(seq, (): void => {
       this.#handoff(share, worker);
     });
-    worker.send({ cmd: "NODE_CLUSTER", act: "newconn", key: share.key, seq }, socket);
+    // **The raw handle, not the socket.** node's `RoundRobinHandle` intercepts at the
+    // handle level -- `this.handle.onconnection = (err, handle) => this.distribute(err,
+    // handle)` -- and sends that handle, which crosses as `net.Native`. The worker's
+    // `child.js` then does `server.onconnection(0, handle)` and node's `net` builds
+    // `new Socket({ handle })`, expecting something with `close`.
+    //
+    // Sending a *socket* instead crosses as `net.Socket`, so the worker reconstructs a
+    // `net.Socket` and `new Socket({ handle: aSocket })` reaches for `_handle.close` on it:
+    // *self._handle.close is not a function*, at `closeSocketHandle (node:net:360)` by way
+    // of `Object.onconnection (node:net:2735)`, in the worker, naming nothing here.
+    //
+    // A plain `send(message, socket)` is different and stays a socket -- node's own
+    // `process.send(msg, socket)` delivers a socket. This case is not that case.
+    worker.send(
+      { cmd: "NODE_CLUSTER", act: "newconn", key: share.key, seq },
+      { ntsRawHandleOf: (socket as unknown as { _handle: number })._handle },
+    );
   }
 
   /** Drop a departed worker from every address, closing any listener left with none. */
