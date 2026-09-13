@@ -8532,3 +8532,59 @@ written, which is *before* the only run that could supply the number.
 it, then put the answer in.** `dexes.sh` already says this -- "0 until measured"
 -- and says it because a placeholder there was left as a *word* for four
 minutes. Writing 40 is worse than writing 0, because 40 looks like a decision.
+
+## `queenRows` is `[D` because TypeScript says `number[]`, and my note said otherwise
+
+This file has carried, since the row was first priced:
+
+> One named cause found and priced at 9.1%: `queenRows` is `[f64]` where the
+> reference is `int[]`, **because `hir::runtime` has a `nts_array_fill_bool` and
+> no `_i32`**.
+
+**The causal half of that is backwards**, and a ten-minute probe says so. I added
+the missing row -- `("nts_array_fill_i32", &[None, Some(Int { bits: 32, signed:
+true })], None)` -- with the backend mapping beside it, rebuilt, and emitted
+`awfy-queens`:
+
+    before   public boolean[] freeMaxs;  boolean[] freeRows;  double[] queenRows;
+    after    public boolean[] freeMaxs;  boolean[] freeRows;  double[] queenRows;
+    calls to arrayFillInt: 0
+
+Nothing moved. The row is **necessary and nowhere near sufficient**, and the
+reason is in the case's own source:
+
+    freeMaxs: boolean[] | null;      ->  [Z
+    freeRows: boolean[] | null;      ->  [Z
+    queenRows: number[] | null;      ->  [D
+
+**The element type is the TypeScript type.** `boolean[]` is `[Z` because
+TypeScript *has* a `boolean`; `number[]` is `[D` because TypeScript's only
+numeric type is an f64. `nts_array_fill_bool` exists **because** `boolean[]`
+exists -- the helper follows the type, and I had read the arrow the other way.
+
+### Which moves the fix somewhere much more interesting
+
+An `int[]` needs TypeScript to be able to *say* "an array of 32-bit integers",
+and it cannot:
+
+- `number[]` is one type, and `elements.rs` says why that matters -- "any
+  `number[]` can be passed anywhere another is expected -- so every array with
+  the same element type has to be treated as one". Narrowing one array's storage
+  and not another's breaks assignability.
+- `Int32Array` **is** distinguishable, and is not this either: it maps to
+  `NtsViewI32`, a view over an `NtsBuffer` whose storage is a `byte[]`. Not an
+  `int[]`.
+
+So the route to `int[]` is a **representable integer type**, which is exactly
+the branded-type question `docs/jvm-interop.md` files under "needs one
+measurement". That measurement is no longer a DX question about generated
+`.d.ts` files. **It is the blocker on 14.2% of the worst row of the goal's open
+number, and on every `number[]` this compiler will ever hand to Java.**
+
+### And the general lesson is the one this file keeps relearning
+
+The note was written as an aside while measuring something else, it named a
+mechanism that was *adjacent* to the cause, and it stood for weeks because
+nobody tried it. **A named cause that has never been applied is a hypothesis
+wearing a measurement's clothes** -- the 9.1% was real and the "because" was
+not, and the two travelled together in one sentence.
