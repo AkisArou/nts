@@ -24620,21 +24620,14 @@ impl<'a> FuncBuilder<'a> {
             return self.narrowed(id, read);
         }
 
-        // A table's `size` is its live entry count, which the header already
-        // holds in the field an array's `length` uses -- so it is the same
-        // operation, not a call.
-        if matches!(
-            self.values[value.0 as usize].ty,
-            HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_))
-        ) {
-            if member_name != "size" {
-                return Err(self.unsupported(
-                    id,
-                    &format!("`{member_name}`, where a `Map` or a `Set` has only `size`"),
-                ));
-            }
-            let origin = self.origin(id);
-            return Ok(self.push(OpKind::Length(value), HirType::NUMBER, origin));
+        if let HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_)) =
+            self.values[value.0 as usize].ty
+        {
+            return self.table_size(id, value, member_name);
+        }
+
+        if let HirType::Managed(ManagedType::Symbol) = self.values[value.0 as usize].ty {
+            return self.symbol_property(id, value, member_name);
         }
 
         if let HirType::Managed(ManagedType::View(_) | ManagedType::AnyView) =
@@ -26223,25 +26216,20 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_table_method(id, receiver, &table, *member, arguments);
         }
 
-        if matches!(
-            self.values[receiver.0 as usize].ty,
-            HirType::Managed(ManagedType::Date)
-        ) {
+        if let HirType::Managed(ManagedType::Date) = self.values[receiver.0 as usize].ty {
             return self.lower_date_method(id, receiver, *member, arguments);
         }
 
-        if matches!(
-            self.values[receiver.0 as usize].ty,
-            HirType::Managed(ManagedType::Buffer)
-        ) {
+        if let HirType::Managed(ManagedType::Buffer) = self.values[receiver.0 as usize].ty {
             return self.lower_buffer_method(id, receiver, *member, arguments);
         }
 
-        if matches!(
-            self.values[receiver.0 as usize].ty,
-            HirType::Managed(ManagedType::DataView)
-        ) {
+        if let HirType::Managed(ManagedType::DataView) = self.values[receiver.0 as usize].ty {
             return self.lower_data_view_method(id, receiver, *member, arguments);
+        }
+
+        if let HirType::Managed(ManagedType::Symbol) = self.values[receiver.0 as usize].ty {
+            return self.symbol_method(id, receiver, *member, arguments);
         }
 
         let HirType::Managed(ManagedType::Object(type_id)) =
@@ -26826,6 +26814,113 @@ impl<'a> FuncBuilder<'a> {
     /// by the element size -- so it is refused here rather than inside
     /// `view_property`, where it would read as a member this compiler does not
     /// provide instead of one this *declaration* cannot support.
+    /// A table's `size`.
+    ///
+    /// Its live entry count, which the header already holds in the field an
+    /// array's `length` uses — so it is the same operation, not a call.
+    ///
+    /// Extracted alongside [`Self::symbol_property`] and
+    /// [`Self::any_view_property`]: `member_of` now dispatches four
+    /// natively-represented receivers and was reading four different ways.
+    fn table_size(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        member_name: &str,
+    ) -> Result<ValueId, Diagnostic> {
+        if member_name != "size" {
+            return Err(self.unsupported(
+                id,
+                &format!("`{member_name}`, where a `Map` or a `Set` has only `size`"),
+            ));
+        }
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::Length(value), HirType::NUMBER, origin))
+    }
+
+    /// A symbol's `description`, which is a **member read** where `String(sym)`
+    /// is a conversion — the same helper family, reached from the other side of
+    /// the language.
+    ///
+    /// The ledger row for this said `nts_symbol_description` and
+    /// `nts_symbol_to_string` "exist and are tested, and nothing lowers a member
+    /// access to them yet", and that was exactly true: both are in `runtime/c`,
+    /// in `hir::runtime`'s table and in LLVM's signatures already. So this and
+    /// [`Self::symbol_method`] are the whole of the feature — no runtime surface
+    /// to add, nothing to regenerate, no backend to red-gate while it catches up.
+    ///
+    /// `description` is `string | undefined` and the helper returns a
+    /// possibly-null `NtsString *`, which is what this compiler already means by
+    /// an absent string: `null` and `undefined` are one value in a compiled
+    /// program. So the representation is a nullable managed string and
+    /// `d === undefined` is the null test it already lowers.
+    fn symbol_property(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        member_name: &str,
+    ) -> Result<ValueId, Diagnostic> {
+        if member_name != "description" {
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "`{member_name}` on a symbol, where `description` is the one member \
+                     this compiler reads"
+                ),
+            ));
+        }
+        let origin = self.origin(id);
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::External("nts_symbol_description".to_owned()),
+                args: vec![value],
+                frame: None,
+            },
+            HirType::Managed(ManagedType::String),
+            origin,
+        ))
+    }
+
+    /// `sym.toString()`, the other half of the same row.
+    ///
+    /// Named rather than left to fall through, because the refusal below it is
+    /// "a method call on something without methods" and a symbol *has* two the
+    /// language defines. Saying "without methods" about one would send its
+    /// reader to the wrong file.
+    fn symbol_method(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let name = self.literal_name(member);
+        if name.as_deref() != Some("toString") {
+            let what = name.unwrap_or_else(|| "a computed member".to_owned());
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "`{what}()` on a symbol, where `toString` is the one method this \
+                     compiler calls"
+                ),
+            ));
+        }
+        if !arguments.is_empty() {
+            return Err(self.unsupported(id, "`toString()` on a symbol with an argument"));
+        }
+        let origin = self.origin(id);
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::External("nts_symbol_to_string".to_owned()),
+                args: vec![receiver],
+                frame: None,
+            },
+            HirType::Managed(ManagedType::String),
+            origin,
+        ))
+    }
+
+
     fn any_view_property(
         &mut self,
         id: NodeId,
