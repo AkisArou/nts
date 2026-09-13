@@ -83,9 +83,34 @@ classes the program exports, so nothing internal grows.
 the surface as-is and document it, which is honest but unpleasant, and there is
 no compatibility reason to prefer either.
 
+## The Map boundary, demonstrated rather than argued
+
+`tags(): Map<string, string>` in the TypeScript is held by Java as a
+`java.util.Map<Object, Object>` — **the same object**, backed by the same arrays
+the compiled code wrote. The run prints:
+
+```
+| session 2 [kind state] live=true svz=positive zero
+```
+
+Four claims, each of which a copy would break:
+
+| | |
+| --- | --- |
+| `session 2` | the map is readable from Java at all |
+| `[kind state]` | **insertion order survives** — a `HashMap` would not give this |
+| `live=true` | a `put` through the Java interface is visible to the TypeScript side, so there is **one table and no copy** |
+| `svz=positive zero` | Java looks up `-0.0` and finds what TypeScript stored as `0` |
+
+The last is the reason this table is not a `LinkedHashMap`. JS keys by
+SameValueZero: `NaN` matches `NaN` and `+0` matches `-0`. `Double.equals`
+agrees on the first and disagrees on the second — and normalising `-0` to `+0`
+at insert, which the table already did so iteration exposes `+0`, makes the two
+rules coincide on every input.
+
+`live=true` is the load-bearing one. Every other assertion here passes just as
+well against a copy.
+
 ## What is not here yet
 
-`Map`, closures-as-lambdas, and generics across the boundary. `NtsMap implements
-java.util.Map` is build item 5 and a TypeScript `Map` is not yet something a
-Java caller can hold, so `tags(): Map<string, string>` is deliberately absent
-rather than written as if it worked.
+Closures as Java lambdas, and generics across the boundary.

@@ -9,6 +9,8 @@ public final class nts.gen.Program {
   public static double Session$hits(nts.gen.Session);
   public static java.lang.String greet(java.lang.String);
   public static double total(double[]);
+  public static nts.rt.NtsMap tags();
+  public static nts.rt.NtsMap zeroKeyed();
 }
 Compiled from "nts"
 public final class nts.gen.Session {

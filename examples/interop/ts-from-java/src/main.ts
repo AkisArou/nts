@@ -1,8 +1,8 @@
 // TypeScript published so that Java can call it.
 //
-// Unlike java-from-ts, this project COMPILES AND RUNS TODAY: `nts emit-jvm`
-// already produces the class files, and `javac` already type-checks Java
-// against them. So `expected/Api.javap` is a real artefact, not a specification.
+// This project COMPILES AND RUNS TODAY: `nts emit-jvm` produces the class
+// files, `javac` type-checks Java against them, and `expected/Api.javap` is a
+// real artefact rather than a specification.
 
 export class Session {
   // `#hits` rather than `private hits`: `private` is a checker-only marker and
@@ -33,4 +33,26 @@ export function total(values: number[]): number {
     sum = sum + values[i];
   }
   return sum;
+}
+
+/// A JavaScript `Map`, handed to Java as a `java.util.Map` with **no copy**.
+///
+/// `NtsMap implements java.util.Map` is what makes this work: the object a
+/// Java caller receives IS the table this function wrote, backed by the same
+/// arrays. The alternative -- converting at the boundary -- is O(n) plus an
+/// allocation on every crossing.
+export function tags(): Map<string, string> {
+  const m = new Map<string, string>();
+  m.set("kind", "session");
+  m.set("state", "open");
+  return m;
+}
+
+/// And the SameValueZero property, which is the reason this table is not a
+/// `LinkedHashMap`: JS keys `+0` and `-0` as the same key, and normalising at
+/// insert makes that coincide exactly with Java's `Double.equals`.
+export function zeroKeyed(): Map<number, string> {
+  const m = new Map<number, string>();
+  m.set(0, "positive zero");
+  return m;
 }
