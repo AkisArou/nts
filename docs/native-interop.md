@@ -183,10 +183,37 @@ The refusal is **where the handle is produced**, not where it is passed. Every
 real C API is a handle API — `FILE*`, `GtkWidget*`, `sqlite3*`, `CFTypeRef` — so
 this single refusal blocks essentially all of them.
 
-There are **450 `declare function` sites** in `runtime/node`. Every one names an
-`nts_*` helper resolved through `hir::runtime`'s hand-maintained signature
-table. That is the mechanism working exactly as designed, for a closed set the
-compiler ships. It is not an FFI.
+**This paragraph was wrong and is corrected here, 2026-09-14.** It claimed 450
+`declare function` sites in `runtime/node`, "every one" an `nts_*` helper
+resolved through `hir::runtime`'s signature table. Counted:
+
+| | |
+|---|---|
+| `declare function` sites in `runtime/node` | 1264 |
+| of those, naming an `nts_*` | 441 |
+| distinct `nts_*` names | 354 |
+| distinct names present in `hir::runtime`'s `SIGNATURES` | **0** |
+
+Not "nearly all" — **none**. The two sets are disjoint by construction and the
+claim had the relationship backwards. `SIGNATURES` (199 names) describes the
+helpers *lowering emits*: `nts_alloc`, `nts_array_at`, `nts_string_*`. The 354
+are **host bridges the node lane authors** — `nts_process_env`,
+`nts_child_process_fork` — declared in TypeScript and implemented in headers
+beside their module (`runtime/node/process/process.h`, `fs/fs.h`, and so on).
+Lowering never generates a call to one; TypeScript in `runtime/node` calls
+them, so they arrive as `Callee::External` with no declared signature and
+`emit-c` infers the prototype from the call operands.
+
+So the honest statement is the opposite of the old one: **the closed set the
+compiler ships and the open set the corpus authors are two different
+populations, and only the first has signatures.** The second is the real FFI
+surface in this tree today, and it is unclassified.
+
+Found by the codex session, which produced `nts_process_env` as a
+counterexample — absent from `hir/runtime.rs` and from `runtime/c`, with its
+prototype in `runtime/node/internal/nts_node.h`. One counterexample was enough
+to falsify it; counting turned "the claim is too strong" into "the claim is
+inverted".
 
 ## The hazard this lane trips over: an unrelated declaration decides the answer
 
