@@ -764,7 +764,14 @@ class Cluster extends EventEmitter {
     // `process.send(msg, socket)` delivers a socket. This case is not that case.
     worker.send(
       { cmd: "NODE_CLUSTER", act: "newconn", key: share.key, seq },
-      { ntsRawHandleOf: (socket as unknown as { _handle: number })._handle },
+      // `net`'s `_handle` is an object now -- node's is too -- so the id comes from inside it.
+      // Reading the object itself here sent a `NetNativeHandle` where a number was wanted and
+      // the resolver would have missed, falling through to a socket node cannot send.
+      {
+        ntsRawHandleOf:
+          (socket as unknown as { _handle: { identifier: number } | null })._handle?.identifier
+            ?? -1,
+      },
     );
   }
 

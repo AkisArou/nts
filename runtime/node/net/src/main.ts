@@ -90,6 +90,7 @@ export { BlockList, SocketAddress };
  * pipe, socket, terminal -- is decided below this line, because fd 0 looks the
  * same from up here whichever it happens to be.
  */
+declare function nts_net_native_handle(handle: number, isServer: boolean): unknown;
 declare function nts_net_adopt_fd(fd: number, readable: boolean, writable: boolean): number;
 declare function nts_net_connect(
   host: string,
@@ -551,9 +552,117 @@ function validateBoundSocketOptions(options: unknown): asserts options is BoundS
   }
 }
 
+/**
+ * The control surface behind `socket._handle` and `server._handle`.
+ *
+ * **Node exposes `_handle` even though it is internal, and its test suite reaches into it.**
+ * Across `test-net-*`, `test-listen-*` and `test-cluster-*` the corpus calls
+ * `_handle.setKeepAlive` (8 sites), assigns `_handle.onconnection` (4), calls
+ * `_handle.setNoDelay` (3) and `_handle.close` (2), and reads `_handle.fd` (1). A number
+ * answers none of those.
+ *
+ * It also has to be an object for a reason that is not about methods at all:
+ *
+ *     spawn(execPath, [file, 'child'], {
+ *       stdio: [ 'ignore', 'ignore', 'ignore', server._handle ],
+ *     });
+ *
+ * A **number** in a `stdio` array is a file descriptor, so `server._handle` as `1` passed the
+ * parent's stdout and the child listened on something that was not a socket. That is all three
+ * of this module's remaining interpreted failures -- `test-listen-fd-server` and the two
+ * `test-listen-fd-detached` files -- and a bare number cannot be told apart from a legitimate
+ * `stdio: [0, 1, 2]` entry, so no resolver could have fixed it.
+ *
+ * `zlib` reached the same conclusion first and this follows its shape deliberately:
+ * `ZlibNativeHandle` keeps the numeric ABI identifier inside a fixed-layout value "without
+ * treating a number as if it had methods". Every method here delegates to a binding that
+ * already exists; nothing is stubbed, because an object answering `close` but not
+ * `getsockname` trades one confusing failure for another.
+ */
+class NetNativeHandle {
+  readonly identifier: number;
+  /** Whether this is a server's handle, which has its own close, ref and address bindings. */
+  readonly server: boolean;
+  /**
+   * Node's `Server` handle carries this and `cluster`'s round-robin assigns it to steal
+   * connections. Held so an assignment is not silently lost; see `#deliver` for where a
+   * handle that has one is given the connection instead of the server.
+   */
+  onconnection: ((status: number, handle: unknown) => void) | null = null;
+
+  constructor(identifier: number, server = false) {
+    this.identifier = identifier;
+    this.server = server;
+  }
+
+  /**
+   * **The real descriptor, not this object's id, and the difference is a whole bug.**
+   *
+   * node's `getValidStdio` tests `typeof stdio.fd === 'number'` **before** it tests for a
+   * handle wrap:
+   *
+   *     } else if (typeof stdio === 'number' || typeof stdio.fd === 'number') {
+   *       acc.push({ type: 'fd', fd: ... });
+   *     } else if (getHandleWrapType(stdio) || getHandleWrapType(stdio.handle) || ...
+   *
+   * So a wrapper answering `fd` with its internal identifier is read as *that file descriptor*
+   * and the handle branch is never reached. This returned `identifier` for one commit and
+   * reproduced the exact defect the wrapper exists to fix -- `server._handle` becoming fd 1,
+   * the parent's stdout -- with the child getting a FIFO where a socket was wanted. Measured:
+   * `fstatSync(3).isFIFO()` true with the wrapper, `isSocket()` true with the host handle
+   * passed directly.
+   *
+   * `-1` rather than a guess when there is no host handle, which is the compiled lane.
+   */
+  get fd(): number {
+    const host = nts_net_native_handle(this.identifier, this.server) as { fd?: unknown } | undefined;
+    return typeof host?.fd === "number" ? host.fd : -1;
+  }
+
+  /**
+   * The host's libuv handle, for node's own `spawn` to inherit.
+   *
+   * node decides whether a `stdio` entry is inheritable with
+   * `getHandleWrapType(stdio) || getHandleWrapType(stdio.handle) || getHandleWrapType(stdio._handle)`,
+   * so a plain object is refused however well shaped. `net`'s lane does not substitute
+   * `child_process` -- its `uses` is `events` alone -- so the `spawn` reading this is node's and
+   * nothing of ours gets a chance to translate. Answering here is the only place that works.
+   *
+   * `undefined` on the compiled lane, where there is no host object to hand over. That is the
+   * same boundary the module already documents for `_handle` itself, and a caller gets a
+   * refusal from `spawn` rather than a descriptor that is not a socket.
+   */
+  get handle(): unknown {
+    return nts_net_native_handle(this.identifier, this.server);
+  }
+
+  close(): void {
+    if (this.server) nts_net_server_close(this.identifier, (): void => {});
+    else nts_net_close(this.identifier, (): void => {});
+  }
+
+  setNoDelay(enable = true): void {
+    if (!this.server) nts_net_set_no_delay(this.identifier, enable);
+  }
+
+  setKeepAlive(enable = false, initialDelaySeconds = 0): void {
+    if (!this.server) nts_net_set_keepalive(this.identifier, enable, initialDelaySeconds);
+  }
+
+  ref(): void {
+    if (this.server) nts_net_server_ref(this.identifier, true);
+    else nts_net_ref(this.identifier, true);
+  }
+
+  unref(): void {
+    if (this.server) nts_net_server_ref(this.identifier, false);
+    else nts_net_ref(this.identifier, false);
+  }
+}
+
 export class Socket extends Duplex {
   /** The connection, once there is one. */
-  _handle: number | null = null;
+  _handle: NetNativeHandle | null = null;
 
   connecting = false;
   bytesRead = 0;
@@ -648,7 +757,7 @@ export class Socket extends Duplex {
       this.#localAddress = typeof address === "string" ? undefined : address;
       this.#provider = this.#boundPipe ? "PIPEWRAP" : "TCPWRAP";
       this.#resetAsyncIdentity(this.#provider);
-      this._handle = consumeBoundSocket(options.handle);
+      this._handle = new NetNativeHandle(consumeBoundSocket(options.handle));
       this.#boundSource = true;
     } else if (options.fd !== undefined || options.handle !== undefined) {
       // An `fd` is an unopened form of `handle`: adopt it first, then take the
@@ -679,7 +788,7 @@ export class Socket extends Duplex {
       // Before the handle is touched, because taking an existing one starts
       // reading and a read can complete before the constructor returns.
       this.#resetAsyncIdentity(this.#provider);
-      this._handle = handle;
+      this._handle = new NetNativeHandle(handle);
       this.#capture();
       if (options.noDelay) this.setNoDelay(true);
       if (options.keepAlive) {
@@ -820,12 +929,12 @@ export class Socket extends Duplex {
   #capture(): void {
     if (this._handle === null) return;
     this.#localAddress = makeAddress(
-      nts_net_address_text(this._handle, false),
-      nts_net_address_numbers(this._handle, false),
+      nts_net_address_text(this._handle!.identifier, false),
+      nts_net_address_numbers(this._handle!.identifier, false),
     );
     this.#remoteAddress = makeAddress(
-      nts_net_address_text(this._handle, true),
-      nts_net_address_numbers(this._handle, true),
+      nts_net_address_text(this._handle!.identifier, true),
+      nts_net_address_numbers(this._handle!.identifier, true),
     );
   }
 
@@ -1072,7 +1181,7 @@ export class Socket extends Duplex {
       return;
     }
     context.handles[index] = handle;
-    this._handle = handle;
+    this._handle = new NetNativeHandle(handle);
 
     if (context.nextIndex < context.addresses.length) {
       const socket: Socket = this;
@@ -1106,7 +1215,7 @@ export class Socket extends Duplex {
         nts_net_close(handle, ignoreNativeClose);
       }
     }
-    this._handle = winner;
+    this._handle = new NetNativeHandle(winner);
     this.#completeConnection(context.options);
   }
 
@@ -1152,7 +1261,7 @@ export class Socket extends Duplex {
       });
     let handle: number;
     if (this.#boundSource && this._handle !== null) {
-      handle = this._handle;
+      handle = this._handle.identifier;
       const errno = nts_net_connect_bound(handle, host, port, path, onConnected);
       this.#boundSource = false;
       // bind(2) and connect(2) have both run by the time the native call
@@ -1173,7 +1282,7 @@ export class Socket extends Duplex {
     );
 
     if (handle < 0) nextTick(onConnected, handle);
-    else this._handle = handle;
+    else this._handle = new NetNativeHandle(handle);
   }
 
   #completeConnection(options: ConnectOptions): void {
@@ -1197,7 +1306,7 @@ export class Socket extends Duplex {
     this.#readingStarted = true;
 
     nts_net_read_start(
-      this._handle,
+      this._handle!.identifier,
       (bytes: Uint8Array) =>
         this.#inScope(() => {
           this.#refreshTimeout();
@@ -1214,7 +1323,7 @@ export class Socket extends Duplex {
           // from the kernel until the consumer catches up, or the buffer grows
           // without bound.
           if (!this.push(Buffer.from(bytes)) && this._handle !== null) {
-            nts_net_read_stop(this._handle);
+            nts_net_read_stop(this._handle!.identifier);
             this.#readingStarted = false;
           }
         }),
@@ -1349,7 +1458,7 @@ export class Socket extends Duplex {
   override pause(): this {
     super.pause();
     if (this._handle !== null && this.#readingStarted) {
-      nts_net_read_stop(this._handle);
+      nts_net_read_stop(this._handle!.identifier);
       this.#readingStarted = false;
     }
     return this;
@@ -1426,7 +1535,7 @@ export class Socket extends Duplex {
       if (request === undefined) finish();
       else request.complete(finish);
     };
-    const queued = nts_net_write(this._handle, buffer, onWritten);
+    const queued = nts_net_write(this._handle!.identifier, buffer, onWritten);
     if (queued > 0) {
       request = new SocketRequest("WRITEWRAP", this.#asyncId);
     }
@@ -1485,7 +1594,7 @@ export class Socket extends Duplex {
     // A shutdown rather than a close: the read side stays open, which is what
     // makes a half-open connection possible at all.
     const request = new SocketRequest("SHUTDOWNWRAP", this.#asyncId);
-    nts_net_shutdown(this._handle, (errno) =>
+    nts_net_shutdown(this._handle!.identifier, (errno) =>
       request.complete(() => {
         callback(errno < 0 ? uvException(errno, "shutdown") : undefined);
       }),
@@ -1504,7 +1613,7 @@ export class Socket extends Duplex {
       multiple.timer = null;
       for (let index = 0; index < multiple.nextIndex; index++) {
         const attempt = multiple.handles[index];
-        if (attempt !== undefined && attempt !== this._handle) {
+        if (attempt !== undefined && attempt !== this._handle?.identifier) {
           nts_net_close(attempt, ignoreNativeClose);
         }
       }
@@ -1543,7 +1652,7 @@ export class Socket extends Duplex {
       finish();
       return;
     }
-    const handle = this._handle;
+    const handle = this._handle.identifier;
     this._handle = null;
     if (this.#boundSource) {
       this.#boundSource = false;
@@ -1571,13 +1680,13 @@ export class Socket extends Duplex {
    * turns it off.
    */
   setNoDelay(enable = true): this {
-    if (this._handle !== null) nts_net_set_no_delay(this._handle, enable);
+    if (this._handle !== null) nts_net_set_no_delay(this._handle!.identifier, enable);
     return this;
   }
 
   setKeepAlive(enable = true, initialDelay = 0): this {
     if (this._handle !== null) {
-      nts_net_set_keepalive(this._handle, enable, Math.floor(initialDelay / 1000));
+      nts_net_set_keepalive(this._handle!.identifier, enable, Math.floor(initialDelay / 1000));
     }
     return this;
   }
@@ -1596,14 +1705,14 @@ export class Socket extends Duplex {
 
   getTypeOfService(): number {
     if (this._handle === null) return this.#typeOfService ?? 0;
-    const result = nts_net_get_tos(this._handle);
+    const result = nts_net_get_tos(this._handle!.identifier);
     if (result < 0) throw exceptionWithHostPort(result, "getTypeOfService");
     return result;
   }
 
   #setTypeOfServiceOnHandle(value: number): void {
     if (this._handle === null) return;
-    const result = nts_net_set_tos(this._handle, value);
+    const result = nts_net_set_tos(this._handle!.identifier, value);
     if (result < 0) throw exceptionWithHostPort(result, "setTypeOfService");
   }
 
@@ -1675,12 +1784,12 @@ export class Socket extends Duplex {
    * to keep running, and a no-op version of it is why such a program hangs.
    */
   ref(): this {
-    if (this._handle !== null) nts_net_ref(this._handle, true);
+    if (this._handle !== null) nts_net_ref(this._handle!.identifier, true);
     return this;
   }
 
   unref(): this {
-    if (this._handle !== null) nts_net_ref(this._handle, false);
+    if (this._handle !== null) nts_net_ref(this._handle!.identifier, false);
     return this;
   }
 
@@ -1762,7 +1871,7 @@ export class Server extends EventEmitter {
 
   override [captureRejectionSymbol] = Server.dispatchCapturedRejection;
 
-  _handle: number | null = null;
+  _handle: NetNativeHandle | null = null;
   declare _connectionKey: string;
   listening = false;
   maxConnections = Infinity;
@@ -2027,7 +2136,7 @@ export class Server extends EventEmitter {
       return this;
     }
 
-    this._handle = handle;
+    this._handle = new NetNativeHandle(handle, true);
     const localAddress = this.address();
     if (typeof localAddress === "string") {
       this._connectionKey = `-1:${localAddress}:-1`;
@@ -2042,8 +2151,8 @@ export class Server extends EventEmitter {
 
   address(): AddressInfo | string | null {
     if (this._handle === null) return null;
-    const address = nts_net_server_address_text(this._handle);
-    const numbers = nts_net_server_address_numbers(this._handle);
+    const address = nts_net_server_address_text(this._handle!.identifier);
+    const numbers = nts_net_server_address_numbers(this._handle!.identifier);
     // A unix socket has no family/port columns; its address is its path.
     if (numbers.length === 0) return address.length === 0 ? null : address;
     return makeAddress(address, numbers) ?? null;
@@ -2073,7 +2182,7 @@ export class Server extends EventEmitter {
     }
 
     if (this._handle !== null) {
-      const handle = this._handle;
+      const handle = this._handle.identifier;
       this._handle = null;
       this.listening = false;
       nts_net_server_close(handle, () => {
@@ -2125,13 +2234,13 @@ export class Server extends EventEmitter {
 
   ref(): this {
     this.#keepProcessAlive = true;
-    if (this._handle !== null) nts_net_server_ref(this._handle, true);
+    if (this._handle !== null) nts_net_server_ref(this._handle!.identifier, true);
     return this;
   }
 
   unref(): this {
     this.#keepProcessAlive = false;
-    if (this._handle !== null) nts_net_server_ref(this._handle, false);
+    if (this._handle !== null) nts_net_server_ref(this._handle!.identifier, false);
     return this;
   }
 

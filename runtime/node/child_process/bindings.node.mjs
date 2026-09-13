@@ -138,7 +138,18 @@ function hostHandle(sent) {
       if (found !== undefined) return found;
     }
   }
-  const handle = sent._handle;
+  // **`net`'s `_handle` is an object carrying `identifier`, as node's carries a descriptor.**
+  //
+  // This read `typeof sent._handle === "number"` to recognise one of our sockets. When `net`
+  // stopped exposing a bare number -- because a number in a `stdio` array is a file descriptor
+  // and `server._handle` was being passed as fd 1 -- every socket stopped being recognised
+  // here, and a socket that is not recognised is sent as itself.
+  const wrapped = sent._handle;
+  const handle = typeof wrapped === "number"
+    ? wrapped
+    : wrapped !== null && typeof wrapped === "object" && typeof wrapped.identifier === "number"
+      ? wrapped.identifier
+      : undefined;
   if (typeof handle !== "number") return sent;
   if (typeof globalThis.nts_net_host_socket !== "function") return sent;
   const host = globalThis.nts_net_host_socket(handle);
@@ -163,6 +174,19 @@ function hostHandle(sent) {
 
 function hostStream(entry) {
   if (entry === null || typeof entry !== "object") return entry;
+  // **A `stdio` entry can be one of `net`'s handles, and then the host needs its own.**
+  //
+  // `spawn(..., { stdio: ['ignore','ignore','ignore', server._handle] })` asks the operating
+  // system to hand a child a listening socket. Only the host's handle can be inherited, so a
+  // `NetNativeHandle` is translated here rather than passed through -- passed through as a
+  // *number*, which is what `_handle` used to be, it was read as **file descriptor 1** and the
+  // child listened on the parent's stdout.
+  if (typeof entry.identifier === "number") {
+    if (entry.server === true) {
+      return globalThis.nts_net_host_server_handle?.(entry.identifier) ?? entry;
+    }
+    return globalThis.nts_net_host_socket?.(entry.identifier)?._handle ?? entry;
+  }
   if (typeof entry.ntsChildHandle !== "number") return entry;
   const owner = live.get(entry.ntsChildHandle);
   if (owner === undefined) return entry;

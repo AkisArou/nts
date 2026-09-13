@@ -370,6 +370,31 @@ globalThis.nts_net_listen = (
   }
 };
 
+/**
+ * The **host's** handle behind one of this module's server ids, for another stand-in.
+ *
+ * `spawn(..., { stdio: [..., server._handle] })` asks the operating system to give a child a
+ * listening socket, and only the host's own handle can be inherited that way. `net`'s
+ * `_handle` is a `NetNativeHandle` carrying an id; this turns the id into the thing the host's
+ * `spawn` understands. Three of this module's tests are that one line --
+ * `test-listen-fd-server` and the two `test-listen-fd-detached` files.
+ */
+globalThis.nts_net_host_server_handle = (handle) => servers.get(handle)?._handle;
+
+/**
+ * The host's libuv handle behind one of our ids, for a **consumer outside this profile**.
+ *
+ * node's own `spawn` decides whether a `stdio` entry is an inheritable handle with
+ * `getHandleWrapType(stdio) || getHandleWrapType(stdio.handle) || getHandleWrapType(stdio._handle)`
+ * -- it wants a `TCP`, `Pipe`, `TTY` or `UDP`. `net`'s lane does not substitute
+ * `child_process`, so the `spawn` that reads `server._handle` in
+ * `test-listen-fd-{server,detached}` is node's, and no translation of ours runs at all. The
+ * handle object itself therefore has to answer, which is what `NetNativeHandle.handle` is for.
+ */
+globalThis.nts_net_native_handle = (handle, isServer) => (isServer
+  ? servers.get(handle)?._handle
+  : sockets.get(handle)?.socket?._handle);
+
 function serverAddress(handle) {
   const server = servers.get(handle);
   return server?.address() ?? undefined;
