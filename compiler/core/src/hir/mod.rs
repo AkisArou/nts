@@ -3467,6 +3467,33 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
                 ),
                 origin.location,
             ));
+            // **And recorded, not only reported.** The comment above already
+            // knew the symptom -- "`emit-c` says *no function of that name was
+            // compiled*, which reads as an export-table problem" -- and the
+            // cause is that `uncompiled` held only what `note_uncompiled` saw,
+            // which is a function refused *at* its own body. A caller dropped
+            // here was in neither list, so the napi wrapper had nothing to say
+            // about it and fell back to reporting its absence.
+            //
+            // The Node lane counted **105** such lines across 26 modules, each
+            // telling a reader a name is missing and sending them nowhere,
+            // against 257 declines that do name a reason. `fs` alone is 59.
+            //
+            // The same omission as `drop_orphaned_bodies` one layer down, found
+            // the same day and for the same reason: a pass that removes
+            // something is the only thing that knows why, and a diagnostic is
+            // read by a person while a list is read by the next pass.
+            if !lowered
+                .program
+                .uncompiled
+                .iter()
+                .any(|(at, _)| *at == caller)
+            {
+                lowered.program.uncompiled.push((
+                    caller.clone(),
+                    format!("it calls `{callee}`, which was refused above"),
+                ));
+            }
             lowered.program.funcs.retain(|func| func.name != caller);
         }
     }

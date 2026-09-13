@@ -3215,9 +3215,10 @@ fn report_missing(
     program: &hir::Program,
     wrapped: &[(&str, &str)],
     published_classes: &[&str],
+    refused: &[String],
     skipped: &mut Vec<Skipped>,
 ) {
-    report_unrepresentable_exports(program, wrapped, published_classes, skipped);
+    report_unrepresentable_exports(program, wrapped, published_classes, refused, skipped);
     report_unpublished_modules(program, skipped);
 }
 
@@ -3259,6 +3260,7 @@ fn report_unrepresentable_exports(
     program: &hir::Program,
     wrapped: &[(&str, &str)],
     published_classes: &[&str],
+    refused: &[String],
     skipped: &mut Vec<Skipped>,
 ) {
     let values = value_exports(program);
@@ -3309,7 +3311,30 @@ fn report_unrepresentable_exports(
                     .iter()
                     .find(|(at, _)| at == emitted || at == name)
                     .map_or_else(
-                        || "is exported and no function of that name was compiled".to_owned(),
+                        || {
+                            // **Two causes wore one sentence.** `uncompiled`
+                            // carries the *lowering's* refusals; a body the
+                            // **backend** dropped is not in it, so every one of
+                            // those read "no function of that name was
+                            // compiled" -- which states the effect and sends
+                            // the reader nowhere. The Node lane counted 105 of
+                            // them across 26 modules, against 257 declines that
+                            // do name a reason.
+                            //
+                            // `refused` tells them apart, and it can only do so
+                            // since it started recording what
+                            // `drop_orphaned_bodies` removes: before that, a
+                            // cascade drop was absent from both lists and this
+                            // arm was the only thing left to say.
+                            if refused.iter().any(|at| at == emitted || at == name) {
+                                "is exported and this backend refused its body, which is \
+                                 reported above as an NTS2xxx against the function"
+                                    .to_owned()
+                            } else {
+                                "is exported and no function of that name was compiled"
+                                    .to_owned()
+                            }
+                        },
                         |(_, why)| format!("is exported and was not compiled: {why}"),
                     )
             // **A value export whose type does not cross**, which the last arm
@@ -3880,7 +3905,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     out.push_str(&value_publishing);
     out.push_str("    return exports;\n}\n");
 
-    report_missing(program, &wrapped, &published_classes, &mut skipped);
+    report_missing(program, &wrapped, &published_classes, refused, &mut skipped);
 
     Addon {
         source: out,
