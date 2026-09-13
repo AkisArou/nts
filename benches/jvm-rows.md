@@ -110,6 +110,17 @@ meets them. This is the map; the row table below it is the current state.
   - `erasure-stored-unknown` is a `long[]` where the JVM wants a `double[]`: 3.5x on ART, 0% here
   - Generators as values: what this lane already has, and the two numbers that bear on it
   - And the settled shape has one consequence: a prefix is not a subtype here
+  - The four closure sites are not the arity case, and not the async one either
+  - `awfy-towers` is a bounds-check row, not an inliner-budget row
+  - The bounds-guard fix clears one row, and the survey says which
+  - `awfy-bounce`: the two named suspects are dead, and so is the instrument
+  - A handler body counts against the budget, so the obvious shape is worse than the guard
+  - "Zero cost on the straight-line path" was true twice and irrelevant twice
+  - The same case compiles the guard two different ways, and only one is the benchmark
+  - The artefact says 1.284x where the transcription said 1.646x, and the row does not clear
+  - `awfy-bounce`: the eighth hypothesis is the one that moved, and it is a double
+  - The quiet-check cannot see a compile, which is the loudest thing here
+  - And my generalisation used the table instead of the flag
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -118,6 +129,34 @@ one that stands -- twice tonight an earlier section's heading asserted something
 its own body later withdrew, and a reader meeting the first would have taken a
 retracted number as current. Headings now say when they have been withdrawn.
 The row table below is always current; the sections behind it are a history.
+
+### Bar 1 on ART, current as of 2026-09-13
+
+The table below this is the **HotSpot** sweep. The bar is written about Android,
+so this is the column that decides it, and it is kept here because the sections
+that establish each line are thousands of lines down.
+
+    row              AOT      state
+    awfy-list       0.20x     under; the reference collapses under blind AOT
+    awfy-nbody      1.00x     at parity, band 0.007 -- the tightest here
+    awfy-queens     0.92x     under in AOT only
+    awfy-mandelbrot   --      under
+    awfy-permute    1.003x    over by 0.3% and RULED OUT: smaller code, more
+                              inlining, 8 virtual dispatches against 29
+    awfy-sieve        --      UNPLACEABLE: band 0.024 against a distance of 0.003
+    awfy-bounce     1.11x     mechanism found 2026-09-13 -- a loop-carried `dadd`
+                              in the innermost loop, measured 1.11x -> 1.02x.
+                              The fix is the middle end's and is not built.
+    awfy-towers     1.80x     fully priced, every fix refused:
+                              1.284x bounds guards x 1.08x inliner budget
+                              x ~1.30x codegen quality with no mechanism
+
+**Five fixes were priced on `awfy-towers` and all five refused**, which is the
+row's actual state rather than "open": outlining the cold block, dropping the
+integral bounds guards, a per-access try/catch, a shared-handler try/catch, and
+`ifnull` for a null comparison. Four projections about it died in one night, each
+a correct measurement of the wrong quantity -- see the sections at the end.
+
 
 ## Where the rows stand
 
