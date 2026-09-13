@@ -8406,3 +8406,67 @@ was.
 This is written down in this repository as "use `command cp -f`", and the
 failure was not forgetting it. It was **reaching for a backup at all** when the
 file was already committed.
+
+## `agrees_with_c`, built — and it is not a gate step, at 281 seconds
+
+The plan lists this as `✗` and describes it as "one HIR, two renderers". Built
+now as `tooling/jvm/agrees-with-c.sh`, and the scoping took longer than the
+script because **most of what the plan wanted is already covered**:
+
+- **Override descriptors** -- the plan's second motivating case -- are handled.
+  `bridge_for` emits a bridge when an override's descriptor differs from the
+  method it overrides, and `lib.rs:867` refuses by name when it cannot. Done,
+  and not by this.
+- **Everywhere node is the oracle** is covered twice over: the gate drives the
+  differential through C and through the JVM, each against node. Two independent
+  checks; nothing for a third to add.
+
+**What is genuinely uncovered is the space where node is wrong.** `hir::runtime`
+pins BigInt at exactly 128 bits because record 0036 measured `BigInteger`
+reproducing node's cost; node's is arbitrary precision. So `3n` multiplied often
+enough has one answer in node and a different, *deliberate* one here -- and both
+backends are meant to disagree with node identically. Nothing checked that.
+
+So the assertion is not "do they agree with node" but **"where they disagree
+with node, do they disagree identically"**. The differential already prints both
+sides of every disagreement, so the two runs' `nts ` lines compare directly and
+no second harness was needed.
+
+    C answered 10 case(s) node called wrong, the JVM 10
+    the two backends answer identically where node does not
+
+### Two things the fixture had to get past first
+
+`bigint` could not reach this harness at all:
+
+    return v            -> nothing to check: no exported function has scalar
+                           arguments and a scalar result
+    return v.toString() -> NTS1001 a method call on something without methods
+
+`String(v)` is the spelling that works, and a `string` result is what the
+differential drives. **That is why the space was uncovered** -- not because
+nobody thought of it, but because a wrapping bigint had no route to the harness,
+and `sweep`'s `big` row asks only `typeof` and `truthy`.
+
+### Not a gate step, and the number rather than the instinct
+
+**281 seconds** -- two full differential runs, the C side paying clang on the
+emitted program. The `jvm` step's own sweep costs **1s** and earns every run;
+this costs five minutes across three sessions to check a space that has never
+contained a defect. Hand-run when BigInt lowering changes, and the judgement
+gets revisited if it ever fires.
+
+### And the first sabotage attempt proved nothing, again
+
+A `sed` injected into a copy of the script to make the two runs compile
+different programs **did not fire**, and the run reported "identically" -- a
+pass that means nothing, which is the third time tonight a sabotage has been
+aimed at something that could not trigger. Redone explicitly, two fixtures
+differing in one digit, run by hand end to end:
+
+    c: 6 answers, jvm: 6 answers
+    DIFFER -- the comparison detects it
+
+The lesson holds and keeps needing re-learning: **a sabotage has to be watched
+landing, not assumed to have landed.** Injecting one through a `sed` puts the
+thing under test and the thing doing the testing in the same unverified edit.
