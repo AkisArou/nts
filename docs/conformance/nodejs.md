@@ -24566,3 +24566,42 @@ If those 13 were classified so the compiler refused rather than inferred, the vi
 would be five compiled rows becoming a stated refusal instead of a silent zero. That is worth more
 to this ledger than the zero is.
 
+## `.then` is 2 of 414 roots in `stream`, against 35 sites
+
+Asked from the compiler side whether `.then` refusing might be a larger part of `stream`'s compiled
+row than the boundary refusals are, on the strength of 35 `.then(` sites in that module. Measured,
+counting only refusals in `stream`'s own sources:
+
+    NTS1001 roots in stream sources                            414
+    of those, "a method call on something without methods"       2
+    NTS1003 cascades                                          194
+
+The two are `stream/src/end-of-stream.ts:419` and `stream/src/iter/share.ts:103`. The dominant roots
+are elsewhere: 62 properties of unrepresentable type, 30 parameters of the same, 28
+`X which Y does not declare`, 27 struct-offset pointer casts, 24 declared-with-no-representation,
+21 functions returning something unrepresentable.
+
+### A site count is not a root count, and the gap is the whole question
+
+Thirty-five sites, two roots. Thirty-three `.then` calls are in code that never produces a `.then`
+root, and the candidate reason is that their enclosing functions are declined earlier for something
+else -- 194 functions here are named as cascades. **If that is what is happening, implementing
+`.then` publishes none of those 33**: each moves to whatever refusal comes next. This ledger has
+already been caught by that once, when removing what looked like the second-biggest chokepoint
+published zero exports, because a compiler reports one blocker at a time.
+
+So `.then` is not worth pricing off its site count. The prior from this side is two roots in
+`stream`, and what would change it is a before-and-after on **roots** with the rest of the tree held
+still -- not a count of call sites.
+
+### Two corrections on the way to that number
+
+`stream` is **not** one of the five modules publishing nothing compiled -- those are
+`child_process`, `cluster`, `console`, `events` and `timers`. `stream` publishes 2 names and its one
+compiled pass is real, confirmed by the emptying arm.
+
+And my first count of the sites returned **0 of everything**, because `grep -oE '\.then('` leaves an
+unclosed group. Escaping the paren reproduced the 51 / 7 / 1 exactly. A pattern that silently
+matches nothing looks the same as a tree that contains nothing -- the third instance of that family
+in two days, after a filter over a stream that was never produced and a fixture that failed to load.
+
