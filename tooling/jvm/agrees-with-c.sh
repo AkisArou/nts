@@ -106,7 +106,19 @@ fi
 if diff -u "$work/c.answers" "$work/jvm.answers" > "$work/diff" 2>&1; then
   echo "the two backends answer identically where node does not"
 else
-  echo "the two backends disagree with each other:" >&2
-  head -20 "$work/diff" >&2
+  # **Bounded, and it says so.** `head -20` alone would print twenty lines of a
+  # two-hundred-line disagreement and give a reader no way to know which it was.
+  # The failure mode is not a wrong number -- it is a *ranking* that is right
+  # about a sample nobody chose, and the only defence is for the cap to name
+  # itself. `NTS_AGREE_ROWS=0` prints all of them.
+  differing=$(grep -cE '^[-+][^-+]' "$work/diff" || true)
+  rows=${NTS_AGREE_ROWS-20}
+  echo "the two backends disagree with each other on $differing line(s):" >&2
+  if [ "$rows" = 0 ]; then
+    grep -E '^[-+][^-+]' "$work/diff" >&2
+  else
+    grep -E '^[-+][^-+]' "$work/diff" | head -"$rows" >&2
+    [ "$differing" -gt "$rows" ] && echo "... $((differing - rows)) more (NTS_AGREE_ROWS=0 for all)" >&2
+  fi
   exit 1
 fi
