@@ -1238,47 +1238,77 @@ moves -- `tooling/memory` on the native lanes, `getThreadAllocatedBytes` here.
 **Status: fixed by an existing mechanism. The bytecode analysis in (1) is the
 optional half, not the load-bearing one.**
 
-### 4. `same_shape` may merge two field-less foreign layouts
+### 4. `same_shape` merges field-less layouts -- measured, and the reason it is fatal is not the one I gave
 
 ```ts
 import { Runnable } from "java:java.lang";
 import { Observer } from "java:java.util";
 ```
 
-Both are interfaces; neither has fields. If they merge, a `Runnable` is passed
-where the verifier wants an `Observer` and the class fails to load -- or, on a
-lane with no verifier, it does not fail and the wrong method runs.
+I wrote that these "may merge" and that it should be tested rather than assumed.
+**Tested.** Two field-less TypeScript classes:
 
-I said the name must carry identity and that this should be tested rather than
-assumed. Reading it: `same_shape` **already takes `base` as a parameter** and
-compares it, with a comment explaining that it is a parameter rather than a
-caller's comparison "so that neither of them can forget it". But both of these
-have base `Object`, so the base does not separate them. The worry is real.
+```ts
+class Alpha {}
+class Beta {}
+```
 
-**The fix is one line, into a function written for exactly this family.**
-`lower.rs:4615` has `nominal_name(name)` -- *"whether this layout's name is its
-identity"* -- currently `is_error || is_signature_name || is_constructor_name`.
-Record 0096 is the story of what happens without it: an empty `Ctor_Error`
-merged with an empty `Fn...` signature, and node's `path` got
-`normalizeString`'s function parameter emitted with the type of the `Error`
-constructor. A foreign layout is a **fourth member of the same family** --
-deliberately empty, nominal -- so `nominal_name` gains `is_foreign_name(name)`.
+`nts layouts` prints one line -- `Alpha [1 2]`. Two `TypeId`s, one layout, named
+for whichever was seen first. `Beta` is gone. Adding an identical method to each
+does not separate them either: `greet(): number` on both still gives
+`Alpha [1 6]`, because `same_shape` compares the method list and the lists
+agree.
 
-The doc comment there already states the rule in the form that makes this safe:
+**And then the emitter handles it correctly, by a mechanism I did not know was
+there.** `nts emit-jvm` on that program writes four classes, and the shape is
+the answer:
+
+```
+nts/gen/Alpha.class          public class nts.gen.Alpha
+nts/gen/Alpha__Alpha.class   public final class nts.gen.Alpha__Alpha extends nts.gen.Alpha
+nts/gen/Alpha__Beta.class    public final class nts.gen.Alpha__Beta  extends nts.gen.Alpha
+```
+
+The merged layout becomes a **shared base class**, and each original type gets a
+subclass of it. `a` is an `Alpha__Alpha`, `b` is an `Alpha__Beta`, both are
+assignable where the layout is declared, and each carries its own method bodies.
+That is what `81c5200e` moved the floor for. `b instanceof Alpha` folds to
+`const false`, agreeing with node.
+
+So **merging is not currently a hazard for TypeScript layouts**, and my drawback
+was wrong about the present tense. It is still fatal for foreign layouts, and
+the measurement says why much better than the guess did:
+
+> The mechanism that rescues a merge is synthesising a subclass per original
+> type. **It works precisely because we own the names and can invent
+> `Alpha__Beta`.** A `java.lang.Runnable` cannot be made to extend an
+> `nts/gen/...` base: it already exists, its binary name *is* its identity, and
+> its supertype chain is fixed by the jar. There is no `__` form available.
+
+A foreign layout is therefore the one case where a merge cannot be repaired
+downstream, because every repair this backend has depends on owning the class.
+
+**The fix is unchanged and is one line.** `lower.rs:4615` has `nominal_name` --
+*"whether this layout's name is its identity"* -- currently
+`is_error || is_signature_name || is_constructor_name`. Record 0096 is the story
+of the cross-family merge that reached node's `path`. A foreign layout is the
+fourth member of that family, so `nominal_name` gains `is_foreign_name(name)`,
+and the doc comment there already states the rule over both sides:
 
 > a layout whose name is its identity does not merge with a differently-named
 > layout, whatever family the other one is in.
 
-Stated over both sides, so foreign-vs-foreign **and** foreign-vs-TypeScript are
-covered by the same line. `is_foreign_name` goes by prefix and shape, matching
-`is_signature_name`'s precedent: a foreign layout is named `java/lang/Runnable`,
-and `/` cannot appear in a TypeScript identifier.
+`is_foreign_name` goes by prefix and shape, matching `is_signature_name`'s
+precedent: a foreign layout is named `java/lang/Runnable`, and `/` cannot appear
+in a TypeScript identifier.
 
-*Test:* two single-method Java interfaces in one program, asserting two layouts
-survive; plus a foreign layout against an empty TypeScript class.
+*Test:* two single-method Java interfaces, asserting two layouts survive -- and,
+because the merge is benign until it isn't, assert the emitted class names are
+the two binary names rather than one of them plus a `__` form.
 
-**Status: fixed, one line, in a function whose doc comment anticipated the
-family before the family existed.**
+**Status: fixed, one line. The premise is now measured rather than assumed, and
+the measurement moved the argument from "they might collide" to "this is the
+only merge the backend cannot repair".**
 
 ### 5. Non-primitive statics cannot inline
 
@@ -1451,7 +1481,7 @@ TypeScript-level catch waits on a shared change already on the list.**
 | 1 | Public fields | fixed | a foreign access is not a `FieldGet` |
 | 2 | No optimisation through a foreign object | mostly fixed | descriptors are a `Facts` source; the JIT owns the rest |
 | 3 | Everything escapes | fixed | `runtime::keeps`, already per-parameter |
-| 4 | Layouts merging | fixed, one line | `nominal_name`, record 0096's family |
+| 4 | Layouts merging | fixed, one line; premise **measured** | `nominal_name` -- and a merge is the one thing the emitter cannot repair for a class it does not own |
 | 5 | Non-primitive statics | **withdrawn** | it was one instruction |
 | 6 | Cross-thread callback return | fixed for the real surface | `NtsEnv.CURRENT` is a `ThreadLocal` |
 | 7 | Nullability | fixed for annotated jars | 144 annotations on `View` alone |
