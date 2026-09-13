@@ -2934,7 +2934,7 @@ statement one member kind over.
 That keeps `java:` out of the middle end entirely: `bind.rs` is the only place
 the string appears and should stay so.
 
-### The 10 is not the same problem, and I was wrong about it twice
+### The 10 is not the same problem, and it took four diagnoses
 
 First reading: the prelude is a `declare namespace` and a generated binding is a
 `declare module "java:…"`, so a rule keyed on the module specifier covers the 35
@@ -2952,16 +2952,51 @@ class HashMap<K = unknown, V = unknown> { /* the same two members */ }
 //     1x "a method `size` with no declaration in the hierarchy"
 ```
 
-The type parameters are **unused** in the second arm. Adding `<K, V>` and
-changing nothing else produces the refusal, and both arms are inside the same
-`declare module "java:java.util"`, so the shape is constant across the
-experiment. A generic class has no single layout, so a member has no class to
-belong to.
+The type parameters are **unused** in the second arm, and both arms are inside
+the same `declare module "java:java.util"`, so the shape is constant. That
+looked like the answer and was not.
 
-Getting there took two probes whose arms differed in two things each — the
-return type and the declaration together, then the type parameters and the
-member signatures together. The second of those looked like a clean answer and
-was not one.
+**It is not the type parameters, and it is not the position either. It is
+whether anything in the program specialises the class at all.** Both uses in one
+file, same class, same members:
+
+```ts
+export function viaParameter(m: HashMap<string, number>): number { return m.size(); }
+export function viaReturn(c: Catalog): number { const m = c.index(); /* ... */ }
+```
+
+    -> 3x a method without a body
+       cascades naming `HashMap<5>#size` and `Catalog#index`
+       ZERO "a class this compiler has no type for"
+
+Delete `viaParameter`, change nothing else:
+
+    -> 2x a member of `HashMap`, a class this compiler has no type for
+       1x a method `size` with no declaration in the hierarchy
+
+**The parameter-position use fixes the return-position use.** `HashMap<5>` is a
+specialisation something asked for, and once it exists the return arm finds a
+type waiting. So the refusal is a *whole-program* fact — was this instantiation
+ever specialised — and **the failing site is not the site that decides the
+answer**. A parameter requests one; a return does not.
+
+Which makes the fix narrow rather than general: not "layouts for returned
+foreign instantiations", but making a return request the specialisation a
+parameter already requests. The machinery exists and runs; one of the two
+positions does not reach it.
+
+### Four diagnoses, each true about arms that differed in something uncontrolled
+
+`namespace` versus `java:` module; then the type parameters; then return
+position; then whole-program specialisation. The first two are mine, the third
+came back from the C lane, and the fourth only appeared because the repro was
+sent rather than the conclusion — running someone else's arms is what exposed
+the variable neither set controlled.
+
+**And it inverts a trap already recorded here**: *some defects key on a
+program-wide fact, so minimising deletes the trigger.* Here **adding** an
+unrelated exported function deleted the defect. Same cause, opposite direction,
+and a reduction lies in both.
 
 ### Which the erasure argument already answers
 
