@@ -25,7 +25,7 @@ export function clamp(v: number, lo: number, hi: number): number {
 //
 // This emits `bool bool_(bool)` -- a trailing underscore, because `bool` is
 // taken in C. Nothing here says so, and a hand-written `bool` prototype links
-// against nothing. A generated header would make it a non-issue.
+// against nothing. The generated program.h declares the exact C symbol.
 export function bool(v: boolean): boolean {
   return !v;
 }
@@ -58,7 +58,7 @@ export function sumOf(o: { a: number; b: number }): number {
 }
 
 /** The same shape with a NAMED interface. Here to show the contrast in the
- *  emitted name -- NOT a recommendation: a generated header exports a stable
+ *  emitted name -- NOT a recommendation: the generated header exports a stable
  *  alias for either form, so anonymous object types are fine to export. */
 export interface Pair {
   a: number;
@@ -87,7 +87,7 @@ export function greetLength(n: number): number {
 // --- spot 5: a promise needs a checkpoint the caller must know about -------
 //
 // `NtsPromise *later(double)`. The caller does: call, `nts_checkpoint()`, then
-// `nts_promise_state()` / `nts_promise_value()`. It works and is undocumented.
+// `nts_promise_state()` / `nts_promise_value()`. The generated header documents this sequence.
 export async function later(n: number): Promise<number> {
   // The `await` is load-bearing for the demonstration: an `async` function with
   // no suspension is ALREADY SETTLED when it returns, so the checkpoint would

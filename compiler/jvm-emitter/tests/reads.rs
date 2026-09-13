@@ -1614,7 +1614,7 @@ fn a_binding_table_round_trips() {
     // **Refused by name, not skipped.** Silently dropping a bad row makes the
     // call it described fall back to "refused", which is indistinguishable from
     // the feature not being built.
-    let bad = "# fine\n12 3 5 wobbly com/example/ui/Rect.left:I\n";
+    let bad = "# fine\n12 3 5 wobbly - com/example/ui/Rect.left:I\n";
     let why = nts_jvm_emitter::bind::read_table(bad).expect_err("an unknown call kind is refused");
     assert!(why.contains("wobbly") && why.contains("line 2"), "{why}");
 
@@ -1623,8 +1623,27 @@ fn a_binding_table_round_trips() {
 
     // The control: the *well-formed* version of the same row must parse, or the
     // two assertions above would pass on a function that refuses everything.
-    let good = "# fine\n12 3 5 field com/example/ui/Rect.left:I\n";
+    let good = "# fine\n12 3 5 field - com/example/ui/Rect.left:I\n";
     assert_eq!(nts_jvm_emitter::bind::read_table(good).expect("parses").len(), 1);
+
+    // **`-` and `.` are opposite claims and must not collapse.** `-` is "the
+    // analysis could not read this method", which means assume everything
+    // escapes; `.` is "proved: nothing escapes". Reading one as the other turns
+    // ignorance into permission, which is the failure `escapes::table` already
+    // refuses to make and which this file must not undo on the way out.
+    let absent = nts_jvm_emitter::bind::read_table("9 1 5 virtual - a/B.c:()V\n")
+        .expect("parses");
+    assert_eq!(absent[0].keeps, None, "`-` is not analysed");
+    let proved = nts_jvm_emitter::bind::read_table("9 1 5 virtual . a/B.c:()V\n")
+        .expect("parses");
+    assert_eq!(proved[0].keeps, Some(Vec::new()), "`.` is proved-nothing-escapes");
+    let some = nts_jvm_emitter::bind::read_table("9 1 5 virtual 0,2 a/B.c:(LX;LY;LZ;)V\n")
+        .expect("parses");
+    assert_eq!(some[0].keeps, Some(vec![0, 2]));
+    assert!(
+        nts_jvm_emitter::bind::read_table("9 1 5 virtual 0,x a/B.c:()V\n").is_err(),
+        "a non-numeric parameter index is refused rather than dropped"
+    );
 }
 
 /// A foreign key splits back into the parts an invoke needs, including the ones

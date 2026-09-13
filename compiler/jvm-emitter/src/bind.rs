@@ -863,6 +863,18 @@ pub struct Bound {
     pub key: String,
     /// Which instruction this becomes.
     pub call: Call,
+    /// Which of this member's parameters it **keeps** a reference to past the
+    /// call, by index -- `escapes::table`'s answer for the same key.
+    ///
+    /// **`None` and `Some(vec![])` mean opposite things and the distinction is
+    /// the whole point.** `None` is "the analysis could not read this method",
+    /// which means assume every argument escapes: always sound, only
+    /// pessimistic. `Some(vec![])` is "proved: nothing escapes", which is a
+    /// claim, and writing it for a method nobody analysed would turn ignorance
+    /// into permission. `escapes::table` already refuses to record the second
+    /// for the first, and this carries that distinction through the file rather
+    /// than flattening it on the way out.
+    pub keeps: Option<Vec<usize>>,
 }
 
 /// Record a row against the buffer it was just written into.
@@ -886,6 +898,9 @@ fn mark(
         // Filled in by `module_of`, from the assembled text. A row's offset is
         // derived from the file it points into, so it cannot disagree with it.
         end: 0,
+        // Filled in by `declarations_with`, which has the class the analysis
+        // needs to read. `mark` has only a name.
+        keeps: None,
         line: buf.bytes().filter(|byte| *byte == b'\n').count() + 1,
         column,
         key: format!("{owner}.{member}:{descriptor}"),
@@ -1008,6 +1023,12 @@ pub fn declarations_with(
     // Which methods collapse onto one TypeScript signature. Computed before
     // rendering, because the decision is about the *set*: a name is only
     // ambiguous relative to its siblings.
+    // What each member keeps, read from its own bytecode. Keyed by the same
+    // `owner.member:descriptor` the rows are, so the two cannot disagree about
+    // which member an answer belongs to -- `the_escape_table_builds_the_same_key`
+    // is what holds that.
+    let escaping: std::collections::BTreeMap<String, Vec<usize>> =
+        crate::escapes::table(class).into_iter().collect();
     // One derivation, shared with the inherited path -- see `collapsed_of`.
     let collapsed = collapsed_of(class);
     // Names this class inherits as public, so a protected member it *declares*
@@ -1049,6 +1070,11 @@ pub fn declarations_with(
         }
         out.push_str("  }\n");
         table.append(&mut constants_table);
+    }
+    // Attach what the bytecode analysis found, now that every row exists.
+    // Absent stays absent: a member the analysis could not read keeps `None`.
+    for row in &mut table {
+        row.keeps = escaping.get(&row.key).cloned();
     }
     Ok((out, table))
 }
@@ -1988,7 +2014,7 @@ pub fn read_table(text: &str) -> Result<Vec<Bound>, String> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let mut parts = line.splitn(5, ' ');
+        let mut parts = line.splitn(6, ' ');
         let mut next = |what: &str| {
             parts.next().ok_or_else(|| format!("line {}: no {what}", at + 1)).map(str::to_owned)
         };
@@ -1996,6 +2022,12 @@ pub fn read_table(text: &str) -> Result<Vec<Bound>, String> {
         let line_no = next("line")?;
         let column = next("column")?;
         let call = next("call kind")?;
+        // **Before the key, because the key is the rest of the line.** A
+        // descriptor contains no space, but putting a field after it would
+        // still need the split widened every time one is added, and the reader
+        // and the writer would have to agree about which. The last field being
+        // the only unbounded one is a rule that does not need re-deciding.
+        let keeps = next("keeps")?;
         let key = next("member key")?;
         let number = |text: &str, what: &str| {
             text.parse::<usize>().map_err(|_| format!("line {}: {what} is not a number: {text}", at + 1))
@@ -2014,6 +2046,24 @@ pub fn read_table(text: &str) -> Result<Vec<Bound>, String> {
                 other => return Err(format!("line {}: unknown call kind `{other}`", at + 1)),
             },
             key,
+            // `-` is "not analysed", which is not the same as "nothing
+            // escapes" -- see `Bound::keeps`.
+            keeps: if keeps == "-" {
+                None
+            } else if keeps.is_empty() || keeps == "." {
+                Some(Vec::new())
+            } else {
+                Some(
+                    keeps
+                        .split(',')
+                        .map(|it| {
+                            it.parse::<usize>().map_err(|_| {
+                                format!("line {}: `{it}` is not a parameter index", at + 1)
+                            })
+                        })
+                        .collect::<Result<Vec<usize>, String>>()?,
+                )
+            },
         });
     }
     Ok(rows)
@@ -2030,7 +2080,9 @@ pub fn write_table(package: &str, rows: &[Bound]) -> String {
     out.push_str("# Keyed by the byte offset of a declaration's end, which is what\n");
     out.push_str("# `location.span.end` carries: the checker picks the overload, and the\n");
     out.push_str("# declaration it picked selects the row.\n");
-    out.push_str("# <end-byte> <line> <column> <call> <owner.member:descriptor>\n");
+    out.push_str("# <end-byte> <line> <column> <call> <keeps> <owner.member:descriptor>\n");
+    out.push_str("# <keeps> is `-` when the analysis could not read the method, `.` when it\n");
+    out.push_str("# proved nothing escapes, and a comma-separated parameter list otherwise.\n");
     for row in rows {
         let call = match row.call {
             Call::Static => "static",
@@ -2040,7 +2092,18 @@ pub fn write_table(package: &str, rows: &[Bound]) -> String {
             Call::Field => "field",
             Call::StaticField => "staticfield",
         };
-        let _ = writeln!(out, "{} {} {} {call} {}", row.end, row.line, row.column, row.key);
+        let keeps = match &row.keeps {
+            None => "-".to_owned(),
+            Some(indices) if indices.is_empty() => ".".to_owned(),
+            Some(indices) => {
+                indices.iter().map(ToString::to_string).collect::<Vec<_>>().join(",")
+            }
+        };
+        let _ = writeln!(
+            out,
+            "{} {} {} {call} {keeps} {}",
+            row.end, row.line, row.column, row.key
+        );
     }
     out
 }
