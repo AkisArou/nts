@@ -208,7 +208,7 @@ void nts_fs_mkdir_async_bytes(NtsArray *path, double mode, bool recursive,
                               NtsHeader *callback);
 void nts_fs_read_async(double descriptor, double length, double position,
                        NtsHeader *callback);
-void nts_fs_read_bigint_async(double fd, double length, double position,
+void nts_fs_read_bigint_async(double fd, double length, __int128 position,
                               NtsHeader *callback);
 void nts_fs_readv_async(double fd, NtsArray *lengths, double position,
                         NtsHeader *callback);

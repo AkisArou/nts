@@ -2483,7 +2483,7 @@ static void on_read_done(uv_fs_t *request) {
     extra_finish(extra);
 }
 
-static void read_start(double fd, double length, double position,
+static void read_start(double fd, double length, int64_t position,
                        NtsHeader *callback) {
     ExtraRequest *extra = calloc(1, sizeof(ExtraRequest));
     if (extra == NULL) {
@@ -2503,7 +2503,7 @@ static void read_start(double fd, double length, double position,
     if (callback != NULL) nts_retain(callback);
     uv_buf_t one = uv_buf_init(extra->buffer, (unsigned int)extra->capacity);
     int status = uv_fs_read(fs_loop(), &extra->request, (uv_file)fd, &one, 1,
-                            (int64_t)position, on_read_done);
+                            position, on_read_done);
     if (status != 0) {
         async_call_read(callback, (double)status, 0.0,
                         nts_array_new(&nts_node_desc_double, 0));
@@ -2513,17 +2513,14 @@ static void read_start(double fd, double length, double position,
 
 void nts_fs_read_async(double descriptor, double length, double position,
                        NtsHeader *callback) {
-    read_start(descriptor, length, position, callback);
+    read_start(descriptor, length, (int64_t)position, callback);
 }
 
-/* The bigint form differs only in how the caller spelled the offset. It has
- * already become a double by the time it is here, so there is one
- * implementation and not two -- and the note is worth leaving, because a
- * reader looking for where the 64-bit path went should find this rather than
- * conclude it was forgotten. */
-void nts_fs_read_bigint_async(double fd, double length, double position,
+/* Keep the bigint offset integral through the shared libuv path. Converting
+ * it to double loses low bits above 2^53, even for a valid int64_t offset. */
+void nts_fs_read_bigint_async(double fd, double length, __int128 position,
                               NtsHeader *callback) {
-    read_start(fd, length, position, callback);
+    read_start(fd, length, (int64_t)position, callback);
 }
 
 /* `readv` takes the slice lengths and answers one flat array, mirroring how
@@ -2537,7 +2534,7 @@ void nts_fs_readv_async(double fd, NtsArray *lengths, double position,
         double each = NTS_ITEMS(lengths, double)[i];
         if (each > 0.0) total += (size_t)each;
     }
-    read_start(fd, (double)total, position, callback);
+    read_start(fd, (double)total, (int64_t)position, callback);
 }
 
 static void on_scandir_done(uv_fs_t *request) {
