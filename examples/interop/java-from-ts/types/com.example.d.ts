@@ -34,6 +34,7 @@ declare module "java:com.example" {
     /** Throws java.lang.NumberFormatException. Caught at the call site and raised as an `NtsRefusal`; not catchable by a TypeScript `try` yet. */
     parse(a0: string): number;
     repeat<T>(a0: T, a1: number): java.util.List<T> | null;
+    tally<T>(a0: T, a1: Int32Array): java.util.List<T> | null;
     total(a0: java.util.List<java.lang.Number>): number;
     raw(): java.util.List | null;
     cursorAt(a0: number): Catalog.Cursor | null;

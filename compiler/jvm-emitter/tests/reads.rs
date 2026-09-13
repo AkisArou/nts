@@ -995,3 +995,38 @@ fn java_base() -> Option<PathBuf> {
         })
         .clone()
 }
+
+/// The two type renderers agree about a primitive array.
+///
+/// `bind` has a plain renderer and a generic one. They used to carry separate
+/// typed-array tables, and the generic copy keyed on the **rendered** name --
+/// `"int" => "Int32Array"` -- which was correct while brands existed and became
+/// wrong the moment they were removed, because every integral width renders as
+/// `number` now.
+///
+/// **Nothing caught it**, because catching it needs a method that is *both*
+/// generic and takes a primitive array, and the fixture had none: `counts()`
+/// went through the plain renderer and was right, `repeat<T>` went through the
+/// generic one and had no array. `Catalog.tally` exists to be both.
+#[test]
+fn both_renderers_agree_about_a_primitive_array() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let body = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Catalog"))
+        .expect("renders");
+
+    // The plain renderer, on `()[I`.
+    assert!(body.contains("counts(): Int32Array | null;"), "{body}");
+    // The generic renderer, on `(TT;[I)` -- the same `[I`.
+    assert!(
+        body.contains("tally<T>(a0: T, a1: Int32Array): java.util.List<T> | null;"),
+        "a primitive array renders the same in a generic signature:\n{body}"
+    );
+    // And specifically not the wrong width, which is what the second table gave.
+    assert!(
+        !body.contains("tally<T>(a0: T, a1: Float64Array)"),
+        "`[I` is an Int32Array in both renderers, not a Float64Array:\n{body}"
+    );
+}

@@ -107,6 +107,14 @@ public final class Catalog {
         return out;
     }
 
+    /** A generic method whose parameter is a primitive array -- the shape that
+     *  goes through the generic renderer rather than the plain one. */
+    public <T> List<T> tally(T item, int[] counts) {
+        java.util.ArrayList<T> out = new java.util.ArrayList<T>();
+        for (int n : counts) { for (int i = 0; i < n; i++) { out.add(item); } }
+        return out;
+    }
+
     /** A wildcard in a covariant position: read-only in TypeScript terms. */
     public double total(List<? extends Number> xs) {
         double sum = 0;

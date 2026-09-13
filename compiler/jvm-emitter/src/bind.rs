@@ -767,16 +767,17 @@ fn generic_type(signature: &str) -> Option<(String, usize)> {
         }
         b'[' => {
             let (inner, used) = generic_type(&signature[1..])?;
-            let rendered = match inner.as_str() {
-                "byte" => "Uint8Array".to_owned(),
-                "short" => "Int16Array".to_owned(),
-                "char" => "Uint16Array".to_owned(),
-                "int" => "Int32Array".to_owned(),
-                "float" => "Float32Array".to_owned(),
-                "number" => "Float64Array".to_owned(),
-                "bigint" => "BigInt64Array".to_owned(),
-                other => format!("{other}[]"),
-            };
+            // `typed_array`, not a second copy of its table. The copy that was
+            // here keyed on the *rendered* name -- `"int" => "Int32Array"` --
+            // which was right while brands existed and became wrong the moment
+            // they were removed, because every integral width renders as
+            // `number` now. `[I` in a generic signature came out
+            // `Float64Array`.
+            //
+            // Invisible until a method was both generic and took a primitive
+            // array, which nothing in the fixture was: the non-generic renderer
+            // got `counts(): Int32Array` right on the same descriptor.
+            let rendered = typed_array(&signature[1..], &inner);
             Some((rendered, used + 1))
         }
         b'L' => {
