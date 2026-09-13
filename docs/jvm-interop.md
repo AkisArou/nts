@@ -1116,3 +1116,117 @@ somewhere to land: it posts, and the work runs on the environment's own lane.
 What is unbuilt is the adapter that turns a Java callback into an
 `NtsResumable`. That is a smaller thing than "threads are unsupported", which is
 what this document said before the inbox was checked.
+
+# What a zero-field layout is, and every drawback it brings
+
+## The idea
+
+A `Layout` is how HIR describes an object type: a name, a list of fields, a list
+of methods. For a TypeScript class the compiler **owns** that layout — it chose
+where each field lives, so it can emit a field access at a known index and
+reason about everything stored there.
+
+For a Java class we own none of it. We cannot see its private fields and its
+offsets are the JVM's business. So: a `Layout` whose **`fields` list is empty**.
+The compiler knows the type exists and has an identity; it claims to know
+nothing about its contents.
+
+That is not a trick. It is the honest statement, and it is safe for a specific
+reason: **every pass that reasons about object contents keys on fields.** With
+no fields there is nothing for them to conclude, rightly or wrongly.
+
+## Drawback 1, and it nearly sank the proposal: Java has public fields
+
+    public final class android.graphics.Rect {
+      public int bottom;  public int left;  public int right;  public int top;
+
+`Rect.left` is read directly in Android code constantly. So the constraint this
+document proposed one section ago — *"the binding surfaces every member as a
+method, never as a field"* — **is not survivable**, and it took one `javap` of a
+real `android.jar` to find out.
+
+**The resolution keeps both properties.** A foreign field access is *not* a
+`FieldGet`/`FieldSet` op: it goes through the binding mechanism, like a method
+call does, and emits `getfield`/`putfield` directly. Then `fields::analyze`
+never sees it — its soundness sentence is about *its own* ops — and `rect.left`
+works. The rule becomes **"a foreign member is never one of our field ops"**,
+which is about representation rather than about what may be surfaced.
+
+## The remaining drawbacks, in order of how much they cost
+
+**2. No optimisation through a foreign object, ever.** No field narrowing, no
+scalarisation, no escape analysis inside it. This is correct — we must not
+optimise through something we do not own — but it is a real ceiling, and a
+program that puts hot data in a Java object pays it.
+
+**3. A bound call is opaque, so everything passed to it escapes.** `hir::escape`
+cannot see through a Java method, so an object handed to one must be assumed to
+escape. That costs frame placement on the native lanes and scalar replacement
+here.
+
+**4. `same_shape` may merge two field-less foreign layouts.** Two Java classes
+with no fields and no methods in common would look identical. The name must
+carry the identity, which is what `signature_name` does for function types — but
+it is the specific thing to test first, not assume.
+
+**5. Non-primitive statics cannot inline.** `Rect.CREATOR` is a
+`static final Parcelable$Creator` — no `ConstantValue` attribute, so it is a
+`getstatic` and a real reference. Only primitive and `String` constants vanish.
+
+**6. A cross-thread callback cannot return a value.** The inbox gives a
+callback on another thread somewhere to land, but posting means it runs
+**later**. A Java listener that must answer synchronously — `onTouch` returning
+`boolean` — cannot be served that way at all. **Only void, fire-and-forget
+callbacks cross threads**; a value-returning one must be same-thread or be
+refused. This is the sharpest limit on the Android surface and it is not fixable
+by an adapter.
+
+**7. Nullability is only as good as the annotations**, with a checked-in
+overrides file for the jars that have none.
+
+**8. A jar upgrade is a two-step** — regenerate, review the diff — because the
+`.d.ts` is checked in. That is the price of it being fast and greppable, and the
+drift test is what makes the staleness loud.
+
+**9. Exceptions kill the process** until a throw can cross a call on any
+backend.
+
+# Correcting 5 and 8: both were caution, not difficulty
+
+## Inner classes can be bound, and the fix is mechanical
+
+I proposed refusing them. That was laziness dressed as caution.
+
+A true inner class captures its enclosing instance: the class file's constructor
+descriptor carries a synthetic leading parameter, and the **`InnerClasses`
+attribute** names the outer class. Both are readable — the reader we are
+building for other reasons hands us exactly this. So the binding can surface
+
+    outer.newInner(args…)          // or  new Outer.Inner(outer, args…)
+
+and pass the outer instance as the first constructor argument, which is what
+`javac` emits for `outer.new Inner()`.
+
+**So the honest reason to defer is priority, not difficulty**, and the plan
+should say that rather than implying it is hard. Anonymous and local classes
+stay out, because they are not public API surface.
+
+## Ambiguous overloads mostly are not ambiguous
+
+I proposed refusing when `f(int)`, `f(long)` and `f(double)` collapse to
+`f(number)`. But **a TypeScript `number` is an f64**, so `f(double)` is the
+overload that receives it *without loss* — picking it is not a guess, it is the
+only non-lossy choice. `f(int)` would truncate.
+
+That gives a principled total order: **prefer the overload whose parameter
+losslessly receives the TypeScript type.** `number` → `double`, then `float`,
+then `long`, then `int`. `bigint` → `long`. `string` → `String`.
+
+And where two overloads are *equally* lossless — `f(String)` against
+`f(Object)` — **Java's own rule already decides it**: most specific applicable
+method wins, JLS 15.12.2, which is the algorithm `javac` runs and which we can
+run over the same class-file data.
+
+**So refuse only where `javac` itself would call it ambiguous**, which is rare
+and genuinely undecidable. That is a much smaller refusal than the one proposed,
+and it is the rule a Java programmer already expects.
