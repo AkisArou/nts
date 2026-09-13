@@ -500,6 +500,40 @@ hand-written prototype for `bool` links against nothing. *Fix: generate
 `program.h` — the mangling stops mattering the moment the caller includes the
 real declarations.*
 
+**1b. The inbound twin, which does not have that escape.** The same rule renames
+a C function this program wants to *call*. `import { sqrt, pow, fabs } from
+"c:math"` emitted
+
+    double sqrt_(double);   double pow_(double, double);   double fabs_(double);
+        v7 = sqrt_(v6);
+
+and `nm -u` on the object showed `U sqrt_`, `U pow_`, `U fabs_`. libm provides
+`sqrt`. Nothing provides `sqrt_`. Generating a header cannot rescue this one —
+the declaration we need is `<math.h>`'s and the caller is us.
+
+The rule is `c_identifier` (`codegen/common/src/symbols.rs:413`): `RESERVED ∪
+collides_with_a_header ∪ generated ∪ leading underscore` gets a `_` appended,
+and `collides_with_a_header` is MATH ∪ TYPES ∪ STRING ∪ POSIX ∪ HEADER_MACROS
+with an `f`/`l` suffix strip so `powf` and `powl` go too. It is *correct* for
+what it was written for — a program's own `sqrt` must not collide with the
+declaration the runtime header drags in — and exactly wrong for a binding,
+where the collision is the point.
+
+**Resolved in the native lane's in-flight work, not by removing the rule:**
+`Callee::Native` emits the raw external name while compiled TypeScript
+definitions keep going through `c_identifier`. Two callers, two rules, which is
+the right split — a user's `sqrt` still mangles. Verified by the native lane
+end-to-end rather than by symbol table alone: thirteen functions in one program
+including `fabs`/`sqrt`/`pow`, compiled with `-fno-builtin` against the real
+`<math.h>`, linked and run against libm.
+
+Worth keeping the near-miss on record. The two functions first chosen as the
+falsifier were `abs` and `labs`, and `<stdlib.h>` is **not** on the collision
+list — so the arm picked was the one arm the defect could not reach, and the
+binding would have shipped working for two names and broken for `sqrt`, `pow`,
+`sin`, `cos`, `strlen` and `memcpy`. Neither `emit-c` nor `clang -c` returns
+non-zero here; the symbol table and the link are the only places it shows.
+
 **2. An anonymous object type's C name is a whole-program fact**, which is worse
 than "it is generated". Measured, three arms:
 
