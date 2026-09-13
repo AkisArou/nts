@@ -89,8 +89,39 @@ not compile without the other. One proposal or none.
   is a `double`: one word where two were wanted, the same error from the other
   direction. Hence the `i2d`.
 
-### What it does not do
+### `Facts` from the descriptor — the second of the plan's three one-liners
 
-`escape.rs`'s `Callee::External` arm still does not take a `keeps` answer from
-the table, and `Facts` is still not seeded from a JVM descriptor. Both are named
-in the same plan and neither is touched here.
+`facts::from_jvm_descriptor` existed, was documented, was tested, and **had no
+caller outside its own tests**. Correct code that compiled, linked, and did
+nothing. `flow.rs` now calls it for a `Callee::External` whose name is a foreign
+key — and needs no table to do it, because the descriptor is already in the key.
+
+**Measured rather than asserted.** Four probes, arms differing in that one line:
+
+| probe | changed |
+| --- | --- |
+| `Math.abs(b.size())` | **yes** |
+| `b.size() + b.size()` | no |
+| `xs[b.size()]` | no |
+| `b.size() < 10` | no |
+
+```
+without facts          with facts
+  i2d                    istore_1        <- stays an int
+  Math.abs:(D)D          i2l
+                         Math.abs:(J)J   <- integer abs, not floating point
+                         l2d
+```
+
+The three that did not change look right rather than broken: `int + int`
+overflows so the sum must stay `f64`; an index in `[-2^31, 2^31-1]` is not
+provably inside any array, so the bounds check has to stay. One probe in four is
+the honest figure, and it would have been easy to run only the first and claim
+the feature.
+
+### What it still does not do
+
+`escape.rs`'s `Callee::External` arm does not take a `keeps` answer from the
+table. It cannot yet: `escapes::table` computes the answers and the `.bind` rows
+do not carry them, so that one needs a column in the table before it needs a
+line in `escape.rs`. Named in the same plan, untouched here.

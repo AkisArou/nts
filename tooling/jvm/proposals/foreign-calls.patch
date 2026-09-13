@@ -174,6 +174,53 @@ index 18b8696b..89c4f51f 100644
      jvm_class_name(&layout.name)
  }
  
+diff --git a/compiler/core/src/hir/flow.rs b/compiler/core/src/hir/flow.rs
+index c49d52e7..8fe315ea 100644
+--- a/compiler/core/src/hir/flow.rs
++++ b/compiler/core/src/hir/flow.rs
+@@ -495,7 +495,9 @@ fn call_result(context: &Context, callee: &Callee) -> Facts {
+             .get(slot)
+             .copied()
+             .unwrap_or(Facts::TOP),
+-        Callee::External(name) => runtime_result(name).unwrap_or(Facts::TOP),
++        Callee::External(name) => {
++            runtime_result(name).or_else(|| foreign_result(name)).unwrap_or(Facts::TOP)
++        }
+     }
+ }
+ 
+@@ -621,6 +623,31 @@ fn upto(hi: f64) -> Facts {
+     Facts::new(0.0, hi.min(facts::U32_MAX), true, false, false)
+ }
+ 
++/// What a **bound Java member** returns, from the descriptor in its own name.
++///
++/// `from_jvm_descriptor` has existed and been tested since the day the binding
++/// table was designed, and had **no caller outside its own tests** -- correct,
++/// documented, and dead. This is its first use.
++///
++/// The descriptor is already in the key: `owner.member:(params)ret`, so this
++/// needs no table lookup and no plumbing. An `I` is a 32-bit signed integer by
++/// the JVM's own guarantee, enforced by the verifier at class load, so the
++/// facts are a platform invariant rather than an inference.
++///
++/// **What it costs not to have.** Without it a value arriving from Java is
++/// `TOP`: unbounded, possibly NaN, possibly `-0`. So `rect.right - rect.left`
++/// cannot be proved integral, the arithmetic after it stays `f64`, and every
++/// operation downstream carries NaN and `-0` handling that the descriptor had
++/// already ruled out.
++fn foreign_result(key: &str) -> Option<Facts> {
++    if !super::runtime::is_foreign_key(key) {
++        return None;
++    }
++    let descriptor = key.split_once(':')?.1;
++    let returns = descriptor.rsplit_once(')')?.1;
++    super::facts::from_jvm_descriptor(returns)
++}
++
+ fn runtime_result(name: &str) -> Option<Facts> {
+     const INDEX: &[&str] = &[
+         "nts_str_index_of",
 diff --git a/compiler/core/src/hir/lower.rs b/compiler/core/src/hir/lower.rs
 index a68bd64d..9e9df66e 100644
 --- a/compiler/core/src/hir/lower.rs
