@@ -418,9 +418,8 @@ fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<(ClassFile, crate:
         .iter()
         .map(|m| (m.name.clone(), m.descriptor.clone()))
         .collect();
-    let bound = bindings_on_supertypes(class);
     let mut found = Vec::new();
-    for parent in supertypes(class, resolve) {
+    for (parent, bound) in supertypes_bound(class, resolve) {
         let from_interface = parent.access & access::INTERFACE != 0;
         for method in &parent.methods {
             if !visible(method.access) || method.name.starts_with('<') || !is_api(method) {
@@ -1179,19 +1178,59 @@ fn is_api(member: &crate::read::Member) -> bool {
 /// `java/lang/Object` is skipped: `toString` and `wait` on every generated type
 /// is noise nobody is reaching for.
 fn supertypes(class: &ClassFile, resolve: &dyn Resolve) -> Vec<ClassFile> {
-    let mut found = Vec::new();
-    let mut queue: Vec<String> =
-        class.super_name.iter().chain(class.interfaces.iter()).cloned().collect();
+    supertypes_bound(class, resolve).into_iter().map(|(parent, _)| parent).collect()
+}
+
+/// Every supertype, each with the type arguments this class binds on it --
+/// **through intermediates, not only directly**.
+///
+/// `A extends B<Cursor>` and `B<T> extends C<T>` means `C`'s `T` is `Cursor`
+/// for `A`, and nothing in `A`'s own signature says so: it names `B<Cursor>`
+/// and stops. The first version of this resolved one level and left 87
+/// `Cannot find name` behind, all of them a parameter bound two steps up.
+///
+/// So the walk carries the substitution with it. Arriving at `P` from child `C`
+/// with substitution `S`, `P`'s own supertype signature gives what `P` binds on
+/// *its* parents in terms of `P`'s variables, and applying `S` to that rewrites
+/// them in terms of the original class. One pass, and the chain composes.
+fn supertypes_bound(
+    class: &ClassFile,
+    resolve: &dyn Resolve,
+) -> Vec<(ClassFile, std::collections::BTreeMap<String, String>)> {
+    let mut found: Vec<(ClassFile, std::collections::BTreeMap<String, String>)> = Vec::new();
+    let direct = bindings_on_supertypes(class);
+    let mut queue: Vec<(String, std::collections::BTreeMap<String, String>)> = class
+        .super_name
+        .iter()
+        .chain(class.interfaces.iter())
+        .map(|name| (name.clone(), direct.clone()))
+        .collect();
     // A bound rather than a visited set: the verifier rejects a cyclic
     // hierarchy at load, so this only guards a malformed jar.
     for _ in 0..64 {
-        let Some(name) = queue.pop() else { break };
-        if name == "java/lang/Object" || found.iter().any(|it: &ClassFile| it.binary_name == name) {
+        let Some((name, inherited)) = queue.pop() else { break };
+        if name == "java/lang/Object" || found.iter().any(|(it, _)| it.binary_name == name) {
             continue;
         }
         let Some(parent) = resolve.find(&name) else { continue };
-        queue.extend(parent.super_name.iter().chain(parent.interfaces.iter()).cloned());
-        found.push(parent);
+        // What `parent` binds on its own supertypes, rewritten through what we
+        // already know about `parent`'s variables.
+        let mine = bindings_on_supertypes(&parent);
+        let carried: std::collections::BTreeMap<String, String> = mine
+            .iter()
+            .map(|(owner, arguments)| {
+                (owner.clone(), substitute(arguments, &parent, inherited.get(&name).map_or("", |it| it.as_str())))
+            })
+            .chain(inherited.clone())
+            .collect();
+        queue.extend(
+            parent
+                .super_name
+                .iter()
+                .chain(parent.interfaces.iter())
+                .map(|it| (it.clone(), carried.clone())),
+        );
+        found.push((parent, inherited));
     }
     found
 }
