@@ -8168,3 +8168,39 @@ That last line is the one that matters: the check is right and has never been
 seen to fire in the harness it lives in. It will be, the first time an example
 stops agreeing -- which is precisely the event it exists for and precisely the
 event nobody can schedule.
+
+## "Every case was driven" was nine of sixty-one, and it said so about neither
+
+MainClaude's finding tonight, applied to my own scripts: **partial disclosure is
+worse than none.** A tool that says nothing about its limits invites you to
+check; one that names a limit precisely reads as having told you its limits.
+Theirs warned carefully about unparsed lines while silently capping its roots at
+25 of 204, and a corpus reach of zero was concluded from the gap.
+
+`agrees-on-device.sh` is the same shape, and its own comment is the proof that
+somebody had already thought about disclosure here:
+
+> **Do not claim agreement for a comparison that did not happen.** With `javac`
+> off the PATH every case failed to build, `noted` reached nine, `differ` stayed
+> zero, and this line said "every case agrees" -- which is a statement about
+> nine comparisons none of which ran.
+
+That limit was found the hard way and named exactly. The **second** limit was
+never mentioned: `$cases` defaults to a hand-picked nine, so `every case was
+driven` is true and is true *about a domain somebody chose*, with no way to see
+the choice from the output. I recorded that as an "unjustified domain" earlier
+tonight and left it, because expanding the set costs device time three sessions
+pay -- which was a decision about the **set** and I let it stand in for a
+decision about the **sentence**.
+
+    every case was driven -- 9 of the 61 bench cases, the default set
+    every case was driven -- 2 of the 61 bench cases          (named on the CLI)
+
+Two lines, no device cost, and the scope is now in the output rather than in the
+source. The set is still nine and still unjustified; what changed is that a
+reader can see it is nine.
+
+**And the corpus is 61, not 60.** I have written "10 of 60 bench cases" and
+"7 of 60" and "five of sixty" all night, from memory, in figures I sent to
+another session. The number is now read from the tree at print time, which is
+the only reason this one cannot go stale the way "Six do" and "188 of 188" did.

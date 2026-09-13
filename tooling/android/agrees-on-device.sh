@@ -210,7 +210,24 @@ JAVA
 done
 
 echo
-[ "$skipped" = 0 ] && echo "every case was driven" \
+# **"every case" is nine of sixty, and saying so is the whole of this change.**
+#
+# The comment below records this line printing a completeness claim over nine
+# comparisons that never ran, and the fix was to stop claiming *agreement*
+# without one. That disclosed one limit carefully and left a second undisclosed:
+# `$cases` defaults to a hand-picked nine, so "every case was driven" is true
+# and is true **about a domain somebody chose**, and a reader has no way to see
+# the choice from the output.
+#
+# **Partial disclosure is worse than none.** A tool that says nothing about its
+# limits invites you to check; one that names a limit this precisely reads as
+# having told you its limits. MainClaude hit the same shape the same night --
+# a census warning carefully about unparsed lines while silently capping its
+# roots at 25 of 204 -- and concluded a corpus reach was zero from it.
+total_known=$(ls -d "$root"/benches/cases/*/ 2>/dev/null | wc -l | tr -d ' ')
+driven=$(printf '%s\n' $cases | wc -w | tr -d ' ')
+[ "$skipped" = 0 ] \
+  && echo "every case was driven -- $driven of the $total_known bench cases$([ $# -gt 0 ] || echo ', the default set')" \
   || echo "$skipped case(s) this driver cannot spell -- see the comment above"
 [ "$noted" = 0 ] || echo "$noted case(s) did not get as far as running -- see above"
 [ "$differ" = 0 ] || { echo "$differ case(s) answered differently on the two runtimes"; exit 1; }
