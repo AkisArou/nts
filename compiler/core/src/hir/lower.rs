@@ -24976,6 +24976,18 @@ impl<'a> FuncBuilder<'a> {
                 let arguments = self.arguments_of(id);
                 self.call_through_closure(id, callee_node, callee, &arguments)
             }
+            Branch::MethodOn(receiver, receiver_node, member, present) => {
+                // Here and not before the branch, for the reason above.
+                let receiver = match present {
+                    Some(ty) => {
+                        let origin = self.origin(receiver_node);
+                        self.push(OpKind::Unerase { value: receiver }, ty, origin)
+                    }
+                    None => receiver,
+                };
+                let arguments = self.arguments_of(id);
+                self.lower_method_on(id, receiver, receiver_node, member, &arguments)
+            }
             Branch::Element(receiver, index, present) => {
                 // Here and not before the branch, for the reason above.
                 let receiver = match present {
@@ -26231,26 +26243,71 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
         let parts = self.children(callee_node);
+
+        // `a?.b()` -- three children, because the `?.` is a token of its own
+        // between the receiver and the member. Handled before the two-child
+        // destructure below rather than falling through it, which is where it
+        // used to land and be refused by name.
+        if let [receiver_node, dot, member] = parts.as_slice()
+            && self.node(*dot).kind == NodeKind::Syntax(syntax::QUESTION_DOT_TOKEN)
+        {
+            let (receiver_node, member) = (*receiver_node, *member);
+            return self.lower_optional_method_call(id, receiver_node, member, arguments);
+        }
+
         let [receiver_node, member] = parts.as_slice() else {
-            // Named, because "unexpected" is a statement about the reader
-            // rather than about the program. A member access carries a third
-            // child exactly when it is optional-chained -- the question-dot
-            // sits between the receiver and the member -- and every one of the
-            // nine that reached this in `runtime/web-platform` was that,
-            // spelled `record.timer?.cancel()`. Saying "unexpected shape" sent
-            // the reader to look for a parser problem.
-            let chained = parts.len() == 3
-                && self.node(parts[1]).kind == NodeKind::Syntax(syntax::QUESTION_DOT_TOKEN);
             return Err(self.unsupported(
                 callee_node,
-                if chained {
-                    "an optional-chained method call (`a?.b()`)"
-                } else {
-                    "a method callee that is not a receiver and a member"
-                },
+                "a method callee that is not a receiver and a member",
             ));
         };
-        let receiver = self.lower_expression(*receiver_node)?;
+        let (receiver_node, member) = (*receiver_node, *member);
+        let receiver = self.lower_expression(receiver_node)?;
+        self.lower_method_on(id, receiver, receiver_node, member, arguments)
+    }
+
+    /// `a?.b(...)` -- the receiver's absence short-circuits the whole call.
+    ///
+    /// The same three steps as [`Self::lower_optional_access`], with a method
+    /// call where that one has a member read: ask whether the receiver has room
+    /// for an absence, narrow it where it does, and branch. The arguments are
+    /// evaluated **inside** the present arm, because `a?.b(f())` does not call
+    /// `f` when `a` is absent.
+    fn lower_optional_method_call(
+        &mut self,
+        id: NodeId,
+        receiver_node: NodeId,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let receiver = self.lower_expression(receiver_node)?;
+        let Some(absent) = self.absence_of(receiver_node, receiver) else {
+            // A receiver with no room for an absence is never absent, so this is
+            // an ordinary method call. TypeScript permits the shape and reports
+            // it as unnecessary.
+            return self.lower_method_on(id, receiver, receiver_node, member, arguments);
+        };
+        let present = self.present_of(receiver_node, receiver);
+        self.lower_branching_value(
+            id,
+            absent,
+            Branch::Absent,
+            Branch::MethodOn(receiver, receiver_node, member, present),
+        )
+    }
+
+    /// A method call whose receiver is already lowered.
+    ///
+    /// Split out of [`Self::lower_method_call`] so the optional-chained form can
+    /// hand it a receiver that has been narrowed inside the present arm.
+    fn lower_method_on(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        receiver_node: NodeId,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
 
         // `n.toString()` is `ToString` spelled as a method. A number has no
         // other method this compiler provides, so the arm is exact rather than
@@ -26259,9 +26316,9 @@ impl<'a> FuncBuilder<'a> {
             self.values[receiver.0 as usize].ty,
             HirType::Float { .. } | HirType::Int { .. }
         ) {
-            let name = self.node(*member).text.clone().unwrap_or_default();
+            let name = self.node(member).text.clone().unwrap_or_default();
             if name == "toString" && arguments.is_empty() {
-                return self.as_string(*receiver_node, receiver);
+                return self.as_string(receiver_node, receiver);
             }
             // `n.toString(radix)`, which is three calls from every module's
             // front door: `ERR_INVALID_ARG_TYPE` renders the offending value
@@ -26275,7 +26332,7 @@ impl<'a> FuncBuilder<'a> {
             if name == "toString" && arguments.len() == 1 {
                 let radix = self.lower_expression(arguments[0])?;
                 let radix = self.coerce(radix, &HirType::NUMBER, arguments[0])?;
-                let value = self.coerce(receiver, &HirType::NUMBER, *receiver_node)?;
+                let value = self.coerce(receiver, &HirType::NUMBER, receiver_node)?;
                 let origin = self.origin(id);
 
                 return self.lower_radix_to_string(id, value, radix, &origin);
@@ -26292,7 +26349,7 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::String)
         ) && arguments.is_empty()
             && matches!(
-                self.node(*member).text.as_deref(),
+                self.node(member).text.as_deref(),
                 Some("valueOf" | "toString")
             )
         {
@@ -26305,7 +26362,7 @@ impl<'a> FuncBuilder<'a> {
             self.values[receiver.0 as usize].ty,
             HirType::Managed(ManagedType::String)
         ) {
-            return self.lower_string_method(id, receiver, *member, arguments);
+            return self.lower_string_method(id, receiver, member, arguments);
         }
         // A view takes the same two steps as an array, and for the same reason:
         // `class Bytes extends Uint8Array` declares its own methods, and the
@@ -26317,7 +26374,7 @@ impl<'a> FuncBuilder<'a> {
             self.values[receiver.0 as usize].ty,
             HirType::Managed(ManagedType::View(_))
         ) {
-            return self.lower_view_method(id, receiver, *receiver_node, *member, arguments);
+            return self.lower_view_method(id, receiver, receiver_node, member, arguments);
         }
 
         if let HirType::Managed(ManagedType::Array(element)) =
@@ -26341,37 +26398,37 @@ impl<'a> FuncBuilder<'a> {
             if let Some(declared) = self
                 .snapshot
                 .node_types
-                .get(receiver_node)
+                .get(&receiver_node)
                 .copied()
                 .map(|ty| self.class_behind(ty))
-                && let Some(name) = self.literal_name(*member)
+                && let Some(name) = self.literal_name(member)
                 && self.hierarchy.declaring(declared, &name).is_some()
             {
-                return self.lower_object_method(id, receiver, declared, *member, arguments);
+                return self.lower_object_method(id, receiver, declared, member, arguments);
             }
-            return self.lower_array_method(id, receiver, &element, *member, arguments);
+            return self.lower_array_method(id, receiver, &element, member, arguments);
         }
 
         if let table @ HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_)) =
             self.values[receiver.0 as usize].ty.clone()
         {
-            return self.lower_table_method(id, receiver, &table, *member, arguments);
+            return self.lower_table_method(id, receiver, &table, member, arguments);
         }
 
         if let HirType::Managed(ManagedType::Date) = self.values[receiver.0 as usize].ty {
-            return self.lower_date_method(id, receiver, *member, arguments);
+            return self.lower_date_method(id, receiver, member, arguments);
         }
 
         if let HirType::Managed(ManagedType::Buffer) = self.values[receiver.0 as usize].ty {
-            return self.lower_buffer_method(id, receiver, *member, arguments);
+            return self.lower_buffer_method(id, receiver, member, arguments);
         }
 
         if let HirType::Managed(ManagedType::DataView) = self.values[receiver.0 as usize].ty {
-            return self.lower_data_view_method(id, receiver, *member, arguments);
+            return self.lower_data_view_method(id, receiver, member, arguments);
         }
 
         if let HirType::Managed(ManagedType::Symbol) = self.values[receiver.0 as usize].ty {
-            return self.symbol_method(id, receiver, *member, arguments);
+            return self.symbol_method(id, receiver, member, arguments);
         }
 
         let HirType::Managed(ManagedType::Object(type_id)) =
@@ -26379,7 +26436,7 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Err(self.unsupported(id, "a method call on something without methods"));
         };
-        self.lower_object_method(id, receiver, type_id, *member, arguments)
+        self.lower_object_method(id, receiver, type_id, member, arguments)
     }
 
     /// A method on a `Date`.
@@ -32587,6 +32644,13 @@ enum Branch {
     /// must not call `g` when `f` is absent, which is what the specification
     /// says and what a branch taken earlier would get wrong.
     Invoke(ValueId, NodeId, Option<HirType>),
+    /// `a?.b(...)`'s present arm: a method call on an already-lowered receiver.
+    ///
+    /// Carries the receiver's *node* as well as its value, because the dispatch
+    /// inside asks the node for its type in several arms. The arguments are not
+    /// here: they are lowered from `id` inside the arm, so that `a?.b(f())` does
+    /// not call `f` on the absent path.
+    MethodOn(ValueId, NodeId, NodeId, Option<HirType>),
     /// `xs?.[i]`'s read, in the arm where the receiver is present.
     ///
     /// The index is lowered *here* rather than before the branch, for the same
