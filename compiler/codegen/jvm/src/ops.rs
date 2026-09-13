@@ -159,6 +159,18 @@ fn growable_external(name: &str, holds: &str) -> Option<(String, &'static str, S
         "includes" | "includes_ref" => ("includes", format!("(L{class};{element})Z")),
         "includes_str" => ("includesStr", format!("(L{class};{element})Z")),
         "fill" | "fill_ref" | "fill_bool" => ("fill", format!("(L{class};{element})L{class};")),
+        // **Void**, with `keep_first` below the only other one here. Most
+        // growable helpers answer something -- a new length, an element, the
+        // array back for chaining -- because most are expressions in
+        // JavaScript. `xs.length = n` is a *statement*, so there is nothing to
+        // leave on the stack, and a `D` written out of habit would leave one
+        // value unconsumed at every call site: a verifier failure rather than a
+        // miscompile, which is the good direction to be wrong in.
+        //
+        // The class comes from the argument as it does above, so `_ref` needs
+        // no separate method -- `NtsArrayL.setLength` is the one that clears
+        // the dropped slots.
+        "set_length" | "set_length_ref" => ("setLength", format!("(L{class};D)V")),
         "reverse" | "reverse_ref" => ("reverse", format!("(L{class};)L{class};")),
         "slice" | "slice_ref" => ("slice", format!("(L{class};DD)L{class};")),
         // `_value` joins the two above rather than needing a third method:
@@ -5394,5 +5406,39 @@ mod signatures {
         // other. The rule is `dexes.sh`'s and it is easier to quote than to
         // keep: a floor is a number a run produced.
         assert!(wanted.len() >= 73, "only {} call(s) were checked", wanted.len());
+    }
+}
+
+#[cfg(test)]
+mod set_length {
+    /// The name `lower` emits resolves, and to a **void** method.
+    ///
+    /// Added with the entry rather than after it: the lowering that calls this
+    /// landed separately, so between the two commits nothing exercised the row
+    /// and a typo would have surfaced as `NoSuchMethodError` at run time in
+    /// someone else's gate step.
+    #[test]
+    fn the_name_lower_emits_resolves_to_a_void_method() {
+        for (holds, class) in
+            [("D", "nts/rt/NtsArrayD"), ("Z", "nts/rt/NtsArrayZ"), ("L", "nts/rt/NtsArrayL")]
+        {
+            let (owner, method, descriptor) =
+                super::growable_external("nts_array_set_length", holds)
+                    .unwrap_or_else(|| panic!("no entry for a {holds} array"));
+            assert_eq!(owner, class);
+            assert_eq!(method, "setLength");
+            assert_eq!(descriptor, format!("(L{class};D)V"));
+        }
+
+        // `_ref` is the same Java method: the class already came from the
+        // argument, so the suffix chooses nothing here.
+        assert_eq!(
+            super::growable_external("nts_array_set_length_ref", "L"),
+            super::growable_external("nts_array_set_length", "L"),
+        );
+
+        // The control. A stem that is not in the table must still be `None`,
+        // or the assertions above pass on a function that accepts anything.
+        assert!(super::growable_external("nts_array_set_width", "D").is_none());
     }
 }
