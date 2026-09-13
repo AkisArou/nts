@@ -936,9 +936,9 @@ backend_examples() {
 # was not its own is worse than one left too low: it fails on the next clean run
 # and the failure names the wrong thing.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  # 197 -> 198 -> 199 -> 200 on 2026-09-13. One below its sibling, and it is named:
+  # 197 through 201 on 2026-09-13. One below its sibling, and the one is named:
   # `this-in-a-field-initializer`, which the run prints rather than absorbing.
-  backend_examples 200 "through the LLVM backend, counting" ); }
+  backend_examples 201 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -949,15 +949,16 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 #
-# **198 -> 199 -> 200 -> 201 on 2026-09-13**, for `a-closure-over-a-loop-variable`,
-# `a-symbols-description` and `a-comparison-through-valueof`. This floor
+# **198 through 202 on 2026-09-13**, for `a-closure-over-a-loop-variable`,
+# `a-symbols-description`, `a-comparison-through-valueof` and
+# `a-slot-typed-exactly-undefined`. This floor
 # is *below* its corpus and ratchets, which is a different instrument from the
 # JVM's `exact` one below: that lane's floor equals its corpus and so cannot
 # ratchet, only hold. Both are right where they are, and the difference is worth
 # not flattening -- an example this backend does not yet agree on should lower
 # the number it can hold, not fail the step the day it lands.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 201 "through the LLVM backend" ); }
+  backend_examples 202 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1217,7 +1218,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   status=$?
   printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
   [ "$status" -eq 0 ] || return 1
-  backend_examples 201 "through the JVM backend" exact ); }
+  backend_examples 202 "through the JVM backend" exact ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

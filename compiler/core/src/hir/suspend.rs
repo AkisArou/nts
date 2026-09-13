@@ -261,6 +261,29 @@ fn crossing(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
                         consider(*arg);
                     }
                 }
+                // **And whatever the handler's body reads, which its arguments
+                // are not.** The loop above covers what is *passed* to the
+                // handler; a handler is a block like any other and can read any
+                // value that was live before the `await`, without it appearing
+                // in `args`.
+                //
+                // `NotDominated { value: %4, used_in: b8 }` in
+                // `Closure48#call__resume`: a closure read from the captured
+                // environment before the suspension and *called* by the
+                // rejection path. It is not an argument, it is not read between
+                // the `await` and the end of its block, and the handler is
+                // reached from the dispatch -- so all three of the sets above
+                // miss it, each for its own reason.
+                //
+                // `live_in` of the handler is exactly the set, and it is
+                // available because `crossing` runs on the **unsplit**
+                // function, where the handler is an ordinary block that
+                // liveness has already solved. The paragraph above discovered
+                // this failure once and fixed the half of it that its own
+                // program exercised.
+                for operand in live.live_in(rejection.handler) {
+                    consider(*operand);
+                }
             }
         }
     }

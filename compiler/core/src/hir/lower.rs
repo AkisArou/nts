@@ -30910,7 +30910,7 @@ impl<'a> FuncBuilder<'a> {
         } else {
             OpKind::ConstUndefined
         };
-        if ty.as_ref() == Some(&HirType::Erased) {
+        if matches!(ty, Some(HirType::Erased | HirType::Void)) {
             let origin = self.origin(id);
             return Ok(self.push(literal, HirType::Erased, origin));
         }

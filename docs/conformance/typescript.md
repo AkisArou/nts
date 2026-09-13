@@ -581,15 +581,31 @@ each of four modules — and broke `sweep`, because after `b.f = null` the check
 conversion down the tagged path while the storage is still a pointer. The
 missing arm is not an oversight; it is the absence of a single right answer.
 
-Reading a `Void` contextual type as erased fixes the twin (`value: undefined`,
-and `return undefined` from a `void` function, both refused today) and turns
-**12 of 24 addons red** with `NotDominated` inside a generator resume — a
-latent bug in a path the refusal had been standing in front of, and the second
-load-bearing over-refusal found this week after `for (var i = …)`.
+**The `undefined` twin landed the same day, and the price was a bug three files
+away.** Reading a `Void` contextual type as erased fixes `value: undefined` and
+`return undefined` from a `void` function — and on its own it turns **12 of 24
+addons red** with `NotDominated` inside a generator resume.
 
-What it needs is for the contextual type at the literal to come from the
-**layout** the field path already decided rather than from the checker a second
-time. `blockers/a-property-typed-exactly-null` carries both measurements.
+It does not introduce that. The refusal was standing in front of a
+generator-resume path, and removing it was the first thing ever to compile one.
+The bug is in `hir::suspend`: a rejection handler is a block like any other and
+can read any value live before the `await`, and `crossing` spilled what was
+*passed* to the handler without spilling what its body *reads*. The comment
+above that code had found the same failure once before and fixed the half its
+own program exercised. `live_in` of the handler block is the whole set, and it
+was available all along because `crossing` runs on the **unsplit** function.
+
+Refusals after: util −16, net −18, assert −16, stream −17, and 21 distinct
+things across 16 modules under `` `X` or `X` where what it stands in for is not
+a reference `` — the sixth-largest cause in the census.
+
+`examples/a-slot-typed-exactly-undefined` is 116 cases across four functions.
+**No arm in it exercises the suspend repair**, which is measured rather than
+assumed: two candidates were written and each passed against a build with the
+repair reverted. The repair's witness is the corpus and `addons` is its guard.
+
+`null` is still refused and is a different problem —
+`blockers/a-property-typed-exactly-null` carries its measurement.
 
 One absence is also enough to answer `typeof`. Which of `"string"` and
 `"object"` a `string | null` gives depends on what the pointer holds — a runtime

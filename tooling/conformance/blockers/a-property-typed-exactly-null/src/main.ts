@@ -48,16 +48,20 @@
 // standing in for, and the missing arm is not an oversight — it is the absence
 // of a single right answer.
 //
-// **2. Reading a `Void` contextual type as erased**, which fixes the twin case
-// (`value: undefined`, and `return undefined` from a `void` function, both of
-// which refuse today). Also three characters. Examples: 201 of 201 on all three
-// backends. Addons: **12 of 24 regressed**, `refusing to emit code from invalid
-// HIR`, `NotDominated` inside a generator resume.
+// **2. Reading a `Void` contextual type as erased** — which fixed the twin case
+// and **landed**, once the bug it uncovered was fixed. It turned 12 of 24 addons
+// into `refusing to emit code from invalid HIR` on its own, `NotDominated`
+// inside a generator resume, because the refusal had been standing in front of a
+// generator-resume path and removing it was the first thing ever to compile one.
 //
-// It does not introduce that. The refusal stood in front of a generator-resume
-// path where a value crosses a `yield` without being placed in the frame, and
-// removing it was the first thing ever to compile that path. The second
-// load-bearing over-refusal found this week — the other was `for (var i = …)`.
+// The bug was in `hir::suspend`: a rejection handler can read any value live
+// before the `await`, and `crossing` spilled what was *passed* to the handler
+// without spilling what its body reads. `live_in` of the handler is the set.
+// `examples/a-slot-typed-exactly-undefined` holds the result.
+//
+// So the twin is closed and this is not, which is the opposite of where the day
+// started — `null` looked like the easier half because it was the one with a
+// missing arm rather than a disagreement between two.
 //
 // # What it actually needs
 //
