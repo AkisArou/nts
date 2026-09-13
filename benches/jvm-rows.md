@@ -7502,3 +7502,45 @@ number standing as a measured one.
 
 `awfy-towers` is unchanged: flat on this axis, and the double counter is ruled
 out with a number rather than an argument.
+
+### The frame counts above are wrong, and the window was biased against the answer
+
+Retracted within the hour, by the rule this file already has about counting what
+an instrument could not run.
+
+I counted `InlineInfo[` inside a **fixed 3,000-line window** from each method's
+header and reported that *we* inline more -- 656 frames against the reference's
+622, in half the code. Bounded properly, by the next method's header:
+
+    method                 spans   windowed   inlined frames
+    ours   moveDisks       3090      3000     674   (window said 656)
+    ref    moveDisks       5139      3000    1128   (window said 622)
+
+**The reference inlines 67% more than we do, not less.** The window truncated
+3% of our method and **42% of theirs** -- biased against precisely the side that
+had more to count, because the side with more inlining has a longer dump, which
+is the thing being measured. A fixed window over a variable-length record does
+not sample it, it *ranks by length* and then reports the ranking as the finding.
+
+So the corrected picture, and it points the opposite way from the retracted one:
+
+    ours       5,764 bytes     674 inlined frames
+    reference 10,815 bytes   1,128 inlined frames    and 1.81x faster
+
+**Inlining is back as the leading candidate for `awfy-towers`'s residual**, and
+the mechanism is the one this file already established: ART's inliner budget is
+per-callee, our `popDiskFrom` is 51 dex units against the reference's 25 and our
+`pushDisk` 66, and a recursive chain inlines *deeper* the smaller its callees
+are. The reference is not inlining one more frame than us; it is inlining
+another four hundred and fifty.
+
+**What this does not license.** The 1.08x figure earlier in this file was
+*measured* -- ours against a transcription under AOT with the JIT column as a
+control -- and it stands as what that comparison measured. A structural count of
+frames is not a timing, and I have spent this night learning what happens when
+those two are treated as one number. The honest statement is that the residual
+now has a candidate with artefact evidence behind it, and no measurement.
+
+And it is the second time tonight a number came from an instrument's limit
+rather than the program: `0 lines` of an odex dump because both sides install as
+one package, and now `622` because a window was shorter than the record.
