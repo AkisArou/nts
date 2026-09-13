@@ -1804,7 +1804,7 @@ counting too until an expression used the array on both sides of the call:
 them. Five helpers had it — the three `fill`s and both `reverse`s — and it had
 been there as long as they had.
 
-The lesson is about where it was found rather than what it was. `examples/rc`
+The lesson is about where it was found rather than what it was. `tooling/gate/rc.sh`
 runs every example under the counting provider and asks whether the program
 returns to its baseline; that check has been green throughout, because no
 example had ever written the two calls in one expression. A conservation law is
