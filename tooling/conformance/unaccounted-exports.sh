@@ -25,6 +25,28 @@
 # than this counts -- the re-export column says how many such lines it has, and
 # `fs` has eleven, which makes its 44 a floor rather than a total. And a name
 # published under an alias is counted as unaccounted.
+#
+# # It subtracts sets, and it used to subtract counts
+#
+# The first version computed `declared - published - declined` as integers and
+# clamped a negative result to zero. Those three do not count the same things: a
+# `no wrapper` line can name a namespace member or a class field -- `Stats.atime` --
+# which was never in `declared`, so the third term routinely exceeded the first.
+# Measured on 2026-09-13: **18 of 26 modules produced a negative gap and therefore
+# printed 0**, `fs` at -82 and `stream` at -73. A check cannot be failed by a module
+# whose answer saturates, and this one could not be failed by two thirds of them.
+#
+# So all three are sets of names now, and the remainder is a set difference, which
+# cannot go negative and can be printed. The numbers move: with the arithmetic form
+# and matched provenance `cluster` read -2 and now reads its actual remainder.
+#
+# # Pass the same build the logs came from
+#
+# `published` reads `$NTS_ADDON_OUT` and defaults to `target/node`, which is a
+# shared directory any session may have rebuilt from any commit. Reading it beside
+# logs from a different build is how `cluster` reported 4 unaccounted in one run and
+# -2 in the next, from the same logs. Pass `NTS_ADDON_OUT` pointing at the build the
+# logs describe, or the two columns are about two programs.
 set -u
 logs="${1:?usage: unaccounted-exports.sh <emit-log-dir>}"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -32,19 +54,40 @@ cd "$root"
 
 printf '%-20s %6s %6s %6s %8s %s\n' module declared published declined unaccounted "re-export lines"
 total=0
+addons="${NTS_ADDON_OUT:-$root/target/node}"
 for log in "$logs"/*.log; do
   module=$(basename "$log" .log)
   entry="runtime/node/$module/src/main.ts"
   [ -f "$entry" ] || continue
-  declared=$(grep -hoE '^export (async )?(function|class|const) [A-Za-z_$][A-Za-z0-9_$]*' "$entry" |
-    awk '{print $NF}' | sort -u | wc -l)
-  reexports=$(grep -cE '^export (\*|\{)' "$entry")
-  published=$(node -e "try{console.log(Object.keys(require('${NTS_ADDON_OUT:-$root/target/node}/$module.node')).length)}catch(e){console.log(0)}" 2>/dev/null | tail -1)
-  declined=$(grep -cE 'no wrapper' "$log")
-  gap=$((declared - published - declined))
-  [ "$gap" -lt 0 ] && gap=0
+  # Three sets of names, so the remainder is a difference and not a subtraction.
+  # `awk` rather than the shell's `grep`, which is ugrep here and has missed a real
+  # match before; every count below is load-bearing.
+  declared=$(awk 'match($0, /^export (async )?(function|class|const) [A-Za-z_$][A-Za-z0-9_$]*/) {
+      n = split(substr($0, RSTART, RLENGTH), p, " "); print p[n] }' "$entry" | sort -u)
+  reexports=$(awk '/^export (\*|\{)/ {n++} END {print n+0}' "$entry")
+  # The addon's keys, **plus what `shape.mjs` assigns onto the module.** A name the
+  # shape supplies is published, and reading only the addon called `querystring.encode`
+  # unaccounted while leaving `decode` -- the line above it, the same construct -- alone.
+  # A check that treats two spellings of one thing differently is reporting on itself.
+  published=$({ node -e "try{console.log(Object.keys(require('$addons/$module.node')).join('\n'))}catch(e){}" 2>/dev/null
+    shape="runtime/node/$module/shape.mjs"
+    [ -f "$shape" ] && awk 'match($0, /^[ \t]*[A-Za-z_$][A-Za-z0-9_$]*\.[A-Za-z_$][A-Za-z0-9_$]*[ \t]*=/) {
+        s = substr($0, RSTART, RLENGTH); sub(/^[ \t]*[^.]*\./, "", s); sub(/[ \t]*=$/, "", s); print s }' "$shape"
+  } | sort -u)
+  # A `no wrapper for X:` line may name `Stats.atime`; only the owner matters here,
+  # because that is the name `declared` could ever have held.
+  declined=$(awk 'match($0, /^no wrapper for [A-Za-z_$][A-Za-z0-9_$.]*/) {
+      s = substr($0, RSTART + 15, RLENGTH - 15); sub(/\..*/, "", s); print s }' "$log" | sort -u)
+  remainder=$(comm -23 <(printf '%s\n' "$declared" | sed '/^$/d') \
+    <(printf '%s\n%s\n' "$published" "$declined" | sed '/^$/d' | sort -u))
+  gap=$(printf '%s\n' "$remainder" | sed '/^$/d' | wc -l)
   total=$((total + gap))
-  printf '%-20s %6s %6s %6s %8s %s\n' "$module" "$declared" "$published" "$declined" "$gap" "$reexports"
+  printf '%-20s %6s %6s %6s %8s %s\n' "$module" \
+    "$(printf '%s\n' "$declared" | sed '/^$/d' | wc -l)" \
+    "$(printf '%s\n' "$published" | sed '/^$/d' | wc -l)" \
+    "$(printf '%s\n' "$declined" | sed '/^$/d' | wc -l)" \
+    "$gap" "$reexports"
+  [ "$gap" -gt 0 ] && printf '%s\n' "$remainder" | sed '/^$/d' | sed 's/^/                       /'
 done
 
 echo
