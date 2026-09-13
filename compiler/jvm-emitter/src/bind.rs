@@ -669,6 +669,22 @@ fn render_fields_into(
     constants_table: &mut Vec<Bound>,
 ) -> Result<(), String> {
     let is_enum_class = class.access & access::ENUM != 0;
+    // **A field and a method may share a name in Java and may not in
+    // TypeScript.** `ByteArrayInputStream` has `protected int mark` beside
+    // `void mark(int)`, and `Calendar` has `protected boolean[] isSet` beside
+    // `boolean isSet(int)` -- `TS2300 Duplicate identifier`, and the class does
+    // not compile rather than the member.
+    //
+    // The field yields, because a call site is the common case and a protected
+    // field is the rarer one. Same contract as a renamed overload: the binding
+    // table row still carries `mark:I`, so a read still reaches the field Java
+    // declared.
+    let shadowed: std::collections::BTreeSet<&str> = class
+        .methods
+        .iter()
+        .filter(|m| visible(m.access) && is_api(m))
+        .map(|m| m.name.as_str())
+        .collect();
 
     for field in class.fields.iter().filter(|f| visible(f.access)) {
         let Some((rendered, _)) = field
@@ -723,6 +739,11 @@ fn render_fields_into(
             &field.descriptor,
             if is_static { Call::StaticField } else { Call::Field },
         );
+        let emitted = if shadowed.contains(field.name.as_str()) {
+            format!("{}$field", field.name)
+        } else {
+            field.name.clone()
+        };
         // A namespace member is a `const`. `static readonly` is class syntax
         // and is `TS1128 Declaration or statement expected` here -- the second
         // thing wrong with an interface constant, after `static` on a member.
@@ -738,7 +759,7 @@ fn render_fields_into(
                     if is_final { "readonly " } else { "" }
                 )
             },
-            field.name,
+            emitted,
             if provably_present { rendered.clone() } else { returns(&rendered, &field.annotations) },
         );
     }
