@@ -1197,7 +1197,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # them agrees. A floor this lane did not earn by building anything is still a
   # floor it has to hold -- and because it equals the corpus it cannot ratchet,
   # only hold, so an example that stops agreeing fails on the day it lands.
-  backend_examples 199 "through the JVM backend" exact ); }
+  backend_examples 200 "through the JVM backend" exact ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
