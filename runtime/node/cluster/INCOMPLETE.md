@@ -144,6 +144,32 @@ and the count moves the honest way rather than the flattering one. The residual 
 not flowing through a received handle when `net` is ours -- is a real defect and is recorded
 here rather than in the module that was passing it.
 
+
+## `test-cluster-uncaught-exception` needs `process` in `uses`, and that costs 11 files
+
+The test installs `process.on('uncaughtException')` in a cluster primary, throws, and expects
+its handler to exit 42. Through this harness the same branch exits **0** where plain node
+exits 42, because `run-one.mjs` catches a module's escaped exception and only hands it on to a
+module that declares the hook:
+
+    // A module that owns uncaught-exception dispatch gets first refusal.
+    if (!dispatchEscapedException(e)) { reportFailure(e); return; }
+
+`process` owns it, and `process` is not in this module's `uses` -- so nothing claims the
+exception and the harness reports the failure the test is about.
+
+**Measured rather than assumed.** Adding `process` to `uses`:
+
+    86 file(s): 66 passed, 18 failed    (against 77 / 7)
+
+**Eleven files lost, none gained** -- `bind-twice`, `eaddrinuse`, `fork-env`,
+`fork-windowsHide`, `message`, `primary-error`, `primary-kill`, `rr-domain-listen`,
+`setup-primary-argv`, `worker-events`, `worker-exit`. Substituting `process` changes what a
+primary *is* far more than it changes what one throw does. Reverted.
+
+So this file is not a defect in `cluster`: it is one test's price against eleven others', and
+the price is recorded rather than guessed at.
+
 ## What is here
 
 The handshake, and it is the whole of the module. A primary forks a child with
