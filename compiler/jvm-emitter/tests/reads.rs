@@ -310,3 +310,137 @@ fn android_view_carries_its_nullability_in_the_invisible_table() {
     assert!(view.methods.len() > 100, "View should have many methods, got {}", view.methods.len());
     assert_eq!(view.super_name.as_deref(), Some("java/lang/Object"));
 }
+
+/// The generator, against the same fixture the reader is tested on.
+///
+/// The checked-in `examples/interop/java-from-ts/types/com.example.d.ts` was
+/// written by hand as the **specification** for this function. Comparing the
+/// two is how the spec stops being aspirational -- where they differ, one of
+/// them is wrong, and the difference is the work list.
+#[test]
+fn the_generator_produces_declarations_for_the_fixture() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let catalog = ours(&classes, "com.example.Catalog");
+    let body = nts_jvm_emitter::bind::declarations(&catalog).expect("Catalog should render");
+
+    // The decisions, each measured or forced, asserted individually so a
+    // failure names which one moved rather than printing a diff of the whole
+    // file.
+    let expect = |needle: &str| {
+        assert!(body.contains(needle), "expected `{needle}` in:\n{body}");
+    };
+
+    expect("static readonly MAX: int;");       // I -> branded int
+    // A `ConstantValue` field IS its constant, so it is provably never null --
+    // without this it read `string | null` for a compile-time string literal.
+    expect("static readonly NAME: string;");
+    // But a `static final` reference that is NOT a constant stays nullable,
+    // because the class file genuinely cannot prove it. That pair is the
+    // control: a rule that made every static non-null would pass the line
+    // above and fail this one.
+    expect("static readonly DEFAULT_KIND: com.example.Kind | null;");
+    expect("hits: int;");                            // a public mutable field
+    expect("id(): bigint;");                         // J -> bigint, never number
+    expect("counts(): Int32Array");                  // [I -> a typed array, not int[]
+    expect("bytes(): Uint8Array");                   // [B
+    expect("sum(a0: Int32Array): int;");             // varargs are an array at the ABI
+    expect("constructor(a0: string");                // <init> becomes a constructor
+
+    // `ConstantValue` is surfaced, because it decides whether touching the
+    // member loads the class at all.
+    expect("Inlined at the call site");
+    expect("A real `getstatic`");
+
+    // A `throws` clause reaches the declaration.
+    expect("Throws java.lang.NumberFormatException");
+
+    // `Object` is `unknown`, never `any`.
+    let rendered = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Catalog"))
+        .expect("renders");
+    assert!(!rendered.contains(": any"), "`any` must never be generated");
+
+    // And the module wrapper produces something importable.
+    let module = nts_jvm_emitter::bind::module("com.example", &[body]);
+    assert!(module.contains("declare module \"java:com.example\""));
+    assert!(module.starts_with("// GENERATED"), "the header says not to edit it");
+}
+
+/// The nullability rules run in opposite directions for a return and an
+/// argument, and getting that backwards is a silent hole.
+#[test]
+fn nullability_is_asymmetric_between_returns_and_arguments() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let body = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Catalog"))
+        .expect("renders");
+
+    // A RETURN defaults to `| null` when unannotated: the class file does not
+    // say, and guessing non-null produces an NPE the types promised could not
+    // happen.
+    assert!(body.contains("name(): string | null;"), "an unannotated return is nullable:\n{body}");
+
+    // An ARGUMENT does not get `| null` added by default. The error a caller
+    // wants kept is passing null where the callee never said it accepts one,
+    // so widening every parameter would delete exactly that check.
+    assert!(
+        body.contains("render(a0: string): string | null;"),
+        "an unannotated argument stays non-null:\n{body}"
+    );
+    // The control: `find(a0: number)` proves a primitive argument is untouched
+    // by either rule, so the two assertions above are about nullability rather
+    // than about parameters in general.
+    assert!(body.contains("find(a0: number): int;"), "a primitive argument is unchanged:\n{body}");
+}
+
+/// Print the generated declarations, for reading rather than asserting.
+/// `cargo test --test reads show_generated -- --nocapture --ignored`
+#[test]
+#[ignore = "output for a human, not an assertion"]
+fn show_generated() {
+    let Some(classes) = fixture() else { return };
+    for class in ["com.example.Catalog", "com.example.Kind"] {
+        match nts_jvm_emitter::bind::declarations(&ours(&classes, class)) {
+            Ok(body) => println!("{body}"),
+            Err(why) => println!("REFUSED {why}"),
+        }
+    }
+}
+
+/// An enum's own constants are never null, and the class file says so.
+#[test]
+fn enum_constants_are_not_nullable() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let body =
+        nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Kind")).expect("renders");
+
+    // `ACC_ENUM` on both the class and the field. The JLS guarantees `<clinit>`
+    // creates every constant before any is observable, so `| null` here would
+    // be a check that can never fire.
+    assert!(body.contains("static readonly SMALL: com.example.Kind;"), "{body}");
+    assert!(body.contains("static readonly LARGE: com.example.Kind;"), "{body}");
+    assert!(!body.contains("SMALL: com.example.Kind | null"), "an enum constant is never null");
+
+    // The control: an unannotated reference return on the SAME class is still
+    // nullable, so this is about `ACC_ENUM` rather than about the class.
+    assert!(body.contains("weight(): int;"), "{body}");
+    assert!(
+        body.contains("static valueOf(a0: string): com.example.Kind | null;"),
+        "an unannotated return is still nullable on an enum:\n{body}"
+    );
+
+    // **A gap this test also pins.** `Kind.name()` and `Kind.ordinal()` come
+    // from `java.lang.Enum` and are NOT declared on `Kind`, so they do not
+    // appear -- this generator surfaces declared members only. Inherited
+    // members need walking the superclass chain, which needs the jar rather
+    // than one class file, and that is the next thing after generics.
+    assert!(!body.contains("ordinal()"), "inherited members are not surfaced yet; if this \
+        starts failing, the superclass walk landed and this assertion is the one to delete");
+}

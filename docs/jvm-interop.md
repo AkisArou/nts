@@ -2220,3 +2220,59 @@ rather than in a mean.
 What changes is the *order* to do them in. The copies worth eliminating first
 are the ones on data TypeScript never reads, because those are the ones where
 the copy is 100% of the cost rather than 49% of one pass.
+
+# Build item 6: `.d.ts` generation, and what the generator does that the spec did not
+
+`compiler/jvm-emitter/src/bind.rs` turns a parsed class file into declarations.
+The hand-written `examples/interop/java-from-ts/types/com.example.d.ts` was the
+**specification** for it; running the generator on the same fixture is how that
+spec stopped being aspirational.
+
+Every type-mapping row is forced by something measured rather than chosen: `J`
+is `bigint` because a `long` exceeds 2^53; `I` is a branded `int` because a
+brand in a **declared** signature lowers cleanly and the checker rejects a plain
+`number` with `TS2345`, which is the whole mechanism separating `find(int)` from
+`find(double)`; `[I` is `Int32Array` because a branded array does not lower at
+all while a typed array gives a real `managed<view<i32>>`.
+
+## Two things the generated output got wrong, and the class file could prove
+
+**A `ConstantValue` field read `string | null`.** It is a compile-time constant
+-- the value is *in the class file* and the JVM resolves the read to an `ldc` --
+so there is no execution in which it is null. Every use was getting a null check
+that could never fire, which is exactly the noise that makes a generated binding
+unpleasant enough to hand-edit.
+
+**Enum constants read `Kind | null`.** `ACC_ENUM` on both the class and the
+field says what they are, and the JLS guarantees `<clinit>` creates every
+constant before any is observable.
+
+Both are now non-null. And the control that keeps the rule honest:
+`Catalog.DEFAULT_KIND` is a `static final Kind` that is *not* an enum constant
+and has no `ConstantValue`, so it stays `| null` -- the class file genuinely
+cannot prove it, and the overrides file is the escape. A rule that made every
+static non-null would pass the first two assertions and fail that one.
+
+## Where the generator is right and the hand-written spec was wrong
+
+The spec omitted `find(key: int)`, calling it "unreachable from TypeScript".
+That was wrong: `find(Java.asInt(3))` reaches it, and reaching it is the entire
+point of the brand. The generator emits all four overloads and the spec should
+follow it.
+
+## The gaps, named rather than discovered
+
+- **Generics are read but not rendered.** `names()` surfaces as
+  `java.util.List | null` where the `Signature` attribute says
+  `List<String>`. The input is parsed and carried on `Member::signature`, so
+  this is a rendering gap, and it is the next thing to close.
+- **Inherited members are not surfaced.** `Kind.name()` and `Kind.ordinal()`
+  come from `java.lang.Enum` and this generator emits declared members only.
+  Walking the superclass chain needs the whole jar rather than one class file.
+- **Parameter names are `a0`, `a1`.** Real names need the `MethodParameters`
+  attribute, which `javac` only emits under `-parameters`, or the local
+  variable table. `android.jar` has neither, so this may be as good as it gets
+  and the honest fix is doc comments rather than names.
+- **An array return gets `| null`.** Correct -- a Java method can return a null
+  array -- and noisy. The overrides file is the answer for the APIs where it
+  matters.

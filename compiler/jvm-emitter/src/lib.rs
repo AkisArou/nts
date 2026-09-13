@@ -35,6 +35,7 @@
 //! text        a javap-style listing, disassembled from the bytes we wrote
 //! ```
 
+pub mod bind;
 pub mod class;
 pub mod code;
 pub mod descriptor;
