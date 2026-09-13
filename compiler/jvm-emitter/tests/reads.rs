@@ -1273,3 +1273,35 @@ fn a_bridge_method_is_not_part_of_the_api() {
         "the bridge widens what the real signature narrows, and javac refuses it:\n{body}"
     );
 }
+
+/// `@Deprecated` reaches the reader, so it should reach the caller.
+///
+/// 401 of 8,980 public members in the sampled `android.jar` are deprecated --
+/// 4.5%. A Java developer sees every one struck through in an editor; a
+/// TypeScript caller of the generated binding saw nothing, because the
+/// generator read the annotation and discarded it.
+///
+/// TypeScript has no modifier for it and does not need one: every editor
+/// honours `@deprecated` in a doc comment.
+#[test]
+fn a_deprecated_member_says_so() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let body = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Catalog"))
+        .expect("renders");
+
+    let marked = |name: &str| {
+        body.lines()
+            .zip(body.lines().skip(1))
+            .any(|(before, line)| line.trim().starts_with(name) && before.contains("@deprecated"))
+    };
+    assert!(marked("legacyFind"), "a deprecated method is marked:\n{body}");
+
+    // **The control.** A rule that marked everything would pass the line above
+    // and make the annotation meaningless -- which is the failure mode of a
+    // signal, as distinct from the failure mode of a check.
+    assert!(!marked("describe"), "an ordinary method is not marked:\n{body}");
+    assert!(!marked("find"), "nor is another one:\n{body}");
+}

@@ -83,6 +83,13 @@ public final class Catalog {
 
     // --- nullability --------------------------------------------------------
 
+    /** A deprecated member: a Java caller sees this struck through, and so
+     *  should a TypeScript one. */
+    @Deprecated
+    public int legacyFind(String key) {
+        return find(key);
+    }
+
     /** Annotated: the generator must surface `| null`. */
     public String describe(int id) {
         return id == 0 ? null : "item-" + id;

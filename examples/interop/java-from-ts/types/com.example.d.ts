@@ -29,6 +29,8 @@ declare module "java:com.example" {
     render(a0: string): string | null;
     render(a0: unknown): string | null;
     sum(...a0: number[]): number;
+    /** @deprecated */
+    legacyFind(a0: string): number;
     describe(a0: number): string | null;
     name(): string | null;
     /** Throws java.lang.NumberFormatException. Caught at the call site and raised as an `NtsRefusal`; not catchable by a TypeScript `try` yet. */
