@@ -75,8 +75,12 @@ if [ $# -gt 0 ]; then
     fi
   done
 else
+  # **`invalid` and `unsupported` are excluded, as `backend_examples` excludes
+  # them.** `invalid` exists to fail typechecking, so the backend declining it
+  # is the example working. Counting it made `1 declined` a permanent fixture,
+  # and a permanent fixture is what a real decline would have hidden behind.
   targets=$( (ls -d "$root"/examples/*/ "$root"/benches/cases/*/ 2>/dev/null) \
-    | sed "s|^$root/||;s|/$||" | sort)
+    | sed "s|^$root/||;s|/$||" | grep -vE '/(invalid|unsupported)$' | sort)
 fi
 
 # **The count this ratchet owes itself.** See `docs/records/0295`.
@@ -139,11 +143,22 @@ JSON
     # A refusal is this backend working. It is counted, not failed: the corpus
     # has programs every backend declines, and a lane that reported those as
     # dex failures would be measuring the wrong thing.
+    # **The name, not just the count.** This printed `1 declined` on every run
+    # for weeks and nobody had ever expanded it into its member. A number an
+    # instrument prints every time, that nobody has turned into a list, is a
+    # domain nobody has enumerated -- and printing it is what makes it
+    # invisible, because a constant reads as furniture rather than as a
+    # question. `times-on-device.sh` beside this already names its declines;
+    # this one counted them.
+    printf "%-28s the backend declined it: %s\n" "$name" \
+      "$(grep -v '^$' "$out/emit.log" | head -1 | cut -c1-72)"
     declined=$((declined + 1))
     continue
   fi
   classes=$(find "$out/classes" -name '*.class' 2>/dev/null)
-  [ -n "$classes" ] || { declined=$((declined + 1)); continue; }
+  [ -n "$classes" ] || {
+    printf "%-28s emitted no class file\n" "$name"
+    declined=$((declined + 1)); continue; }
   # The generated classes only. The runtime jar has its own ratchet and
   # including it here would make every failure ambiguous about which half of
   # the artefact d8 refused.
@@ -183,7 +198,16 @@ printf "%s method(s) across them\n" "$methods"
 # codegen change that prunes more and drops this is indistinguishable *here*
 # from the defect it guards, and that is the point: a drop owes an explanation
 # and then a new number, rather than fitting under a margin somebody chose.
-floor=${NTS_DEX_METHOD_FLOOR:-4723}
+# **4832**, measured 2026-09-13: 268 dexed, 0 refused, **0 declined**.
+#
+# Set to 4848 first, from the run *before* `invalid` and `unsupported` were
+# excluded, and that was wrong by the 16 methods `unsupported` contributes. A
+# floor taken from a run of a different target set is not a floor, and the only
+# reason it did not land that way is that this was re-run afterwards rather
+# than reasoned about -- the exclusion removes targets, so it cannot leave the
+# count unchanged, and "it only drops the one that declined" was an assumption
+# with a subtraction in it.
+floor=${NTS_DEX_METHOD_FLOOR:-4832}
 if [ $# -eq 0 ] && [ "$methods" -lt "$floor" ]; then
   echo "only $methods method(s) dexed, against a floor of $floor" >&2
   # **Which of the two it is, said here rather than left to the reader.** This
@@ -191,9 +215,20 @@ if [ $# -eq 0 ] && [ "$methods" -lt "$floor" ]; then
   # that did not get compiled -- a full disk, a frontend hiccup -- in a way a
   # `refused` count is not. A peer meeting this failure on an unrelated change
   # should not have to work out which kind it is.
-  if [ "$declined" -gt 1 ]; then
-    echo "and $declined target(s) were declined, against the 1 this expects" >&2
-    echo "(`a-class-stored-and-compared`) -- so the count is short because" >&2
+  # **Two bugs lived on the next three lines and neither could fire.** It read
+  # `declined -gt 1` against an expectation of one, named
+  # `a-class-stored-and-compared` as that one, and wrote the name in
+  # *backticks inside double quotes* -- so the branch would have tried to
+  # execute it as a command. None of it ran, because the count was never above
+  # one and the floor was never missed.
+  #
+  # The name was also wrong. Expanding the count on 2026-09-13 showed the single
+  # decline was `invalid`, which exists to fail typechecking; the example named
+  # here had been fixed at some point and the count stayed 1 while the
+  # attribution went stale in silence.
+  if [ "$declined" -gt 0 ]; then
+    echo "and $declined target(s) were declined, where 0 is expected now that" >&2
+    echo "invalid and unsupported are excluded -- so the count is short because" >&2
     echo "targets did not compile, which is a different fault from pruning" >&2
   else
     echo "with the expected $declined decline(s), so every target compiled and" >&2
