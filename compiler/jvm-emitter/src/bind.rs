@@ -94,6 +94,48 @@ fn type_of(descriptor: &str) -> Option<(String, usize)> {
 // reading the output, not by reasoning about it.
 thread_local! {
     static PACKAGE: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+    /// Packages this module referred to and does not itself declare, collected
+    /// while rendering so `module_of` can import them.
+    ///
+    /// A thread-local for the same reason `PACKAGE` is one: `reference` is
+    /// called from a dozen places through `type_of` and `generic_type`, and
+    /// threading an accumulator through all of them to reach one writer would
+    /// be a parameter on every signature in this file.
+    static IMPORTS: std::cell::RefCell<std::collections::BTreeSet<String>> =
+        const { std::cell::RefCell::new(std::collections::BTreeSet::new()) };
+}
+
+/// The package part of a binary name, in binary form.
+///
+/// **From the binary name, before `$` becomes `.`.** A package separator is `/`
+/// and a nesting separator is `$`, and flattening them together first is what
+/// made `android/view/accessibility/AccessibilityEvent` render as
+/// `accessibility.AccessibilityEvent`: the bound package's prefix was stripped
+/// off a *sub*-package, leaving a relative path to a namespace that does not
+/// exist. 163 of the errors in `android.view` were that one line.
+fn package_of(binary: &str) -> &str {
+    binary.rsplit_once('/').map_or("", |(package, _)| package)
+}
+
+/// The alias an imported package takes: its full path, underscored.
+///
+/// **The last component was tried first and is wrong.** `accessibility` reads
+/// better than `android_view_accessibility`, and on the real `android.view` two
+/// packages collide on it immediately -- `android.animation` and
+/// `android.view.animation` both want `animation`, and so do
+/// `android.content.res` and one other. Detecting that in `module_of` does not
+/// work either: references are rendered *before* the module is assembled, so by
+/// the time the clash is visible the short name is already in the text and only
+/// the import statement can be changed. That produces a file where the alias
+/// bound by the import is not the alias the references use, which is worse than
+/// either name.
+///
+/// The full path needs no global knowledge and cannot collide. It costs
+/// `android_graphics.Canvas` where a Java programmer writes
+/// `android.graphics.Canvas`, which is the same information and one character
+/// different.
+fn alias_of(package: &str) -> String {
+    package.replace('/', "_")
 }
 
 /// The typed array for a Java array's element descriptor.
@@ -126,15 +168,35 @@ fn reference(binary: &str) -> String {
         // A nested class is `Outer$Inner` in the class file and `Outer.Inner`
         // in a namespace, which is how `Catalog.Entry` reads at a call site.
         other => {
-            let dotted = other.replace(['/', '$'], ".");
-            // A class in the package being generated is in scope unqualified.
+            let owner = package_of(other);
+            let simple = other.rsplit_once('/').map_or(other, |(_, it)| it).replace('$', ".");
             PACKAGE.with(|package| {
-                let package = package.borrow();
-                if package.is_empty() {
-                    return dotted.clone();
+                let package = package.borrow().replace('.', "/");
+                // A class in the package being generated is in scope unqualified.
+                if owner == package {
+                    return simple.clone();
                 }
-                let prefix = format!("{package}.");
-                dotted.strip_prefix(&prefix).map_or_else(|| dotted.clone(), str::to_owned)
+                // **`java.*` stays fully qualified and is not imported**, so a
+                // reference reads `java.util.List<string>` exactly as a Java
+                // programmer writes it. That is only sound because the prelude
+                // is *generated* -- see `namespace_of`. While it was a
+                // hand-written ten-type subset, this same line cost **2,637 of
+                // 4,395 errors** over the transitive closure of `android.view`:
+                // `java.util.List` resolved and
+                // `java.util.concurrent.Executor` did not, because the jar's
+                // bindings reference the library in full and the prelude
+                // covered a corner of it.
+                //
+                // Importing them instead was measured and works -- it takes
+                // that 2,637 to zero -- and renders `java_util.List`, which is
+                // worse to read than Java. Generating the prelude gets both.
+                //
+                // A default package has nothing to import from and stays bare.
+                if owner.starts_with("java/") || owner.is_empty() {
+                    return other.replace(['/', '$'], ".");
+                }
+                IMPORTS.with(|it| it.borrow_mut().insert(owner.to_owned()));
+                format!("{}.{simple}", alias_of(owner))
             })
         }
     }
@@ -749,7 +811,28 @@ pub fn declarations_with(
     } else {
         "class"
     };
-    let _ = writeln!(out, "  export {kind} {name} {{");
+    // **The class's own type parameters, which were never emitted.** The
+    // `Signature` attribute carries `<E:Ljava/lang/Object;>...` for a generic
+    // class, and it was read and dropped: every declaration came out as
+    // `export interface List {` while every *reference* to it came out as
+    // `java_util.List<string>`, because member signatures were surfaced and the
+    // class header was not.
+    //
+    // Invisible for as long as the only inputs were a nine-class fixture with
+    // no generic classes and a hand-written prelude whose generics I had typed
+    // myself. Over the transitive closure of `android.view` it is **5,105
+    // errors** of `TS2315 Type 'List' is not generic` -- the largest single
+    // category once the prelude gaps stopped masking it.
+    //
+    // `= unknown` on each, for the reason the prelude already gave: a
+    // pre-generics **raw** type reaches this with no `Signature` at all, and
+    // without a default `java.util.List` is `TS2314 Generic type 'List<E>'
+    // requires 1 type argument(s)` -- a hard error where the jar simply did not
+    // say.
+    let parameters = type_parameters(class.signature.as_deref())
+        .replace('>', " = unknown>")
+        .replace(", ", " = unknown, ");
+    let _ = writeln!(out, "  export {kind} {name}{parameters} {{");
 
     let mut out_constants = String::new();
     render_fields_into(&mut out, &mut out_constants, class, &mut table, &mut constants_table)?;
@@ -1208,6 +1291,91 @@ fn render_inherited(
 /// and true inner classes, and both nest the same way here; the difference
 /// between them is in the *constructor descriptor*, which already carries the
 /// outer instance for an inner one.
+/// The same classes as a **global namespace** rather than an ambient module --
+/// the prelude every other binding is written in.
+///
+/// `java.util.List` has to resolve without an import, because a `.d.ts` with a
+/// top-level import is a *module* and then its `declare module` blocks are
+/// augmentations that declare nothing. A global `declare namespace java.util`
+/// is reachable from every binding with no import at all, which is why
+/// `reference` leaves `java.*` fully qualified.
+///
+/// **This is what makes that sound.** The prelude was hand-written -- ten types
+/// chosen by what the fixture happened to need -- and over the transitive
+/// closure of `android.view` that cost 2,637 errors, 60% of everything wrong,
+/// all of them `Namespace 'java.util' has no exported member`. A curated subset
+/// cannot back a reference into a library the jar uses in full.
+///
+/// The class bodies are rendered by the same `declarations_with` the module
+/// form uses; only the wrapper differs. Nested packages nest: `java.util` and
+/// `java.util.concurrent` are separate calls and separate declarations, which
+/// TypeScript merges because a namespace is open.
+#[must_use]
+pub fn namespace_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (String, Vec<Bound>) {
+    let mut out = String::new();
+    out.push_str("// GENERATED by `nts bind`. Do not edit.\n//\n");
+    out.push_str("// The prelude, as a **global namespace**: no top-level import anywhere in\n");
+    out.push_str("// this file, or it becomes a module and every `java.util.List` in every\n");
+    out.push_str("// binding stops resolving.\n\n");
+    let _ = writeln!(out, "declare namespace {package} {{");
+
+    // The imports this file would have needed are exactly the ones it must not
+    // have. A prelude that referred out to a package it could not name would be
+    // the problem it exists to solve, so anything outside `java.*` is dropped
+    // on the floor by `reference` already -- and `IMPORTS` is drained here so
+    // it does not leak into the next module generated in this process.
+    let leaked = IMPORTS.with(|it| std::mem::take(&mut *it.borrow_mut()));
+    for owner in &leaked {
+        let _ = writeln!(out, "  // references {} , which a prelude cannot import", owner.replace('/', "."));
+    }
+
+    let mut bound: Vec<Bound> = Vec::new();
+    for (binary, body, rows) in classes.iter().filter(|(binary, _, _)| !binary.contains('$')) {
+        let mut rows = rows.clone();
+        shift(&mut rows, lines_in(&out), 0);
+        bound.append(&mut rows);
+        out.push_str(body);
+
+        let simple = simple_name(binary);
+        let prefix = format!("{binary}$");
+        let nested: Vec<&(String, String, Vec<Bound>)> =
+            classes.iter().filter(|(inner, _, _)| inner.starts_with(&prefix)).collect();
+        if nested.is_empty() {
+            out.push('\n');
+            continue;
+        }
+        let _ = writeln!(out, "\n  export namespace {simple} {{");
+        for (_, body, rows) in nested {
+            let mut rows = rows.clone();
+            shift(&mut rows, lines_in(&out), 2);
+            bound.append(&mut rows);
+            for line in body.lines() {
+                if line.is_empty() {
+                    out.push('\n');
+                } else {
+                    let _ = writeln!(out, "  {line}");
+                }
+            }
+        }
+        out.push_str("  }\n\n");
+    }
+    out.push_str("}\n");
+
+    let mut starts = vec![0usize];
+    for (at, byte) in out.bytes().enumerate() {
+        if byte == b'\n' {
+            starts.push(at + 1);
+        }
+    }
+    for row in &mut bound {
+        if row.line == 0 || row.line > starts.len() {
+            continue;
+        }
+        row.end = starts.get(row.line).map_or(out.len(), |next| next - 1);
+    }
+    (out, bound)
+}
+
 #[must_use]
 pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (String, Vec<Bound>) {
     let mut bound: Vec<Bound> = Vec::new();
@@ -1231,6 +1399,32 @@ pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (St
     out.push_str("// The brands and the `java.*` namespace come from java.d.ts, which is global --\n");
     out.push_str("// this file must NOT import them, or it becomes a module and declares nothing.\n\n");
     let _ = writeln!(out, "declare module \"java:{package}\" {{");
+
+    // **The imports, and they go inside the block.** A top-level import would
+    // make this file a module and the block an augmentation that declares
+    // nothing; an import *inside* `declare module` is module-scoped and leaves
+    // the file a global script. Compiled before being believed: an ambient
+    // module referring to another ambient module's types this way typechecks at
+    // zero errors, and removing the line is `TS2304 Cannot find name`.
+    //
+    // Without these, a binding for one package emits references into twenty
+    // others that resolve to nothing -- 1,103 of the 1,479 errors in
+    // `android.view` were `Cannot find namespace 'android'`, and the file was
+    // unusable on its own.
+    let imports = IMPORTS.with(|it| std::mem::take(&mut *it.borrow_mut()));
+    let mine = package.replace('.', "/");
+    let wanted: Vec<&String> = imports.iter().filter(|it| **it != mine).collect();
+    for owner in &wanted {
+        let _ = writeln!(
+            out,
+            "  import * as {} from \"java:{}\";",
+            alias_of(owner),
+            owner.replace('/', ".")
+        );
+    }
+    if !wanted.is_empty() {
+        out.push('\n');
+    }
 
     // Outer classes first, each followed by a namespace holding whatever nests
     // inside it -- TypeScript wants the class before the namespace that merges

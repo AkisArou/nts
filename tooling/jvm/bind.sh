@@ -20,13 +20,17 @@
 # about which of four overloads to invoke.
 set -eu
 
-jar=""; classes=""; package=""; out=""
+jar=""; classes=""; package=""; out=""; prelude=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --jar)     jar=${2:?--jar needs a path};     shift 2 ;;
     --classes) classes=${2:?--classes needs a path}; shift 2 ;;
     --package) package=${2:?--package needs a name}; shift 2 ;;
     --out)     out=${2:?--out needs a directory}; shift 2 ;;
+    # A global `declare namespace java.util` rather than an ambient
+    # `declare module "java:java.util"`. Bindings reach the prelude with no
+    # import, which is why `java.util.List` reads as it does in Java.
+    --prelude) prelude=1; shift ;;
     -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     # **Refused rather than ignored.** An argument that silently does nothing is
     # indistinguishable from the thing it configures being broken -- which cost
@@ -67,9 +71,20 @@ set -- $(cd "$classes" && find "$dir" -maxdepth 1 -name '*.class' 2>/dev/null | 
 [ $# -gt 0 ] || { echo "bind.sh: no classes under $classes/$dir" >&2; exit 1; }
 
 mkdir -p "$out"
-( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" cargo run --release -q \
+
+# **Exported rather than written as an assignment prefix.** `${prelude:+VAR=1}`
+# in front of a command does not make an assignment: the shell expands it to a
+# word and then tries to run it, which is `NTS_BIND_PRELUDE=1: command not
+# found`. An assignment prefix has to be literal.
+if [ -n "$prelude" ]; then
+  NTS_BIND_PRELUDE=1
+  export NTS_BIND_PRELUDE
+fi
+( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" \
+    cargo run --release -q \
     -p nts-jvm-emitter --example bind -- "$classes" "$package" "$@" ) > "$out/$package.d.ts"
-( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" NTS_BIND_TABLE=1 cargo run --release -q \
+( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" NTS_BIND_TABLE=1 \
+    cargo run --release -q \
     -p nts-jvm-emitter --example bind -- "$classes" "$package" "$@" ) > "$out/$package.bind"
 
 echo "bind.sh: $# class(es) -> $out/$package.d.ts and $out/$package.bind"

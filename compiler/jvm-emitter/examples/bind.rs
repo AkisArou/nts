@@ -107,7 +107,14 @@ fn main() {
         println!("\n}}");
         return;
     }
-    let (module, bound) = bind::module_of(package, &bodies);
+    // A prelude is a global namespace rather than an ambient module -- see
+    // `namespace_of`. The same class bodies either way; only the wrapper
+    // differs.
+    let (module, bound) = if std::env::var("NTS_BIND_PRELUDE").is_ok() {
+        bind::namespace_of(package, &bodies)
+    } else {
+        bind::module_of(package, &bodies)
+    };
     if std::env::var("NTS_BIND_TABLE").is_ok() {
         // The binding table rather than the declarations, for the same reason
         // the escape table is its own run: it is read by the compiler, not by a
