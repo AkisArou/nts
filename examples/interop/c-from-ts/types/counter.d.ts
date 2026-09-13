@@ -4,6 +4,14 @@
 // the DX is a file you can read rather than a proposal, and so that when the
 // importer lands its output has something to be diffed against.
 
+// The scalar types are **branded numbers** (decided 2026-09-13):
+//
+//     type c_int = number & { readonly __c_int: unique symbol };
+//
+// so arithmetic keeps working and `Math.abs` still accepts one. `Ptr`, `Ref`,
+// `Owned` and `CFn` are NOT branded numbers -- a pointer is not an f64 and the
+// assignability leak a brand carries would be wrong there.
+
 declare module "c:counter" {
   // --- scalars carry their C type, not `number` -----------------------------
   //

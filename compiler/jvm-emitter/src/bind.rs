@@ -311,12 +311,114 @@ fn collapsed_of(class: &ClassFile) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The type arguments a class binds on each supertype, keyed by the supertype's
+/// own parameter name.
+///
+/// `class CursorLoader extends AsyncTaskLoader<Cursor>` inherits
+/// `D onLoadInBackground()` from a parent declared `<D>`, and `D` means nothing
+/// in `CursorLoader`. Rendering the inherited member verbatim produced
+/// `onLoadInBackground(): D | null` on a class with no `D` -- **249 errors over
+/// the closure**, the largest category left after nesting.
+///
+/// The substitution is done on the **JVM signature** rather than on the
+/// rendered TypeScript. `()TD;` becomes `()Landroid/database/Cursor;` by an
+/// exact grammar rule; rewriting `D` in `Loader.OnLoadCompleteListener<D>` as
+/// text would need word boundaries in a language whose type names can contain
+/// anything.
+///
+/// One level, from the class's own `Signature`. A grandparent's parameters
+/// bound through an intermediate are not resolved -- those stay as they are and
+/// are still wrong, which is why this returns a map rather than claiming to be
+/// complete.
+fn bindings_on_supertypes(class: &ClassFile) -> std::collections::BTreeMap<String, String> {
+    let mut map = std::collections::BTreeMap::new();
+    let Some(signature) = class.signature.as_deref() else { return map };
+    // Skip this class's own parameters: what follows is the superclass and then
+    // each interface, each possibly with type arguments.
+    let (rest, _) = split_type_parameters(signature);
+    let mut at = rest;
+    while let Some(open) = at.find('<') {
+        let Some(close) = matching_angle(&at[open..]) else { break };
+        let owner = at[1..open].to_owned();
+        let arguments: Vec<String> = arguments_of(&at[open + 1..open + close]);
+        map.insert(owner, arguments.join(","));
+        at = &at[open + close + 1..];
+        // Step past the `;` that closes this supertype.
+        if let Some(semi) = at.find(';') {
+            at = &at[semi + 1..];
+        } else {
+            break;
+        }
+    }
+    map
+}
+
+/// The index of the `>` matching the `<` at the start of `text`.
+fn matching_angle(text: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    for (at, byte) in text.bytes().enumerate() {
+        match byte {
+            b'<' => depth += 1,
+            b'>' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(at);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The top-level type arguments inside a `<...>`, each as its own signature.
+fn arguments_of(inside: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    let bytes = inside.as_bytes();
+    let mut at = 0usize;
+    while at < bytes.len() {
+        match bytes[at] {
+            b'<' => depth += 1,
+            b'>' => depth = depth.saturating_sub(1),
+            b';' if depth == 0 => {
+                out.push(inside[start..=at].to_owned());
+                start = at + 1;
+            }
+            _ => {}
+        }
+        at += 1;
+    }
+    if start < inside.len() {
+        out.push(inside[start..].to_owned());
+    }
+    out
+}
+
+/// Replace a parent's type variables with what the child bound them to.
+fn substitute(signature: &str, parent: &ClassFile, arguments: &str) -> String {
+    let Some(declared) = parent.signature.as_deref() else { return signature.to_owned() };
+    let (_, names) = split_type_parameters(declared);
+    if names.is_empty() {
+        return signature.to_owned();
+    }
+    let actual: Vec<String> = arguments_of(arguments);
+    let mut out = signature.to_owned();
+    for (index, name) in names.iter().enumerate() {
+        let Some(replacement) = actual.get(index) else { continue };
+        out = out.replace(&format!("T{name};"), replacement);
+    }
+    out
+}
+
 fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<(ClassFile, crate::read::Member)> {
     let mut seen: Vec<(String, String)> = class
         .methods
         .iter()
         .map(|m| (m.name.clone(), m.descriptor.clone()))
         .collect();
+    let bound = bindings_on_supertypes(class);
     let mut found = Vec::new();
     for parent in supertypes(class, resolve) {
         let from_interface = parent.access & access::INTERFACE != 0;
@@ -343,7 +445,16 @@ fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<(ClassFile, crate:
                 continue;
             }
             seen.push(key);
-            found.push((parent.clone(), method.clone()));
+            // Rebind the parent's type variables to what this class bound them
+            // to, so `D onLoadInBackground()` inherited into
+            // `CursorLoader extends AsyncTaskLoader<Cursor>` renders `Cursor`
+            // rather than a name with nothing behind it.
+            let mut method = method.clone();
+            if let Some(arguments) = bound.get(&parent.binary_name) {
+                method.signature =
+                    method.signature.as_deref().map(|it| substitute(it, &parent, arguments));
+            }
+            found.push((parent.clone(), method));
         }
     }
     found

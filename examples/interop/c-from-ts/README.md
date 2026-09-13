@@ -47,15 +47,23 @@ very different shapes.
 
 ## The order these unblock in
 
+Numbered to match `docs/native-interop.md`'s build order, so the two cannot
+drift apart:
+
 | # | what | this file's blocked line |
 | --- | --- | --- |
-| 1 | the scalar types (`c_int` and friends) | `clamped` |
+| 0 | the scalar types, **branded** `number`s (`c_int` and friends) | `clamped` |
+| 1 | `libc.d.ts`, shipped and curated | nothing here directly — it is what every *other* program needs |
 | 2 | opaque handles (`Counter`) | `named`, and every other function here |
-| 3 | `Owned`/`Ref` and the discharge check | `named`, `label` |
-| 4 | `using` over a foreign resource | `scoped` |
+| 4 | `Owned`/`Ref`, the discharge check, and `using` | `named`, `scoped`, `label` |
 | 5 | `CFn` — a real function pointer | `watched` |
-| 6 | `Ptr` and `addrOf` over a place | `readOut` |
+| 5 | `Ptr` and `addrOf` over a place | `readOut` |
 
-1 and 2 are independent of the ownership language and are what make a walking
-skeleton run. 3 and 4 are `ResourceFlow`. 5 and 6 are the parts that make
-ordinary C libraries reachable rather than just simple ones.
+0 and 2 are independent of the ownership language and are what make a walking
+skeleton run. 4 is `ResourceFlow`. 5 is what makes *ordinary* C libraries
+reachable rather than only simple ones — GTK is signal-driven, so a binding
+without `CFn` is a binding that cannot open a window and respond to it.
+
+Step 3 (the LLVM `declare` path) and step 7 (the generator) do not block a line
+here: the first is invisible from the source and the second is what would have
+*written* `types/counter.d.ts` instead of me.
