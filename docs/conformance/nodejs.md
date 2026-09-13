@@ -24276,3 +24276,49 @@ Left in place deliberately: the six agreeing files are a real overlap of subject
 iterator transforms *are* stream transforms -- and forcing a single owner would hide that from
 whichever module lost. What the tool gives is the arithmetic being visible instead of implied.
 
+## cluster 42 to 78 and child_process to 104, in one day, by cause
+
+    cluster        86 file(s): 78 passed, 6 failed, 2 skipped    (42 that morning)
+    child_process 119 file(s): 104 passed, 5 failed, 9 skipped   (119 files, not 120 --
+                                                                  one claim released)
+
+Eleven named causes, and every one was found by diffing the pass **set** rather than reading
+the total. Four of them were introduced by the commit immediately before them, and one
+*correct* fix needed a second correct fix to stand.
+
+    the handshake's errno was a name where `getSystemErrorName` demands a negative number
+    `SharedHandle` unimplemented -- udp, a caller's `fd`, every non-SCHED_RR policy
+    `worker.disconnect()` closed the channel instead of sending `{ act: 'disconnect' }`
+    `setupPrimary` applied none of node's defaults and was not cumulative
+    four events emitted inside the call that produced them
+    `setupPrimary`/`fork`/`disconnect` unbound, where node publishes them as properties
+    `exitedAfterDisconnect` started `false` where node starts `undefined`
+    round robin sent a socket where node sends a raw handle
+    the scheduling policy was written to a field nobody read
+    a unix socket path was bound absolute where node picks the shorter spelling
+    a fifth stdio slot did not exist, then was readable-only, then lacked its channel
+
+### The three that are about measurement rather than about `cluster`
+
+**One message is not one cause, again.** A six-file `ERR_INVALID_ARG_TYPE` group was three
+causes: three files fixed by the errno change, three needing `SharedHandle`, the shortest-path
+rule and a `_handle` object respectively.
+
+**One cause wore four diagnostics.** The synchronous emits surfaced as a TDZ error
+(`Cannot access 'worker' before initialization`), a hang, a mustCall tally, and an event nobody
+heard. Nothing in any of the four named timing.
+
+**A `replace` that matched nothing read as a null result.** `#releaseShared` was written three
+commits before it existed: the edit matched six-space indentation where the file has four, and
+nothing asserted it had matched. The lane then said "no change", which I read as *the close path
+did not help* rather than *the close path is not there*. Same shape as `f83be20a` deleting the
+pty harness, from the other direction -- and in both cases the measurement came back plausible.
+
+### A file claimed by two lanes disagreed, and that is not flakiness
+
+`test-cluster-net-send.js` passed under `child_process` and failed under `cluster`. The cause,
+traced to a stack frame: the child creates a socket from **this profile's `net`** -- substituted
+in `cluster`'s lane and not in `child_process`'s -- and node's own `process.send` refuses a
+handle type it does not recognise. `double-claimed.mjs` found eight such files, two of which
+disagree.
+
