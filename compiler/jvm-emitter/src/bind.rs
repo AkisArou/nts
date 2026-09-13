@@ -41,6 +41,9 @@ const ACC_FINAL: u16 = 0x0010;
 /// On a class it means "this is an enum"; on a field, "this is one of its
 /// constants". JVMS table 4.5-A.
 const ACC_ENUM: u16 = 0x4000;
+/// `ACC_INTERFACE`, and `ACC_ABSTRACT` on a method. JVMS table 4.5-A/4.6-A.
+const ACC_INTERFACE: u16 = 0x0200;
+const ACC_ABSTRACT: u16 = 0x0400;
 /// The method's last parameter is a varargs one. At the ABI it is still an
 /// array -- `javac` packs the arguments at the **call site** -- but a caller
 /// writes `sum(1, 2, 3)`, so the declaration has to spread or it reads
@@ -336,6 +339,65 @@ fn suffix(descriptor: &str) -> String {
     format!("${}", names.join("$"))
 }
 
+/// The binary name of a method descriptor's parameter at `index`, if it is a
+/// reference type. Needed because the *rendered* type has already lost it.
+fn parameter_binary(descriptor: &str, index: usize) -> Option<String> {
+    let open = descriptor.find('(')?;
+    let close = descriptor.find(')')?;
+    let mut rest = &descriptor[open + 1..close];
+    let mut at = 0usize;
+    while !rest.is_empty() {
+        let (_, used) = type_of(rest)?;
+        if at == index {
+            let part = &rest[..used];
+            return part.strip_prefix('L').and_then(|it| it.strip_suffix(';')).map(str::to_owned);
+        }
+        rest = &rest[used..];
+        at += 1;
+    }
+    None
+}
+
+/// A Java **functional interface** as a TypeScript function type.
+///
+/// A single-abstract-method interface -- `Runnable`, `OnTouchListener`,
+/// `OnBytes` -- is what a Java caller passes a lambda to, and it is what a
+/// TypeScript caller wants to pass an arrow function to. Surfaced as the
+/// interface type instead, `setOnTouch` would demand an object with an
+/// `onTouch` property, which is not what anybody writes and not what `javac`
+/// accepts either.
+///
+/// This is cost 8 in docs/jvm-interop.md -- *"Closure to Java functional
+/// interface, eliminated"* -- and it is eliminated here rather than at the call
+/// site: a closure already IS an object with one method on this backend, so
+/// there is nothing to convert, only something to *declare correctly*.
+///
+/// Returns `None` unless the resolver finds the class **and** it is an
+/// interface with exactly one abstract method. Default and static methods do
+/// not count against it, which is what makes `Comparator` still a SAM.
+fn functional_interface(binary: &str, resolve: &dyn Resolve) -> Option<String> {
+    let class = resolve.find(binary)?;
+    if class.access & ACC_INTERFACE == 0 {
+        return None;
+    }
+    let mut abstracts = class
+        .methods
+        .iter()
+        .filter(|m| m.access & ACC_ABSTRACT != 0 && m.access & ACC_STATIC == 0);
+    let only = abstracts.next()?;
+    if abstracts.next().is_some() {
+        return None;
+    }
+    let (parameters, result) = signature_of(&only.descriptor)?;
+    let arguments = parameters
+        .iter()
+        .enumerate()
+        .map(|(index, rendered)| format!("a{index}: {rendered}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    Some(format!("({arguments}) => {result}"))
+}
+
 /// The name a method is emitted under, renaming it when an overload collapses.
 ///
 /// If another public method of the class renders the same name with the same
@@ -498,6 +560,13 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
                 } else {
                     rendered.clone()
                 };
+                // A functional interface parameter takes a closure, not an
+                // object with a method on it.
+                if let Some(binary) = parameter_binary(&method.descriptor, index)
+                    && let Some(signature) = functional_interface(&binary, resolve)
+                {
+                    return format!("a{index}: {signature}");
+                }
                 if variadic && index == last {
                     // The ABI type is the array; the call site spreads. A
                     // typed array is not spreadable as elements, so the
@@ -552,12 +621,55 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
     Ok(out)
 }
 
+/// Every **field** this class inherits and does not itself declare.
+///
+/// A separate walk from the methods, and it was missing: `Panel extends View
+/// extends Widget` could not read `panel.right`, because `right` is a public
+/// field on `Widget` and only methods were being inherited. `android.graphics.
+/// Rect`-shaped geometry is *exactly* this -- public mutable fields read
+/// through a subclass -- so a generator that inherits methods only cannot
+/// express the Android surface it exists for.
+///
+/// Shadowing is by name alone, because a field cannot be overloaded: a subclass
+/// declaring `left` hides the parent's, and the subclass's is the one in scope.
+fn inherited_fields(class: &ClassFile, resolve: &dyn Resolve) -> Vec<crate::read::Member> {
+    let mut seen: Vec<String> = class.fields.iter().map(|f| f.name.clone()).collect();
+    let mut found = Vec::new();
+    let mut next = class.super_name.clone();
+    for _ in 0..32 {
+        let Some(name) = next.take() else { break };
+        if name == "java/lang/Object" {
+            break;
+        }
+        let Some(parent) = resolve.find(&name) else { break };
+        for field in &parent.fields {
+            if field.access & ACC_PUBLIC == 0 || seen.contains(&field.name) {
+                continue;
+            }
+            seen.push(field.name.clone());
+            found.push(field.clone());
+        }
+        next.clone_from(&parent.super_name);
+    }
+    found
+}
+
 /// Append every member this class inherits and does not redeclare.
 ///
 /// Separate from [`declarations_with`] because that function was over a hundred
 /// lines with it inline, and the two halves answer different questions: what
 /// this class says, and what it gets for free.
 fn render_inherited(out: &mut String, class: &ClassFile, resolve: &dyn Resolve) {
+    for field in inherited_fields(class, resolve) {
+        let Some((rendered, _)) = type_of(&field.descriptor) else { continue };
+        let _ = writeln!(
+            out,
+            "    /** Inherited. */\n    {}{}: {};",
+            if field.access & ACC_FINAL != 0 { "readonly " } else { "" },
+            field.name,
+            if field.constant { rendered.clone() } else { returns(&rendered, &field.annotations) },
+        );
+    }
     for method in inherited(class, resolve) {
         let Some((parameters, result)) = method
             .signature

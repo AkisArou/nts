@@ -3,9 +3,18 @@
 No Android SDK dependency: plain Java interfaces with the same *shapes*, so this
 runs on a desktop JVM in the gate and on a device unchanged.
 
-`./build.sh` compiles the Java and runs `Demo`, which needs no TypeScript at
-all. The TypeScript side is the specification — it needs `nts bind` and a
-foreign layout, build items 4 and 1.
+`./build.sh` compiles the Java, runs `Demo`, **generates the declarations from
+the resulting class files**, and diffs them against what is committed.
+`NTS_REGENERATE=1 ./build.sh` accepts a change.
+
+The TypeScript side **typechecks with zero errors**; what it still refuses is
+the lowering of a call into Java, which needs the binding table and a foreign
+layout — build items 1 and 4. Each refusal names itself:
+
+```
+a member of `HashMap`, a class this compiler has no type for
+a method without a body
+```
 
 ## The constraint, demonstrated instead of argued
 
@@ -53,3 +62,29 @@ form once, deliberately, so the difference is visible rather than described.
 `src/refused.ts` has three, each with the diagnostic: a value-returning callback
 on a foreign thread, a registration from a thread with no environment, and an
 override that widens a return type the verifier checks.
+
+## Two generator bugs this project found, and neither was visible in the Java
+
+**A functional interface took an object instead of a closure.** `setOnTouch`
+surfaced as `setOnTouch(a0: View.OnTouch)` — demanding an object with an
+`onTouch` property, which is neither what anybody writes nor what `javac`
+accepts. A single-abstract-method interface now surfaces as a function type:
+
+```ts
+setOnTouch(a0: (a0: number, a1: number) => boolean): void;
+static load(a0: string, a1: (a0: Uint8Array) => void): void;
+```
+
+That is cost 8 — *"closure to Java functional interface, eliminated"* — and it
+is eliminated by **declaring it correctly** rather than by converting anything:
+a closure already is an object with one method on this backend.
+
+**Inherited fields were not surfaced at all.** `Panel extends View extends
+Widget`, and `panel.right` was `TS2339 Property 'right' does not exist`. The
+inheritance walk handled methods only. `android.graphics.Rect`-shaped geometry
+is *exactly* public fields read through a subclass, so a generator that inherits
+methods only cannot express the surface it exists for.
+
+Both were found by **compiling** `src/main.ts` against the generated
+declarations. The Java compiles cleanly either way, and reading the `.d.ts` did
+not show either one.

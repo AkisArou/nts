@@ -553,6 +553,29 @@ fn inherited_members_are_surfaced_through_a_resolver() {
         with.contains("setBounds") && with.contains("/** Inherited. */"),
         "with a resolver, Widget's members appear on View:\n{with}"
     );
+    // **Inherited FIELDS, which the first version of this walk missed
+    // entirely.** `right` is a public field on `Widget`, and `panel.right` in
+    // android-shape's `main.ts` was `TS2339 Property 'right' does not exist` --
+    // found by compiling the project, not by this test. `Rect`-shaped geometry
+    // is exactly public fields read through a subclass, so a generator that
+    // inherits methods only cannot express the surface it exists for.
+    assert!(
+        with.contains("left: number;") && with.contains("right: number;"),
+        "Widget's public fields must appear on View:\n{with}"
+    );
+    assert!(
+        !without.contains("left: number;"),
+        "and not without a resolver, or the assertion above is about nothing:\n{without}"
+    );
+
+    // A functional interface parameter takes a closure rather than an object
+    // with a method on it -- cost 8, and the whole reason `setOnTouch` is
+    // callable with an arrow function.
+    assert!(
+        with.contains("setOnTouch(a0: (a0: number, a1: number) => boolean): void;"),
+        "a single-abstract-method interface surfaces as a function type:\n{with}"
+    );
+
     // `dispatchTouch` is declared on View itself and must NOT be marked
     // inherited -- the control that the two sets are told apart.
     let marked_inherited = with
