@@ -5,7 +5,7 @@ below is worth less than the paragraph after it.
 
 ## Where it is
 
-    interpreted   86 file(s): 41 passed, 43 failed, 2 skipped, 0 not applicable
+    interpreted   86 file(s): 78 passed, 6 failed, 2 skipped, 0 not applicable
 
 84 by `test-pattern`, 1 claimed in `extra-tests`, 2 local fixtures. The claimed one --
 `test-listen-fd-cluster.js` -- fails, and claiming a failing test is the honest direction:
@@ -83,7 +83,7 @@ different**. Only then do the broken arms' counts mean anything.
 
 ## The compiled lane publishes nothing, and its 25 passes were all hollow
 
-    interpreted   86 file(s): 42 passed, 42 failed, 2 skipped
+    interpreted   86 file(s): 78 passed, 6 failed, 2 skipped
     compiled      86 file(s): 25 printed, and every one of them asserted nothing
 
 `shape.mjs` reads `exports.default`. The addon exports no `default` -- its six keys are
@@ -119,31 +119,56 @@ same way, the other small compiled surfaces are real: `stream`'s single pass and
 surface is not by itself a hollow one -- an absent one is.
 
 
-## `test-cluster-net-send.js` was claimed by two lanes, and passed in one of them
+## The six that remain, with what each one is
 
-`child_process/extra-tests` claimed it with this reason:
+    http-pipe                    hang, uncharacterised
+    net-send                     a child's socket is ours; node's `send` refuses it
+    net-server-drop-connection   hang, uncharacterised
+    shared-leak                  the last shared holder never leaves
+    uncaught-exception           wants `process` in `uses`, priced at 11 files above
+    listen-fd-cluster            ENOTSOCK from `bind` inside the worker's own `rr()`
 
-    upstream names it for cluster, which this profile does not implement
+### `net-send`: the child's socket is one of ours, and node cannot send it
 
-That was true when it was written and stopped being true when this module landed. Since then
-the file has been claimed **twice** -- by `child_process` through `extra-tests` and by this
-module through `test-pattern` -- and it does not agree with itself:
+This file was claimed by two lanes and **disagreed with itself** -- a pass under
+`child_process`, a failure here -- which is why `child_process/extra-tests` released it. The
+entry that replaced it here said the handle arrived and no data flowed. **That was wrong**, and
+the correct account is narrower and worse:
 
-    child_process lane   1 file(s): 1 passed
-    cluster lane         1 file(s): 1 failed
+    plain message from the child      arrives
+    message carrying a handle         never arrives at all
 
-Same file, same tree, same hour. The difference is what each lane substitutes: `cluster` uses
-`child_process events net`, so the primary's `net` is this profile's, while `child_process`
-uses `buffer events stream` and leaves `net` as node's. The handle arrives in both -- it is a
-host socket either way -- and under this module's lane no data flows through it, so
-`assert.ok(called)` fails in the `exit` handler.
+The child's `process.send('handle', socket)` throws before anything crosses:
 
-**A file contributing a pass to one denominator and a failure to another makes both numbers
-ambiguous**, so the stale claim is released: `child_process` drops it, this module keeps it,
-and the count moves the honest way rather than the flattering one. The residual cause -- data
-not flowing through a received handle when `net` is ours -- is a real defect and is recorded
-here rather than in the module that was passing it.
+    TypeError [ERR_INVALID_HANDLE_TYPE]: This handle type cannot be sent
+        at target._send (node:internal/child_process:848:15)
+        at callable.eval (.../msgonly-local.js:22:15)
+        at #completeConnection (.../runtime/node/net/src/main.ts:1189:10)
 
+The last frame is the whole finding: the socket the child created came from **this profile's
+`net`**, and node's own `send` only accepts node's handle types. Under `child_process`'s lane
+`net` is not substituted, the child's socket is node's, and the same file passes.
+
+**A cluster worker is not affected**, and that was worth checking rather than assuming, because
+this module's design rests on it: a worker reports `typeof globalThis.nts_cluster_self_send ===
+'undefined'` and carries node's own `_getServer`, so the worker half really is node's. It is a
+child forked by `child_process.fork` from a substituted parent that inherits ours.
+
+**Open, and deliberately not guessed at:** why that child inherits the substitution when a
+cluster worker does not. `inheritedEnvironment()` copies every key, so it is not something
+`cluster.fork` strips. Whatever the mechanism, the consequence above is measured.
+
+### `shared-leak`: the last shared holder never leaves
+
+Traced: both workers exit 0, the workers map reaches zero, and the primary sits holding a bound
+socket. `#releaseShared` closes a shared descriptor when its last holder goes -- and only **one**
+worker ever queries, because the second is disconnected before its `listen` completes. So the
+`holders` map for that key never empties through the path that closes it.
+
+Two real fixes came out of chasing it and are committed: the scheduling policy is frozen from
+`cluster.schedulingPolicy` as node does, and `#releaseShared` exists at all -- it had been
+written three commits earlier and **never applied**, because the edit matched on the wrong
+indentation and nothing asserted that it had.
 
 ## `test-cluster-uncaught-exception` needs `process` in `uses`, and that costs 11 files
 
