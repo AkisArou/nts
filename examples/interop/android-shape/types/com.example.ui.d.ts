@@ -50,6 +50,8 @@ declare module "java:com.example.ui" {
     /** Inherited. */
     setBounds(a0: number, a1: number, a2: number, a3: number): void;
     /** Inherited. */
+    static defaultPadding(): number;
+    /** Inherited. */
     setPadding(...a0: number[]): void;
     /** Inherited. */
     press(a0: Widget.Pressable): void;
@@ -75,6 +77,7 @@ declare module "java:com.example.ui" {
     constructor();
     onMeasure(a0: number, a1: number): void;
     setBounds(a0: number, a1: number, a2: number, a3: number): void;
+    static defaultPadding(): number;
     setPadding(...a0: number[]): void;
     press(a0: Widget.Pressable): void;
     post(a0: Widget.Task | ((a0: number) => void)): void;
@@ -88,9 +91,17 @@ declare module "java:com.example.ui" {
       /** Inherited. */
       run(a0: number): void;
     }
+    export namespace Pressable {
+        /** Inherited. */
+        const KIND: string;
+    }
     /** com.example.ui.Widget$Task */
     export interface Task {
       run(a0: number): void;
+    }
+    export namespace Task {
+        /** Inlined at the call site: the class is never loaded for this. */
+        const KIND: string;
     }
   }
 

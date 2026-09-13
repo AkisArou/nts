@@ -390,7 +390,20 @@ fn emitted_name(
 }
 
 /// Append every public field, with its nullability and constant-ness.
-fn render_fields(out: &mut String, class: &ClassFile) -> Result<(), String> {
+/// Fields, with an interface's constants diverted to `constants`.
+///
+/// **A TypeScript `interface` cannot carry a `static` member** -- `TS1070
+/// 'static' modifier cannot appear on a type member` -- and a Java interface's
+/// fields are *implicitly* `public static final`, which is a standard idiom:
+/// 10 of 109 interfaces in the sampled `android.jar` have one.
+///
+/// So they go in a `namespace` of the same name, which TypeScript merges with
+/// the interface, and `Task.KIND` resolves exactly as it does in Java.
+fn render_fields_into(
+    out: &mut String,
+    constants: &mut String,
+    class: &ClassFile,
+) -> Result<(), String> {
     let is_enum_class = class.access & access::ENUM != 0;
 
     for field in class.fields.iter().filter(|f| f.access & access::PUBLIC != 0) {
@@ -429,12 +442,26 @@ fn render_fields(out: &mut String, class: &ClassFile) -> Result<(), String> {
         } else {
             ""
         };
-        out.push_str(note);
+        // An interface's fields cannot be members; they become the merged
+        // namespace's constants instead.
+        let interface = class.access & access::INTERFACE != 0;
+        let into = if interface { &mut *constants } else { &mut *out };
+        into.push_str(note);
+        // A namespace member is a `const`. `static readonly` is class syntax
+        // and is `TS1128 Declaration or statement expected` here -- the second
+        // thing wrong with an interface constant, after `static` on a member.
         let _ = writeln!(
-            out,
-            "    {}{}{}: {};",
-            if is_static { "static " } else { "" },
-            if is_final { "readonly " } else { "" },
+            into,
+            "    {}{}: {};",
+            if interface {
+                "const ".to_owned()
+            } else {
+                format!(
+                    "{}{}",
+                    if is_static { "static " } else { "" },
+                    if is_final { "readonly " } else { "" }
+                )
+            },
             field.name,
             if provably_present { rendered.clone() } else { returns(&rendered, &field.annotations) },
         );
@@ -483,7 +510,8 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         if is_interface { "interface" } else { "class" }
     );
 
-    render_fields(&mut out, class)?;
+    let mut constants = String::new();
+    render_fields_into(&mut out, &mut constants, class)?;
 
     // Which methods collapse onto one TypeScript signature. Computed before
     // rendering, because the decision is about the *set*: a name is only
@@ -538,9 +566,18 @@ pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<Str
         );
     }
 
-    render_inherited(&mut out, class, resolve);
+    render_inherited(&mut out, class, resolve, &mut constants);
 
     out.push_str("  }\n");
+    if !constants.is_empty() {
+        // Declaration merging: `interface Task` and `namespace Task` are one
+        // type to TypeScript, so `Task.KIND` resolves as it does in Java.
+        let _ = writeln!(out, "  export namespace {name} {{");
+        for line in constants.lines() {
+            let _ = writeln!(out, "  {line}");
+        }
+        out.push_str("  }\n");
+    }
     Ok(out)
 }
 
@@ -677,13 +714,31 @@ fn arguments(method: &crate::read::Member, parameters: &[String], resolve: &dyn 
 /// Separate from [`declarations_with`] because that function was over a hundred
 /// lines with it inline, and the two halves answer different questions: what
 /// this class says, and what it gets for free.
-fn render_inherited(out: &mut String, class: &ClassFile, resolve: &dyn Resolve) {
+fn render_inherited(
+    out: &mut String,
+    class: &ClassFile,
+    resolve: &dyn Resolve,
+    constants: &mut String,
+) {
     for field in inherited_fields(class, resolve) {
         let Some((rendered, _)) = type_of(&field.descriptor) else { continue };
+        // An inherited interface constant is still static -- `Pressable.KIND`
+        // is the same constant `Task.KIND` is -- so it goes to the namespace
+        // too, and on a class it keeps its `static`.
+        let is_interface = class.access & access::INTERFACE != 0;
+        let into = if is_interface { &mut *constants } else { &mut *out };
         let _ = writeln!(
-            out,
+            into,
             "    /** Inherited. */\n    {}{}: {};",
-            if field.access & access::FINAL != 0 { "readonly " } else { "" },
+            if is_interface {
+                "const ".to_owned()
+            } else {
+                format!(
+                    "{}{}",
+                    if field.access & access::STATIC != 0 { "static " } else { "" },
+                    if field.access & access::FINAL != 0 { "readonly " } else { "" }
+                )
+            },
             field.name,
             if field.constant { rendered.clone() } else { returns(&rendered, &field.annotations) },
         );

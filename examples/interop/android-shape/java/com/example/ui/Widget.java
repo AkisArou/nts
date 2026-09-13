@@ -24,7 +24,19 @@ public class Widget {
 
     /** A single-abstract-method interface declared on the base class. */
     public interface Task {
+        /** An interface field: implicitly `public static final`, and inherited
+         *  by every implementor. Also a `ConstantValue`, so provably non-null
+         *  and an `ldc` rather than a `getstatic`. */
+        String KIND = "task";
+
         void run(int id);
+    }
+
+    /** A static on the base class. `View.defaultPadding()` is legal Java, and
+     *  the generated TypeScript classes carry no `extends`, so it has to be
+     *  listed on the subclass or it is unreachable. */
+    public static int defaultPadding() {
+        return 8;
     }
 
     /** An interface extending another: its own method plus the parent's. */

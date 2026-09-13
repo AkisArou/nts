@@ -1130,3 +1130,50 @@ fn a_superinterface_is_inherited_and_counted() {
         "two abstract methods once inherited: no closure, because javac accepts none:\n{widget}"
     );
 }
+
+/// A Java interface's constants, which cannot be members of a TypeScript
+/// interface at all.
+///
+/// A Java interface's fields are implicitly `public static final`, and it is a
+/// standard idiom -- 10 of 109 interfaces in the sampled `android.jar` have
+/// one. Emitting them as members produced **two** TypeScript errors in
+/// sequence: `TS1070 'static' modifier cannot appear on a type member`, and
+/// then, once they moved to a namespace, `TS1128 Declaration or statement
+/// expected` because `static readonly` is class syntax and a namespace member
+/// is a `const`.
+///
+/// Declaration merging is the answer: `interface Task` and `namespace Task` are
+/// one type to TypeScript, so `Task.KIND` resolves exactly as in Java.
+#[test]
+fn an_interface_constant_becomes_a_merged_namespace() {
+    let Some(ui) = android_shape() else {
+        eprintln!("SKIP reads: the android-shape fixture did not build");
+        return;
+    };
+    let read = |name: &str| {
+        let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
+        nts_jvm_emitter::read::class_file(&bytes).expect("parses")
+    };
+    let resolve = FromDirectory(ui.clone());
+    let task = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget$Task"), &resolve)
+        .expect("renders");
+
+    assert!(task.contains("export namespace Task {"), "a merged namespace:\n{task}");
+    assert!(task.contains("const KIND: string;"), "carrying a const:\n{task}");
+    // Neither spelling that TypeScript rejects.
+    assert!(!task.contains("static readonly KIND"), "`static` is not a type member:\n{task}");
+    assert!(
+        !task.contains("  static ") || !task.contains("export interface Task"),
+        "no static member survives on the interface:\n{task}"
+    );
+
+    // **The control: a class keeps `static readonly`**, which is correct there
+    // and is the spelling the interface may not use. A fix that emitted `const`
+    // everywhere would pass every assertion above.
+    let widget = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget"), &resolve)
+        .expect("renders");
+    assert!(
+        !widget.contains("export namespace Widget {"),
+        "a class needs no namespace for its statics:\n{widget}"
+    );
+}
