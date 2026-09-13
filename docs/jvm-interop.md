@@ -476,3 +476,157 @@ In this order, because each produces something falsifiable:
 
 Nothing here should be built before (2) and (3), because both can change the
 shape of everything above them.
+
+# Every cost named, and what eliminates it
+
+Written because a plan that lists costs and stops is a plan that has decided to
+pay them. Each row below is either eliminated, or says plainly why it cannot be
+and how rare it is.
+
+## The framing that makes most of this possible: there is no boundary
+
+On the C lane an FFI is a real thing -- a calling convention, a marshalling
+step, a place where the two sides genuinely differ. **On this lane both sides
+are JVM bytecode.** A call into Java is an `invokevirtual`, indistinguishable
+from a call into our own emitted code. There is no crossing to make cheap.
+
+So every cost in this document is a **representation mismatch** and nothing
+else, and a representation mismatch is eliminable by changing a representation.
+That is why the list below ends mostly in "eliminated" rather than "reduced".
+
+## 1. Boxing at the `Map` boundary — *reduced to the caller's own*
+
+A Java caller writing `map.get(1.0)` autoboxes a `Double` **in their code,
+before the call**. Nothing we do removes it; it is not ours.
+
+What is ours: `getObject(NtsMap, Object)` already exists and looks a key up
+without allocating on our side, so the cost is a hash and a compare.
+
+**And the interface is not the only surface.** `NtsMap` keeps its `public
+static` primitive paths, so a Java caller who cares calls
+`NtsMap.getDouble(map, 1.0)` and boxes nothing. Kotlin does exactly this --
+the mapped interface for compatibility, specialised operations beside it.
+
+Residual: a caller who insists on `Map.get(Object)`. HotSpot's escape analysis
+removes the box when the call inlines; ART's is weaker and will not.
+
+## 2. `number[]` → `int[]` — *eliminated, and it is the headline*
+
+This is the same defect as the worst Bar 1 row on ART, already measured in
+`benches/jvm-rows.md`, five interleaved rounds:
+
+    A  int[]     + instance methods   8752.2 ns    AWFY as written
+    B  double[]  + instance methods   9995.5 ns    +14.2%
+    ours                             10970.7 ns    +25.3%
+
+**The element type alone is 14.2%.** The named blocker is small: `hir::runtime`
+has `nts_array_fill_bool` and **no `_i32`**, so an integer array falls back to
+`f64`. A `double[]` is eight bytes an element against four, an `i2d` per store
+and a `d2i` per read.
+
+So one change -- carrying integer-ness into the array's element type --
+
+- **eliminates this interop copy entirely** (an `int[]` is the `int[]` Java
+  wants);
+- is worth **~14%** on `awfy-queens`, the worst row on the goal's open number;
+- is **not JVM-only**: the note recording it says both native lanes carry it;
+- and it is `hir::elements`' with a `hir::runtime` row beside it, which is the
+  same two-lane coordination as `nts_uncaught_builtin` and is already rehearsed.
+
+**Nothing else in this document has that ratio of leverage to size.**
+
+## 3. `bigint` → `BigInteger` — *unavoidable, and scoped*
+
+Arbitrary precision from a fixed 128 bits is a construction, not a view.
+Extending `BigInteger` would mean maintaining its representation *and* ours,
+which is worse than the copy.
+
+Scoped instead: **`long` is the Java integer type that appears in APIs**, and it
+is free -- `NtsBigInt.lo` is the value. `BigInteger` appears in cryptography and
+almost nowhere else. Documented as a copy at the one place it happens.
+
+## 4. The growable-array wrapper — *three eliminations, in order*
+
+1. **Free already, and untaken.** When `items.length == length` the wrapper's
+   `items` *is* the array Java wants. Detect and pass it through; this is ours
+   and costs nothing.
+2. **`trim()`** where they differ: one copy, amortised over every later
+   crossing, instead of one per call.
+3. **Per-array, not whole-program** -- the real fix. `hir::escape` and
+   `hir::elements` already work per array; the whole-program summary is
+   conservative rather than necessary. An array that provably never grows stays
+   bare in a program where another one does, and the cliff disappears.
+
+## 5. `Uint8Array` subarray → `byte[]` — *eliminated in the common case*
+
+- **`ByteBuffer.wrap(storage, offset, length)`** is a zero-copy view, wherever
+  the API takes a buffer.
+- **Prefer the offset/length overload.** `InputStream.read(byte[], int, int)`,
+  `OutputStream.write(byte[], int, int)` and most of `java.nio` have one. The
+  binding table knows every overload, so the generator routes to the one that
+  takes an offset and copies nothing.
+
+Residual: an API taking a bare `byte[]` with no offset form and no buffer form.
+
+## 6. `AbstractMap` redefining `equals`/`hashCode` — *eliminated by not using it*
+
+Implement `java.util.Map` directly rather than extending `AbstractMap`, so every
+method is ours and none is inherited. Verify first that nothing in this runtime
+uses an `NtsMap` as a key; if something does, that site takes an
+`IdentityHashMap`.
+
+## 7. Interface dispatch on `NtsMap` — *zero, by construction*
+
+Every operation is a `public static` taking the map as its first argument, so
+emitted code never calls through the interface. An interface a class does not
+call through is itable entries and no instructions.
+
+## 8. Closure → Java functional interface — *eliminated*
+
+The backend already emits one `nts/gen/Fn$<hash>` class per closure descriptor.
+**Adding `implements com.example.Listener` to it is free**, and the binding
+table says which interface. No adapter object, no wrapper, no allocation per
+crossing. A closure passed to two different Java interfaces implements both,
+which a class may do.
+
+## 9. Overload collapse — *eliminated by distinguishable types*
+
+`f(int)`, `f(long)` and `f(double)` collapse to `f(number)` only if `int` and
+`long` are not distinguishable in the `.d.ts`. `long` is already distinct --
+it is `bigint`. `int` needs the brand, which is the next row. With both, the
+three are three TS overloads and resolution is the checker's.
+
+Where they remain ambiguous, **the binding refuses rather than guesses**.
+
+## 10. Branded types hitting the intersection refusal — *two routes, one needs no compiler change*
+
+- **For the Java direction, none is needed.** The binding table carries the
+  descriptor, so the compiler inserts the `d2i` itself and `int` in the `.d.ts`
+  is documentation. This works today.
+- **For directing the compiler**, the narrow rule -- *an intersection of a
+  primitive with types declaring only phantom properties is that primitive* --
+  does not cover the shape that broke the rejected rule, and is one measurement.
+
+Kotlin's own answer is worth noting because it is neither: `@JvmInline value
+class Meters(val v: Double)` erases to a bare `double` and is **nominal**. TS has
+no such declaration, which is why the intersection hack exists at all.
+
+## 11. `d2i` at an integer boundary — *one instruction, and eliminated by row 2*
+
+Where the value is already an `i32` there is nothing to convert. Same fix.
+
+## 12. Nullability — *not a speed cost*
+
+Annotations plus a checked-in overrides file. It costs DX and correctness
+attention, not instructions.
+
+# What this adds up to
+
+Of twelve named costs, **eight are eliminated outright**, one is reduced to the
+caller's own choice, two are unavoidable and rare enough to name at their single
+site, and one is not a speed cost at all.
+
+And the ordering falls out of it rather than being chosen: **row 2 is first**,
+because it is the only one that pays for itself before any of this is built --
+14.2% on the worst row of the goal's open number, shared by all three backends,
+blocked on a missing `_i32` in a table that already has `_bool`.
