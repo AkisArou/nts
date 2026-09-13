@@ -549,9 +549,96 @@ public final class RuntimeRegression {
         check(Double.isNaN(NtsValue.valueToNumber(NtsValue.ofObject(new Plain(1)))), "an object is NaN");
     }
 
+
+    /**
+     * `NtsMap implements java.util.Map`, which is what lets a Java method take
+     * one of our maps without a copy.
+     *
+     * <p>Two things are being checked and only one of them is the interface.
+     *
+     * <p>**The interesting one is that SameValueZero and Java's `equals` agree
+     * on every input.** JS keys by SameValueZero: `NaN` matches `NaN`, and `+0`
+     * matches `-0`. `Double.equals(NaN, NaN)` is *true*, which lines up, and
+     * `Double.equals(+0.0, -0.0)` is *false*, which does not. The table already
+     * normalises `-0` to `+0` at insert so that iteration exposes `+0`, and the
+     * consequence -- not obvious until you look for it -- is that the two rules
+     * coincide exactly. A Java caller looking up `-0.0` finds what a JS caller
+     * stored as `0`.
+     *
+     * <p>**The other is that the view is a view.** Writing through the static
+     * ABI has to be visible through the `Map`, and writing through the `Map`
+     * has to be visible to the static ABI, because there is only one table. A
+     * copy would pass every other assertion here and fail these two.
+     */
+    private static void testMapAsJavaMap() {
+        NtsMap map = NtsMap.newMap(0);
+        java.util.Map<Object, Object> view = map;
+
+        // Written through the compiled-code ABI...
+        NtsMap.set(map, NtsValue.ofString("a"), NtsValue.ofNumber(1));
+        NtsMap.set(map, NtsValue.ofNumber(0.0), NtsValue.ofString("zero"));
+        NtsMap.set(map, NtsValue.ofNumber(Double.NaN), NtsValue.ofString("nan"));
+
+        // ...and read through the Java interface, with no copy in between.
+        check(view.size() == 3, "size through the interface");
+        equal(view.get("a"), Double.valueOf(1), "string key through the interface");
+
+        // SameValueZero: -0 finds what was stored as +0.
+        equal(view.get(Double.valueOf(-0.0)), "zero", "-0 finds the +0 entry");
+        check(view.containsKey(Double.valueOf(-0.0)), "containsKey(-0)");
+        // And the key it hands back is +0, not the -0 that was asked for.
+        boolean sawPositiveZero = false;
+        for (Object key : view.keySet()) {
+            if (key instanceof Double && ((Double) key).doubleValue() == 0.0) {
+                check(Double.doubleToLongBits(((Double) key).doubleValue()) == 0L,
+                    "iteration exposes +0, not -0");
+                sawPositiveZero = true;
+            }
+        }
+        check(sawPositiveZero, "the zero key was iterated");
+
+        // SameValueZero: NaN matches NaN, where `==` would not.
+        equal(view.get(Double.valueOf(Double.NaN)), "nan", "NaN finds the NaN entry");
+
+        // The view is live in both directions.
+        view.put("b", Double.valueOf(2));
+        check(NtsMap.has(map, NtsValue.ofString("b")), "a Map put is visible to the static ABI");
+        NtsMap.set(map, NtsValue.ofString("c"), NtsValue.ofNumber(3));
+        equal(view.get("c"), Double.valueOf(3), "a static set is visible through the Map");
+
+        // Insertion order survives, which `HashMap` would not give.
+        StringBuilder order = new StringBuilder();
+        for (Object key : view.keySet()) {
+            if (key instanceof String) { order.append((String) key); }
+        }
+        equal(order.toString(), "abc", "insertion order through keySet");
+
+        // removal, and entrySet
+        equal(view.remove("a"), Double.valueOf(1), "remove returns the previous value");
+        check(!view.containsKey("a"), "removed key is gone");
+        int entries = 0;
+        for (java.util.Map.Entry<Object, Object> entry : view.entrySet()) {
+            check(entry.getKey() != null || entry.getValue() != null, "an entry is readable");
+            entries++;
+        }
+        check(entries == view.size(), "entrySet agrees with size");
+
+        // `equals` against a plain HashMap, both ways, without AbstractMap.
+        java.util.Map<Object, Object> plain = new java.util.HashMap<Object, Object>();
+        for (java.util.Map.Entry<Object, Object> entry : view.entrySet()) {
+            plain.put(entry.getKey(), entry.getValue());
+        }
+        check(view.equals(plain), "equals a HashMap with the same entries");
+        check(view.hashCode() == plain.hashCode(), "hashCode matches the Map contract");
+
+        view.clear();
+        check(view.isEmpty() && NtsMap.size(map) == 0, "clear through the interface");
+    }
+
     public static void main(String[] args) throws Exception {
         testBigInt(); System.out.println("bigint randomized tests passed");
         testMap(); System.out.println("map randomized and cursor tests passed");
+        testMapAsJavaMap(); System.out.println("NtsMap as java.util.Map passed");
         testNumbersAndIndices(); System.out.println("numeric and index tests passed");
         testArraysAndStrings(); System.out.println("array and string tests passed");
         testPromises(); System.out.println("promise and queue tests passed");

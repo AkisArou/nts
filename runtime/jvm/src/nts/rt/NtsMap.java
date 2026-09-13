@@ -14,7 +14,7 @@ import java.util.Arrays;
  * Interior holes cannot be reused: a surviving old entry may precede them.
  * This collection, like the event loop, is confined to one execution thread.
  */
-public final class NtsMap {
+public final class NtsMap implements java.util.Map<Object, Object> {
     private static final NtsValue[] EMPTY_VALUES = new NtsValue[0];
     private static final long[] EMPTY_INDEX = new long[0];
     private static final NtsValue ZERO_KEY = NtsValue.ofNumber(0.0);
@@ -725,5 +725,215 @@ public final class NtsMap {
         // 194 -- on integer keys, fractional keys and negative keys alike.
         h *= 0x9e3779b1;
         return h ^ (h >>> 16);
+    }
+
+    // ------------------------------------------------------------------
+    // java.util.Map, so a Java caller holds this object itself
+    // ------------------------------------------------------------------
+    //
+    // **The whole point is that there is no copy.** A Java method taking a
+    // `java.util.Map` receives *this table*, backed by the same `keys` and
+    // `values` arrays the compiled TypeScript writes. Converting instead would
+    // be O(n) plus an allocation per crossing, on every crossing.
+    //
+    // What it is not is literally free: each `get` and `put` converts one
+    // `NtsValue` to or from a Java reference, which is a tag switch and at most
+    // one box. That is O(1) against a copy's O(n), and it is the honest version
+    // of the plan's "free".
+    //
+    // **Implemented directly rather than by extending `AbstractMap`**, which is
+    // cost 6 in docs/jvm-interop.md: `AbstractMap` defines `equals` and
+    // `hashCode` by iterating `entrySet()` and allocating an `Entry` per
+    // element, and inheriting them would put that cost on operations that do
+    // not otherwise need one.
+    //
+    // **SameValueZero comes out exactly right, and that is the reason this
+    // class is not a `LinkedHashMap` to begin with.** JS keys by SameValueZero:
+    // `NaN` matches `NaN`, and `+0` matches `-0`. Java's `Double.equals` agrees
+    // on the first -- `Double.equals(NaN, NaN)` is true -- and disagrees on the
+    // second. Normalising `-0` to `+0` at insert, which this table already does
+    // so that iteration exposes `+0`, makes the two rules coincide on every
+    // input. So a Java caller's `containsKey(Double.valueOf(-0.0))` finds the
+    // entry a JS caller stored as `0`, which is what both languages expect.
+
+    /** A JS value as the nearest Java reference. `undefined` and `null` both become Java null. */
+    private static Object toJava(NtsValue value) {
+        switch (value.tag) {
+            case NtsValue.UNDEFINED:
+            case NtsValue.NULL:
+                return null;
+            case NtsValue.BOOLEAN:
+                return Boolean.valueOf(value.num != 0.0);
+            case NtsValue.NUMBER:
+                return Double.valueOf(value.num);
+            default:
+                // STRING, FUNCTION, SYMBOL and OBJECT all carry their payload in
+                // `ref`, so this is a field read rather than a conversion.
+                return value.ref;
+        }
+    }
+
+    /** A Java reference as a JS value. The inverse of {@link #toJava}, minus the ambiguity of null. */
+    private static NtsValue fromJava(Object value) {
+        if (value == null) { return NtsValue.NULL_VALUE; }
+        if (value instanceof String) { return NtsValue.ofString((String) value); }
+        if (value instanceof Double) { return NtsValue.ofNumber(((Double) value).doubleValue()); }
+        if (value instanceof Number) { return NtsValue.ofNumber(((Number) value).doubleValue()); }
+        if (value instanceof Boolean) { return NtsValue.ofBoolean(((Boolean) value).booleanValue()); }
+        return NtsValue.ofObject(value);
+    }
+
+    @Override public int size() { return count; }
+    @Override public boolean isEmpty() { return count == 0; }
+    @Override public boolean containsKey(Object key) { return has(this, fromJava(key)); }
+    @Override public Object get(Object key) { return toJava(get(this, fromJava(key))); }
+
+    @Override
+    public Object put(Object key, Object value) {
+        NtsValue k = fromJava(key);
+        Object previous = toJava(get(this, k));
+        set(this, k, fromJava(value));
+        return previous;
+    }
+
+    @Override
+    public Object remove(Object key) {
+        NtsValue k = fromJava(key);
+        Object previous = toJava(get(this, k));
+        delete(this, k);
+        return previous;
+    }
+
+    @Override
+    public void putAll(java.util.Map<?, ?> from) {
+        for (java.util.Map.Entry<?, ?> entry : from.entrySet()) {
+            put(entry.getKey(), entry.getValue());
+        }
+    }
+
+    @Override public void clear() { clear(this); }
+
+    @Override
+    public boolean containsValue(Object value) {
+        NtsValue wanted = fromJava(value);
+        for (int at = nextI(this, 0); at >= 0; at = nextI(this, at + 1)) {
+            if (sameKey(valueAt(this, at), wanted)) { return true; }
+        }
+        return false;
+    }
+
+    /**
+     * Insertion-ordered cursor over the live entries, converting lazily.
+     *
+     * <p>Backed by {@link #nextI}, so it walks the same storage the compiled
+     * code writes and allocates nothing per element beyond whatever `toJava`
+     * boxes. `remove` is unsupported: the table's cursors are absolute
+     * insertion positions and a removal during iteration is the one thing that
+     * would make them lie.
+     */
+    private abstract class Cursor<T> implements java.util.Iterator<T> {
+        private int at = nextI(NtsMap.this, 0);
+
+        @Override public boolean hasNext() { return at >= 0; }
+
+        @Override
+        public T next() {
+            if (at < 0) { throw new java.util.NoSuchElementException(); }
+            int here = at;
+            at = nextI(NtsMap.this, here + 1);
+            return of(here);
+        }
+
+        @Override
+        public void remove() {
+            throw new UnsupportedOperationException("NtsMap cursors are absolute insertion positions");
+        }
+
+        abstract T of(int absolute);
+    }
+
+    @Override
+    public java.util.Set<Object> keySet() {
+        return new java.util.AbstractSet<Object>() {
+            @Override public int size() { return count; }
+            @Override public boolean contains(Object key) { return containsKey(key); }
+            @Override
+            public java.util.Iterator<Object> iterator() {
+                return new Cursor<Object>() {
+                    @Override Object of(int absolute) { return toJava(keyAtI(NtsMap.this, absolute)); }
+                };
+            }
+        };
+    }
+
+    @Override
+    public java.util.Collection<Object> values() {
+        return new java.util.AbstractCollection<Object>() {
+            @Override public int size() { return count; }
+            @Override
+            public java.util.Iterator<Object> iterator() {
+                return new Cursor<Object>() {
+                    @Override Object of(int absolute) { return toJava(valueAt(NtsMap.this, absolute)); }
+                };
+            }
+        };
+    }
+
+    @Override
+    public java.util.Set<java.util.Map.Entry<Object, Object>> entrySet() {
+        return new java.util.AbstractSet<java.util.Map.Entry<Object, Object>>() {
+            @Override public int size() { return count; }
+            @Override
+            public java.util.Iterator<java.util.Map.Entry<Object, Object>> iterator() {
+                return new Cursor<java.util.Map.Entry<Object, Object>>() {
+                    @Override
+                    java.util.Map.Entry<Object, Object> of(int absolute) {
+                        return new java.util.AbstractMap.SimpleImmutableEntry<Object, Object>(
+                            toJava(keyAtI(NtsMap.this, absolute)), toJava(valueAt(NtsMap.this, absolute)));
+                    }
+                };
+            }
+        };
+    }
+
+    /**
+     * `Map.equals`, without `AbstractMap`'s per-element `Entry` allocation.
+     *
+     * <p>The contract is set equality of entries, which for two maps of equal
+     * size is "every key of mine is present in theirs with an equal value" --
+     * checkable by walking our own storage directly.
+     */
+    @Override
+    public boolean equals(Object other) {
+        if (other == this) { return true; }
+        if (!(other instanceof java.util.Map)) { return false; }
+        java.util.Map<?, ?> them = (java.util.Map<?, ?>) other;
+        if (them.size() != count) { return false; }
+        for (int at = nextI(this, 0); at >= 0; at = nextI(this, at + 1)) {
+            Object key = toJava(keyAtI(this, at));
+            Object mine = toJava(valueAt(this, at));
+            Object theirs = them.get(key);
+            if (mine == null ? theirs != null || !them.containsKey(key) : !mine.equals(theirs)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** `Map.hashCode`: the sum of the entries' hashes, order-independent by contract. */
+    @Override
+    public int hashCode() {
+        int total = 0;
+        for (int at = nextI(this, 0); at >= 0; at = nextI(this, at + 1)) {
+            Object key = toJava(keyAtI(this, at));
+            Object value = toJava(valueAt(this, at));
+            total += (key == null ? 0 : key.hashCode()) ^ (value == null ? 0 : value.hashCode());
+        }
+        return total;
+    }
+
+    /** Absolute-index value read, the companion `valueAt` has for doubles. */
+    private static NtsValue valueAt(NtsMap map, int absolute) {
+        return valueAt(map, (double) absolute);
     }
 }
