@@ -846,3 +846,71 @@ first slice is not:
 All three are `hir`'s rather than this lane's. What this lane can do is supply
 the number each slice is worth, which for slice 2 is already measured at 14.2%
 on the worst row of the goal's open number.
+
+# The element width, settled: narrowing exists and one filter blocks it
+
+**This supersedes everything above about a union-find project.** Three positions
+were taken on this in one day and the middle one was invented; the third is
+verified from the pass and independently from the corpus.
+
+**Narrowing `number[]` to an integer array already exists and already fires.**
+`hir::elements::representations` maps an `f64` element to an integer one, and
+`erasure-stored-unknown` emits both from a single program:
+
+    newarray double        and        newarray long
+
+`width_for` returns `HirType::Int { bits, signed: true }`, so `int[]` is a
+target rather than a wish.
+
+**What blocks `queenRows` is one filter, and it is a global `any`:**
+
+    .filter(|(element, _)| !borrowed.contains(*element))
+
+`reaches_a_runtime_helper` walks every function, takes every `Callee::External`
+call, and inserts the element type of every array-typed argument. No call-site
+condition, no per-array scope. `new Array(8).fill(-1)` reaches `nts_array_fill`,
+so `f64` enters `borrowed`, so **every `number[]` in the program** is
+disqualified.
+
+## Two pieces, and their real costs
+
+**Piece 1 — the filter disqualifies only where no narrowed form of that helper
+exists.** Not merely "a narrowed form exists somewhere": it has to be reachable
+for *that* call, or the pass keeps an `int[]` and hands it to a helper expecting
+`[D`. **That is the covariance hazard again, arriving at the helper boundary
+instead of the assignment**, and the current filter is conservative in the safe
+direction -- it gives up narrowing rather than mis-narrowing. So the failing arm
+gets written before the fix, not after.
+
+**Piece 2 — the `_i32` helper rows, and they are not one row.** A new runtime
+helper lands in **three tables**: `hir::runtime`, the LLVM signatures, and this
+lane's. `tooling/gate/bench-agree.sh` is 111 lines with **no allowance list** --
+checked, not remembered -- so a helper present in two of three **red-gates the
+third** rather than skipping it. The C implementation and the LLVM signature are
+one lane's; the JVM row is this one's. Piece 2 is a coordinated change by
+construction and the estimate has to say so.
+
+## What this retracts
+
+- **"The element type is the TypeScript type."** Wrong. It is the TypeScript
+  type *until* `representations` narrows it, and narrowing is live.
+- **The union-find project.** Not needed for the element width. The growable
+  cliff is a *different* global `any`, in `arrays_can_grow`, and still wants
+  partitioning -- two global filters folded into one problem because both were
+  global.
+- **"Slice 1 is free."** `escape.rs` exposes `escapes()`, `is_frame_local()` and
+  `analyze_program()`, and **nothing surfaces them** -- `escape::` appears
+  nowhere in the CLI. The count wants a ~30-line instrument, not a grep.
+
+## And the sequence, which is the part worth keeping
+
+    P1  "because `hir::runtime` has no `_i32`"   weeks old, never applied
+    P2  added the row, nothing moved, so
+        "the element type IS the TypeScript type"   invented and published
+    P3  read the pass: narrowing was *disqualified*, not never attempted
+
+P2's observation was correct and its *because* was manufactured, four messages
+after this lane coined the phrase for exactly that failure -- and with
+`elements.rs`' own warning twelve lines from the code being reasoned about:
+**"reading the code and reading the emitted IR are two measurements and only the
+second was right."** The IR was read. The pass was not.
