@@ -36,6 +36,16 @@ projects' `build.sh` -- because the CLI lives in `tooling/cli`, which this lane
 does not own. The CLI is `check`, `emit-c`, `emit-jvm`, `hir`, `layouts`,
 `version`.
 
+**A note on how code is cited here, which this document got wrong.** References
+into `compiler/core/src/hir/**` name a **function or a phrase**, never a line
+number. That file belongs to another lane and moves constantly: `lower.rs:6570`
+was cited as the evidence for the brand refusal and now points at an unrelated
+comment about `Structured { flags: 16384 }`, because the passage it meant moved
+thirty lines when that lane edited the file. The quote was accurate; the
+coordinate was not. A line number into a file you do not own is a citation with
+an expiry date, and `grep` finds the phrase after any edit that does not delete
+it.
+
 ## The representations, measured
 
 This is the table everything else depends on, and none of it is a design
@@ -447,7 +457,8 @@ Three rules I would hold to:
 
 You proposed `type int = number & { __type: "int" }`. **That exact shape is
 refused by this compiler today**, and the reason is measured rather than
-incidental -- `lower.rs:6570`:
+incidental -- `lower.rs`, at the comment beginning *"`TypeKind::Intersection`
+falls here"*:
 
 > `TypeKind::Intersection` falls here, and **that is a decision** rather than an
 > omission. It is tempting and it is wrong, measured on 2026-09-12. The rule
@@ -1080,7 +1091,7 @@ generated fields are emitted `public` today, so a Java caller can `putfield`
 into one with no `FieldSet` in the HIR at all. See "Keeping the advantage", which
 is the only item in this document with a deadline.
 
-`Layout.base` **does** exist (`hir/mod.rs:1361`), so inheritance is representable
+`Layout.base` **does** exist (`hir/mod.rs`, `pub base: Option<TypeId>`), so inheritance is representable
 — but a TS class extending a Java one needs `base` to name a foreign type, which
 is this same question. **Android needs that constantly**: `extends Activity`,
 `implements OnClickListener`.
@@ -1453,7 +1464,7 @@ retained: frame placement is lost and the array is heap-allocated. But
 `OutputStream.write` copies its argument out and keeps nothing.
 
 **The mechanism already exists, and it is already per-parameter.**
-`hir/escape.rs:728` reads `Callee::External(name) => runtime::keeps(name)`, and
+`hir/escape.rs`'s `gone_into_the_unknown` reads `Callee::External(name) => runtime::keeps(name)`, and
 `keeps` returns `Option<&'static [usize]>`: `None` means "assume everything",
 `Some(&[])` means "keeps nothing", `Some(&[0])` names which parameters are
 retained. The comment above the `nts_presence_` arm records what saying so was
@@ -1532,7 +1543,7 @@ the measurement says why much better than the guess did:
 A foreign layout is therefore the one case where a merge cannot be repaired
 downstream, because every repair this backend has depends on owning the class.
 
-**The fix is unchanged and is one line.** `lower.rs:4615` has `nominal_name` --
+**The fix is unchanged and is one line.** `lower.rs`'s `nominal_name` --
 *"whether this layout's name is its identity"* -- currently
 `is_error || is_signature_name || is_constructor_name`. Record 0096 is the story
 of the cross-family merge that reached node's `path`. A foreign layout is the
