@@ -388,7 +388,51 @@ pub(super) fn forward_stores(func: &mut Func) -> usize {
                     // The motivating site is `seed: number`. Ownership belongs
                     // to `own.rs` and `rc`, and a redundant-load rule has no
                     // business reasoning about it.
-                    if !matches!(func.values[op.0 as usize].ty, HirType::Managed(_))
+                    //
+                    // **Except where there is no ownership to duplicate.** The
+                    // argument above is entirely about a count: the load takes,
+                    // so forwarding makes a second live reference and the store
+                    // then owes a release. A value with no count has none of
+                    // that, and `own.rs::counted_here` already says which
+                    // values those are -- it answers `false` for a string
+                    // literal, a null and an undefined, because they are static
+                    // data the runtime treats as immortal.
+                    //
+                    // So the three of them forward, and this is not a second
+                    // list deciding the same question: it is a strict subset of
+                    // one `own.rs` states, chosen because those three are also
+                    // the ones whose *placement* cannot move. `counted_here`
+                    // answers `false` for two more -- `ClosureStatic` and a
+                    // frame-placed `Call` -- and they are deliberately left
+                    // out. A frame-placed result is frame-placed *because*
+                    // `place_allocations` proved it does not outlive the frame,
+                    // and extending its live range is the kind of reasoning
+                    // that pass owns, not this one. That is the same sentence
+                    // as the paragraph above, one pass over.
+                    //
+                    // The shape that prompted it is a `throw`: a provided
+                    // error is built with `field.set %o.0 = <const "...">` and
+                    // read straight back out by `field.get %o.0` to hand
+                    // `nts_uncaught` the message, because the runtime cannot
+                    // read a `message` field and the compiler can.
+                    //
+                    // **109 sites, not the 717 that `throw new X(...)`**, and
+                    // the difference is this pass working rather than missing
+                    // them. A user-defined error class stores its message
+                    // inside its own constructor, so a `call` sits between the
+                    // store and the load and clears the map -- correctly, since
+                    // a call can write any field. 608 of the corpus's throws
+                    // are that shape, 263 of them `ERR_INVALID_ARG_TYPE`. The
+                    // first number this comment carried was 717, which is the
+                    // count of the *source construct* and not of the pattern.
+                    let stored_is_immortal = matches!(
+                        func.values[value.0 as usize].kind,
+                        OpKind::ConstString(_) | OpKind::ConstNull | OpKind::ConstUndefined
+                    );
+                    let owned_reference =
+                        matches!(func.values[op.0 as usize].ty, HirType::Managed(_))
+                            && !stored_is_immortal;
+                    if !owned_reference
                         && func.values[op.0 as usize].ty == func.values[value.0 as usize].ty
                     {
                         let target = replacement.get(&value).copied().unwrap_or(value);

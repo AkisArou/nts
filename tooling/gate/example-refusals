@@ -30,7 +30,22 @@ generic-classes-unsupported 8 the constructs the name promises
 generator-unsupported 3 the constructs the name promises
 dates-unsupported 6 the constructs the name promises
 async-unsupported 4 the constructs the name promises
-array-from-unsupported 2 the constructs the name promises
+# Was 2 until `86994fb4` landed the mapped-callback arm, which is one of the
+# two constructs this example's name promises. The remaining one is a
+# `for...of` over an object type.
+#
+# **Stale from that commit until 2026-09-13, and it printed every run.** The
+# step reports a fallen count as progress and passes, deliberately -- a gate
+# that goes red when you fix something teaches people to stop fixing things --
+# so the only thing standing between the note and the edit is somebody acting
+# on a line in a *passing* run. Nobody did, including on the run where this
+# same file was audited row by row: that audit compared the third column and
+# the second was the one that had moved.
+#
+# The cost is not tidiness. The comparison is `count > want`, so a `want` left
+# at 2 lets a regression back to 2 pass silently -- a blind spot exactly the
+# size of the progress, over the code that just changed.
+array-from-unsupported 1 the constructs the name promises
 mathops-unsupported 1 the constructs the name promises
 # One of four arms. The other three are the shapes this refusal must *not*
 # take, so a count of 2 here means the refusal has grown a case it should not

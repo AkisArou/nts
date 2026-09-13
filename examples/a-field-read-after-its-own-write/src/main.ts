@@ -26,17 +26,41 @@
 //     no pass            util 1066    buffer 124    timers 167
 //     forwarding all     util  931    buffer  68    timers 142
 //     scalars only       util 1064    buffer 124    timers 167
+//     + immortal consts  util  942    buffer  69    timers 144
 //
-// The middle row is what this pass did before the `memory` step refused it, and
+// The second row is what this pass did before the `memory` step refused it, and
 // it is **wrong rather than better**. Every one of those 216 loads but two was
 // of a *managed reference*, and a load of a reference is not merely a load --
-// see `aReferenceIsNotForwarded` below. Restricted to what it may soundly do,
-// the pass removes **two loads in `util` and none in `buffer` or `timers`**,
-// plus the site in `benches/common/awfy-som.ts` that found it.
+// see `aReferenceIsNotForwarded` below. Restricted to scalars it removed **two
+// loads in `util` and none in `buffer` or `timers`**, plus the site in
+// `benches/common/awfy-som.ts` that found it.
 //
-// That is the number, and it agrees with the JVM lane's own count of the
-// pattern -- two sites in the whole program -- which I had briefly decided was
-// an underestimate on the strength of the middle row.
+// # The restriction was wider than its reason
+//
+// The last row is 2026-09-13 and it gets **122 of the 135 the unsound version
+// removed in `util`, 55 of its 56 in `buffer` and 23 of its 25 in `timers`, at
+// no allocation cost**. `memory` is green across every case.
+//
+// The exclusion of references is entirely an argument about a *count* -- the
+// load takes, so forwarding makes a second live reference and the store then
+// owes a release. **A string literal has no count.** `own.rs::counted_here`
+// already answers `false` for `ConstString`, `ConstNull` and `ConstUndefined`,
+// because they are static data the runtime treats as immortal, so there is
+// nothing to duplicate and nothing owed. Those three forward; see
+// `aLiteralForwards` and its control at the bottom of this file.
+//
+// **So "216 loads of which 214 were managed references" was true and read as
+// though the restriction cost nearly all of it.** It cost about a tenth. That
+// sentence counted the *kind* of load, and the restriction was about ownership,
+// which only some of that kind have.
+//
+// Per-module figures elsewhere, each over that module's whole cone so they do
+// not sum: fs -217, process -216, http -205, stream -183, events -122, os -56,
+// path -6. Ten of ten modules moved.
+//
+// The `scalars only` row was re-derived before the two above it were quoted --
+// 1064, 124 and 167, matching exactly -- which is what licenses quoting rows
+// that cannot be re-derived without reverting the pass twice.
 //
 // **A count of loads is not a count of seconds either**, and none is claimed:
 // on C and LLVM clang removes most of these itself. What the count buys is what
@@ -222,4 +246,53 @@ export function twoReferencesToOneObject(n: number): number {
   const b = pair.first;
   b.seed = 9;
   return a.seed;
+}
+
+class Labelled {
+  label: string;
+  built: string;
+  constructor(label: string) {
+    this.label = label;
+    this.built = label;
+  }
+}
+
+/**
+ * Under test: a **managed** load that forwards, which everything above says
+ * does not happen.
+ *
+ * The exclusion of references is entirely an argument about a count — the load
+ * takes, so forwarding makes a second live reference and the store then owes a
+ * release, and `subclass-field` went from 0 allocations to 17 proving it. A
+ * **string literal has no count**: `own.rs::counted_here` answers `false` for
+ * it, because it is static data the runtime treats as immortal. There is
+ * nothing to duplicate, so the load forwards and nothing owes anything.
+ *
+ * This is the shape every `throw` of a provided error writes. The error is
+ * built with its message in field 0 and the message is then read straight back
+ * out to hand to `nts_uncaught`, because a descriptor records where an object's
+ * references are and not what they are called — so the runtime cannot read a
+ * `message` field and the compiler can. 109 sites in `runtime/node`.
+ */
+export function aLiteralForwards(n: number): number {
+  const l = new Labelled("fixed");
+  l.label = "relabelled";
+  return l.label.length + (n & 7);
+}
+
+/**
+ * The control, and it differs in exactly one thing: whether the stored value is
+ * a literal.
+ *
+ * A built string is an ordinary heap reference with an ordinary count, so this
+ * keeps its load for the reason `aReferenceIsNotForwarded` states. Without this
+ * arm the one above would be satisfied by a pass that forwarded every managed
+ * load — which is the version the `memory` step already refused once, and the
+ * reason the refusal is not visible here is that **the answer never moves**.
+ * Both arms agree with node either way; only the emission differs.
+ */
+export function aBuiltStringIsNotForwarded(n: number): number {
+  const l = new Labelled("fixed");
+  l.built = "a" + String(n & 7);
+  return l.built.length + (n & 7);
 }
