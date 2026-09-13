@@ -189,9 +189,11 @@ resolved through `hir::runtime`'s signature table. Counted:
 
 | | |
 |---|---|
-| `declare function` sites in `runtime/node` | 1264 |
-| of those, naming an `nts_*` | 441 |
+| `declare function` sites in `runtime/node` source | 397 |
+| of those, naming an `nts_*` | 397 — all of them |
 | distinct `nts_*` names | 354 |
+
+**The site counts here exclude `node_modules`; the first version of this table did not.** `find runtime/node -name '*.ts'` sweeps `node_modules/.tsbuild/dist/**`, which re-declares bridges in generated `.d.ts` — 441 sites became 397 once excluded. The **distinct-name** count is 354 either way and **zero** names are unique to the generated tree, so nothing downstream of 354 moved. Worth recording because a contaminated glob that does not change the conclusion is the kind that survives.
 | distinct names present in `hir::runtime`'s `SIGNATURES` | **0** |
 
 Not "nearly all" — **none**. The two sets are disjoint by construction and the
