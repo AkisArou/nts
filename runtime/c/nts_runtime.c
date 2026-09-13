@@ -7046,7 +7046,7 @@ NtsPromiseJoinResult nts_promise_join(const NtsPromise *promise) {
     double settled = nts_promise_state(promise);
     if (settled != NTS_PROMISE_PENDING) {
       result = settled == NTS_PROMISE_FULFILLED ? NTS_JOIN_FULFILLED
-                                               : NTS_JOIN_REJECTED;
+                                                : NTS_JOIN_REJECTED;
       break;
     }
     if (!nts_env->host_installed || !nts_env->host.pump_one) {
@@ -7060,10 +7060,10 @@ NtsPromiseJoinResult nts_promise_join(const NtsPromise *promise) {
     // The last turn can settle the promise and still report no live work.
     nts_checkpoint();
     settled = nts_promise_state(promise);
-    result = settled == NTS_PROMISE_FULFILLED ? NTS_JOIN_FULFILLED
-           : settled == NTS_PROMISE_REJECTED ? NTS_JOIN_REJECTED
-           : pumped == NTS_HOST_PUMP_BUSY ? NTS_JOIN_REENTRANT
-                                         : NTS_JOIN_PENDING;
+    result = settled == NTS_PROMISE_FULFILLED  ? NTS_JOIN_FULFILLED
+             : settled == NTS_PROMISE_REJECTED ? NTS_JOIN_REJECTED
+             : pumped == NTS_HOST_PUMP_BUSY    ? NTS_JOIN_REENTRANT
+                                               : NTS_JOIN_PENDING;
     break;
   }
   nts_env->join_active = false;
