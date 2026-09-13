@@ -73,85 +73,46 @@ narrative had already explained away.
 
     stdio-reuse-readable-stdio.js         who owns the read
 
-### Who owns the read: measured against node, and node reads in neither case
+### `stdio-reuse-readable-stdio` and `pipe-dataflow` want opposite handoffs, and the price is measured
 
-`pipe-dataflow` and `stdio-reuse-readable-stdio` are both gated on this, and it had been
-recorded here as *a decision about who owns the read*. It is not a decision. node's behaviour
-was measurable and was measured, by hooking `child.stdout._handle.readStart` on node itself:
+**The earlier account here was wrong twice and is replaced.** It first called this "a decision
+about who owns the read". It then said node calls `readStart` in neither arrangement -- a
+measurement whose hook was on the *instance*, installed after `spawn` had returned, while node
+calls it during `spawn`.
 
-    only an `end` listener, no `data`     end fired, close fired,
-                                          readStart called = false
-    stdout handed to another child        wc produced its answer,
-                                          readStart on cat.stdout called = false
+Hooking `Pipe.prototype.readStart` before any child exists, for one `spawn`:
 
-**node calls `readStart` in neither case**, and `end` and `close` still fire in the first. So
-the eager `nts_child_process_read_start` in `ChildReadable`'s constructor is not what node does,
-and the comment there -- that the eager read is needed so a killed child's stdout reaches `end`
--- is an explanation for our arrangement rather than a description of node's.
+    readStart calls during spawn   2      (stdout and stderr)
+    cat.stdout.fd                  undefined
+    cat.stdout.isPaused()          false
+    readableLength after a turn    65536
 
-That makes the work concrete instead of open:
+So node reads a child's stdio eagerly and buffers 64KB, exactly as this profile does.
 
-  * the read must start on the **consumer's** first `_read`, not in the constructor
-  * `close` bookkeeping must learn the pipe is finished without reading it, which today rides
-    on the binding's EOF callback and therefore on having started a read
-  * only then does `_handle.readStart` mean anything, and only then is exposing it honest --
-    a `readStart` this profile never calls would satisfy `mustNotCall` while the constructor
-    does the very thing the test forbids, which is the hollow pass this file already warned
-    about above
+And hooking `Pipe.prototype.readStop` across a handoff:
 
-Not started. It is a change to when a child's output is consumed, with `test-child-process-kill`
-depending on the current arrangement, and it wants its own pass rather than the tail of another.
+    before the handoff   isPaused=false destroyed=false
+    after                isPaused=true  destroyed=false  readStop=1  handle=present
+    later                readableLength=0
 
+**node pauses the parent's reader and keeps the handle.** The child gets a duplicate, the parent
+consumes nothing meanwhile, and the parent can `resume()` afterwards. One mechanism serving both
+tests.
 
+This stand-in cannot currently produce that combination, and the two arms have been measured:
 
-  This one is the ownership question, and it is not the same bug as `pipe-dataflow` despite
-  arriving next to it: the file never mentions `_handle`. It hands `p1.stdout` to `head`,
-  waits for `head` to exit, and then reads `p1.stdout` from the parent -- legal because
-  `head` is no longer reading. Ours reads that stream from the constructor onward, so
-  parent and child consume the same pipe. `test-child-process-kill` needs the eager read so
-  a killed child's stdout still reaches `end`; the two pull opposite ways and the answer is
-  a decision about who owns the read, not a line of code.
+    handing the host stream       pipe-dataflow PASSES,  stdio-reuse FAILS
+    handing its descriptor,       pipe-dataflow FAILS,   stdio-reuse PASSES
+    with the stream paused        (`wc` counts 983041 of 1048577 -- exactly 65536
+                                   short, one 64KB read, 4 of 5 runs)
 
-## The three that were "observed" and were bugs
+The stream is what the tree hands over, because that is node's branch and it keeps
+`pipe-dataflow`'s 1MB intact. `stdio-reuse-readable-stdio` is the price: with the handle
+transferred by node's wrap branch, the parent's later `resume()` reaches a socket that produces
+nothing, though it reports `destroyed=false readable=true`.
 
-  Kept because each one had a story attached that was wrong.
+**What would close it:** reproducing node's pause-and-keep rather than choosing between transfer
+and duplicate -- most likely handing the descriptor *and* stopping the host's reader before it
+has buffered anything, which `pause()` in `hostStream` did not achieve because the 64KB was
+already in flight. That is one more measurement, not a redesign.
 
-    send-returns-boolean.js   fixed -- and the first fix caused it
-    send-keep-open.js         fixed -- `options` was validated and discarded
-    test-cluster-net-send.js  fixed here, and then given up to `cluster`
-
-  `send-keep-open`: `send(message, handle, options, callback)` validated `options` and then
-  never passed it on. Silent for every caller except the one that means it --
-  `keepOpen: true` tells node not to close the parent's copy of a sent socket, and the test
-  then writes to that socket from the parent. Dropped, the parent's half was already gone.
-
-  `send-returns-boolean`: the story was "no backlog of our own". Measured against node,
-  rv1..rv4 read **[true, true, false, false] on both** -- forwarding to the host's `send`
-  forwards the host's queue, and the backlog needed nothing. The actual fault was the
-  callback fix made an hour earlier: `send` returns false for **backpressure**, not failure,
-  and node still delivers the message and still calls back with null once the queue drains.
-  Synthesising `ERR_IPC_CHANNEL_CLOSED` whenever the return was false turned every backed-up
-  send into an error. The callback is now forwarded to the host, which is the only side that
-  knows when a message has gone.
-
-  `test-cluster-net-send` **is no longer counted here.** It was claimed through
-  `extra-tests` on the stated grounds that "upstream names it for cluster, which this profile
-  does not implement" -- true when written, false since `cluster` landed. It was then claimed
-  by both lanes and disagreed with itself: a pass here and a failure under `cluster`, same
-  file, same tree, same hour, because `cluster`'s lane substitutes `net` and this one does
-  not. A file contributing a pass to one denominator and a failure to another makes both
-  numbers ambiguous, so the claim is released and the count moved the honest way: **120 files
-  and 104 passes became 119 and 103.** The fix below is still this module's and still stands;
-  what changed is who counts the file.
-
-  `process.send(msg, socket)` in a child arrives as two values and
-  the stand-in forwarded one, at all four of its message sites -- so `assert.ok(handle)`
-  failed on a message that had otherwise arrived intact. Sending a handle *to* a child had
-  worked all along, which is why nothing pointed here. What the parent now receives is the
-  **host's** socket: the descriptor is real and its data flows, but `instanceof net.Socket`
-  answers false against our `net`, because adopting it needs a host-to-ours direction `net`
-  does not expose.
-
-  And it runs the **opposite way** to the serialization one above, which is why the two do
-  not share a fix: there, one of ours has to become the host's on the way out; here, one of
-  the host's has to become ours on the way in. Three instances, two directions.

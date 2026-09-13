@@ -190,6 +190,22 @@ function hostStream(entry) {
   if (typeof entry.ntsChildHandle !== "number") return entry;
   const owner = live.get(entry.ntsChildHandle);
   if (owner === undefined) return entry;
+  // **The stream, not its descriptor, because node's wrap branch does the right thing.**
+  //
+  // Measured on node, hooking `Pipe.prototype.readStop` and watching the parent's stream across
+  // a handoff:
+  //
+  //     before   isPaused=false destroyed=false
+  //     after    isPaused=true  destroyed=false  readStop=1  handle=present
+  //     later    readableLength=0                (nothing stolen)
+  //
+  // So node **pauses the parent's reader and keeps the handle**. The child gets a duplicate, the
+  // parent can `resume()` afterwards, and nothing is consumed in between. That is what both of
+  // the awkward tests need at once: `pipe-dataflow` needs the parent not to steal, and
+  // `stdio-reuse-readable-stdio` needs the parent able to read again once the other child exits.
+  //
+  // Handing the descriptor instead put node on its `fd` branch, which dups without pausing, and
+  // the reader we left running stole one 64KB chunk: `wc` counted **983041 of 1048577**.
   const slot = entry.ntsChildSlot;
   return (slot === 0 ? owner.child.stdin
     : slot === 1 ? owner.child.stdout
