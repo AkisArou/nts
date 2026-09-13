@@ -8321,3 +8321,40 @@ So this lane has one instrument where it thought it had none, and the cost of
 finding that out was one environment variable. **Worth a gate step**, and worth
 the same question asked of every other `✗` in the plan: not "should this be
 built" but "is it already there and unreached".
+
+### The rest of the plan's `✗` list, asked the same question
+
+Not "should this be built" but "is it already there and unreached". Checked
+against the tree rather than against the plan:
+
+    execute.rs                  NOT PRESENT
+    signatures.rs               NOT PRESENT
+    runtime_agrees_with_hir.rs  NOT PRESENT
+    agrees_with_c.rs            NOT PRESENT
+    runtime_jar.rs              BUILT   compiler/codegen/jvm/tests/
+    tag_table.rs                BUILT   compiler/codegen/jvm/tests/
+    sabotage.rs                 BUILT   compiler/codegen/jvm/tests/
+    `unverifiable class` row    BUILT   tooling/suite/src/main.rs:599
+    sweep through this lane     WORKS   with one environment variable
+
+**Four of the nine were done and the list still said they were not**, and one
+more needed no work at all. A plan ages; that is expected and is not the
+finding. The finding is that the question had not been asked, and the cost of
+asking it was one `find` and one `grep` -- against a list that has been quoted
+as the lane's remaining work for as long as the lane has existed.
+
+Four genuinely remain, and they are the ones worth stating as work rather than
+as a checklist:
+
+- **`agrees_with_c.rs`** -- one HIR, two renderers. Tonight is the argument for
+  it: the C lane agreed with node on 10,005 sweep cases that this backend got
+  wrong, and the only reason anyone found out is that a second backend was run
+  over the same programs. A test that does that on every commit is cheaper than
+  an environment variable somebody remembers.
+- **`runtime_agrees_with_hir.rs`** -- the forward direction of the name tables,
+  which two sections up turned out to be unenumerable in general and perfectly
+  enumerable over `runtime.rs`'s own list.
+- **`signatures.rs`** -- the descriptor table, generated from `javap -p` over the
+  jar and drift-tested.
+- **`execute.rs`** -- compile an example, run it, assert on output; the C lane's
+  is 1,754 lines.
