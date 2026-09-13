@@ -52,6 +52,13 @@ import type { ChildProcess } from "../../child_process/src/main.ts";
  */
 const UV_ENOTSUP = -95;
 const UV_EADDRINUSE = -98;
+/**
+ * The bit `flags` carries for `ipv6Only`, which is the only one node's `net` honours there.
+ * Measured from `internalBinding('tcp_wrap').constants` on this platform: 1, beside
+ * `UV_TCP_REUSEPORT` at 2. Named rather than inlined because the neighbouring value is
+ * what a future reader would otherwise guess at.
+ */
+const UV_TCP_IPV6ONLY = 1;
 
 declare function nts_process_env(name: string): string;
 /**
@@ -519,7 +526,8 @@ class Cluster extends EventEmitter {
     const seq = seqOf(message);
     const asked = message as {
       address?: unknown; port?: unknown; addressType?: unknown; fd?: unknown;
-      index?: unknown; flags?: unknown;
+      index?: unknown; flags?: unknown; backlog?: unknown;
+      readableAll?: unknown; writableAll?: unknown;
     };
     const address = typeof asked.address === "string" ? asked.address : "";
     const port = typeof asked.port === "number" ? asked.port : -1;
@@ -535,7 +543,12 @@ class Cluster extends EventEmitter {
     // not `SCHED_RR`, and for a caller that brought its own `fd`. `internal/cluster/child.js`
     // decides which half it is in by whether a **handle** arrived with the reply, so the
     // difference here is one extra argument to `send` and not a different message.
-    if (addressType === "udp4" || addressType === "udp6" || fd >= 0
+    // node's condition exactly, and `fd` is **not** in it: under `SCHED_RR` a
+    // caller-supplied descriptor goes to `RoundRobinHandle`, which listens on `{ fd,
+    // backlog }`. Sending it to the shared path instead is a divergence I introduced with
+    // `SharedHandle` and it is what `test-listen-fd-cluster` reports as an internal
+    // assertion.
+    if (addressType === "udp4" || addressType === "udp6"
       || schedulingPolicy !== SCHED_RR) {
       if (seq === undefined) return;
       let shared = this.#shared.get(key);
@@ -582,14 +595,42 @@ class Cluster extends EventEmitter {
         this.#distributions.delete(key);
         for (const settle of waiting) settle(errno);
       });
-      // A negative port means the address is a **path**, not a host: node's own
-      // RoundRobinHandle branches the same way, `listen({ path })` against
-      // `listen({ port, host })`. Listening on port -1 is what broke
-      // test-cluster-listen-pipe-readable-writable, which had been passing on the ENOTSUP
-      // that used to come back instead.
+      // **node's three listen branches, with every option it forwards.**
+      //
+      // `RoundRobinHandle` reads `{ port, fd, flags, backlog, readableAll, writableAll }`
+      // off the worker's message and listens one of three ways: `{ fd, backlog }`,
+      // `{ port, host, ipv6Only, backlog }`, or `{ path, backlog, readableAll,
+      // writableAll }`. This forwarded none of them, and each absence is its own test:
+      //
+      //   backlog     `test-cluster-net-listen-backlog` patches
+      //               `net.Server.prototype.listen` in the primary and asserts the option
+      //               arrives. `assert(options.backlog, 127)` is a truthiness check whose
+      //               *message* is 127, which is why the failure read `AssertionError: 127`
+      //               and named no option at all.
+      //   ipv6Only    carried in `flags`, bit `UV_TCP_IPV6ONLY` -- measured as 1 from
+      //               `internalBinding('tcp_wrap').constants` on this platform, beside
+      //               `UV_TCP_REUSEPORT` at 2.
+      //   readableAll/writableAll   the pipe permissions, path case only.
+      //
+      // A negative port means the address is a **path** rather than a host, which is node's
+      // own branch: listening on port -1 is what broke
+      // test-cluster-listen-pipe-readable-writable.
+      const backlog = typeof asked.backlog === "number" ? asked.backlog : undefined;
       const where = port < 0
-        ? { path: address }
-        : { port, host: address === "" ? undefined : address };
+        ? {
+          path: address,
+          backlog,
+          readableAll: asked.readableAll === true,
+          writableAll: asked.writableAll === true,
+        }
+        : {
+          port,
+          host: address === "" ? undefined : address,
+          ipv6Only: (typeof asked.flags === "number" ? asked.flags : 0) & UV_TCP_IPV6ONLY
+            ? true
+            : false,
+          backlog,
+        };
       server.listen(where, (): void => {
         distribution!.listening = true;
         const bound = server.address();
