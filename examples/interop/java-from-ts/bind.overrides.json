@@ -1,0 +1,13 @@
+{
+  "//": "What the class file cannot say. Same format as the nullability and keeps overrides for any jar.",
+  "com.example.Catalog": {
+    "nullability": {
+      "//": "`name()` is unannotated but never returns null. Without this the generator defaults it to `string | null`, which is correct-but-verbose.",
+      "name()Ljava/lang/String;": "nonnull"
+    },
+    "keeps": {
+      "//": "Which parameters the callee retains. An absent entry means `assume everything`, which is always sound. `[]` means the callee keeps nothing, which lets the argument stay off the heap.",
+      "sum([I)I": []
+    }
+  }
+}
