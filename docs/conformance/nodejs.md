@@ -24233,3 +24233,46 @@ So the axis over four measurements, and what each one was actually counting:
 
 The honest movement across all of it is `net` +2 and `tty` restored to 1.
 
+## Eight files are claimed by two modules, and two of them disagree
+
+A module's denominator is its `test-pattern` plus `extra-tests` plus `test-suites`, and
+nothing stops two modules matching the same file. `tooling/conformance/double-claimed.mjs`
+computes the overlap statically and, with `--run`, executes each file in each claiming lane:
+
+    8 file(s) claimed by more than one module
+
+    test-stream-iter-transform-compat.js       stream=pass  zlib=pass
+    test-stream-iter-transform-coverage.js     stream=pass  zlib=pass
+    test-stream-iter-transform-errors.js       stream=pass  zlib=pass
+    test-stream-iter-transform-roundtrip.js    stream=pass  zlib=pass
+    test-stream-iter-transform-sync.js         stream=pass  zlib=pass
+    test-stream-iter-validation.js             stream=pass  zlib=pass
+    test-stream-preprocess.js                  readline=pass  stream=FAIL   DISAGREE
+    test-stream2-httpclient-response-end.js    http=pass      stream=FAIL   DISAGREE
+
+**The disagreement is not flakiness, it is the lane.** A lane substitutes only the modules
+in its `uses`, so the same file runs against different code in each. The ninth case, found
+first and now resolved, shows it plainly: `test-cluster-net-send.js` passed under
+`child_process` and failed under `cluster`, because `cluster` uses `net` and `child_process`
+does not. It had been claimed by both since `cluster` landed, on a recorded rationale --
+*"upstream names it for cluster, which this profile does not implement"* -- that stopped being
+true the same day and was re-read by nobody. Released; `child_process` went 120 files / 104
+passes to 119 / 103, which is the unflattering direction and the right one.
+
+### What it does and does not cost
+
+**The compiled axis of 50 is not inflated**, and the argument is short enough to check rather
+than trust: all eight shared files are shared *with* `stream`, and `stream`'s only compiled
+pass is `local/default-highwatermark-static.js`, which no other module claims. So no shared
+file passes compiled in two modules. `zlib`'s single compiled pass is `test-zlib-const.js`,
+also unshared.
+
+**Any sum of *interpreted* passes across modules over-counts by six.** The six stream/zlib
+files pass in both lanes, and each is counted in both rows. No published number sums the
+interpreted lane across modules today -- but the axis is exactly that shape for the compiled
+one, so the hazard is one claimed file away from being live.
+
+Left in place deliberately: the six agreeing files are a real overlap of subject -- `zlib`'s
+iterator transforms *are* stream transforms -- and forcing a single owner would hide that from
+whichever module lost. What the tool gives is the arithmetic being visible instead of implied.
+
