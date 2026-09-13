@@ -1,0 +1,5 @@
+{
+  "//": "`noUnusedLocals` off, and only that. The fixture's second arm is a function no export reaches -- the arm that rules out `pruning would have removed it` -- and an unreferenced function is exactly what TS6133 rejects. Exporting it instead would make it reachable and delete the arm, which is the failure this fixture is built to avoid.",
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": { "rootDir": ".", "noUnusedLocals": false }
+}

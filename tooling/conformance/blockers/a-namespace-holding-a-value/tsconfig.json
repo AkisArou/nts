@@ -1,0 +1,5 @@
+{
+  "//": "Extends tsconfig.fixtures.json rather than the blockers base, deliberately. The blockers base reaches the repository root tsconfig.base.json, which sets `erasableSyntaxOnly` -- and under that flag a `namespace` with a value in it is TS1294 before the compiler ever sees it. Every program this repository compiles *with nts* uses tsconfig.fixtures.json, which does not set it. So the blockers default would make this fixture measure TypeScript's opinion instead of the compiler's.",
+  "extends": "../../../../tsconfig.fixtures.json",
+  "include": ["src"]
+}
