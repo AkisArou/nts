@@ -7700,3 +7700,36 @@ night, where two fixes were each refused for not clearing a threshold neither
 could clear alone. The correction is not "always price fixes in combination". It
 is to notice when a combination is the *only* justification, and to distrust it
 exactly then.
+
+### And the biggest of the three is not this backend's to make
+
+Checked before building it, which is the only reason it cost nothing:
+`nts_uncaught` is a **`hir::runtime`** name. So the seventeen units are not a
+rendering choice this backend made -- they are what HIR hands it:
+
+    ObjectNew  nts.gen.Error
+    FieldSet   message
+    FieldSet   name
+    Erase      -> NtsValue
+    Call       nts_uncaught(NtsValue, String)
+    Unreachable
+
+Six ops, rendered faithfully. The backend *could* synthesise a generated static
+per program -- `Program.throw$Error(String, String)` -- and collapse each site to
+`ldc; ldc; invokestatic; athrow`, because a *generated* helper may reference
+`nts.gen.Error` where a runtime one cannot. But that is pattern-matching a
+six-op HIR shape inside one backend to undo a decision the middle end makes for
+three, and the C and LLVM lanes pay the same seventeen-op sequence with none of
+the benefit.
+
+**So it goes upstream with its number, like `arrays_can_grow` and the
+constant-array hoist before it:** a throw whose value is never observed -- and it
+cannot be, since a throw crossing a call is unimplemented on every backend -- is
+six HIR ops where it could be one. **48 sites across 10 of the 60 bench cases**,
+17 dex code units each on this lane, and on `awfy-towers` it is the single
+largest component of the method that misses ART's inliner budget.
+
+That also finishes the route two sections up. Of its three terms the largest is
+not mine, and the other two are worth seven units against a deficit of nineteen.
+**The route is not "not started"; it is not available**, and the difference
+matters because the first invites someone to pick it up.
