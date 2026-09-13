@@ -123,7 +123,33 @@ for dir in runtime/node/*/; do
     NTS_CONFORMANCE_TIMEOUT_MS="${NTS_CONFORMANCE_TIMEOUT_MS:-20000}" \
       timeout 900 node "$root/tooling/conformance/run.mjs" --module "$module" \
       --addon "$out/$module.node" --empty-exports --verbose 2>&1 |
+      tee "$out/$module.empty.log" |
       awk '/^ *pass  /{print $2}' | sort > "$empty_p"
+
+    # **An arm that never ran must not be counted as an arm that found nothing.**
+    #
+    # Both arms are read by `awk` into a list of pass names, and a run that died produces an
+    # empty list -- indistinguishable from a run where nothing passed. A peer lost an hour to
+    # exactly this shape on a different instrument: the command exited 1 with
+    # `No version is set for command tsgo`, printed nothing, and a filter for `NTS1[0-9]{3}`
+    # reported a clean bill. **A filter over a stream that was never produced looks like a
+    # filter over a stream with nothing in it.**
+    #
+    # The two arms fail in opposite directions here, and the second is the dangerous one:
+    #
+    #   a dead intact arm   -> no passes -> the module silently contributes 0 (under)
+    #   a dead empty arm    -> nothing survives emptying -> **every** intact pass counts as
+    #                          real (over)
+    #
+    # Every mechanism this script exists to catch already fails open, so the total is biased
+    # upward rather than noisy; an unguarded dead arm adds a second upward bias on top. Both
+    # arms must show a summary line or the module is reported and not counted.
+    if ! grep -q "file(s):" "$out/$module.intact.log" ||
+       ! grep -q "file(s):" "$out/$module.empty.log"; then
+      printf '%-20s ARM DIED -- not counted; see %s.{intact,empty}.log\n' \
+        "$module" "$out/$module"
+      continue
+    fi
     line="$(tail -1 "$out/$module.intact.log")"
     pass="$(comm -23 "$intact_p" "$empty_p" | sed '/^$/d' | wc -l)"
     hollow="$(comm -12 "$intact_p" "$empty_p" | sed '/^$/d' | wc -l)"
