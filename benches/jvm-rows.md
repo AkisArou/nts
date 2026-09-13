@@ -7980,3 +7980,41 @@ that reads the message back; the helper takes the message directly and never
 emits that load at all. So forwarding is worth 2 units *on this site* and zero
 once the helper lands -- its value is on the **608** user-defined throws the
 helper cannot serve, which is where MainClaude measured it and where it belongs.
+
+### Which retracts "not available", and the blocked half is not needed
+
+Two sections up, this file concluded that `awfy-towers` could not reach the
+reference's inlining and that the route was **"not available"** -- and I sent
+that to MainClaude in those words, on the argument that outlining the cold throw
+takes `popDiskFrom` only to 39, still over.
+
+**That rested on the 17, and the cold block is 27.** With the number read off
+the dex:
+
+    as emitted                                        51 u
+    the throw collapsed to a helper call, 27 -> 8     32 u    <- the budget
+    (drop the integral guards)                        22 u    not needed
+
+So **the one change reaches the budget on its own**, and the half that is blocked
+on the harness -- dropping the guards, which needs a site table and costs the
+lane its only compiler-bug alarm -- is **not required**. Nor is the bounds-check
+CSE, nor the null fusion that turned out to be worth zero. The route is one
+change, not three, and the three-term arithmetic two sections up was three wrong
+terms that happened to sum correctly.
+
+Every one of those terms was a number about something other than what it was
+being asked about: 17 units from a transcription, 5 units of CSE never measured
+on the real method, 2 units of null fusion that d8 already performs. **A sum of
+three wrong terms landing on the right answer is the least detectable kind of
+wrong**, because the check anyone would run is whether the total is plausible.
+
+**What does not change:** the change is MainClaude's, since `nts_uncaught` is a
+`hir::runtime` name; 32 against a budget of 32 is a margin of zero; and this row
+is over the bar for reasons beyond inlining -- 1.284x of bounds guards measured
+separately, and a residual with artefact evidence and no timing. Reaching the
+budget would close the inlining term and no other.
+
+So the corrected statement is not "the route is available" either. It is: **the
+route is one change, it is not mine, and it is worth what one of three terms of
+`awfy-towers` is worth** -- which is still unmeasured, and which I have twice
+tonight been tempted to infer from a size.
