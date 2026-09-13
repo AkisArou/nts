@@ -662,7 +662,14 @@ class Cluster extends EventEmitter {
       // own branch: listening on port -1 is what broke
       // test-cluster-listen-pipe-readable-writable.
       const backlog = typeof asked.backlog === "number" ? asked.backlog : undefined;
-      const where = port < 0
+      // node's first branch, and it comes before the other two: a caller-supplied
+      // descriptor is listened on directly, with no address of any kind. Documented here
+      // two commits ago and not implemented, so `test-listen-fd-cluster` -- a worker
+      // listening on a descriptor the primary owns, which is this branch and nothing else
+      // -- fell through to the port case and bound port -1.
+      const where = fd >= 0
+        ? { fd, backlog }
+        : port < 0
         ? {
           path: bindAddress,
           backlog,
