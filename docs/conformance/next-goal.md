@@ -2,6 +2,7 @@ Your goal is to close node's conformance gap in `runtime/node`, measured against
 
 **Where it stands, 2026-09-13. A stale number here is a diff, not a re-paste.**
 
+    net             185 files: 154 passed, 0 failed, 7 skipped   (151/3 before `_handle`)
     cluster          86 files: 78 passed, 6 failed, 2 skipped    (42 that morning)
     child_process   119 files: 104 passed, 5 failed, 9 skipped
     compiled axis    46 across 26 modules, emptying arm on every module

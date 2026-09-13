@@ -24374,3 +24374,49 @@ observation without noticing it was structural.) The honest movement from
 49 across the whole day is `tty` +1, `net` +2, and **six hollow passes removed** -- two found
 by a peer, four by generalising the guard.
 
+## `net` reaches zero failing on the interpreted lane, on one seam
+
+    net  185 file(s): 154 passed, 0 failed, 7 skipped, 24 not applicable   (was 151 / 3)
+
+All three remaining failures were `_handle` being a **number** where node's is an object. A
+number in a `stdio` array is a file descriptor, so
+
+    stdio: [ 'ignore', 'ignore', 'ignore', server._handle ]
+
+passed **fd 1**, the parent's stdout, and the child's `listen({ fd: 3 })` got something that was
+not a socket. `test-listen-fd-server`, `test-listen-fd-detached` and
+`test-listen-fd-detached-inherit` are that one sentence.
+
+Two things made it cheaper than it looked. **`zlib` had already answered it** --
+`ZlibNativeHandle` keeps the numeric ABI identifier inside a fixed-layout value rather than
+"treating a number as if it had methods" -- so `NetNativeHandle` follows a shape already proven
+in this tree rather than a new one. And **every method the corpus reaches for already had a
+binding**: `setKeepAlive` at 8 sites, `setNoDelay` at 3, `close` at 2, `fd` at 1. Nothing is
+stubbed, which was the condition for doing it at all.
+
+### The wrapper reproduced the bug it exists to fix
+
+`get fd() { return this.identifier; }`, added because the corpus reads `_handle.fd` once. node's
+`getValidStdio` tests **in this order**:
+
+    } else if (typeof stdio === 'number' || typeof stdio.fd === 'number') {
+      acc.push({ type: 'fd', fd: ... });
+    } else if (getHandleWrapType(stdio) || getHandleWrapType(stdio.handle) || ...
+
+An object answering `fd` with an internal id is read as *that descriptor* and the handle branch
+is never reached. Measured with two arms one line apart: `fstatSync(3).isFIFO()` true with the
+wrapper, `isSocket()` true with the host handle passed directly. **An object with one wrong
+property is a number with extra steps.**
+
+### And who owns the read was never a decision
+
+`pipe-dataflow` and `stdio-reuse-readable-stdio` were recorded as gated on a decision about
+whether the parent may read a stream it hands on. Hooking `readStart` on node itself:
+
+    only an `end` listener, no `data`   end fired, close fired, readStart called = false
+    stdout handed to another child      wc produced its answer, readStart called = false
+
+**node calls it in neither case**, and `end`/`close` still fire in the first. So the eager read
+in `ChildReadable`'s constructor is ours, not node's, and the comment justifying it describes
+our arrangement. A question that had sat open for a day was one measurement wide.
+
