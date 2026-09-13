@@ -7733,3 +7733,35 @@ That also finishes the route two sections up. Of its three terms the largest is
 not mine, and the other two are worth seven units against a deficit of nineteen.
 **The route is not "not started"; it is not available**, and the difference
 matters because the first invites someone to pick it up.
+
+## I diffed the shared file before committing it, which is one step too late
+
+`tooling/gate/all.sh` carries three floor lines and two sessions. Its own header
+says: **`git diff <path>` before naming it**, and if the diff holds someone
+else's work, wait or agree who carries it.
+
+I diffed it before *committing*. The rule says before *editing*, and the
+difference is the whole hazard: by commit time the other session's lines were
+already under my write. They survived -- my edit was a read-modify-write of the
+whole file, so it read their two LLVM floors and wrote them back -- and I know
+that because I checked, not because the method guarantees it. A read-patch-write
+through a temp file is atomic against a *reader* and blind to a concurrent
+*writer*, which this repository has a record about, and the failure it produces
+is partial rather than total: the half of their edit far from mine survives and
+the half near it does not.
+
+Nothing was lost this time. What made it safe was luck about the shape of my
+write, and what made it *knowable* was reading the diff rather than the file.
+
+The second raise is why it happened at all. `192 -> 197` earlier tonight was a
+considered edit; `197 -> 198` an hour later, on a line I had just touched, felt
+like repeating a finished action -- and that is exactly when a precondition gets
+skipped, because the situation no longer looks like the one the rule is about.
+The first time I checked the diff first. The second time I did not, on the same
+line, in the same file, with the same peer editing it.
+
+**The mechanical version, which needs no discipline:** diff in the same command
+as the edit, before the write, and refuse the write if the diff is non-empty.
+`git diff --quiet <path> || { echo "someone else is in here"; exit 1; }` is one
+line and it cannot be forgotten while thinking about the floor number, which is
+what was actually occupying me both times.
