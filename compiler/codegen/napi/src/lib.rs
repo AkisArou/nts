@@ -1878,6 +1878,26 @@ fn constructor_callback(
 /// copied as plain data, where the methods vanish *silently*; here the surface
 /// is named at build time, so a caller learns what is missing from the build
 /// rather than from `undefined is not a function`.
+/// Why a name has no function, where the program recorded a reason.
+///
+/// **One lookup, three call sites.** A plain export, a namespace member and a
+/// class constructor all ask the same question -- *was this name refused, and
+/// why* -- and until now only the first consulted `program.uncompiled`; the
+/// other two answered with their own search, which states the effect and sends
+/// the reader nowhere. 76 namespace members and 40 constructors across the 26
+/// modules, against 100 plain exports that had just learned to say it.
+///
+/// `stream`'s 43 are one family -- `consumers.blob`, `.arrayBuffer`, `.buffer`,
+/// `.bytes`, `.text`, `.json` -- which is one cause reported member by member,
+/// and the reason a line count and a cause count are different units here.
+fn why_uncompiled(program: &hir::Program, name: &str, absent: &str) -> String {
+    program
+        .uncompiled
+        .iter()
+        .find(|(at, _)| at == name)
+        .map_or_else(|| absent.to_owned(), |(_, why)| format!("{absent}: {why}"))
+}
+
 fn class_definition(
     class: &str,
     publish: &str,
@@ -1897,10 +1917,9 @@ fn class_definition(
         // Silent `?` here cost an hour: the class fell back to the export
         // pass's generic "is not a function this backend can name", which is
         // the message that exists for a class and so read as unchanged.
-        skipped.push(Skipped {
-            function: class.to_owned(),
-            reason: "is a class whose constructor was not compiled".to_owned(),
-        });
+        let absent = "is a class whose constructor was not compiled";
+        let reason = why_uncompiled(program, &format!("{class}#constructor"), absent);
+        skipped.push(Skipped { function: class.to_owned(), reason });
         return None;
     };
     // The receiver's C type is the struct the factory allocates. Taken from the
@@ -2946,12 +2965,11 @@ fn emit_namespaces(
                 skipped.push(Skipped {
                     function: format!("{name}.{property}"),
                     reason: known.unwrap_or_else(|| {
-                        // No entry means no wrapper was ever attempted -- the
-                        // lowering refused the function, and the refusal that
-                        // says why is upstream with a source line on it. Naming
-                        // that is the honest fallback rather than describing
-                        // this pass's own search.
-                        "is a namespace member whose function was not compiled".to_owned()
+                        why_uncompiled(
+                            program,
+                            name_of,
+                            "is a namespace member whose function was not compiled",
+                        )
                     }),
                 });
                 continue;

@@ -209,6 +209,8 @@ pub const BINDING_ELEMENT: u16 = 209;
 pub const OBJECT_LITERAL_EXPRESSION: u16 = 211;
 /// `` `a${x}b` ``: a head, then one span per substitution.
 pub const TEMPLATE_EXPRESSION: u16 = 229;
+/// `` tag`a${x}b` `` -- a call whose arguments are a template's pieces.
+pub const TAGGED_TEMPLATE_EXPRESSION: u16 = 216;
 /// One substitution and the literal text that follows it.
 pub const TEMPLATE_SPAN: u16 = 240;
 pub const PROPERTY_ACCESS_EXPRESSION: u16 = 212;

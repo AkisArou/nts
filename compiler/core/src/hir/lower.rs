@@ -6050,6 +6050,24 @@ fn provided_representation(
         return Some(HirType::Managed(ManagedType::Date));
     }
 
+    // A `TemplateStringsArray` **is** an array of the cooked strings, which is
+    // what a tag receives and indexes. lib.d.ts declares it as a
+    // `ReadonlyArray<string>` with a `raw` beside it -- and `readonly string[]`
+    // already represents, so the only thing stopping the whole construct was
+    // that the interface itself was decomposed at the library boundary and came
+    // back with no representation at all.
+    //
+    // **`raw` is not here and refuses as an ordinary member read.** It is the
+    // *un*-cooked text -- `\n` as two characters rather than one -- which is a
+    // second string list this compiler does not build, so a representation
+    // carrying only the cooked strings is honest about what it has. An array
+    // has only a `length`, and that is the sentence a reader gets.
+    if named(snapshot, ty) == Some("TemplateStringsArray") {
+        return Some(HirType::Managed(ManagedType::Array(Box::new(
+            HirType::Managed(ManagedType::String),
+        ))));
+    }
+
     // An `ArrayBuffer`, for the same reason and on the same terms: it carries
     // no element type, so there is nothing further to read. What varies about
     // a buffer is its length and whether it is resizable, and both are runtime
@@ -18515,6 +18533,193 @@ impl<'a> FuncBuilder<'a> {
     /// `String(n)` and gets ECMAScript's conversion rather than a `printf` one.
     /// An empty literal part contributes no concatenation: `` `${a}${b}` `` is
     /// one join rather than three.
+    /// `` tag`a${x}b` ``, which is `tag(["a", "b"], x)`.
+    ///
+    /// A tagged template is a **call**, and the specification says what its
+    /// arguments are: an array of the literal pieces first, then one argument
+    /// per substitution in source order. So this builds the array, lowers the
+    /// substitutions left to right -- which is observable, since one of them may
+    /// call something -- and hands both to the call the checker resolved.
+    ///
+    /// # What the array is, and what it is not
+    ///
+    /// `TemplateStringsArray` represents as `string[]`, which is what a tag
+    /// receives and indexes. lib.d.ts declares a `raw` beside it -- the
+    /// *un*-cooked text, `\n` as two characters rather than one -- and this
+    /// builds no such second list, so reading `raw` refuses as an ordinary
+    /// member of an array. That is honest about what is there rather than
+    /// answering the cooked strings to a program asking for the raw ones.
+    ///
+    /// The array is rebuilt per evaluation. The specification interns it per
+    /// call *site* -- the same tag called twice in a loop receives the identical
+    /// object, and `strings === strings` across two calls is `true` -- which a
+    /// program can observe and a memoising tag depends on. Nothing here does
+    /// that, so a tag that keys a cache on the array's identity would see a
+    /// miss every time; it is written down rather than hidden because it is the
+    /// one observable difference, and the fix is an interned per-site constant
+    /// rather than anything about this lowering.
+    ///
+    /// # The tag has to be a plain declared function
+    ///
+    /// `lower_call` resolves a callee through qualified names, generic
+    /// suffixes, static and method dispatch, closures and imports, and none of
+    /// that is duplicated here: a tag that is not a directly-callable function
+    /// declaration is refused by name. Every other shape is a call path this
+    /// one would have to reproduce, and two derivations of "which function is
+    /// this" is the mistake this file keeps recording.
+    /// A template's literal pieces and the expressions between them.
+    ///
+    /// A template with no substitution is one piece and no expression;
+    /// otherwise it is the head's text, then each span's expression followed by
+    /// its own trailing text. An empty piece is a real string rather than an
+    /// absence -- `` tag`${x}y` `` has pieces `["", "y"]` -- which is the
+    /// difference between this and [`Self::lower_template`], where an empty
+    /// part contributes no concatenation.
+    fn template_parts(
+        &mut self,
+        template: NodeId,
+    ) -> Result<(Vec<String>, Vec<NodeId>), Diagnostic> {
+        let mut pieces: Vec<String> = Vec::new();
+        let mut substitutions: Vec<NodeId> = Vec::new();
+        match self.kind_of(template) {
+            Some(syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL) => {
+                pieces.push(self.node(template).text.clone().unwrap_or_default());
+            }
+            Some(syntax::TEMPLATE_EXPRESSION) => {
+                for part in self.children(template) {
+                    match self.kind_of(part) {
+                        Some(syntax::TEMPLATE_HEAD) => {
+                            pieces.push(self.node(part).text.clone().unwrap_or_default());
+                        }
+                        Some(syntax::TEMPLATE_SPAN) => {
+                            let inner = self.children(part);
+                            let [expression, literal] = inner.as_slice() else {
+                                return Err(self
+                                    .unsupported(part, "a template span of unexpected shape"));
+                            };
+                            substitutions.push(*expression);
+                            pieces.push(self.node(*literal).text.clone().unwrap_or_default());
+                        }
+                        _ => {
+                            return Err(
+                                self.unsupported(part, "a template part of unexpected shape")
+                            );
+                        }
+                    }
+                }
+            }
+            _ => return Err(self.unsupported(template, "a tagged template over this literal")),
+        }
+        Ok((pieces, substitutions))
+    }
+
+    fn lower_tagged_template(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let children = self.children(id);
+        let [tag, template] = children.as_slice() else {
+            return Err(self.unsupported(id, "a tagged template of unexpected shape"));
+        };
+        let (tag, template) = (*tag, *template);
+        // Through the tag's **symbol**, not through `call_targets`: the checker
+        // keys that map by call expression and a tagged template is a different
+        // node kind, so asking it answers `None` for every tag there is. The
+        // first version did ask, and refused all three arms of its own fixture
+        // with `the checker did not resolve` -- which was true and was about
+        // the map rather than about the program.
+        let declaration = self
+            .node(tag)
+            .symbol
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .map(|record| record.declarations.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .find(|at| self.kind_of(*at) == Some(syntax::FUNCTION_DECLARATION));
+        let Some(declaration) = declaration.filter(|_| {
+            // A locally bound name holds a *value*, which is a closure and a
+            // dispatch rather than a direct call. Refused rather than called by
+            // the declaration's name, which would call the wrong function where
+            // a parameter shadows one.
+            !self
+                .node(tag)
+                .symbol
+                .is_some_and(|symbol| self.bindings.contains_key(&symbol.0))
+        }) else {
+            return Err(self.unsupported(
+                id,
+                "a tagged template whose tag is not a plain declared function",
+            ));
+        };
+
+        // **A rest parameter takes the substitutions as one array**, and that is
+        // the spread machinery rather than this one: the callee's arity is the
+        // fixed parameters plus one, and handing it the substitutions
+        // positionally is the wrong number of arguments. The verifier said so
+        // -- `CallArgumentCount { expected: 2, found: 3 }` -- which is the right
+        // place for it to fail and the wrong place for a reader to find out.
+        if self.children(declaration).into_iter().any(|child| {
+            self.kind_of(child) == Some(syntax::PARAMETER)
+                && self
+                    .children(child)
+                    .into_iter()
+                    .any(|part| self.kind_of(part) == Some(syntax::DOT_DOT_DOT_TOKEN))
+        }) {
+            return Err(self.unsupported(
+                id,
+                "a tagged template whose tag takes a rest parameter, which wants the \
+                 substitutions as one array",
+            ));
+        }
+
+        let (pieces, substitutions) = self.template_parts(template)?;
+
+        let origin = self.origin(id);
+        let text = HirType::Managed(ManagedType::String);
+        let array_ty = HirType::Managed(ManagedType::Array(Box::new(text.clone())));
+        #[allow(clippy::cast_precision_loss)]
+        let count = pieces.len() as f64;
+        let length = self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin.clone());
+        let strings = self.push(
+            OpKind::ArrayNew {
+                length,
+                zeroed: true,
+            },
+            array_ty,
+            origin.clone(),
+        );
+        for (at, piece) in pieces.into_iter().enumerate() {
+            #[allow(clippy::cast_precision_loss)]
+            let position = at as f64;
+            let index = self.push(OpKind::ConstFloat(position), HirType::NUMBER, origin.clone());
+            let value = self.push(OpKind::ConstString(piece), text.clone(), origin.clone());
+            self.push(
+                OpKind::ArraySet {
+                    array: strings,
+                    index,
+                    value,
+                    checked: false,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+
+        // **After the array**, because the substitutions are expressions and
+        // may call something: the specification evaluates them left to right
+        // after the template object is made, and an allocation between two of
+        // them would be the only thing that could reorder.
+        let mut args = vec![strings];
+        for expression in substitutions {
+            args.push(self.lower_expression(expression)?);
+        }
+
+        let name = self
+            .qualified
+            .get(&declaration)
+            .cloned()
+            .or_else(|| self.declared_name(declaration))
+            .ok_or_else(|| self.unsupported(tag, "a tagged template with an unnamed tag"))?;
+        self.push_call(id, Callee::Direct(name), args, Some(declaration))
+    }
+
     fn lower_template(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let text = HirType::Managed(ManagedType::String);
         let mut result: Option<ValueId> = None;
@@ -19478,6 +19683,7 @@ impl<'a> FuncBuilder<'a> {
                 ))
             }
             Some(syntax::TEMPLATE_EXPRESSION) => self.lower_template(id),
+            Some(syntax::TAGGED_TEMPLATE_EXPRESSION) => self.lower_tagged_template(id),
             Some(syntax::DELETE_EXPRESSION) => self.lower_delete(id),
             Some(syntax::TYPE_OF_EXPRESSION) => self.lower_typeof(id),
             Some(syntax::VOID_EXPRESSION) => self.lower_void(id),

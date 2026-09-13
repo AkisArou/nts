@@ -889,7 +889,7 @@ backend_examples() {
 # was not its own is worse than one left too low: it fails on the next clean run
 # and the failure names the wrong thing.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 196 "through the LLVM backend, counting" ); }
+  backend_examples 197 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -900,7 +900,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 197 "through the LLVM backend" ); }
+  backend_examples 198 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1128,17 +1128,19 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # same operation. The arm stayed in the example rather than being trimmed to
   # make three backends agree, which is what made it findable: trimming it would
   # have taken the only thing that asks the question.
-  # **197 of 197, and the two numbers are meant to be the same one.** The run
+  # **198 of 198, and the two numbers are meant to be the same one.** The run
   # that moved it printed no `not agreeing:` line at all. A floor equal to the
   # corpus is a different instrument from one below it: it cannot ratchet, only
   # hold, and an example that does not agree fails this step on the day it
   # lands rather than being absorbed into a gap. The plan this lane started
   # from set the target at "86 of 87, which is the LLVM floor"; the corpus has
   # grown by a hundred and one since and this backend refuses nothing in it.
-  # 192 -> 197 on 2026-09-13: the corpus grew by five while this lane spent the
-  # night measuring rather than lowering, and every one of them agrees. A floor
-  # this lane did not earn by building anything is still a floor it has to hold.
-  backend_examples 197 "through the JVM backend" ); }
+  # 192 -> 197 -> 198 on 2026-09-13, twice in one night: the corpus grew by six
+  # while this lane spent it measuring rather than lowering, and every one of
+  # them agrees. A floor this lane did not earn by building anything is still a
+  # floor it has to hold -- and because it equals the corpus it cannot ratchet,
+  # only hold, so an example that stops agreeing fails on the day it lands.
+  backend_examples 198 "through the JVM backend" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
