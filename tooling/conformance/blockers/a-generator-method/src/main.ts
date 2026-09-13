@@ -75,9 +75,18 @@
 //
 //     internal/errors.ts:1256  `code` on a union one of whose members has no layout
 //
-// The total is not established here and is not guessed at. `refusal-census.mjs`
-// now reports how many roots it left out and takes `--top=`, which is the change
-// that makes "it is not in the table" mean something.
+// **The total, measured with the cap raised:** `refusal-census.mjs --top=204`
+// reads `\`X\` on a union one of whose members has no layout` at **6 things, 7
+// sites, 24 modules**, with two neighbours in the same family --
+// `\`X\` on a union, past the fields its members agree about` (3, 4, 5) and
+// `\`X\` on a union whose members share no leading field` (3, 3, 2), the last
+// of which is the `union-members-lay-fields-out-differently` fixture.
+//
+// Read the 24 the way this file's own header says to: every root in
+// `internal/errors.ts` appears in every cone that imports it, so 24 modules is
+// where the *sites* are visible and not 24 independent problems. Seven sites in
+// the most-imported file in the tree is still the shape worth knowing, because
+// what it costs is measured by what it cascades into rather than by its count.
 //
 // Two separate reasons the old quotation could not be checked by searching, and
 // only one of them was the search's fault: the **message changed** while the
