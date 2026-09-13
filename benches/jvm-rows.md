@@ -7615,3 +7615,51 @@ sound: method size is checkable in `dexdump`, where a ratio is not.
 
 Recorded and not started, because that is a measurement and the machine has been
 shared three ways all night.
+
+## ART's inliner budget is 32, pinned at last, and it says exactly what to fix
+
+This file has bracketed the budget twice and never pinned it -- "below 32 rather
+than at it", then "between 25 and 34", then "above 30". The reference's own
+`moveDisks` answers it, because what a compiler **refuses** to inline is as
+legible as what it accepts:
+
+    method_index  method        units    inlined into moveDisks
+            153   moveDisks        21    750x   (recursive)
+            154   moveTopDisk      14    233x
+            155   popDiskFrom      25    145x
+            156   pushDisk         33    -- not inlined
+
+`pushDisk` at 33 units is refused while `popDiskFrom` at 25 is taken 145 times.
+With this file's earlier arms -- 30 inlines, 34 does not -- the budget is in
+**(30, 33)**, which is **32**: ART's documented value, confirmed from three
+independent directions rather than read from a source file.
+
+### And it makes the row's inlining half exact
+
+    method         ours   reference   inlines?
+    moveTopDisk      15          14   both
+    popDiskFrom      51          25   reference only   <- the whole gap
+    pushDisk         66          33   **neither**      <- level, both over 32
+
+**`pushDisk` is not a gap.** The reference's own is over budget and refused, so
+both sides pay for it equally, and every unit spent shrinking ours below 44
+buys nothing until it reaches 32. That removes the harder of the two methods
+from the work list entirely -- which the earlier framing, comparing 66 against
+33 as a 2x deficit, had exactly backwards.
+
+So the inlining half of `awfy-towers` is **one method**: `popDiskFrom`, ours at
+51 against a budget of 32.
+
+    as emitted                      51 u   over
+    outline the cold throw    -12   39 u   over
+    drop the integral guards  -10   29 u   UNDER -- inlines
+
+The pair lands at 29 with three units to spare, and neither half reaches 32
+alone. That is the same pair this file priced and refused twice tonight, and it
+is now the *only* thing between this row and the reference's inlining -- with
+the guards half still blocked on the harness rather than on the contract.
+
+**What is still not licensed:** how much of the 1.81x that inlining is worth.
+The 1.08x measured earlier stands as what that comparison measured. This section
+pins a constant and identifies a target; it does not price the prize, and after
+tonight that distinction is the whole discipline.
