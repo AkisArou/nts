@@ -705,8 +705,24 @@ They are still worth having — `Ptr`, `Ref` and `Owned` have no other home,
 because assignability is exactly what they are for. But `c_int` on a parameter
 is now a choice, and the DX argument points at (b).
 
-*Open, and it is a decision: whether the generator emits (a) or (b) by default,
-and whether an author can opt into the strict form per module.*
+**Milestone decision: branded parameters.** For the scalar-and-handle milestone,
+the declaration is the single authored ABI source. The compiler derives native
+signatures from it; authors do not maintain a second binding file with another
+copy of each parameter type. Ordinary TypeScript computation retains `number`
+semantics, with machine-width conversions at foreign calls. Results need no
+`as number` cast. Parameters require an explicit assertion of the C scalar type.
+
+This accepts the call-site verbosity to avoid declaration/table drift. Revisit
+the default when a header importer can generate both the ergonomic TypeScript
+surface and its ABI table from one source, with disagreement diagnosed. Branded
+types remain useful as an opt-in check then. This decision describes the inbound
+implementation being built; it does not claim those calls already compile.
+
+ABI tests must cover each scalar in parameter-only and return-only positions,
+including an otherwise unchanged program with an unrelated declaration added.
+An unbranded number must be rejected in either native signature position.
+Conflicting declarations of one link symbol must fail explicitly; neither
+declaration order nor runtime-table lookup order may choose its ABI.
 
 ## The questions that were open, and what investigating them found
 
