@@ -24364,7 +24364,13 @@ now recorded in `net/INCOMPLETE.md`: `server._handle` is a number where node's i
     09-13 13:xx   50   emptying arm, but only for modules publishing nothing
     09-13 2x:xx   46   emptying arm for every module
 
-Four of the five were wrong and each was wrong in the same direction. The honest movement from
+Four of the five were wrong and each was wrong in the same direction, and **that has a
+cause rather than being a coincidence: every one of these mechanisms fails open.** A test
+that asserts nothing passes. A branch not taken passes. Two absent things are equal. So the
+error term has a *sign* -- an axis measured without an emptying arm is biased **upward**, not
+merely noisy, and a figure here that has not been re-derived should be distrusted in that
+direction specifically. (The sharpening is a peer's; I had recorded the four-in-one-direction
+observation without noticing it was structural.) The honest movement from
 49 across the whole day is `tty` +1, `net` +2, and **six hollow passes removed** -- two found
 by a peer, four by generalising the guard.
 
