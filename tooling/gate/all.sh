@@ -1128,14 +1128,17 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # same operation. The arm stayed in the example rather than being trimmed to
   # make three backends agree, which is what made it findable: trimming it would
   # have taken the only thing that asks the question.
-  # **188 of 188, and the two numbers are meant to be the same one.** The run
+  # **197 of 197, and the two numbers are meant to be the same one.** The run
   # that moved it printed no `not agreeing:` line at all. A floor equal to the
   # corpus is a different instrument from one below it: it cannot ratchet, only
   # hold, and an example that does not agree fails this step on the day it
   # lands rather than being absorbed into a gap. The plan this lane started
   # from set the target at "86 of 87, which is the LLVM floor"; the corpus has
   # grown by a hundred and one since and this backend refuses nothing in it.
-  backend_examples 192 "through the JVM backend" ); }
+  # 192 -> 197 on 2026-09-13: the corpus grew by five while this lane spent the
+  # night measuring rather than lowering, and every one of them agrees. A floor
+  # this lane did not earn by building anything is still a floor it has to hold.
+  backend_examples 197 "through the JVM backend" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
