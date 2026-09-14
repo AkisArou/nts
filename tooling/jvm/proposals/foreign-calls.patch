@@ -37,10 +37,108 @@ index 891c49cd..9f979bf3 100644
  name = "nts-diagnostics"
  version = "0.0.0"
 diff --git a/compiler/codegen/jvm/src/ops.rs b/compiler/codegen/jvm/src/ops.rs
-index 8a8c2be5..8ad2dbaa 100644
+index 8a8c2be5..da7c11e5 100644
 --- a/compiler/codegen/jvm/src/ops.rs
 +++ b/compiler/codegen/jvm/src/ops.rs
-@@ -4426,6 +4426,111 @@ impl Emitter<'_> {
+@@ -1615,6 +1615,97 @@ impl Emitter<'_> {
+         Ok(())
+     }
+ 
++    /// Arguments to a **bound Java member**, narrowed to the widths the jar
++    /// declared.
++    ///
++    /// Separate from [`Self::push_arguments`] because that one walks a
++    /// descriptor *this repository wrote*, where the declared width is already
++    /// the width the value is held in. Here the descriptor comes from a jar and
++    /// the value is a JavaScript `number` -- an `f64` -- so every integral
++    /// parameter needs a conversion, and it must be the one **JavaScript**
++    /// specifies rather than the one the JVM would do.
++    ///
++    /// **`d2i` is the wrong instruction and it is wrong quietly.** Java
++    /// saturates: `2**31` becomes `2147483647`. `ToInt32` wraps modulo `2^32`:
++    /// it becomes `-2147483648`, which is what node prints, and node is the
++    /// oracle. The two agree on every value anyone tries by hand and disagree
++    /// on exactly the ones a boundary is tested with, so the difference does
++    /// not fail to verify -- it prints a different number.
++    ///
++    /// Java's `char` is **unsigned** where its `byte` and `short` are not, so
++    /// they cannot share a helper. Passing `-1` is what shows it: `65535` into
++    /// a `char`, `-1` into a `short`.
++    fn push_foreign_arguments(
++        &mut self,
++        code: &mut Code,
++        pool: &mut Pool,
++        args: &[ValueId],
++        descriptor: &str,
++        origin: &nts_semantic_schema::Origin,
++    ) -> Result<(), Diagnostic> {
++        use nts_jvm_emitter::insn::{self, Kind};
++        let Some(parameters) = nts_jvm_emitter::descriptor::parameters(descriptor) else {
++            return Err(refuse(
++                self.func,
++                &format!("a bound member whose descriptor `{descriptor}` this compiler cannot read"),
++            ));
++        };
++        if parameters.len() != args.len() {
++            return Err(refuse(
++                self.func,
++                &format!(
++                    "a bound member given {} argument(s) against `{descriptor}`",
++                    args.len()
++                ),
++            ));
++        }
++        for (&arg, want) in args.iter().zip(parameters) {
++            self.load(code, pool, arg)?;
++            // What the value *is*, not what its signature says: `intcall`
++            // holds some helper answers in an `int` slot, and starting from
++            // the declared `f64` would emit a conversion from a double that is
++            // not on the stack.
++            let integral = self.narrowed.contains(&arg)
++                || matches!(self.ty(arg), HirType::Int { .. } | HirType::Bool);
++            match (want, integral) {
++                // Already the width the jar asked for.
++                ("I" | "Z", true) | ("D", false) => {}
++                // The JavaScript conversions, one helper per width.
++                ("I", false) => code.invoke_static(origin, pool, RUNTIME, "toInt32", "(D)I"),
++                ("S", false) => code.invoke_static(origin, pool, RUNTIME, "toInt16", "(D)I"),
++                ("B", false) => code.invoke_static(origin, pool, RUNTIME, "toInt8", "(D)I"),
++                ("C", false) => code.invoke_static(origin, pool, RUNTIME, "toUint16", "(D)I"),
++                // Already an `int`, so the JVM's own narrowing is the same
++                // truncation `ToInt32` would do from here and is one byte.
++                ("S", true) => code.convert(origin, insn::I2S, Kind::Int, Kind::Int),
++                ("B", true) => code.convert(origin, insn::I2B, Kind::Int, Kind::Int),
++                ("C", true) => code.convert(origin, insn::I2C, Kind::Int, Kind::Int),
++                ("F", false) => code.convert(origin, insn::D2F, Kind::Double, Kind::Float),
++                ("D", true) => code.convert(origin, insn::I2D, Kind::Int, Kind::Double),
++                // A reference parameter: the callback coercion already owns
++                // this question and answers it for interfaces as well.
++                (other, _) if other.starts_with('L') || other.starts_with('[') => {
++                    self.coerce_callback(code, pool, arg, other, origin)?;
++                }
++                // **`J` lands here deliberately.** A `bigint` is an
++                // `NtsBigInt`, not a `long`, and the conversion between them is
++                // a decision this lane has not made. Refusing by name is the
++                // rule; emitting `d2l` would be a wrong number at every
++                // magnitude a `long` exists for.
++                (other, held) => {
++                    return Err(refuse(
++                        self.func,
++                        &format!(
++                            "a bound member wanting `{other}` for {}",
++                            if held { "an integer" } else { "a number" }
++                        ),
++                    ));
++                }
++            }
++        }
++        Ok(())
++    }
++
+     /// The argument a fixed intrinsic declared as a callback interface,
+     /// brought to that type on the stack.
+     ///
+@@ -4426,6 +4517,111 @@ impl Emitter<'_> {
                      code.invoke_static(origin, pool, owner, narrow, &format!("{arguments})I"));
                      return Ok(Placed::OnStack);
                  }
@@ -99,7 +197,7 @@ index 8a8c2be5..8ad2dbaa 100644
 +                        self.load(code, pool, *receiver)?;
 +                        rest
 +                    };
-+                    self.push_arguments(code, pool, rest, descriptor, origin)?;
++                    self.push_foreign_arguments(code, pool, rest, descriptor, origin)?;
 +                    match bound.kind {
 +                        ForeignKind::Static => {
 +                            code.invoke_static(origin, pool, owner, member, descriptor);
@@ -226,7 +324,7 @@ index faa0ec48..497bc555 100644
      const INDEX: &[&str] = &[
          "nts_str_index_of",
 diff --git a/compiler/core/src/hir/lower.rs b/compiler/core/src/hir/lower.rs
-index ac9baa5d..4951a699 100644
+index ac9baa5d..2df96afc 100644
 --- a/compiler/core/src/hir/lower.rs
 +++ b/compiler/core/src/hir/lower.rs
 @@ -354,7 +354,7 @@ fn generic_classes(
@@ -664,7 +762,39 @@ index ac9baa5d..4951a699 100644
          // What this class does for each dispatch slot. Empty where nothing in
          // the hierarchy is overridden, which is most classes.
          let mut methods = vec![None; self.hierarchy.table_size()];
-@@ -30800,6 +30882,19 @@ impl<'a> FuncBuilder<'a> {
+@@ -28182,12 +28264,26 @@ impl<'a> FuncBuilder<'a> {
+             .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
+         self.materialize(id, &ty)?;
+         let origin = self.origin(id);
++        // **A bound static, selected the way an instance call already is.**
++        // `callee_for` resolves a bound member reached through a receiver; a
++        // static has no receiver to dispatch on, so it arrives here instead --
++        // and this was the one call shape the binding never reached. It is not
++        // an edge of the surface: `Integer.parseInt`, `Math.abs` and every
++        // factory method in the JDK are statics.
++        let bound = self
++            .snapshot
++            .call_targets
++            .get(&id)
++            .and_then(|it| it.callee)
++            .map(|declaration| self.location(declaration))
++            .and_then(|at| self.foreign.get(&(at.file.0, at.span.end)))
++            .map(|row| row.key.clone());
++        let callee = match bound {
++            Some(key) => Callee::External(key),
++            None => Callee::Direct(format!("{class_name}.{member_name}")),
++        };
+         Ok(self.push(
+-            OpKind::Call {
+-                callee: Callee::Direct(format!("{class_name}.{member_name}")),
+-                args,
+-                frame: None,
+-            },
++            OpKind::Call { callee, args, frame: None },
+             ty,
+             origin,
+         ))
+@@ -30800,6 +30896,19 @@ impl<'a> FuncBuilder<'a> {
          } else {
              member_name
          };
