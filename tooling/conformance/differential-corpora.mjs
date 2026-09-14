@@ -3030,6 +3030,71 @@ export const CORPORA = {
     },
     calls: [
       {
+        // **`createInterface`, which this corpus excluded for answering "over time".** That was a
+        // statement about the harness: an `Interface` is an async iterable and nothing could await
+        // one until 2026-09-14. Over a fixed in-memory source it is entirely deterministic --
+        // `readline` has no sibling substitution, so the `Readable` feeding it is node's on both
+        // sides and this compares `readline` alone.
+        //
+        // Line splitting is where a reimplementation differs: `\n` against `\r\n`, a trailing
+        // fragment with no terminator, and an empty source. The input is woven into all three.
+        label: "interface-lines",
+        call: async (m, s) => {
+          const text = `${s}\n${s}\r\n${s}`;
+          const show = async (make) => {
+            try {
+              return `ok:${JSON.stringify(await make())}`;
+            } catch (error) {
+              return `${error?.code ?? error?.name ?? "?"}`;
+            }
+          };
+          return [
+            await show(async () => {
+              const rl = m.createInterface({ input: Readable.from([text]), terminal: false });
+              const lines = [];
+              for await (const line of rl) lines.push(line);
+              rl.close();
+              return lines;
+            }),
+            // A source that ends without a terminator: the fragment is still a line.
+            await show(async () => {
+              const rl = m.createInterface({ input: Readable.from([`${s}`]), terminal: false });
+              const lines = [];
+              for await (const line of rl) lines.push(line);
+              rl.close();
+              return lines;
+            }),
+            // Chunk boundaries must not decide where lines are: the same bytes arriving one at a
+            // time have to produce the same lines.
+            await show(async () => {
+              const rl = m.createInterface({
+                input: Readable.from(Array.from(text)),
+                terminal: false,
+              });
+              const lines = [];
+              for await (const line of rl) lines.push(line);
+              rl.close();
+              return lines;
+            }),
+            // `promises.Readline` batches escapes and writes them on `commit`, so the bytes and
+            // the fact that nothing reaches the stream before `commit` are both compared.
+            await show(async () => {
+              if (m.promises?.Readline === undefined) return "absent";
+              const written = [];
+              const sink = new Writable({
+                write(chunk, encoding, done) { written.push(chunk.toString("utf8")); done(); },
+              });
+              const writer = new m.promises.Readline(sink);
+              writer.cursorTo(String(s).length % 7, 2).moveCursor(1, -1).clearLine(0);
+              const beforeCommit = written.length;
+              await writer.commit();
+              return [beforeCommit, JSON.stringify(written.join(""))];
+            }),
+          ].join("|");
+        },
+      },
+
+      {
         // `emitKeypressEvents`, the last of `readline`'s three uncompared
         // names. It turns bytes on a stream into `'keypress'` events, and the
         // decoding is a state machine: an escape sequence arrives as several
