@@ -61,6 +61,7 @@ const UV_EADDRINUSE = -98;
  */
 const UV_TCP_IPV6ONLY = 1;
 
+/** @ntsAbi managed */
 declare function nts_process_env(name: string): string;
 /**
  * The current process's channel, which a worker answers through.
@@ -105,6 +106,7 @@ declare function nts_cluster_shared_handle(
  * that names it.
  */
 declare function nts_cluster_shared_handle_close(id: number): void;
+/** @ntsAbi managed */
 declare function nts_process_env_has(name: string): boolean;
 
 /** `undefined` rather than `""` for a name nothing set, which is what node's env does. */
@@ -639,7 +641,32 @@ class Cluster extends EventEmitter {
     if (distribution === undefined) {
       distribution = new Distribution(key);
       this.#distributions.set(key, distribution);
-      const server = createServer((socket: Socket): void => {
+      // **`pauseOnConnect`, or the primary eats the first bytes of every connection.**
+      //
+      // node never builds a `Socket` here at all: `RoundRobinHandle` steals the listening
+      // handle and installs its own `onconnection`, so an accepted connection is a raw handle
+      // that nothing has read from. This accepts into a real `Socket`, and an accepted socket
+      // resumes -- `if (!this.#options.pauseOnConnect) socket.resume()` in `net` -- which arms
+      // the read. The handoff to a worker then costs an IPC round trip, and anything the client
+      // sent in the meantime has already been consumed **here**, into a stream in the primary
+      // that nobody will ever read.
+      //
+      // A client that writes on `connect` therefore loses its first write, which is every HTTP
+      // client there is. Measured with one fixture in three arms, same handoff each time:
+      //
+      //     worker only writes                            served, data flows
+      //     worker reads, client writes on connect         `connection`, `end`, and no data
+      //     worker reads, client writes 300ms later        `worker read "ping"`
+      //
+      // The third arm is the proof: the descriptor is fine and the read direction works. Only
+      // the timing was wrong, and `test-listen-fd-cluster` and `test-cluster-http-pipe` both
+      // fail on it because node's `http` server must read a request before it can answer.
+      //
+      // `pauseOnConnect` reaches `pauseOnCreate` on the accepted socket, which is the flag that
+      // skips `read(0)` in the constructor, so the bytes stay in the kernel where the worker's
+      // descriptor can still see them. That is node's behaviour reproduced through the option
+      // node's own `net` provides for it, rather than a second accept path here.
+      const server = createServer({ pauseOnConnect: true }, (socket: Socket): void => {
         distribution!.pending.push(socket);
         this.#handoffNext(distribution!);
       });
@@ -912,9 +939,13 @@ class Cluster extends EventEmitter {
   _setupWorker(): void {}
 }
 
+/** @ntsAbi managed */
 declare function nts_process_argv(): string[];
+/** @ntsAbi managed */
 declare function nts_process_exec_argv(): string[];
+/** @ntsAbi managed */
 declare function nts_process_cwd(): string;
+/** @ntsAbi managed */
 declare function nts_process_env_keys(): string[];
 
 /** The environment as a plain object, so a fork can extend rather than replace it. */

@@ -335,7 +335,26 @@ globalThis.nts_net_listen = (
     // Accepted transports follow the same rule as outgoing ones: the public
     // Socket above this seam, not the stand-in host socket, decides whether a
     // received FIN also ends writing.
-    const server = net.createServer({ allowHalfOpen: true });
+    //
+    // **`pauseOnConnect`, because `adoptAt`'s `socket.pause()` does not stop the read.**
+    //
+    // node's accepted `Socket` calls `read(0)` in its constructor, which arms libuv. The
+    // `pause()` in `adoptAt` clears the flowing flag but only calls `readStop()` when
+    // `this[kBuffer]` is set, and `kBuffer` exists only for a socket created with the
+    // `onread` option -- which these are not. So the host socket went on reading below this
+    // seam and the first chunks landed in *its* buffer, where nothing above ever looks.
+    //
+    // It cost two cluster files. `cluster`'s primary accepts a connection and hands the
+    // descriptor to a worker one IPC round trip later; anything the client wrote on
+    // `connect` had already been drained here, so the worker saw `connection` and `end` and
+    // no data, and node's `http` server -- which must read a request before it can answer --
+    // never ran its handler. Delaying the client's write by 300ms made the same fixture pass,
+    // which is what named the race.
+    //
+    // The comment on `adoptAt` was right about the intent and the code did not achieve it.
+    // This makes it true where it matters: an accepted socket is never read-started, and
+    // `nts_net_read_start` is what resumes it.
+    const server = net.createServer({ allowHalfOpen: true, pauseOnConnect: true });
     server.on("connection", (socket) => onConnection(adopt(socket)));
     server.on("error", (e) => {
       servers.delete(handle);
