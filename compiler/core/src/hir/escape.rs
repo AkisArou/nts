@@ -737,21 +737,7 @@ fn gone_into_the_unknown(
     // Deliberately not a name table for the native side. A prefix list would be
     // a second derivation of a fact the declaration already states, and the two
     // would disagree the first time someone renamed a binding.
-    let kept: Option<Vec<usize>> = match callee {
-        Callee::External(name) => super::runtime::keeps(name).map(<[usize]>::to_vec),
-        Callee::Native(target) => Some(
-            (0..target.parameters.len())
-                .filter(|slot| {
-                    !matches!(
-                        target.retention.get(*slot),
-                        Some(super::native::Retention::NotRetained)
-                    )
-                })
-                .collect(),
-        ),
-        _ => None,
-    };
-    match kept {
+    match kept_slots(callee) {
         Some(slots) => {
             for slot in slots {
                 if let Some(argument) = args.get(slot) {
@@ -764,6 +750,32 @@ fn gone_into_the_unknown(
                 escaped(escapes, func, *argument);
             }
         }
+    }
+}
+
+/// Which argument slots a foreign call may keep, or `None` for "all of them".
+///
+/// Separated from its one caller so the decision can be asked about directly.
+/// Its effect on placement is not observable -- `@ntsNoEscape` is accepted only
+/// on native pointer parameters, and those never reach `place_allocations`, so
+/// the two populations are disjoint by construction and no reachable allocation
+/// moves because of this. That is exactly why it needs a test of its own: a
+/// fact with no observable consequence is a fact nothing else will notice
+/// losing.
+pub(crate) fn kept_slots(callee: &Callee) -> Option<Vec<usize>> {
+    match callee {
+        Callee::External(name) => super::runtime::keeps(name).map(<[usize]>::to_vec),
+        Callee::Native(target) => Some(
+            (0..target.parameters.len())
+                .filter(|slot| {
+                    !matches!(
+                        target.retention.get(*slot),
+                        Some(super::native::Retention::NotRetained)
+                    )
+                })
+                .collect(),
+        ),
+        _ => None,
     }
 }
 
@@ -1458,5 +1470,62 @@ mod tests {
             escapes[0].escapes(ValueId(1)),
             "a returned container carries what was stored into it"
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod foreign_contracts {
+    use super::{Callee, kept_slots};
+    use crate::hir::native::{Convention, Function, Retention, Type};
+
+    fn native(retention: Vec<Retention>) -> Callee {
+        Callee::Native(std::sync::Arc::new(Function {
+            name: "consume".to_owned(),
+            convention: Convention::C,
+            parameters: vec![Type::Void, Type::Void],
+            result: Type::Void,
+            retention,
+            variadic: None,
+        }))
+    }
+
+    /// Both foreign lanes answer from their own evidence, and `Unknown` is not
+    /// "nothing escapes".
+    ///
+    /// One arm used to answer for `Callee::External` and `Callee::Native`
+    /// together by returning `None`, which means *all slots escape* -- correct
+    /// for something nothing was known about, and a refusal to read a
+    /// declaration that says otherwise.
+    ///
+    /// **This has no observable effect on placement**, and the test exists
+    /// because of that rather than despite it: `@ntsNoEscape` is accepted only
+    /// on native pointer parameters, which never reach `place_allocations`, so
+    /// the populations are disjoint by construction. Nothing downstream would
+    /// notice this fact being lost. Measured before claiming otherwise.
+    #[test]
+    fn a_declared_contract_is_read_and_unknown_is_not_a_contract() {
+        // Every slot escapes: nothing was established about either.
+        assert_eq!(
+            kept_slots(&native(vec![Retention::Unknown, Retention::Unknown])),
+            Some(vec![0, 1])
+        );
+        // The first is authored not-retained, so only the second is kept.
+        assert_eq!(
+            kept_slots(&native(vec![Retention::NotRetained, Retention::Unknown])),
+            Some(vec![1])
+        );
+        assert_eq!(
+            kept_slots(&native(vec![Retention::NotRetained, Retention::NotRetained])),
+            Some(Vec::new())
+        );
+
+        // A callee neither lane describes stays unknown, which is `None` and
+        // means all of them -- the distinction this function exists for.
+        assert_eq!(kept_slots(&Callee::Direct("whatever".to_owned())), None);
+        // And the other foreign lane still answers from its own table rather
+        // than from a native declaration, which is what "one arm, two lanes"
+        // has to mean: one place, two sources of evidence.
+        assert_eq!(kept_slots(&Callee::External("nts_unknown_helper".to_owned())), None);
     }
 }

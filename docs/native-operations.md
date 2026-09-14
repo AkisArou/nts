@@ -318,6 +318,46 @@ The includes are emitted only where a layout needs them. An include is not free
 in this file -- `<stdlib.h>` declares `div`, a name a TypeScript program is
 entitled to export -- so a program naming no header-backed struct gets none.
 
+## Effects: what a call does to memory, and who may say so
+
+ABI says how bits cross. Effects say what a call does to memory and when, and
+**a header cannot infer it**. Four properties, each checkable:
+
+**One representation, not two beside each other.** `native::Function` carries
+`retention: Vec<Retention>` and no `no_escape`. The authored tag is still
+spelled `@ntsNoEscape` and `NativeAttributes::no_escape` is the parsed tag --
+those are the *syntax*, read once in the frontend. What the HIR carries is the
+fact.
+
+**Unknown is not "nothing escapes".** `Retention::Unknown` is the absence of a
+claim: the callee may keep, free, reallocate or invalidate the argument, and
+may call it after returning. Kept distinct at every consumer.
+
+**One place, two sources of evidence.** `escape::kept_slots` answers for
+`Callee::External` from `runtime::keeps` and for `Callee::Native` from the
+declaration's own `retention`; everything else is `None`, which means every
+slot escapes. Both lanes used to share an arm that returned `None`.
+
+**It has no observable effect on placement, and the test exists because of
+that.** `@ntsNoEscape` is accepted only on native pointer parameters, and those
+never reach `place_allocations` -- the two populations are disjoint by
+construction, so no reachable allocation moves. Nothing downstream would notice
+this fact being lost, which is exactly why it is asserted directly rather than
+through a consequence.
+
+**Preservation through HIR.** `nts hir --prepared` prints the contract on the
+call -- `call.native apply_twice [-.]`, where `-` is NotRetained and `.` is
+Unknown -- and a test asks the prepared program for it, with an untagged arm
+that must report `Unknown`.
+
+**An importer leaves it Unknown rather than inventing it.** `nts bind-c` emits
+`@ntsNoEscape` only from an explicit `--no-escape` flag, and the generated
+comment says whose claim it is. The inference it refuses to make is tempting
+and wrong: `const void *` looks like a promise not to keep the pointer and is
+nothing of the kind -- `const` restricts what the callee may *write through*,
+and `strdup`'s argument is `const char *`. Asserted in both directions, because
+a tool that had stopped emitting tags at all would pass the first half.
+
 ## Unions, packing, and the pointers that come out of them
 
 `native::Struct` is now `native::Record` and carries a `RecordKind`. One type

@@ -1135,6 +1135,66 @@ mod tests {
         }
     }
 
+    fn request(no_escape: Vec<(String, String)>) -> Request {
+        Request {
+            headers: vec!["string.h".to_owned()],
+            defines: Vec::new(),
+            module: "c:x".to_owned(),
+            records: Vec::new(),
+            functions: Vec::new(),
+            clang_args: Vec::new(),
+            constants: Vec::new(),
+            no_escape,
+            aliases: BTreeMap::new(),
+        }
+    }
+
+    /// An importer leaves effects **Unknown** rather than inventing them from
+    /// C types.
+    ///
+    /// The temptation is real and the inference is wrong: `const void *` looks
+    /// like a promise not to keep the pointer and is nothing of the kind --
+    /// `const` restricts what the callee may *write through*, not what it may
+    /// retain, and `strdup`'s argument is `const char *`. A header states types
+    /// and says nothing about lifetimes, so a contract can only come from an
+    /// author, which is why `--no-escape` is a flag and not a heuristic.
+    ///
+    /// The second arm is what makes the first a check: with the flag, the tag
+    /// does appear, so this cannot pass on a tool that stopped emitting tags
+    /// altogether.
+    #[test]
+    fn a_derived_binding_invents_no_contract_from_a_c_type() {
+        let mut binding = Binding::default();
+        binding.functions.push(Function {
+            name: "keeps_it".to_owned(),
+            // Every shape that might tempt an inference: a const view, a plain
+            // pointer, and a `void *`.
+            parameters: vec![
+                ("a".to_owned(), Shape::VoidPointer(true)),
+                ("b".to_owned(), Shape::Pointer(Box::new(Shape::Scalar("c_char")), true)),
+                ("c".to_owned(), Shape::Pointer(Box::new(Shape::Scalar("c_int")), false)),
+            ],
+            result: Some(Shape::Scalar("c_int")),
+            variadic: false,
+        });
+
+        let silent = binding.render(&request(Vec::new()));
+        assert!(
+            !silent.contains("@ntsNoEscape"),
+            "a header states no lifetime, so nothing here may claim one:\n{silent}"
+        );
+        assert!(silent.contains("ConstPtr<unknown>"), "{silent}");
+
+        let authored = binding.render(&request(vec![
+            ("keeps_it".to_owned(), "a".to_owned()),
+        ]));
+        assert!(authored.contains("@ntsNoEscape a"), "{authored}");
+        assert!(
+            authored.contains("an authored claim"),
+            "the generated file has to say whose claim it is:\n{authored}"
+        );
+    }
+
     #[test]
     fn the_binding_reproduces_the_layouts_it_describes_and_refuses_when_it_cannot() {
         let mut binding = Binding::default();
