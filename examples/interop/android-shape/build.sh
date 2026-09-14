@@ -52,6 +52,29 @@ elif ! diff -u "$here/types/com.example.ui.d.ts" "$generated" \
   exit 1
 fi
 
+# **And the TypeScript, which until 2026-09-15 this script never compiled.**
+#
+# `src/main.ts` holds every construct the coverage matrix credits to this
+# project -- a TypeScript class extending a Java one, a class implementing a
+# Java interface, both callback shapes -- and none of it was built by anything.
+# The file was a design sketch that read like a working example. It does work;
+# that was luck rather than evidence, and two of its claims were false when
+# finally run.
+emitted="$here/target/emitted"
+NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$nts" emit-jvm "$here/tsconfig.json" --out "$emitted"
+javac --release 8 -Xlint:all,-options -cp "$emitted:$here/target/classes:$emitted/nts-runtime.jar" \
+  -d "$here/target/classes" "$here/java/Run.java"
+got=$(java -Xverify:all -cp "$here/target/classes:$emitted:$emitted/nts-runtime.jar" Run)
+want="100 1 1 1 10 4"
+if [ "$got" != "$want" ]; then
+  echo "android-shape: the TypeScript printed"
+  echo "  $got"
+  echo "expected"
+  echo "  $want"
+  exit 1
+fi
+echo "android-shape: ts ran -- $got"
+
 echo "android-shape: demo ran and declarations agree"
 
 # And every refusal this project documents, produced rather than asserted in

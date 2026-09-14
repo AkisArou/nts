@@ -47,12 +47,17 @@ class TouchCounter implements View.OnTouch {
   }
 }
 
-export function main(): void {
+export function main(): string {
   const panel = new Panel();
 
-  // An implementing object, passed where Java wants the interface.
+  // An implementing object, passed where Java wants the interface -- and
+  // dispatched through, because installing a listener is not calling one. This
+  // line used to be absent and `counter.seen` stayed 0: the closure below
+  // replaced the listener before Java ever reached this one, so the object
+  // path was constructed, passed, verified by javac, and never run.
   const counter = new TouchCounter();
   panel.setOnTouch(counter);
+  const byObject = panel.dispatchTouch(1, 1);
 
   // --- same thread, returns a value ---------------------------------------
   // Runs on the calling thread and its answer is used immediately. Possible
@@ -66,10 +71,22 @@ export function main(): void {
   const consumed = panel.dispatchTouch(10, 10);
 
   // --- foreign thread, returns nothing ------------------------------------
-  // Posted to NtsInbox and run on our lane. Lossless because it is `void`.
+  //
+  // **This runs on the loader's thread, not on ours.** The plan says a void
+  // callback from a foreign thread is posted to `NtsInbox` and drained on our
+  // lane; that is not what is emitted. `Closure1.onBytes` wraps the `byte[]`
+  // and calls straight into `Program.Closure1$call`, and **no emitted class in
+  // this project references `NtsInbox` at all** -- `javap -c` says zero, five
+  // classes out of five.
+  //
+  // It is `void`, so nothing is lost on the way back. What is not established
+  // is the thing the inbox exists for: our runtime is a single lane, and this
+  // body touches it from a thread we do not own. It works here because the
+  // body only writes one number. Corrected 2026-09-15; the claim had no
+  // witness and ran for as long as nothing compiled this file.
   Loader.load("payload", (data: Uint8Array): void => {
     const head = data.subarray(0, 4); // a view, not a copy
-    report(head.length);
+    fromLoader = head.length;
   });
 
   // --- the overload that costs an allocation, for contrast ----------------
@@ -78,9 +95,14 @@ export function main(): void {
   const bounds = new Rect(0, 0, 10, 10);
   panel.setBounds(bounds);
 
-  report(consumed ? 1 : 0);
+  return `${panel.measured} ${consumed ? 1 : 0} ${byObject ? 1 : 0} ${counter.seen} ${panel.right}`;
 }
 
-function report(n: number): void {
-  // stands in for whatever the app does with it
+/// What the loader's callback recorded. Read by the Java driver *after* waiting
+/// for it, because `Loader.load` returns as soon as the thread starts -- so
+/// reading this at the end of `main` would be a race, and would have read 0.
+let fromLoader = 0;
+
+export function loaded(): number {
+  return fromLoader;
 }

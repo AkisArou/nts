@@ -1960,6 +1960,16 @@ separate `interop/` tree that no floor counts until they are ready.
 
 ## The coverage matrix, so nothing is exercised by accident
 
+**Audited 2026-09-15, and the heading was aspirational.** Six rows were marked
+for a project that did not exercise them, and the reason was structural rather
+than careless: `android-shape/build.sh` compiled the Java, ran a Java demo and
+diffed the generated declarations, and **never compiled `src/main.ts` at all** --
+the file holding every construct the third column claims. It does compile and
+run, which was luck; two of its own comments were false when it was finally
+run, including the one about the inbox below. `build.sh` now emits it, runs it
+and asserts its output line, so the column is guarded rather than asserted.
+Rows corrected in place carry an inline comment with what the artefact said.
+
 | | 1. java-from-ts | 2. ts-from-java | 3. android-shape |
 | --- | --- | --- | --- |
 | `HashMap` in and out | ● | out only | |  <!-- corrected 2026-09-15: a Map crosses **out** as `NtsMap`, which IS a `java.util.Map`, at no cost. It does not cross **in**: a `Map` parameter publishes as the concrete `nts.rt.NtsMap`, so a caller holding a `HashMap` must build an `NtsMap` with `newMap`/`set` and copy entry by entry -- there is no `fromMap`. Out is free, in is a copy. -->
@@ -1980,7 +1990,7 @@ separate `interop/` tree that no floor counts until they are ready.
 | TS implements a Java interface | | | ● |
 | TS extends a Java class | | | ● |
 | Callback returning a value, same thread | | | ● |
-| Callback void, foreign thread, via inbox | | | ● |
+| Callback void, foreign thread -- **not** via inbox | | | ● |  <!-- corrected 2026-09-15: the callback does arrive from a foreign thread and does run, but `NtsInbox` is not involved: `Closure1.onBytes` wraps the `byte[]` and calls `Program.Closure1$call` on the loader's thread, and no emitted class in the project references `NtsInbox` -- zero, across five of five. The plan's handoff is unbuilt, and because it is `void` nothing visible breaks, which is why it survived. -->
 | Closure as a functional interface | | | ● |  <!-- corrected 2026-09-15: not exercised in ts-from-java: neither file contains a lambda, a method reference or a functional interface. Its README already listed closures under "what is not here yet". -->
 
 ## 1. `java-from-ts` — TypeScript consumes Java
