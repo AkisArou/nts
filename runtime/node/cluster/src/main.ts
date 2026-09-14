@@ -502,9 +502,46 @@ class Cluster extends EventEmitter {
         if (acceptedOf(message)) {
           // The worker took it. Nothing to do but offer the next one.
         } else {
-          // It is shutting down: put the connection back for somebody else.
+          // **A refusal goes to the back of the queue and to a *free* worker, not to the
+          // front and back to the worker that just refused.**
+          //
+          // The earlier comment here said "it is shutting down", and that is only one of the
+          // two reasons node answers `accepted: false`. The other is `maxConnections`, and it
+          // is checked *before* the acknowledgement, in node's own `child.js`:
+          //
+          //     let accepted = server !== undefined;
+          //     if (accepted && server[owner_symbol]) {
+          //       const self = server[owner_symbol];
+          //       if (self.maxConnections != null &&
+          //           self._connections >= self.maxConnections &&
+          //           !self.dropMaxConnection) {
+          //         accepted = false;
+          //       }
+          //     }
+          //
+          // So a refusal is ordinary traffic on a healthy worker, not an end-of-life signal,
+          // and what happens next decides whether the connection is served at all.
+          // `round_robin_handle.js`:
+          //
+          //     if (reply.accepted) handle.close();
+          //     else this.distribute(0, handle);
+          //     this.handoff(worker);
+          //
+          // and `distribute` **appends** and then offers it to whoever is free:
+          //
+          //     append(this.handles, handle);
+          //     const [ workerEntry ] = this.free;
+          //     if (ArrayIsArray(workerEntry)) { ...; this.handoff(worker); }
+          //
+          // `unshift` put it back at the head, where the very next `#handoff` to this same
+          // worker picked up the identical socket and was refused again. A worker with
+          // `maxConnections: 0` refuses everything, so it sat on the front of the queue
+          // trading one connection back and forth while the rest were distributed around it.
           const socket = distribution.handedTo.get(ack);
-          if (socket !== undefined) distribution.pending.unshift(socket);
+          if (socket !== undefined) {
+            distribution.pending.push(socket);
+            this.#handoffNext(distribution);
+          }
         }
         distribution.handedTo.delete(ack);
         pending();
