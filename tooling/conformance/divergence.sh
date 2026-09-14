@@ -24,20 +24,19 @@
 # and `fuzz-deep-equal` in one. A gate step that costs a second is one nobody argues
 # about, and the shared tree runs gates continuously.
 #
-# `fuzz-timer-order.mjs` is **excluded and this is the reason**, so it is not silently
-# forgotten. It reported 0 to 2 differing programs across five runs at the *same* seed,
-# and a different program each time:
+# `fuzz-timer-order.mjs` is **in, and it took two repairs to earn that.** It was excluded
+# at first, reporting 0 to 2 differing programs across five runs at the same seed and a
+# different program each time -- impossible from a deterministic generator if both sides
+# are held still. Its header claimed "every program is run twice per scheduler"; the code
+# ran *node* twice and this profile once, so only node's nondeterminism was filtered.
+# Sampling both twice was necessary and not sufficient, because a near-coin-flip program
+# survives it; a candidate divergence is now confirmed three times before it is reported.
+# Six consecutive runs clean, and still reporting five divergences when `setImmediate` is
+# deliberately replaced with `setTimeout(fn, 0)`.
 #
-#     213 agree, 2 differ, 87 skipped      211 agree, 0 differ, 79 skipped
-#     231 agree, 2 differ, 69 skipped      216 agree, 0 differ, 84 skipped
-#     228 agree, 1 differ, 72 skipped
-#
-# Its filter runs each program twice per scheduler and skips one that disagrees with
-# itself. Two samples is a weak stability test under load, so timing-sensitive programs
-# reach the comparison and read as divergences. Whether any of them is a real ordering
-# bug is unsettled: the next step is to take one diverging program and run it many times
-# against node alone, and a filter that samples more than twice is what would let this
-# join the list.
+# It runs 150 programs here rather than its default 300, which is **20 seconds against the
+# other four checks' one**. That is the whole cost of this step and it buys the only
+# regression check on scheduling order; run it with no argument for the wider sweep.
 #
 # `differential-ts.mjs --all` is excluded for cost rather than doubt -- it is minutes,
 # not seconds, and it is clean over 22 modules.
@@ -46,9 +45,15 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root" || exit 1
 
 status=0
-for check in skip-audit stale-exclusions self-oracle fuzz-deep-equal; do
+for check in skip-audit stale-exclusions self-oracle fuzz-deep-equal "fuzz-timer-order 150"; do
   started=$(date +%s)
-  output="$(node "tooling/conformance/$check.mjs" 2>&1)"
+  # `set --` then pass only the arguments that exist. Passing `"${2:-}"` unconditionally
+  # handed every argument-less check an empty string, and `fuzz-deep-equal` reads its first
+  # argument as a case count: it ran **zero cases and reported ok**. Caught by reading the
+  # summary line rather than the exit status, which is the reason this step prints one.
+  set -- $check
+  output="$(node "tooling/conformance/$1.mjs" "${@:2}" 2>&1)"
+  check="$1"
   code=$?
   elapsed=$(( $(date +%s) - started ))
   if [ "$code" -eq 0 ]; then
