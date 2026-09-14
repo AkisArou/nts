@@ -153,6 +153,9 @@ fn managed_abi_belongs_only_to_the_annotated_declaration() {
     let annotations: Vec<_> = snapshot
         .nodes
         .iter()
+        // Assert attachment within this fixture, independent of tags on the
+        // imported library's own declarations.
+        .filter(|node| snapshot.sources[node.origin.location.file.0 as usize].display_path.file_name() == Some("main.ts"))
         .filter_map(|node| node.native_abi.as_deref())
         .collect();
     assert_eq!(annotations, ["managed", "nonsense"]);

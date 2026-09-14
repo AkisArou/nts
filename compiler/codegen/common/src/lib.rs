@@ -26,3 +26,5 @@ pub use backend::{Backend, UnknownBackend};
 pub use destruct::{Copy, edge_copies};
 pub use linearize::block_order;
 pub use writer::CodeWriter;
+
+pub mod native;

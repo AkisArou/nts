@@ -506,27 +506,42 @@ fn compatible(found: &HirType, want: &HirType) -> bool {
 
 fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
     for op in &func.values {
-        let (pointer, index, stored) = match &op.kind {
-            OpKind::NativeLoad { pointer, index } => (*pointer, *index, None),
-            OpKind::NativeStore { pointer, index, value } => (*pointer, *index, Some(*value)),
+        let (pointer, index) = match &op.kind {
+            OpKind::NativeLoad { pointer, index } | OpKind::NativeStore { pointer, index, .. }
+            | OpKind::NativeIndexAddress { pointer, index } => (*pointer, Some(*index)),
+            OpKind::NativeFieldAddress { pointer, .. } => (*pointer, None),
             _ => continue,
         };
         let found = &func.value(pointer).ty;
-        let HirType::NativePointer(super::native::Pointee::Scalar(scalar)) = found else {
+        let HirType::NativePointer(element) = found else {
             problems.push(Invalid::OperandType { func: func.name.clone(), op: "native memory access", found: found.clone() });
             continue;
         };
-        let expected = scalar.representation();
-        let actual = stored.map_or(&op.ty, |value| &func.value(value).ty);
-        // Exact equality: widening is a conversion, never a different-sized
-        // memory access to the same address.
-        for (what, expected, actual) in [
-            ("native memory element", expected, actual),
-            ("native memory index", HirType::Int { bits: 64, signed: true }, &func.value(index).ty),
-        ] {
+        let expected = match &op.kind {
+            OpKind::NativeLoad { .. } | OpKind::NativeStore { .. } => element.element_type(),
+            OpKind::NativeIndexAddress { .. } => (!matches!(element, super::native::Pointee::Opaque(_))).then(|| found.clone()),
+            OpKind::NativeFieldAddress { field, .. } => match element {
+                super::native::Pointee::Struct(layout) => layout.fields.get(*field as usize).map(|f| HirType::NativePointer(f.ty.clone())),
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some(expected) = expected else {
+            problems.push(Invalid::OperandType { func: func.name.clone(), op: "native memory layout", found: found.clone() });
+            continue;
+        };
+        let actual = match op.kind {
+            OpKind::NativeStore { value, .. } => &func.value(value).ty,
+            _ => &op.ty,
+        };
+        let mut report = |what, expected, actual: &HirType| {
             if expected != *actual {
                 problems.push(Invalid::StoreType { func: func.name.clone(), what, expected, found: actual.clone() });
             }
+        };
+        report("native memory element", expected, actual);
+        if let Some(index) = index {
+            report("native memory index", HirType::Int { bits: 64, signed: true }, &func.value(index).ty);
         }
     }
 }
@@ -1045,7 +1060,9 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         }
         OpKind::FieldGet { object, .. } => vec![*object],
         OpKind::FieldSet { object, value, .. } => vec![*object, *value],
-        OpKind::NativeLoad { pointer, index } => vec![*pointer, *index],
+        OpKind::NativeFieldAddress { pointer, .. } => vec![*pointer],
+        OpKind::NativeIndexAddress { pointer, index }
+        | OpKind::NativeLoad { pointer, index } => vec![*pointer, *index],
         OpKind::NativeStore { pointer, index, value } => vec![*pointer, *index, *value],
         OpKind::ArrayGet { array, index, .. } => vec![*array, *index],
         OpKind::ArraySet {

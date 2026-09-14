@@ -161,6 +161,8 @@ fn has_effects(kind: &OpKind) -> bool {
         | OpKind::ArrayNew { .. }
         | OpKind::Length(_)
         | OpKind::NativeLoad { .. }
+        | OpKind::NativeIndexAddress { .. }
+        | OpKind::NativeFieldAddress { .. }
         | OpKind::ArrayGet { .. }
         | OpKind::StringUnitAt { .. } => false,
     }

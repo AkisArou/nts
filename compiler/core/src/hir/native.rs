@@ -40,6 +40,21 @@ pub enum Type {
 pub enum Pointee {
     Opaque(String),
     Scalar(Scalar),
+    Struct(std::sync::Arc<Struct>),
+    Pointer(Box<Pointee>),
+}
+
+/// C storage order is declaration order, never the managed layout order.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Struct {
+    pub name: String,
+    pub fields: Vec<Field>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Field {
+    pub name: String,
+    pub ty: Pointee,
 }
 
 impl Pointee {
@@ -48,11 +63,24 @@ impl Pointee {
         match self {
             Self::Opaque(name) => format!("struct {name}"),
             Self::Scalar(scalar) => scalar.c_type().to_owned(),
+            Self::Struct(layout) => format!("struct {}", layout.name),
+            Self::Pointer(pointee) => pointee.pointer_type(),
         }
     }
 
     #[must_use]
     pub fn pointer_type(&self) -> String { format!("{} *", self.c_type()) }
+
+    /// A loadable scalar or pointer slot. Aggregates are addressable, but a
+    /// whole-aggregate load/copy is not an implicit pointer assignment.
+    #[must_use]
+    pub fn element_type(&self) -> Option<HirType> {
+        match self {
+            Self::Scalar(scalar) => Some(scalar.representation()),
+            Self::Pointer(pointee) => Some(HirType::NativePointer((**pointee).clone())),
+            Self::Opaque(_) | Self::Struct(_) => None,
+        }
+    }
 }
 
 impl std::fmt::Display for Pointee {
@@ -60,6 +88,8 @@ impl std::fmt::Display for Pointee {
         match self {
             Self::Opaque(name) => write!(f, "{name}"),
             Self::Scalar(scalar) => write!(f, "{}", scalar.c_type()),
+            Self::Struct(layout) => write!(f, "{}", layout.name),
+            Self::Pointer(pointee) => write!(f, "{pointee}*"),
         }
     }
 }
@@ -367,40 +397,5 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     number.then_some(brand).flatten()
 }
 
-/// A reserved phantom field authors a pointee layout or C struct tag. A nullable declaration
-/// has the same ABI; undefined and mixed-pointer unions have no such contract.
-#[must_use]
-pub fn pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
-    use nts_semantic_schema::LiteralValue;
-    let record = snapshot.types.get(ty.0 as usize)?;
-    if let TypeKind::Union(parts) = &record.kind {
-        let [first, second] = parts.as_slice() else { return None; };
-        let is_null = |part: TypeId| matches!(
-            snapshot.types.get(part.0 as usize).map(|record| &record.kind),
-            Some(TypeKind::Null)
-        );
-        let payload = if is_null(*first) { *second }
-            else if is_null(*second) { *first }
-            else { return None; };
-        return pointer(snapshot, payload);
-    }
-    let TypeKind::Object { properties } = &record.kind else { return None; };
-    let [property] = properties.as_slice() else { return None; };
-    // tsgo escapes a source name beginning __ with one more underscore.
-    if !property.readonly || property.optional
-        || property.kind != MemberKind::Field
-    {
-        return None;
-    }
-    if property.name == "___c_pointer" {
-        return scalar(snapshot, property.ty).map(Pointee::Scalar);
-    }
-    if property.name != "___c_opaque" { return None; }
-    let TypeKind::Literal(LiteralValue::String(name)) =
-        &snapshot.types.get(property.ty.0 as usize)?.kind
-    else { return None; };
-    // Identifier validity belongs to the native emitter's shared C-name
-    // classifier, just as it does for a foreign function's symbol. Recognize
-    // the authored type here even when its name will receive a diagnostic.
-    Some(Pointee::Opaque(name.clone()))
-}
+mod schema;
+pub use schema::{is_layout, pointer};

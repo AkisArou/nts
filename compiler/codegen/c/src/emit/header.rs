@@ -213,6 +213,11 @@ fn boundary_type(
     origin: &Origin,
     preferred: &str,
 ) -> Result<String, Diagnostic> {
+    if let HirType::NativePointer(nts_core::hir::native::Pointee::Struct(layout)) = ty {
+        let alias = unique_name(names, preferred);
+        writer.line(origin, format!("typedef struct {} {alias};", layout.name));
+        return Ok(format!("{alias} *"));
+    }
     if !matches!(ty, HirType::Managed(ManagedType::Object(_))) {
         return return_c_type(program, ty, origin);
     }

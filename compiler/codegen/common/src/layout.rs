@@ -160,11 +160,31 @@ pub struct Placement {
 /// describe.
 #[must_use]
 pub fn place(fields: &[Field]) -> Option<Placement> {
-    let mut at = HEADER.size;
-    let mut align = HEADER.align;
-    let mut offsets = Vec::with_capacity(fields.len());
-    for field in fields {
-        let shape = shape_of(&field.ty)?;
+    place_shapes(fields.iter().map(|field| shape_of(&field.ty)), HEADER)
+}
+
+/// A native C payload starts at zero, independently of the managed header.
+#[must_use]
+pub fn native_place(layout: &nts_core::hir::native::Struct) -> Option<Placement> {
+    place_shapes(layout.fields.iter().map(|field| native_shape(&field.ty)), Shape { size: 0, align: 1 })
+}
+
+#[must_use]
+pub fn native_shape(pointee: &nts_core::hir::native::Pointee) -> Option<Shape> {
+    use nts_core::hir::native::Pointee;
+    match pointee {
+        Pointee::Struct(layout) => native_place(layout).map(|p| Shape { size: p.size, align: p.align }),
+        Pointee::Opaque(_) => None,
+        _ => shape_of(&pointee.element_type()?),
+    }
+}
+
+fn place_shapes(shapes: impl IntoIterator<Item = Option<Shape>>, prefix: Shape) -> Option<Placement> {
+    let mut at = prefix.size;
+    let mut align = prefix.align;
+    let mut offsets = Vec::new();
+    for shape in shapes {
+        let shape = shape?;
         at = round_up(at, shape.align);
         offsets.push(at);
         at += shape.size;

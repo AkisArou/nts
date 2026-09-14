@@ -66,6 +66,11 @@ pub struct Emitted {
 pub fn emit(program: &Program) -> Emitted {
     let mut text = String::new();
     let mut diagnostics = Vec::new();
+    if let Err(why) = nts_codegen_common::native::layouts(program)
+        && let Some(func) = program.funcs.first()
+    {
+        return Emitted { text, diagnostics: vec![refuse(func, &why)] };
+    }
     let native = match native::declarations(program) {
         Ok(lines) => lines,
         Err(diagnostics) => return Emitted { text, diagnostics },
@@ -2744,19 +2749,9 @@ fn memory_operation(
         OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
             return element_access(func, value, &out);
         }
-        OpKind::NativeLoad { pointer, index }
-        | OpKind::NativeStore { pointer, index, .. } => {
-            let HirType::NativePointer(nts_core::hir::native::Pointee::Scalar(scalar)) =
-                &func.value(*pointer).ty else {
-                return Err(refuse(func, "native memory without a scalar pointee layout"));
-            };
-            let element = ty_of(&scalar.representation(), func)?;
-            let address = format!("{out}.at = getelementptr {element}, ptr {}, i64 {}", name(*pointer), name(*index));
-            let access = match &op.kind {
-                OpKind::NativeStore { value, .. } => format!("store {element} {}, ptr {out}.at", name(*value)),
-                _ => format!("{out} = load {element}, ptr {out}.at"),
-            };
-            format!("{address}\n  {access}")
+        OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
+        | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. } => {
+            return native_memory::operation(func, &op.kind, &out);
         }
         OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
             return text_operation(func, value, &out);
@@ -3444,3 +3439,5 @@ fn unary(
         UnOp::ToInt32 | UnOp::ToUint32 => coercion(func, out, value, op, operand, ty, float)?,
     })
 }
+
+mod native_memory;

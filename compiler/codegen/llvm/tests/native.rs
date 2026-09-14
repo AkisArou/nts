@@ -15,6 +15,10 @@ fn prepare(name: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
 }
 
 fn prepare_with_provider(name: &str, source: &str, provider: hir::Provider) -> Option<(Utf8PathBuf, hir::Prepared)> {
+    prepare_with_files(name, source, provider, &[])
+}
+
+fn prepare_with_files(name: &str, source: &str, provider: hir::Provider, declarations: &[(&str, &str)]) -> Option<(Utf8PathBuf, hir::Prepared)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
@@ -25,8 +29,13 @@ fn prepare_with_provider(name: &str, source: &str, provider: hir::Provider) -> O
         std::process::id()
     ));
     std::fs::create_dir_all(&dir).unwrap();
+    let mut files = String::new();
+    for (name, contents) in declarations {
+        std::fs::write(dir.join(name), contents).unwrap();
+        write!(files, ",\"{name}\"").unwrap();
+    }
     std::fs::write(dir.join("tsconfig.json"), format!(
-        r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#
+        r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"{files}]}}"#
     )).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
     let snapshot = TsgoApi::for_compilation(tsgo)
@@ -635,5 +644,161 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
         clang(&dir, &["-O2", "-c", input, "-o", output]);
         clang(&dir, &[output, "caller.o", "native.o", "runtime.o", "-lm", "-o", "caller"]);
         assert!(Command::new(dir.join("caller")).status().unwrap().success(), "{input}");
+    }
+}
+
+#[test]
+fn native_struct_fields_addresses_and_aliases_agree_with_c() {
+    let source = include_str!("../../common/test-support/native-structs/main.ts");
+    let Some((dir, prepared)) = prepare("native-structs", source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("native.c"), include_str!("../../common/test-support/native-structs/native.c")).unwrap();
+    std::fs::write(dir.join("caller.c"), include_str!("../../common/test-support/native-structs/caller.c")).unwrap();
+    for source in ["native.c", "caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+    }
+    for (source, object) in [("program.c", "c.o"), ("program.ll", "llvm.o")] {
+        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", "caller"]);
+        assert!(Command::new(dir.join("caller")).status().unwrap().success(), "{source}");
+    }
+    // Corrupt only the address given to stamp: public layouts, C caller and
+    // C implementation remain the identical objects used by the passing arm.
+    let good = "getelementptr i8, ptr %v0, i64 16";
+    assert!(llvm.text.contains(good));
+    let bad = llvm.text.replacen(good, "getelementptr i8, ptr %v0, i64 20", 1);
+    std::fs::write(dir.join("bad.ll"), bad).unwrap();
+    clang(&dir, &["-O2", "-Wno-override-module", "-c", "bad.ll", "-o", "bad.o"]);
+    clang(&dir, &["bad.o", "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", "bad"]);
+    assert_eq!(Command::new(dir.join("bad")).status().unwrap().code(), Some(2));
+}
+
+#[test]
+fn native_poll_calls_libc_and_matches_the_platform_header() {
+    let source = include_str!("../../../../examples/interop/native-poll/src/main.ts");
+    let declarations = [("poll.d.ts", include_str!("../../../../examples/interop/native-poll/types/poll.d.ts"))];
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some((dir, prepared)) = prepare_with_files("native-poll", source, provider, &declarations) else { return; };
+        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let c = nts_codegen_c::emit(&prepared.program);
+        assert!(c.is_complete(), "{:?}", c.diagnostics);
+        let llvm = nts_codegen_llvm::emit(&prepared.program);
+        assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+        std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+        std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+        std::fs::write(dir.join("caller.c"), include_str!("../../../../examples/interop/native-poll/native/caller.c")).unwrap();
+        std::fs::write(dir.join("layout.c"), include_str!("../../../../examples/interop/native-poll/native/layout.c")).unwrap();
+        for source in ["caller.c", "layout.c", "nts_runtime.c"] {
+            clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+        }
+        for (source, object) in [("program.c", "c.o"), ("program.ll", "llvm.o")] {
+            clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+            clang(&dir, &[object, "caller.o", "layout.o", "nts_runtime.o", "-lm", "-o", "caller"]);
+            assert!(Command::new(dir.join("caller")).status().unwrap().success(), "{source} {provider:?}");
+        }
+    }
+}
+
+#[test]
+fn native_struct_rejections_preserve_the_valid_arm() {
+    for (name, bad) in [
+        ("aggregate-store", "export function bad(p: Ptr<State>): void { p[0] = p[1]; }"),
+        ("spread", "export function bad(p: Ptr<State>): number { const copy = {...p}; return copy.count; }"),
+        ("managed-address", "export function bad(): number { const p = {count: 1}; return addrOf(p, 'count')[0]; }"),
+        ("plain-field", "type Bad = Struct<{count: number}>; export function bad(p: Ptr<Bad>): number { return p.count; }"),
+        ("optional-field", "type Bad = Struct<{count?: c_int32}>; export function bad(p: Ptr<Bad>): number { return p.count ?? 0; }"),
+        ("nested-field", "type Bad = Struct<{inner: State}>; export function bad(p: Ptr<Bad>): void { void p; }"),
+        ("schema-value", "export function bad(p: State): void { void p; }"),
+        ("lying-address", "/** @ntsAbi intrinsic */ declare function addrOf(p: Ptr<State>, key: 'count'): Ptr<c_double>; export function bad(p: Ptr<State>): number { return addrOf(p, 'count')[0]; }"),
+    ] {
+        // The managed-address case must reach lowering without a TS error;
+        // a false intrinsic declaration cannot authorize addressing a TS object.
+        let bad = if name == "managed-address" {
+            "/** @ntsAbi intrinsic */ declare function addrOf(p: {count: number}, key: 'count'): Ptr<c_int32>; export function bad(): number { return addrOf({count: 1}, 'count')[0]; }"
+        } else { bad };
+        let import = if matches!(name, "lying-address" | "managed-address") { "" } else { "import {addrOf} from 'c:memory';" };
+        let source = format!("import type {{Ptr, Struct, c_int32, c_double}} from 'c:types'; {import}\n type State = Struct<{{count: c_int32}}>; export function good(p: Ptr<State>): number {{ return p.count; }} {bad}");
+        let Some((_, prepared)) = prepare(name, &source) else { return; };
+        assert!(!prepared.diagnostics.is_empty(), "{name} was accepted");
+        assert!(prepared.program.funcs.iter().any(|f| f.name == "good"), "{name}: {:?}", prepared.diagnostics);
+        assert!(!prepared.program.funcs.iter().any(|f| f.name == "bad"), "{name}: {:?}", prepared.diagnostics);
+    }
+}
+
+#[test]
+fn conflicting_native_struct_tags_refuse_in_both_backends() {
+    let source = "import type {Ptr, Struct, c_int32, c_double} from 'c:types';
+        type A = Struct<{x:c_int32}, 'Collision'>;
+        type B = Struct<{x:c_double}, 'Collision'>;
+        export function a(p:Ptr<A>):number {return p.x;}
+        export function b(p:Ptr<B>):number {return p.x;}";
+    let Some((_, prepared)) = prepare("struct-collision", source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    for diagnostics in [&c.diagnostics, &llvm.diagnostics] {
+        assert!(diagnostics.iter().any(|d| d.message.contains("conflicting native layouts")), "{diagnostics:?}");
+    }
+}
+
+#[test]
+fn native_address_verifier_rejects_wrong_field_type_and_index() {
+    let source = "import type {Ptr, Struct, c_int32} from 'c:types';
+        import {addrOf} from 'c:memory';
+        type S = Struct<{x:c_int32}>;
+        export function field(p:Ptr<S>):Ptr<c_int32> {return addrOf(p, 'x');}
+        export function item(p:Ptr<S>, i:number):Ptr<S> {return addrOf(p, i);}";
+    let Some((_, prepared)) = prepare("verify-native-address", source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(hir::verify::verify(&prepared.program).is_ok());
+    for corruption in 0..3 {
+        let mut program = prepared.program.clone();
+        let mut changed = false;
+        for func in &mut program.funcs {
+            for value in &mut func.values {
+                match &mut value.kind {
+                    hir::OpKind::NativeFieldAddress { field, .. } if corruption < 2 => {
+                        if corruption == 0 { *field = u32::MAX; } else { value.ty = hir::HirType::NUMBER; }
+                        changed = true;
+                    }
+                    hir::OpKind::NativeIndexAddress { .. } if corruption == 2 => {
+                        value.ty = hir::HirType::NUMBER;
+                        changed = true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        assert!(changed);
+        assert!(hir::verify::verify(&program).is_err(), "corruption {corruption}");
+    }
+}
+
+#[test]
+fn native_header_alias_survives_an_unrelated_layout_declaration() {
+    let source = "import type {Ptr, Struct, c_int32} from 'c:types';
+        import {addrOf as address} from 'c:memory';
+        type State = Struct<{count:c_int32}>;
+        function addrOf(n:number):number {return n+2;}
+        export function inspectState(p:Ptr<State>):number {return addrOf(address(p, 'count')[0]);}";
+    let caller = "#include \"program.h\"\nint main(void) {inspectState_p_t s={17}; return inspectState(&s)==19 ? 0 : 1;}\n";
+    for (case, prefix) in [("alone", ""), ("perturbed", "type Unrelated = {first:number; second:string};\n")] {
+        let Some((dir, prepared)) = prepare(case, &format!("{prefix}{source}")) else { return; };
+        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let c = nts_codegen_c::emit(&prepared.program);
+        assert!(c.is_complete(), "{:?}", c.diagnostics);
+        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+        std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+        std::fs::write(dir.join("caller.c"), caller).unwrap();
+        clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "program.c", "caller.c", "-o", "caller"]);
+        assert!(Command::new(dir.join("caller")).status().unwrap().success());
     }
 }

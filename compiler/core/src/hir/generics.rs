@@ -500,6 +500,8 @@ fn spell(ty: &super::HirType) -> String {
         HirType::Never => "never".to_owned(),
         HirType::NativePointer(super::native::Pointee::Opaque(name)) => format!("native{}_{}", name.len(), name),
         HirType::NativePointer(super::native::Pointee::Scalar(scalar)) => format!("native_scalar_{scalar:?}"),
+        HirType::NativePointer(super::native::Pointee::Struct(layout)) => format!("native_struct_{}_{}", layout.name.len(), layout.name),
+        HirType::NativePointer(super::native::Pointee::Pointer(pointee)) => format!("ptr_{}", spell(&HirType::NativePointer((**pointee).clone()))),
         HirType::Bool => "bool".to_owned(),
         HirType::Erased => "erased".to_owned(),
         HirType::BigInt => "bigint".to_owned(),

@@ -6346,6 +6346,7 @@ fn representation_of(
     if let Some(name) = super::native::pointer(snapshot, ty) {
         return Some(HirType::NativePointer(name));
     }
+    if super::native::is_layout(snapshot, ty) { return None; }
     let record = snapshot.types.get(ty.0 as usize)?;
     Some(match &record.kind {
         TypeKind::Unknown => HirType::Erased,
@@ -9442,6 +9443,9 @@ impl<'a> FuncBuilder<'a> {
             // which has no own-source refusal of its own.
             Some(syntax::ELEMENT_ACCESS_EXPRESSION) => match self.children(id).as_slice() {
                 [object, index] => {
+                    if matches!(self.type_of(*object), Some(HirType::NativePointer(super::native::Pointee::Struct(_)))) {
+                        return self.native_member_key(id, *index).is_some();
+                    }
                     // **What the receiver is, not what the checker narrowed it
                     // to.** A rest parameter written as a union of tuples is
                     // represented here as an *array*, and after
@@ -14307,6 +14311,14 @@ impl<'a> FuncBuilder<'a> {
         callee: NodeId,
         arguments: &[NodeId],
     ) -> Option<Result<ValueId, Diagnostic>> {
+        if let Some(decl) = self.snapshot.call_targets.get(&id).and_then(|target| target.callee)
+            && self.node(decl).native_abi.as_deref() == Some("intrinsic")
+            && !self.has_a_body(decl)
+            && self.declared_name(decl).as_deref() == Some("addrOf")
+        {
+            return Some(self.native_address_of(id, arguments));
+        }
+
         // `Number.parseInt` before the intrinsic table, because that table's
         // entries all take exactly one argument and this takes a radix.
         //
@@ -18478,6 +18490,9 @@ impl<'a> FuncBuilder<'a> {
             if let Some(place) = self.array_length_place(object, *member) {
                 return Ok(place);
             }
+            if matches!(self.values[object.0 as usize].ty, HirType::NativePointer(_)) {
+                return self.native_member_place(target, object);
+            }
             let HirType::Managed(ManagedType::Object(type_id)) =
                 self.values[object.0 as usize].ty.clone()
             else {
@@ -18556,8 +18571,7 @@ impl<'a> FuncBuilder<'a> {
         if self.kind_of(target) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
             let (array, index) = self.element_access_parts(target)?;
             if matches!(self.values[array.0 as usize].ty, HirType::NativePointer(_)) {
-                let index = self.coerce(index, &HirType::Int { bits: 64, signed: true }, target)?;
-                return Ok(Place::NativeElement { pointer: array, index });
+                return self.native_element_place(target, array, index);
             }
             // `table[key] = value` on a string-keyed table. The key crosses
             // erased, as every other table operation's key does.
@@ -23724,22 +23738,6 @@ impl<'a> FuncBuilder<'a> {
         found
     }
 
-    /// `xs[i]` with both halves already lowered.
-    ///
-    fn native_element_type(&self, id: NodeId, pointer: ValueId) -> Result<HirType, Diagnostic> {
-        match &self.values[pointer.0 as usize].ty {
-            HirType::NativePointer(super::native::Pointee::Scalar(scalar)) => Ok(scalar.representation()),
-            _ => Err(self.unsupported(id, "native memory access without a scalar pointee layout")),
-        }
-    }
-
-    fn native_load(&mut self, id: NodeId, pointer: ValueId, index: ValueId) -> Result<ValueId, Diagnostic> {
-        let ty = self.native_element_type(id, pointer)?;
-        let index = self.coerce(index, &HirType::Int { bits: 64, signed: true }, id)?;
-        let read = self.push(OpKind::NativeLoad { pointer, index }, ty, self.origin(id));
-        self.coerce(read, &HirType::NUMBER, id)
-    }
-
     /// Split out so that `xs?.[i]` can share it: the optional form lowers its
     /// receiver first, to ask whether it is absent, and then wants exactly this
     /// read in the arm where it is not.
@@ -24181,7 +24179,7 @@ impl<'a> FuncBuilder<'a> {
             self.values[array_value.0 as usize].ty,
             HirType::Managed(
                 ManagedType::Array(_) | ManagedType::View(_) | ManagedType::Table(_, _)
-            ) | HirType::NativePointer(super::native::Pointee::Scalar(_))
+            ) | HirType::NativePointer(_)
         ) && !self.erased_but_proven_an_array(id, array_value)
         {
             return Err(self.not_an_array(id));
@@ -24238,7 +24236,12 @@ impl<'a> FuncBuilder<'a> {
             let numeric_index = self.kind_of(id) == Some(syntax::ELEMENT_ACCESS_EXPRESSION)
                 && children.len() == 2
                 && children.last().and_then(|index| self.type_of(*index)).is_some_and(|ty| matches!(ty, HirType::Int { .. } | HirType::Float { .. }));
-            if !matches!(pointee, super::native::Pointee::Scalar(_)) || !numeric_index {
+            let named_field = match &pointee {
+                super::native::Pointee::Struct(layout) => children.last().and_then(|member| self.native_member_key(id, *member))
+                    .is_some_and(|name| layout.fields.iter().any(|f| f.name == name)),
+                _ => false,
+            };
+            if !(numeric_index && !matches!(pointee, super::native::Pointee::Opaque(_)) || named_field) {
                 return Err(self.unsupported(id, "a property read through a native pointer"));
             }
         }
@@ -24883,6 +24886,10 @@ impl<'a> FuncBuilder<'a> {
         value: ValueId,
         member_name: &str,
     ) -> Result<ValueId, Diagnostic> {
+        if matches!(self.values[value.0 as usize].ty, HirType::NativePointer(_)) {
+            let place = self.native_member_place(id, value)?;
+            return self.read_place(id, &place);
+        }
         if matches!(
             self.values[value.0 as usize].ty,
             HirType::Managed(ManagedType::Buffer)
@@ -33035,3 +33042,5 @@ mod tests {
         );
     }
 }
+
+mod native_memory;

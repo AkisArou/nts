@@ -619,7 +619,7 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
             let kind = func.values[value.0 as usize].kind.clone();
             let produced = func.values[value.0 as usize].ty.clone();
             let updated = match kind {
-                kind @ (OpKind::NativeLoad { .. } | OpKind::NativeStore { .. } | OpKind::ArraySet { .. }) =>
+                kind @ (OpKind::NativeLoad { .. } | OpKind::NativeStore { .. } | OpKind::NativeIndexAddress { .. } | OpKind::ArraySet { .. }) =>
                     memory_operands(func, &mut rewritten, &mut count, &kind),
                 // Both operands of an operator at one type, which C picks for
                 // itself with its usual arithmetic conversions and never
@@ -723,14 +723,15 @@ fn memory_operands(
 ) -> Option<OpKind> {
     let native_index = HirType::Int { bits: 64, signed: true };
     match *kind {
-        OpKind::NativeLoad { pointer, index } => {
+        OpKind::NativeLoad { pointer, index } | OpKind::NativeIndexAddress { pointer, index } => {
             let index = convert(func, rewritten, count, index, &native_index);
-            Some(OpKind::NativeLoad { pointer, index })
+            Some(if matches!(kind, OpKind::NativeLoad { .. }) { OpKind::NativeLoad { pointer, index } }
+                else { OpKind::NativeIndexAddress { pointer, index } })
         }
         OpKind::NativeStore { pointer, index, value: stored } => {
             match &func.value(pointer).ty {
-                HirType::NativePointer(super::native::Pointee::Scalar(scalar)) => {
-                    let element = scalar.representation();
+                HirType::NativePointer(pointee) => {
+                    let element = pointee.element_type()?;
                     let index = convert(func, rewritten, count, index, &native_index);
                     let stored = convert(func, rewritten, count, stored, &element);
                     Some(OpKind::NativeStore { pointer, index, value: stored })
@@ -905,7 +906,7 @@ fn reconcile_fixed_results<S: std::hash::BuildHasher>(
         .filter_map(|(at, op)| {
             let declared = match &op.kind {
                 OpKind::NativeLoad { pointer, .. } => match &func.value(*pointer).ty {
-                    HirType::NativePointer(super::native::Pointee::Scalar(scalar)) => scalar.representation(),
+                    HirType::NativePointer(pointee) => pointee.element_type()?,
                     _ => return None,
                 },
                 OpKind::Call {

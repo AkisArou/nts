@@ -1852,19 +1852,7 @@ fn emit_object_types(
     program: &Program,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let mut pointers = std::collections::BTreeSet::new();
-    for ty in program.funcs.iter().flat_map(|func| {
-        std::iter::once(&func.return_type).chain(func.params.iter().map(|p| &p.ty)).chain(func.values.iter().map(|v| &v.ty))
-    }).chain(program.layouts.iter().flat_map(|layout| layout.fields.iter().map(|field| &field.ty))) {
-        if let HirType::NativePointer(nts_core::hir::native::Pointee::Opaque(name)) = ty { pointers.insert(name); }
-    }
-    for name in pointers {
-        if !nts_codegen_common::symbols::is_native_c_identifier(name) {
-            diagnostics.push(Diagnostic::error("NTS2006", format!("opaque pointee `{name}` is not an available C struct tag"), origin.location));
-            continue;
-        }
-        writer.line(origin, format!("struct {name};"));
-    }
+    if let Err(diagnostic) = native_memory::types(writer, origin, program) { diagnostics.push(diagnostic); }
     // Every object type is forward-declared first, so a field may point at a
     // type declared later -- or at its own, which a linked structure does.
     for layout in &program.layouts {
@@ -3841,12 +3829,8 @@ fn memory_op(
     let op = func.value(value);
     let name = value_name(value);
     let text = match &op.kind {
-        OpKind::NativeLoad { pointer, index } => {
-            format!("{name} = {}[{}];", value_name(*pointer), value_name(*index))
-        }
-        OpKind::NativeStore { pointer, index, value } => {
-            format!("{}[{}] = {};", value_name(*pointer), value_name(*index), value_name(*value))
-        }
+        OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
+        | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. } => native_memory::operation(func, &op.kind, &name, &op.origin)?,
         // One predictable branch. The string is compile-time text and is only
         // touched on the path that ends the program.
         OpKind::CellReady { cell, name } => format!(
@@ -4100,8 +4084,8 @@ fn emit_op(
         OpKind::Unary { op: un, operand } => {
             unary_text(func, &name, *un, *operand, &op.ty, &op.origin)?
         }
-        OpKind::NativeLoad { .. }
-        | OpKind::NativeStore { .. }
+        OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
+        | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. }
         | OpKind::ObjectNew { .. }
         | OpKind::ClosureStatic
         | OpKind::CellReady { .. }
@@ -4742,3 +4726,5 @@ mod tests {
         );
     }
 }
+
+mod native_memory;

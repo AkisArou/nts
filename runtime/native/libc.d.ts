@@ -6,12 +6,19 @@ declare module "c:types" {
   // Construct and destroy it through the library's functions. `| null` admits
   // a null pointer. The phantom field is never readable or constructible.
   export type Opaque<Name extends string> = { readonly __c_opaque: Name };
-  // Native scalar storage, projected as ordinary TS numbers on reads/writes.
-  // This pointer carries neither an extent nor an ownership obligation.
-  export interface Ptr<T> {
-    readonly __c_pointer: T;
-    [index: number]: number;
-  }
+  // Struct is a layout description. The optional second argument names a
+  // foreign C struct tag; application code normally uses the binding's alias.
+  export type Struct<Fields, Tag extends string = ""> = {
+    readonly __c_struct: Fields;
+    readonly __c_tag: Tag;
+  };
+  // Addresses carry no extent or lifetime checks. Scalar slots project as TS
+  // numbers; struct indexing returns an alias, and pointer slots stay pointers.
+  type NativeValue<T> = T extends number ? number : T;
+  export type Ptr<T> = { readonly __c_pointer: T } &
+    (T extends Struct<infer Fields, string>
+      ? { [K in keyof Fields]: NativeValue<Fields[K]> } & { [index: number]: Ptr<T> }
+      : { [index: number]: NativeValue<T> });
   // Hand-written native ABI scalar declarations, maintained with hir/native.rs.
   // Import the required types from "c:types".
   // Brands select the C boundary type; arithmetic inside TypeScript is ordinary
@@ -36,6 +43,16 @@ declare module "c:types" {
   export type c_ptrdiff_t = number & { readonly __c_ptrdiff_t: unique symbol };
   export type c_float = number & { readonly __c_float: unique symbol };
   export type c_double = number & { readonly __c_double: unique symbol };
+}
+
+declare module "c:memory" {
+  import type { Ptr, Struct } from "c:types";
+  // These operate on native storage, not JS temporaries. A field key preserves
+  // its native type even though the field's value projects as a TS number.
+  /** @ntsAbi intrinsic */
+  export function addrOf<F, N extends string, K extends keyof F>(storage: Ptr<Struct<F, N>>, key: K): Ptr<F[K]>;
+  /** @ntsAbi intrinsic */
+  export function addrOf<T>(storage: Ptr<T>, index: number): Ptr<T>;
 }
 
 declare module "c:stdint" {

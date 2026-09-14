@@ -727,6 +727,9 @@ pub enum OpKind {
     /// Indices count elements and must be signed native-width integers.
     NativeLoad { pointer: ValueId, index: ValueId },
     NativeStore { pointer: ValueId, index: ValueId, value: ValueId },
+    /// Form an address, without reading storage or changing its lifetime.
+    NativeIndexAddress { pointer: ValueId, index: ValueId },
+    NativeFieldAddress { pointer: ValueId, field: u32 },
     /// The nth parameter of the function, materialized as a value.
     Param(u32),
     /// The nth parameter of the block that defines it.

@@ -382,11 +382,14 @@ fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
         env!("CARGO_MANIFEST_DIR"),
         "/../../../runtime/native/libc.d.ts"
     ));
-    for function in declarations
-        .lines()
-        .filter_map(|line| line.trim().strip_prefix("export function "))
-        .map(|line| line.split('(').next().unwrap())
-    {
+    // The shipped surface now includes compiler operations as well as libc.
+    // Only an explicitly tagged intrinsic has no linker symbol to exercise.
+    let mut intrinsic = false;
+    for line in declarations.lines().map(str::trim) {
+        if line.contains("@ntsAbi intrinsic") { intrinsic = true; }
+        let Some(function) = line.strip_prefix("export function ") else { continue; };
+        if std::mem::take(&mut intrinsic) { continue; }
+        let function = function.split('(').next().unwrap();
         assert!(
             text.contains(&format!("= {function}(")),
             "{function} must be called by its actual linker name"
