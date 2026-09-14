@@ -53,4 +53,44 @@ elif ! diff -u "$here/types/com.example.d.ts" "$generated" \
   exit 1
 fi
 
-echo "java-from-ts: jar built and declarations agree"
+# **And run it**, which is the half that was missing. Until this existed the
+# script checked the *binder* -- that the generated declarations match what is
+# committed -- and never compiled the TypeScript beside them. `new
+# Catalog("widgets")`, the first line of `src/main.ts`, was refused for an
+# unknown length of time under a comment reading "This file compiles, and
+# lowers", and nothing here would ever have said so.
+emitted="$out/classes-ts"
+NTS_BACKEND=jvm "$nts" emit-jvm "$here/tsconfig.json" --out "$emitted" --entry main > "$out/emit.log" 2>&1
+if grep -qE "NTS[0-9]{4}" "$out/emit.log"; then
+  echo "java-from-ts: the program did not lower:"
+  sed 's/^/    /' "$out/emit.log"
+  exit 1
+fi
+
+cat > "$out/Driver.java" <<'DRIVER'
+public final class Driver {
+    public static void main(String[] a) { System.out.println(nts.gen.Program.main()); }
+}
+DRIVER
+javac -cp "$emitted:$emitted/nts-runtime.jar" -d "$out" "$out/Driver.java"
+answer=$(java -Xverify:all -cp "$out:$emitted:$out/classes:$emitted/nts-runtime.jar" Driver)
+echo "java-from-ts: $answer"
+
+# Two values checked rather than the whole line, and each says something a
+# crash would not. `515` is `hits + MAX` computed *in Java* -- 3 + 512 -- so it
+# proves the bound call arrived and came back with the jar's own arithmetic.
+# `9007199254740993` is 2^53+1, which a `double` cannot hold, so it proves the
+# `long` crossed as a `bigint` rather than being rounded on the way.
+#
+# **Not the whole line, because one field is knowingly wrong.** `Catalog.MAX`
+# reads `0` where Java says `512`: an ambient numeric constant folds to zero in
+# shared lowering, on this backend and on C, with no diagnostic. Asserting the
+# current output whole would write that wrong value down as expected.
+case $answer in
+  *" 515 "*) ;;
+  *) echo "java-from-ts: expected 515 (hits + MAX, computed in Java) in: $answer"; exit 1 ;;
+esac
+case $answer in
+  *9007199254740993*) ;;
+  *) echo "java-from-ts: expected 2^53+1 to survive as a bigint in: $answer"; exit 1 ;;
+esac
