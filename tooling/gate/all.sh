@@ -1431,6 +1431,25 @@ blockers() {
     printf '%s\n' "$out" | grep '^  FIXED '
     echo "  ^ convert these to guards; not a failure"
   }
+  # **A fixture that produced no `program.c` was not evaluated in either
+  # direction**, and `blockers-check.mjs` has a category for exactly that --
+  # `NO OUTPUT`, at its line 318, which increments the same `unexpected` counter
+  # the summary reports. This step used to grep only the three loud categories,
+  # so such a fixture counted toward "needing a person" and the step still
+  # **returned 0**: the gate went green over fixtures it had not measured.
+  #
+  # That is the shape the harness header already records -- a day when 29
+  # fixtures reported needing a person, 28 of them a full `/tmp` and one a real
+  # regression invisible among them. The category exists to name it; this is the
+  # gate looking for it. Checked before the loud ones, because a run that could
+  # not evaluate some fixtures is not a run whose other verdicts should be read
+  # first.
+  silent=$(printf '%s\n' "$out" | grep -c '^  NO OUTPUT ' || true)
+  [ "$silent" = "0" ] || {
+    printf '%s\n' "$out" | grep '^  NO OUTPUT ' -A 1
+    echo "  ^ emit-c wrote no program.c: these were not measured either way"
+    return 1
+  }
   changed=$(printf '%s\n' "$out" | grep -cE '^  (CHANGED|REGRESSED) ' || true)
   [ "$changed" = "0" ] || {
     printf '%s\n' "$out" | grep -E '^  (CHANGED|REGRESSED) ' -A 2
