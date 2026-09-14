@@ -1807,10 +1807,14 @@ NTS_READS_ONLY bool nts_array_includes(const NtsArray *a, double needle);
 NTS_READS_ONLY double nts_array_at(const NtsArray *a, double at);
 /* Report an uncaught throw and stop.
  *
- * There is no `try`/`catch` yet, so every throw is uncaught by construction and
- * a throw is a *termination* -- which is what it is for a program with no
- * handler, and what these programs mean by it. When handlers arrive this
- * becomes the last resort rather than the only one. */
+ * The **last resort**, not the only one: a compiled program's own `try` is
+ * fully lowered -- a handler is a block and a `throw` is a jump -- so this is
+ * reached only where nothing caught it. This comment used to say "there is no
+ * `try`/`catch` yet, so every throw is uncaught by construction", which the
+ * comment forty lines below already contradicted, and which
+ * `try { throw new Error("x") } catch { return 7 }` disproves: it compiles to a
+ * body that returns 7 with no call to this function at all, checked by running
+ * it rather than by reading the emitted C. */
 /* An uncaught `throw`, rendered as far as anything here can see it.
  *
  * The value rather than a message, because `catch (e)` is `unknown` and a
