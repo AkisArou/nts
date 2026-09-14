@@ -883,6 +883,78 @@ export const CORPORA = {
     input: (rnd) => unicodeWord(rnd),
     calls: [
       {
+        // **The per-encoding slice and write methods, and `Blob`.** `corpus-reach.mjs` had this
+        // module at 94 of 117 and the remainder was these: `Buffer#utf8Slice` and its eight
+        // siblings, `Buffer#hexWrite` and its eight, `Buffer#inspect`, `SlowBuffer`, and the
+        // `Blob` surface -- which is asynchronous and so was out of reach until the harness
+        // learned to await.
+        //
+        // The `*Slice`/`*Write` pair is what `toString(encoding)` and `write(string, encoding)`
+        // are built on, published and undocumented. They take raw offsets with no validation, so
+        // they are exactly where an off-by-one lives, and nothing in the pinned suite calls one.
+        label: "encoding-primitives",
+        call: async (m, s) => {
+          const bytes = m.Buffer.from(s, "utf8");
+          const show = (make) => {
+            try {
+              const v = make();
+              if (v instanceof Uint8Array) return m.Buffer.from(v).toString("base64");
+              return String(v);
+            } catch (error) {
+              return `threw:${error?.code ?? error?.name ?? "?"}`;
+            }
+          };
+          const slices = ["utf8Slice", "asciiSlice", "latin1Slice", "hexSlice", "base64Slice",
+            "base64urlSlice", "ucs2Slice"];
+          const written = (method) => show(() => {
+            const into = m.Buffer.alloc(16);
+            const n = into[method](s, 0, 16);
+            return `${n}:${into.toString("hex")}`;
+          });
+          const settle = async (make) => {
+            try { return `ok:${await make()}`; } catch (error) { return `${error?.code ?? error?.name ?? "?"}`; }
+          };
+          return [
+            // Each slice over the whole buffer, and one over an interior range so an offset that
+            // is quietly ignored shows up.
+            ...slices.map((method) => (typeof bytes[method] === "function"
+              ? `${method}=${show(() => bytes[method](0, bytes.length))}`
+              : `${method}=absent`)),
+            ...slices.map((method) => (typeof bytes[method] === "function"
+              ? `${method}[1,3]=${show(() => bytes[method](1, 3))}`
+              : `${method}=absent`)),
+            ...["utf8Write", "asciiWrite", "latin1Write", "hexWrite", "base64Write",
+              "base64urlWrite", "ucs2Write"].map((method) => (
+              typeof m.Buffer.prototype[method] === "function"
+                ? `${method}=${written(method)}`
+                : `${method}=absent`)),
+            `inspect=${show(() => bytes.inspect())}`,
+            `slow=${typeof m.SlowBuffer === "function" ? show(() => m.SlowBuffer(s.length).length) : "absent"}`,
+            // `Blob` is a value with asynchronous readers: the bytes it gives back, its size and
+            // type, and what a slice of it contains.
+            await settle(async () => {
+              if (m.Blob === undefined) return "absent";
+              const blob = new m.Blob([s, bytes], { type: "text/plain" });
+              const sliced = blob.slice(0, Math.min(3, blob.size));
+              return [
+                blob.size,
+                blob.type,
+                (await blob.text()).length,
+                m.Buffer.from(await blob.arrayBuffer()).toString("base64"),
+                typeof blob.bytes === "function"
+                  ? m.Buffer.from(await blob.bytes()).toString("base64")
+                  : "no-bytes",
+                await sliced.text(),
+              ].join(",");
+            }),
+            // An object URL that was never registered resolves to `undefined` on both sides.
+            `resolve=${show(() => (m.resolveObjectURL === undefined
+              ? "absent"
+              : String(m.resolveObjectURL(`blob:nodedata:${s.slice(0, 8)}`))))}`,
+          ].join("|");
+        },
+      },
+      {
         // **`Buffer`'s instance methods**, which were the largest single gap in
         // the corpus: 18 of 117 reached, and the 99 unreached include every
         // numeric accessor. Endianness, sign extension and the unaligned offset

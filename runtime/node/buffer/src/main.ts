@@ -328,6 +328,54 @@ function checkByteLength(byteLength: number): number {
   boundsError(byteLength, 6, "byteLength");
 }
 
+/**
+ * **`*Slice`'s bounds are checked, not clamped, and the order of the checks is observable.**
+ *
+ * `toString(encoding, start, end)` clamps; the per-encoding `utf8Slice`/`hexSlice`/... family comes
+ * from node's C++ binding and throws `ERR_OUT_OF_RANGE`. Both go through `decodeIn` here, so the
+ * check lives in this wrapper rather than in `decodeIn`, or `toString` would start throwing.
+ *
+ * Measured against node on a 4-byte buffer, and the order is the part that is easy to get wrong:
+ *
+ *     0,4 -> "ABCD"      1,3 -> "BC"        4,4 -> ""
+ *     0,5 -> throws      5,5 -> ""          2,1 -> ""
+ *     -1,2 -> throws     0,-1 -> throws
+ *     1.5,3 -> "BC"      NaN,3 -> "ABC"     "1",3 -> "BC"
+ *
+ * `5,5` and `0,5` look inconsistent until the order is written down: a negative bound throws, then
+ * `start >= end` answers `""` **before** the length is consulted, and only then is an end past the
+ * buffer an error. That is why `5,5` is empty and `3,4` on a two-byte buffer is not.
+ *
+ * Found by the differential: 214 of 4,025 inputs diverged, every one of them an interior slice this
+ * profile clamped where node refuses.
+ */
+function sliceBounds(target: Buffer, start: unknown, end: unknown): { from: number; to: number } {
+  const whole = (value: unknown, fallback: number): number => {
+    if (value === undefined) return fallback;
+    const asNumber = Math.trunc(Number(value));
+    return Number.isNaN(asNumber) ? 0 : asNumber;
+  };
+  // **An empty buffer answers `""` to any bounds at all, including negative ones.** node's
+  // binding takes that fast path before it validates anything:
+  //
+  //     Buffer.alloc(0).utf8Slice(1, 3)   ""        Buffer.from("A").utf8Slice(1, 3)  throws
+  //     Buffer.alloc(0).utf8Slice(0, 2)   ""        Buffer.from("A").utf8Slice(0, 2)  throws
+  //
+  // Missing this left exactly one diverging input out of 4,025 -- the empty string -- after the
+  // other 213 were fixed. The long tail of a bounds rule is its degenerate case.
+  if (target.length === 0) return { from: 0, to: 0 };
+  const from = whole(start, 0);
+  const to = whole(end, target.length);
+  if (from < 0 || to < 0) {
+    throw new ERR_OUT_OF_RANGE("index", `>= 0 && <= ${target.length}`, from < 0 ? from : to);
+  }
+  if (from >= to) return { from: 0, to: 0 };
+  if (to > target.length) {
+    throw new ERR_OUT_OF_RANGE("index", `>= 0 && <= ${target.length}`, to);
+  }
+  return { from, to };
+}
+
 export class Buffer extends Uint8Array {
   static poolSize = 8192;
 
@@ -584,32 +632,39 @@ export class Buffer extends Uint8Array {
     return decodeIn(this, 0, this.length, "utf8");
   }
 
-  asciiSlice(start = 0, end = this.length): string {
-    return decodeIn(this, start, end, "ascii");
+  asciiSlice(start?: unknown, end?: unknown): string {
+    const range = sliceBounds(this, start, end);
+    return decodeIn(this, range.from, range.to, "ascii");
   }
 
-  base64Slice(start = 0, end = this.length): string {
-    return decodeIn(this, start, end, "base64");
+  base64Slice(start?: unknown, end?: unknown): string {
+    const range = sliceBounds(this, start, end);
+    return decodeIn(this, range.from, range.to, "base64");
   }
 
-  base64urlSlice(start = 0, end = this.length): string {
-    return decodeIn(this, start, end, "base64url");
+  base64urlSlice(start?: unknown, end?: unknown): string {
+    const range = sliceBounds(this, start, end);
+    return decodeIn(this, range.from, range.to, "base64url");
   }
 
-  latin1Slice(start = 0, end = this.length): string {
-    return decodeIn(this, start, end, "latin1");
+  latin1Slice(start?: unknown, end?: unknown): string {
+    const range = sliceBounds(this, start, end);
+    return decodeIn(this, range.from, range.to, "latin1");
   }
 
-  hexSlice(start = 0, end = this.length): string {
-    return decodeIn(this, start, end, "hex");
+  hexSlice(start?: unknown, end?: unknown): string {
+    const range = sliceBounds(this, start, end);
+    return decodeIn(this, range.from, range.to, "hex");
   }
 
-  ucs2Slice(start = 0, end = this.length): string {
-    return decodeIn(this, start, end, "ucs2");
+  ucs2Slice(start?: unknown, end?: unknown): string {
+    const range = sliceBounds(this, start, end);
+    return decodeIn(this, range.from, range.to, "ucs2");
   }
 
-  utf8Slice(start = 0, end = this.length): string {
-    return decodeIn(this, start, end, "utf8");
+  utf8Slice(start?: unknown, end?: unknown): string {
+    const range = sliceBounds(this, start, end);
+    return decodeIn(this, range.from, range.to, "utf8");
   }
 
   asciiWrite(value: string, offset = 0, length = this.length - offset): number {
