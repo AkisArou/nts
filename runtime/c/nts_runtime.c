@@ -1259,7 +1259,31 @@ const char *nts_thrown_class(NtsValue value) {
 /* A callback bridge is entering compiled code. Paired with `nts_callback_leave`
    around the call and nothing else, so the count is the number of foreign
    frames between here and the outermost landing. */
-void nts_callback_enter(void) { nts_environment_current()->in_callback++; }
+/* A C library calling back into compiled code, on the thread that owns this
+ * environment.
+ *
+ * The check is the same one `nts_promise_join` makes, for the same reason:
+ * everything below here -- `in_callback`, the reference counts, the heap -- is
+ * plain memory reached through a `_Thread_local` pointer that *defaults to one
+ * shared environment*. A second thread entering here increments `in_callback`
+ * without synchronisation and allocates against another thread's heap.
+ *
+ * **What it catches and what it does not.** `nts_is_owner_thread` delegates to
+ * a host, so an embedder that installed one gets a stop here instead of a
+ * race. A standalone program has installed no host and the answer is
+ * unconditionally true, so a foreign thread reaches this undetected -- the
+ * runtime has no way of its own to know which thread owns it, and inventing
+ * one here would be a second answer to a question the host already owns.
+ * Stated rather than papered over. */
+void nts_callback_enter(void) {
+  if (!nts_is_owner_thread()) {
+    fprintf(stderr,
+            "nts: a callback entered compiled code from a thread this "
+            "environment does not own\n");
+    abort();
+  }
+  nts_environment_current()->in_callback++;
+}
 void nts_callback_leave(void) { nts_environment_current()->in_callback--; }
 
 _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail) {

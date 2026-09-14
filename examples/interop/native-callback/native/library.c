@@ -12,6 +12,8 @@ int dispatch(const struct handlers *h, int n) {
 
 int apply_twice(int (*f)(int), int x) { return f(f(x)); }
 
+int64_t apply_wide(int64_t (*f)(int64_t), int64_t x) { return f(x); }
+
 // And one that calls it zero times, so a bridge that is never entered is
 // distinguishable from one that is.
 int apply_never(int (*f)(int), int x) { (void)f; return x; }

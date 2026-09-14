@@ -1,5 +1,5 @@
-import { apply_twice, apply_never, dispatch, each_upto, subscribe, unsubscribe, deliver, type Counter, type Handlers } from "c:library";
-import type { Ptr, c_int } from "c:types";
+import { apply_twice, apply_never, apply_wide, dispatch, each_upto, subscribe, unsubscribe, deliver, type Counter, type Handlers } from "c:library";
+import type { Ptr, c_int, c_int64 } from "c:types";
 import { local, sizeof } from "c:memory";
 import { malloc, free } from "c:stdlib";
 
@@ -88,3 +88,19 @@ export function throughTable(value: number): number {
 }
 
 function double(n: c_int): c_int { return (n * 2) as c_int; }
+
+// **Reentrancy**: C calls TypeScript, which calls C, which calls TypeScript
+// again. Each entry brackets itself with `nts_callback_enter`/`leave`, so the
+// counter has to nest rather than toggle -- a bridge setting a flag instead of
+// counting would leave the outer frame looking like ordinary code once the
+// inner one returned.
+function reenter(n: c_int): c_int { return apply_twice(addOne, n); }
+function addOne(n: c_int): c_int { return (n + 1) as c_int; }
+export function reentrant(x: number): number { return apply_twice(reenter, x as c_int); }
+
+// **Both-direction conversion at 64 bits.** The bridge takes an `int64_t` from
+// C, hands the compiled function a `__int128`, and converts the result back.
+// Nothing is a `double` on that path, which is the whole point: above 2^53 a
+// double loses the low bit, and every value below it would agree either way.
+function bump(n: c_int64): c_int64 { return (n + 1n) as c_int64; }
+export function wideRoundTrip(x: bigint): bigint { return apply_wide(bump, x as c_int64); }

@@ -506,6 +506,43 @@ thing a header cannot state, and it is emitted as `...rest: unknown[]` with a
 TODO, which does not compile -- deliberately, so it stops at the declaration
 rather than at a call.
 
+## The four things a callback has to settle first
+
+Item 4's order is load-bearing: exception containment, both-direction
+conversion, reentrancy and thread come *before* anything retained. Each is now
+asserted by `examples/interop/native-callback`, and the first three had been
+present without being checked.
+
+**Exception containment.** A `throw` inside a callback has C frames between it
+and any landing -- frames belonging to a library that knows nothing about a
+non-local jump, and `longjmp` past them skips whatever they hold. So while
+`in_callback` is non-zero a throw is not delivered outward at all: it prints
+and stops. Exercised in a forked child, because the control's expected outcome
+is a dead process.
+
+**Both-direction conversion.** The bridge converts C's argument in and the
+result out. For `int` that is `(double)a0` and `(int)r`; for `int64_t` it is
+`__int128`, with no `double` anywhere on the path. The test uses **2^53 + 1**,
+the smallest integer a double cannot hold: through a double the answer comes
+back `...93` and the assertion demands `...94`. Every value below 2^53 agrees
+either way, which is why a smaller one proves nothing.
+
+**Reentrancy.** C calls TypeScript, which calls C, which calls TypeScript
+again -- four entries, each bracketing itself. `reentrant(1) = 5`. A bridge
+setting a flag instead of counting passes every single-entry test and leaves
+the outer frame looking like ordinary code the moment the inner one returns.
+
+**Thread.** `nts_callback_enter` asserts `nts_is_owner_thread`, as
+`nts_promise_join` already did. What it catches and what it does not is worth
+being exact about: `nts_env` is `_Thread_local` but *defaults to one shared
+environment*, so a second thread entering a bridge increments `in_callback`
+without synchronisation and allocates against another thread's heap. An
+embedder that installed a host gets a stop. A **standalone** program has
+installed no host, `nts_is_owner_thread` is unconditionally true, and a foreign
+thread reaches the bridge undetected -- the runtime has no way of its own to
+know which thread owns it, and inventing one would be a second answer to a
+question the host already owns.
+
 ## A callback in a struct
 
 `struct sigaction`, every `_ops` table in the kernel headers, and most C

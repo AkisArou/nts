@@ -64,6 +64,20 @@ int main(void) {
   printf("throughTable(21) = %d\n", (int)table);
   assert(table == 42);
 
+  // Reentrancy: C -> TS -> C -> TS. `apply_twice` calls its callback twice and
+  // that callback calls `apply_twice` again, so each of the four entries
+  // brackets itself. 1 -> ((1+1)+1) -> (((3)+1)+1) = 5.
+  double nested = reentrant(1);
+  printf("reentrant(1) = %d\n", (int)nested);
+  assert(nested == 5);
+
+  // Both directions at 64 bits, with the one value that separates an exact
+  // path from a `double` one: 2^53 + 1 is the smallest integer a double cannot
+  // hold. Through a double this comes back 9007199254740994, not ...93.
+  long long wide = (long long)wideRoundTrip(9007199254740993LL);
+  printf("wideRoundTrip(2^53+1) = %lld\n", wide);
+  assert(wide == 9007199254740994LL);
+
   puts("native callback: C called a TypeScript function through a bridge, "
        "a throw stopped at it, and a retained one outlived its call");
   return 0;

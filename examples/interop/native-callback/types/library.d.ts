@@ -9,7 +9,7 @@
  * @ntsHeader "library.h"
  */
 declare module "c:library" {
-  import type { ConstPtr, Ptr, Struct, c_int } from "c:types";
+  import type { ConstPtr, Ptr, Struct, c_int, c_int64 } from "c:types";
   // The context the C library hands back. It never looks inside; only this
   // program does, which is what an opaque context is for.
   export type Counter = Struct<{ total: c_int }, "counter">;
@@ -37,6 +37,10 @@ declare module "c:library" {
   export function dispatch(h: ConstPtr<Handlers>, n: c_int): c_int;
 
   export function apply_twice(f: (n: c_int) => c_int, x: c_int): c_int;
+
+  /** The same at 64 bits, where the conversion has something to lose.
+   * @ntsNoEscape f */
+  export function apply_wide(f: (n: c_int64) => c_int64, x: c_int64): c_int64;
   /** Takes the same callback and never calls it.
    * @ntsNoEscape f
    */

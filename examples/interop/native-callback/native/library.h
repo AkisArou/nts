@@ -29,6 +29,13 @@ struct handlers {
 int dispatch(const struct handlers *h, int n);
 
 int apply_twice(int (*f)(int), int x);
+
+// The same shape at 64 bits. `int64_t` is the case where a bridge that routed
+// the value through a `double` would be wrong for anything above 2^53, and
+// every value below it would agree -- so this exists to be called with one
+// above.
+#include <stdint.h>
+int64_t apply_wide(int64_t (*f)(int64_t), int64_t x);
 int apply_never(int (*f)(int), int x);
 void each_upto(void (*f)(struct counter *, int), struct counter *ctx, int upto);
 int subscribe(void (*f)(struct counter *, int), struct counter *ctx);
