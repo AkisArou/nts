@@ -668,9 +668,28 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         "{}",
         refusal.message
     );
-    // And the reason the CLI now treats this as fatal: what it emitted is a
-    // program, not a fragment. Both functions are in it, and one of them calls
-    // through the other's prototype.
+    // And the reason the CLI treats this one as fatal while it tolerates the
+    // rest. Both halves are asserted, because only the pair is a check: a
+    // predicate that answered `true` for everything would pass the line below
+    // and would have turned sixteen node modules from building into regressed,
+    // which is exactly what the first version of it did.
+    assert!(
+        nts_codegen_c::leaves_the_program_inconsistent(refusal),
+        "a conflicting ABI leaves a call declared wrongly: {}",
+        refusal.message
+    );
+    let declines = nts_codegen_c::emit(&agreeing.program);
+    assert!(
+        declines
+            .diagnostics
+            .iter()
+            .all(|d| !nts_codegen_c::leaves_the_program_inconsistent(d)),
+        "nothing about the agreeing program is inconsistent: {:?}",
+        declines.diagnostics
+    );
+
+    // What it emitted is a program, not a fragment. Both functions are in it,
+    // and one of them calls through the other's prototype.
     let text = emitted.writer.text();
     assert!(text.contains("double one("), "the first function is emitted:\n{text}");
     assert!(

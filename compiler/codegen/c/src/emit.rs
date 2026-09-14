@@ -790,6 +790,30 @@ fn native_prototype(
     format!("{} {name}({parameters});", spelling.of(&target.result))
 }
 
+/// Whether this diagnostic means the emitted C is **not a program to build**.
+///
+/// Most of what this emitter reports is a *decline*: a type it has no layout
+/// for, say, which the node profile produces 199 of and which still leaves a
+/// program that tree builds and runs. Those behave like a lowering refusal --
+/// something is missing, and what remains is consistent.
+///
+/// `NTS2007` is the other kind, and every case of it is the same shape: a
+/// foreign symbol this program *calls* is not correctly declared. The call
+/// stays in the body either way, so the emitted C either declares that symbol
+/// wrongly or not at all. A conflicting pair of declarations is the worst of
+/// them -- one prototype wins, and the other function calls through it.
+///
+/// A code and not a severity, because both are errors and only one of them
+/// makes the output unusable. The first version of this check was `any error
+/// at all` and it turned sixteen node modules from building into regressed --
+/// measured on `examples/`, which was the wrong population: the modules are
+/// built through `tooling/conformance/build.sh`, and every one of them reports
+/// declines.
+#[must_use]
+pub fn leaves_the_program_inconsistent(diagnostic: &Diagnostic) -> bool {
+    diagnostic.code == "NTS2007"
+}
+
 fn external_prototypes(program: &Program) -> Prototypes {
     let mut seen: rustc_hash::FxHashMap<&str, (&nts_core::hir::native::Function, String)> =
         rustc_hash::FxHashMap::default();

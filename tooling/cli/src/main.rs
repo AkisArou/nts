@@ -2284,7 +2284,7 @@ fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<(
     Ok(())
 }
 
-/// A refusal from the emitter is fatal, unlike one from lowering.
+/// The refusals from the emitter that make its output unusable.
 ///
 /// The two are not the same kind of thing and used to share an exit code.
 /// Lowering *drops* the function it refuses, so its output is consistent -- a
@@ -2297,17 +2297,24 @@ fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<(
 /// with both functions in it and one of them calling through the other's
 /// prototype. Every `build.sh` here runs `set -e` against that exit code.
 ///
-/// Measured before changing: zero emitter diagnostics across every example and
-/// sixty other fixtures, so nothing was relying on the old behaviour.
+/// **Not every emitter diagnostic**, and the first version of this made that
+/// mistake. Most of them are declines -- a type with no layout, which the node
+/// profile reports 199 of -- and the program that remains is the one the tree
+/// builds. Treating those as fatal turned sixteen node modules from building
+/// into regressed. `nts_codegen_c::leaves_the_program_inconsistent` draws the
+/// line, where the diagnostics are raised.
 fn refuse_if_the_emitter_declined(diagnostics: &[nts_diagnostics::Diagnostic]) -> Result<()> {
-    if diagnostics.is_empty() {
+    let fatal = diagnostics
+        .iter()
+        .filter(|d| nts_codegen_c::leaves_the_program_inconsistent(d))
+        .count();
+    if fatal == 0 {
         return Ok(());
     }
     bail!(
-        "{} emitter refusal(s): the C above is not a program to build. Unlike a \
-         lowering refusal, which drops the function it names, these leave it in \
-         with something else's ABI",
-        diagnostics.len()
+        "{fatal} emitter refusal(s) leave the C above inconsistent: it is not a \
+         program to build. Unlike a lowering refusal, which drops the function it \
+         names, these leave it in with something else's ABI"
     )
 }
 

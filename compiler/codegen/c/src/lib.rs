@@ -35,4 +35,5 @@ pub use emit::{
     UV_HOST_HEADER, UV_HOST_HEADER_NAME, UV_HOST_SOURCE, UV_HOST_SOURCE_NAME, Support, c_global, c_identifier, c_member, emit,
     support_files,
     standalone_main,
+    leaves_the_program_inconsistent,
 };
