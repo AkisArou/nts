@@ -527,6 +527,96 @@ export const CORPORA = {
           // same base directory. `open` is included because a `FileHandle` must be closed and
           // this is the only spec in a position to prove that it can be -- 4,000 inputs holding
           // handles would exhaust the process rather than report a divergence.
+          // **The read-only stream and descriptor half.** `createReadStream`, the descriptor
+          // family (`open`/`read`/`readv`/`fstat`/`close`), directory handles and `statfs` are
+          // all reads, so they are admissible under this corpus's standing rule: nothing here
+          // creates, moves or removes anything. The *writing* half of `fs` stays out, and that
+          // is a rule about shared state rather than a gap in the harness.
+          //
+          // Every descriptor and directory handle is closed on every path. 4,000 inputs leaking
+          // one apiece would exhaust the process rather than report a divergence, which is a
+          // failure mode this corpus has already produced once, from a listening server.
+          label: "read-only-streams",
+          call: async (m, s) => {
+            const at = BASE + s;
+            // **Every asynchronous arm gets a deadline, and this spec is why the rule is not
+            // optional.** Without one, the read-stream arm never settled under
+            // `corpus-reach.mjs`, which instruments a module's functions before running the
+            // corpus over it: the instrumented stream did not emit what the arm was waiting for,
+            // and the tool died with "Detected unsettled top-level await" and printed **nothing
+            // at all**. A spec that can hang does not hang only in the harness it was written
+            // for. `net`'s spec had a deadline and this one did not.
+            const withDeadline = (make) =>
+              new Promise((resolve) => {
+                // **Reffed, and that is the whole point of it.** `unref()` here defeated the
+                // deadline entirely: an unreffed timer does not hold the loop, so the loop
+                // drained with the promise unsettled and the tool still died with "Detected
+                // unsettled top-level await". A deadline exists to make something settle; it
+                // cannot do that from outside the thing keeping the process alive.
+                //
+                // It costs nothing when the arm answers, because it is cleared immediately. It
+                // costs two seconds exactly when an arm would otherwise hang forever.
+                const timer = setTimeout(() => resolve("timeout"), 2000);
+                Promise.resolve()
+                  .then(make)
+                  .then((v) => { clearTimeout(timer); resolve(v); })
+                  .catch((error) => { clearTimeout(timer); resolve(`${error?.code ?? error?.name ?? "?"}`); });
+              });
+            const settle = (make) => withDeadline(async () => `ok:${await make()}`);
+            return [
+              // A read stream's bytes, and that it ends. `encoding` is left off so the
+              // comparison is over buffers rather than a decoder's opinion.
+              await settle(() => new Promise((resolve, reject) => {
+                const stream = m.createReadStream(at);
+                const chunks = [];
+                stream.on("data", (chunk) => chunks.push(chunk));
+                stream.on("error", reject);
+                stream.on("close", () => resolve(`bytes:${Buffer.concat(chunks).length}`));
+              })),
+              // The descriptor family, closed on both paths.
+              await settle(async () => {
+                const fd = m.openSync(at, "r");
+                try {
+                  const stat = m.fstatSync(fd);
+                  const buffer = Buffer.alloc(8);
+                  const read = m.readSync(fd, buffer, 0, 8, 0);
+                  return `file=${stat.isFile()} read=${read}`;
+                } finally { m.closeSync(fd); }
+              }),
+              // `readv` into two views, which is where an offset is got wrong.
+              await settle(async () => {
+                const fd = m.openSync(at, "r");
+                try {
+                  const views = [Buffer.alloc(3), Buffer.alloc(5)];
+                  const read = m.readvSync(fd, views);
+                  return `read=${read} first=${views[0].length}`;
+                } finally { m.closeSync(fd); }
+              }),
+              // A directory handle, iterated and closed.
+              await settle(async () => {
+                if (m.opendirSync === undefined) return "absent";
+                const dir = m.opendirSync(at);
+                try {
+                  const names = [];
+                  for (;;) {
+                    const entry = dir.readSync();
+                    if (entry === null) break;
+                    names.push(`${entry.name}:${entry.isFile()}${entry.isDirectory()}`);
+                  }
+                  return names.sort().join(",");
+                } finally { dir.closeSync(); }
+              }),
+              await settle(() => (m.statfsSync === undefined
+                ? "absent"
+                : typeof m.statfsSync(at).type)),
+              // `glob` over the fixture directory, sorted so the order is not the question.
+              await settle(() => (m.globSync === undefined
+                ? "absent"
+                : m.globSync("*.mjs", { cwd: at }).slice().sort().join(","))),
+            ].join("|");
+          },
+        },
+        {
           label: "promises-read-only",
           call: async (m, s) => {
             const at = BASE + s;
@@ -2432,11 +2522,12 @@ export const CORPORA = {
                 // A deadline, so a spec that stops answering is a *value* both sides can be
                 // compared on rather than a run that never ends. The first version of this had
                 // none and took a ten-minute timeout to say what "timeout" says in one second.
+                // Reffed for the same reason as `fs`'s: an unreffed deadline lets the loop
+                // drain with the promise unsettled, which is the failure it exists to prevent.
                 const deadline = setTimeout(() => {
                   socket.destroy();
                   resolve("timeout");
-                }, 5000);
-                deadline.unref();
+                }, 2000);
                 const settle = (value) => { clearTimeout(deadline); resolve(value); };
                 const socket = m.connect({ host: "127.0.0.1", port }, () => {
                   socket.end(payload);

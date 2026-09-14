@@ -26,7 +26,9 @@ import {
   validateString,
 } from "../../internal/validators.ts";
 import { ERR_INVALID_ARG_TYPE } from "../../internal/errors.ts";
-import { getValidatedPath, type PathLike } from "./options.ts";
+import { type PathLike } from "./options.ts";
+import { fileURLToPath } from "../../url/src/fileurl.ts";
+import { URL } from "../../url/src/url.ts";
 import { Dirent, Stats } from "./stats.ts";
 
 export type GlobPatternInput = string | string[];
@@ -102,8 +104,30 @@ export function normalizeGlobOptions(
   validateGlobOptionsObject(raw);
   const options = raw;
 
+  // **`cwd` is not a validated path here, and node is deliberate about that.**
+  // `lib/internal/fs/glob.js` is one line: `this.#root = toPathIfFileURL(cwd) ?? '.'`. No
+  // null-byte check, and `??` means `null` is the same as absent. An unusable directory then
+  // simply yields nothing, because a glob that finds no matches is not an error.
+  //
+  // Routing it through `getValidatedPath` diverged twice, measured against node:
+  //
+  //     cwd with a NUL   node []   ours ERR_INVALID_ARG_VALUE
+  //     cwd: null        node []   ours ERR_INVALID_ARG_TYPE
+  //
+  // A non-string that is not a URL still fails on both sides -- node reaches `readdir` and
+  // throws `ERR_INVALID_ARG_TYPE` there, which is the same code from a different place -- so the
+  // type check is kept and only the null-byte rejection and the `null` handling are node's.
   let cwd = ".";
-  if (options.cwd !== undefined) cwd = getValidatedPath(options.cwd, "options.cwd");
+  if (options.cwd !== undefined && options.cwd !== null) {
+    const given = options.cwd;
+    if (typeof given === "string") {
+      cwd = given;
+    } else if (given instanceof URL) {
+      cwd = fileURLToPath(given as URL);
+    } else {
+      throw new ERR_INVALID_ARG_TYPE("options.cwd", ["string", "Buffer", "URL"], given);
+    }
+  }
 
   let followSymlinks = false;
   if (options.followSymlinks !== null && options.followSymlinks !== undefined) {
