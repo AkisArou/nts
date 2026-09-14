@@ -226,6 +226,24 @@ fn typed_array(element: &str, rendered: &str) -> String {
     }
 }
 
+/// The TypeScript type a Java collection **is** at run time, when it is one.
+///
+/// Kotlin calls these *mapped types*: `kotlin.collections.List` **is**
+/// `java.util.List`, so Kotlin never converts a collection when calling Java --
+/// there is nothing to convert. We can take the same answer for `Map` because
+/// `NtsMap implements java.util.Map`, and because the one place JavaScript and
+/// Java disagree about keys is `-0`, which `NtsMap` normalises at insertion so
+/// that Java's `equals`/`hashCode` implement `SameValueZero` exactly.
+///
+/// **`Set` cannot follow, and the reason is structural rather than an
+/// omission.** A TypeScript `Set` is also an `NtsMap` at run time, so it would
+/// have to implement `java.util.Set` as well -- and one class cannot implement
+/// both: `Map.remove(Object)` returns `V` and `Set.remove(Object)` returns
+/// `boolean`, which is a return-type clash the JVM rejects outright.
+fn mapped_collection(binary: &str) -> Option<&'static str> {
+    (binary == "java/util/Map").then_some("Map")
+}
+
 /// A reference type's binary name, as TypeScript.
 fn reference(binary: &str) -> String {
     match binary {
@@ -2107,6 +2125,25 @@ fn generic_type(signature: &str) -> Option<(String, usize)> {
                 }
             }
             let base = reference(&name);
+            // **Both spellings, because ours already is the platform type.**
+            // `NtsMap implements java.util.Map`, so a TypeScript `Map` needs no
+            // conversion to cross -- but a map *returned* from Java is the
+            // generated `java.util.Map`, and a caller must be able to hand that
+            // back too. Accepting either is what makes the crossing free in
+            // both directions; see `mapped_collection`.
+            // **Not inside the package that declares it.** `reference`
+            // returns the bare `Map` for a class in the package being
+            // generated, and inside `declare namespace java.util` that name
+            // resolves to *this* `Map` rather than TypeScript's -- so the
+            // union came out as `(Map<K, V> | Map<K, V>)`, both arms the same
+            // type. TypeScript has no way to spell the global one from inside
+            // a namespace that shadows it, so the mapping belongs at the call
+            // sites outside.
+            if let Some(mapped) = mapped_collection(&name).filter(|it| *it != base) {
+                let arguments =
+                    if arguments.is_empty() { String::new() } else { format!("<{}>", arguments.join(", ")) };
+                return Some((format!("({mapped}{arguments} | {base}{arguments})"), at));
+            }
             if arguments.is_empty() || base == "string" || base == "unknown" {
                 Some((base, at))
             } else {
