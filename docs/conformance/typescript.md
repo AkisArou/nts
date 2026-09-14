@@ -540,7 +540,7 @@ of the surface therefore costs nothing.
 | ✅ | arrays; a tuple whose elements agree *is* an array of them |
 | ✅ | heterogeneous tuples — a struct with positional fields, `_0` and `_1` `examples/tuples` carries them — a fixed-length heterogeneous sequence, which is what the positional struct is for. |
 | ✅ | objects — a flat struct with a layout |
-| ✅ | typed arrays: all eight kinds, as `NtsArray` with a narrow element |
+| ✅ | typed arrays: all eight kinds, as `NtsArray` with a narrow element **Enumeration checked 2026-09-14, and it is exact.** No single example carries eight, so this row cites the suite rather than a directory: across `examples/`, eight distinct spellings appear and they are precisely the eight this row claims — `Uint8` (79 uses), `Uint16` (14), `Float64` (9), `Int32` (6), `Uint32` (5), `Float32` (4), `Int16` (3), `Int8` (2). The three JavaScript typed arrays that do **not** appear are `Uint8ClampedArray`, `BigInt64Array` and `BigUint64Array`, and all three are accounted for elsewhere in this file rather than missing — the clamping one under `instanceof` against a natively-represented type, the other two in §16's table. So "all eight" is the right number and not a round one. |
 | ✅ | `unknown`, `any` sites, unions, optional properties — one 16-byte tagged value `examples/optional-properties` carries `x?: T`, and `examples/optional-unassigned` the field a constructor never writes. |
 | ✅ | `null` and `undefined`, as two values — see below for what a pointer can hold |
 | ✅ | `typeof` — including `"function"` for a closure and `"object"` for `null` |
