@@ -35,7 +35,24 @@ for (const entry of readdirSync(NODE_DIR, { withFileTypes: true })) {
   for (const file of readdirSync(testDir)) {
     if (!file.endsWith(".js")) continue;
     scanned++;
-    const text = readFileSync(join(testDir, file), "utf8");
+    const raw = readFileSync(join(testDir, file), "utf8");
+    // **Prose is not code, and this read prose.** Its only finding on 2026-09-14 was
+    // `buffer/slowbuffer-length-static.js`, whose sole mention of `require("node:buffer")`
+    // is a comment recording what the author checked before writing the fixture. A detector
+    // that reads a file as text flags the sentence describing the hazard as the hazard.
+    //
+    // Block comments go, and so do lines that are comments. A `//` *after* code is left
+    // alone deliberately: stripping to end-of-line would also cut a `require` that followed
+    // a string containing `//`, and a false negative in a detector is worse than the false
+    // positive it would prevent.
+    const text = raw
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n")
+      .filter((line) => {
+        const t = line.trim();
+        return !t.startsWith("//") && !t.startsWith("*");
+      })
+      .join("\n");
     const bare = new RegExp(`require\\("${entry.name}"\\)`).test(text);
     const prefixed = new RegExp(`require\\("node:${entry.name}"\\)`).test(text);
     if (!bare || !prefixed) continue;
