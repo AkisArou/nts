@@ -24839,10 +24839,45 @@ part of the 46.
 46 is the same number as the morning's measurement, from a compiler that had changed underneath in
 ways that *did* move other counts. That it did not move is worth as much as the number.
 
-**Its provenance is an mtime, not a hash.** The binary was a copy of `target/release/nts`, which is a
-shared working tree another session rebuilds continuously, and it contained uncommitted work. So this
-is the tree at 04:30 and it is not reproducible from any commit. A hash-attributed axis needs a
-pinned-worktree build, which this session does not do.
+**Its provenance was an mtime, and then a hash agreed with it.** The binary here was a copy of
+`target/release/nts`, a shared working tree another session rebuilds continuously, with uncommitted
+work in it -- so this run is the tree at 04:30 and is not reproducible from any commit.
+
+A second session then built `9da24cc3` in a pinned worktree with `pinned.sh` and a private
+`NTS_ADDON_OUT` and ran the same script. **It agrees row for row, 46 / 1722 / 4.** So the number now
+has a commit under it rather than a timestamp, and the two runs bracket each other rather than one
+standing alone. Cite the hash-attributed one.
+
+That run also settles two rows this lane could not reach. **`cluster` builds**: `cluster.node` exists
+in the private directory and all 26 modules were attempted, so its "no addon built" in the gate is
+`build-floor.sh`'s fixed 24-name `FLOOR` and says nothing about capability -- the same reading error
+that `child_process` produced twice. And `cluster.build.log` is 1,264 NTS1001 against 624 NTS1003,
+whose top messages are type representation rather than boundaries:
+
+    63  a property `value` of unrepresentable type (a union of `closeSentinel`...)
+    58  a property `sourceSignals` of unrepresentable type (an array of ...)
+    57  a call inside a `try`, whose `throw` would not reach this handler
+    44  `null` or `undefined` where what it stands in for is not a reference
+
+Which is `stream`'s family, and a third independent line of evidence for the wrapper-limited reading:
+the module's compiled row is 0 because an EventEmitter **instance** cannot cross the boundary, not
+because these 1,264 are in the way.
+
+### And `cluster`'s 25 hollow passes are the largest hollow count in the run
+
+Every other publishes-nothing module is 0 real / 0 hollow. `cluster` is 0 / **25**, and that is not
+an open question -- it is the most thoroughly diagnosed row in this file. `shape.mjs` reads
+`exports.default`, the addon exports none of the six keys under that name, so the module resolves to
+`{}`:
+
+    compiled     require('cluster') -> KEYS=0  []      branch=NEITHER
+    interpreted  require('cluster') -> KEYS=12 [...]   branch=primary
+
+Twenty-five role-guarded files take **neither** branch and assert nothing. It is the first of the
+three hollowness mechanisms recorded here, and the reason the axis counts real passes separately: a
+number that included those 25 was a number about the harness. The emptying arm is the only instrument
+that can see it, and this is the row that justifies running it on every module rather than on the
+ones that look suspicious.
 
 ### Four recorded causes for one defect, and the pattern in them
 
