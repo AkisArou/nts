@@ -231,8 +231,9 @@ fn inputs(ty: &HirType, known: Facts) -> Vec<f64> {
 /// declaration and rejected only where the two met. A default that is right for
 /// its neighbours is wrong for the newcomer, and the newcomer is exactly what
 /// nobody is looking at.
-fn c_type(ty: &HirType) -> &'static str {
+fn c_type(ty: &HirType) -> String {
     match ty {
+        HirType::NativePointer(name) => return format!("struct {name} *"),
         HirType::Managed(nts_core::hir::ManagedType::String) => "NtsString *",
         // Same as the map below: the harness generates calls from scalar
         // signatures and cannot make a symbol, so this is here to be right
@@ -300,7 +301,7 @@ fn c_type(ty: &HirType) -> &'static str {
         HirType::Managed(nts_core::hir::ManagedType::Array(_)) => "NtsArray *",
         HirType::Managed(nts_core::hir::ManagedType::Object(_)) => "void *",
         HirType::Void | HirType::Never => "void",
-    }
+    }.to_owned()
 }
 
 /// Compile a program, run it, run the same source on node, and compare.

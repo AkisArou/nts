@@ -168,3 +168,46 @@ fn managed_abi_belongs_only_to_the_annotated_declaration() {
     assert_eq!(lowered.diagnostics.len(), 2, "{:?}", lowered.diagnostics);
     assert!(format!("{:?}", lowered.diagnostics).contains("unknown @ntsAbi `nonsense`"));
 }
+
+#[test]
+fn opaque_pointers_reject_boxing_forgery_and_numeric_containers() {
+    let declarations = "import type { Opaque } from \"c:types\"; type Counter = Opaque<\"Counter\">; declare function make(): Counter; declare function read(c: Counter): c_int;\n";
+    for (name, body) in [
+        ("pointer-array", "export function bad(): number { const a = [make()]; return read(a[0]!); }"),
+        ("pointer-erased", "export function bad(): unknown { return make(); }"),
+        ("pointer-field", "export function bad(): string { return make().__c_opaque; }"),
+        ("pointer-in", "export function bad(): boolean { return \"__c_opaque\" in make(); }"),
+        ("pointer-index", "export function bad(): string { return make()[\"__c_opaque\"]; }"),
+        ("pointer-forged", "export function bad(): Counter { return { __c_opaque: \"Counter\" }; }"),
+        ("pointer-cast", "export function bad(n: number): Counter { return n as unknown as Counter; }"),
+        ("pointer-brand-cast", "type Other = Opaque<\"Other\">; export function bad(): Other { return make() as unknown as Other; }"),
+        ("pointer-undefined", "export function bad(n: number): Counter | undefined { return n ? make() : undefined; }"),
+    ] {
+        // The valid arm is present in the same program as every rejected arm.
+        let source = format!("{declarations} export function good(): number {{ return read(make()); }} {body}");
+        let Some(snapshot) = snapshot(name, &source) else { return; };
+        let prepared = hir::prepare(&snapshot).unwrap();
+        assert!(!prepared.diagnostics.is_empty(), "{name} must refuse");
+        assert!(prepared.program.funcs.iter().any(|f| f.name == "good"), "{name}: valid arm lost");
+        assert!(!prepared.program.funcs.iter().any(|f| f.name == "bad"), "{name}: rejected function emitted");
+    }
+}
+
+#[test]
+fn opaque_pointee_identity_does_not_depend_on_signature_position() {
+    for (name, declaration, body) in [
+        ("result", "declare function create(): Handle;", "export function run(): Handle { return create(); }"),
+        ("parameter", "declare function consume(p: Handle): c_int;", "export function run(p: Handle): number { return consume(p); }"),
+    ] {
+        for witness in ["", "type Unused = Opaque<\"Different\">;"] {
+            let source = format!("import type {{ Opaque }} from \"c:types\"; type Handle = Opaque<\"_Counter\">; {declaration} {body} {witness}");
+            let Some(snapshot) = snapshot(&format!("opaque-position-{name}"), &source) else { return; };
+            let prepared = hir::prepare(&snapshot).unwrap();
+            assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+            let run = prepared.program.funcs.iter().find(|f| f.name == "run").unwrap();
+            let pointer = HirType::NativePointer("_Counter".to_owned());
+            if name == "result" { assert_eq!(run.return_type, pointer); }
+            else { assert_eq!(run.params[0].ty, pointer); }
+        }
+    }
+}

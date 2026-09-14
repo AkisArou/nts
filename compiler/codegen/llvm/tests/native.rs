@@ -11,6 +11,10 @@ mod native_cases;
 use native_cases::CASES;
 
 fn prepare(name: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
+    prepare_with_provider(name, source, hir::Provider::NoGc)
+}
+
+fn prepare_with_provider(name: &str, source: &str, provider: hir::Provider) -> Option<(Utf8PathBuf, hir::Prepared)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
@@ -29,7 +33,7 @@ fn prepare(name: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((dir, hir::prepare(&snapshot).unwrap()))
+    Some((dir, hir::prepare_with(&snapshot, &hir::Options { provider, ..hir::Options::default() }).unwrap()))
 }
 
 fn clang(dir: &Utf8Path, args: &[&str]) {
@@ -496,5 +500,86 @@ fn compatible_c_aliases_share_one_symbol_in_both_backends() {
         clang(&dir, &["-O2", "-c", source, "-o", "program.o"]);
         clang(&dir, &["program.o", "native.o", "caller.c", "-o", "caller"]);
         assert!(Command::new(dir.join("caller")).status().unwrap().success());
+    }
+}
+
+#[test]
+fn opaque_handles_keep_pointer_bits_and_manual_lifetime_on_both_backends() {
+    let source = r#"
+import type { Opaque, c_int } from "c:types";
+type Counter = Opaque<"Counter">;
+type Wide = Opaque<"_Wide">;
+declare function counter_new(n: c_int): Counter | null;
+declare function counter_read(c: Counter): c_int;
+declare function counter_bump(c: Counter, n: c_int): c_int;
+declare function counter_destroy(c: Counter): void;
+declare function wide_new(): Wide;
+declare function wide_valid(w: Wide): boolean;
+/** @ntsAbi managed */
+declare function invoke(f: () => number): number;
+export function run(n: number): number {
+    const c = counter_new(n as c_int);
+    if (c === null) return -1;
+    counter_bump(c, 2 as c_int);
+    const answer = invoke(() => counter_read(c));
+    counter_destroy(c);
+    return answer + 0.25;
+}
+export function wide(): boolean { return wide_valid(wide_new()); }
+export function identity(c: Counter | null): Counter | null { return c; }
+"#;
+    for (label, provider) in [("nogc", hir::Provider::NoGc), ("rc", hir::Provider::ReferenceCounting)] {
+        let Some((dir, prepared)) = prepare_with_provider(&format!("opaque-{label}"), source, provider) else { return; };
+        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        for func in &prepared.program.funcs {
+            for op in &func.values {
+                if let hir::OpKind::Retain(value) | hir::OpKind::Release(value) | hir::OpKind::Erase { value } = op.kind {
+                    assert!(!matches!(func.values[value.0 as usize].ty, hir::HirType::NativePointer(_)));
+                }
+            }
+        }
+        let c = nts_codegen_c::emit(&prepared.program);
+        assert!(c.is_complete(), "{:?}", c.diagnostics);
+        let llvm = nts_codegen_llvm::emit(&prepared.program);
+        assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+        assert!(c.writer.text().contains("struct Counter *"));
+        assert!(c.writer.text().contains("struct _Wide *"));
+        assert!(llvm.text.contains("declare ptr @wide_new()"));
+        assert!(!llvm.text.contains("ptrtoint"), "pointer bits must never travel through numbers");
+        std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+        std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+        std::fs::write(dir.join("counter.h"), include_str!("../../../../examples/interop/c-from-ts/native/counter.h")).unwrap();
+        std::fs::write(dir.join("counter.c"), include_str!("../../../../examples/interop/c-from-ts/native/counter.c")).unwrap();
+        std::fs::write(dir.join("native.c"), r#"
+#include "nts_runtime.h"
+#include "counter.h"
+struct _Wide;
+struct _Wide *wide_new(void) { return (struct _Wide *)(uintptr_t)UINT64_C(0x0020000000000001); }
+bool wide_valid(struct _Wide *p) { return (uintptr_t)p == UINT64_C(0x0020000000000001); }
+double invoke(NtsHeader *cb) {
+    return ((double (*)(NtsHeader *))cb->descriptor->methods[nts_closure_call_slot])(cb);
+}
+"#).unwrap();
+        std::fs::write(dir.join("caller.c"), r#"
+#include "program.h"
+#include "counter.h"
+int main(void) {
+    if (run(3.75) != 5.25 || run(-1) != -1 || counter_live() != 0) return 1;
+    if (!wide()) return 2;
+    Counter *c = counter_new(9);
+    if (identity(c) != c || identity(NULL) != NULL) return 3;
+    counter_destroy(c);
+    return counter_live() != 0;
+}
+"#).unwrap();
+        for file in ["counter.c", "native.c", "caller.c", "nts_runtime.c"] {
+            clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+        }
+        for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+            clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+            clang(&dir, &[object, "counter.o", "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+            assert!(Command::new(dir.join(executable)).status().unwrap().success(), "{label}/{executable}");
+        }
     }
 }

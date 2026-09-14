@@ -2,6 +2,10 @@
 // Module members enter scope only through imports.
 
 declare module "c:types" {
+  // A pointer to a C struct tag, with no managed header or implicit lifetime.
+  // Construct and destroy it through the library's functions. `| null` admits
+  // a null pointer. The phantom field is never readable or constructible.
+  export type Opaque<Name extends string> = { readonly __c_opaque: Name };
   // Hand-written native ABI scalar declarations, maintained with hir/native.rs.
   // Import the required types from "c:types".
   // Brands select the C boundary type; arithmetic inside TypeScript is ordinary

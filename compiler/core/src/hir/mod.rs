@@ -84,6 +84,9 @@ pub enum HirType {
     /// a `never` return means the call does not come back, which lets a backend
     /// drop everything after it.
     Never,
+    /// An opaque C pointer. Its pointee name is ABI identity, not a managed
+    /// object layout. It is never traced, retained, released, or boxed.
+    NativePointer(String),
     Bool,
     /// An exact integer of a chosen width.
     ///

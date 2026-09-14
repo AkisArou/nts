@@ -5759,6 +5759,9 @@ fn key_kind_of(key: &HirType) -> u32 {
 
 #[must_use]
 pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
+    if let Some(name) = super::native::pointer(snapshot, ty) {
+        return format!("an opaque C pointer to {name}");
+    }
     let Some(record) = snapshot.types.get(ty.0 as usize) else {
         return "an unknown type".to_owned();
     };
@@ -6015,7 +6018,13 @@ fn representation_within(
     path.push(ty);
     let result = representation_of(snapshot, ty, path, subst);
     path.pop();
-    result
+    // Runtime containers dispatch between numbers, managed references and
+    // tagged values. A native pointer belongs to none of those protocols.
+    result.filter(|ty| match ty {
+        HirType::Managed(ManagedType::Array(element) | ManagedType::Set(element) | ManagedType::Promise(element)) => !matches!(element.as_ref(), HirType::NativePointer(_)),
+        HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => !matches!(key.as_ref(), HirType::NativePointer(_)) && !matches!(value.as_ref(), HirType::NativePointer(_)),
+        _ => true,
+    })
 }
 
 /// What a tuple represents as.
@@ -6334,6 +6343,9 @@ fn representation_of(
     if super::native::scalar(snapshot, ty).is_some() {
         return Some(HirType::NUMBER);
     }
+    if let Some(name) = super::native::pointer(snapshot, ty) {
+        return Some(HirType::NativePointer(name.to_owned()));
+    }
     let record = snapshot.types.get(ty.0 as usize)?;
     Some(match &record.kind {
         TypeKind::Unknown => HirType::Erased,
@@ -6499,6 +6511,9 @@ fn representation_of(
             }
             // Nothing left to be: `null | undefined` on its own.
             let shared = shared?;
+            if matches!(shared, HirType::NativePointer(_)) {
+                return None;
+            }
             // One representation, and at most one absence for the null pointer
             // to stand for. Two absences need two values and a pointer has one.
             let absences = usize::from(has_null) + usize::from(has_undefined);
@@ -8895,6 +8910,11 @@ impl<'a> FuncBuilder<'a> {
     /// [`FuncBuilder::present_of`] is the one read-back that does *not* come
     /// from here, because its licence is different -- see it for why.
     fn narrowed(&mut self, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+        if let Some(want @ HirType::NativePointer(_)) = self.type_of(id)
+            && self.values[value.0 as usize].ty != want
+        {
+            return Err(self.unsupported(id, "a value asserted to be an opaque C pointer"));
+        }
         // A view narrowed to its element type, which is the other direction of
         // `AnyView` and the one that makes it a representation rather than a
         // trapdoor.
@@ -9523,6 +9543,15 @@ impl<'a> FuncBuilder<'a> {
         let have = self.values[value.0 as usize].ty.clone();
         if have == *want {
             return Ok(value);
+        }
+        if matches!(want, HirType::NativePointer(_))
+            && matches!(self.values[value.0 as usize].kind, OpKind::ConstNull)
+        {
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::ConstNull, want.clone(), origin));
+        }
+        if matches!(have, HirType::NativePointer(_)) || matches!(want, HirType::NativePointer(_)) {
+            return Err(self.unsupported(id, "an opaque C pointer converted to a different representation"));
         }
         // A slot of type `never` cannot receive a value, and one is arriving.
         // `{ from: "x" as never }` is how a program gets here: the assertion
@@ -14515,6 +14544,7 @@ impl<'a> FuncBuilder<'a> {
         };
         let origin = self.origin(id);
         let (helper, args) = match (&result.payload, value) {
+            (HirType::NativePointer(_), Some(_)) => return Err(self.unsupported(id, "an opaque C pointer in a promise payload")),
             (HirType::Void, _) | (_, None) => ("nts_promise_fulfill_void", vec![result.promise]),
             (HirType::Float { .. } | HirType::Int { .. } | HirType::Bool, Some(value)) => {
                 ("nts_promise_fulfill_number", vec![result.promise, value])
@@ -16925,6 +16955,9 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_in(&mut self, id: NodeId, lhs: NodeId, rhs: NodeId) -> Result<ValueId, Diagnostic> {
+        if matches!(self.type_of(rhs), Some(HirType::NativePointer(_))) {
+            return Err(self.unsupported(id, "an `in` test through an opaque C pointer"));
+        }
         let Some(key) = self.private_name_key(lhs).or_else(|| self.literal_key(lhs)) else {
             return Err(self.unsupported(
                 lhs,
@@ -20436,6 +20469,11 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        if matches!(self.contextual_type(id, 0), Some(HirType::NativePointer(_)))
+            || matches!(self.type_of(id), Some(HirType::NativePointer(_)))
+        {
+            return Err(self.unsupported(id, "an opaque C pointer constructed as an object literal; use the C library's constructor"));
+        }
         // The *declared* type where there is one, not the literal's own.
         //
         // `const o: Options = {}` gives the literal type `{}`, which has no
@@ -24168,6 +24206,9 @@ impl<'a> FuncBuilder<'a> {
     /// value type is `unique symbol`; erasure would return `undefined`.
     fn check_native_brand_read(&self, id: NodeId) -> Result<(), Diagnostic> {
         let children = self.children(id);
+        if children.first().and_then(|object| self.snapshot.node_types.get(object)).is_some_and(|ty| super::native::pointer(self.snapshot, *ty).is_some()) {
+            return Err(self.unsupported(id, "a property read through an opaque C pointer"));
+        }
         if let (Some(object), Some(member)) = (children.first(), children.last())
             && let Some(ty) = self.snapshot.node_types.get(object)
             && super::native::scalar(self.snapshot, *ty).is_some()
@@ -25459,7 +25500,7 @@ impl<'a> FuncBuilder<'a> {
             // emitter compares addresses for this rather than reading through
             // them, which for a string is the difference between an answer and
             // a fault.
-            HirType::Managed(_) => {
+            HirType::Managed(_) | HirType::NativePointer(_) => {
                 let null = self.push(OpKind::ConstNull, ty, origin.clone());
                 Some(self.push(
                     OpKind::Binary {
@@ -31241,7 +31282,7 @@ impl<'a> FuncBuilder<'a> {
             let origin = self.origin(id);
             return Ok(self.push(literal, HirType::Erased, origin));
         }
-        let ty = ty.filter(HirType::is_managed);
+        let ty = ty.filter(|ty| ty.is_managed() || (matches!(literal, OpKind::ConstNull) && matches!(ty, HirType::NativePointer(_))));
         let Some(ty) = ty else {
             return Err(self.unsupported(
                 id,
@@ -32140,7 +32181,7 @@ const fn spelling_of(ty: &HirType) -> Option<&'static str> {
         HirType::Managed(ManagedType::Object(id)) if super::is_closure_type(*id) => "function",
         HirType::Managed(ManagedType::Symbol) => "symbol",
         HirType::Managed(_) => "object",
-        HirType::Erased | HirType::Void | HirType::Never => return None,
+        HirType::Erased | HirType::Void | HirType::Never | HirType::NativePointer(_) => return None,
     })
 }
 

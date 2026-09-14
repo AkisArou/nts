@@ -23,6 +23,7 @@ pub enum Convention {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
+    Pointer(String),
     Scalar(Scalar),
     Bool,
     Void,
@@ -50,6 +51,7 @@ impl Type {
     #[must_use]
     pub fn representation(&self) -> HirType {
         match self {
+            Self::Pointer(name) => HirType::NativePointer(name.clone()),
             Self::Scalar(scalar) => scalar.representation(),
             Self::Bool => HirType::Bool,
             Self::Void => HirType::Void,
@@ -60,8 +62,9 @@ impl Type {
     }
 
     #[must_use]
-    pub const fn c_type(&self) -> &'static str {
-        match self {
+    pub fn c_type(&self) -> std::borrow::Cow<'_, str> {
+        std::borrow::Cow::Borrowed(match self {
+            Self::Pointer(name) => return std::borrow::Cow::Owned(format!("struct {name} *")),
             Self::Scalar(scalar) => scalar.c_type(),
             Self::Bool => "bool",
             Self::Void => "void",
@@ -78,7 +81,7 @@ impl Type {
                 ManagedType::View(_) | ManagedType::AnyView | ManagedType::DataView => "NtsView *",
                 ManagedType::Symbol => "NtsSymbol *",
             },
-        }
+        })
     }
 }
 
@@ -103,6 +106,9 @@ impl Function {
         abi: Option<&str>,
     ) -> Result<Self, String> {
         fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
+            if let Some(name) = pointer(snapshot, ty) {
+                return Some(Type::Pointer(name.to_owned()));
+            }
             if let Some(scalar) = scalar(snapshot, ty) {
                 return Some(Type::Scalar(scalar));
             }
@@ -329,4 +335,38 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
         }
     }
     number.then_some(brand).flatten()
+}
+
+/// A reserved phantom field authors a C struct tag. A nullable declaration
+/// has the same ABI; undefined and mixed-pointer unions have no such contract.
+#[must_use]
+pub fn pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
+    use nts_semantic_schema::LiteralValue;
+    let record = snapshot.types.get(ty.0 as usize)?;
+    if let TypeKind::Union(parts) = &record.kind {
+        let [first, second] = parts.as_slice() else { return None; };
+        let is_null = |part: TypeId| matches!(
+            snapshot.types.get(part.0 as usize).map(|record| &record.kind),
+            Some(TypeKind::Null)
+        );
+        let payload = if is_null(*first) { *second }
+            else if is_null(*second) { *first }
+            else { return None; };
+        return pointer(snapshot, payload);
+    }
+    let TypeKind::Object { properties } = &record.kind else { return None; };
+    let [property] = properties.as_slice() else { return None; };
+    // tsgo escapes a source name beginning __ with one more underscore.
+    if property.name != "___c_opaque" || !property.readonly || property.optional
+        || property.kind != MemberKind::Field
+    {
+        return None;
+    }
+    let TypeKind::Literal(LiteralValue::String(name)) =
+        &snapshot.types.get(property.ty.0 as usize)?.kind
+    else { return None; };
+    // Identifier validity belongs to the native emitter's shared C-name
+    // classifier, just as it does for a foreign function's symbol. Recognize
+    // the authored type here even when its name will receive a diagnostic.
+    Some(name)
 }

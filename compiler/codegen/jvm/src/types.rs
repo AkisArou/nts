@@ -502,7 +502,7 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // and adding a variant upstream is a compile error rather than a
         // silent refusal. `never` reaching a value position means control got
         // somewhere the type system said it could not.
-        HirType::Never => return None,
+        HirType::NativePointer(_) | HirType::Never => return None,
     })
 }
 
@@ -540,7 +540,7 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
         HirType::Bool | HirType::Int { .. } => Kind::Int,
         HirType::Float { bits: 32 } => Kind::Float,
         HirType::Float { .. } => Kind::Double,
-        HirType::Void | HirType::Never => return None,
+        HirType::Void | HirType::NativePointer(_) | HirType::Never => return None,
     })
 }
 
@@ -621,7 +621,7 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             | HirType::Int { .. }
             | HirType::Float { .. }
             | HirType::Void
-            | HirType::Never => return None,
+            | HirType::NativePointer(_) | HirType::Never => return None,
         },
     })
 }
@@ -632,6 +632,7 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
 pub fn describe(ty: &HirType) -> String {
     match ty {
         HirType::Never => "a value of type `never`".to_owned(),
+        HirType::NativePointer(name) => format!("an opaque C pointer to {name}"),
         HirType::BigInt => "a bigint".to_owned(),
         HirType::Erased => "an erased value".to_owned(),
         HirType::Managed(ManagedType::String) => "a string".to_owned(),

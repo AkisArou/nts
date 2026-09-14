@@ -1170,6 +1170,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
 
 fn render(ty: &HirType) -> String {
     match ty {
+        HirType::NativePointer(name) => format!("native<{name}>"),
         HirType::Void => "void".to_owned(),
         HirType::Never => "never".to_owned(),
         HirType::Bool => "bool".to_owned(),

@@ -1398,6 +1398,12 @@ fn externals(program: &Program) -> Vec<String> {
 /// The LLVM type a value of this HIR type lives in.
 fn ty_of(ty: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
     Ok(match ty {
+        HirType::NativePointer(name) => {
+            if !nts_codegen_common::symbols::is_native_c_identifier(name) {
+                return Err(refuse(func, "an opaque pointee that is not an available C struct tag"));
+            }
+            "ptr"
+        }
         HirType::Void => "void",
         HirType::Bool => "i1",
         HirType::Float { bits: 32 } => "float",
@@ -1826,7 +1832,7 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
         OpKind::Call { .. } => return call(func, value, &out),
         // A null pointer, which is what an absent reference is: the one spare
         // value a pointer has, and the whole reason `T | null` costs nothing.
-        OpKind::ConstNull | OpKind::ConstUndefined if matches!(op.ty, HirType::Managed(_)) => {
+        OpKind::ConstNull | OpKind::ConstUndefined if matches!(op.ty, HirType::Managed(_) | HirType::NativePointer(_)) => {
             format!("{out} = inttoptr i64 0 to ptr")
         }
         // Where there are *two* absences the value is erased and each has a tag
@@ -3306,7 +3312,7 @@ fn unary(
                 "{out} = call zeroext i1 @nts_string_truthy(ptr {})",
                 name(operand)
             ),
-            HirType::Managed(_) => {
+            HirType::Managed(_) | HirType::NativePointer(_) => {
                 format!("{out} = icmp ne ptr {}, null", name(operand))
             }
             HirType::Int { .. } | HirType::BigInt => {

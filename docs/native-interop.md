@@ -10,6 +10,41 @@ gap descriptions; the remaining design sections are proposals.
 
 ## Implemented since the measurements below
 
+The inbound milestone now supports declared scalar C ABIs and opaque handles
+on both C and LLVM. `runtime/native/libc.d.ts` is one hand-written file of
+ambient `c:*` modules: include it in the compilation, then import functions
+and types without a `paths` mapping. Scalar brands author the ABI at foreign
+calls; arithmetic inside TypeScript keeps ordinary `number` semantics.
+`Callee::Native` carries the declaration's signature and raw C symbol identity.
+An unbranded ambient `abs(number): number` is refused instead of inventing
+`double abs(double)`.
+
+`Opaque<"Counter">` from `c:types` represents `struct Counter *`, and adding
+`| null` admits a null pointer. The pointee identity survives locals, function
+parameters and results, and closure captures. Handles have no managed header,
+tracing, retain, or release; destruction is an explicit C-library call, and a
+captured handle's owner must keep it alive through every use. Runtime containers
+of handles, boxing, forged object literals, phantom-property reads and `in`
+tests are refused. Node-API and JVM do not marshal raw C pointers.
+
+`examples/interop/c-from-ts` now contains a real C implementation and caller,
+checking conversion, mutation, null, destruction and the live-handle count.
+Native tests run C and LLVM against the same separately compiled C objects,
+including a captured handle under reference counting and a pointer above the
+exact integer range of `double`. Deliberately rounding that pointer through
+`double` makes the unchanged caller fail. Parameter-only and return-only type
+controls also run with and without an unrelated unused declaration.
+
+Existing NTS host bridges author their managed convention with `@ntsAbi managed`
+on each declaration; backend-owned intrinsics use `@ntsAbi intrinsic`. Unknown
+externals no longer receive a prototype inferred from call operands. Managed
+calls preserve runtime pointer/value representations, and their exposed object
+and array storage stays conservative. The host's C header must be visible when
+compiling generated C to check the authored signature. LLVM's managed aggregate
+ABI currently targets AMD64 System V, including whole-aggregate stack placement
+when argument registers are exhausted. `Owned`/`Ref` and ownership checking,
+raw C callbacks, by-value structs, and pointer dereferencing remain deferred.
+
 `emit-c --out` now generates `program.h` with the entry modules' emitted
 function declarations, the exact C symbols, stable object aliases named
 `<export>_<parameter>_t` / `<export>_return_t`, and checked struct layouts.

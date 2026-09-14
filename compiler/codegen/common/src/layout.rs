@@ -111,9 +111,11 @@ pub fn shape_of(ty: &HirType) -> Option<Shape> {
             size: 16,
             align: 16,
         },
+        // Native and managed pointers occupy one word. Tracing is a separate
+        // question; a native pointer never enters the descriptor's roots.
         // Every managed value is one pointer, which is what lets a field whose
         // type has no layout be emitted opaque and still be placed exactly.
-        HirType::Managed(
+        HirType::NativePointer(_) | HirType::Managed(
             ManagedType::String
             | ManagedType::Symbol
             | ManagedType::Date

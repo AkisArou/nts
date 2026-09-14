@@ -229,6 +229,7 @@ fn object_crosses(
 #[allow(clippy::match_same_arms)]
 fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> Option<Cross> {
     match ty {
+        HirType::NativePointer(_) => None,
         HirType::Void => Some(Cross::Void),
         HirType::Bool => Some(Cross::Bool),
         HirType::Float { .. } | HirType::Int { .. } => Some(Cross::Number),
@@ -359,6 +360,7 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
 
 fn spell(ty: &HirType) -> String {
     match ty {
+        HirType::NativePointer(name) => format!("an opaque C pointer to {name}"),
         HirType::Void => "void".to_owned(),
         HirType::Bool => "bool".to_owned(),
         HirType::Erased => "unknown".to_owned(),
@@ -397,6 +399,7 @@ fn spell(ty: &HirType) -> String {
 /// the name is built from the same [`c_identifier`] rather than spelled again.
 fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
     match ty {
+        HirType::NativePointer(name) => format!("struct {name} *"),
         // Neither has a value to marshal: `void` is a function that returned
         // nothing, `never` one that did not return.
         HirType::Void | HirType::Never => "void".to_owned(),
@@ -3934,6 +3937,15 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opaque_pointers_have_no_javascript_marshalling_path() {
+        let pointer = HirType::NativePointer("Counter".to_owned());
+        assert!(cross(&pointer, &[], &FxHashSet::default()).is_none());
+        let array = HirType::Managed(ManagedType::Array(Box::new(pointer)));
+        assert!(cross(&array, &[], &FxHashSet::default()).is_none());
+        assert!(matches!(cross(&HirType::NUMBER, &[], &FxHashSet::default()), Some(Cross::Number)));
+    }
 
     #[test]
     fn scalar_c_types_preserve_the_program_abi() {

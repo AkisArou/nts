@@ -56,7 +56,17 @@ an entry from the selected backend's intrinsic table; it cannot import an
 arbitrary C symbol. JVM provider declarations use this path, while C host bridges
 use the managed convention above.
 
-The inbound milestone is still in progress. Opaque handles and validation of
-the repository's managed Node host integration remain.
+Opaque C handles use `Opaque<"Counter">` imported from `c:types`, where `Counter`
+is the C struct tag. A foreign constructor can return `Opaque<"Counter"> | null`;
+locals, parameters, returns, null checks, equality, and closure captures preserve
+the pointer and its pointee identity. See `examples/interop/c-from-ts` for a
+complete separately compiled C library and caller.
+
+Opaque handles have no managed header and receive no automatic retain, release,
+or tracing. Destruction remains an explicit library call. The owner must keep a
+captured handle alive for every closure use. Boxing into `unknown`, numeric
+conversions, property reads, forged object literals, and runtime containers of
+handles are refused. Node-API and JVM do not marshal opaque C pointers.
+
 C function-pointer callbacks, variadic functions, structs by value, pointer dereferencing, and
 ownership checking are outside this milestone; these files do not claim them.

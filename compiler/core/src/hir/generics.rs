@@ -498,6 +498,7 @@ fn spell(ty: &super::HirType) -> String {
     match ty {
         HirType::Void => "void".to_owned(),
         HirType::Never => "never".to_owned(),
+        HirType::NativePointer(name) => format!("native{}_{name}", name.len()),
         HirType::Bool => "bool".to_owned(),
         HirType::Erased => "erased".to_owned(),
         HirType::BigInt => "bigint".to_owned(),

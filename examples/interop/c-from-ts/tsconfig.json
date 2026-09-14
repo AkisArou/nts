@@ -2,6 +2,7 @@
   "extends": "../../../tsconfig.fixtures.json",
   "include": [
     "src",
-    "types"
+    "types",
+    "../../../runtime/native/libc.d.ts"
   ]
 }

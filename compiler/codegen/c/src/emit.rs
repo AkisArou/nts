@@ -1852,6 +1852,19 @@ fn emit_object_types(
     program: &Program,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    let mut pointers = std::collections::BTreeSet::new();
+    for ty in program.funcs.iter().flat_map(|func| {
+        std::iter::once(&func.return_type).chain(func.params.iter().map(|p| &p.ty)).chain(func.values.iter().map(|v| &v.ty))
+    }).chain(program.layouts.iter().flat_map(|layout| layout.fields.iter().map(|field| &field.ty))) {
+        if let HirType::NativePointer(name) = ty { pointers.insert(name); }
+    }
+    for name in pointers {
+        if !nts_codegen_common::symbols::is_native_c_identifier(name) {
+            diagnostics.push(Diagnostic::error("NTS2006", format!("opaque pointee `{name}` is not an available C struct tag"), origin.location));
+            continue;
+        }
+        writer.line(origin, format!("struct {name};"));
+    }
     // Every object type is forward-declared first, so a field may point at a
     // type declared later -- or at its own, which a linked structure does.
     for layout in &program.layouts {
@@ -2380,6 +2393,9 @@ fn descriptors_reached(bodies: &[(String, CodeWriter, &Func)]) -> Vec<&'static s
 
 /// The C spelling of a type, including the object types this program declares.
 fn c_type_of(program: &Program, ty: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
+    if let HirType::NativePointer(name) = ty {
+        return Ok(format!("struct {name} *"));
+    }
     if let HirType::Managed(ManagedType::Object(_)) = ty {
         let layout = layout_of(program, ty, origin)?;
         return Ok(format!("{} *", object_type_name(layout)));
@@ -2972,6 +2988,7 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
 
 fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
     Ok(match ty {
+        HirType::NativePointer(_) => return Err(Diagnostic::error("NTS2006", "an opaque pointer needs its declared C pointee name", origin.location)),
         HirType::Void => "void",
         HirType::Bool => "bool",
         HirType::Erased => "NtsValue",
@@ -3631,7 +3648,7 @@ fn unary_text(
                 // `isnan` on an `__int128`, which is not C -- it has no NaN to
                 // exclude, being an exact integer, and `0n` is its only falsy
                 // value.
-                HirType::Int { .. } | HirType::BigInt | HirType::Managed(_) => {
+                HirType::Int { .. } | HirType::BigInt | HirType::Managed(_) | HirType::NativePointer(_) => {
                     format!("{name} = {} != 0;", value_name(operand))
                 }
                 // An erased value carries which of those it is, so the rule is
