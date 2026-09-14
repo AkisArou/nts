@@ -119,6 +119,48 @@ provably inside any array, so the bounds check has to stay. One probe in four is
 the honest figure, and it would have been easy to run only the first and claim
 the feature.
 
+### There were three call shapes and the binding reached one
+
+A bound member is called three ways and, until this patch, `foreign` was
+consulted on exactly one of them:
+
+| shape | site | before |
+| --- | --- | --- |
+| `c.vi(7)` instance | `callee_for` | wired |
+| `Conv.si(7)` static | `lower_static_call` | **never asked** |
+| `new Conv(7)` | `lower_new` | **never asked** |
+
+Statics are not an edge of the surface: `Integer.parseInt`, `Math.abs` and
+every factory method in the JDK are statics. `new` is worse — `lower_new` laid
+the class out, allocated an object and called a constructor of ours, all three
+wrong for a class that lives in a jar.
+
+**Both stayed invisible because the only real fixture exercises neither.**
+`examples/interop/java-from-ts` calls no static method at all and constructs
+nothing with a zero-argument constructor, so its column of the matrix passed
+by not being asked.
+
+**And the example does not lower.** Its first line, `new Catalog("widgets")`,
+was refused. It reads as working because *the compiler reports one blocker at a
+time* and the `HashMap.get` refusal at line 44 is printed first, so the
+constructor refusal never appears. `src/main.ts` says "**This file compiles,
+and lowers**" and that was false. After this patch the example refuses one
+line rather than its first, and the remaining blocker is `HashMap.get` reached
+through the prelude — a different gap.
+
+**`layout_of` was also emitting `com/conv/Conv.class`** — a stub with nothing
+but a default constructor, written beside the real class. Whichever classpath
+entry comes first wins, so with the emitted directory ahead of the jar, every
+call into the bound class became `NoSuchMethodError`. Loud rather than silent,
+which is the better of the two ways to be wrong, but a class this compiler had
+no business writing.
+
+Finding that needed one predicate and there were two: `hir::lower`'s
+`is_foreign_name` and `codegen/jvm`'s `types::class_name` each wrote out the
+`/` test, and the second carried a comment asserting it matched the first. A
+comment cannot fail when one of them changes. Both now call
+`runtime::is_foreign_layout_name`.
+
 ### The conversion policy, settled and verified — NOT yet in the patch
 
 The defect below is diagnosed, the rule is decided, and the implementation was
