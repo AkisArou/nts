@@ -509,6 +509,11 @@ fn spell(ty: &super::HirType) -> String {
         HirType::NativePointer(super::native::Pointee::Const(pointee)) => {
             format!("const_{}", spell(&HirType::NativePointer((**pointee).clone())))
         }
+        // The typedef name, which is already a function of the signature's
+        // shape -- so two spellings agree exactly when the signatures do.
+        HirType::NativePointer(super::native::Pointee::FnPointer(signature)) => {
+            format!("fn_{}", signature.name)
+        }
         HirType::NativePointer(super::native::Pointee::Unaligned(pointee)) => {
             format!("unaligned_{}", spell(&HirType::NativePointer((**pointee).clone())))
         }

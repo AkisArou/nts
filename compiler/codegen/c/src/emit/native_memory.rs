@@ -323,6 +323,13 @@ fn pointee_is_foreign(pointee: &Pointee) -> bool {
         // `void` name no struct at all, and an opaque tag names one the
         // declaration authored -- a header defines it or the witness will say so.
         Pointee::Scalar(_) | Pointee::Opaque(_) | Pointee::Void => true,
+        // Witnessable exactly when every part of its signature is, which is
+        // the same rule `Type::FnPointer` follows one level up.
+        Pointee::FnPointer(signature) => signature
+            .parameters
+            .iter()
+            .chain(std::iter::once(&*signature.result))
+            .all(names_only_foreign),
         Pointee::Record(layout) => layout.foreign,
         Pointee::Pointer(inner)
         | Pointee::Const(inner)

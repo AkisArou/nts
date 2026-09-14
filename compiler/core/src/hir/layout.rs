@@ -227,6 +227,10 @@ pub fn native_shape(pointee: &crate::hir::native::Pointee) -> Option<Shape> {
         // than letting it fall through matters for a packed record inside
         // another: the inner one's alignment must not raise the outer's.
         Pointee::Unaligned(inner) => native_shape(inner).map(|s| Shape { size: s.size, align: 1 }),
+        // One pointer, like any other. Named rather than left to the catch-all
+        // because `element_type` gives it back as a pointer to itself, and the
+        // catch-all would then ask this function about that and not terminate.
+        Pointee::FnPointer(_) => Some(Shape { size: POINTER, align: POINTER }),
         _ => shape_of(&pointee.element_type()?),
     }
 }

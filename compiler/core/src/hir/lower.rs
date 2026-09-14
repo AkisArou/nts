@@ -28516,9 +28516,19 @@ impl<'a> FuncBuilder<'a> {
                 ));
             }
             let origin = self.origin(call);
+            // Typed as the function pointer it is, not as `void *`.
+            //
+            // `void *` was close enough to compile and is not what C says: the
+            // emitted program assigned a *function* to a `void *` and passed a
+            // `void *` where `NtsFn_int_int` was wanted, neither of which is a
+            // conversion ISO C performs. `-pedantic-errors` reported ten of
+            // them in `native-callback` alone. It is also the imprecision that
+            // let a closure's heap address reach C as something to call, before
+            // bridges existed -- a `void *` says nothing a wrong value would
+            // contradict.
             *argument = self.push(
                 OpKind::NativeBridge { closure: *argument, signature: signature.clone() },
-                HirType::NativePointer(super::native::Pointee::Void),
+                HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
                 origin,
             );
         }

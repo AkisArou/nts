@@ -103,6 +103,32 @@ pub struct FnPointer {
     pub result: Box<Type>,
 }
 
+/// Ordered and hashed **by the derived name**, which `spell` makes a function
+/// of the shape alone -- so two of these compare and hash equal exactly when
+/// they are equal, and `spell` is the only thing that ever sets a name.
+///
+/// By hand rather than derived, because deriving would demand `Hash` and `Ord`
+/// on `native::Type` and from there on every managed type it can hold, which is
+/// a lot of trait surface for an ordering whose only job is to let a `Pointee`
+/// sit in a `BTreeSet`.
+impl std::hash::Hash for FnPointer {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
+}
+
+impl PartialOrd for FnPointer {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for FnPointer {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
 impl FnPointer {
     /// A typedef name derived from the signature itself.
     ///
@@ -214,6 +240,17 @@ pub enum Pointee {
     /// A pointer to one is not this; this is the storage itself, which is why
     /// it appears as a member and decays to a pointer when read.
     Array { element: Box<Pointee>, length: u32 },
+    /// A C function pointer, as a thing a value can *be*.
+    ///
+    /// [`Type::FnPointer`] is the same shape in a signature; this is it in the
+    /// places a `Pointee` goes -- the type of a bridge, and the type of a
+    /// struct member that holds a callback.
+    ///
+    /// **Its `pointer_type` adds no `*`.** `NtsFn_int_int` already *is*
+    /// `int (*)(int)`, so `NtsFn_int_int *` would be a pointer to a function
+    /// pointer, which is a different type and not one anything here means.
+    /// That irregularity is C's, and this is where it is absorbed.
+    FnPointer(std::sync::Arc<FnPointer>),
     /// A view of the same thing that promises no alignment.
     ///
     /// Produced by taking the address of a member of a **packed** record, and a
@@ -325,6 +362,9 @@ impl Pointee {
             // different ones cannot collide -- the same rule the function
             // pointer typedefs follow, for the same reason.
             Self::Unaligned(pointee) => pointee.unaligned_typedef(),
+            // The typedef, which is C's only spelling for this where a type
+            // precedes a name.
+            Self::FnPointer(signature) => signature.name.clone(),
         }
     }
 
@@ -349,7 +389,13 @@ impl Pointee {
     }
 
     #[must_use]
-    pub fn pointer_type(&self) -> String { format!("{} *", self.c_type()) }
+    pub fn pointer_type(&self) -> String {
+        match self {
+            // Already a pointer. See the variant's own note.
+            Self::FnPointer(signature) => signature.name.clone(),
+            other => format!("{} *", other.c_type()),
+        }
+    }
 
     /// The typedef name for this pointee read without alignment.
     ///
@@ -406,6 +452,12 @@ impl Pointee {
             // does not exist; an unaligned one changes how a backend spells
             // the access and not what is found there.
             Self::Const(pointee) | Self::Unaligned(pointee) => pointee.element_type(),
+            // A function pointer is a value -- one word, loadable and storable
+            // -- not something to step through or dereference. Its element is
+            // itself, which is what makes `p.run = f` an ordinary store.
+            Self::FnPointer(signature) => {
+                Some(HirType::NativePointer(Self::FnPointer(signature.clone())))
+            }
             // Reading `p.name[i]` is reading a `T`: the array decays to a
             // pointer to its first element, exactly as it does in C.
             Self::Array { element, .. } => element.element_type(),
@@ -429,6 +481,7 @@ impl std::fmt::Display for Pointee {
             Self::Const(pointee) => write!(f, "const {pointee}"),
             Self::Array { element, length } => write!(f, "{element}[{length}]"),
             Self::Unaligned(pointee) => write!(f, "unaligned {pointee}"),
+            Self::FnPointer(signature) => write!(f, "{}", signature.name),
         }
     }
 }
@@ -457,18 +510,23 @@ impl Type {
             Self::Managed(ty) => HirType::Managed(ty.clone()),
             Self::Erased => HirType::Erased,
             Self::BigInt => HirType::BigInt,
-            // One machine word holding an address this program never reads
-            // through, which is what `void *` already means here. C does not
-            // guarantee a code pointer and an object pointer share a
-            // representation; POSIX does, and this compiler targets Linux LP64
-            // only, which is where that assumption is stated.
+            // The function pointer itself, not a `void *` standing in for one.
             //
-            // The *declared* type stays `FnPointer` and is what the emitted C
-            // is written from, so the ABI is not decided by this line -- only
-            // the width of the value carrying it. TypeScript keeps the two
-            // apart before here: a function type and a `Ptr<unknown>` are not
-            // assignable to each other.
-            Self::FnPointer(_) => HirType::NativePointer(Pointee::Void),
+            // It was `Pointee::Void` on the reasoning that this is one machine
+            // word holding an address the program never reads through -- true,
+            // and it made the emitted C say things ISO C does not: assigning a
+            // function to a `void *`, and passing a `void *` where an
+            // `NtsFn_int_int` is wanted. `-pedantic-errors` reported ten of
+            // those in `native-callback`. POSIX does guarantee the
+            // representation, which is why it worked; the declaration was
+            // simply less true than it could be.
+            //
+            // Saying the real thing also removes a conversion: the specializer
+            // converts each argument to its parameter's representation, and
+            // with `void *` that inserted `v4 = (void *)v2;` before every call.
+            Self::FnPointer(signature) => {
+                HirType::NativePointer(Pointee::FnPointer(signature.clone()))
+            }
         }
     }
 

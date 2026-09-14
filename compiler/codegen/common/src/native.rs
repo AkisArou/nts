@@ -20,7 +20,10 @@ impl Layouts {
         match pointee {
             // Neither names a struct this program must define: a scalar has no
             // tag, and `void` has no type at all.
-            Pointee::Scalar(_) | Pointee::Void => {}
+            // A function pointer names no record to define. Whatever *its*
+            // signature names is reached where the signature is emitted, not
+            // here: this walk is about struct definitions.
+            Pointee::Scalar(_) | Pointee::Void | Pointee::FnPointer(_) => {}
 
             // Each names whatever it is a view of, so the record any of them
             // reaches still needs its definition emitted. One arm rather than
