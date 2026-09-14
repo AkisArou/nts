@@ -618,6 +618,31 @@ that is the case where the two behaviours differ. Disabling the guard turns the
 child's exit from 1 into 7, "the throw jumped out, skipping the C frame
 between", which is the hazard stated as an observation rather than a worry.
 
+**Retained callbacks, and what their protocol actually is.** A retained
+callback is called after the registering call returns, so its context must
+outlive that frame. `native-callback` subscribes, drives two events through
+`deliver`, unsubscribes, reads the accumulated total and frees:
+
+    local context     refused  -- "native local address escapes"
+    heap context      accepted
+    @ntsNoEscape ctx  accepted with a local, because then it is not retained
+
+No new machinery was needed. The contract for a retained parameter is
+`Unknown` -- the *absence* of `@ntsNoEscape` -- and that is exactly what refuses
+the local. The local-address check reaching through a callback, rather than a
+rule written for one.
+
+**What the compiler proves here, and what it does not.** It proves the context
+is not a frame that has gone. It proves nothing about the heap one: freeing it
+while still subscribed is a use-after-free like any other, and pairing
+`subscribe` with `unsubscribe` is the caller's obligation. `unsubscribe` is the
+defined event after which the library calls neither the callback nor the context
+again, and that is what makes the free safe -- a fact the binding states and
+nothing checks. Proving the pairing is ResourceFlow's job and it is not built.
+
+The bridge and the closure singleton are immortal, so nothing about the
+*callable* needs releasing; the whole lifetime question is the context's.
+
 **What libc's own callbacks still need.** `qsort` and its family take
 `void *` and expect the callback to cast. Reading through a `void *` is exactly
 what `Pointee::Void` refuses, so a real libc callback needs a checked way to

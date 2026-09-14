@@ -718,3 +718,63 @@ fn a_wide_brand_has_bigint_semantics_in_both_signature_positions() {
         }
     }
 }
+
+/// What a *retained* callback may be given as its context.
+///
+/// A retained callback is called after the registering call returns, so its
+/// context has to outlive that frame. The contract for such a parameter is
+/// `Unknown` -- the absence of `@ntsNoEscape` -- and that is exactly what makes
+/// a local refused: the local-address check reaching through a callback rather
+/// than a rule written for one.
+///
+/// The heap arm is accepted and the compiler proves nothing about it. Pairing
+/// the registration with its release is the caller's obligation, and freeing a
+/// context while still subscribed is a use-after-free like any other. That
+/// pairing is what `ResourceFlow` would prove; this asserts only that the two
+/// arms are told apart.
+#[test]
+fn a_retained_callback_refuses_a_local_context_and_accepts_a_heap_one() {
+    // `c_int` arrives from the harness's own import line.
+    let header = "import type { Ptr, Struct } from \"c:types\";\n\
+         import { local, sizeof } from \"c:memory\";\n\
+         import { malloc, free } from \"c:stdlib\";\n\
+         type Slot = Struct<{ n: c_int }, \"slot\">;\n\
+         function tick(ctx: Ptr<Slot>, n: c_int): void { ctx.n = (ctx.n + n) as c_int; }\n\
+         declare function subscribe(cb: (c: Ptr<Slot>, n: c_int) => void, ctx: Ptr<Slot>): c_int;\n";
+    for (name, body, refused) in [
+        (
+            "heap",
+            "export function go(): number {\n\
+             const ctx = malloc<Slot>(sizeof<Slot>());\n\
+             if (ctx === null) return -1;\n\
+             return subscribe(tick, ctx);\n\
+             }",
+            false,
+        ),
+        (
+            "local",
+            "export function go(): number { const ctx = local<Slot>(); return subscribe(tick, ctx); }",
+            true,
+        ),
+        // The same local, with the contract that says the callee keeps nothing.
+        // Then it is not retained, and a local is exactly what it may have.
+        (
+            "local-borrowed",
+            "export function go(): number { const ctx = local<Slot>(); return borrow(tick, ctx); }\n\
+             /** @ntsNoEscape cb ctx */\n\
+             declare function borrow(cb: (c: Ptr<Slot>, n: c_int) => void, ctx: Ptr<Slot>): c_int;",
+            false,
+        ),
+    ] {
+        let Some(snapshot) = snapshot(&format!("retained-{name}"), &format!("{header}{body}")) else {
+            return;
+        };
+        let prepared = hir::prepare(&snapshot).unwrap();
+        assert_eq!(
+            !prepared.diagnostics.is_empty(),
+            refused,
+            "{name}: {:?}",
+            prepared.diagnostics
+        );
+    }
+}

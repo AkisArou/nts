@@ -48,7 +48,15 @@ int main(void) {
   if (sumTo(5) != 15) return 4;
   if (sumTo(0) != 0) return 5;
 
+  // Retained: the library holds the callback and calls it from `deliver`,
+  // which is not on the stack of the call that subscribed. 3 + 4, accumulated
+  // into a heap context across two separate events.
+  if (retainedTotal(3, 4) != 7) return 10;
+  // And again, to show the context was released and re-taken rather than
+  // accumulating into whatever the first run left behind.
+  if (retainedTotal(1, 1) != 2) return 11;
+
   puts("native callback: C called a TypeScript function through a bridge, "
-       "and a throw stopped at it");
+       "a throw stopped at it, and a retained one outlived its call");
   return 0;
 }

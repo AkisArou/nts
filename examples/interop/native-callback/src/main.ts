@@ -1,6 +1,7 @@
-import { apply_twice, apply_never, each_upto, type Counter } from "c:library";
+import { apply_twice, apply_never, each_upto, subscribe, unsubscribe, deliver, type Counter } from "c:library";
 import type { Ptr, c_int } from "c:types";
-import { local } from "c:memory";
+import { local, sizeof } from "c:memory";
+import { malloc, free } from "c:stdlib";
 
 // Non-capturing: no enclosing state, so the whole of it is code and a bare C
 // function pointer has everything it needs.
@@ -42,4 +43,28 @@ export function sumTo(upto: number): number {
   const counter = local<Counter>();
   each_upto(accumulate, counter, upto as c_int);
   return counter.total;
+}
+
+// Retained: C keeps the callback and the context and calls them after this
+// returns. The context is on the heap because it has to outlive this frame --
+// a local is refused, which is the local-address check reaching through a
+// callback rather than a rule written for one.
+//
+// The pairing below is the release protocol, and it is the caller's: unsubscribe
+// is the defined event after which C calls neither again, and only then is the
+// context free to release. Nothing here proves the pairing.
+export function retainedTotal(first: number, second: number): number {
+  const ctx = malloc<Counter>(sizeof<Counter>());
+  if (ctx === null) return -1;
+  ctx.total = 0 as c_int;
+  const handle = subscribe(accumulate, ctx);
+  deliver(first as c_int);
+  deliver(second as c_int);
+  unsubscribe(handle);
+  const total = ctx.total;
+  free(ctx);
+  // Delivered after release: the library has let go, so nothing runs and the
+  // freed context is not touched.
+  deliver(99 as c_int);
+  return total;
 }

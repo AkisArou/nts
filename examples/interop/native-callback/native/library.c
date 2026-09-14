@@ -15,3 +15,27 @@ int apply_never(int (*f)(int), int x) { (void)f; return x; }
 void each_upto(void (*f)(struct counter *, int), struct counter *ctx, int upto) {
   for (int i = 1; i <= upto; i++) f(ctx, i);
 }
+
+// A *retained* callback: the library keeps it and calls it after the
+// registering call has returned, which is the shape every real event API has.
+// One slot, because the point is the lifetime and not the bookkeeping.
+static void (*held_fn)(struct counter *, int);
+static struct counter *held_ctx;
+
+int subscribe(void (*f)(struct counter *, int), struct counter *ctx) {
+  held_fn = f;
+  held_ctx = ctx;
+  return 1;
+}
+
+void unsubscribe(int handle) {
+  (void)handle;
+  held_fn = 0;
+  held_ctx = 0;
+}
+
+// The event. Nothing about this call is on the stack of the one that
+// subscribed, which is what makes the context's lifetime the caller's problem.
+void deliver(int n) {
+  if (held_fn) held_fn(held_ctx, n);
+}

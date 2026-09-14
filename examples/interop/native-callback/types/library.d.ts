@@ -28,4 +28,24 @@ declare module "c:library" {
    * @ntsNoEscape ctx
    */
   export function each_upto(f: (ctx: Ptr<Counter>, n: c_int) => void, ctx: Ptr<Counter>, upto: c_int): void;
+
+  /** Keeps the callback and the context, and calls them after this returns.
+   *
+   * No `@ntsNoEscape`: the contract is *Unknown*, which is what a retained
+   * callback needs it to be. That is what refuses a local as the context --
+   * the address would not outlive the call that registered it.
+   *
+   * What the compiler does not check, and says so rather than implying it: the
+   * heap context's lifetime. Freeing it while still subscribed is a
+   * use-after-free the same way any `free` is, and pairing `subscribe` with
+   * `unsubscribe` is the caller's obligation. That pairing is what ResourceFlow
+   * would prove; nothing here proves it.
+   */
+  export function subscribe(f: (ctx: Ptr<Counter>, n: c_int) => void, ctx: Ptr<Counter>): c_int;
+  /** After this returns, the library calls neither the callback nor the
+   * context again -- the defined event that makes freeing the context safe. */
+  export function unsubscribe(handle: c_int): void;
+  /** Drives one event, so a test can observe a call that is not on the stack
+   * of the one that registered it. */
+  export function deliver(n: c_int): void;
 }
