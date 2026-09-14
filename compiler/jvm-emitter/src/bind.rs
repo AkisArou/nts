@@ -250,11 +250,24 @@ fn typed_array(element: &str, rendered: &str) -> String {
 /// Java disagree about keys is `-0`, which `NtsMap` normalises at insertion so
 /// that Java's `equals`/`hashCode` implement `SameValueZero` exactly.
 ///
-/// **`Set` cannot follow, and the reason is structural rather than an
-/// omission.** A TypeScript `Set` is also an `NtsMap` at run time, so it would
-/// have to implement `java.util.Set` as well -- and one class cannot implement
-/// both: `Map.remove(Object)` returns `V` and `Set.remove(Object)` returns
-/// `boolean`, which is a return-type clash the JVM rejects outright.
+/// **`Set` does not follow, and the reason is our toolchain rather than the
+/// platform.** A TypeScript `Set` is also an `NtsMap` at run time, so it would
+/// have to implement `java.util.Set` as well. `Map.remove(Object)` returns `V`
+/// and `Set.remove(Object)` returns `boolean`, and this comment used to say that
+/// was "a return-type clash the JVM rejects outright".
+///
+/// **Measured 2026-09-15, and the JVM does not reject it.** A JVM method is
+/// identified by name *and* descriptor, and a descriptor includes the return
+/// type, so those are two methods at the class-file level -- which is how every
+/// covariant override gets its bridge. `jvm-emitter/tests/runs.rs` builds such a
+/// class, loads it under `-Xverify:all`, and calls both through their own
+/// interfaces: each reaches its own code.
+///
+/// What rejects it is `javac`, with "both define remove(Object), but with
+/// unrelated return types" -- and `NtsMap` is Java source compiled by `javac`.
+/// So the obstacle is real and it is in our build, not in the JVM. Making `Set`
+/// a mapped type means that one class file coming from somewhere else, which is
+/// a decision about the runtime jar rather than an impossibility.
 fn mapped_collection(binary: &str) -> Option<&'static str> {
     (binary == "java/util/Map").then_some("Map")
 }

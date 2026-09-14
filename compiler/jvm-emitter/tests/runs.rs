@@ -716,3 +716,188 @@ fn a_call_through_an_interface_reaches_two_implementations() {
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "3.25\n4.5");
 }
+
+/// **Can one class implement both `java.util.Map` and `java.util.Set`?**
+///
+/// `docs/jvm-interop.md` said no, and said the reason was structural: both
+/// declare `remove(Object)`, with return types `V` and `boolean`, "which is a
+/// return-type clash the JVM rejects outright".
+///
+/// The first half is checkable and true -- `javac` refuses
+/// `class Both implements Map<Object, Object>, Set<Object>` with "both define
+/// remove(Object), but with unrelated return types". But **that is javac's rule
+/// and this lane never runs javac.** A JVM method is identified by name *and*
+/// descriptor, and a descriptor includes the return type, so two methods
+/// differing only there are two methods at the class-file level -- which is how
+/// every covariant override gets its bridge.
+///
+/// So the question the doc answered with "the JVM" has to be put to the JVM.
+#[test]
+fn a_class_file_may_implement_both_map_and_set() {
+    let Some(java) = java_home_bin("java") else {
+        eprintln!("SKIP runs: no JDK");
+        return;
+    };
+    let origin = origin();
+
+    let pool = Pool::new();
+    let mut both = ClassBuilder::new("Both", "java/lang/Object");
+    both.access = access::PUBLIC | access::SUPER | access::ABSTRACT;
+    both.interfaces = vec!["java/util/Map".to_owned(), "java/util/Set".to_owned()];
+    // The clash itself: one name, two descriptors, both abstract.
+    both.method(
+        access::PUBLIC | access::ABSTRACT,
+        "remove",
+        "(Ljava/lang/Object;)Ljava/lang/Object;",
+        None,
+    );
+    both.method(access::PUBLIC | access::ABSTRACT, "remove", "(Ljava/lang/Object;)Z", None);
+    let built = both.build(pool).expect("a class the emitter could build");
+
+    // A `main` that forces `Both` to be loaded *and linked*. Writing the file
+    // and not loading it would test the file system.
+    let mut pool = Pool::new();
+    let mut code = Code::new(vec![VType::Object(ARGS.into())], 1);
+    code.initialize_locals(&origin, 1);
+    out(&mut code, &mut pool, &origin);
+    code.const_string(&origin, &mut pool, "Both");
+    code.invoke_static(
+        &origin,
+        &mut pool,
+        "java/lang/Class",
+        "forName",
+        "(Ljava/lang/String;)Ljava/lang/Class;",
+    );
+    code.invoke_virtual(&origin, &mut pool, "java/lang/Class", "getName", "()Ljava/lang/String;");
+    println(&mut code, &mut pool, &origin, "Ljava/lang/String;");
+    code.ret(&origin, None);
+    let body = code.finish(&pool).expect("a body");
+
+    let mut main = ClassBuilder::new("LoadsBoth", "java/lang/Object");
+    main.default_constructor(&origin, &mut pool).expect("<init>");
+    main.method(access::PUBLIC | access::STATIC, "main", "([Ljava/lang/String;)V", Some(body));
+    let runner = main.build(pool).expect("a class");
+
+    let dir = work_dir("both-map-and-set");
+    std::fs::write(dir.join(built.path()), &built.bytes).expect("write Both");
+    std::fs::write(dir.join(runner.path()), &runner.bytes).expect("write LoadsBoth");
+    let output = Command::new(java)
+        .args(["-Xverify:all", "-XX:-UsePerfData", "-cp"])
+        .arg(&dir)
+        .arg("LoadsBoth")
+        .output()
+        .expect("run java");
+
+    assert!(
+        output.status.success(),
+        "the JVM rejected it, so the doc's claim holds:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "Both");
+}
+
+/// And the case that matters: **concrete**, with each `remove` reached through
+/// its own interface.
+///
+/// The abstract test above proves the class file loads. This one proves the two
+/// methods are separately callable -- `invokeinterface` resolves on name *and*
+/// descriptor, so the `Map` caller and the `Set` caller reach different code.
+/// If that did not hold, loading would be a curiosity rather than a capability.
+///
+/// Two one-method interfaces rather than `Map` and `Set` themselves, because the
+/// question is about the clash and not about the other 25 methods. `javac` is
+/// used for the *interfaces*, which it compiles happily -- it only objects to a
+/// class implementing both, which is exactly the objection under test.
+#[test]
+fn both_clashing_methods_are_callable_through_their_own_interfaces() {
+    let (Some(java), Some(javac)) = (java_home_bin("java"), java_home_bin("javac")) else {
+        eprintln!("SKIP runs: no JDK");
+        return;
+    };
+    let dir = work_dir("clashing-remove");
+    std::fs::write(
+        dir.join("Pair.java"),
+        "public interface Pair {\n\
+         \x20   interface Mapish { Object remove(Object k); }\n\
+         \x20   interface Setish { boolean remove(Object k); }\n\
+         }\n",
+    )
+    .expect("write");
+    let built = Command::new(&javac)
+        .args(["--release", "8", "-d"])
+        .arg(&dir)
+        .arg(dir.join("Pair.java"))
+        .output()
+        .expect("javac runs");
+    assert!(built.status.success(), "javac: {}", String::from_utf8_lossy(&built.stderr));
+
+    let origin = origin();
+    let mut pool = Pool::new();
+    let mut both = ClassBuilder::new("Clash", "java/lang/Object");
+    both.interfaces = vec!["Pair$Mapish".to_owned(), "Pair$Setish".to_owned()];
+    both.default_constructor(&origin, &mut pool).expect("<init>");
+
+    // `Object remove(Object)` returns the string "from-map".
+    let mut code = Code::new(vec![VType::Object("Clash".into()), VType::Object("java/lang/Object".into())], 2);
+    code.initialize_locals(&origin, 2);
+    code.const_string(&origin, &mut pool, "from-map");
+    code.ret(&origin, Some(Kind::Ref));
+    let map_body = code.finish(&pool).expect("a body");
+    both.method(access::PUBLIC, "remove", "(Ljava/lang/Object;)Ljava/lang/Object;", Some(map_body));
+
+    // `boolean remove(Object)` returns true. Same name, same argument, and the
+    // JVM keeps them apart because the descriptors differ.
+    let mut code = Code::new(vec![VType::Object("Clash".into()), VType::Object("java/lang/Object".into())], 2);
+    code.initialize_locals(&origin, 2);
+    code.const_int(&origin, &mut pool, 1);
+    code.ret(&origin, Some(Kind::Int));
+    let set_body = code.finish(&pool).expect("a body");
+    both.method(access::PUBLIC, "remove", "(Ljava/lang/Object;)Z", Some(set_body));
+    let clash = both.build(pool).expect("a class");
+
+    // A caller that reaches each through its own interface type.
+    let mut pool = Pool::new();
+    // The receiver goes to a local rather than being juggled on the stack: the
+    // point here is which method each `invokeinterface` reaches, not stack
+    // gymnastics.
+    let mut code = Code::new(vec![VType::Object(ARGS.into()), VType::Object("Clash".into())], 2);
+    code.initialize_locals(&origin, 1);
+    code.new_object(&origin, &mut pool, "Clash");
+    code.dup(&origin);
+    code.invoke_special(&origin, &mut pool, "Clash", "<init>", "()V");
+    code.store(&origin, Kind::Ref, 1);
+
+    out(&mut code, &mut pool, &origin);
+    code.load(&origin, Kind::Ref, 1);
+    code.const_null(&origin);
+    code.invoke_interface(&origin, &mut pool, "Pair$Mapish", "remove", "(Ljava/lang/Object;)Ljava/lang/Object;");
+    code.invoke_virtual(&origin, &mut pool, "java/lang/Object", "toString", "()Ljava/lang/String;");
+    code.load(&origin, Kind::Ref, 1);
+    code.const_null(&origin);
+    code.invoke_interface(&origin, &mut pool, "Pair$Setish", "remove", "(Ljava/lang/Object;)Z");
+    code.invoke_static(&origin, &mut pool, "java/lang/String", "valueOf", "(Z)Ljava/lang/String;");
+    code.invoke_virtual(&origin, &mut pool, "java/lang/String", "concat", "(Ljava/lang/String;)Ljava/lang/String;");
+    println(&mut code, &mut pool, &origin, "Ljava/lang/String;");
+    code.ret(&origin, None);
+    let body = code.finish(&pool).expect("a body");
+
+    let mut main = ClassBuilder::new("CallsBoth", "java/lang/Object");
+    main.default_constructor(&origin, &mut pool).expect("<init>");
+    main.method(access::PUBLIC | access::STATIC, "main", "([Ljava/lang/String;)V", Some(body));
+    let runner = main.build(pool).expect("a class");
+
+    std::fs::write(dir.join(clash.path()), &clash.bytes).expect("write Clash");
+    std::fs::write(dir.join(runner.path()), &runner.bytes).expect("write CallsBoth");
+    let output = Command::new(java)
+        .args(["-Xverify:all", "-XX:-UsePerfData", "-cp"])
+        .arg(&dir)
+        .arg("CallsBoth")
+        .output()
+        .expect("run java");
+    assert!(
+        output.status.success(),
+        "dispatch through one of the two failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "from-maptrue");
+}
