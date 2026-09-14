@@ -466,6 +466,25 @@ thing a header cannot state, and it is emitted as `...rest: unknown[]` with a
 TODO, which does not compile -- deliberately, so it stops at the declaration
 rather than at a call.
 
+## Bit-fields: refused in both directions, not described
+
+A bit-field has no address and no byte offset -- `&p->version` does not
+compile -- so nothing in this surface can spell one, and `hir::layout` has no
+rule for packing them. What matters is that neither half of the toolchain
+describes one *wrongly*:
+
+- `nts bind-c` refuses by name: *`flags.version` is a bit-field, which this
+  surface cannot describe*. Its layout self-check already refused the record,
+  since it cannot reproduce a layout whose members have no byte offsets, but
+  that reported two sizes and named the symptom.
+- A **hand-written** binding for the same struct -- four bit-fields described
+  as four `unsigned int`s -- is refused by `program.c` itself:
+  `_Static_assert(sizeof(struct flags) == 16u)` against a header that says 4.
+
+The second only works because `program.h` includes what the binding names.
+While nts defined its own copy of the struct, that assertion compared two
+derivations of one field list and passed.
+
 ## Variadics
 
 `int open(const char *, int, ...)` cannot be reached without them: with

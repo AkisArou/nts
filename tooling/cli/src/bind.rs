@@ -242,6 +242,24 @@ impl Binding {
                 if field.get("kind").and_then(serde_json::Value::as_str) != Some("FieldDecl") {
                     continue;
                 }
+                // A bitfield is a member with no address and no byte offset:
+                // `&p->version` does not compile, the surface has no spelling
+                // for one, and `hir::layout` has no rule for packing them. The
+                // self-check already refuses such a record -- it cannot
+                // reproduce a layout whose members have no byte offsets -- but
+                // it does so by reporting two sizes, which names the symptom
+                // and not the cause. Named here instead, where it is known.
+                if field.get("isBitfield") == Some(&serde_json::Value::Bool(true)) {
+                    let member = field
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("<unnamed>");
+                    bail!(
+                        "`{name}.{member}` is a bit-field, which this surface cannot describe: \
+                         it has no address and no byte offset. Bind the record through an \
+                         opaque pointer, or read it from C."
+                    );
+                }
                 let (written, desugared) = qual_type(field).unwrap_or_default();
                 let member = field
                     .get("name")
