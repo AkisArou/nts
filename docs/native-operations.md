@@ -607,6 +607,28 @@ The second only works because `program.h` includes what the binding names.
 While nts defined its own copy of the struct, that assertion compared two
 derivations of one field list and passed.
 
+### The hand-written ABI is deleted for the chosen example
+
+`examples/interop/native-poll/types/poll.d.ts` is **generated**, by that
+example's own `bind.sh`. The file it replaced was written by hand and the two
+are the same binding: identical types, identical contract, differing only in a
+parameter *name*, which the generated one takes from the header (`nfds`) where
+the author had chosen `count`.
+
+The hand-written file carried this, which is why it was worth writing:
+
+> `events` and `revents` are `short`, and a binding calling them `int` has the
+> right size and the wrong struct.
+
+True, load-bearing, and now something a tool reads rather than something a
+person remembers.
+
+The one thing that did **not** transfer is `@ntsNoEscape fds`, which is in the
+command rather than in the file, because a C signature cannot state it and this
+tool will not invent it. Without it the compiler refuses `local<PollFd>()` as an
+escape -- correctly -- which is what makes the flag a claim and not a
+formality.
+
 ### What it refuses, surveyed against real headers
 
 Twelve POSIX records, asked for one at a time. The survey is the instrument:
