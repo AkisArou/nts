@@ -384,6 +384,62 @@ fn no_escape_annotations_are_checked_and_scoped_to_their_declaration() {
     }
 }
 
+/// The contract reaches the program a backend is handed.
+///
+/// It is authored on a declaration and consumed by `escape.rs`, and between
+/// those two points it passes through every preparation pass. Nothing along
+/// that path rebuilds a `native::Function`, so it survives -- but "nothing
+/// does" is a claim about every pass rather than about any one of them, and it
+/// is the kind of claim a later pass breaks silently. This asks the program
+/// instead, at the point a backend reads it.
+///
+/// The call is *not* inlined here -- checked, rather than assumed: `run` still
+/// calls `hand` in the prepared dump. So this covers the passes that rewrite
+/// around a call and not yet one that moves it into another body. Worth
+/// extending the day a native call is seen to be inlined.
+///
+/// The second arm is what makes the first one a check. Identical source with
+/// the tag removed must report `Unknown`; without it the assertion would pass
+/// on a compiler that had stopped reading the tag at all.
+#[test]
+fn a_borrow_contract_survives_the_prepared_pipeline() {
+    for (name, tag, expected) in [
+        ("tagged", "/** @ntsNoEscape p */", hir::native::Retention::NotRetained),
+        ("untagged", "", hir::native::Retention::Unknown),
+    ] {
+        // The pointer is a parameter, not `local<c_int>()`. Stack storage
+        // handed to a callee with no contract *is* an escape, and the untagged
+        // arm was refused for that -- correctly, and it would have made the
+        // control a test of the refusal rather than of the contract.
+        let Some(snapshot) = snapshot(&format!("contract-survives-{name}"), &format!(r#"
+            import type {{ Ptr }} from "c:types";
+            {tag}
+            declare function consume(p: Ptr<c_int>): c_int;
+            // One hop, so the call is not the exported function's own.
+            function hand(p: Ptr<c_int>): c_int {{ return consume(p); }}
+            export function run(p: Ptr<c_int>): number {{ return hand(p); }}
+        "#)) else { return; };
+        let prepared = hir::prepare(&snapshot).unwrap();
+        assert!(prepared.diagnostics.is_empty(), "{name}: {:?}", prepared.diagnostics);
+        let contracts: Vec<hir::native::Retention> = prepared
+            .program
+            .funcs
+            .iter()
+            .flat_map(|func| &func.values)
+            .filter_map(|op| match &op.kind {
+                hir::OpKind::Call { callee: hir::Callee::Native(target), .. }
+                    if target.name == "consume" => target.retention.first().copied(),
+                _ => None,
+            })
+            .collect();
+        assert!(!contracts.is_empty(), "{name}: no call to `consume` survived to be checked");
+        assert!(
+            contracts.iter().all(|kept| *kept == expected),
+            "{name}: expected {expected:?} on every surviving call, found {contracts:?}"
+        );
+    }
+}
+
 #[test]
 fn prepared_storage_verifier_catches_corrupted_counts_and_borrow_contracts() {
     let Some(snapshot) = snapshot("local-verifier", r#"

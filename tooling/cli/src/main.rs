@@ -1473,7 +1473,30 @@ fn render_callee(
     match callee {
         nts_core::hir::Callee::Direct(name) => ("call".to_owned(), name.clone()),
         nts_core::hir::Callee::External(name) => ("call.extern".to_owned(), name.clone()),
-        nts_core::hir::Callee::Native(target) => ("call.native".to_owned(), target.name.clone()),
+        // With the contract each parameter carries, because a contract that
+        // cannot be read off the HIR cannot be checked to have survived it.
+        // `escape.rs` consults exactly this, and until it was printed the only
+        // way to see whether a pass had preserved it was to read the pass.
+        //
+        // `Unknown` is a dot rather than a word: it is the absence of a claim,
+        // it is the common case, and spelling it out would bury the arguments
+        // that do carry one under the ones that do not.
+        nts_core::hir::Callee::Native(target) => {
+            let contract: String = target
+                .retention
+                .iter()
+                .map(|kept| match kept {
+                    nts_core::hir::native::Retention::NotRetained => '-',
+                    nts_core::hir::native::Retention::Unknown => '.',
+                })
+                .collect();
+            let name = if contract.contains('-') {
+                format!("{} [{contract}]", target.name)
+            } else {
+                target.name.clone()
+            };
+            ("call.native".to_owned(), name)
+        }
         nts_core::hir::Callee::Virtual { slot, declared } => {
             (format!("call.virtual[{slot}]"), declared.clone())
         }
