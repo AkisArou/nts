@@ -56,7 +56,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 // `build.sh`, `loads.sh` and `axis-controls.mjs` take; the default is unchanged.
 const ADDON_DIR = process.env.NTS_ADDON_OUT ?? resolve(ROOT, "target/node");
 const require = createRequire(import.meta.url);
-const ABSENCE = /absent|not published|missing|does not publish|does not implement|not implemented/i;
+// `has no ... module` earns its place the hard way: added as an `UNIMPLEMENTED` pattern first,
+// where it never fired, because a line has to pass this gate before any pattern sees it. The
+// control caught that; a detector extended in one place and controlled in the other reports a
+// clean zero for the same reason the original did.
+const ABSENCE = /absent|not published|missing|does not publish|does not implement|not implemented|has no [a-z_]+ module/i;
 /**
  * A reason that ties a named module to the claim that it is unimplemented.
  *
@@ -65,6 +69,11 @@ const ABSENCE = /absent|not published|missing|does not publish|does not implemen
  * that was found stale. Backticks optional, because the instance had none.
  */
 const UNIMPLEMENTED = [
+  // "for which this profile has no dns module" -- the phrasing that hid five stale reasons in
+  // `async_hooks/not-applicable` from the two patterns below, on 2026-09-14. A detector written
+  // against the wording of the instance that prompted it catches that instance and no other.
+  /this profile has no `?([a-z_][\w]*)`? module/gi,
+  /has no `?([a-z_][\w]*)`? module of its own/gi,
   /`?([a-z_][\w]*)`?,?\s+which this profile does not implement/gi,
   /(?:does not implement|has not implemented)\s+`?([a-z_][\w]*)`?/gi,
 ];

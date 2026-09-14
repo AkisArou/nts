@@ -1,3 +1,22 @@
+# **Five reasons here were re-derived on 2026-09-14 and all five were right for the wrong
+# reason.** They read "for which this profile has no dns module" and "...no child_process
+# module"; both modules exist, `child_process` at 109 of 120 and `dns` as a `lookup`-only
+# surface. A rationale conditional on an absence stops being true without anything touching
+# the line -- the third instance of that shape in this tree.
+#
+# Re-derived by measurement rather than by rewording: `dns` and `child_process` were added to
+# this module's `uses` and the five exclusions dropped. The `uses` change costs nothing -- 117
+# passed / 0 failed either way -- and the five still fail, so the exclusions stand, on these
+# causes instead:
+#
+#     test-getaddrinforeqwrap.js   fails in process/bindings.node.mjs:310
+#     test-getnameinforeqwrap.js   the same
+#     test-graph.pipe.js           TypeError: reading 'triggerAsyncId' of undefined
+#     test-pipewrap.js             an assertion inequality
+#     test-querywrap.js            dns.resolve is not a function
+#
+# The last is a finding rather than a reason: this profile's `dns` has no resolver half at
+# all, which is `dns/not-applicable`'s own subject and 20 files there.
 test-asyncresource-bind.js: language non-goal (§13); Node asserts deprecated asyncResource and observable length metadata on the returned function; supported binding behavior is covered by local/asyncresource-bind-static.js
 test-async-hooks-execution-async-resource-await.js: language non-goal (§13); setup uses util.promisify.custom on setTimeout; supported async-resource propagation through await and HTTP is covered by local/execution-async-resource-await.js
 test-async-hooks-run-in-async-scope-caught-exception.js: structurally hollow crash-only oracle; an absent AsyncResource throws inside the test's catch and still passes sabotage; supported exception propagation and context-stack restoration are covered by local/run-in-async-scope-caught-exception.js
@@ -19,11 +38,11 @@ async-hooks/test-track-promises-false-check.js: private native-binding oracle; i
 async-hooks/test-filehandle-no-reuse.js: unavailable provider; all observed work is driven through node:http2 and its private FileHandle wrapping, while this profile has no http2 module
 async-hooks/test-crypto-pbkdf2.js: unavailable provider; it exclusively asserts PBKDF2REQUEST events emitted by node:crypto, for which this profile has no crypto module
 async-hooks/test-crypto-randomBytes.js: unavailable provider; it exclusively asserts RANDOMBYTESREQUEST events emitted by node:crypto, for which this profile has no crypto module
-async-hooks/test-getaddrinforeqwrap.js: unavailable provider; it exclusively asserts GETADDRINFOREQWRAP events emitted by node:dns, for which this profile has no dns module
-async-hooks/test-getnameinforeqwrap.js: unavailable provider; it exclusively asserts GETNAMEINFOREQWRAP events emitted by node:dns, for which this profile has no dns module
-async-hooks/test-querywrap.js: unavailable provider; it exclusively asserts QUERYWRAP events emitted by node:dns, for which this profile has no dns module
-async-hooks/test-pipewrap.js: unavailable provider; it exclusively observes PROCESSWRAP and PIPEWRAP resources created by node:child_process, for which this profile has no child_process module
-async-hooks/test-graph.pipe.js: unavailable provider; its entire graph consists of PROCESSWRAP and PIPEWRAP resources created by node:child_process, for which this profile has no child_process module
+async-hooks/test-getaddrinforeqwrap.js: unavailable provider; it exclusively asserts GETADDRINFOREQWRAP events emitted by node:dns, for which this profile's `dns` does not emit that resource type
+async-hooks/test-getnameinforeqwrap.js: unavailable provider; it exclusively asserts GETNAMEINFOREQWRAP events emitted by node:dns, for which this profile's `dns` does not emit that resource type
+async-hooks/test-querywrap.js: unavailable provider; it exclusively asserts QUERYWRAP events emitted by node:dns, for which this profile's `dns` does not emit that resource type
+async-hooks/test-pipewrap.js: unavailable provider; it exclusively observes PROCESSWRAP and PIPEWRAP resources created by node:child_process, for which this profile's `child_process` does not emit that resource type
+async-hooks/test-graph.pipe.js: unavailable provider; its entire graph consists of PROCESSWRAP and PIPEWRAP resources created by node:child_process, for which this profile's `child_process` does not emit that resource type
 async-hooks/test-signalwrap.js: unavailable provider; it exclusively observes SIGNALWRAP resources created by Node's native process signal machinery, which this profile does not implement
 async-hooks/test-graph.signal.js: unavailable providers; its graph is composed of Node-native SIGNALWRAP plus child_process PROCESSWRAP/PIPEWRAP resources, none of which this profile implements
 async-hooks/test-async-local-storage-tlssocket.js: unavailable provider; the asynchronous boundary under test is node:tls, for which this profile has no tls module
