@@ -69,18 +69,26 @@ only thing that reports it, so a build that tolerates warnings cannot tell.
 ## Two things a binding cannot name
 
 `EPOLL_CTL_ADD` is a macro and `EPOLLIN` an enumerator. Neither is a
-declaration, so no binding can carry either and the program spells the values
-itself -- with `native/caller.c` asserting both against the real ones.
+declaration, so no binding can carry either -- and the values are **read out of
+the header** rather than typed here:
 
-They are named `CTL_ADD` and `READABLE` rather than the C names, and the two
-halves of that are not the same problem:
+    sh examples/interop/native-epoll/bind.sh      # regenerates src/constants.ts
+
+`native/caller.c` still asserts both against the real ones, and what that
+checks has changed: not that someone copied two numbers correctly, but that the
+generated file is current. Verified by making it stale -- `READABLE = 4` -- and
+watching the caller abort.
+
+`READABLE` rather than `EPOLLIN`, and the two halves of that are not the same
+problem:
 
 - **the macro** would have replaced the program's own identifier before the
   compiler saw it, giving `static int32_t 1 = ...`. nts releases each of its
   own names from whatever macro a header bound it to, so this one is handled.
 - **the enumerator** is a real declaration, and nothing can release that. A
   program including `<sys/epoll.h>` cannot also define `EPOLLIN`, exactly as
-  any C file could not.
+  any C file could not. `nts bind-c` refuses that name rather than generating
+  it, and names the flag that fixes it.
 
 ## Build
 

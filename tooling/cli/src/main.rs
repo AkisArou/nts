@@ -269,6 +269,15 @@ fn bind_c(rest: &[String]) -> Result<()> {
         records: repeated("--record"),
         functions: repeated("--fn"),
         clang_args: repeated("--clang"),
+        // `NAME` or `NAME:brand`. The brand defaults to `c_int`, which is what
+        // C gives an unsuffixed integer constant and what most of these are.
+        constants: repeated("--const")
+            .iter()
+            .map(|entry| match entry.split_once(':') {
+                Some((name, brand)) => (name.to_owned(), brand.to_owned()),
+                None => (entry.clone(), "c_int".to_owned()),
+            })
+            .collect(),
         no_escape: repeated("--no-escape")
             .iter()
             .map(|pair| {
@@ -286,6 +295,23 @@ fn bind_c(rest: &[String]) -> Result<()> {
             })
             .collect::<Result<_>>()?,
     };
+    // Constants go to their own file, and a `.ts` rather than a `.d.ts`: a
+    // declaration file cannot carry a value, so the two outputs are two things
+    // and not one split in half.
+    if !request.constants.is_empty() {
+        let text = bind::constants(&request)?;
+        match single("--constants-out") {
+            Some(path) => {
+                std::fs::write(&path, &text)
+                    .with_context(|| format!("writing the constants to {path}"))?;
+                println!("wrote {path}");
+            }
+            None => print!("{text}"),
+        }
+        if request.records.is_empty() && request.functions.is_empty() {
+            return Ok(());
+        }
+    }
     let text = bind::run(&request)?;
     match single("--out") {
         Some(path) => {

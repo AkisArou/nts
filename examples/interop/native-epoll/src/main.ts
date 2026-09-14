@@ -7,21 +7,22 @@ import {
   type Events,
 } from "c:epoll";
 import { local } from "c:memory";
+import { EPOLL_CTL_ADD, READABLE } from "./constants";
 import type { c_int, c_uint64 } from "c:types";
 
 // `EPOLL_CTL_ADD` and `EPOLLIN`, which a binding cannot name: one is a macro
-// and the other an enum constant, and neither is a declaration. Their values
-// are asserted against the real ones in `native/caller.c`, because a number
-// written in TypeScript is a claim about a header like any other.
+// and the other an enumerator, and neither is a declaration. **Their values are
+// read out of the header** by `bind.sh`, not typed here -- see `constants.ts`,
+// which that script regenerates. `native/caller.c` still asserts both against
+// the real ones, which now checks that the generated file is current rather
+// than that someone copied two numbers correctly.
 //
-// **Not spelled `EPOLLIN`.** program.c includes <sys/epoll.h> now, and that
-// header declares `EPOLLIN` as an enumerator -- so a global of that name is a
-// redefinition, the same way it would be in any C file that included it. The
-// macro half of this hazard is handled for us: nts releases each of its own
-// names from whatever macro a header bound it to, which is what `EPOLL_CTL_ADD`
-// needed. An enumerator is a real declaration and nothing can release that.
-const CTL_ADD = 1 as c_int;
-const READABLE = 1 as Events;
+// `READABLE`, not `EPOLLIN`: program.c includes <sys/epoll.h>, and that header
+// *declares* `EPOLLIN` as an enumerator, so a global of that name is a
+// redefinition exactly as it would be in any C file. The macro half of the
+// hazard is handled -- nts releases each of its own names from whatever macro a
+// header bound it to, which is what `EPOLL_CTL_ADD` needs -- and nothing can
+// release a declaration. `nts bind-c` refuses the name and says which it is.
 
 // Waits for one readable descriptor and returns the `fd` the kernel handed
 // back through the union -- the same word this program put there.
@@ -37,7 +38,7 @@ export function waitForOne(fd: number): number {
   const subscription = local<EpollEvent>();
   subscription.events = READABLE;
   subscription.data.fd = fd as c_int;
-  if (epoll_ctl(epfd, CTL_ADD, fd as c_int, subscription) !== 0) {
+  if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd as c_int, subscription) !== 0) {
     close(epfd);
     return -2;
   }
