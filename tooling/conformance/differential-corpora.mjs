@@ -2137,7 +2137,95 @@ export const CORPORA = {
       for (let i = 0; i < k; i++) out += CHARS[Math.floor(rnd() * CHARS.length)];
       return out;
     },
-    calls: [
+    calls: (() => {
+      // **One server for the whole run, not one per input.** The corpus drives ~4,000 inputs
+      // through every spec; a server and a `listen` each time would be ~4,000 listens per side
+      // and would dominate the run. This is created on first use and outlives the process, which
+      // is the same reason `fs`'s corpus resolves its base path once in this position.
+      // **And one keep-alive agent, for the same reason.** A fresh connection per request put
+      // this spec over a ten-minute timeout on its first run: ~4,000 inputs is ~4,000 TCP
+      // handshakes and teardowns per side. Reusing the socket is what makes the spec affordable,
+      // and it is also closer to what an HTTP client does.
+      let shared = null;
+      const serverFor = async (m) => {
+        if (shared !== null) return shared;
+        const server = m.createServer((request, response) => {
+          const body = [];
+          request.on("data", (chunk) => body.push(chunk));
+          request.on("end", () => {
+            // Echo what arrived, and report what the server saw of the request line. `Date` is
+            // never compared -- it is the one response header that differs between two runs of
+            // the same program, let alone two implementations.
+            response.setHeader("X-Seen-Method", request.method);
+            response.setHeader("X-Seen-Version", request.httpVersion);
+            response.writeHead(200, { "Content-Type": "text/plain" });
+            response.end(Buffer.concat(body));
+          });
+        });
+        await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+        // **Unreffed, or the process never exits and the host waits on it forever.** The probe
+        // computes this profile's side in a child and `differential-ts.mjs` reads it with
+        // `spawnSync`; a listening server keeps that child's loop alive after the answer has
+        // been printed. The first run of this spec hit the ten-minute timeout with nothing
+        // wrong but that.
+        server.unref();
+        shared = {
+          server,
+          port: server.address().port,
+          agent: new m.Agent({ keepAlive: true, maxSockets: 1 }),
+        };
+        return shared;
+      };
+      return [
+        {
+          // **The socket half of `http`, which this corpus excluded by construction.** The note
+          // above says "every part of `http` that speaks to a socket" is out, and that was a
+          // statement about the harness rather than about the module: a request is asynchronous
+          // and `differential-ts.mjs` could not await until 2026-09-14. `corpus-reach.mjs` had
+          // this module at **2 of 78** published functions, the lowest in the tree.
+          //
+          // What is compared is deterministic: the status line, the body that came back, the
+          // headers the server reported seeing, and the ones it set. Ports are never compared --
+          // the two sides listen on different ones by definition -- and neither is `Date`.
+          label: "request-round-trip",
+          call: async (m, s) => {
+            try {
+              const { port, agent } = await serverFor(m);
+              const payload = Buffer.from(String(s), "utf8");
+              return await new Promise((resolve) => {
+                const request = m.request(
+                  { host: "127.0.0.1", port, method: "POST", path: "/echo", agent },
+                  (response) => {
+                    const chunks = [];
+                    response.on("data", (chunk) => chunks.push(chunk));
+                    response.on("end", () => {
+                      const body = Buffer.concat(chunks);
+                      const names = Object.keys(response.headers)
+                        .filter((name) => name !== "date")
+                        .sort()
+                        .join(",");
+                      resolve([
+                        response.statusCode,
+                        response.statusMessage,
+                        response.httpVersion,
+                        names,
+                        response.headers["content-type"],
+                        response.headers["x-seen-method"],
+                        response.headers["x-seen-version"],
+                        body.equals(payload) ? "echoed" : `differs:${body.length}/${payload.length}`,
+                      ].join("~"));
+                    });
+                  },
+                );
+                request.on("error", (error) => resolve(`threw:${error.code ?? error.name}`));
+                request.end(payload);
+              });
+            } catch (error) {
+              return `threw:${error.code ?? error.name ?? "?"}`;
+            }
+          },
+        },
+
       // Error paths. See `REJECTED` above.
       { label: "validateHeaderName!", throws: true, call: (m, s) => m.validateHeaderName(`bad header ${String(s).length}`) },
       {
@@ -2197,7 +2285,8 @@ export const CORPORA = {
         label: "maxHeaderSize",
         call: (m) => m.maxHeaderSize,
       },
-    ],
+    ];
+    })(),
   },
   net: {
     // The pure surface of `net`, which I first dismissed as "sockets answer
