@@ -75,14 +75,24 @@ const ours = new Set(Object.keys(mod));
 //                `nts hir --prepared` -- so it costs the compiled lane nothing either.
 //
 //   inherits     read "prototype surgery is what the API *is*, and this profile does not do
-//                prototype surgery". That is **true of the compiled lane and measured**:
-//                `nts hir --prepared` has no `inherits` function at all, so it does not reach
-//                a backend. It is published here anyway, because the interpreted lane is
-//                TypeScript on node, `Object.setPrototypeOf` is exactly what node's own
-//                implementation does, and every behaviour matches -- chain, `super_`, and its
-//                writable/configurable descriptor. The absence was a compiled-lane fact
-//                applied to the interpreted surface, and the two lanes already differ in many
-//                places that are recorded rather than hidden.
+//                prototype surgery". It is refused on the compiled lane, and **the cause is
+//                not the prototype surgery**:
+//
+//                    no wrapper for inherits: is exported and was not compiled:
+//                    `Object.defineProperty`, a global member with no definition here
+//
+//                `Object.setPrototypeOf` is not what stops it; writing `super_` with a
+//                descriptor is. Published here anyway, because the interpreted lane is
+//                TypeScript on node and every behaviour matches -- chain, `super_`, and its
+//                writable/configurable descriptor.
+//
+//                **How that was measured matters, because the first attempt was wrong.**
+//                `nts hir --prepared` showed no `inherits` function and I read that as
+//                "refused". It is also exactly what a *supported* function with no caller
+//                looks like: the dump says what a backend receives, not what the compiler
+//                declines. The arm that answers is a file that calls it -- with one added,
+//                the refusal prints by name. An absence in a reachability dump is evidence
+//                about reach until something reaches.
 //
 //   promisify.custom  was never only a name. node's `promisify` returns a function's own
 //                declared promisified form if it has one, and `fs` and `child_process` use
