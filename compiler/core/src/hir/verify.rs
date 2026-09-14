@@ -1077,6 +1077,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::SharedFieldGet { value, .. } => {
             vec![*value]
         }
+        OpKind::NativeCopy { destination, source } => vec![*destination, *source],
         OpKind::Await { promise, rejects_to } => {
             let mut read = vec![*promise];
             // Every argument the rejection edge owes its handler is read here,

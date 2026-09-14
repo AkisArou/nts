@@ -466,6 +466,50 @@ thing a header cannot state, and it is emitted as `...rest: unknown[]` with a
 TODO, which does not compile -- deliberately, so it stops at the declaration
 rather than at a call.
 
+## Aggregate copy
+
+    copy(destination, source)
+
+`*destination = *source` -- one whole `T`. An operation and not an assignment,
+because there is nowhere to write one: a record member projects as `Ptr<T>` on
+purpose, so `p.inner = q.inner` is a pointer assignment and reads like one.
+
+`Ptr` on the destination, `ConstPtr` on the source: C's own `memcpy` signature
+minus the size, because the size is the type's and both sides share the type.
+Overlap is undefined, as for `memcpy`, and nothing checks it.
+
+    *v2 = *v1;                                                      /* C */
+    call void @llvm.memcpy.p0.p0.i64(ptr align 8 %v2, ptr align 8 %v1, i64 32, i1 false)
+
+C's own aggregate assignment rather than a `memcpy` with `sizeof`, because that
+size is a number `program.c` already asserts against the C compiler and
+restating it would be a second derivation of one fact. LLVM has no struct type
+to assign -- every address there is a byte GEP -- so it names the size and the
+alignment, both from the same layout.
+
+**A copy retains nothing**, which `native_storage.rs` had to be told: passing a
+local's interior to `copy` was an escape, so `copy(b.origin, a.origin)` on stack
+storage was refused. Both operands are safe, the *source* included -- which is
+what separates it from a store, where the value being written is an address
+escaping into the storage it points at.
+
+**The check that makes the fixture a test** is not equality after the copy --
+two names for one object are equal. It is changing the source afterwards and
+asking the destination: a pointer assignment passes everything before that line
+and fails it. Both sabotages were run by changing the emitter and rebuilding:
+emitting nothing fails, `memcpy(d, s, 4)` fails, `*d = *s` passes.
+
+One guard here is a control and one is not, checked by probing. *A copy between
+two different native types* fires on plain source. *A copy into a `const` native
+view* does not -- tsgo answers `TS2345` first -- and is marked in place as
+defensive, kept because a `Ptr` can still be built by a cast.
+
+`ConstPtr` also had to learn the projection `Ptr` already made. It gave
+`Slot<Pair>` for a nested record where `Ptr` gives `Ptr<Pair>`, so every
+`ConstPtr` to a record with a nested record or an inline array was unusable --
+and nothing had asked for one until `copy` needed to pass a `Ptr<Sample>` where
+a `ConstPtr<Sample>` was wanted.
+
 ## Bit-fields: refused in both directions, not described
 
 A bit-field has no address and no byte offset -- `&p->version` does not

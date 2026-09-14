@@ -17,6 +17,28 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str)
             return Ok(format!("{out} = call ptr @nts_native_malloc(double {}, i64 {size})", name(bytes)));
         }
         OpKind::NativeFree { pointer } => return Ok(format!("call void @free(ptr {})", name(pointer))),
+        // `llvm.memcpy` rather than a load and a store of an aggregate: this
+        // backend never names a struct type -- every address here is a byte
+        // GEP -- so there is no aggregate value to move through a register.
+        //
+        // The alignment is the type's, which is what the destination and the
+        // source both have: `copy` refuses two different pointees, so there is
+        // one alignment and not a smaller of two.
+        OpKind::NativeCopy { destination, source } => {
+            let HirType::NativePointer(element) = &func.value(destination).ty else {
+                return Err(refuse(func, "a copy without a native pointer"));
+            };
+            let shape = nts_core::hir::layout::native_shape(element)
+                .ok_or_else(|| refuse(func, "a copy of a native type with no size"))?;
+            return Ok(format!(
+                "call void @llvm.memcpy.p0.p0.i64(ptr align {} {}, ptr align {} {}, i64 {}, i1 false)",
+                shape.align,
+                name(destination),
+                shape.align,
+                name(source),
+                shape.size
+            ));
+        }
         _ => {}
     }
     let (OpKind::NativeLoad { pointer, .. } | OpKind::NativeStore { pointer, .. }
@@ -73,7 +95,18 @@ pub(super) fn stack_storage(func: &Func) -> Vec<String> {
 pub(super) fn helpers(program: &super::Program) -> String {
     let allocate = program.funcs.iter().any(|f| f.values.iter().any(|op| matches!(op.kind, OpKind::NativeMalloc { .. })));
     let free = program.funcs.iter().any(|f| f.values.iter().any(|op| matches!(op.kind, OpKind::NativeFree { .. })));
+    // The intrinsic is declared only where it is used, like the two above. An
+    // unused `declare` is harmless and an undeclared use is not, so the
+    // condition is the same shape either way -- this one exists so the IR of a
+    // program that copies nothing is unchanged.
+    let copies = program
+        .funcs
+        .iter()
+        .any(|f| f.values.iter().any(|op| matches!(op.kind, OpKind::NativeCopy { .. })));
     let mut text = String::new();
+    if copies {
+        text.push_str("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)\n");
+    }
     if free { text.push_str("declare void @free(ptr)\n"); }
     if allocate { text.push_str(r"declare ptr @malloc(i64)
 define internal ptr @nts_native_malloc(double %bytes, i64 %minimum) {

@@ -95,7 +95,23 @@ declare module "c:types" {
   export type ConstPtr<T> = { readonly __c_pointer: T } & (T extends
     | Struct<infer Fields, string>
     | Union<infer Fields, string>
-    ? { readonly [K in keyof Fields]: Slot<Fields[K]> } & { readonly [index: number]: ConstPtr<T> }
+    // The same projection `Ptr` makes, restricted. A record member is storage,
+    // so it is a *pointer* to that storage here too -- a const one, because a
+    // view that could hand out a writable interior would not be a view.
+    //
+    // It did not mirror `Ptr` until a `copy(destination, source)` needed to
+    // pass a `Ptr<Sample>` where a `ConstPtr<Sample>` was wanted and could not:
+    // `Ptr` gives `Ptr<Pair>` for a nested record and this gave `Slot<Pair>`,
+    // which are unrelated types. Every `ConstPtr` to a record with a nested
+    // record or an inline array was unusable, and nothing had asked for one.
+    ? { readonly [K in keyof Fields]: Fields[K] extends
+          | { readonly __c_struct: unknown }
+          | { readonly __c_union: unknown }
+          ? ConstPtr<Fields[K]>
+          : Fields[K] extends CArray<infer E, number>
+            ? ConstPtr<E>
+            : Slot<Fields[K]> }
+      & { readonly [index: number]: ConstPtr<T> }
     : { readonly [index: number]: Slot<T> });
   // Hand-written native ABI scalar declarations, maintained with hir/native.rs.
   // Import the required types from "c:types".
@@ -156,7 +172,7 @@ declare module "c:memory" {
   /** @ntsAbi intrinsic */
   export function sizeof<T>(): number;
 
-  import type { Ptr } from "c:types";
+  import type { ConstPtr, Ptr } from "c:types";
   // The address of a native place, written the way C writes it: `addrOf(p.fd)`
   // is `&p->fd`, and `addrOf(p[i])` is `&p[i]`.
   //
@@ -168,6 +184,23 @@ declare module "c:memory" {
   // storage, and nothing else; a managed object has no address to take.
   /** @ntsAbi intrinsic */
   export function addrOf<T>(place: { readonly __c_of?: T }): Ptr<T>;
+  // `*destination = *source` -- one whole `T`, copied.
+  //
+  // **An operation rather than an assignment**, because there is nowhere to
+  // write one. A record member projects as `Ptr<T>`, deliberately: `p.inner`
+  // is the bytes that are there and not a duplicate of them, so
+  // `p.inner = q.inner` is a pointer assignment and reads like one. Copying is
+  // a different thing and says so.
+  //
+  // `Ptr` on the destination and `ConstPtr` on the source, which is C's own
+  // `memcpy(void *restrict, const void *restrict, size_t)` minus the size --
+  // the size is the type's, and both sides share the type.
+  //
+  // **Overlap is undefined**, exactly as it is for `memcpy`. Nothing here
+  // checks it: two pointers into one array can overlap and this compiler
+  // cannot see that.
+  /** @ntsAbi intrinsic */
+  export function copy<T>(destination: Ptr<T>, source: ConstPtr<T>): void;
 }
 
 /**

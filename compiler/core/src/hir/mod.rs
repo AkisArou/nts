@@ -737,6 +737,15 @@ pub enum OpKind {
     /// Form an address, without reading storage or changing its lifetime.
     NativeIndexAddress { pointer: ValueId, index: ValueId },
     NativeFieldAddress { pointer: ValueId, field: u32 },
+    /// `*destination = *source` -- one whole element, copied.
+    ///
+    /// A distinct operation and not a load followed by a store, because there
+    /// is no value in between: an aggregate has no representation this IR can
+    /// hold in a `ValueId`, which is exactly why reading a record member gives
+    /// its address. Both operands point at the same pointee, checked.
+    ///
+    /// Overlap is undefined, as it is for `memcpy`, and nothing checks it.
+    NativeCopy { destination: ValueId, source: ValueId },
     /// The address of a **bridge**: a generated C function with `signature`
     /// that calls the compiled function `function`.
     ///

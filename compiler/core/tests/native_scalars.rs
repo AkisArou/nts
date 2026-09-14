@@ -440,6 +440,52 @@ fn a_borrow_contract_survives_the_prepared_pipeline() {
     }
 }
 
+/// A copy survives the pipeline, and is refused between two different types.
+///
+/// Nothing reads a copy's result, so without an entry in `dce.rs` it is dropped
+/// as unused -- which is the way this operation fails silently, since the
+/// program still compiles and still runs, just without the copy in it. Asked of
+/// the prepared program rather than of the pass.
+#[test]
+fn a_copy_survives_and_is_refused_between_two_types() {
+    // Named `same`, not `snapshot`: the binding would shadow the helper and the
+    // second call below would not resolve.
+    let Some(same) = snapshot("copy-survives", r#"
+        import { copy, local } from "c:memory";
+        // Only `Struct`: the harness already imports every scalar brand, and
+        // naming one again is `TS2300 Duplicate identifier`.
+        import type { Struct } from "c:types";
+        type A = Struct<{ v: c_int; w: c_int }, "">;
+        export function go(): void { const a = local<A>(); const b = local<A>(); copy(a, b); }
+    "#) else { return; };
+    let prepared = hir::prepare(&same).unwrap();
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let copies = prepared
+        .program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter(|op| matches!(op.kind, hir::OpKind::NativeCopy { .. }))
+        .count();
+    assert_eq!(copies, 1, "the copy was dropped between lowering and the backend");
+
+    // The arm that makes it a check: two different layouts, which would take
+    // the destination's size and read past the source.
+    let Some(mismatched) = snapshot("copy-mismatch", r#"
+        import { copy, local } from "c:memory";
+        import type { Struct } from "c:types";
+        type A = Struct<{ v: c_int }, "">;
+        type B = Struct<{ v: c_int; w: c_int }, "">;
+        export function go(): void { const a = local<A>(); const b = local<B>(); copy(a, b); }
+    "#) else { return; };
+    let prepared = hir::prepare(&mismatched).unwrap();
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("two different native types")),
+        "{:?}",
+        prepared.diagnostics
+    );
+}
+
 #[test]
 fn prepared_storage_verifier_catches_corrupted_counts_and_borrow_contracts() {
     let Some(snapshot) = snapshot("local-verifier", r#"

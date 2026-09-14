@@ -103,7 +103,9 @@ const PURE_RUNTIME_CALLS: &[&str] = &["nts_tag_name"];
 #[allow(clippy::match_same_arms)]
 fn has_effects(kind: &OpKind) -> bool {
     match kind {
-        OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. } => true,
+        // A copy writes memory, which is the whole of what it does: nothing
+        // reads its result, so without this it would be dropped as unused.
+        OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. } | OpKind::NativeCopy { .. } => true,
         // Taking a bridge's address computes a constant and observes nothing.
         // Whether the *bridged function* survives is a different question, and
         // not this one's to answer: `reachable.rs` keeps the bridged body alive.

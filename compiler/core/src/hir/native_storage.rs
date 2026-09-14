@@ -123,7 +123,15 @@ fn borrowed(func: &Func, root: ValueId, summaries: &Borrows) -> bool {
                         | OpKind::NativeFieldAddress { pointer, .. } => operand == *pointer,
                     OpKind::NativeStore { pointer, value, .. } => operand == *pointer && !is_alias(*value),
                     OpKind::Convert(_) => matches!(op.ty, HirType::NativePointer(_)),
-                    OpKind::Binary { op: BinOp::Eq | BinOp::Ne, .. } => true,
+                    // A copy reads and writes bytes and keeps nothing -- it is
+                    // `*d = *s`, which stores no address anywhere -- so both
+                    // its operands are safe, the *source* included. That is
+                    // what separates it from a store, where an aliased value
+                    // being written is the address escaping into the storage
+                    // it points at. Comparison keeps nothing either, which is
+                    // why they share an arm.
+                    OpKind::NativeCopy { .. }
+                    | OpKind::Binary { op: BinOp::Eq | BinOp::Ne, .. } => true,
                     OpKind::Call { callee, args, .. } => args.iter().enumerate().all(|(at, arg)| {
                         if !is_alias(*arg) { return true; }
                         match callee {

@@ -144,6 +144,14 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
             if name.is_empty() { call } else { format!("{name} = {call}") }
         },
         OpKind::NativeFree { pointer } => format!("free({});", value_name(pointer)),
+        // `*d = *s`, which is C's own aggregate assignment: the compiler picks
+        // how to move the bytes and knows the type's alignment. A `memcpy` with
+        // `sizeof` would be equivalent and would restate a size this file has
+        // already asserted against the C compiler -- two derivations of one
+        // number, which is the shape this lane keeps removing.
+        OpKind::NativeCopy { destination, source } => {
+            format!("*{} = *{};", value_name(destination), value_name(source))
+        }
         OpKind::NativeLoad { pointer, index } => format!("{name} = {}[{}];", value_name(pointer), value_name(index)),
         OpKind::NativeStore { pointer, index, value } => format!("{}[{}] = {};", value_name(pointer), value_name(index), value_name(value)),
         OpKind::NativeIndexAddress { pointer, index } => format!("{name} = {} + {};", value_name(pointer), value_name(index)),

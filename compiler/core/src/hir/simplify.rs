@@ -183,6 +183,10 @@ fn constant(func: &Func, value: ValueId) -> Option<i128> {
 pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
     match kind {
         OpKind::NativeBridge { closure, .. } => *closure = of(*closure),
+        OpKind::NativeCopy { destination, source } => {
+            *destination = of(*destination);
+            *source = of(*source);
+        }
         OpKind::Erase { value }
         | OpKind::TagOf { value }
         | OpKind::Unerase { value }

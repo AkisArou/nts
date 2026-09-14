@@ -14576,7 +14576,7 @@ impl<'a> FuncBuilder<'a> {
         {
             match self.declared_name(decl).as_deref() {
                 Some("addrOf") => return Some(self.native_address_of(id, arguments)),
-                Some(name @ ("local" | "sizeof" | "malloc" | "free")) => return Some(self.native_storage(id, name, arguments)),
+                Some(name @ ("local" | "sizeof" | "malloc" | "free" | "copy")) => return Some(self.native_storage(id, name, arguments)),
                 _ => {},
             }
         }

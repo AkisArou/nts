@@ -2902,7 +2902,8 @@ fn memory_operation(
         }
         OpKind::NativeLocal { .. } | OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. }
         | OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
-        | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. } => {
+        | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. }
+        | OpKind::NativeCopy { .. } => {
             return native_memory::operation(func, &op.kind, &op.ty, &out);
         }
         OpKind::Length(_) | OpKind::StringUnitAt { .. } => {

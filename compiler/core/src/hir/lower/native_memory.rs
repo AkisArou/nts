@@ -205,6 +205,45 @@ impl FuncBuilder<'_> {
             let shape = crate::hir::layout::native_shape(&storage).ok_or_else(|| self.unsupported(id, "sizeof needs a complete native layout"))?;
             return Ok(self.push(OpKind::ConstFloat(f64::from(shape.size)), HirType::NUMBER, self.origin(id)));
         }
+        if operation == "copy" {
+            let [destination, source] = args else {
+                return Err(self.unsupported(id, "copy needs a destination and a source"));
+            };
+            let destination = self.lower_expression(*destination)?;
+            let source = self.lower_expression(*source)?;
+            let (HirType::NativePointer(into), HirType::NativePointer(from)) = (
+                self.values[destination.0 as usize].ty.clone(),
+                self.values[source.0 as usize].ty.clone(),
+            ) else {
+                return Err(self.unsupported(id, "copy needs two native pointers"));
+            };
+            // A `const` *destination* is the one direction C forbids, and the
+            // surface already says so: `Ptr<T>` there, `ConstPtr<T>` on the
+            // source. **Unreachable from TypeScript source, and checked to
+            // be** -- tsgo answers `TS2345 Argument of type 'ConstPtr<A>' is
+            // not assignable` before this is asked. Kept because a `Ptr` can
+            // still be built by a cast, and because the store path refuses the
+            // same thing; it is not a control, unlike the type check below,
+            // which does fire on plain source.
+            if matches!(into, Pointee::Const(_)) {
+                return Err(self.unsupported(id, "a copy into a `const` native view"));
+            }
+            // The same pointee on both sides, ignoring the source's `const`:
+            // that is the qualification conversion C performs, and the only one.
+            // Without this a copy between two unrelated records would take the
+            // destination's size and read past the source.
+            if into.viewed() != from.viewed() {
+                return Err(self.unsupported(id, "a copy between two different native types"));
+            }
+            if crate::hir::layout::native_shape(&into).is_none() {
+                return Err(self.unsupported(id, "a copy of a native type with no size"));
+            }
+            return Ok(self.push(
+                OpKind::NativeCopy { destination, source },
+                HirType::Void,
+                self.origin(id),
+            ));
+        }
         if operation == "free" {
             let [arg] = args else { return Err(self.unsupported(id, "free needs one pointer")); };
             let expecting = self.expecting.replace(HirType::NativePointer(Pointee::Scalar(crate::hir::native::Scalar::UInt8)));

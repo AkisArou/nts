@@ -1721,6 +1721,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::NativeLocal { count } => format!("%{index} = native.local {count} : {ty}"),
         OpKind::NativeMalloc { bytes } => format!("%{index} = native.malloc %{} : {ty}", bytes.0),
         OpKind::NativeFree { pointer } => format!("native.free %{}", pointer.0),
+        OpKind::NativeCopy { destination, source } => {
+            format!("native.copy %{} <- %{}", destination.0, source.0)
+        }
         OpKind::NativeBridge { closure, signature } => {
             format!("%{index} = native.bridge %{} as {} : {ty}", closure.0, signature.name)
         }
