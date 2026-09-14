@@ -24651,3 +24651,36 @@ today; `child_process`'s row is 0 of 110. If the shim-only population carried an
 brand, those five rows become a **stated refusal instead of a silent zero** -- the same number and
 different information, which is the failure this ledger keeps finding in itself.
 
+## The five silent zeros are not refusal-limited, and the census says so
+
+`tooling/conformance/own-roots.sh` counts refusal **roots belonging to each module's own sources**,
+because emitting a module compiles what it imports and an unfiltered count for `fs` includes
+refusals owned by `stream`, `buffer` and `internal`. Filtered, over all 26:
+
+    stream  414   fs 190   http 128   zlib 110   util  73   readline 70
+    assert   49   timers 35   buffer 33   child_process 33   net 30   events 29
+    process  28   url 23   async_hooks 20   diagnostics_channel 17   console 10
+    dgram     9   cluster 4   path 3   dns 2
+    os, punycode, querystring, string_decoder, tty   0
+
+**The five modules that publish nothing on the compiled lane have among the *lowest* own-root
+counts**: `cluster` **4**, `console` 10, `events` 29, `child_process` 33, `timers` 35. `stream` has
+414 own roots and still publishes 2 names and earns a real compiled pass.
+
+So those five rows are not zero because the compiler refuses their code. They are zero because of
+the **wrapper**: `shape.mjs` reads `exports.default`, the addon exports none, and the module
+publishes `{}`. `cluster` is the sharpest case -- 4 refused constructs in its own sources, and a row
+of zero. That is the ceiling this ledger already described, now with a number against it: an object,
+instance, class or namespace cannot cross the Node-API boundary, and no amount of closing refusals
+moves those five.
+
+It also reorders where closing refusals *would* pay: `stream`, `fs`, `http` and `zlib` hold 842 of
+the 1,180 own roots between them.
+
+### And the instrument found a module that did not typecheck
+
+`cluster` printed `0 0 0` on the first run, which is implausible for a module importing
+`child_process` and `net`. Its emit had **failed** -- `TS2322` from a `stdio` type I had widened on
+one side only -- so no refusal was ever written, and counting a log that does not exist reads exactly
+like counting a clean one. The script now requires `wrote program.c` before reporting a number.
+
