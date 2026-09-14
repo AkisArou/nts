@@ -3,7 +3,7 @@
 // Every comment below is emitted, not written by hand: where a member costs an
 // allocation or loads a class, the declaration is where a reader is looking.
 //
-// The brands and the `java.*` namespace come from java.d.ts, which is global --
+// The `java.*` namespace comes from the generated preludes, which are global --
 // this file must NOT import them, or it becomes a module and declares nothing.
 
 declare module "java:com.example.ui" {

@@ -2131,12 +2131,21 @@ pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (St
     // `TS2307 Cannot find module 'java:com.example'` at every import site.
     //
     // With no top-level import the file is a global script and the block is an
-    // ambient declaration, which is what an import can resolve to. The brands
-    // and the `java.*` namespace come from `java.d.ts`, which is global for the
-    // same reason.
+    // ambient declaration, which is what an import can resolve to. The `java.*`
+    // namespace comes from the generated preludes, which are global for the same
+    // reason.
     //
     // Found by compiling the output. Reading it three times did not.
-    out.push_str("// The brands and the `java.*` namespace come from java.d.ts, which is global --\n");
+    //
+    // **Corrected 2026-09-15.** Both this comment and the line it emits used to
+    // say "the brands and the `java.*` namespace come from `java.d.ts`". There
+    // are no brands -- they were removed, and `find$int` is what replaced them --
+    // and there is no `java.d.ts` anywhere in the tree: the preludes are
+    // `java.lang.prelude.d.ts` and `java.util.prelude.d.ts`, written by this same
+    // generator. Two false claims, emitted into the header of every binding this
+    // command has ever produced, telling a reader to look for a file that does
+    // not exist.
+    out.push_str("// The `java.*` namespace comes from the generated preludes, which are global --\n");
     out.push_str("// this file must NOT import them, or it becomes a module and declares nothing.\n\n");
     let _ = writeln!(out, "declare module \"java:{package}\" {{");
 
