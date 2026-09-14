@@ -1698,6 +1698,18 @@ impl Emitter<'_> {
                 }
                 // A reference parameter: the callback coercion already owns
                 // this question and answers it for interfaces as well.
+                // The same mismatch arriving rather than returning: under
+                // `arrays_can_grow` our value is an `NtsArrayL` and the jar
+                // declared a bare array.
+                (other, _) if other.starts_with('[') && self.shape.grows => {
+                    return Err(refuse(
+                        self.func,
+                        &format!(
+                            "a bound member wanting `{other}` in a program where some array \
+                             grows: the growable representation is not a Java array"
+                        ),
+                    ));
+                }
                 (other, _) if other.starts_with('L') || other.starts_with('[') => {
                     self.coerce_callback(code, pool, arg, other, origin)?;
                 }
@@ -4435,6 +4447,28 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
         let returns = descriptor.rsplit(')').next().unwrap_or("");
+        // **A Java array cannot take the representation a growing program
+        // gives every array.** `arrays_can_grow` is whole-program: one `push`
+        // anywhere puts every `ManagedType::Array` behind `NtsArrayL`. That
+        // decision is about arrays *this compiler allocates*; a jar's array is
+        // fixed and not ours to re-lay-out. So the frame said wrapper, the
+        // value was a bare `[Ljava/lang/String;`, and the class did not load
+        // -- with zero diagnostics on the way there, the verifier being the
+        // only thing that noticed.
+        //
+        // Refused by name until a foreign array is its own type rather than
+        // ours. That fix is upstream and written up; this is the difference
+        // between a named refusal and a wrong answer.
+        if returns.starts_with('[') && self.shape.grows {
+            return Err(refuse(
+                self.func,
+                &format!(
+                    "a bound member returning `{returns}` in a program where some array grows: \
+                     a Java array cannot take the growable representation that choice gives \
+                     every array, and it is not ours to re-lay-out"
+                ),
+            ));
+        }
         if matches!(result, HirType::Float { bits: 64 }) {
             use nts_jvm_emitter::insn::{self, Kind};
             match returns {
