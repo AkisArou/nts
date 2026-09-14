@@ -82,7 +82,7 @@ covers it — which also reveals the rows where no example does.
 | | | |
 |---|---|---|
 | ✅ | arithmetic | `+ - * / % **` |
-| ✅ | bitwise | `& \| ^ ~ << >> >>>` `examples/bitwise` carries them, under the fact that makes them worth a row: `| 0` is how integer intent is written in JavaScript. |
+| ✅ | bitwise | `& \| ^ ~ << >> >>>` `examples/bitwise` carries them, under the fact that makes them worth a row: `a \| 0` is how integer intent is written in JavaScript. |
 | ✅ | integer `+ - *` **wrap** at 32 bits, as `(a + b) \| 0` is defined to | specialization narrows an accumulator to `int32_t` wherever the values are whole, which does not prove the sum fits. The C backend emitted a plain signed `+`, and signed overflow is undefined in C — so a long enough walk answered `3221225471` where node answers `-1073741825`, the same bits read as unsigned. Wrapped through the unsigned counterpart now. The LLVM backend was always right: its `add` carries no `nsw`. Held by a codegen text test, not by the differential, which cannot pin undefined behaviour |
 | ✅ | comparison, equality | `< > <= >= === !==`, and `==`/`!=` where nothing coerces |
 | ◐ | `==` that **coerces** | refused — see below |
