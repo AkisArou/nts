@@ -529,6 +529,31 @@ The second only works because `program.h` includes what the binding names.
 While nts defined its own copy of the struct, that assertion compared two
 derivations of one field list and passed.
 
+### What it refuses, surveyed against real headers
+
+Twelve POSIX records, asked for one at a time. The survey is the instrument:
+each refusal is either a gap or a missing mapping, and guessing which headers
+to try would have found neither of the two it did.
+
+| | before | after |
+|---|---|---|
+| `stat`, `tm`, `timeval`, `sockaddr`, `msghdr`, `dirent`, `rlimit`, `statvfs`, `iovec`, `addrinfo`, `epoll_event`, `sockaddr_in` | 8 ok | **12 ok** |
+| `sigaction` | `void (*)(void)` unknown | a function-pointer *member*, which the compiler refuses too |
+| `termios` | `cc_t` unknown | an unnamed member: an anonymous union, which the surface cannot spell |
+
+**A typedef reached through an array had nothing to fall back on.**
+`desugaredQualType` is absent for an array type, so `cc_t[32]` and
+`__syscall_slong_t[3]` carried no desugared form at all and `struct termios`
+and `struct stat` were both refused for a typedef the same parse had already
+resolved. The fix is the parse's own typedef table -- 137 entries for two
+headers -- resolved one hop at a time.
+
+**A nested record is pulled in, not demanded.** `struct sockaddr_in` holds a
+`struct in_addr` and `struct stat` holds three `struct timespec`s; their
+layouts *are* part of the outer layout, so asking for them separately was
+bookkeeping the tool can do. Repeated until it settles, because a nested record
+may nest.
+
 ## Constants, which no binding can carry
 
 `EPOLLIN` is an enumerator, `EPOLL_CTL_ADD` a macro, `O_CREAT | O_WRONLY` an

@@ -323,9 +323,80 @@ fn walk<'a>(node: &'a serde_json::Value, out: &mut Vec<&'a serde_json::Value>) {
 }
 
 impl Binding {
+    /// One record by tag, read out of the parse.
+    ///
+    /// `None` when these headers hold no complete definition of it -- the
+    /// caller decides whether that is a refusal, because a requested tag that
+    /// is missing and a nested one that is missing are different sentences.
+    fn record_named(
+        nodes: &[&serde_json::Value],
+        tag: &str,
+        typedefs: &BTreeMap<String, String>,
+    ) -> Result<Option<Record>> {
+        let Some(node) = nodes.iter().find(|n| {
+            n.get("kind").and_then(serde_json::Value::as_str) == Some("RecordDecl")
+                && n.get("completeDefinition") == Some(&serde_json::Value::Bool(true))
+                && n.get("name").and_then(serde_json::Value::as_str) == Some(tag)
+        }) else {
+            return Ok(None);
+        };
+        let union = node.get("tagUsed").and_then(serde_json::Value::as_str) == Some("union");
+        let packed = children(node)
+            .iter()
+            .any(|c| c.get("kind").and_then(serde_json::Value::as_str) == Some("PackedAttr"));
+        let mut members = Vec::new();
+        for field in children(node) {
+            if field.get("kind").and_then(serde_json::Value::as_str) != Some("FieldDecl") {
+                continue;
+            }
+            // A bit-field is a member with no address and no byte offset:
+            // `&p->version` does not compile, the surface has no spelling for
+            // one, and `hir::layout` has no rule for packing them. The layout
+            // self-check already refuses such a record -- it cannot reproduce a
+            // layout whose members have no byte offsets -- but it does so by
+            // reporting two sizes, which names the symptom. Named here instead.
+            if field.get("isBitfield") == Some(&serde_json::Value::Bool(true)) {
+                let member =
+                    field.get("name").and_then(serde_json::Value::as_str).unwrap_or("<unnamed>");
+                bail!(
+                    "`{tag}.{member}` is a bit-field, which this surface cannot describe: it has \
+                     no address and no byte offset. Bind the record through an opaque pointer, \
+                     or read it from C."
+                );
+            }
+            let (written, desugared) = qual_type(field).unwrap_or_default();
+            let member = field.get("name").and_then(serde_json::Value::as_str).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "`{tag}` has an unnamed member of type `{written}`, which has no spelling in a binding"
+                )
+            })?;
+            let ty = shape_of(written, desugared, typedefs)
+                .with_context(|| format!("member `{member}` of `{tag}`"))?;
+            members.push(Member { name: member.to_owned(), ty });
+        }
+        if members.is_empty() {
+            bail!("`{tag}` has no members, which is not a layout a binding can describe");
+        }
+        Ok(Some(Record { tag: tag.to_owned(), union, packed, members }))
+    }
+
     fn collect(&mut self, json: &serde_json::Value, request: &Request) -> Result<()> {
         let mut nodes = Vec::new();
         walk(json, &mut nodes);
+
+        // Every typedef this parse recorded, name to underlying spelling. Built
+        // once: `shape` resolves a chain one hop at a time and there are 137 of
+        // them in a parse of two headers.
+        let typedefs: BTreeMap<String, String> = nodes
+            .iter()
+            .filter(|n| n.get("kind").and_then(serde_json::Value::as_str) == Some("TypedefDecl"))
+            .filter_map(|n| {
+                Some((
+                    n.get("name")?.as_str()?.to_owned(),
+                    n.get("type")?.get("qualType")?.as_str()?.to_owned(),
+                ))
+            })
+            .collect();
 
         let wanted_records: BTreeSet<&str> = request.records.iter().map(String::as_str).collect();
         let wanted_functions: BTreeSet<&str> =
@@ -335,64 +406,18 @@ impl Binding {
         // A tag may be defined more than once across a header set; the last
         // complete definition wins, and `check` catches any disagreement with
         // the layout clang actually used.
-        for node in &nodes {
-            let Some(name) = node.get("name").and_then(serde_json::Value::as_str) else { continue };
-            if node.get("kind").and_then(serde_json::Value::as_str) != Some("RecordDecl")
-                || node.get("completeDefinition") != Some(&serde_json::Value::Bool(true))
-                || !wanted_records.contains(name)
-            {
-                continue;
+        for tag in &wanted_records {
+            if let Some(record) = Self::record_named(&nodes, tag, &typedefs)? {
+                self.records.insert((*tag).to_owned(), record);
             }
-            let union = node.get("tagUsed").and_then(serde_json::Value::as_str) == Some("union");
-            let packed = children(node)
-                .iter()
-                .any(|c| c.get("kind").and_then(serde_json::Value::as_str) == Some("PackedAttr"));
-            let mut members = Vec::new();
-            for field in children(node) {
-                if field.get("kind").and_then(serde_json::Value::as_str) != Some("FieldDecl") {
-                    continue;
-                }
-                // A bitfield is a member with no address and no byte offset:
-                // `&p->version` does not compile, the surface has no spelling
-                // for one, and `hir::layout` has no rule for packing them. The
-                // self-check already refuses such a record -- it cannot
-                // reproduce a layout whose members have no byte offsets -- but
-                // it does so by reporting two sizes, which names the symptom
-                // and not the cause. Named here instead, where it is known.
-                if field.get("isBitfield") == Some(&serde_json::Value::Bool(true)) {
-                    let member = field
-                        .get("name")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("<unnamed>");
-                    bail!(
-                        "`{name}.{member}` is a bit-field, which this surface cannot describe: \
-                         it has no address and no byte offset. Bind the record through an \
-                         opaque pointer, or read it from C."
-                    );
-                }
-                let (written, desugared) = qual_type(field).unwrap_or_default();
-                let member = field
-                    .get("name")
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or_else(|| anyhow::anyhow!(
-                        "`{name}` has an unnamed member of type `{written}`, which has no spelling in a binding"
-                    ))?;
-                let ty = shape_of(written, desugared).with_context(|| {
-                    format!("member `{member}` of `{name}`")
-                })?;
-                members.push(Member { name: member.to_owned(), ty });
-            }
-            if members.is_empty() {
-                bail!("`{name}` has no members, which is not a layout a binding can describe");
-            }
-            self.records
-                .insert(name.to_owned(), Record { tag: name.to_owned(), union, packed, members });
         }
         for tag in &wanted_records {
             if !self.records.contains_key(*tag) {
                 bail!("no complete definition of `{tag}` in these headers");
             }
         }
+
+        self.pull_in_nested(&nodes, &typedefs)?;
 
         for node in &nodes {
             let Some(name) = node.get("name").and_then(serde_json::Value::as_str) else { continue };
@@ -407,7 +432,8 @@ impl Binding {
                 .split_once(" (")
                 .map(|(before, _)| before.trim())
                 .ok_or_else(|| anyhow::anyhow!("`{name}` has an unreadable type `{signature}`"))?;
-            let result = if result == "void" { None } else { Some(shape(result)?) };
+            let result =
+                if result == "void" { None } else { Some(shape(result, &typedefs)?) };
             let mut parameters = Vec::new();
             for (at, parameter) in children(node)
                 .iter()
@@ -424,7 +450,7 @@ impl Binding {
                     .map_or_else(|| format!("arg{at}"), |n| n.trim_start_matches('_').to_owned());
                 parameters.push((
                     spelled,
-                    shape_of(written, desugared)
+                    shape_of(written, desugared, &typedefs)
                         .with_context(|| format!("parameter {at} of `{name}`"))?,
                 ));
             }
@@ -440,6 +466,58 @@ impl Binding {
                 bail!("no declaration of `{wanted}` in these headers");
             }
         }
+        Ok(())
+    }
+
+    /// Records stored inline in one being bound, brought in with it.
+    ///
+    /// Required and not optional: a nested record's layout *is* part of the
+    /// outer layout, so without it nothing can be checked and nothing spelled.
+    /// Pulled in rather than demanded -- `struct sockaddr_in` holds a `struct
+    /// in_addr`, and asking for the second is bookkeeping this can do.
+    fn pull_in_nested(
+        &mut self,
+        nodes: &[&serde_json::Value],
+        typedefs: &BTreeMap<String, String>,
+    ) -> Result<()> {
+        // A record stored inline in a requested one is required, not optional:
+        // its layout is part of the outer layout, so without it nothing can be
+        // checked and nothing can be spelled. Pulled in rather than demanded --
+        // `struct sockaddr_in` holds a `struct in_addr` and asking for the
+        // second is bookkeeping the tool can do. Repeated until it settles,
+        // because a nested record may nest.
+        loop {
+            let nested: BTreeSet<String> = self
+                .records
+                .values()
+                .flat_map(|record| &record.members)
+                .filter_map(|member| match &member.ty {
+                    Shape::Record(tag) if !self.records.contains_key(tag) => Some(tag.clone()),
+                    Shape::Array(element, _) => match &**element {
+                        Shape::Record(tag) if !self.records.contains_key(tag) => Some(tag.clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .collect();
+            if nested.is_empty() {
+                break;
+            }
+            let mut found = false;
+            for tag in &nested {
+                if let Some(record) = Self::record_named(nodes, tag, typedefs)? {
+                    self.records.insert(tag.clone(), record);
+                    found = true;
+                }
+            }
+            if !found {
+                bail!(
+                    "these headers define no complete `{}`, which is stored inline in a record being bound",
+                    nested.iter().next().map_or("", String::as_str)
+                );
+            }
+        }
+
         Ok(())
     }
 }
@@ -460,10 +538,14 @@ fn qual_type(node: &serde_json::Value) -> Option<(&str, Option<&str>)> {
 }
 
 /// The written spelling if it is one this knows, else the desugared one.
-fn shape_of(written: &str, desugared: Option<&str>) -> Result<Shape> {
-    match (shape(written), desugared) {
+fn shape_of(
+    written: &str,
+    desugared: Option<&str>,
+    typedefs: &BTreeMap<String, String>,
+) -> Result<Shape> {
+    match (shape(written, typedefs), desugared) {
         (Ok(shape), _) => Ok(shape),
-        (Err(first), Some(desugared)) => shape(desugared).map_err(|_| first),
+        (Err(first), Some(desugared)) => shape(desugared, typedefs).map_err(|_| first),
         (Err(first), None) => Err(first),
     }
 }
@@ -479,7 +561,7 @@ fn shape_of(written: &str, desugared: Option<&str>) -> Result<Shape> {
 /// brand: `uint32_t` is `c_uint32` and `unsigned int` is `c_uint`, and on this
 /// target they are the same type spelled by two declarations that mean
 /// different things to a reader.
-fn shape(c_type: &str) -> Result<Shape> {
+fn shape(c_type: &str, typedefs: &BTreeMap<String, String>) -> Result<Shape> {
     let c_type = c_type.trim();
     if let Some(inner) = c_type.strip_suffix('*') {
         let inner = inner.trim();
@@ -490,14 +572,14 @@ fn shape(c_type: &str) -> Result<Shape> {
         if inner == "void" {
             return Ok(Shape::VoidPointer(constant));
         }
-        return Ok(Shape::Pointer(Box::new(shape(inner)?), constant));
+        return Ok(Shape::Pointer(Box::new(shape(inner, typedefs)?), constant));
     }
     if let Some((element, count)) = c_type.strip_suffix(']').and_then(|s| s.rsplit_once('[')) {
         let count: u64 = count
             .trim()
             .parse()
             .with_context(|| format!("`{c_type}` has no constant length"))?;
-        return Ok(Shape::Array(Box::new(shape(element)?), count));
+        return Ok(Shape::Array(Box::new(shape(element, typedefs)?), count));
     }
     for keyword in ["struct ", "union "] {
         if let Some(tag) = c_type.strip_prefix(keyword) {
@@ -525,10 +607,25 @@ fn shape(c_type: &str) -> Result<Shape> {
         "float" => "c_float",
         "double" => "c_double",
         "_Bool" | "bool" => "boolean",
-        other => bail!(
-            "`{other}` is a C type this does not know how to spell in a binding; \
-             add it to `shape` beside the others rather than letting it be guessed"
-        ),
+        // A typedef clang recorded, resolved one hop at a time.
+        //
+        // **The table, not `desugaredQualType`.** That field is absent for an
+        // array type: `cc_t[32]` and `__syscall_slong_t[3]` carry no desugared
+        // form at all, so the fallback that handles a plain `cc_t` had nothing
+        // to fall back to and `struct stat` and `struct termios` were both
+        // refused for a typedef the parse had already resolved.
+        other => {
+            let next = typedefs.get(other).ok_or_else(|| anyhow::anyhow!(
+                "`{other}` is a C type this does not know how to spell in a binding; \
+                 add it to `shape` beside the others rather than letting it be guessed"
+            ))?;
+            // A chain terminates: clang's own typedefs are acyclic, and a name
+            // that resolved to itself would be a parse this could not have got.
+            if next == other {
+                bail!("`{other}` is a typedef of itself, which clang cannot have reported");
+            }
+            return shape(next, typedefs);
+        }
     };
     Ok(Shape::Scalar(brand))
 }
@@ -887,6 +984,11 @@ mod tests {
 
     #[test]
     fn c_spellings_map_or_are_refused_by_name() {
+        // `cc_t` stands for the case the survey found: a typedef reached
+        // through an array, where clang reports no `desugaredQualType` at all.
+        let typedefs: BTreeMap<String, String> =
+            [("cc_t".to_owned(), "unsigned char".to_owned())].into_iter().collect();
+        let shape = |c_type: &str| super::shape(c_type, &typedefs);
         assert_eq!(shape("char").unwrap(), Shape::Scalar("c_char"));
         // `char` and `uint8_t` are different types with one representation,
         // which is the distinction a hand-written binding got wrong first.
@@ -903,6 +1005,13 @@ mod tests {
             Shape::Array(Box::new(Shape::Scalar("c_char")), 65)
         );
         assert_eq!(shape("struct pollfd").unwrap(), Shape::Record("pollfd".to_owned()));
+        // Through a typedef, and through one reached inside an array -- which
+        // is the shape with no `desugaredQualType` to fall back on.
+        assert_eq!(shape("cc_t").unwrap(), Shape::Scalar("c_uint8"));
+        assert_eq!(
+            shape("cc_t[32]").unwrap(),
+            Shape::Array(Box::new(Shape::Scalar("c_uint8")), 32)
+        );
         // Refused by name rather than approximated. A near-miss is the failure
         // this tool exists to remove, so an unknown spelling must not become a
         // plausible neighbour.
