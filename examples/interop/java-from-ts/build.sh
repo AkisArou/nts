@@ -76,21 +76,21 @@ javac -cp "$emitted:$emitted/nts-runtime.jar" -d "$out" "$out/Driver.java"
 answer=$(java -Xverify:all -cp "$out:$emitted:$out/classes:$emitted/nts-runtime.jar" Driver)
 echo "java-from-ts: $answer"
 
-# Two values checked rather than the whole line, and each says something a
-# crash would not. `515` is `hits + MAX` computed *in Java* -- 3 + 512 -- so it
-# proves the bound call arrived and came back with the jar's own arithmetic.
-# `9007199254740993` is 2^53+1, which a `double` cannot hold, so it proves the
-# `long` crossed as a `bigint` rather than being rounded on the way.
+# **The whole line, now that none of it is knowingly wrong.** This used to
+# check two values and say why: `Catalog.MAX` read `0` where Java says `512`,
+# because a declared numeric constant folded to zero in shared lowering, and
+# asserting the output whole would have written that wrong value down as
+# expected. That is fixed, so the check is the answer rather than a sample of
+# it.
 #
-# **Not the whole line, because one field is knowingly wrong.** `Catalog.MAX`
-# reads `0` where Java says `512`: an ambient numeric constant folds to zero in
-# shared lowering, on this backend and on C, with no diagnostic. Asserting the
-# current output whole would write that wrong value down as expected.
-case $answer in
-  *" 515 "*) ;;
-  *) echo "java-from-ts: expected 515 (hits + MAX, computed in Java) in: $answer"; exit 1 ;;
-esac
-case $answer in
-  *9007199254740993*) ;;
-  *) echo "java-from-ts: expected 2^53+1 to survive as a bigint in: $answer"; exit 1 ;;
-esac
+# Each field is a matrix row and several would survive a plausible break: `515`
+# is `hits + MAX` computed in Java, `9007199254740993` is 2^53+1 surviving as a
+# bigint, `65535` is nowhere here but `s:x` is a bound `String` round trip, and
+# `k` and the trailing `widgets` are a static nested class and an inner one.
+expected="catalog 3 512 10 0 0 widgets 515 4 9007199254740993 1 3 0 3 s:x 6 6 widgets 3 2 k widgets"
+if [ "$answer" != "$expected" ]; then
+  echo "java-from-ts: the answer changed."
+  echo "  expected: $expected"
+  echo "  actual:   $answer"
+  exit 1
+fi

@@ -2165,6 +2165,26 @@ fn declaration_is_exported(probe: &FuncBuilder, id: NodeId) -> bool {
         })
 }
 
+/// The value a **declared** constant carries in its own type.
+///
+/// `declare const MAX: 512` has no initializer, so nothing else knows what it
+/// holds -- and `globals::analyze` seeds a non-exported numeric global with
+/// `Facts::constant(initial)`, so every read of one folded to zero. That was a
+/// wrong number on every backend with no diagnostic anywhere: `Catalog.MAX`
+/// printed `0` where Java says `512`, and `declare const X: 512` reduced it out
+/// of interop entirely -- `dconst_0` on the JVM and `v0 = 0.0` in C.
+///
+/// A literal type is the one place a declaration can carry a value, which is
+/// why `nts bind` renders a Java `static final int MAX = 512` as
+/// `static readonly MAX: 512`.
+fn declared_literal(probe: &FuncBuilder, name: NodeId) -> Option<f64> {
+    match &probe.snapshot.types.get(probe.snapshot.node_types.get(&name)?.0 as usize)?.kind {
+        TypeKind::Literal(LiteralValue::Number(value)) => Some(*value),
+        TypeKind::Literal(LiteralValue::Boolean(value)) => Some(f64::from(u8::from(*value))),
+        _ => None,
+    }
+}
+
 fn collect_module_scope(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
@@ -2281,7 +2301,19 @@ fn collect_module_scope(
                 continue;
             }
         }
-        let value = constant.unwrap_or(0.0);
+        // **A declared constant's type *is* its value.** `declare const MAX:
+        // 512` has no initializer, so `constant` is `None` and `initial`
+        // became `0` -- and `globals::analyze` seeds a non-exported numeric
+        // global with `Facts::constant(initial)`, so every read folded to
+        // zero. `Catalog.MAX` printed `0` where Java says `512`, on this
+        // backend and on C, with no diagnostic on either.
+        //
+        // The value was always there: the checker resolves the annotation to
+        // `TypeKind::Literal`, which is the one place a declaration can carry
+        // one. Read here rather than special-cased later, so the global is
+        // right for every pass and every backend at once.
+        let declared = declared_literal(&probe, *name_node);
+        let value = constant.or(declared).unwrap_or(0.0);
         let Some(ty) = probe.type_of(*name_node) else {
             scope.unsupported.insert(
                 symbol.0,
@@ -2477,11 +2509,16 @@ fn collect_static_fields(
             Some(initializer) if !erased => probe.constant_value(initializer, &scope.constants),
             _ => None,
         };
+        // The same as a module-scope `declare const`: a static declared with a
+        // literal type carries its value there and nowhere else. `nts bind`
+        // renders a Java `static final int MAX = 512` as `static readonly MAX:
+        // 512` for exactly this reason.
+        let declared = declared_literal(probe, name_node);
         let global = u32::try_from(scope.globals.len()).unwrap_or(u32::MAX);
         scope.globals.push(super::Global {
             name: unshared_name(&scope.globals, Some(format!("{class_name}.{field}")), global),
             ty: ty.clone(),
-            initial: constant.unwrap_or(0.0),
+            initial: constant.or(declared).unwrap_or(0.0),
             exported: false,
             deferred: constant.is_none() && initializer.is_some(),
             origin: probe.origin(name_node),
@@ -4581,7 +4618,7 @@ pub fn lower_with(
 
     publish_surface(&mut lowered, snapshot, &shared.naming, &module, entry);
 
-    collect_class_identities(&mut lowered.program, snapshot);
+    collect_declared_facts(&mut lowered.program, snapshot);
     canonicalize_objects(&mut lowered.program);
     prune_class_tests(&mut lowered.program);
     // The conservation law, enforced rather than merely measured: every
@@ -4820,6 +4857,51 @@ fn prune_class_tests(program: &mut Program) {
 /// After the merge rather than during it, because a type's final layout is not
 /// known until every builder has contributed -- a layout is discovered by
 /// whichever function first needs it.
+/// What a program states rather than what lowering derives.
+///
+/// Both of these read declarations the value graph does not reach -- an ambient
+/// `declare module` is never lowered -- so they are scans of the snapshot and
+/// not products of the walk above.
+fn collect_declared_facts(program: &mut Program, snapshot: &SemanticSnapshot) {
+    collect_class_identities(program, snapshot);
+    collect_native_headers(program, snapshot);
+}
+
+/// Gather the headers every native binding module declares.
+///
+/// **Every module, not only the ones this program calls into.** A binding is a
+/// claim about a header whether or not it is exercised, and a module naming a
+/// header that is not on the box should say so rather than wait for the first
+/// program that imports it. The cost of a header a program does not use is one
+/// include in a file that is compiled for its assertions.
+///
+/// A scan rather than a traversal: an ambient `declare module` is not reached
+/// by lowering, which follows values, and there is exactly one pass over the
+/// nodes here against the many a lookup would repeat.
+fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
+    let (mut headers, mut defines) = (Vec::new(), Vec::new());
+    for node in &snapshot.nodes {
+        if !matches!(
+            node.kind,
+            NodeKind::Syntax(
+                nts_semantic_schema::syntax::MODULE_DECLARATION
+                    | nts_semantic_schema::syntax::SOURCE_FILE
+            )
+        ) {
+            continue;
+        }
+        let Some(native) = node.native.as_ref() else { continue };
+        headers.extend(native.headers.iter().flatten().cloned());
+        defines.extend(native.defines.iter().flatten().cloned());
+    }
+    for list in [&mut headers, &mut defines] {
+        list.sort();
+        list.dedup();
+    }
+    program.native_headers = headers;
+    program.native_defines = defines;
+}
+
 fn collect_class_identities(program: &mut Program, snapshot: &SemanticSnapshot) {
     for layout in &program.layouts {
         let mut here: Vec<super::ClassIdentity> = Vec::new();
