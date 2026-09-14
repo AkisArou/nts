@@ -902,13 +902,33 @@ export class Socket extends Duplex {
     }
   }
 
+  /**
+   * **The local address is read from the handle, so it goes when the handle does.**
+   *
+   * node defines these three over `this._getsockname()`, and `_getsockname` answers `{}` when
+   * `!this._handle` -- so after a socket is destroyed all three are `undefined`. `remoteAddress`
+   * is *not*: node caches the peer in `_peername` and keeps answering it. The asymmetry is
+   * node's and is observable:
+   *
+   *     after close   node   local=undefined lport=undefined lfam=undefined remote="127.0.0.1"
+   *                   ours   local="127.0.0.1" lport=38776   lfam="IPv4"    remote="127.0.0.1"
+   *
+   * This profile cached both halves, so all three outlived the handle. Found by adding a socket
+   * round trip to the differential; it is not compared there, because node's answer to these in
+   * that arrangement depends on when the handler runs rather than on the input, and a field that
+   * is not a function of the input cannot be compared. It is pinned by a fixture that controls
+   * the timing instead.
+   */
   get localAddress(): string | undefined {
+    if (this._handle === null) return undefined;
     return this.#boundPath ?? this.#localAddress?.address;
   }
   get localPort(): number | undefined {
+    if (this._handle === null) return undefined;
     return this.#localAddress?.port;
   }
   get localFamily(): string | undefined {
+    if (this._handle === null) return undefined;
     return this.#localAddress?.family;
   }
   get remoteAddress(): string | undefined {
