@@ -822,17 +822,17 @@ fn native_struct_rejections_preserve_the_valid_arm() {
     for (name, bad) in [
         ("aggregate-store", "export function bad(p: Ptr<State>): void { p[0] = p[1]; }"),
         ("spread", "export function bad(p: Ptr<State>): number { const copy = {...p}; return copy.count; }"),
-        ("managed-address", "export function bad(): number { const p = {count: 1}; return addrOf(p, 'count')[0]; }"),
+        ("managed-address", "export function bad(): number { const p = {count: 1}; return addrOf(p.count)[0]; }"),
         ("plain-field", "type Bad = Struct<{count: number}>; export function bad(p: Ptr<Bad>): number { return p.count; }"),
         ("optional-field", "type Bad = Struct<{count?: c_int32}>; export function bad(p: Ptr<Bad>): number { return p.count ?? 0; }"),
         ("nested-field", "type Bad = Struct<{inner: State}>; export function bad(p: Ptr<Bad>): void { void p; }"),
         ("schema-value", "export function bad(p: State): void { void p; }"),
-        ("lying-address", "/** @ntsAbi intrinsic */ declare function addrOf(p: Ptr<State>, key: 'count'): Ptr<c_double>; export function bad(p: Ptr<State>): number { return addrOf(p, 'count')[0]; }"),
+        ("lying-address", "/** @ntsAbi intrinsic */ declare function addrOf(p: unknown): Ptr<c_double>; export function bad(p: Ptr<State>): number { return addrOf(p.count)[0]; }"),
     ] {
         // The managed-address case must reach lowering without a TS error;
         // a false intrinsic declaration cannot authorize addressing a TS object.
         let bad = if name == "managed-address" {
-            "/** @ntsAbi intrinsic */ declare function addrOf(p: {count: number}, key: 'count'): Ptr<c_int32>; export function bad(): number { return addrOf({count: 1}, 'count')[0]; }"
+            "/** @ntsAbi intrinsic */ declare function addrOf(p: unknown): Ptr<c_int32>; export function bad(): number { const o = {count: 1}; return addrOf(o.count)[0]; }"
         } else { bad };
         let import = if matches!(name, "lying-address" | "managed-address") { "" } else { "import {addrOf} from 'c:memory';" };
         let source = format!("import type {{Ptr, Struct, c_int32, c_double}} from 'c:types'; {import}\n type State = Struct<{{count: c_int32}}>; export function good(p: Ptr<State>): number {{ return p.count; }} {bad}");
@@ -864,8 +864,10 @@ fn native_address_verifier_rejects_wrong_field_type_and_index() {
     let source = "import type {Ptr, Struct, c_int32} from 'c:types';
         import {addrOf} from 'c:memory';
         type S = Struct<{x:c_int32}>;
-        export function field(p:Ptr<S>):Ptr<c_int32> {return addrOf(p, 'x');}
-        export function item(p:Ptr<S>, i:number):Ptr<S> {return addrOf(p, i);}";
+        export function field(p:Ptr<S>):Ptr<c_int32> {return addrOf(p.x);}
+        // An element of a block of structs is already an address, so this is
+        // `p + i` and not `&(p + i)`; `addrOf` here would be a Ptr<Ptr<S>>.
+        export function item(p:Ptr<S>, i:number):Ptr<S> {return p[i];}";
     let Some((_, prepared)) = prepare("verify-native-address", source) else { return; };
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     assert!(hir::verify::verify(&prepared.program).is_ok());
@@ -898,7 +900,7 @@ fn native_header_alias_survives_an_unrelated_layout_declaration() {
         import {addrOf as address} from 'c:memory';
         type State = Struct<{count:c_int32}>;
         function addrOf(n:number):number {return n+2;}
-        export function inspectState(p:Ptr<State>):number {return addrOf(address(p, 'count')[0]);}";
+        export function inspectState(p:Ptr<State>):number {return addrOf(address(p.count)[0]);}";
     let caller = "#include \"program.h\"\nint main(void) {inspectState_p_t s={17}; return inspectState(&s)==19 ? 0 : 1;}\n";
     for (case, prefix) in [("alone", ""), ("perturbed", "type Unrelated = {first:number; second:string};\n")] {
         let Some((dir, prepared)) = prepare(case, &format!("{prefix}{source}")) else { return; };

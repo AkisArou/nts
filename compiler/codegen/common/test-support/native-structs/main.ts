@@ -5,8 +5,8 @@ declare function stamp(p: Ptr<c_uint16>): void;
 export function run(p: Ptr<State>): number {
     const alias = p;
     alias.total = 7.5;
-    stamp(address(p, "count"));
-    address(p, "data")[0] = address(p.data, 1);
+    stamp(address(p.count));
+    address(p.data)[0] = address(p.data[1]);
     p.data[0] = 99;
     p[1].total = 3.25;
     return p.total + p.count + p.data[0];
@@ -19,6 +19,6 @@ export function computedKey(p: Ptr<Keys>): number {
   const key = "count";
   const before = p[chooseKey()];
   p[chooseKey()] += 2;
-  address(p, chooseKey())[0] = 25;
+  address(p[chooseKey()])[0] = 25;
   return before * 100 + p[key] + keyCalls;
 }

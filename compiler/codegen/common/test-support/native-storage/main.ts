@@ -15,7 +15,7 @@ function forwarded(p: Ptr<c_int>): number { return read(p); }
 export function stack(seed: number): number {
   const states = local<State>(2);
   if (witness(states, 0 as c_int) !== 1) return -1;
-  const alias = seed > 0 ? addrOf(states[1], "count") : addrOf(states, "count");
+  const alias = seed > 0 ? addrOf(states[1].count) : addrOf(states.count);
   alias[0] = 17;
   states[0].value = 2.5;
   states[1].value = 3.5;

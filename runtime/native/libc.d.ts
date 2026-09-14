@@ -12,13 +12,22 @@ declare module "c:types" {
     readonly __c_struct: Fields;
     readonly __c_tag: Tag;
   };
-  // Addresses carry no extent or lifetime checks. Scalar slots project as TS
-  // numbers; struct indexing returns an alias, and pointer slots stay pointers.
-  type NativeValue<T> = T extends number ? number : T;
-  export type Ptr<T> = { readonly __c_pointer: T } &
-    (T extends Struct<infer Fields, string>
-      ? { [K in keyof Fields]: NativeValue<Fields[K]> } & { [index: number]: Ptr<T> }
-      : { [index: number]: NativeValue<T> });
+  // A slot reads as the plain value it holds and remembers what it is a slot
+  // *of*. The phantom is optional, which is the whole trick: a plain `number`
+  // satisfies it, so `p[i] = n`, `p[i] += 1` and `p.count += 2` stay ordinary
+  // arithmetic -- while `addrOf` can still recover the declared C type, because
+  // an address must know the width it loads through and a bare `number` names
+  // none. Neither half works without the other: brand the slot and every write
+  // becomes a conversion; strip it and every address loses its element type.
+  // The value half is `number` for anything numeric, not the brand: that is
+  // what keeps `p[i] = n` and `p.count += 2` ordinary arithmetic. A pointer
+  // field keeps its own type, having no number to project to.
+  type Slot<T> = T extends number
+    ? number & { readonly __c_of?: T }
+    : T & { readonly __c_of?: T };
+  export type Ptr<T> = { readonly __c_pointer: T } & (T extends Struct<infer Fields, string>
+    ? { [K in keyof Fields]: Slot<Fields[K]> } & { [index: number]: Ptr<T> }
+    : { [index: number]: Slot<T> });
   // Hand-written native ABI scalar declarations, maintained with hir/native.rs.
   // Import the required types from "c:types".
   // Brands select the C boundary type; arithmetic inside TypeScript is ordinary
@@ -54,22 +63,31 @@ declare module "c:memory" {
   /** @ntsAbi intrinsic */
   export function sizeof<T>(): number;
 
-  import type { Ptr, Struct } from "c:types";
-  // These operate on native storage, not JS temporaries. A field key preserves
-  // its native type even though the field's value projects as a TS number.
+  import type { Ptr } from "c:types";
+  // The address of a native place, written the way C writes it: `addrOf(p.fd)`
+  // is `&p->fd`, and `addrOf(p[i])` is `&p[i]`.
+  //
+  // TypeScript has no lvalues, so this signature accepts any expression and the
+  // compiler decides. `addrOf(1 + 1)` and `addrOf(f())` typecheck here and are
+  // refused at lowering, naming the expression -- the same contract the rest of
+  // this compiler works to: reachable behaviour either lowers or produces a
+  // precise diagnostic. What is addressable is a field or an element of native
+  // storage, and nothing else; a managed object has no address to take.
   /** @ntsAbi intrinsic */
-  export function addrOf<F, N extends string, K extends keyof F>(storage: Ptr<Struct<F, N>>, key: K): Ptr<F[K]>;
-  /** @ntsAbi intrinsic */
-  export function addrOf<T>(storage: Ptr<T>, index: number): Ptr<T>;
+  export function addrOf<T>(place: { readonly __c_of?: T }): Ptr<T>;
 }
 
 declare module "c:stdint" {
   // Hand-written fixed-width C integer aliases. JavaScript number precision applies.
   export type {
-    c_int8 as int8_t, c_uint8 as uint8_t,
-    c_int16 as int16_t, c_uint16 as uint16_t,
-    c_int32 as int32_t, c_uint32 as uint32_t,
-    c_int64 as int64_t, c_uint64 as uint64_t,
+    c_int8 as int8_t,
+    c_uint8 as uint8_t,
+    c_int16 as int16_t,
+    c_uint16 as uint16_t,
+    c_int32 as int32_t,
+    c_uint32 as uint32_t,
+    c_int64 as int64_t,
+    c_uint64 as uint64_t,
   } from "c:types";
 }
 

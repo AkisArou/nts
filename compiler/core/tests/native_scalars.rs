@@ -295,9 +295,9 @@ fn local_storage_and_sizeof_lower_from_the_authored_types() {
         function read(p: Ptr<c_int>): number { return p[0]; }
         export function run(): number {
             const p = local<Request>(2);
-            p[0].fd = -1; p[1].fd = -1;
+            p[0].fd = -1 as c_int; p[1].fd = -1 as c_int;
             const r = poll(p, 2 as c_ulong, 0 as c_int);
-            return r + read(addrOf(p, "fd")) + sizeof<Request>() + sizeof<c_int>();
+            return r + read(addrOf(p[0].fd)) + sizeof<Request>() + sizeof<c_int>();
         }
         export function heap(bytes: number): number {
             const p = malloc<c_int>(bytes);
@@ -318,7 +318,7 @@ fn local_storage_and_sizeof_lower_from_the_authored_types() {
 fn local_addresses_cannot_outlive_or_free_their_storage() {
     for (name, body, reason) in [
         ("return", "export function bad(): Ptr<c_int> { return local<c_int>(); }", "escapes"),
-        ("field-return", "export function bad(): Ptr<c_int> { return addrOf(local<S>(), 'x'); }", "escapes"),
+        ("field-return", "export function bad(): Ptr<c_int> { return addrOf(local<S>().x); }", "escapes"),
         ("join-return", "export function bad(n: number): Ptr<c_int> { const p = local<c_int>(); const q = n > 0 ? p : local<c_int>(); return q; }", "escapes"),
         ("global", "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } export function bad(): void { held = local<c_int>(); }", "module-scope variable"),
         ("object", "export function bad(): {p: Ptr<c_int>} { return {p: local<c_int>()}; }", "escapes"),
@@ -327,7 +327,7 @@ fn local_addresses_cannot_outlive_or_free_their_storage() {
         ("unknown-call", "declare function consume(p: Ptr<c_int>): void; export function bad(): void { consume(local<c_int>()); }", "escapes"),
         ("return-helper", "function alias(p: Ptr<c_int>): Ptr<c_int> { return p; } export function bad(): number { return alias(local<c_int>())[0]; }", "escapes"),
         ("store-helper", "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } function keep(p: Ptr<c_int>): void { held = p; } export function bad(): void { keep(local<c_int>()); }", "module-scope variable"),
-        ("free", "export function bad(): void { const p = local<c_int>(); const q = addrOf(p, 0); free(q); }", "escapes"),
+        ("free", "export function bad(): void { const p = local<c_int>(2); const q = addrOf(p[0]); free(q); }", "escapes"),
         ("async", "export async function bad(): Promise<number> { const p = local<c_int>(); return p[0]; }", "suspending"),
         ("generator", "export function* bad(): Generator<number> { const p = local<c_int>(); yield p[0]; }", "suspending"),
         ("loop", "export function bad(n: number): number { let r=0; for(let i=0;i<n;i++) r+=local<c_int>()[0]; return r; }", "inside a loop"),
@@ -409,4 +409,134 @@ fn prepared_storage_verifier_catches_corrupted_counts_and_borrow_contracts() {
         assert!(changed);
         assert!(hir::verify::verify(&program).is_err(), "mutation {kind}");
     }
+}
+
+/// What `addrOf` accepts, and the two different ways it refuses.
+///
+/// C takes an address with a prefix operator on an lvalue. TypeScript has no
+/// lvalues and no such operator, so `addrOf(p.fd)` is a call -- and a call's
+/// signature cannot, on its own, say that only some expressions are places.
+///
+/// Two mechanisms carry that between them, and the split is the point:
+///
+/// - A native slot's type carries an **optional** phantom naming what it is a
+///   slot of. Optional, so a plain `number` still assigns to it and `p[i] += 1`
+///   stays arithmetic; present, so `addrOf` can infer the declared C type an
+///   address must know. Nothing else in the language has that phantom, so
+///   `addrOf(42)`, `addrOf(f())` and a managed object's field are rejected by
+///   **TypeScript**, before the compiler is consulted.
+/// - What types cannot see is a conditional: `c ? p.x : q.x` is a slot, and is
+///   not a place. That is refused at **lowering**, by looking at the syntax.
+///
+/// Each arm below is labelled with which mechanism must catch it. A mechanism
+/// that stops working shows up as an arm caught by the other one, so the labels
+/// are asserted rather than described.
+#[test]
+fn addrof_takes_a_native_place_and_nothing_else() {
+    #[derive(PartialEq, Debug)]
+    enum Caught {
+        Nothing,
+        Typescript,
+        Lowering,
+    }
+    let header = "import type { Ptr, Struct } from \"c:types\";\n\
+         import { addrOf, local } from \"c:memory\";\n\
+         type S = Struct<{ x: c_int; y: c_int }, \"\">;\n\
+         declare function f(): number;\n\
+         /** @ntsNoEscape p */\n\
+         declare function want(p: Ptr<c_int>): void;\n";
+    for (name, body, expected) in [
+        (
+            "field",
+            "export function go(): void { const p = local<S>(); want(addrOf(p.x)); }",
+            Caught::Nothing,
+        ),
+        (
+            "element",
+            "export function go(): void { const b = local<c_int>(4); want(addrOf(b[1])); }",
+            Caught::Nothing,
+        ),
+        (
+            "element-then-field",
+            "export function go(): void { const p = local<S>(3); want(addrOf(p[2].y)); }",
+            Caught::Nothing,
+        ),
+        (
+            "literal",
+            "export function go(): number { return addrOf(42)[0]; }",
+            Caught::Typescript,
+        ),
+        (
+            "arithmetic",
+            "export function go(): number { return addrOf(1 + 1)[0]; }",
+            Caught::Typescript,
+        ),
+        (
+            "call-result",
+            "export function go(): number { return addrOf(f())[0]; }",
+            Caught::Typescript,
+        ),
+        (
+            "managed-object-field",
+            "export function go(): number { const o = { count: 1 }; return addrOf(o.count)[0]; }",
+            Caught::Typescript,
+        ),
+        (
+            "conditional",
+            "export function go(c: boolean): void { const p = local<S>(); const q = local<S>(); want(addrOf(c ? p.x : q.x)); }",
+            Caught::Lowering,
+        ),
+    ] {
+        let Some((snapshot, typescript)) = snapshot_allowing_errors(
+            &format!("addrof-{name}"),
+            &format!("{header}{body}"),
+        ) else {
+            return;
+        };
+        let caught = if typescript {
+            Caught::Typescript
+        } else {
+            let prepared = hir::prepare(&snapshot).unwrap();
+            if prepared.diagnostics.is_empty() {
+                Caught::Nothing
+            } else {
+                Caught::Lowering
+            }
+        };
+        assert_eq!(caught, expected, "{name}");
+    }
+}
+
+/// `snapshot`, but a TypeScript error is an answer rather than a panic.
+fn snapshot_allowing_errors(
+    name: &str,
+    source: &str,
+) -> Option<(nts_semantic_schema::SemanticSnapshot, bool)> {
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize_utf8()
+        .unwrap();
+    let dir: Utf8PathBuf = root.join(format!(
+        "target/native-scalar-tests/{}-{name}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        format!(
+            r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("main.ts"),
+        format!("import type {{ c_int }} from \"c:types\";\n{source}"),
+    )
+    .unwrap();
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&dir.join("tsconfig.json"))
+        .unwrap();
+    let errors = snapshot.has_errors();
+    Some((snapshot, errors))
 }

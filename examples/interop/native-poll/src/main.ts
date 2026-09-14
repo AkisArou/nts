@@ -38,7 +38,9 @@ function waitRequests(requests: Ptr<PollFd>, count: number, timeoutMs: number): 
     requests[i].events = 1; // POLLIN on Linux
     requests[i].revents = 0;
   }
-  const events = addrOf(requests, "revents");
+  // `&requests->revents`. The address is taken before the call and read after
+  // it, so it must observe the write libc performed through it.
+  const events = addrOf(requests.revents);
   const ready = poll(requests, count as c_ulong, timeoutMs as c_int);
   if (ready <= 0) return ready;
   // Reading this address must observe the write performed inside libc.

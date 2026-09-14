@@ -71,16 +71,55 @@ impl FuncBuilder<'_> {
         Ok(Place::NativeElement { pointer, index })
     }
 
+    /// `addrOf(p.fd)` and `addrOf(p[i])`, which are `&p->fd` and `&p[i]`.
+    ///
+    /// The argument is examined as *syntax*, because TypeScript has no lvalues
+    /// and so a type cannot say whether an expression denotes storage:
+    /// `addrOf(1 + 1)` and `addrOf(f())` typecheck exactly as `addrOf(p.fd)`
+    /// does. Two shapes denote a place -- a member of native storage and an
+    /// element of it -- and everything else is refused here, naming what was
+    /// written rather than leaving a signature that promises more than it takes.
+    ///
+    /// A managed object is refused by the same path one step later: its receiver
+    /// does not lower to a native pointer, so there is no place to address. That
+    /// is deliberate and permanent rather than unimplemented. A TypeScript
+    /// object's representation belongs to the compiler, and handing out an
+    /// interior address would fix a layout that reference counting and
+    /// specialization both expect to own.
     pub(super) fn native_address_of(&mut self, id: NodeId, arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
-        let [storage, key] = arguments else { return Err(self.unsupported(id, "addrOf needs native storage and a field key or element index")); };
-        let pointer = self.lower_expression(*storage)?;
-        let index_type = self.type_of(*key);
-        let address = if matches!(index_type, Some(HirType::Int { .. } | HirType::Float { .. })) {
-            let index = self.lower_expression(*key)?;
+        let [place] = arguments else {
+            return Err(self.unsupported(id, "addrOf takes one native place"));
+        };
+        let kind = self.kind_of(*place);
+        let children = self.children(*place);
+        if !matches!(
+            kind,
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
+        ) || children.len() < 2
+        {
+            return Err(self.unsupported(id, "addrOf needs a field or an element of native storage"));
+        }
+        let (receiver, member) = (children[0], children[children.len() - 1]);
+        let pointer = self.lower_expression(receiver)?;
+        let index_type = self.type_of(member);
+        let address = if kind == Some(syntax::ELEMENT_ACCESS_EXPRESSION)
+            && matches!(index_type, Some(HirType::Int { .. } | HirType::Float { .. }))
+        {
+            let index = self.lower_expression(member)?;
             self.native_index_address(id, pointer, index)?
         } else {
-            let name = self.native_member_key(id, *key).ok_or_else(|| self.unsupported(id, "addrOf needs a constant native field key"))?;
-            self.lower_expression(*key)?;
+            let name = self
+                .native_member_key(*place, member)
+                .ok_or_else(|| self.unsupported(id, "addrOf needs a constant field name"))?;
+            // `p[key()]` names its field with an expression, and that expression
+            // still runs. Only an element access has one: the member of a
+            // property access is an identifier, not a value to evaluate. The
+            // same split `native_member_place` makes, for the same reason -- a
+            // key whose call was dropped is a side effect silently deleted, and
+            // the layout is identical either way, so nothing else would notice.
+            if kind == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
+                self.lower_expression(member)?;
+            }
             self.native_field_address(id, pointer, &name)?
         };
         // A tag cannot authorize lying about the returned pointer's pointee.

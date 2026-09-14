@@ -321,6 +321,56 @@ not an instruction for a pointer. A pointer's no-op is a zero-offset
 `getelementptr`. The C backend had been correct throughout; only assembling the
 IR found it.
 
+## Sixth executable slice: taking an address the way C writes it
+
+`addrOf(requests.revents)` is `&requests->revents`. It replaces
+`addrOf(requests, "revents")`, which passed the field name as a value and so
+spelled a second time what the type already knew.
+
+**The problem, stated plainly.** C takes an address with a prefix operator on an
+lvalue. TypeScript has neither, so this is a call -- and a call's signature
+cannot say that only some expressions denote storage. `addrOf(42)`,
+`addrOf(a + b)` and `addrOf(f())` are the same shape to a type checker as
+`addrOf(p.fd)`. Any single-argument form has to answer that, and it cannot be
+answered by the signature alone.
+
+**Two mechanisms answer it, and neither could alone.**
+
+A native slot's type carries a phantom naming what it is a slot *of*:
+
+    type Slot<T> = T extends number ? number & { readonly __c_of?: T } : T & { readonly __c_of?: T };
+
+The phantom is **optional**, which is the whole trick. Optional, so a plain
+`number` satisfies it and `p[i] = n`, `p[i] += 1` and `p.count += 2` stay
+ordinary arithmetic. Present, so `addrOf` can infer the declared C type:
+
+    export function addrOf<T>(place: { readonly __c_of?: T }): Ptr<T>;
+
+Both halves are load-bearing. Brand the slot itself and every write becomes a
+conversion, including the compound assignments, which cannot be written as one.
+Strip it and `addrOf(p.events)` infers `Ptr<number>` -- a pointer naming no C
+width, unusable for the load it exists to perform.
+
+Nothing outside native storage carries that phantom, so **TypeScript** rejects
+`addrOf(42)`, `addrOf(f())` and the field of a managed object, before the
+compiler is consulted. A managed object is refused permanently rather than
+pending: its representation belongs to the compiler, and handing out an interior
+address would fix a layout that reference counting and specialization own.
+
+What types cannot see is `addrOf(c ? p.x : q.x)` -- both branches are slots, and
+the conditional is not a place. That is refused at **lowering**, from the
+syntax: only a member and an element access denote a place.
+
+`compiler/core/tests/native_scalars.rs` asserts *which* mechanism catches each
+arm rather than only that it was caught, because a mechanism that stops working
+otherwise hides behind the other one.
+
+**One bug this found on the way in.** The first version dropped
+`lower_expression` on the member, and `p[key()]` stopped calling `key()`. The
+address is identical either way, so nothing in the emitted C would have looked
+wrong; `native-structs` caught it at run time by counting the calls. A computed
+key is an expression and still runs.
+
 ## Direction for the next executable slices
 
 1. **More native storage and header-derived bindings.** `void *`, const-qualified
