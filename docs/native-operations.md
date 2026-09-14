@@ -354,6 +354,51 @@ of four members, packed so `data` sits at offset 4, and 12 bytes where the
 natural layout is 16. `examples/interop/native-epoll` hands a descriptor to the
 kernel through it and reads it back out.
 
+## Deriving a binding from a header: clang subprocess or libclang
+
+Measured on this box, clang 22.1.8, against `<sys/epoll.h>`, `<unistd.h>` and
+`<sys/utsname.h>`.
+
+| | clang subprocess | libclang |
+|---|---|---|
+| prototypes | not in the record dump at all; needs `-ast-dump=json` — **1.0 MB** for `<sys/epoll.h>`, 1.5 MB for socket + netinet | same walk, typed, with `is_function_variadic` |
+| layouts | `-fdump-record-layouts` is correct, but dumps only records the TU **lays out** — one forced instance per type | `get_size` / `get_align` / `get_offset` on any definition |
+| all records at once | `-fdump-record-layouts-complete` — **wrong for every packed struct** | n/a |
+| include paths | the driver supplies its own resource dir | must be told, and **does not fail without it** |
+| time | 0.03 s | 0.10 s including Python startup |
+
+Two results decided it, and neither is about speed.
+
+**`-fdump-record-layouts-complete` is wrong about packed records.** It reports
+`struct epoll_event` as 16 bytes, alignment 8, `data` at offset 8 — where the
+compiler says 12, 1 and 4. Not a printing bug: `_Static_assert`s in the *same
+translation unit* fail under that flag and hold without it, and a `packed`
+struct written by hand is wrong the same way, so it is not glibc-specific. The
+only flag that dumps every record is the one that would silently generate the
+exact defect `native_witness.c` exists to catch.
+
+**libclang does not fail when it cannot find its own headers.** Parsed without
+`-isystem $(clang -print-resource-dir)/include`, `stddef.h` is not found,
+`size_t` is never defined, and clang error-recovers — so
+
+    ssize_t write(int, const void *, int)
+
+comes back, confidently, where `<unistd.h>` says `size_t`. The AST is walkable
+and every answer from it is wrong in a way no later step could notice. Adding
+the resource dir gives `size_t`. The driver adds it for you; the library is not
+the driver, which is the whole difference.
+
+**So: libclang, with two non-negotiables** — pass the resource dir, and treat
+any diagnostic at error severity or above as fatal *before* reading a cursor.
+It gives prototypes and layouts in one typed walk, with array element counts,
+`const` qualification and variadic detection, and needs neither a forced
+instance per record nor a megabyte of JSON per header.
+
+And whichever route: **a derived binding is still a claim.** It is generated
+from one compiler's reading of one set of headers under one set of macros, and
+`native_witness.c` is still what proves it against the headers the consumer
+actually compiles with.
+
 ## Variadics
 
 `int open(const char *, int, ...)` cannot be reached without them: with
