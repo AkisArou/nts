@@ -478,6 +478,58 @@ sizes, both alignments, every offset, and `_Generic` on the nested member, which
 must answer `struct timeval *` and would not if the member had been described as
 a pointer or flattened into its fields.
 
+## Reading headers: the measurement, and what it decided
+
+Before building a header importer there was a choice to make and no evidence
+behind it: a clang **subprocess** consuming structured output, or **libclang**.
+Both were measured on one header carrying the shapes that matter -- a typedef
+chain, an incomplete record used only by pointer, a complete record with
+padding, a `const` pointer, a bitfield, a nested record, function pointers
+including a nested declarator, a conditional declaration, a variadic, and a
+signedness-sensitive return.
+
+**It was not decided on speed.** The JSON AST dump ran in 0.01s at 124 MB peak;
+the libclang traversal in 0.04s at 109 MB. At this size neither is disqualified,
+and the difference is noise — single runs on a 35-line header.
+
+**It was decided on whether one derivation can answer.**
+
+`clang -Xclang -ast-dump=json` gives declaration identity, spelled and desugared
+types, qualifiers and signedness. It gives **no layout at all**: the 439
+`offset` keys in that output are *source* offsets inside `loc` records. Nothing
+in the JSON says where a field sits.
+
+Layouts need a second invocation, `-fdump-record-layouts-complete`, whose output
+is column-aligned text with `*** Dumping AST Record Layout` separators and
+`[sizeof=24, align=8]` trailers — undocumented, and not the same format as the
+first. So the subprocess path is two parses of one header that must then be
+correlated.
+
+**The correlation has no key.** On the probe header the layout dump emitted 7
+records where the JSON had 6 `RecordDecl`s, and 2 of the 7 were spelled
+`struct (unnamed at /usr/include/bits/types.h:155:12)` — identified by source
+location and nothing else. Anonymous records are ordinary in real headers. That
+is one fact reached by two derivations joined on something that does not exist
+for part of the population, which is the failure this lane has now met from
+three directions in one day.
+
+libclang answers all of it in a single traversal, through a documented stable C
+interface: `clang_Type_getSizeOf`, `clang_Type_getAlignOf`,
+`clang_Cursor_getOffsetOfField`, `clang_Cursor_isBitField`, and cursors as
+identity. On the same header it reported `struct outer` as `sizeof=40 align=8`
+with `const char *` still qualified and the bitfield flagged.
+
+**libclang, then.** Not to avoid a subprocess -- invoking clang is also a
+dependency, and a heavier one than it looks, since some of these options are
+`-cc1` only and `-cc1` does not apply the driver's include paths. The reason is
+that the subprocess path cannot answer the layout question from the same
+derivation as the type question, and a binding needs both to be about the same
+declaration.
+
+Neither path escapes the target question: triple, sysroot, defines, include
+paths and invalidation are required either way, and verification needs them too.
+That was never the difference between them.
+
 ## Direction for the next executable slices
 
 1. **More native storage and header-derived bindings.** `void *`, const-qualified
