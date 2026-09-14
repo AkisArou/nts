@@ -619,6 +619,8 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
             let kind = func.values[value.0 as usize].kind.clone();
             let produced = func.values[value.0 as usize].ty.clone();
             let updated = match kind {
+                kind @ (OpKind::NativeLoad { .. } | OpKind::NativeStore { .. } | OpKind::ArraySet { .. }) =>
+                    memory_operands(func, &mut rewritten, &mut count, &kind),
                 // Both operands of an operator at one type, which C picks for
                 // itself with its usual arithmetic conversions and never
                 // mentions. The LLVM backend had to name a type for the
@@ -664,32 +666,6 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
                     let erased = convert(func, &mut rewritten, &mut count, erased, &want);
                     Some(OpKind::Erase { value: erased })
                 }
-                OpKind::ArraySet {
-                    array,
-                    index,
-                    value: stored,
-                    checked,
-                } => match &func.values[array.0 as usize].ty {
-                    // A view's slot has to agree with what is stored into it
-                    // for the same reason an array's does, and specialization
-                    // narrows a parameter without knowing where it will be
-                    // stored. Missing this put an `i32` into a `Float64Array`
-                    // -- which C converts silently at the assignment and LLVM
-                    // refuses outright, so only the second backend said so.
-                    HirType::Managed(
-                        super::ManagedType::Array(element) | super::ManagedType::View(element),
-                    ) => {
-                        let want = (**element).clone();
-                        let stored = convert(func, &mut rewritten, &mut count, stored, &want);
-                        Some(OpKind::ArraySet {
-                            array,
-                            index,
-                            value: stored,
-                            checked,
-                        })
-                    }
-                    _ => None,
-                },
                 OpKind::GlobalSet {
                     global,
                     value: stored,
@@ -734,7 +710,62 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
     }
 
     func.blocks = blocks;
-    count + reconcile_edges(func) + reconcile_call_results(func, returns)
+    count + reconcile_edges(func) + reconcile_fixed_results(func, returns)
+}
+
+/// Reconcile memory operands after numeric specialization. The allocation or
+/// pointee owns the memory width, independently of the stored value's type.
+fn memory_operands(
+    func: &mut Func,
+    rewritten: &mut Vec<ValueId>,
+    count: &mut usize,
+    kind: &OpKind,
+) -> Option<OpKind> {
+    let native_index = HirType::Int { bits: 64, signed: true };
+    match *kind {
+        OpKind::NativeLoad { pointer, index } => {
+            let index = convert(func, rewritten, count, index, &native_index);
+            Some(OpKind::NativeLoad { pointer, index })
+        }
+        OpKind::NativeStore { pointer, index, value: stored } => {
+            match &func.value(pointer).ty {
+                HirType::NativePointer(super::native::Pointee::Scalar(scalar)) => {
+                    let element = scalar.representation();
+                    let index = convert(func, rewritten, count, index, &native_index);
+                    let stored = convert(func, rewritten, count, stored, &element);
+                    Some(OpKind::NativeStore { pointer, index, value: stored })
+                }
+                _ => None,
+            }
+        }
+        OpKind::ArraySet {
+            array,
+            index,
+            value: stored,
+            checked,
+        } => match &func.values[array.0 as usize].ty {
+            // A view's slot has to agree with what is stored into it
+            // for the same reason an array's does, and specialization
+            // narrows a parameter without knowing where it will be
+            // stored. Missing this put an `i32` into a `Float64Array`
+            // -- which C converts silently at the assignment and LLVM
+            // refuses outright, so only the second backend said so.
+            HirType::Managed(
+                super::ManagedType::Array(element) | super::ManagedType::View(element),
+            ) => {
+                let want = (**element).clone();
+                let stored = convert(func, rewritten, count, stored, &want);
+                Some(OpKind::ArraySet {
+                    array,
+                    index,
+                    value: stored,
+                    checked,
+                })
+            }
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 fn call_arguments(
@@ -851,7 +882,7 @@ fn usual_conversion(left: &HirType, right: &HirType) -> HirType {
     }
 }
 
-/// Make a direct call's result the type the function it names returns.
+/// Restore results whose representation is fixed by a native layout or ABI.
 ///
 /// The call keeps the callee's type and a `Convert` narrows it, which is the
 /// explicit form of what the call site used to assert on its own. Unchecked
@@ -863,7 +894,7 @@ fn usual_conversion(left: &HirType, right: &HirType) -> HirType {
 /// and may disagree with its callee -- and then could not inline a call whose
 /// signature disagrees, so a one-line arrow function stayed a real call in the
 /// innermost loop. C converts at the assignment and never had to notice.
-fn reconcile_call_results<S: std::hash::BuildHasher>(
+fn reconcile_fixed_results<S: std::hash::BuildHasher>(
     func: &mut Func,
     returns: &std::collections::HashMap<String, HirType, S>,
 ) -> usize {
@@ -873,6 +904,10 @@ fn reconcile_call_results<S: std::hash::BuildHasher>(
         .enumerate()
         .filter_map(|(at, op)| {
             let declared = match &op.kind {
+                OpKind::NativeLoad { pointer, .. } => match &func.value(*pointer).ty {
+                    HirType::NativePointer(super::native::Pointee::Scalar(scalar)) => scalar.representation(),
+                    _ => return None,
+                },
                 OpKind::Call {
                     callee: super::Callee::Native(target),
                     ..

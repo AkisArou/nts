@@ -1856,7 +1856,7 @@ fn emit_object_types(
     for ty in program.funcs.iter().flat_map(|func| {
         std::iter::once(&func.return_type).chain(func.params.iter().map(|p| &p.ty)).chain(func.values.iter().map(|v| &v.ty))
     }).chain(program.layouts.iter().flat_map(|layout| layout.fields.iter().map(|field| &field.ty))) {
-        if let HirType::NativePointer(name) = ty { pointers.insert(name); }
+        if let HirType::NativePointer(nts_core::hir::native::Pointee::Opaque(name)) = ty { pointers.insert(name); }
     }
     for name in pointers {
         if !nts_codegen_common::symbols::is_native_c_identifier(name) {
@@ -2394,7 +2394,7 @@ fn descriptors_reached(bodies: &[(String, CodeWriter, &Func)]) -> Vec<&'static s
 /// The C spelling of a type, including the object types this program declares.
 fn c_type_of(program: &Program, ty: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
     if let HirType::NativePointer(name) = ty {
-        return Ok(format!("struct {name} *"));
+        return Ok(name.pointer_type());
     }
     if let HirType::Managed(ManagedType::Object(_)) = ty {
         let layout = layout_of(program, ty, origin)?;
@@ -3832,7 +3832,7 @@ fn suspension(op: &nts_core::hir::Op) -> Result<String, Diagnostic> {
     }
 }
 
-fn managed_op(
+fn memory_op(
     writer: &mut CodeWriter,
     func: &Func,
     value: ValueId,
@@ -3841,6 +3841,12 @@ fn managed_op(
     let op = func.value(value);
     let name = value_name(value);
     let text = match &op.kind {
+        OpKind::NativeLoad { pointer, index } => {
+            format!("{name} = {}[{}];", value_name(*pointer), value_name(*index))
+        }
+        OpKind::NativeStore { pointer, index, value } => {
+            format!("{}[{}] = {};", value_name(*pointer), value_name(*index), value_name(*value))
+        }
         // One predictable branch. The string is compile-time text and is only
         // touched on the path that ends the program.
         OpKind::CellReady { cell, name } => format!(
@@ -3952,7 +3958,7 @@ fn managed_op(
                 value_name(*stored)
             )
         }
-        _ => unreachable!("managed_op is only reached for managed operations"),
+        _ => unreachable!("memory_op is only reached for memory operations"),
     };
     writer.line(&op.origin, text);
     Ok(())
@@ -4094,7 +4100,9 @@ fn emit_op(
         OpKind::Unary { op: un, operand } => {
             unary_text(func, &name, *un, *operand, &op.ty, &op.origin)?
         }
-        OpKind::ObjectNew { .. }
+        OpKind::NativeLoad { .. }
+        | OpKind::NativeStore { .. }
+        | OpKind::ObjectNew { .. }
         | OpKind::ClosureStatic
         | OpKind::CellReady { .. }
         | OpKind::FieldGet { .. }
@@ -4106,9 +4114,7 @@ fn emit_op(
         | OpKind::ArraySet { .. }
         | OpKind::Await { .. }
         | OpKind::Yield { .. }
-        | OpKind::Suspend { .. } => {
-            return managed_op(writer, func, value, context);
-        }
+        | OpKind::Suspend { .. } => return memory_op(writer, func, value, context),
         // An erased value is not a pointer to cast: it is sixteen bytes that
         // hold one only when the tag says so, and the runtime helper is where
         // that question is asked. The compiler emits the same retain and

@@ -6344,7 +6344,7 @@ fn representation_of(
         return Some(HirType::NUMBER);
     }
     if let Some(name) = super::native::pointer(snapshot, ty) {
-        return Some(HirType::NativePointer(name.to_owned()));
+        return Some(HirType::NativePointer(name));
     }
     let record = snapshot.types.get(ty.0 as usize)?;
     Some(match &record.kind {
@@ -18555,6 +18555,10 @@ impl<'a> FuncBuilder<'a> {
 
         if self.kind_of(target) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
             let (array, index) = self.element_access_parts(target)?;
+            if matches!(self.values[array.0 as usize].ty, HirType::NativePointer(_)) {
+                let index = self.coerce(index, &HirType::Int { bits: 64, signed: true }, target)?;
+                return Ok(Place::NativeElement { pointer: array, index });
+            }
             // `table[key] = value` on a string-keyed table. The key crosses
             // erased, as every other table operation's key does.
             if matches!(
@@ -18617,6 +18621,7 @@ impl<'a> FuncBuilder<'a> {
     fn read_place(&mut self, id: NodeId, place: &Place) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         Ok(match *place {
+            Place::NativeElement { pointer, index } => self.native_load(id, pointer, index)?,
             Place::Field { object, field } => {
                 let layout = match self.values[object.0 as usize].ty.clone() {
                     HirType::Managed(ManagedType::Object(ty)) => self.layout_of(id, ty)?,
@@ -19305,6 +19310,7 @@ impl<'a> FuncBuilder<'a> {
         value: ValueId,
     ) -> Result<ValueId, Diagnostic> {
         let want = match *place {
+            Place::NativeElement { pointer, .. } => Some(self.native_element_type(id, pointer)?),
             Place::Element { array, .. } => return Ok(self.coerce_element(id, array, value)),
             // The runtime takes the new length as a `double`, like every other
             // array helper that carries an index or a count. `Some`, because
@@ -19464,6 +19470,9 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let value = self.coerce_to_slot(id, place, value)?;
         match *place {
+            Place::NativeElement { pointer, index } => {
+                self.push(OpKind::NativeStore { pointer, index, value }, HirType::Void, origin);
+            }
             Place::Field { object, field } => {
                 self.field_set(object, field, value, &origin);
             }
@@ -23717,6 +23726,20 @@ impl<'a> FuncBuilder<'a> {
 
     /// `xs[i]` with both halves already lowered.
     ///
+    fn native_element_type(&self, id: NodeId, pointer: ValueId) -> Result<HirType, Diagnostic> {
+        match &self.values[pointer.0 as usize].ty {
+            HirType::NativePointer(super::native::Pointee::Scalar(scalar)) => Ok(scalar.representation()),
+            _ => Err(self.unsupported(id, "native memory access without a scalar pointee layout")),
+        }
+    }
+
+    fn native_load(&mut self, id: NodeId, pointer: ValueId, index: ValueId) -> Result<ValueId, Diagnostic> {
+        let ty = self.native_element_type(id, pointer)?;
+        let index = self.coerce(index, &HirType::Int { bits: 64, signed: true }, id)?;
+        let read = self.push(OpKind::NativeLoad { pointer, index }, ty, self.origin(id));
+        self.coerce(read, &HirType::NUMBER, id)
+    }
+
     /// Split out so that `xs?.[i]` can share it: the optional form lowers its
     /// receiver first, to ask whether it is absent, and then wants exactly this
     /// read in the arm where it is not.
@@ -23726,6 +23749,9 @@ impl<'a> FuncBuilder<'a> {
         array: ValueId,
         index: ValueId,
     ) -> Result<ValueId, Diagnostic> {
+        if matches!(self.values[array.0 as usize].ty, HirType::NativePointer(_)) {
+            return self.native_load(id, array, index);
+        }
         // The element's representation comes from the *array*, not from the
         // access node's type. Under `noUncheckedIndexedAccess` — which is what
         // TypeScript actually knows — that type is `number | undefined`, and
@@ -24155,7 +24181,7 @@ impl<'a> FuncBuilder<'a> {
             self.values[array_value.0 as usize].ty,
             HirType::Managed(
                 ManagedType::Array(_) | ManagedType::View(_) | ManagedType::Table(_, _)
-            )
+            ) | HirType::NativePointer(super::native::Pointee::Scalar(_))
         ) && !self.erased_but_proven_an_array(id, array_value)
         {
             return Err(self.not_an_array(id));
@@ -24206,8 +24232,15 @@ impl<'a> FuncBuilder<'a> {
     /// value type is `unique symbol`; erasure would return `undefined`.
     fn check_native_brand_read(&self, id: NodeId) -> Result<(), Diagnostic> {
         let children = self.children(id);
-        if children.first().and_then(|object| self.snapshot.node_types.get(object)).is_some_and(|ty| super::native::pointer(self.snapshot, *ty).is_some()) {
-            return Err(self.unsupported(id, "a property read through an opaque C pointer"));
+        if let Some(pointee) = children.first().and_then(|object| self.snapshot.node_types.get(object))
+            .and_then(|ty| super::native::pointer(self.snapshot, *ty))
+        {
+            let numeric_index = self.kind_of(id) == Some(syntax::ELEMENT_ACCESS_EXPRESSION)
+                && children.len() == 2
+                && children.last().and_then(|index| self.type_of(*index)).is_some_and(|ty| matches!(ty, HirType::Int { .. } | HirType::Float { .. }));
+            if !matches!(pointee, super::native::Pointee::Scalar(_)) || !numeric_index {
+                return Err(self.unsupported(id, "a property read through a native pointer"));
+            }
         }
         if let (Some(object), Some(member)) = (children.first(), children.last())
             && let Some(ty) = self.snapshot.node_types.get(object)
@@ -32549,6 +32582,7 @@ enum Omitted {
 /// lowering the target twice would call it twice.
 #[derive(Debug, Clone)]
 enum Place {
+    NativeElement { pointer: ValueId, index: ValueId },
     Field {
         object: ValueId,
         field: u32,

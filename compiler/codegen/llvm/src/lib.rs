@@ -1399,7 +1399,8 @@ fn externals(program: &Program) -> Vec<String> {
 fn ty_of(ty: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
     Ok(match ty {
         HirType::NativePointer(name) => {
-            if !nts_codegen_common::symbols::is_native_c_identifier(name) {
+            if let nts_core::hir::native::Pointee::Opaque(name) = name
+                && !nts_codegen_common::symbols::is_native_c_identifier(name) {
                 return Err(refuse(func, "an opaque pointee that is not an available C struct tag"));
             }
             "ptr"
@@ -2742,6 +2743,20 @@ fn memory_operation(
         }
         OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
             return element_access(func, value, &out);
+        }
+        OpKind::NativeLoad { pointer, index }
+        | OpKind::NativeStore { pointer, index, .. } => {
+            let HirType::NativePointer(nts_core::hir::native::Pointee::Scalar(scalar)) =
+                &func.value(*pointer).ty else {
+                return Err(refuse(func, "native memory without a scalar pointee layout"));
+            };
+            let element = ty_of(&scalar.representation(), func)?;
+            let address = format!("{out}.at = getelementptr {element}, ptr {}, i64 {}", name(*pointer), name(*index));
+            let access = match &op.kind {
+                OpKind::NativeStore { value, .. } => format!("store {element} {}, ptr {out}.at", name(*value)),
+                _ => format!("{out} = load {element}, ptr {out}.at"),
+            };
+            format!("{address}\n  {access}")
         }
         OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
             return text_operation(func, value, &out);

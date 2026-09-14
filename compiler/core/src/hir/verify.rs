@@ -364,6 +364,7 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
     }
     for func in &program.funcs {
         check_stores(program, func, problems);
+        check_native_memory(func, problems);
         // The ops a block still holds, not every value the lowering ever made.
         //
         // This asks whether a call "reaches the linker as an undefined symbol",
@@ -501,6 +502,33 @@ fn compatible(found: &HirType, want: &HirType) -> bool {
     // So the conversion is inserted once, by `specialize::reconcile_stores`,
     // and this says what it now means for a program to be valid.
     false
+}
+
+fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
+    for op in &func.values {
+        let (pointer, index, stored) = match &op.kind {
+            OpKind::NativeLoad { pointer, index } => (*pointer, *index, None),
+            OpKind::NativeStore { pointer, index, value } => (*pointer, *index, Some(*value)),
+            _ => continue,
+        };
+        let found = &func.value(pointer).ty;
+        let HirType::NativePointer(super::native::Pointee::Scalar(scalar)) = found else {
+            problems.push(Invalid::OperandType { func: func.name.clone(), op: "native memory access", found: found.clone() });
+            continue;
+        };
+        let expected = scalar.representation();
+        let actual = stored.map_or(&op.ty, |value| &func.value(value).ty);
+        // Exact equality: widening is a conversion, never a different-sized
+        // memory access to the same address.
+        for (what, expected, actual) in [
+            ("native memory element", expected, actual),
+            ("native memory index", HirType::Int { bits: 64, signed: true }, &func.value(index).ty),
+        ] {
+            if expected != *actual {
+                problems.push(Invalid::StoreType { func: func.name.clone(), what, expected, found: actual.clone() });
+            }
+        }
+    }
 }
 
 fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
@@ -1017,6 +1045,8 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         }
         OpKind::FieldGet { object, .. } => vec![*object],
         OpKind::FieldSet { object, value, .. } => vec![*object, *value],
+        OpKind::NativeLoad { pointer, index } => vec![*pointer, *index],
+        OpKind::NativeStore { pointer, index, value } => vec![*pointer, *index, *value],
         OpKind::ArrayGet { array, index, .. } => vec![*array, *index],
         OpKind::ArraySet {
             array,

@@ -632,7 +632,7 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
 pub fn describe(ty: &HirType) -> String {
     match ty {
         HirType::Never => "a value of type `never`".to_owned(),
-        HirType::NativePointer(name) => format!("an opaque C pointer to {name}"),
+        HirType::NativePointer(name) => format!("a native pointer to {name}"),
         HirType::BigInt => "a bigint".to_owned(),
         HirType::Erased => "an erased value".to_owned(),
         HirType::Managed(ManagedType::String) => "a string".to_owned(),

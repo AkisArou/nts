@@ -246,11 +246,13 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
             *object = of(*object);
             *value = of(*value);
         }
-        OpKind::ArrayGet { array, index, .. } => {
+        OpKind::NativeLoad { pointer: array, index }
+        | OpKind::ArrayGet { array, index, .. } => {
             *array = of(*array);
             *index = of(*index);
         }
-        OpKind::ArraySet {
+        OpKind::NativeStore { pointer: array, index, value }
+        | OpKind::ArraySet {
             array,
             index,
             value,

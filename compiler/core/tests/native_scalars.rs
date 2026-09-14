@@ -205,9 +205,75 @@ fn opaque_pointee_identity_does_not_depend_on_signature_position() {
             let prepared = hir::prepare(&snapshot).unwrap();
             assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
             let run = prepared.program.funcs.iter().find(|f| f.name == "run").unwrap();
-            let pointer = HirType::NativePointer("_Counter".to_owned());
+            let pointer = HirType::NativePointer(hir::native::Pointee::Opaque("_Counter".to_owned()));
             if name == "result" { assert_eq!(run.return_type, pointer); }
             else { assert_eq!(run.params[0].ty, pointer); }
+        }
+    }
+}
+
+#[test]
+fn scalar_pointer_access_does_not_admit_object_or_pointer_forgery() {
+    let declarations = "import type { Ptr } from \"c:types\"; type Bytes = Ptr<c_uint8>; declare function make(): Bytes;";
+    for (name, body) in [
+        ("erase", "export function bad(): unknown { return make(); }"),
+        ("brand", "export function bad(): c_uint8 { return make().__c_pointer; }"),
+        ("in", "export function bad(): boolean { return '__c_pointer' in make(); }"),
+        ("forged", "export function bad(): Bytes { return { __c_pointer: 0 as c_uint8 }; }"),
+        ("cast", "export function bad(n: number): Bytes { return n as unknown as Bytes; }"),
+        ("reinterpret", "export function bad(): Ptr<c_double> { return make() as unknown as Ptr<c_double>; }"),
+        ("array", "export function bad(): number { const a = [make()]; return a[0]![0]; }"),
+    ] {
+        let source = format!("{declarations} export function good(): number {{ const p = make(); p[0] = 42; return p[0]; }} {body}");
+        let Some(snapshot) = snapshot(&format!("scalar-pointer-{name}"), &source) else { return; };
+        let prepared = hir::prepare(&snapshot).unwrap();
+        assert!(!prepared.diagnostics.is_empty(), "{name} must refuse");
+        assert!(prepared.program.funcs.iter().any(|f| f.name == "good"), "{name}: valid arm lost");
+        assert!(!prepared.program.funcs.iter().any(|f| f.name == "bad"), "{name}: rejected function emitted");
+    }
+}
+
+#[test]
+fn native_memory_verifier_rejects_corrupted_widths_and_indices() {
+    let Some(snapshot) = snapshot("native-memory-verifier", "import type { Ptr } from \"c:types\"; export function run(p: Ptr<c_uint8>, n: number): number { p[0] = n; return p[1]; }") else { return; };
+    let prepared = hir::prepare(&snapshot).unwrap();
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let function = prepared.program.funcs.iter().position(|f| f.name == "run").unwrap();
+    for arm in ["read", "store", "index", "opaque"] {
+        let mut program = prepared.program.clone();
+        let func = &mut program.funcs[function];
+        let (load, pointer, index) = func.values.iter().enumerate().find_map(|(at, op)| match op.kind {
+            hir::OpKind::NativeLoad { pointer, index } => Some((at, pointer, index)),
+            _ => None,
+        }).unwrap();
+        match arm {
+            "read" => func.values[load].ty = HirType::NUMBER,
+            "index" => func.values[index.0 as usize].ty = HirType::NUMBER,
+            "opaque" => func.values[pointer.0 as usize].ty = HirType::NativePointer(hir::native::Pointee::Opaque("Hidden".to_owned())),
+            _ => {
+                let stored = func.values.iter().find_map(|op| match op.kind {
+                    hir::OpKind::NativeStore { value, .. } => Some(value), _ => None,
+                }).unwrap();
+                func.values[stored.0 as usize].ty = HirType::NUMBER;
+            }
+        }
+        assert!(hir::verify::verify(&program).is_err(), "{arm} corruption must fail");
+    }
+}
+
+#[test]
+fn scalar_pointees_survive_return_only_declarations_and_unrelated_types() {
+    for brand in ["c_int", "c_uint", "c_int8", "c_uint8", "c_int16", "c_uint16", "c_int32", "c_uint32", "c_int64", "c_uint64", "c_long", "c_ulong", "c_size_t", "c_ptrdiff_t", "c_float", "c_double"] {
+        for witness in ["", "type Unused = Ptr<c_double>;"] {
+            let source = format!("import type {{ Ptr }} from \"c:types\"; declare function make(): Ptr<{brand}>;
+                export function run(): number {{ return make()[1]; }} {witness}");
+            let Some(snapshot) = snapshot(&format!("pointer-result-{brand}"), &source) else { return; };
+            let prepared = hir::prepare(&snapshot).unwrap();
+            assert!(prepared.diagnostics.is_empty(), "{brand}: {:?}", prepared.diagnostics);
+            let expected = HirType::NativePointer(hir::native::Pointee::Scalar(hir::native::Scalar::from_brand(&format!("__{brand}")).unwrap()));
+            let run = prepared.program.funcs.iter().find(|f| f.name == "run").unwrap();
+            let call = run.values.iter().find(|op| matches!(op.kind, hir::OpKind::Call { .. })).unwrap();
+            assert_eq!(call.ty, expected, "{brand}");
         }
     }
 }

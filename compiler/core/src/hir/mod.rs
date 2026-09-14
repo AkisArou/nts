@@ -84,9 +84,9 @@ pub enum HirType {
     /// a `never` return means the call does not come back, which lets a backend
     /// drop everything after it.
     Never,
-    /// An opaque C pointer. Its pointee name is ABI identity, not a managed
-    /// object layout. It is never traced, retained, released, or boxed.
-    NativePointer(String),
+    /// A native address with a declared pointee layout. Never represented as
+    /// a number, traced, retained, released, or implicitly boxed.
+    NativePointer(native::Pointee),
     Bool,
     /// An exact integer of a chosen width.
     ///
@@ -722,6 +722,11 @@ pub struct Op {
 /// What an operation does.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpKind {
+    /// Access native storage. The pointer's pointee is the memory type;
+    /// conversions to/from source values are separate HIR operations.
+    /// Indices count elements and must be signed native-width integers.
+    NativeLoad { pointer: ValueId, index: ValueId },
+    NativeStore { pointer: ValueId, index: ValueId, value: ValueId },
     /// The nth parameter of the function, materialized as a value.
     Param(u32),
     /// The nth parameter of the block that defines it.

@@ -6,6 +6,12 @@ declare module "c:types" {
   // Construct and destroy it through the library's functions. `| null` admits
   // a null pointer. The phantom field is never readable or constructible.
   export type Opaque<Name extends string> = { readonly __c_opaque: Name };
+  // Native scalar storage, projected as ordinary TS numbers on reads/writes.
+  // This pointer carries neither an extent nor an ownership obligation.
+  export interface Ptr<T> {
+    readonly __c_pointer: T;
+    [index: number]: number;
+  }
   // Hand-written native ABI scalar declarations, maintained with hir/native.rs.
   // Import the required types from "c:types".
   // Brands select the C boundary type; arithmetic inside TypeScript is ordinary

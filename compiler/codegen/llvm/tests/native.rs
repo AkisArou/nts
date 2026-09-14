@@ -583,3 +583,57 @@ int main(void) {
         }
     }
 }
+
+#[test]
+fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
+    let brands = CASES.iter().map(|case| case.0).collect::<Vec<_>>().join(", ");
+    let mut source = format!("import type {{ Ptr, {brands} }} from \"c:types\";\n");
+    let mut caller = "#include \"program.h\"\nint main(void) {\n".to_owned();
+    for (i, (brand, ctype, input, expected)) in CASES.iter().enumerate() {
+        writeln!(source, "export function memory_{i}(p: Ptr<{brand}>, q: Ptr<{brand}>, n: number): number {{
+            p[1] = n;
+            const before = q[1];
+            let index = 1;
+            p[index++] += 0;
+            p[2] = 7;
+            return before + q[index] + index;
+        }}").unwrap();
+        writeln!(caller, "{{ {ctype} data[4] = {{11, 0, 0, 23}};
+            if (memory_{i}(data, data, {input}) != (double)({expected}) + 9) return {};
+            if (data[0] != 11 || data[1] != ({ctype})({expected}) || data[2] != 7 || data[3] != 23) return {};
+        }}", i * 2 + 1, i * 2 + 2).unwrap();
+    }
+    source.push_str("declare function mutate(p: Ptr<c_uint8>): void;
+        export function acrossCall(p: Ptr<c_uint8>, alias: Ptr<c_uint8>): number {
+            const before = alias[0]; mutate(p); return before * 100 + alias[0];
+        }");
+    // Compile the checked-in example as part of this same two-backend fixture.
+    source.push_str(include_str!("../../../../examples/interop/native-buffer/src/main.ts")
+        .split_once('\n').unwrap().1);
+    caller.push_str("uint8_t shared = 2; if (acrossCall(&shared, &shared) != 295) return 40;\n");
+    caller.push_str("uint8_t text[] = {'a', 0, 'z', 195, 'Q'};
+        if (uppercaseAscii(text, 5) != 2 || text[0] != 'A' || text[1] != 0 || text[2] != 'Z' || text[3] != 195 || text[4] != 'Q') return 41;
+        return 0; }\n");
+    let Some((dir, prepared)) = prepare("pointer-memory", &source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert!(!llvm.text.contains("ptrtoint"));
+    assert!(!c.writer.text().contains("nts_array_"));
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("caller.c"), caller).unwrap();
+    std::fs::write(dir.join("native.h"), "#include <stdint.h>\nvoid mutate(uint8_t *p);\n").unwrap();
+    std::fs::write(dir.join("native.c"), "#include \"native.h\"\nvoid mutate(uint8_t *p) { p[0] = 95; }\n").unwrap();
+    clang(&dir, &["-O2", "-c", "native.c", "-o", "native.o"]);
+    clang(&dir, &["-O2", "-c", "nts_runtime.c", "-o", "runtime.o"]);
+    clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", "caller.c", "-o", "caller.o"]);
+    for (input, output) in [("program.c", "c-program.o"), ("program.ll", "llvm-program.o")] {
+        clang(&dir, &["-O2", "-c", input, "-o", output]);
+        clang(&dir, &[output, "caller.o", "native.o", "runtime.o", "-lm", "-o", "caller"]);
+        assert!(Command::new(dir.join("caller")).status().unwrap().success(), "{input}");
+    }
+}

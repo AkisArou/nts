@@ -233,7 +233,7 @@ fn inputs(ty: &HirType, known: Facts) -> Vec<f64> {
 /// nobody is looking at.
 fn c_type(ty: &HirType) -> String {
     match ty {
-        HirType::NativePointer(name) => return format!("struct {name} *"),
+        HirType::NativePointer(name) => return name.pointer_type(),
         HirType::Managed(nts_core::hir::ManagedType::String) => "NtsString *",
         // Same as the map below: the harness generates calls from scalar
         // signatures and cannot make a symbol, so this is here to be right

@@ -14,6 +14,10 @@ status: "Draft for discussion · Version 0.1"
 **Memory policies:** RC and No-RC remain supported  
 **Implementation status:** Proposed design; no implementation in the compiler has been inspected or verified.
 
+**Revision in progress:** [Native operations: example-led semantics](native-operations.md)
+records the current runnable slice and the decisions being revised from this
+draft. The API below remains a proposal, including its ownership vocabulary.
+
 ## Abstract
 
 This RFC proposes a native-programming interface for a TypeScript-to-native compiler. It replaces routine byte-offset memory intrinsics with native values, typed pointer indexing, field access, address-of operations, and inline arrays. It adds an HIR analysis, called **ResourceFlow**, that checks explicit ownership and resource lifecycles before code generation.

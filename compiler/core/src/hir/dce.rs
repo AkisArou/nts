@@ -129,6 +129,7 @@ fn has_effects(kind: &OpKind) -> bool {
         // strongest effect there is.
         OpKind::CellReady { .. }
         | OpKind::Call { .. }
+        | OpKind::NativeStore { .. }
         | OpKind::ArraySet { .. }
         | OpKind::FieldSet { .. }
         | OpKind::GlobalSet { .. }
@@ -159,6 +160,7 @@ fn has_effects(kind: &OpKind) -> bool {
         | OpKind::FieldGet { .. }
         | OpKind::ArrayNew { .. }
         | OpKind::Length(_)
+        | OpKind::NativeLoad { .. }
         | OpKind::ArrayGet { .. }
         | OpKind::StringUnitAt { .. } => false,
     }

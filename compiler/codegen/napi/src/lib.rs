@@ -360,7 +360,7 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
 
 fn spell(ty: &HirType) -> String {
     match ty {
-        HirType::NativePointer(name) => format!("an opaque C pointer to {name}"),
+        HirType::NativePointer(name) => format!("a native pointer to {name}"),
         HirType::Void => "void".to_owned(),
         HirType::Bool => "bool".to_owned(),
         HirType::Erased => "unknown".to_owned(),
@@ -399,7 +399,7 @@ fn spell(ty: &HirType) -> String {
 /// the name is built from the same [`c_identifier`] rather than spelled again.
 fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
     match ty {
-        HirType::NativePointer(name) => format!("struct {name} *"),
+        HirType::NativePointer(name) => name.pointer_type(),
         // Neither has a value to marshal: `void` is a function that returned
         // nothing, `never` one that did not return.
         HirType::Void | HirType::Never => "void".to_owned(),
@@ -3939,11 +3939,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn opaque_pointers_have_no_javascript_marshalling_path() {
-        let pointer = HirType::NativePointer("Counter".to_owned());
-        assert!(cross(&pointer, &[], &FxHashSet::default()).is_none());
-        let array = HirType::Managed(ManagedType::Array(Box::new(pointer)));
-        assert!(cross(&array, &[], &FxHashSet::default()).is_none());
+    fn native_pointers_have_no_javascript_marshalling_path() {
+        use nts_core::hir::native::{Pointee, Scalar};
+        for pointee in [Pointee::Opaque("Counter".to_owned()), Pointee::Scalar(Scalar::UInt8)] {
+            let pointer = HirType::NativePointer(pointee);
+            assert!(cross(&pointer, &[], &FxHashSet::default()).is_none());
+            let array = HirType::Managed(ManagedType::Array(Box::new(pointer)));
+            assert!(cross(&array, &[], &FxHashSet::default()).is_none());
+        }
         assert!(matches!(cross(&HirType::NUMBER, &[], &FxHashSet::default()), Some(Cross::Number)));
     }
 

@@ -23,7 +23,7 @@ pub enum Convention {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
-    Pointer(String),
+    Pointer(Pointee),
     Scalar(Scalar),
     Bool,
     Void,
@@ -32,6 +32,36 @@ pub enum Type {
     Managed(ManagedType),
     Erased,
     BigInt,
+}
+
+/// Native memory has a declared element layout, independently of ownership.
+/// An opaque tag identifies a foreign object but permits no memory access.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Pointee {
+    Opaque(String),
+    Scalar(Scalar),
+}
+
+impl Pointee {
+    #[must_use]
+    pub fn c_type(&self) -> String {
+        match self {
+            Self::Opaque(name) => format!("struct {name}"),
+            Self::Scalar(scalar) => scalar.c_type().to_owned(),
+        }
+    }
+
+    #[must_use]
+    pub fn pointer_type(&self) -> String { format!("{} *", self.c_type()) }
+}
+
+impl std::fmt::Display for Pointee {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Opaque(name) => write!(f, "{name}"),
+            Self::Scalar(scalar) => write!(f, "{}", scalar.c_type()),
+        }
+    }
 }
 
 impl Type {
@@ -64,7 +94,7 @@ impl Type {
     #[must_use]
     pub fn c_type(&self) -> std::borrow::Cow<'_, str> {
         std::borrow::Cow::Borrowed(match self {
-            Self::Pointer(name) => return std::borrow::Cow::Owned(format!("struct {name} *")),
+            Self::Pointer(pointee) => return std::borrow::Cow::Owned(pointee.pointer_type()),
             Self::Scalar(scalar) => scalar.c_type(),
             Self::Bool => "bool",
             Self::Void => "void",
@@ -107,7 +137,7 @@ impl Function {
     ) -> Result<Self, String> {
         fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
             if let Some(name) = pointer(snapshot, ty) {
-                return Some(Type::Pointer(name.to_owned()));
+                return Some(Type::Pointer(name));
             }
             if let Some(scalar) = scalar(snapshot, ty) {
                 return Some(Type::Scalar(scalar));
@@ -192,7 +222,7 @@ impl Type {
 /// C scalars whose widths are fixed on the native targets supported by nts.
 /// Keep C spelling separate from the register type: it is the declaration's
 /// contract, not an integer width inferred from a particular argument.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Scalar {
     Int,
     UInt,
@@ -337,10 +367,10 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     number.then_some(brand).flatten()
 }
 
-/// A reserved phantom field authors a C struct tag. A nullable declaration
+/// A reserved phantom field authors a pointee layout or C struct tag. A nullable declaration
 /// has the same ABI; undefined and mixed-pointer unions have no such contract.
 #[must_use]
-pub fn pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
+pub fn pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     use nts_semantic_schema::LiteralValue;
     let record = snapshot.types.get(ty.0 as usize)?;
     if let TypeKind::Union(parts) = &record.kind {
@@ -357,16 +387,20 @@ pub fn pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
     let TypeKind::Object { properties } = &record.kind else { return None; };
     let [property] = properties.as_slice() else { return None; };
     // tsgo escapes a source name beginning __ with one more underscore.
-    if property.name != "___c_opaque" || !property.readonly || property.optional
+    if !property.readonly || property.optional
         || property.kind != MemberKind::Field
     {
         return None;
     }
+    if property.name == "___c_pointer" {
+        return scalar(snapshot, property.ty).map(Pointee::Scalar);
+    }
+    if property.name != "___c_opaque" { return None; }
     let TypeKind::Literal(LiteralValue::String(name)) =
         &snapshot.types.get(property.ty.0 as usize)?.kind
     else { return None; };
     // Identifier validity belongs to the native emitter's shared C-name
     // classifier, just as it does for a foreign function's symbol. Recognize
     // the authored type here even when its name will receive a diagnostic.
-    Some(name)
+    Some(Pointee::Opaque(name.clone()))
 }
