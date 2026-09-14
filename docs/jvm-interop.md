@@ -1978,7 +1978,7 @@ Rows corrected in place carry an inline comment with what the artefact said.
 | `int[]` / `byte[]` / subarray | ● | | ● |
 | Generics, wildcards, raw types | ● | raw | |  <!-- corrected 2026-09-15: nothing generic crosses in this direction: `tags()` publishes a **raw** `NtsMap` and the consumer writes `Map<Object, Object>` with an unchecked conversion and a cast per value. The project README said so and the matrix did not. -->
 | Overloads, primitive-preferred | ● | | ● |
-| Nullability, annotated and not | ● | | ● |
+| Nullability, annotated and not | ● | | |  <!-- corrected 2026-09-15: android-shape has **no** nullability annotation anywhere in its Java, and its `main.ts` narrows nothing -- no `=== null`, no `??`, no `!.`; the two members the binder rendered `| null` are untouched by either file. java-from-ts now carries all three paths and they disagree: `render(String)` is `@NonNull` so its return is `string` while its unannotated `Object` overload stays `string | null`, `describe` takes the unannotated default, and `name()` is non-null only because `bind.overrides.json` says so. That file had been checked in and read by nothing. -->
 | Exceptions | | | |  <!-- corrected 2026-09-15: neither project has a `try`, `catch` or `throw` outside the refusals file, and a Java exception propagates as itself rather than as an `NtsRefusal` -- no exception table is emitted -->
 | Public fields (`Rect`-shaped) | ● | | ● |
 | Accessors, not public fields | | ● | ● |

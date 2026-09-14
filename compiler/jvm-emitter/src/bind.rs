@@ -161,6 +161,21 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
     static PRUNED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static PACKAGE: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+    /// The class being rendered, dotted, so a per-member override can be keyed
+    /// by it. Set beside `PACKAGE` and for the same reason.
+    static CLASS: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+    /// Members a person has declared never-null, as `com.example.Catalog#name()Ljava/lang/String;`.
+    ///
+    /// **What the class file cannot say.** An unannotated reference return
+    /// becomes `T | null`, which is the only sound default -- guessing non-null
+    /// produces the NPE the type system promised could not happen, and is why
+    /// Kotlin had to invent platform types. But a jar with no annotations is
+    /// then uniformly nullable, and every call site pays for a fact its author
+    /// knows and the format cannot carry.
+    ///
+    /// This is that fact, supplied out of band and applied by `returns`.
+    static NONNULL: std::cell::RefCell<std::collections::BTreeSet<String>> =
+        const { std::cell::RefCell::new(std::collections::BTreeSet::new()) };
     /// Packages this module referred to and does not itself declare, collected
     /// while rendering so `module_of` can import them.
     ///
@@ -383,11 +398,49 @@ fn is_reference(rendered: &str) -> bool {
 /// platform types: the class file genuinely does not say, and guessing
 /// non-null produces an NPE the type system promised could not happen. An
 /// overrides file is how a jar with no annotations gets cleaned up.
-fn returns(rendered: &str, annotations: &[String], descriptor: &str) -> String {
-    if !descriptor_is_reference(descriptor) || nonnull(annotations) {
+fn returns(rendered: &str, annotations: &[String], descriptor: &str, member: &str) -> String {
+    if !descriptor_is_reference(descriptor) || nonnull(annotations) || overridden_nonnull(member) {
         return rendered.to_owned();
     }
     format!("{rendered} | null")
+}
+
+/// A member's key within its class: the name and the descriptor, together.
+///
+/// Both, because an overload set shares a name -- `render(String)` and
+/// `render(Object)` are two members, and a file correcting one of them has to be
+/// able to say which.
+fn member_key(name: &str, descriptor: &str) -> String {
+    format!("{name}{descriptor}")
+}
+
+/// [`member_key`] for a field, which is the common case and reads better inline.
+fn key(field: &crate::read::Member) -> String {
+    member_key(&field.name, &field.descriptor)
+}
+
+/// Whether a person has declared this member never-null, out of band.
+///
+/// Keyed by the class *and* the member's name-plus-descriptor, because an
+/// overload set shares a name: `render(String)` and `render(Object)` are two
+/// members and a file has to be able to speak about one of them.
+fn overridden_nonnull(member: &str) -> bool {
+    if member.is_empty() {
+        return false;
+    }
+    CLASS.with(|class| {
+        let key = format!("{}#{member}", class.borrow());
+        NONNULL.with(|it| it.borrow().contains(&key))
+    })
+}
+
+/// Install the never-null overrides for the classes about to be rendered.
+///
+/// Whole-run rather than per-class: one file describes a jar, and the renderer
+/// walks the jar. Replaces any previous set, so a second run in one process
+/// does not inherit the first's.
+pub fn set_nonnull(members: std::collections::BTreeSet<String>) {
+    NONNULL.with(|it| *it.borrow_mut() = members);
 }
 
 /// Whether a **descriptor** names a reference, which is the only authority on
@@ -977,7 +1030,7 @@ fn render_fields_into(
             match field.constant_value.as_deref().filter(|it| spellable(it)) {
                 Some(value) => value.to_owned(),
                 None if provably_present => rendered.clone(),
-                None => returns(&rendered, &field.annotations, &field.descriptor),
+                None => returns(&rendered, &field.annotations, &field.descriptor, &key(field)),
             },
         );
     }
@@ -1230,6 +1283,7 @@ pub fn declarations_with(
         .rsplit_once('/')
         .map_or_else(String::new, |(package, _)| package.replace('/', "."));
     PACKAGE.with(|it| it.replace(package));
+    CLASS.with(|it| it.replace(class.binary_name.replace(['/', '$'], ".")));
 
     let mut out = String::new();
     let name = simple_name(&class.binary_name);
@@ -1450,7 +1504,8 @@ fn render_methods_into(
                 &mut *out_constants,
                 "    function {emitted}{}({rendered_arguments}): {};",
                 type_parameters(method.signature.as_deref()),
-                returns(&result, &method.annotations, &method.descriptor),
+                returns(&result, &method.annotations, &method.descriptor,
+                &member_key(&method.name, &method.descriptor)),
             );
             continue;
         }
@@ -1476,7 +1531,8 @@ fn render_methods_into(
             if is_static { "static " } else { "" },
             emitted,
             type_parameters(method.signature.as_deref()),
-            returns(&result, &method.annotations, &method.descriptor),
+            returns(&result, &method.annotations, &method.descriptor,
+                &member_key(&method.name, &method.descriptor)),
         );
     }
     Ok(())
@@ -1726,14 +1782,16 @@ fn arguments(method: &crate::read::Member, parameters: &[String], resolve: &dyn 
 /// Separate from [`declarations_with`] because that function was over a hundred
 /// lines with it inline, and the two halves answer different questions: what
 /// this class says, and what it gets for free.
-fn render_inherited(
-    out: &mut String,
+/// The method names a class offers, all of them and the public ones.
+///
+/// Both loops in [`render_inherited`] need both sets, which is why they are
+/// computed once above them rather than inside either -- and why this is a
+/// query rather than a step: it reads the class and answers, and neither
+/// caller can change what it says.
+fn visible_method_names(
     class: &ClassFile,
     resolve: &dyn Resolve,
-    constants: &mut String,
-    table: &mut Vec<Bound>,
-    constants_table: &mut Vec<Bound>,
-) {
+) -> (std::collections::BTreeSet<String>, std::collections::BTreeSet<String>) {
     // Every method name visible on this class, declared or inherited -- the
     // same question `render_fields_into` asks, asked from the other path.
     // Without it `Calendar` rendered `isSet$field` and `GregorianCalendar`
@@ -1762,6 +1820,18 @@ fn render_inherited(
                 .map(|(_, m)| m.name),
         )
         .collect();
+    (shadowed, public_names)
+}
+
+fn render_inherited(
+    out: &mut String,
+    class: &ClassFile,
+    resolve: &dyn Resolve,
+    constants: &mut String,
+    table: &mut Vec<Bound>,
+    constants_table: &mut Vec<Bound>,
+) {
+    let (shadowed, public_names) = visible_method_names(class, resolve);
     for field in inherited_fields(class, resolve) {
         if omit_type(&field.descriptor, field.signature.as_deref()) {
             continue;
@@ -1803,7 +1873,11 @@ fn render_inherited(
             } else {
                 field.name.clone()
             },
-            if field.constant { rendered.clone() } else { returns(&rendered, &field.annotations, &field.descriptor) },
+            if field.constant {
+                rendered.clone()
+            } else {
+                returns(&rendered, &field.annotations, &field.descriptor, &key(&field))
+            },
         );
     }
     for (declaring, method) in inherited(class, resolve) {
@@ -1878,7 +1952,8 @@ fn render_inherited(
             // one was not, because the fixture had no method with a type
             // parameter of its own until the test below added one.
             type_parameters(method.signature.as_deref()),
-            returns(&result, &method.annotations, &method.descriptor),
+            returns(&result, &method.annotations, &method.descriptor,
+                &member_key(&method.name, &method.descriptor)),
         );
     }
 }

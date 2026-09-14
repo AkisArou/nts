@@ -44,8 +44,9 @@ fail for a reason that is not a defect.
 | `bytes().subarray(0, 4)` | a view, not a copy |
 | `catalog.id()` being `bigint` | 2^53+1 does not fit a `number`, and `id + total` refusing to compile is the point |
 | `find(1.5)` vs `find$int(3)` | `number` is an f64, so `find(double)` is the only lossless receiver and keeps the plain name; the truncating one is reachable under a different **name**, because a branded `int` does not lower in a class method's parameter |
-| `render("x")` | two equally lossless candidates, decided by JLS 15.12.2, the rule `javac` already runs |
-| `describe(...)` vs `name()` | `@Nullable` read from the **CLASS-retention** table; `name()` cleaned up by the overrides file |
+| `render("x")` resolving | two equally lossless candidates, decided by JLS 15.12.2, the rule `javac` already runs |
+| `render("x")` vs its `Object` overload | `@NonNull` read from the **CLASS-retention** table, so one returns `string` and its unannotated sibling returns `string \| null` |
+| `describe(...)` vs `name()` | both unannotated, so both default to `string \| null`; `name()` is cleaned up to `string` by `bind.overrides.json`, which is the only way to say "unannotated and never null" |
 | `cursorAt(2)` | an inner class, constructed through the outer instance |
 
 ## One thing here is measured rather than claimed

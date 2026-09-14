@@ -401,8 +401,14 @@ fn nullability_is_asymmetric_between_returns_and_arguments() {
     // An ARGUMENT does not get `| null` added by default. The error a caller
     // wants kept is passing null where the callee never said it accepts one,
     // so widening every parameter would delete exactly that check.
+    //
+    // `render(Object)` rather than `render(String)`, because the `String`
+    // overload is now `@NonNull` and its return is `string` -- which would leave
+    // this assertion unable to show which of the two rules produced which half.
+    // This one carries both at once: the argument is `unknown` and not
+    // `unknown | null`, and the return is nullable.
     assert!(
-        body.contains("render(a0: string): string | null;"),
+        body.contains("render(a0: unknown): string | null;"),
         "an unannotated argument stays non-null:\n{body}"
     );
     // The control: `find(a0: number)` proves a primitive argument is untouched
@@ -462,6 +468,47 @@ fn enum_constants_are_not_nullable() {
 
 /// Generics survive into the declarations, which is what makes an element
 /// access typed rather than a cast.
+#[test]
+fn nullability_comes_from_three_places_and_they_disagree() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let catalog = ours(&classes, "com.example.Catalog");
+
+    // Nothing installed: the class file is the only source.
+    nts_jvm_emitter::bind::set_nonnull(std::collections::BTreeSet::new());
+    let plain = nts_jvm_emitter::bind::declarations(&catalog).expect("renders").0;
+
+    // **Annotated.** `@NonNull` is CLASS-retention and read from the class file.
+    assert!(plain.contains("render(a0: string): string;"), "annotated:\n{plain}");
+    // **Its own overload, unannotated.** Same name, different answer -- which is
+    // why the override key below carries the descriptor and not just the name.
+    assert!(plain.contains("render(a0: unknown): string | null;"), "sibling overload:\n{plain}");
+    // **Unannotated.** The only sound default: the class file does not say, and
+    // guessing non-null produces the NPE the types ruled out.
+    assert!(plain.contains("describe(a0: number): string | null;"), "default:\n{plain}");
+    // And `name()` is unannotated too, so it starts here.
+    assert!(plain.contains("name(): string | null;"), "name before the override:\n{plain}");
+
+    // **The overrides file**, which is the only way to say "unannotated and
+    // never null" -- a jar with no annotations at all is otherwise uniformly
+    // nullable, and every call site pays for a fact its author knows.
+    //
+    // This mechanism was documented, checked in beside the project, and read by
+    // nothing until 2026-09-15; `name()` and `describe` both rendered
+    // `string | null` and the project's own comment claimed they differed.
+    nts_jvm_emitter::bind::set_nonnull(
+        ["com.example.Catalog#name()Ljava/lang/String;".to_owned()].into_iter().collect(),
+    );
+    let overridden = nts_jvm_emitter::bind::declarations(&catalog).expect("renders").0;
+    assert!(overridden.contains("name(): string;"), "after the override:\n{overridden}");
+    // The override is keyed to one member and does not leak to the others.
+    assert!(overridden.contains("describe(a0: number): string | null;"), "still default:\n{overridden}");
+
+    nts_jvm_emitter::bind::set_nonnull(std::collections::BTreeSet::new());
+}
+
 #[test]
 fn a_map_parameter_takes_a_typescript_map_only_when_one_would_fit() {
     let Some(classes) = fixture() else {

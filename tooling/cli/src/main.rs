@@ -534,6 +534,53 @@ fn curated(path: Option<&Utf8PathBuf>) -> Result<Option<std::collections::BTreeS
 /// between the two modes meant the second run silently destroyed the first
 /// run's bindings, which cost twenty minutes to find and would cost a user
 /// longer, because the file left behind is a valid declaration file.
+/// Read the never-null members from an overrides file.
+///
+/// The shape is one entry per class, because that is how a person reads a jar:
+///
+/// ```json
+/// { "com.example.Catalog": { "nullability": { "name()Ljava/lang/String;": "nonnull" } } }
+/// ```
+///
+/// Keys beginning `//` are comments -- JSON has none, and a file describing
+/// decisions needs somewhere to say why.
+///
+/// **A value other than `nonnull` is an error rather than a skip.** `"nullable"`
+/// is the default and writing it would be harmless; anything else is a typo, and
+/// a typo silently ignored here produces exactly the file the author was trying
+/// to correct.
+fn nonnull_overrides(path: &Utf8Path) -> Result<std::collections::BTreeSet<String>> {
+    let text = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
+    let root: serde_json::Value =
+        serde_json::from_str(&text).with_context(|| format!("parsing {path}"))?;
+    let classes = root.as_object().ok_or_else(|| anyhow!("{path}: the top level is not an object"))?;
+    let mut out = std::collections::BTreeSet::new();
+    for (class, body) in classes {
+        if class.starts_with("//") {
+            continue;
+        }
+        let Some(nullability) = body.get("nullability").and_then(serde_json::Value::as_object) else {
+            continue;
+        };
+        for (member, how) in nullability {
+            if member.starts_with("//") {
+                continue;
+            }
+            match how.as_str() {
+                Some("nonnull") => {
+                    out.insert(format!("{class}#{member}"));
+                }
+                Some("nullable") => {}
+                other => bail!(
+                    "{path}: {class}#{member} says {:?}; the values are \"nonnull\" and \"nullable\"",
+                    other.unwrap_or("a non-string")
+                ),
+            }
+        }
+    }
+    Ok(out)
+}
+
 fn bind_java(args: &[String]) -> Result<()> {
     let mut jar: Option<Utf8PathBuf> = None;
     let mut classes: Option<Utf8PathBuf> = None;
@@ -543,6 +590,7 @@ fn bind_java(args: &[String]) -> Result<()> {
     let mut keeps = false;
     let mut self_contained = false;
     let mut members: Option<Utf8PathBuf> = None;
+    let mut overrides: Option<Utf8PathBuf> = None;
     let mut at = 0;
     while at < args.len() {
         let value = |at: usize, what: &str| -> Result<String> {
@@ -557,10 +605,28 @@ fn bind_java(args: &[String]) -> Result<()> {
             "--keeps" => { keeps = true; at += 1 }
             "--self-contained" => { self_contained = true; at += 1 }
             "--members" => { members = Some(Utf8PathBuf::from(value(at, "--members")?)); at += 2 }
+            "--overrides" => { overrides = Some(Utf8PathBuf::from(value(at, "--overrides")?)); at += 2 }
             // Refused rather than ignored. A misspelled flag that is skipped
             // produces a correct-looking file built with the wrong options.
-            other => bail!("unknown argument `{other}`; nts bind takes --jar or --classes, --package, --out, --prelude, --keeps, --self-contained, --members"),
+            other => bail!("unknown argument `{other}`; nts bind takes --jar or --classes, --package, --out, --prelude, --keeps, --self-contained, --members, --overrides"),
         }
+    }
+    // **What the class file cannot say**, supplied out of band.
+    //
+    // An unannotated reference return becomes `T | null` and that is the only
+    // sound default -- guessing non-null produces the NPE the type system
+    // promised could not happen. The cost lands on a jar that carries no
+    // annotations at all, where every call site then narrows a value its author
+    // knows is never null.
+    //
+    // The file was checked in beside `java-from-ts` from that project's first
+    // commit, documented in `docs/jvm-interop.md`, and **read by nothing** until
+    // 2026-09-15. The project's own `Catalog.java` says `describe` "is marked
+    // and `name` is not, so the generator has to distinguish", and the generator
+    // could not: both rendered `string | null` and there was no mechanism to
+    // tell them apart.
+    if let Some(path) = &overrides {
+        nts_jvm_emitter::bind::set_nonnull(nonnull_overrides(path)?);
     }
     let (Some(package), Some(out)) = (package, out) else {
         bail!("nts bind needs --package and --out");

@@ -26,13 +26,13 @@ declare module "java:com.example" {
     find(a0: bigint): number;
     find(a0: number): number;
     find(a0: string): number;
-    render(a0: string): string | null;
+    render(a0: string): string;
     render(a0: unknown): string | null;
     sum(...a0: number[]): number;
     /** @deprecated */
     legacyFind(a0: string): number;
     describe(a0: number): string | null;
-    name(): string | null;
+    name(): string;
     /** Throws java.lang.NumberFormatException. Propagates as the Java exception itself, terminating the program; not catchable by a TypeScript `try` yet. */
     parse(a0: string): number;
     repeat<T>(a0: T, a1: number): java.util.List<T> | null;
@@ -71,6 +71,10 @@ declare module "java:com.example" {
     static values(): Kind[] | null;
     static valueOf(a0: string): Kind | null;
     weight(): number;
+  }
+
+  /** com.example.NonNull */
+  export interface NonNull {
   }
 
 }

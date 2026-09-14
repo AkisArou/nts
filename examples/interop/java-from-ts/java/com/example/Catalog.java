@@ -8,9 +8,17 @@ import java.util.List;
  * matrix appears here, so the generated `.d.ts` beside it is a real artefact
  * rather than a sketch of a pleasant case.
  *
- * <p>Unannotated for nullability on purpose -- `describe` is marked and `name`
- * is not, so the generator has to distinguish "known null" from "not stated"
- * and the overrides file has something to do.
+ * <p>All three nullability paths appear here, because a binder that handles one
+ * of them is not useful on a real jar: `describe` is unannotated and so defaults
+ * to `| null`; `render(String)` carries `@NonNull` and the class file says so;
+ * `name()` is unannotated and never null, which only `bind.overrides.json` can
+ * express.
+ *
+ * <p>Corrected 2026-09-15. This said `describe` was "marked" and it never was:
+ * there was no annotation anywhere in this project, and nothing read the
+ * overrides file. Both methods rendered `string | null` by the same default, so
+ * the distinction this comment described did not exist -- in the class whose
+ * stated job is to have one of everything.
  */
 public final class Catalog {
 
@@ -70,6 +78,10 @@ public final class Catalog {
     public int find(String key) { return key.length(); }
 
     /** Two equally-lossless candidates: JLS 15.12.2 picks the more specific. */
+    /** Annotated, so the `| null` is dropped on the evidence of the class file
+     *  rather than a file beside it. Its `Object` overload is not annotated,
+     *  which is why the two render differently. */
+    @NonNull
     public String render(String value) { return "s:" + value; }
     public String render(Object value) { return "o:" + value; }
 
@@ -90,7 +102,8 @@ public final class Catalog {
         return find(key);
     }
 
-    /** Annotated: the generator must surface `| null`. */
+    /** Unannotated, so the generator must surface `| null`: the class file does
+     *  not say, and guessing non-null produces the NPE the types ruled out. */
     public String describe(int id) {
         return id == 0 ? null : "item-" + id;
     }

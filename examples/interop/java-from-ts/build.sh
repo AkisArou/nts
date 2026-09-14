@@ -39,7 +39,8 @@ jar --create --file "$out/catalog.jar" -C "$out/classes" .
 generated="$out/com.example.d.ts"
 table="$out/com.example.bind"
 ( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" cargo run --release -q \
-    -p nts-cli -- bind --classes "$out/classes" --package com.example --out "$out" )
+    -p nts-cli -- bind --classes "$out/classes" --package com.example --out "$out" \
+    --overrides "$here/bind.overrides.json" )
 
 if [ "${NTS_REGENERATE:-}" = "1" ]; then
   cp "$generated" "$here/types/com.example.d.ts"
