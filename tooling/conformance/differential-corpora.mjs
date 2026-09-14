@@ -2181,7 +2181,97 @@ export const CORPORA = {
       const T = ["udp4", "udp6", "UDP4", "udp", "", "tcp", "0", "o:udp4", "o:udp6", "o:bogus", "o:", "o:udp4+reuse", "o:udp4+badlookup", "o:none"];
       return T[Math.floor(rnd() * T.length)];
     },
-    calls: [
+    calls: (() => {
+      // One socket for the whole run, bound once and unreffed. See `http`'s corpus for why both
+      // matter: ~4,000 binds per side would dominate the run, and a bound handle keeps the probe's
+      // child alive after it has printed its answer.
+      let shared = null;
+      const socketFor = async (m) => {
+        if (shared !== null) return shared;
+        const socket = m.createSocket({ type: "udp4", reuseAddr: true });
+        await new Promise((resolve, reject) => {
+          socket.once("error", reject);
+          socket.bind(0, "127.0.0.1", resolve);
+        });
+        socket.unref();
+        shared = { socket, port: socket.address().port };
+        return shared;
+      };
+      return [
+        {
+          // **The `Socket` half of `dgram`, which was 2 of 31 published functions.** Everything
+          // uncalled was an instance method: `bind`, `send`, `address`, the TTL and buffer-size
+          // setters, membership, `connect`/`disconnect`. A datagram sent to the socket's own port
+          // is a value -- the bytes arrive or they do not -- so this is a value compare and not
+          // an ordering one.
+          //
+          // Ports are never compared; the two sides bind different ones. What is compared is the
+          // payload, the address *family*, what the getters answer after the setters, and the
+          // codes the membership calls produce for an address that is not multicast.
+          label: "socket-round-trip",
+          call: async (m, s) => {
+            const attempt = (make) => {
+              try {
+                const v = make();
+                return v === undefined ? "ok" : String(v);
+              } catch (error) {
+                return `${error?.code ?? error?.name ?? "?"}`;
+              }
+            };
+            try {
+              const { socket, port } = await socketFor(m);
+              const payload = Buffer.from(String(s), "utf8");
+              const echoed = await new Promise((resolve) => {
+                const timer = setTimeout(() => resolve("timeout"), 2000);
+                const onMessage = (message, rinfo) => {
+                  clearTimeout(timer);
+                  socket.removeListener("message", onMessage);
+                  resolve(`${message.equals(payload) ? "same" : `differs:${message.length}`}~${rinfo.family}~${rinfo.size}`);
+                };
+                socket.on("message", onMessage);
+                socket.send(payload, port, "127.0.0.1", (error) => {
+                  if (error) {
+                    clearTimeout(timer);
+                    socket.removeListener("message", onMessage);
+                    resolve(`send:${error.code ?? error.name}`);
+                  }
+                });
+              });
+              return [
+                echoed,
+                socket.address().family,
+                // The setters answer nothing; the getters are what can be compared. A size is
+                // rounded by the kernel, so the comparison is that both sides round the same way.
+                attempt(() => socket.setTTL(64)),
+                attempt(() => socket.setBroadcast(false)),
+                attempt(() => socket.setMulticastTTL(1)),
+                attempt(() => socket.setMulticastLoopback(false)),
+                attempt(() => socket.setRecvBufferSize(8192)),
+                attempt(() => socket.getRecvBufferSize()),
+                attempt(() => socket.setSendBufferSize(8192)),
+                attempt(() => socket.getSendBufferSize()),
+                attempt(() => socket.getSendQueueSize()),
+                attempt(() => socket.getSendQueueCount()),
+                // An address that is not multicast: both sides must refuse it the same way.
+                attempt(() => socket.addMembership("127.0.0.1")),
+                attempt(() => socket.dropMembership("127.0.0.1")),
+                attempt(() => socket.setMulticastInterface("0.0.0.0")),
+                // `remoteAddress` before a connect is an error, and its family after one is
+                // comparable where its port is not.
+                attempt(() => socket.remoteAddress()),
+                // **`ref()` then `unref()`, in that order, and the order is load-bearest.**
+                // Calling `ref()` alone undoes the `unref()` this corpus does after binding, so
+                // from the first input onward the socket held the probe's child alive and
+                // `spawnSync` waited forever. Ten minutes of nothing, from one method call that
+                // does exactly what it says.
+                attempt(() => { socket.ref(); socket.unref(); return "ok"; }),
+              ].join("|");
+            } catch (error) {
+              return `threw:${error?.code ?? error?.name ?? "?"}`;
+            }
+          },
+        },
+
       {
         label: "createSocket",
         call: (m, spec) => {
@@ -2221,7 +2311,8 @@ export const CORPORA = {
           }
         },
       },
-    ],
+    ];
+    })(),
   },
   timers: {
     // The synchronous surface of a timer: what `setTimeout` validates before
