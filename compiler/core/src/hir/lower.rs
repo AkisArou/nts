@@ -468,9 +468,13 @@ fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarch
 }
 
 /// Read every class declaration's name, base and own methods.
-fn collect_hierarchy(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> Hierarchy {
+fn collect_hierarchy(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    closures: &[ClosureInfo],
+) -> Hierarchy {
     let mut hierarchy = Hierarchy::default();
-    let probe = FuncBuilder::probe(snapshot);
+    let probe = FuncBuilder::new(snapshot, foreign);
     let instantiations = super::generics::instantiations(snapshot);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -2118,6 +2122,7 @@ fn declaration_is_exported(probe: &FuncBuilder, id: NodeId) -> bool {
 
 fn collect_module_scope(
     snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
     closures: &[ClosureInfo],
     hierarchy: &Hierarchy,
 ) -> ModuleScope {
@@ -2139,7 +2144,7 @@ fn collect_module_scope(
     // had a different type; `NtsObj_Request` has eight consecutive
     // `NtsString *` members, where the same defect compiles clean and returns
     // the wrong value.
-    let mut probe = FuncBuilder::probe(snapshot);
+    let mut probe = FuncBuilder::new(snapshot, foreign);
     probe.hierarchy = hierarchy.clone();
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -4363,8 +4368,8 @@ pub fn lower_with(
     // lays out classes and a layout built without the hierarchy is a different
     // layout. `collect_hierarchy` reads the snapshot and the closures and
     // nothing else, so it can come first; the reverse is not true.
-    let hierarchy = collect_hierarchy(snapshot, &closures);
-    let mut module = collect_module_scope(snapshot, &closures, &hierarchy);
+    let hierarchy = collect_hierarchy(snapshot, foreign, &closures);
+    let mut module = collect_module_scope(snapshot, foreign, &closures, &hierarchy);
     lowered.diagnostics.extend(module.refusals.iter().cloned());
     lowered.program.globals.clone_from(&module.globals);
     collect_layouts(&mut lowered.program, module.layouts.clone());
@@ -9618,8 +9623,8 @@ impl<'a> FuncBuilder<'a> {
         // verifier checks call argument types, so the value reaching the call
         // has to *be* of the parameter's type rather than merely share its
         // representation.
-        if matches!(have, HirType::NativePointer(_))
-            && matches!(want, HirType::NativePointer(super::native::Pointee::Void))
+        if let (HirType::NativePointer(from), HirType::NativePointer(to)) = (&have, want)
+            && from.converts_to(to)
         {
             let origin = self.origin(id);
             return Ok(self.push(OpKind::Convert(value), want.clone(), origin));
@@ -19558,6 +19563,19 @@ impl<'a> FuncBuilder<'a> {
         let value = self.coerce_to_slot(id, place, value)?;
         match *place {
             Place::NativeElement { pointer, index } => {
+                // A `const T *` may be read through and not written through.
+                // TypeScript refuses this first -- `TS2542`, "only permits
+                // reading" -- so arriving here means a declaration produced a
+                // pointer whose type said one thing and whose contract said
+                // another, which an intrinsic a program declares for itself can
+                // do. Checked where the store is made, not only where the type
+                // is written.
+                if matches!(
+                    &self.values[pointer.0 as usize].ty,
+                    HirType::NativePointer(super::native::Pointee::Const(_))
+                ) {
+                    return Err(self.unsupported(id, "a store through a `const` native view"));
+                }
                 self.push(OpKind::NativeStore { pointer, index, value }, HirType::Void, origin);
             }
             Place::Field { object, field } => {
