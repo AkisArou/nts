@@ -288,7 +288,13 @@ fn check_native_calls(program: &Program, problems: &mut Vec<Invalid>) {
                     found: op.ty.clone(),
                 });
             }
-            if args.len() != target.parameters.len() {
+            // A variadic prototype takes at least its declared parameters and
+            // then anything; a fixed one takes exactly them.
+            let miscounted = match target.variadic {
+                Some(_) => args.len() < target.parameters.len(),
+                None => args.len() != target.parameters.len(),
+            };
+            if miscounted {
                 problems.push(Invalid::CallArgumentCount {
                     func: func.name.clone(),
                     callee: target.name.clone(),

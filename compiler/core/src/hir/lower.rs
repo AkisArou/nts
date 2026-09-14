@@ -11298,6 +11298,30 @@ impl<'a> FuncBuilder<'a> {
         call: NodeId,
         arguments: &[NodeId],
     ) -> Result<Vec<ValueId>, Diagnostic> {
+        self.lower_arguments_gathering(call, arguments, None)
+    }
+
+    /// The same, for a callee whose rest parameter is not a rest *array*.
+    ///
+    /// A C variadic tail is not one value. `open(path, flags, mode)` passes
+    /// three arguments, and gathering the tail built an empty `NtsArray` and
+    /// handed C its address cast to `uint32_t` -- a call that compiled, linked
+    /// and was wrong, which is the family this whole lane exists to close.
+    fn lower_native_arguments(
+        &mut self,
+        call: NodeId,
+        arguments: &[NodeId],
+        tail: &HirType,
+    ) -> Result<Vec<ValueId>, Diagnostic> {
+        self.lower_arguments_gathering(call, arguments, Some(tail))
+    }
+
+    fn lower_arguments_gathering(
+        &mut self,
+        call: NodeId,
+        arguments: &[NodeId],
+        tail: Option<&HirType>,
+    ) -> Result<Vec<ValueId>, Diagnostic> {
         // Where the callee's rest parameter starts, if it has one. Everything
         // from there is one array rather than one argument each.
         //
@@ -11310,6 +11334,14 @@ impl<'a> FuncBuilder<'a> {
             .parameter_shapes(call)
             .iter()
             .position(|(_, rest)| *rest);
+        // A C variadic tail is not a rest array, so it is neither gathered nor
+        // coerced to one. Each argument from there takes the tail's *element*
+        // type, which is what the declaration names and what the callee is
+        // told it will receive.
+        let (rest, tail_from) = match tail {
+            Some(_) => (None, rest),
+            None => (rest, None),
+        };
 
         let mut args = Vec::new();
         for (at, argument) in arguments.iter().enumerate() {
@@ -11364,11 +11396,18 @@ impl<'a> FuncBuilder<'a> {
             // The same channel `null` already uses -- `lower_expecting` was
             // written so a bare `null` in an argument takes the slot's type --
             // asked one question wider.
-            let value = match self.parameter_representation(call, args.len()) {
-                Some(want) => self.lower_expecting(*argument, &want)?,
+            let want = match (tail, tail_from) {
+                (Some(element), Some(from)) if args.len() >= from => Some((*element).clone()),
+                _ => self.parameter_representation(call, args.len()),
+            };
+            let value = match &want {
+                Some(want) => self.lower_expecting(*argument, want)?,
                 None => self.lower_expression(*argument)?,
             };
-            args.push(self.coerce_to_parameter(call, args.len(), value, *argument)?);
+            args.push(match &want {
+                Some(want) => self.coerce(value, want, *argument)?,
+                None => value,
+            });
         }
         // A rest the call gave nothing to still takes an array, an empty one.
         // `f()` and `f(1)` reach the same function and it reads `xs.length`.
@@ -28408,12 +28447,36 @@ impl<'a> FuncBuilder<'a> {
             self.native_callee(id, declaration, name, signature)?
         };
 
-        let mut args = self.lower_arguments(id, &arguments)?;
-        if let Callee::Native(target) = &callee {
-            self.bridge_callback_arguments(id, &target.clone(), &mut args)?;
-        }
+        let args = self.lower_call_arguments(id, &callee, &arguments)?;
 
         self.push_call(id, callee, args, declaration)
+    }
+
+    /// A call's arguments, lowered the way its callee wants them.
+    ///
+    /// Two things separate a native callee from every other. Its variadic tail
+    /// is arguments rather than a gathered rest array, and a function-typed
+    /// argument becomes a bridge rather than a closure address.
+    fn lower_call_arguments(
+        &mut self,
+        id: NodeId,
+        callee: &Callee,
+        arguments: &[NodeId],
+    ) -> Result<Vec<ValueId>, Diagnostic> {
+        let tail = match callee {
+            Callee::Native(target) => {
+                target.variadic.as_ref().map(super::native::Type::representation)
+            }
+            _ => None,
+        };
+        let mut args = match &tail {
+            Some(element) => self.lower_native_arguments(id, arguments, element)?,
+            None => self.lower_arguments(id, arguments)?,
+        };
+        if let Callee::Native(target) = callee {
+            self.bridge_callback_arguments(id, &target.clone(), &mut args)?;
+        }
+        Ok(args)
     }
 
     /// Turn each argument for a C function pointer parameter into a bridge.

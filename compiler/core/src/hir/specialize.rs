@@ -789,9 +789,18 @@ fn call_arguments(
                 .iter()
                 .enumerate()
                 .map(|(at, arg)| {
-                    target.parameters.get(at).map_or(*arg, |ty| {
-                        convert(func, rewritten, count, *arg, &ty.representation())
-                    })
+                    // Past the declared parameters, the variadic tail's type.
+                    // It is a declared type like any other, so the tail is
+                    // converted exactly as a fixed argument is -- without it
+                    // the arguments C promotes reached the call as whatever
+                    // TypeScript had, which is a double for every number.
+                    target
+                        .parameters
+                        .get(at)
+                        .or(target.variadic.as_ref())
+                        .map_or(*arg, |ty| {
+                            convert(func, rewritten, count, *arg, &ty.representation())
+                        })
                 })
                 .collect();
             Some(OpKind::Call {

@@ -354,6 +354,43 @@ of four members, packed so `data` sits at offset 4, and 12 bytes where the
 natural layout is 16. `examples/interop/native-epoll` hands a descriptor to the
 kernel through it and reads it back out.
 
+## Variadics
+
+`int open(const char *, int, ...)` cannot be reached without them: with
+`O_CREAT` the third argument is required, and one C declaration covers both
+arities. A TypeScript rest parameter is the same statement and needs no tag --
+`native::Function` gains `variadic: Option<Type>`, set from a trailing rest
+parameter.
+
+**A type where C has none, deliberately.** The prototype constrains nothing
+after the comma; the binding constrains everything. A variadic argument's type
+is not recoverable from the callee, so it has to come from somewhere, and a
+declaration is the only place that can be checked. Two shapes of `ioctl` are
+two declared names.
+
+**The tail is arguments, not a rest array.** TypeScript gathers a rest
+parameter into one value, and doing that to `open` handed C the address of an
+empty `NtsArray` cast to `uint32_t` -- a call that compiled, linked and was
+wrong. `lower_native_arguments` skips the gather and gives each argument the
+tail's declared type.
+
+**What C promotes, a binding may not name.** The default argument promotions
+(6.5.2.2p6) apply past the last declared parameter, so a tail of `uint16_t` or
+`float` describes something nobody passes. Refused, with the promoted type
+named -- `declare `int`` rather than a diagnostic that leaves the author
+guessing.
+
+Two neighbouring guards -- a rest parameter that is not last, and one whose
+type is not an array -- are unreachable from TypeScript source, checked by
+probing: tsgo reports TS1014 and TS2370 first. They stay because the input is a
+snapshot rather than the source, and they are marked in place as *not* controls,
+because nothing this lane writes can make them fire.
+
+`examples/interop/native-open` runs on both backends. Its control is the file's
+**permission bits**, not its contents: a call that dropped the third argument
+still creates the file -- with `01650`, tried -- and reading the byte back
+passes.
+
 **Only foreign declarations appear.** `native::Struct` now records whether its
 name is a C tag the declaration authored or a spelling invented for a layout
 that exists only in this program. That is a fact, not a name prefix: an invented

@@ -95,11 +95,43 @@ fn declaration(func: &Func, target: &Function) -> Result<String, Diagnostic> {
             if ty == HirType::Erased { return Ok("i32, i64".to_owned()); }
             Ok(format!("{} {}", ty_of(&ty, func)?, extension(&ty).trim_end()).trim_end().to_owned())
         }).collect::<Result<Vec<_>, Diagnostic>>()?;
+    // `...` and nothing after it, as in C. LLVM needs the declaration to say
+    // so, because a call to a variadic function has to spell the function type
+    // at the call site and the two must agree.
+    let mut parameters = parameters;
+    if target.variadic.is_some() {
+        parameters.push("...".to_owned());
+    }
     Ok(format!(
         "declare {}{} @{}({})",
         extension(&result),
         ty_of(&result, func)?,
         target.name,
+        parameters.join(", ")
+    ))
+}
+
+/// `i32 (ptr, i32, ...)` -- the function type a variadic call must name.
+///
+/// A call to a non-variadic function may leave it out, and does; LLVM takes it
+/// from the callee. For a variadic one it is required, because the call is what
+/// says how many arguments are actually being passed.
+fn variadic_type(func: &Func, target: &Function) -> Result<String, Diagnostic> {
+    let mut parameters = target
+        .parameters
+        .iter()
+        .zip(memory_arguments(target))
+        .map(|(ty, memory)| {
+            if memory { return Ok("ptr".to_owned()); }
+            let ty = ty.representation();
+            if ty == HirType::Erased { return Ok("i32, i64".to_owned()); }
+            ty_of(&ty, func).map(str::to_owned)
+        })
+        .collect::<Result<Vec<_>, Diagnostic>>()?;
+    parameters.push("...".to_owned());
+    Ok(format!(
+        "{} ({})",
+        ty_of(&target.result.representation(), func)?,
         parameters.join(", ")
     ))
 }
@@ -111,13 +143,20 @@ pub(super) fn call(
     result: &HirType,
     out: &str,
 ) -> Result<String, Diagnostic> {
-    if args.len() != target.parameters.len() || *result != target.result.representation() {
+    let miscounted = match target.variadic {
+        Some(_) => args.len() < target.parameters.len(),
+        None => args.len() != target.parameters.len(),
+    };
+    if miscounted || *result != target.result.representation() {
         return Err(refuse(
             func,
             "a native call whose HIR disagrees with its declared ABI",
         ));
     }
-    for (arg, expected) in args.iter().zip(&target.parameters) {
+    for (at, arg) in args.iter().enumerate() {
+        let Some(expected) = target.parameters.get(at).or(target.variadic.as_ref()) else {
+            continue;
+        };
         if !expected.accepts(&func.values[arg.0 as usize].ty) {
             return Err(refuse(
                 func,
@@ -127,7 +166,13 @@ pub(super) fn call(
     }
     let mut before = Vec::new();
     let mut parameters = Vec::new();
-    for (at, (arg, memory)) in args.iter().zip(memory_arguments(target)).enumerate() {
+    // The tail is never a memory argument: every type that would be passed
+    // that way is refused as a variadic tail where the declaration is read.
+    let passing = memory_arguments(target)
+        .into_iter()
+        .chain(std::iter::repeat(false))
+        .take(args.len());
+    for (at, (arg, memory)) in args.iter().zip(passing).enumerate() {
         let temp = format!("{out}.arg{at}");
         if memory {
             before.push(format!("store {{ i32, i64 }} {}, ptr {temp}.storage, align 8", name(*arg)));
@@ -142,10 +187,16 @@ pub(super) fn call(
     } else {
         format!("{out} = ")
     };
+    // A variadic call names the function type; an ordinary one names only the
+    // return type and lets LLVM take the rest from the callee.
+    let spelled = match target.variadic {
+        Some(_) => variadic_type(func, target)?,
+        None => ty_of(result, func)?.to_owned(),
+    };
     before.push(format!(
         "{prefix}call {}{} @{}({})",
         extension(result),
-        ty_of(result, func)?,
+        spelled,
         target.name,
         parameters.join(", ")
     ));

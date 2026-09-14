@@ -770,15 +770,22 @@ fn native_prototype(
     target: &nts_core::hir::native::Function,
     spelling: Spelling,
 ) -> String {
-    let parameters = if target.parameters.is_empty() {
+    let mut parameters: Vec<String> =
+        target.parameters.iter().map(|ty| spelling.of(ty)).collect();
+    // `...` and nothing else: the tail's element type is this binding's claim
+    // about what it passes, and C's prototype has no place to record it. The
+    // *call* carries it -- each argument is converted to that type before it
+    // gets here -- which is where C looks anyway.
+    //
+    // `(...)` alone is not C11: a variadic prototype needs at least one named
+    // parameter. A declaration with none is refused where it is read.
+    if target.variadic.is_some() {
+        parameters.push("...".to_owned());
+    }
+    let parameters = if parameters.is_empty() {
         "void".to_owned()
     } else {
-        target
-            .parameters
-            .iter()
-            .map(|ty| spelling.of(ty))
-            .collect::<Vec<_>>()
-            .join(", ")
+        parameters.join(", ")
     };
     format!("{} {name}({parameters});", spelling.of(&target.result))
 }

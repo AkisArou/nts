@@ -16,6 +16,20 @@ pub struct Function {
     /// What the callee may do with each argument beyond the call, one entry per
     /// parameter. See [`Retention`].
     pub retention: Vec<Retention>,
+    /// The type of each argument past the declared ones, when the C prototype
+    /// ends in `...`.
+    ///
+    /// Spelled as a TypeScript rest parameter, which is already the right
+    /// signal and needs no tag: `open(path, flags, ...rest: c_uint32[])` is
+    /// `int open(const char *, int, ...)`.
+    ///
+    /// **A type, where C has none.** The prototype constrains nothing after the
+    /// comma, and this constrains everything -- which is a narrower claim than
+    /// the header makes and deliberately so. A variadic argument's type is not
+    /// recoverable from the callee, so it has to come from somewhere, and the
+    /// declaration is the only place that can be checked. A binding that needs
+    /// two shapes of `ioctl` declares two names for it.
+    pub variadic: Option<Type>,
 }
 
 /// What a foreign call keeps of one argument after it returns.
@@ -578,11 +592,22 @@ impl Function {
             ));
         }
         let mut parameters = Vec::with_capacity(signature.parameters.len());
-        for parameter in &signature.parameters {
-            if parameter.optional || parameter.rest {
-                return Err(format!(
-                    "foreign function `{name}` with an optional or rest parameter"
-                ));
+        let mut variadic = None;
+        for (at, parameter) in signature.parameters.iter().enumerate() {
+            if parameter.optional {
+                return Err(format!("foreign function `{name}` with an optional parameter"));
+            }
+            if parameter.rest {
+                let element = rest_element(snapshot, &name, parameter, at, signature)?;
+                let ty = abi_type(element)
+                    .filter(|ty| *ty != Type::Void)
+                    .ok_or_else(|| format!(
+                        "foreign function `{name}` variadic tail `{}` without a native ABI element type",
+                        parameter.name
+                    ))?;
+                variadic_tail_is_passable(&name, &ty, parameters.is_empty())?;
+                variadic = Some(ty);
+                continue;
             }
             let ty = abi_type(parameter.ty)
                 .filter(|ty| *ty != Type::Void)
@@ -600,12 +625,93 @@ impl Function {
             },
             retention: vec![Retention::Unknown; parameters.len()],
             parameters,
+            variadic,
             result,
         })
     }
 }
 
+/// The element type of a rest parameter, which is the type of each argument
+/// past the declared ones.
+///
+/// Two of the refusals here are **unreachable from TypeScript source, and
+/// checked to be**: tsgo reports `TS1014 A rest parameter must be last` and
+/// `TS2370 A rest parameter must be of an array type` before this is asked.
+/// They stay because the input is a snapshot rather than the source, and a
+/// malformed one should be refused and not laid out. They are not controls --
+/// nothing written in TypeScript can make either fire.
+fn rest_element(
+    snapshot: &SemanticSnapshot,
+    name: &str,
+    parameter: &nts_semantic_schema::ParameterRecord,
+    at: usize,
+    signature: &nts_semantic_schema::SignatureRecord,
+) -> Result<TypeId, String> {
+    if at + 1 != signature.parameters.len() {
+        return Err(format!(
+            "foreign function `{name}` with a rest parameter that is not last"
+        ));
+    }
+    let Some(TypeKind::Array(element)) =
+        snapshot.types.get(parameter.ty.0 as usize).map(|record| &record.kind)
+    else {
+        return Err(format!(
+            "foreign function `{name}` rest parameter `{}` is not an array type",
+            parameter.name
+        ));
+    };
+    Ok(*element)
+}
+
+/// Whether a variadic tail of this type is what the callee actually receives.
+fn variadic_tail_is_passable(name: &str, ty: &Type, no_fixed: bool) -> Result<(), String> {
+    // C11 6.7.6.3p5: `...` must follow at least one named parameter. `int f(...)`
+    // is not a prototype this can emit, and a declaration with nothing before
+    // the rest parameter is one no header has.
+    if no_fixed {
+        return Err(format!(
+            "foreign function `{name}` is variadic with no declared parameter before `...`"
+        ));
+    }
+    // C promotes a variadic argument narrower than `int`, and a `float` to
+    // `double`, before the callee ever sees it. A type that would be promoted
+    // therefore describes something other than what is passed, and the two
+    // backends would have to agree about a conversion neither declaration
+    // mentions. Refused with the promoted type named, which is what the binding
+    // should say.
+    if let Some(promoted) = ty.promoted_for_variadic() {
+        return Err(format!(
+            "foreign function `{name}` variadic tail is `{}`, which C promotes to `{}` before the callee sees it; declare `{}`",
+            ty.c_type(), promoted.c_type(), promoted.c_type()
+        ));
+    }
+    Ok(())
+}
+
 impl Type {
+    /// What C's default argument promotions turn this into, when they change it.
+    ///
+    /// `None` means it is already its own promoted form and passes as declared.
+    /// The promotions (C11 6.5.2.2p6) apply to every argument past a prototype's
+    /// last declared parameter: anything with integer rank below `int` becomes
+    /// `int` or `unsigned int`, and a `float` becomes a `double`. A declaration
+    /// naming one of those describes something other than what is passed.
+    #[must_use]
+    pub fn promoted_for_variadic(&self) -> Option<Self> {
+        let Self::Scalar(scalar) = self else { return None };
+        Some(Self::Scalar(match scalar {
+            // Every value of these fits in an `int`, signed or not, so C11
+            // 6.3.1.1p2 promotes all of them to the signed one.
+            Scalar::Char
+            | Scalar::Int8
+            | Scalar::UInt8
+            | Scalar::Int16
+            | Scalar::UInt16 => Scalar::Int,
+            Scalar::Float => Scalar::Double,
+            _ => return None,
+        }))
+    }
+
     fn same_abi(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Managed(_), Self::Managed(_)) => self.c_type() == other.c_type(),
