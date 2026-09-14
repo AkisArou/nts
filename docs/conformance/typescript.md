@@ -2091,7 +2091,7 @@ nothing fails loudly when they are.
 | ✅ | reference counting, and a cycle collector over one traversal |
 | ✅ | strings, arrays, objects, tagged values (`NtsValue`) |
 | ✅ | promises, microtasks, the tick queue |
-| ✅ | timers: `setTimeout`, `setInterval`, `clearInterval` `examples/timers` carries all four, `clearTimeout` included. |
+| ✅ | timers: `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval` `examples/timers` carries all four, `clearTimeout` included. **`clearTimeout` added 2026-09-14**: the row listed three of the four and the example it now cites has carried all four throughout — five uses of `clearTimeout`, one of them cancelling a live timer. A row can understate its own subject and read as complete, and citing the example is what surfaced it. |
 | ✅ | host loop, task posting, thread-ownership assertions |
 | ✅ | a hash table — open addressing, linear probing, tombstones, power-of-two slots; `Map` and `Set` are built on it, and `Object`'s enumeration statics turned out not to need one |
 | ✗ | a regular-expression engine |
