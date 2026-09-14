@@ -22717,6 +22717,40 @@ impl<'a> FuncBuilder<'a> {
         let callee = *children
             .first()
             .ok_or_else(|| self.unsupported(id, "a `new` with no callee"))?;
+        // **A bound Java class is constructed on the other side, and this has
+        // to come before the name is required.** Everything below -- the
+        // layout, the allocation, the constructor call -- describes building an
+        // object of ours. A foreign class has none of it: `layout_of` would
+        // emit a stub that then *shadows the real class on the classpath*, and
+        // `ObjectNew` would allocate a second object the `<init>` never
+        // touches.
+        //
+        // Above the `text` read, because `new Catalog.Entry("k")` names its
+        // class with a property access and a property access has no text -- so
+        // a nested bound class was refused as "a computed constructor" when the
+        // binding table can name it exactly. The table is keyed by the
+        // declaration the checker resolved to, not by how the call site spelled
+        // it, which is the whole reason that key was chosen.
+        if let Some(bound) = self
+            .snapshot
+            .call_targets
+            .get(&id)
+            .and_then(|it| it.callee)
+            .map(|declaration| self.location(declaration))
+            .and_then(|at| self.foreign.get(&(at.file.0, at.span.end)))
+            .map(|row| row.key.clone())
+        {
+            let ty = self.type_of(id);
+            let ty = self.widened(id, ty.ok_or_else(|| self.unrepresentable(id, "a `new`"))?);
+            let arguments = self.arguments_of(id);
+            let args = self.lower_arguments(id, &arguments)?;
+            let origin = self.origin(id);
+            return Ok(self.push(
+                OpKind::Call { callee: Callee::External(bound), args, frame: None },
+                ty,
+                origin,
+            ));
+        }
         let class = self
             .node(callee)
             .text
@@ -22828,34 +22862,6 @@ impl<'a> FuncBuilder<'a> {
         let HirType::Managed(ManagedType::Object(type_id)) = ty else {
             return Err(self.unsupported(id, "a `new` that does not produce an object"));
         };
-        // **A bound Java class is constructed on the other side.** Everything
-        // below this -- the layout, the allocation, the constructor call --
-        // describes building an object of ours. A foreign class has none of
-        // it: `layout_of` would emit a stub class that then *shadows the real
-        // one on the classpath*, which is how this was found, and `ObjectNew`
-        // would allocate a second object the `<init>` never touches.
-        //
-        // This is the third and last call shape the binding had to reach.
-        // `callee_for` had the instance case; `lower_static_call` had none
-        // until a moment ago; and `new` arrives here.
-        if let Some(bound) = self
-            .snapshot
-            .call_targets
-            .get(&id)
-            .and_then(|it| it.callee)
-            .map(|declaration| self.location(declaration))
-            .and_then(|at| self.foreign.get(&(at.file.0, at.span.end)))
-            .map(|row| row.key.clone())
-        {
-            let arguments = self.arguments_of(id);
-            let args = self.lower_arguments(id, &arguments)?;
-            let origin = self.origin(id);
-            return Ok(self.push(
-                OpKind::Call { callee: Callee::External(bound), args, frame: None },
-                ty.clone(),
-                origin,
-            ));
-        }
         // Laying the class out here is what makes its fields addressable; the
         // constructor is about to write every one of them.
         self.layout_of(id, type_id)?;
@@ -26657,6 +26663,26 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
+
+        // `big.toString()` is the same `ToString` one type over, and
+        // [`Self::as_string`] has picked `nts_bigint_to_string` for a `BigInt`
+        // receiver since the day bigints landed. **Nothing reached it from
+        // here**: the guard below names `Float` and `Int` and not `BigInt`, so
+        // `"" + big` rendered a bigint and `big.toString()` refused with
+        // `a method call on something without methods` -- one spelling of one
+        // operation working and the other not.
+        //
+        // The helper exists in all three runtimes and in `hir::runtime`, so
+        // this adds no surface; it connects surface that was already built.
+        // Narrow on purpose: only the zero-argument spelling. `toString(radix)`
+        // would need a second parameter the helper does not take, and falling
+        // through to the refusal below is the honest answer for it.
+        if matches!(self.values[receiver.0 as usize].ty, HirType::BigInt)
+            && self.node(member).text.as_deref() == Some("toString")
+            && arguments.is_empty()
+        {
+            return self.as_string(receiver_node, receiver);
+        }
 
         // `n.toString()` is `ToString` spelled as a method. A number has no
         // other method this compiler provides, so the arm is exact rather than

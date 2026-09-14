@@ -4524,6 +4524,35 @@ impl Emitter<'_> {
                         _ => {}
                     }
                 }
+                // **`long` is a `bigint` here, and it is two words becoming
+                // one.** A Java `long` occupies two operand-stack slots; an
+                // `NtsBigInt` is a single reference. Without this the value
+                // left behind is the wrong width, which is not a wrong number
+                // but a stack that stops balancing -- and it is what
+                // `emitting %74 moved the operand stack from 0 to 1` was.
+                //
+                // The emitter's own accounting caught it at the operation
+                // rather than at a block boundary or, worse, at class load in
+                // somebody's program. That is the whole argument for keeping
+                // the depth maintained by construction.
+                if matches!(result, HirType::BigInt) {
+                    if returns != "J" {
+                        return Err(refuse(
+                            self.func,
+                            &format!(
+                                "a bound member returning `{returns}` where the program wants a \
+                                 bigint; only `long` has a lossless spelling as one"
+                            ),
+                        ));
+                    }
+                    code.invoke_static(
+                        origin,
+                        pool,
+                        types::BIGINT,
+                        "fromLong",
+                        "(J)Lnts/rt/NtsBigInt;",
+                    );
+                }
                 if matches!(result, HirType::Void) {
                     let words = nts_jvm_emitter::descriptor::words(returns);
                     if words > 0 {

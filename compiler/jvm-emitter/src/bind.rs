@@ -93,6 +93,25 @@ fn type_of(descriptor: &str) -> Option<(String, usize)> {
 // are in scope under their simple names. Found by running the generator and
 // reading the output, not by reasoning about it.
 thread_local! {
+    /// The classes a curated binding is allowed to mention, and how many
+    /// members were left out because they mention something else.
+    ///
+    /// **A prelude has to close.** Binding `java.util.HashMap` from a real JDK
+    /// pulls `java.util.stream.Stream`, `java.util.Optional` and
+    /// `java.lang.invoke.MethodHandles$Lookup` in behind it, and following that
+    /// closure gives 16,581 lines for `java.util` alone -- against 142 for the
+    /// curated prelude a person wrote. Measured, not guessed.
+    ///
+    /// Measured too: of 467 members across the ten classes such a prelude
+    /// covers, **408 mention nothing outside the set**. So the closure is not
+    /// the price of generating one; the last 13% is.
+    ///
+    /// The count is public and printed rather than swallowed. Omitting a
+    /// member is a decision, and a binding that quietly lacks one is a binding
+    /// its caller cannot tell from a jar that never had it.
+    static KNOWN: std::cell::RefCell<Option<std::collections::BTreeSet<String>>> =
+        const { std::cell::RefCell::new(None) };
+    static PRUNED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static PACKAGE: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
     /// Packages this module referred to and does not itself declare, collected
     /// while rendering so `module_of` can import them.
@@ -744,6 +763,10 @@ fn render_fields_into(
         .collect();
 
     for field in class.fields.iter().filter(|f| visible(f.access)) {
+        if !member_within(&field.descriptor, field.signature.as_deref()) {
+            PRUNED.with(|it| it.set(it.get() + 1));
+            continue;
+        }
         let Some((rendered, _)) = field
             .signature
             .as_deref()
@@ -976,6 +999,64 @@ pub fn declarations(class: &ClassFile) -> Result<(String, Vec<Bound>), String> {
     declarations_with(class, &Alone)
 }
 
+/// Restrict a binding to members that mention only `types`, and reset the
+/// count of what that leaves out.
+///
+/// `None` binds everything, which is what binding somebody's jar wants: there
+/// the closure is the point. A curated prelude is the other case.
+pub fn prune_to(types: Option<std::collections::BTreeSet<String>>) {
+    KNOWN.with(|it| *it.borrow_mut() = types);
+    PRUNED.with(|it| it.set(0));
+}
+
+/// How many members [`prune_to`] has left out since it was last called.
+#[must_use]
+pub fn pruned() -> usize {
+    PRUNED.with(std::cell::Cell::get)
+}
+
+/// Whether every class a descriptor or a generic signature names is one the
+/// binding may mention.
+///
+/// **Both, because checking only the descriptor let three names through.**
+/// `Map.entrySet` erases to `()Ljava/util/Set;`, which is in any set that has
+/// `Set` -- and renders as `Set<Map.Entry<K, V>>`, because the `Signature`
+/// attribute survives erasure and is what the generator prefers. The erased
+/// form is not what the file says.
+///
+/// A name ends at `;` **or** at `<`: in a signature `Ljava/util/Set<...>;`
+/// the class is `java/util/Set` and the angle brackets are its arguments,
+/// which are scanned in their own right as the walk continues.
+fn within_known(signature: &str) -> bool {
+    KNOWN.with(|known| {
+        let known = known.borrow();
+        let Some(known) = known.as_ref() else { return true };
+        let bytes = signature.as_bytes();
+        let mut at = 0;
+        while at < bytes.len() {
+            if bytes[at] != b'L' {
+                at += 1;
+                continue;
+            }
+            let start = at + 1;
+            let mut end = start;
+            while end < bytes.len() && bytes[end] != b';' && bytes[end] != b'<' {
+                end += 1;
+            }
+            if !known.contains(&signature[start..end]) {
+                return false;
+            }
+            at = end;
+        }
+        true
+    })
+}
+
+/// Whether a member may be rendered: both spellings of its type must close.
+fn member_within(descriptor: &str, signature: Option<&str>) -> bool {
+    within_known(descriptor) && signature.is_none_or(within_known)
+}
+
 /// Render one class, resolving inherited members through `resolve`.
 ///
 /// # Errors
@@ -1142,6 +1223,12 @@ fn render_methods_into(
     let (out_constants, constants_table) = constants;
     let is_interface = class.access & access::INTERFACE != 0;
     for method in class.methods.iter().filter(|m| visible(m.access) && is_api(m)) {
+        // Left out rather than rendered against a type this binding does not
+        // declare, which would be a `.d.ts` that does not compile.
+        if !member_within(&method.descriptor, method.signature.as_deref()) {
+            PRUNED.with(|it| it.set(it.get() + 1));
+            continue;
+        }
         // The `Signature` attribute first, because it is the one that still has
         // the type arguments; the erased descriptor is the fallback, so an
         // exotic signature loses its generics rather than losing the method.
@@ -1523,6 +1610,10 @@ fn render_inherited(
         )
         .collect();
     for field in inherited_fields(class, resolve) {
+        if !member_within(&field.descriptor, field.signature.as_deref()) {
+            PRUNED.with(|it| it.set(it.get() + 1));
+            continue;
+        }
         let Some((rendered, _)) = type_of(&field.descriptor) else { continue };
         // An inherited interface constant is still static -- `Pressable.KIND`
         // is the same constant `Task.KIND` is -- so it goes to the namespace
@@ -1564,6 +1655,14 @@ fn render_inherited(
         );
     }
     for (declaring, method) in inherited(class, resolve) {
+        // The inherited half of the same question. `Set` declares none of
+        // `toArray(IntFunction)`, `removeIf`, `stream` or `parallelStream` --
+        // it gets all four from `Collection`, and guarding only the declared
+        // loop left exactly those four names unresolved.
+        if !member_within(&method.descriptor, method.signature.as_deref()) {
+            PRUNED.with(|it| it.set(it.get() + 1));
+            continue;
+        }
         let Some((parameters, result)) = method
             .signature
             .as_deref()

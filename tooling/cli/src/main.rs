@@ -412,6 +412,7 @@ fn bind_java(args: &[String]) -> Result<()> {
     let mut out: Option<Utf8PathBuf> = None;
     let mut prelude = false;
     let mut keeps = false;
+    let mut self_contained = false;
     let mut at = 0;
     while at < args.len() {
         let value = |at: usize, what: &str| -> Result<String> {
@@ -424,9 +425,10 @@ fn bind_java(args: &[String]) -> Result<()> {
             "--out" => { out = Some(Utf8PathBuf::from(value(at, "--out")?)); at += 2 }
             "--prelude" => { prelude = true; at += 1 }
             "--keeps" => { keeps = true; at += 1 }
+            "--self-contained" => { self_contained = true; at += 1 }
             // Refused rather than ignored. A misspelled flag that is skipped
             // produces a correct-looking file built with the wrong options.
-            other => bail!("unknown argument `{other}`; nts bind takes --jar or --classes, --package, --out, --prelude, --keeps"),
+            other => bail!("unknown argument `{other}`; nts bind takes --jar or --classes, --package, --out, --prelude, --keeps, --self-contained"),
         }
     }
     let (Some(package), Some(out)) = (package, out) else {
@@ -485,6 +487,14 @@ fn bind_java(args: &[String]) -> Result<()> {
     if names.is_empty() {
         bail!("no class files for package `{package}` under {root}");
     }
+    // **A curated prelude has to close.** With `--self-contained` a member
+    // that mentions a class outside this tree is left out instead of rendered
+    // against a type nothing declares -- which is a `.d.ts` that does not
+    // compile, measured at 60 errors before this existed. The count is printed
+    // below rather than swallowed: leaving a member out is a decision.
+    nts_jvm_emitter::bind::prune_to(self_contained.then(|| {
+        nts_jvm_emitter::bind::classes_under(root.as_std_path()).into_iter().collect()
+    }));
     let resolve = nts_jvm_emitter::bind::FromDirectory(root.as_std_path().to_path_buf());
     let mut bodies = Vec::new();
     for name in &names {
@@ -518,6 +528,12 @@ fn bind_java(args: &[String]) -> Result<()> {
     std::fs::write(&declarations, &text)?;
     std::fs::write(&table, nts_jvm_emitter::bind::write_table(&package, &bound))?;
     println!("nts bind: {} class(es) -> {declarations} and {table}", names.len());
+    if self_contained {
+        println!(
+            "nts bind: {} member(s) left out, mentioning classes outside this tree",
+            nts_jvm_emitter::bind::pruned()
+        );
+    }
     // The escape table: which parameters a bound method retains, read out of
     // the callee's own bytecode. Its own artefact and its own flag because it
     // is consumed by the compiler rather than by a person, and because **an
