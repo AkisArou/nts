@@ -501,7 +501,7 @@ is what the rest still want, and it is a different feature from this one.
 | ✅ | `import { x }`, `import { x as y }`, `import type` |
 | ✅ | `import * as ns` and members through it `examples/module-namespace` carries it — the form that binds a name to a module rather than to anything in it. |
 | ✅ | `export`, `export { x as y } from`, `export *` |
-| ✅ | evaluation order rooted at the entry module, matching node |
+| ✅ | evaluation order rooted at the entry module, matching node `examples/module-init` carries the statements at the top of a file, `examples/module-evaluation` the sequence of independent statements, and `examples/module-order` an import order chosen on purpose because it is what makes the question observable. |
 | ✅ | cycles: self, three-way, crossed by a function, re-export, late read `examples/module-cycle-self` carries the smallest one — a module that imports itself, which is legal and is a cycle. |
 | ✅ | the temporal dead zone as a **compile-time** error (NTS1004) |
 | ✅ | module-scope state, including references `examples/globals` carries it, under the definition that makes it a row: state that outlives a call. |
@@ -517,8 +517,8 @@ of the surface therefore costs nothing.
 
 | | | |
 |---|---|---|
-| ✅ | aliases, unions, intersections, literal types, tuples |
-| ✅ | optional and `readonly` properties, index signatures | `readonly` was ✅ here while **leaking by name across the whole program**: one `readonly count` anywhere made every `count` in every unrelated type readonly, and twenty-four legal assignments in `runtime/node` were refused for it. Asked of the property's own declaration now, and of the *type* rather than the layout — a layout is shared by every type of the same shape, and `same_shape` ignores `readonly` on purpose. Record 0114 |
+| ✅ | aliases, unions, intersections, literal types, tuples `examples/unions` carries the union as one value with a tag, and `examples/literals` the strongest thing TypeScript can say about a number. |
+| ✅ | optional and `readonly` properties, index signatures | `readonly` was ✅ here while **leaking by name across the whole program**: one `readonly count` anywhere made every `count` in every unrelated type readonly, and twenty-four legal assignments in `runtime/node` were refused for it. Asked of the property's own declaration now, and of the *type* rather than the layout — a layout is shared by every type of the same shape, and `same_shape` ignores `readonly` on purpose. Record 0114 `examples/readonly-names` carries the fact the row turns on, that `readonly` belongs to a property rather than to a name, and `examples/string-keyed-table` the index signature as a table rather than a struct with no fields. |
 | ✅ | mapped, conditional, indexed-access, `keyof`, `typeof`, template literal types |
 | ◐ | function and constructor types | **the function half is answered and the constructor half is not, probed 2026-09-14.** `type Op = (a: number, b: number) => number` with an arrow bound to it and called compiles clean. `type Maker = new (n: number) => Holder` type-checks and is representable, but constructing through a value of that type refuses: `NTS1001 a \`new\` through \`m\`, which holds a class rather than naming one -- the constructor would be chosen from the declared type and not from the value`. So the type form exists and the only operation it is for does not, which is ◐ rather than ✅. Related but not the same row: §4's *class used as a value* is answered, and the union of two class values is its own ✗. |
 | ✅ | `interface`, including `extends` |
