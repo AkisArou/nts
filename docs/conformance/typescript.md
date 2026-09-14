@@ -341,7 +341,7 @@ ordinary calls emits no closure struct, no dispatch slot and no table at all.
 
 | | | |
 |---|---|---|
-| ✅ | fields: public, `readonly`, `private`, `protected`, `static`, `#private` |
+| ✅ | fields: public, `readonly`, `private`, `protected`, `static`, `#private` `examples/a-static-field-is-storage` carries the static one read and written through the class name, `examples/field-defaults` the initialisers that run at construction, and `examples/modifiers-on-a-field` the declaration carrying two or more modifiers, which once lost its initialiser. |
 | ✅ | field initializers, constructors | **a class's own initialisers are emitted inside its own constructor as of 2026-09-12** — at the top when it has no base, immediately after `super()` when it has one, which is where JavaScript puts them. They were at the `new` site, every class's before any constructor ran, and that one placement was wrong three ways: a derived initialiser could not see what `super()` stored, a class built only through the napi wrapper ran none of them, and an optional property's presence mask inherited both. What the allocation site keeps is the classes *below* the one whose constructor it calls — those declare none of their own, and they go **after** the call, because an implicit constructor is `super(...args)` followed by this class's initialisers. `examples/a-field-initialiser` is 174 cases across six functions agreeing with node on **all three backends**, every value derived from the argument so no leftover and no folded constant can be right by accident |
 | ✅ | a **derived class's field initialiser sees what `super()` stored** | `class D extends B { y = this.x + 10 }` reads the `x` the base constructor wrote. It did not: **28 of 29 cases against node**, answering `nan`, because every class's initialisers ran before any constructor. **The optimiser hid it for one probe** — the first version used a constant base value and agreed with node on all 29 cases. Reading an uninitialised member is undefined behaviour, so the same emitted C answers `10` then `7.9e+08` at `-O0` and `11` — node's answer — at `-O2`: a release build agreed because clang chose to, not because the program computed it. A first explanation of stack reuse was offered and disproved by dirtying the stack. Both levels answer 11 now. `blockers/a-derived-field-initialiser` is the guard and runs through the napi boundary, which is the only place the second defect was visible |
 | ✅ | methods, `get`/`set` accessors, `static` methods `examples/accessors` carries them, and states the thing that makes them worth a row: an accessor looks like a property and **is** a call. |
@@ -427,7 +427,7 @@ inherits. The key was the sole blocker, checked rather than assumed:
 |---|---|---|
 | ✅ | **`object`** as a type — a parameter, a field or a local. An erased value, because "some object, which one is not known" *is* a tag and a payload; nothing narrower exists, since the whole content of the type is the absence of a guarantee. **344 occurrences across 36 sites** in `runtime/node` as a parameter alone. Record 0164 |
 | ✅ | `unknown` narrowed to **`{}`** by a `!== null`, which is declined rather than read through. `{}` is the checker saying *not null and not undefined* rather than naming a shape: it declares no member, so the narrowing buys nothing, and an unerase to it is a claim that the value is one of those — about a type no object belongs to. Unchecked on a lane with pointers; `ClassCastException` on the one that checks |
-| ✅ | `Symbol()`, with a description or without — every call a fresh identity, because `Symbol("a") === Symbol("a")` is false |
+| ✅ | `Symbol()`, with a description or without — every call a fresh identity, because `Symbol("a") === Symbol("a")` is false `examples/symbol-values` carries the symbol used as a value, which the row above distinguishes from a symbol used as a name. |
 | ✅ | `Symbol.for` and `Symbol.keyFor` — one symbol per key for the life of the runtime. The registry's strong reference is the specification's rule rather than a leak, and is the whole difference from `Symbol()` |
 | ✅ | `typeof` answering `"symbol"`, `===` by address, a symbol in a field, and `Map`/`Set` keyed by one or by `string \| symbol` |
 | ✅ | **`Date`** — a millisecond offset from the epoch and nothing else, which is what the specification's *time value* is. `new Date(ms)`, `getTime` and `valueOf`, and the `TimeClip` normalisation the constructor applies: truncated toward zero, NaN outside ±8.64e15, and `-0` normalised to `+0`. **55 refusal sites in `runtime/node`, all of them `fs.Stats.atime` and its three siblings** |
@@ -504,10 +504,10 @@ is what the rest still want, and it is a different feature from this one.
 | ✅ | evaluation order rooted at the entry module, matching node |
 | ✅ | cycles: self, three-way, crossed by a function, re-export, late read `examples/module-cycle-self` carries the smallest one — a module that imports itself, which is legal and is a cycle. |
 | ✅ | the temporal dead zone as a **compile-time** error (NTS1004) |
-| ✅ | module-scope state, including references |
+| ✅ | module-scope state, including references `examples/globals` carries it, under the definition that makes it a row: state that outlives a call. |
 | ✅ | `import def from` — default imports | `export default x` binds the name `default` in the module's namespace, so this is `import { default as d }` and needs nothing of its own. Marked ✗ until an audit of this table against the compiler tried it; the gap was a missing fixture, not a missing feature `examples/default-imports` carries it, as `import def from "./m.js"`. |
 | ✗ | dynamic `import()` |
-| ✅ | a module-scope `const` holding a function, called, passed and compared by identity |
+| ✅ | a module-scope `const` holding a function, called, passed and compared by identity `examples/module-functions` is exactly this, and `examples/function-in-an-object-literal` the same function held in an object literal and called through it. |
 | ✗ | a module-scope `let` holding a function — a second arrow is a second layout |
 
 ## 6. The type system
