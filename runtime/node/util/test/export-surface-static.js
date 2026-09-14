@@ -62,19 +62,36 @@ const ours = new Set(Object.keys(mod));
 //
 //   MIMEType, MIMEParams   an RFC 2045 parser, not written
 //   getCallSites           reads V8 stack frames; no representation here
-//   inherits               prototype surgery is what the API *is*, and this
-//                          profile does not do prototype surgery
-//   _extend                deprecated in node since v6; nothing needs it yet
 //   setTraceSigInt         internal tracing hook
 //   transferableAbortController, transferableAbortSignal
 //                          structured-clone integration, which the Abort
 //                          implementation here does not have
+//
+// **Three left this list on 2026-09-14 and the reasons they carried are worth keeping.**
+//
+//   _extend      read "deprecated in node since v6; nothing needs it yet". Something did:
+//                `differential-ts.mjs` calls it and read `absent` against node's answer on
+//                every input. It survives to a backend -- one function in
+//                `nts hir --prepared` -- so it costs the compiled lane nothing either.
+//
+//   inherits     read "prototype surgery is what the API *is*, and this profile does not do
+//                prototype surgery". That is **true of the compiled lane and measured**:
+//                `nts hir --prepared` has no `inherits` function at all, so it does not reach
+//                a backend. It is published here anyway, because the interpreted lane is
+//                TypeScript on node, `Object.setPrototypeOf` is exactly what node's own
+//                implementation does, and every behaviour matches -- chain, `super_`, and its
+//                writable/configurable descriptor. The absence was a compiled-lane fact
+//                applied to the interpreted surface, and the two lanes already differ in many
+//                places that are recorded rather than hidden.
+//
+//   promisify.custom  was never only a name. node's `promisify` returns a function's own
+//                declared promisified form if it has one, and `fs` and `child_process` use
+//                that upstream. A surface list could say the symbol was missing; it could not
+//                say the branch was.
 const ABSENT = [
   "MIMEParams",
   "MIMEType",
-  "_extend",
   "getCallSites",
-  "inherits",
   "setTraceSigInt",
   "transferableAbortController",
   "transferableAbortSignal",

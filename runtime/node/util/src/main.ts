@@ -278,6 +278,29 @@ type ResultCallback<Result, Failure = unknown> = (
 
 type NoResultCallback<Failure = unknown> = (error?: Failure) => void;
 
+/**
+ * **`util.promisify.custom`, and the branch that reads it.**
+ *
+ * node lets a function declare its own promisified form:
+ *
+ *     fn[util.promisify.custom] = () => Promise.resolve("mine");
+ *     util.promisify(fn)()  ->  "mine"
+ *
+ * `lib/internal/util.js` checks that property first and returns it, and it validates that what it
+ * finds is a function -- `ERR_INVALID_ARG_TYPE` on `util.promisify.custom` otherwise. `fs` and
+ * `child_process` both use it upstream, so a caller promisifying `fs.exists` gets node's
+ * single-argument form rather than an `(err, value)` misreading.
+ *
+ * The symbol is registered, not private: `Symbol.for("nodejs.util.promisify.custom")`. Two copies
+ * of the machinery in one process must agree on it, which is the same reason `stream`'s branding
+ * symbols are registered.
+ *
+ * This profile had neither the symbol nor the branch. `surface-absence.mjs` listed
+ * `util.promisify.custom` among nine missing names; what it could not say is that the behaviour
+ * behind it was missing too.
+ */
+const kCustomPromisify: symbol = Symbol.for("nodejs.util.promisify.custom");
+
 export function promisify<
   This,
   Args extends unknown[],
@@ -305,6 +328,14 @@ export function promisify(
   validateFunction(original, "original");
   const callable = original;
 
+  const declared = (original as unknown as Record<PropertyKey, unknown>)[kCustomPromisify];
+  if (declared !== undefined && declared !== null) {
+    if (typeof declared !== "function") {
+      throw new ERR_INVALID_ARG_TYPE("util.promisify.custom", "Function", declared);
+    }
+    return declared as CallableFunction;
+  }
+
   function promisified(this: unknown, ...args: unknown[]): Promise<unknown> {
     return new Promise((resolve, reject) => {
       // Node's callbacks are `(err, value)`, so the promise settles on the
@@ -325,6 +356,62 @@ export function promisify(
 
   return promisified;
 }
+
+// node hangs the symbol off the function itself, which is how callers reach it.
+(promisify as unknown as Record<PropertyKey, unknown>)["custom"] = kCustomPromisify;
+
+/**
+ * `util.inherits`, upstream `lib/util.js`. Sets the prototype chain and records `super_`,
+ * which is writable and configurable there and is relied on by pre-class code in the wild.
+ */
+export function inherits(ctor: unknown, superCtor: unknown): void {
+  if (ctor === undefined || ctor === null) {
+    throw new ERR_INVALID_ARG_TYPE("ctor", "Function", ctor);
+  }
+  if (superCtor === undefined || superCtor === null) {
+    throw new ERR_INVALID_ARG_TYPE("superCtor", "Function", superCtor);
+  }
+  const parent = superCtor as { prototype?: unknown };
+  if (parent.prototype === undefined) {
+    throw new ERR_INVALID_ARG_TYPE("superCtor.prototype", "Object", parent.prototype);
+  }
+  Object.defineProperty(ctor, "super_", {
+    value: superCtor,
+    writable: true,
+    configurable: true,
+  });
+  Object.setPrototypeOf(
+    (ctor as { prototype: object }).prototype,
+    parent.prototype as object,
+  );
+}
+
+/**
+ * `util._extend`, deprecated upstream since v6 and still published. A shallow copy of own
+ * enumerable string keys, which returns `target` untouched when `source` is not an object --
+ * including for `null`, where `Object.assign` would also do nothing but `Object.keys` would throw.
+ */
+function extendImplementation(target: unknown, source: unknown): unknown {
+  if (source === null || typeof source !== "object") return target;
+  const into = target as Record<string, unknown>;
+  const from = source as Record<string, unknown>;
+  for (const key of Object.keys(from)) into[key] = from[key];
+  return target;
+}
+
+/**
+ * **Wrapped, because `util._extend.name` is `"deprecated"` in node and that is observable.**
+ *
+ * `lib/util.js` publishes it as `internalDeprecate(_extend, ..., 'DEP0060')`, so the exported
+ * function is `deprecate`'s wrapper rather than the implementation. `export-surface-static.js`
+ * compares each name and caught this the moment the export appeared -- the behaviour was right
+ * and the identity was not.
+ */
+export const _extend: (target: unknown, source: unknown) => unknown = deprecate(
+  extendImplementation,
+  "The `util._extend` API is deprecated. Please use Object.assign() instead.",
+  "DEP0060",
+) as (target: unknown, source: unknown) => unknown;
 
 /** The inverse of `promisify`, upstream `lib/internal/util.js`. */
 /**
@@ -426,6 +513,8 @@ export default {
   stripVTControlCharacters,
   toUSVString,
   promisify,
+  inherits,
+  _extend,
   callbackify,
   isArray,
 };
