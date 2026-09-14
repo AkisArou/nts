@@ -1,7 +1,8 @@
 //! Native payloads have no managed header. C independently checks the shared
 //! layout calculator on every emitted definition.
-use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name};
-use nts_core::hir::native::Pointee;
+use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype};
+use nts_core::hir::Callee;
+use nts_core::hir::native::{Pointee, Type};
 
 pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<(), Diagnostic> {
     let layouts = nts_codegen_common::native::layouts(program)
@@ -60,5 +61,100 @@ pub(super) fn helpers(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     }
     if program.funcs.iter().any(|f| f.values.iter().any(|v| matches!(v.kind, OpKind::NativeFree { .. }))) {
         writer.line(origin, "extern void free(void *);");
+    }
+}
+
+/// What this program believes about foreign types and functions, in a form that
+/// a translation unit including the real headers can refuse.
+///
+/// The assertions in `program.c` do check the layout calculator against C's --
+/// but for the struct *this program declared*, since both sides are computed
+/// from one field list. They cannot notice that the declaration disagrees with
+/// the library it names. This carries the same claims to where the real
+/// declarations are visible, and adds the two that layout numbers cannot
+/// express:
+///
+/// - `_Generic` over the **address** of each field. A field's own qualifiers do
+///   not survive lvalue conversion -- a `const int` member answers `int` -- so
+///   the value form accepts a declaration that silently drops the `const`.
+/// - the prototype, because an incompatible redeclaration is an error. A call
+///   expression that merely compiles is not the same check: the arguments of
+///   `poll(p, n, t)` convert, so a wrong parameter width still builds.
+///
+/// Size, alignment and offsets do not settle it on their own. Changing a
+/// field's signedness, or its pointee to another type of the same width, moves
+/// none of those numbers, so a witness built only from them passes a schema
+/// that is wrong about every value read through it.
+///
+/// There are no `#include` lines for the bindings. Which header declares
+/// `poll`, under which target, sysroot and defines, is the consumer's fact and
+/// not this program's; inventing one here would assert something nobody told
+/// us. `<stddef.h>` is not an exception to that -- `offsetof` is the assertion
+/// mechanism itself, not a binding.
+///
+/// Only foreign declarations appear. A layout this program invented names
+/// nothing outside it, so there is no header to ask about it, and naming it
+/// here would make the witness fail for a disagreement that cannot exist.
+///
+/// # Errors
+///
+/// If a native layout has no C placement. `types` reports that first for the
+/// same layouts; this cannot be the only place it is noticed.
+pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<bool, Diagnostic> {
+    let layouts = nts_codegen_common::native::layouts(program)
+        .map_err(|why| Diagnostic::error("NTS2006", why, origin.location))?;
+    let mut wrote = false;
+    for layout in layouts.structs.values() {
+        if !layout.foreign { continue; }
+        let placed = nts_core::hir::layout::native_place(layout)
+            .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
+        let tag = format!("struct {}", layout.name);
+        writer.line(origin, format!("_Static_assert(sizeof({tag}) == {}u, \"{} size\");", placed.size, layout.name));
+        writer.line(origin, format!("_Static_assert(_Alignof({tag}) == {}u, \"{} alignment\");", placed.align, layout.name));
+        for (field, offset) in layout.fields.iter().zip(placed.offsets) {
+            writer.line(origin, format!(
+                "_Static_assert(offsetof({tag}, {}) == {offset}u, \"{}.{} offset\");",
+                field.name, layout.name, field.name));
+            writer.line(origin, format!(
+                "_Static_assert(_Generic(&((({tag} *)0)->{}), {}: 1, default: 0), \"{}.{} type\");",
+                field.name, field.ty.pointer_type(), layout.name, field.name));
+        }
+        wrote = true;
+    }
+    let mut declared: std::collections::BTreeMap<&str, String> = std::collections::BTreeMap::new();
+    for func in &program.funcs {
+        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
+            let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
+            if !target.parameters.iter().chain(std::iter::once(&target.result)).all(names_only_foreign) { continue; }
+            declared.entry(target.name.as_str()).or_insert_with(|| native_prototype(&target.name, target));
+        }
+    }
+    for prototype in declared.values() {
+        writer.line(origin, format!("extern {prototype}"));
+        wrote = true;
+    }
+    Ok(wrote)
+}
+
+/// Whether every struct this type names is one a header defines.
+///
+/// A prototype mentioning a layout invented for this program would name a tag
+/// no header declares, and the witness would fail to compile for a reason that
+/// is not a disagreement about anything.
+fn names_only_foreign(ty: &Type) -> bool {
+    match ty {
+        Type::Pointer(pointee) => pointee_is_foreign(pointee),
+        Type::Scalar(_) | Type::Bool | Type::Void => true,
+        Type::Managed(_) | Type::Erased | Type::BigInt => false,
+    }
+}
+
+fn pointee_is_foreign(pointee: &Pointee) -> bool {
+    match pointee {
+        // A scalar names no struct at all, and an opaque tag names one the
+        // declaration authored -- a header defines it or the witness will say so.
+        Pointee::Scalar(_) | Pointee::Opaque(_) => true,
+        Pointee::Struct(layout) => layout.foreign,
+        Pointee::Pointer(inner) => pointee_is_foreign(inner),
     }
 }

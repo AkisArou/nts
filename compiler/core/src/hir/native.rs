@@ -51,6 +51,20 @@ pub enum Pointee {
 pub struct Struct {
     pub name: String,
     pub fields: Vec<Field>,
+    /// Whether `name` is a C struct tag the declaration authored, rather than a
+    /// spelling invented for a layout that exists only in this program.
+    ///
+    /// The two are distinguishable from `name` alone -- an invented one is
+    /// `NtsNative_Type{id}` -- and deliberately not distinguished that way. A
+    /// question answered by a name prefix is answered again, differently, by
+    /// whoever writes the next prefix test. It is recorded once, where the
+    /// declaration is read, because only there is it known.
+    ///
+    /// What turns on it: a foreign tag names a type some header defines, so a
+    /// translation unit that includes that header can be asked whether we
+    /// described it correctly. An invented one names nothing outside this
+    /// program and has no such witness to offer.
+    pub foreign: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]

@@ -12,6 +12,45 @@ fn prepare(name: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
     prepare_with_types(name, source, true)
 }
 
+/// A program whose binding lives in its own declaration file, the way a real
+/// one does.
+///
+/// Not a convenience: `declare module "c:x"` inside a file that imports or
+/// exports anything is a module *augmentation*, and augmenting a module that
+/// does not exist is `TS2664`. A binding has to arrive as an ambient
+/// declaration in a file of its own, so a test that inlines it is not testing
+/// the shape anybody writes.
+fn prepare_with_binding(
+    name: &str,
+    binding: &str,
+    source: &str,
+) -> Option<(Utf8PathBuf, hir::Prepared)> {
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize_utf8()
+        .unwrap();
+    let dir = root.join(format!(
+        "target/native-c-tests/{}-{name}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        format!(
+            r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","binding.d.ts","{root}/runtime/native/libc.d.ts"]}}"#
+        ),
+    )
+    .unwrap();
+    std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
+    std::fs::write(dir.join("main.ts"), source).unwrap();
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&dir.join("tsconfig.json"))
+        .unwrap();
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    Some((dir, hir::prepare(&snapshot).unwrap()))
+}
+
 fn prepare_with_types(
     name: &str,
     source: &str,
@@ -496,4 +535,116 @@ fn type_headers_preserve_brands_and_boolean_abi() {
         String::from_utf8_lossy(&compiled.stderr)
     );
     assert!(Command::new(dir.join("caller")).status().unwrap().success());
+}
+
+/// The witness a program publishes about a foreign type, checked against the
+/// header that really declares it -- and checked that it can *fail*.
+///
+/// The arms differ in one thing: `events` is `c_int16` in one and `c_uint16` in
+/// the other. On this target that changes no size, no alignment and no offset,
+/// so the assertions a layout-only witness would carry are byte-identical
+/// between them. That equality is asserted below rather than described, because
+/// it is the whole reason the type assertions exist: a witness built from the
+/// numbers alone passes a schema that is wrong about every value read through
+/// it.
+///
+/// `-fsyntax-only`: nothing here needs to link or run. The question is whether
+/// the translation unit that can see the real `struct pollfd` accepts what this
+/// program believes about it.
+#[test]
+fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
+    const PROGRAM: &str = "import { poll, type PollFd, type Count, type Timeout } from \"c:poll\";\n\
+         import { local } from \"c:memory\";\n\
+         export function go(timeout: number): number {\n\
+         const fds = local<PollFd>();\n\
+         return poll(fds, 1 as Count, timeout as Timeout);\n\
+         }\n";
+    let binding = |field: &str| {
+        format!(
+            "declare module \"c:poll\" {{\n\
+             import type {{ Ptr, Struct, c_int, {field}, c_ulong }} from \"c:types\";\n\
+             export type PollFd = Struct<{{ fd: c_int; events: {field}; revents: {field} }}, \"pollfd\">;\n\
+             export type Count = c_ulong;\n\
+             export type Timeout = c_int;\n\
+             /** The array is read synchronously and no address into it is kept.\n\
+              * @ntsNoEscape fds\n\
+              */\n\
+             export function poll(fds: Ptr<PollFd>, count: Count, timeout: Timeout): c_int;\n\
+             }}\n"
+        )
+    };
+
+    // `None` only when tsgo is absent. An empty witness is a *failure*, not a
+    // skip: this program names a foreign struct and a foreign function, so a
+    // witness with nothing in it means the generator stopped working. Reading
+    // the two as one condition is how this test passed for its first three runs
+    // while never executing a line of what it exists to check.
+    let witness_of = |name: &str, field: &str| -> Option<(Utf8PathBuf, String)> {
+        let (dir, prepared) = prepare_with_binding(name, &binding(field), PROGRAM)?;
+        let emitted = nts_codegen_c::emit(&prepared.program);
+        assert!(
+            emitted.diagnostics.is_empty(),
+            "{name}: {:?}",
+            emitted.diagnostics
+        );
+        assert!(
+            !emitted.witness.is_empty(),
+            "{name}: a program naming `struct pollfd` and `poll` published no witness"
+        );
+        Some((dir, emitted.witness))
+    };
+
+    let Some((signed_dir, signed)) = witness_of("witness-signed", "c_int16") else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    let (unsigned_dir, unsigned) = witness_of("witness-unsigned", "c_uint16").unwrap();
+
+    assert!(
+        signed.contains("extern int poll(struct pollfd *, unsigned long, int);"),
+        "the prototype is the check a merely-convertible call expression is not:\n{signed}"
+    );
+
+    let layout_only = |witness: &str| {
+        witness
+            .lines()
+            .filter(|line| {
+                line.contains("sizeof(") || line.contains("_Alignof(") || line.contains("offsetof(")
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert_eq!(
+        layout_only(&signed),
+        layout_only(&unsigned),
+        "size, alignment and offsets must not distinguish these; if they do, this \
+         test has stopped exercising the case it exists for"
+    );
+    assert_ne!(signed, unsigned, "the field types must distinguish them");
+
+    let accepted = |dir: &Utf8Path, witness: &str| -> bool {
+        std::fs::write(dir.join("native_witness.h"), witness).unwrap();
+        std::fs::write(
+            dir.join("witness.c"),
+            "#include <poll.h>\n#include <stdint.h>\n#include \"native_witness.h\"\n",
+        )
+        .unwrap();
+        Command::new("clang")
+            .args(["-std=c11", "-fsyntax-only", "-I"])
+            .arg(dir)
+            .arg(dir.join("witness.c"))
+            .status()
+            .unwrap()
+            .success()
+    };
+
+    assert!(
+        accepted(&signed_dir, &signed),
+        "the correct binding must agree with the real <poll.h>"
+    );
+    assert!(
+        !accepted(&unsigned_dir, &unsigned),
+        "an unsigned `events` must be refused -- a witness that accepts both \
+         arms is checking nothing about field types"
+    );
 }

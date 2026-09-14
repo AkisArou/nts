@@ -85,7 +85,9 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
         let name = property.name.strip_prefix("___").map_or_else(|| property.name.clone(), |rest| format!("__{rest}"));
         fields.push(Field { name, ty });
     }
-    Some(Struct { name: if tag.is_empty() { format!("NtsNative_Type{}", shape.0) } else { tag.to_owned() }, fields })
+    let foreign = !tag.is_empty();
+    let name = if foreign { tag.to_owned() } else { format!("NtsNative_Type{}", shape.0) };
+    Some(Struct { name, fields, foreign })
 }
 
 /// Storage named by a native type argument; pointer types occupy one word.

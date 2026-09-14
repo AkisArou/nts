@@ -217,6 +217,68 @@ caller fail. Refusal controls exercise returns, joins, field addresses, captures
 stores, unclassified calls, freeing locals, suspension, loops, and the stack
 budget. The valid local-storage function stays in each refusal fixture.
 
+## Fourth executable slice: a generated witness against the real header
+
+A binding is a claim about someone else's type. `program.c` already asserts
+`sizeof`, `_Alignof` and every `offsetof` against the C compiler -- but for the
+struct *this program declared*, since both sides are computed from one field
+list. Those assertions cannot notice that the declaration disagrees with the
+library it names.
+
+`nts emit-c` now also writes `native_witness.h`: the same claims, plus two the
+numbers cannot express, for a translation unit that includes the real headers to
+accept or refuse.
+
+    _Static_assert(sizeof(struct pollfd) == 8u, "pollfd size");
+    _Static_assert(offsetof(struct pollfd, events) == 4u, "pollfd.events offset");
+    _Static_assert(_Generic(&(((struct pollfd *)0)->events), int16_t *: 1, default: 0), "pollfd.events type");
+    extern int poll(struct pollfd *, unsigned long, int);
+
+**`_Generic` over the address of a field, never the field.** A field's own
+qualifiers do not survive lvalue conversion: a `const int` member answers `int`,
+so the value form accepts a declaration that silently drops the `const`. Taking
+the address keeps them, because `const int *` and `int *` are distinct types.
+
+**The prototype, because an incompatible redeclaration is an error.** A call
+expression that merely compiles is not the same check: the arguments of
+`poll(p, n, t)` convert, so a wrong parameter width still builds. Redeclaring
+beside the real header refuses a wrong width, a wrong return type, a wrong
+pointee, a spurious `const`, and a prototype that is wrongly variadic -- each
+verified, not assumed.
+
+It is one text. `native_prototype` builds the string that `program.c` declares
+the symbol with and that the witness re-declares it with; two derivations could
+drift, and a witness agreeing with a prototype nobody emitted checks nothing.
+
+**Why the layout numbers are not enough, demonstrated rather than argued.**
+Change `events` from `c_int16` to `c_uint16`: size, alignment and every offset
+are unchanged, so a layout-only witness is byte-identical between the two. The
+test asserts that identity, and then asserts that the real `<poll.h>` accepts
+one and refuses the other. Removing the `_Generic` emission makes the test fail
+-- checked by doing it, because a control that cannot fail measures nothing.
+
+**No `#include` for the bindings.** Which header declares `poll`, under which
+target, sysroot and defines, is the consumer's fact rather than the program's;
+inventing one here would assert something nobody said. The consumer includes its
+headers and then the witness. `<stddef.h>` is not an exception -- `offsetof` is
+the assertion mechanism, not a binding.
+
+**Only foreign declarations appear.** `native::Struct` now records whether its
+name is a C tag the declaration authored or a spelling invented for a layout
+that exists only in this program. That is a fact, not a name prefix: an invented
+one is `NtsNative_Type{id}`, and a question answered by a prefix gets answered
+again, differently, by whoever writes the next prefix test. A layout this
+program invented names nothing outside it, so no header can be asked about it.
+
+**What this does not establish.** It checks the properties it names, on the
+declarations a program actually uses -- a binding nothing calls is not witnessed
+until something calls it. It is not a header importer: the declarations are
+still hand-written, and checking them is not deriving them. It says nothing
+about another backend's argument placement, and nothing about whether the
+symbol the linker finds is the one the header described. `examples/interop/
+native-poll` keeps its runtime comparison and its linked, executed caller for
+those.
+
 ## Direction for the next executable slices
 
 1. **More native storage and header-derived bindings.** `void *`, const-qualified
