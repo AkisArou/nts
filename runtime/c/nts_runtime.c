@@ -1277,9 +1277,8 @@ const char *nts_thrown_class(NtsValue value) {
  * Stated rather than papered over. */
 void nts_callback_enter(void) {
   if (!nts_is_owner_thread()) {
-    fprintf(stderr,
-            "nts: a callback entered compiled code from a thread this "
-            "environment does not own\n");
+    fprintf(stderr, "nts: a callback entered compiled code from a thread this "
+                    "environment does not own\n");
     abort();
   }
   nts_environment_current()->in_callback++;
