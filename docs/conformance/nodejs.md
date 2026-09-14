@@ -25014,3 +25014,56 @@ input and `url/parse` read as a field that cannot discriminate -- it discriminat
 35 `util.types.*` predicates, so eleven throw for every input, and the tool reports a missing name as
 a divergence in the vocabulary it uses for a wrong answer.
 
+## The differential could not await, and that was most of node
+
+`corpus-reach.mjs` put the corpus at 9 of `fs`'s 169 published functions, 2 of `http`'s 78, 12 of
+`zlib`'s 45. That was read here as thin specs and it was not. **`differential-ts.mjs` contained no
+`await` and not one of its specs was async**, so a callback-taking function could not be compared at
+all. `zlib`'s 45 split 11 sync, 12 async, 11 classes, 11 `create*`; only the synchronous third was
+reachable by construction, and "0 divergences across 22 modules" was a clean answer to a small
+question.
+
+Both halves await now — the host and `differential-probe.cjs`, which computes this profile's side in
+a child — sequentially rather than concurrently, because these specs schedule timers and streams.
+
+    module    reach before   after     what it found
+    zlib      12 of 45       23        nothing; the async codecs agree byte-for-byte
+    fs         9 of 169      26        `fs.promises.realpath` walked where node calls the binding
+    stream    25 of 108      56        three byte helpers this profile did not publish at all
+
+### Two real defects, and neither is the kind a suite finds
+
+**`fs.promises.realpath`.** node ships two resolvers under one name: `lib/fs.js` walks the path in
+JavaScript with an `lstat` cache, `lib/internal/fs/promises.js` calls `binding.realpath`. They
+disagree — a file path with a trailing slash is `ENOTDIR` from the binding and resolves through the
+walk — and node ships the disagreement. This profile promisified its own callback `realpath`, so all
+three agreed. **Being self-consistent is what hid it**: every internal check agreed with every other,
+and node's suite does not reach the case. 719 of 4,024 generated paths diverged, at one position.
+
+**`stream._isUint8Array`, `_isArrayBufferView`, `_uint8ArrayToBuffer`.** Published by node on the
+module and on `Stream`; six of this module's seven missing surface names were those three seen twice.
+`surface-absence.mjs` had reported them for as long as it has existed. What got them written was a
+spec calling them and reading `absent` against node's answer on all 4,030 inputs — **an absence is
+easy to read past in a list and hard to read past in a comparison.**
+
+### And three instruments had to be repaired to get there, each one behind the last
+
+`corpus-reach.mjs` was synchronous too. With the new zlib spec in place it reported reach going from
+12 to **13** — the one function invoked before the first `await` — and ten more ran invisibly. A
+coverage tool that cannot execute a spec to the end reports a smaller number rather than an error.
+
+A forgotten `await` would have agreed with itself forever: an unresolved promise renders as `{}`
+under `JSON.stringify` and as `[object Promise]` inside a joined string, identically on both sides.
+Both halves refuse one now. **The guard took two attempts** — the first checked array elements, and
+removing an `await` from a real spec still produced 0 divergences and no complaint, because the spec
+ends `[...].join("|")` and the promise was already a substring.
+
+`fuzz-timer-order.mjs` claimed in its header that "every program is run twice per scheduler"; it ran
+node twice and this profile once, so only node's nondeterminism was filtered. Five runs at one seed
+gave 0, 2, 0, 2 and 1 differing programs, a different program each time, from a deterministic
+generator. **A one-sided stability check is worse than none**: it reads as rigour, removes the obvious
+false positives, and what it leaves looks like a finding. Sampling both twice was necessary and not
+sufficient; a candidate divergence is now confirmed three times before it is reported, which is six
+consecutive clean runs and still five divergences when `setImmediate` is deliberately swapped for
+`setTimeout(fn, 0)`.
+
