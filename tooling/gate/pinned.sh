@@ -40,7 +40,18 @@ target=${NTS_GATE_TARGET:-$HOME/.cache/nts-gate/target}
 mkdir -p "$(dirname "$tree")" "$target"
 
 if [ -e "$tree/.git" ]; then
-  git -C "$tree" checkout --detach -q "$sha"
+  # `--force`, because a build in this tree dirties tracked files and a plain
+  # checkout then refuses. `cargo` rewrites `Cargo.lock` whenever the resolved
+  # graph differs from the committed one, so the *second* gate after such a
+  # commit aborts with "local changes would be overwritten" -- naming
+  # `Cargo.lock`, which reads like a real finding and is not one. The first
+  # time this happened the run reported nothing at all and the wrapper's exit
+  # status was still 0.
+  #
+  # Discarding is right here and only here: this worktree exists to hold one
+  # commit while it is gated, nobody edits it, and anything in it that is not
+  # the commit is something a previous gate left behind.
+  git -C "$tree" checkout --detach -q --force "$sha"
 else
   # `worktree add` writes to `.git/worktrees/`, not to the shared index, so it
   # is safe while another session is staging.
