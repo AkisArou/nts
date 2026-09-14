@@ -71,8 +71,15 @@ const ours = new Set(Object.keys(mod));
 //
 //   _extend      read "deprecated in node since v6; nothing needs it yet". Something did:
 //                `differential-ts.mjs` calls it and read `absent` against node's answer on
-//                every input. It survives to a backend -- one function in
-//                `nts hir --prepared` -- so it costs the compiled lane nothing either.
+//                every input.
+//
+//                **It does not reach a backend, and the note that said otherwise was wrong.**
+//                I read one `_extend` function out of `nts hir --prepared` and concluded it
+//                "costs the compiled lane nothing". Diffing the refusals against the commit
+//                before these edits says otherwise: `indexing an object type, which is not an
+//                array` from its own body, and `no wrapper for _extend`. Presence in a
+//                reachability dump is not evidence that a function compiles -- the same
+//                mistake, twice in one file, in both directions.
 //
 //   inherits     read "prototype surgery is what the API *is*, and this profile does not do
 //                prototype surgery". It is refused on the compiled lane, and **the cause is
@@ -84,7 +91,11 @@ const ours = new Set(Object.keys(mod));
 //                `Object.setPrototypeOf` is not what stops it; writing `super_` with a
 //                descriptor is. Published here anyway, because the interpreted lane is
 //                TypeScript on node and every behaviour matches -- chain, `super_`, and its
-//                writable/configurable descriptor.
+//                writable/configurable descriptor. Neither it nor `_extend` is published on
+//                the compiled lane, which is the honest price of both: +3 own refusals in this
+//                module and two more `no wrapper` lines. **Nothing that previously compiled
+//                stopped compiling** -- that was checked by diffing the two emits rather than
+//                assumed from "it still typechecks".
 //
 //                **How that was measured matters, because the first attempt was wrong.**
 //                `nts hir --prepared` showed no `inherits` function and I read that as
