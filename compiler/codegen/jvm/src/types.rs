@@ -65,6 +65,17 @@ pub const STRING_DESCRIPTOR: &str = "Ljava/lang/String;";
 /// same class and could not be passed to each other.
 #[must_use]
 pub fn class_name(layout: &Layout) -> String {
+    // **A bound foreign class is already a binary name and is not ours to
+    // rename.** `com/probe/Box` names a class in somebody's jar; putting it
+    // under `nts/gen/` and flattening the slashes gives
+    // `nts/gen/com$probe$Box`, which is a class nobody has and which will not
+    // verify against the jar the call site invokes into.
+    //
+    // The `/` is the test, matching `hir::lower`'s `is_foreign_name`: a name we
+    // generate is a TypeScript identifier and cannot contain one.
+    if nts_core::hir::runtime::is_foreign_layout_name(&layout.name) {
+        return layout.name.clone();
+    }
     jvm_class_name(&layout.name)
 }
 

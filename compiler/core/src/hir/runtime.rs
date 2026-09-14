@@ -321,9 +321,78 @@ pub fn foreign_key(owner: &str, member: &str, descriptor: &str) -> String {
 /// `lower`: a runtime helper is a C identifier and can contain neither `/` nor
 /// `:`, and a JVM binary name always contains a `/` for anything outside the
 /// default package.
+/// Whether a **layout** stands for a class in somebody's jar.
+///
+/// The `/` is the whole test: a name this compiler generates is a TypeScript
+/// identifier and cannot contain one, while a bound class is named by its JVM
+/// binary name -- `com/example/Catalog`.
+///
+/// **One definition because there were two.** `hir::lower`'s `is_foreign_name`
+/// and `codegen/jvm`'s `types::class_name` each had this test written out, and
+/// the second carried a comment asserting it matched the first. A comment is
+/// not an agreement: it cannot fail when one of them changes. Both now call
+/// here.
+#[must_use]
+pub fn is_foreign_layout_name(name: &str) -> bool {
+    name.contains('/')
+}
+
 #[must_use]
 pub fn is_foreign_key(name: &str) -> bool {
     name.contains(':') && name.contains('/')
+}
+
+/// How a bound foreign member is invoked, and what it retains.
+///
+/// One row of the binding table `nts bind` writes beside a `.d.ts`. The kind
+/// cannot live in the key -- a key that names one method twice is not an
+/// identity, and [`keeps`] looks up the same string -- so it travels here, from
+/// the same rows, read once.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForeignCall {
+    /// `owner.member:descriptor`, the shape [`foreign_key`] builds.
+    pub key: String,
+    /// Which JVM instruction this becomes. A backend that cannot classify a row
+    /// refuses by name rather than guessing `invokevirtual`: getting virtual
+    /// and interface the wrong way round is an `IncompatibleClassChangeError`
+    /// at link time, in the user's program.
+    pub kind: ForeignKind,
+}
+
+/// Every bound member in a program, keyed by `(source, span end)` of the
+/// declaration the checker resolved to.
+///
+/// A named alias because the bare `FxHashMap` in a parameter position fixes
+/// the hasher for every caller, which clippy's `implicit_hasher` is right
+/// about -- and because the key is the load-bearing half: two tables of bound
+/// members exist and they are keyed differently on purpose.
+pub type ForeignTable = rustc_hash::FxHashMap<(u32, u32), ForeignCall>;
+
+/// The six ways a bound member is reached.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ForeignKind {
+    Static,
+    Virtual,
+    Interface,
+    Special,
+    Field,
+    StaticField,
+}
+
+impl ForeignKind {
+    /// Parse the spelling `nts bind` writes.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        Some(match text {
+            "static" => Self::Static,
+            "virtual" => Self::Virtual,
+            "interface" => Self::Interface,
+            "special" => Self::Special,
+            "field" => Self::Field,
+            "staticfield" => Self::StaticField,
+            _ => return None,
+        })
+    }
 }
 
 /// What a **bound Java member** retains, if anything is known about it.

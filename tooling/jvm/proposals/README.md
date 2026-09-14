@@ -1,16 +1,19 @@
-# Proposals
+# Foreign calls: what landed, and what it cost to find
 
-Tested patches this lane wrote against files it does not own, kept here because
-a patch that lives only in `/tmp` is a patch that is one `df` away from gone —
-and that tmpfs has filled before, taking work with it.
+**This landed on 2026-09-14** and `foreign-calls.patch` is deleted with it. A
+patch file beside the tree it has already been applied to is a second copy of
+the same fact, and the stale one is the one someone reads.
 
-Nothing here is applied. Each one is a proposal for the owner of the files it
-touches, and the owner may rewrite it rather than take it.
+What stays here is the part the diff does not carry: the measurements, the
+refutations, and the four defects that were invisible until something real was
+pointed at them. The code carries the decisions; this carries why.
 
-## `foreign-calls.patch`
+The full gate is green at the commit that landed it — 23 steps, `jvm` at 205 of
+205, `blockers` at 175 of 175.
 
-**TypeScript calling Java, lowered to real bytecode and verified.** Applies to
-`e4fe0bb1`; 386 insertions across 8 files.
+## The shape of it
+
+**TypeScript calling Java, lowered to real bytecode and verified.**
 
 ```
 $ java -Xverify:all -cp classes:out:nts-runtime.jar Driver
@@ -18,7 +21,7 @@ TypeScript called Java: Box(14).size() * 1.0 = 42.0
 and the answer is the one Java computes.
 ```
 
-From a real compiled `com.probe.Box`, bound with `tooling/jvm/bind.sh`:
+From a real compiled `com.probe.Box`, bound with `nts bind`:
 
 ```
 public static double main(com.probe.Box);

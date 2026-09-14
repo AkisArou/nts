@@ -495,7 +495,13 @@ fn call_result(context: &Context, callee: &Callee) -> Facts {
             .get(slot)
             .copied()
             .unwrap_or(Facts::TOP),
-        Callee::External(name) => runtime_result(name).unwrap_or(Facts::TOP),
+        Callee::External(name) => {
+            runtime_result(name).or_else(|| foreign_result(name)).unwrap_or(Facts::TOP)
+        }
+        // A native callee's declared return type would seed this the same way
+        // `foreign_result` seeds a JVM descriptor -- the native lane owns that
+        // answer and does not have it yet, so TOP, which is pessimistic and
+        // never wrong.
         Callee::Native(_) => Facts::TOP,
     }
 }
@@ -620,6 +626,31 @@ pub(super) fn string_span(func: &Func, value: ValueId, depth: u32) -> Option<Fac
 /// `[0, hi]`, saturating at the largest length a string can have.
 fn upto(hi: f64) -> Facts {
     Facts::new(0.0, hi.min(facts::U32_MAX), true, false, false)
+}
+
+/// What a **bound Java member** returns, from the descriptor in its own name.
+///
+/// `from_jvm_descriptor` has existed and been tested since the day the binding
+/// table was designed, and had **no caller outside its own tests** -- correct,
+/// documented, and dead. This is its first use.
+///
+/// The descriptor is already in the key: `owner.member:(params)ret`, so this
+/// needs no table lookup and no plumbing. An `I` is a 32-bit signed integer by
+/// the JVM's own guarantee, enforced by the verifier at class load, so the
+/// facts are a platform invariant rather than an inference.
+///
+/// **What it costs not to have.** Without it a value arriving from Java is
+/// `TOP`: unbounded, possibly NaN, possibly `-0`. So `rect.right - rect.left`
+/// cannot be proved integral, the arithmetic after it stays `f64`, and every
+/// operation downstream carries NaN and `-0` handling that the descriptor had
+/// already ruled out.
+fn foreign_result(key: &str) -> Option<Facts> {
+    if !super::runtime::is_foreign_key(key) {
+        return None;
+    }
+    let descriptor = key.split_once(':')?.1;
+    let returns = descriptor.rsplit_once(')')?.1;
+    super::facts::from_jvm_descriptor(returns)
 }
 
 fn runtime_result(name: &str) -> Option<Facts> {

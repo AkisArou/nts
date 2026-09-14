@@ -354,7 +354,7 @@ fn generic_classes(
     snapshot: &SemanticSnapshot,
 ) -> rustc_hash::FxHashMap<NodeId, Vec<super::generics::Instantiation>> {
     let by_symbol = super::generics::instantiations(snapshot);
-    let probe = FuncBuilder::new(snapshot);
+    let probe = FuncBuilder::probe(snapshot);
     snapshot
         .nodes
         .iter()
@@ -470,7 +470,7 @@ fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarch
 /// Read every class declaration's name, base and own methods.
 fn collect_hierarchy(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> Hierarchy {
     let mut hierarchy = Hierarchy::default();
-    let probe = FuncBuilder::new(snapshot);
+    let probe = FuncBuilder::probe(snapshot);
     let instantiations = super::generics::instantiations(snapshot);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -1067,7 +1067,7 @@ fn taken_as_a_closure(closures: &[ClosureInfo], id: NodeId) -> bool {
 }
 
 fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
-    let probe = FuncBuilder::new(snapshot);
+    let probe = FuncBuilder::probe(snapshot);
 
     // A variable that is *ever* assigned cannot be captured, because this
     // captures by value and JavaScript captures by reference. For a name
@@ -1846,7 +1846,7 @@ fn class_token_indices(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<u32
 }
 
 fn naming(snapshot: &SemanticSnapshot) -> Naming {
-    let probe = FuncBuilder::new(snapshot);
+    let probe = FuncBuilder::probe(snapshot);
     let class_tokens = class_token_indices(snapshot);
     let mut declarations: rustc_hash::FxHashMap<String, Vec<NodeId>> =
         rustc_hash::FxHashMap::default();
@@ -2139,7 +2139,7 @@ fn collect_module_scope(
     // had a different type; `NtsObj_Request` has eight consecutive
     // `NtsString *` members, where the same defect compiles clean and returns
     // the wrong value.
-    let mut probe = FuncBuilder::new(snapshot);
+    let mut probe = FuncBuilder::probe(snapshot);
     probe.hierarchy = hierarchy.clone();
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -2452,10 +2452,10 @@ fn collect_static_fields(
 /// a list of reasons a declaration produces no copy, and each reason answering
 /// in one line is what makes the list legible.
 fn ambiguous_name(snapshot: &SemanticSnapshot, id: NodeId) -> Diagnostic {
-    let name = FuncBuilder::new(snapshot)
+    let name = FuncBuilder::probe(snapshot)
         .declared_name(id)
         .unwrap_or_else(|| "?".to_owned());
-    FuncBuilder::new(snapshot).unsupported(
+    FuncBuilder::probe(snapshot).unsupported(
         id,
         &format!("a second function named `{name}` in the same file"),
     )
@@ -2518,7 +2518,7 @@ fn uninstantiated(
             .to_owned(),
         None => return None,
     };
-    Some(FuncBuilder::new(snapshot).unsupported(id, &what))
+    Some(FuncBuilder::probe(snapshot).unsupported(id, &what))
 }
 
 /// Copies of ordinary functions specialised to the concrete type an argument
@@ -2602,7 +2602,7 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
     // `collect_layouts` calls merge a builder's layouts into the program, and a
     // probe whose layouts reached the program would materialise a struct for
     // every type this pass asks about.
-    let mut probe = FuncBuilder::new(snapshot);
+    let mut probe = FuncBuilder::probe(snapshot);
     probe.hierarchy = hierarchy.clone();
 
     let mut calls: Vec<(&NodeId, &nts_semantic_schema::CallTarget)> =
@@ -2726,7 +2726,7 @@ fn note_uncompiled(
     id: NodeId,
     diagnostic: &Diagnostic,
 ) {
-    let Some(name) = FuncBuilder::new(snapshot).declared_name(id) else {
+    let Some(name) = FuncBuilder::probe(snapshot).declared_name(id) else {
         return;
     };
     if program.uncompiled.iter().any(|(at, _)| *at == name) {
@@ -2800,8 +2800,12 @@ fn is_generic_function(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
 }
 
 /// The methods and constructors a class declares.
-fn members_of(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
-    let probe = FuncBuilder::new(snapshot);
+fn members_of(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    id: NodeId,
+) -> Vec<NodeId> {
+    let probe = FuncBuilder::probe(snapshot);
     probe
         .children(id)
         .into_iter()
@@ -2815,6 +2819,21 @@ fn members_of(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
                         | syntax::SET_ACCESSOR
                 )
             )
+        })
+        // **A bound foreign member contributes no function.** Its body is in a
+        // jar; there is nothing of ours to emit, and `callee_for` turns a call
+        // to it into a `Callee::External` that never names a function this
+        // program defines.
+        //
+        // Filtered here rather than refused in `method_body`, because Java
+        // overloads collapse onto one HIR name: `Catalog#find` has four, and
+        // emitting an empty function per declaration produced
+        // `DuplicateFunction { name: "Catalog#find" }` three times over. The
+        // member is not a function that is missing a body -- it is not a
+        // function of ours at all.
+        .filter(|child| {
+            let at = probe.location(*child);
+            !foreign.contains_key(&(at.file.0, at.span.end))
         })
         .collect()
 }
@@ -2835,13 +2854,14 @@ fn members_of(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
 /// what they are rather than as a lowering gap.
 fn lower_class(
     snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
     class: NodeId,
     generic: &rustc_hash::FxHashMap<NodeId, Vec<super::generics::Instantiation>>,
     shared: &Shared,
     lowered: &mut Lowered,
     wanted: &mut std::collections::BTreeSet<usize>,
 ) {
-    let members = members_of(snapshot, class);
+    let members = members_of(snapshot, foreign, class);
     for (copy, (instance, substitution)) in copies_of(generic, class).into_iter().enumerate() {
         for &member in &members {
             // One function for a `static` member, however many copies the class
@@ -2853,6 +2873,7 @@ fn lower_class(
             }
             let mut builder = shared.builder(
                 snapshot,
+                foreign,
                 Copy {
                     substitution: substitution.clone(),
                     ..Copy::default()
@@ -2961,9 +2982,15 @@ impl Shared {
     }
 
     /// A builder for one copy, wired to the program-wide naming.
-    fn builder<'a>(&self, snapshot: &'a SemanticSnapshot, copy: Copy) -> FuncBuilder<'a> {
+    fn builder<'a>(
+        &self,
+        snapshot: &'a SemanticSnapshot,
+        foreign: &'a super::runtime::ForeignTable,
+        copy: Copy,
+    ) -> FuncBuilder<'a> {
         let mut builder = FuncBuilder::instantiating(
             snapshot,
+            foreign,
             self.module.clone(),
             self.hierarchy.clone(),
             self.closures.clone(),
@@ -3042,7 +3069,7 @@ fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
 /// run at construction, and treating them as evaluation would refuse programs
 /// that are fine.
 fn dead_zone_reads(snapshot: &SemanticSnapshot, order: &[usize]) -> Vec<Diagnostic> {
-    let probe = FuncBuilder::new(snapshot);
+    let probe = FuncBuilder::probe(snapshot);
 
     let mut position = vec![usize::MAX; snapshot.modules.len()];
     for (rank, at) in order.iter().enumerate() {
@@ -3153,7 +3180,7 @@ fn evaluated_reads(probe: &FuncBuilder, id: NodeId, visit: &mut impl FnMut(NodeI
 fn module_statements(
     snapshot: &SemanticSnapshot,
 ) -> (Option<(NodeId, Vec<NodeId>)>, Vec<Diagnostic>) {
-    let probe = FuncBuilder::new(snapshot);
+    let probe = FuncBuilder::probe(snapshot);
     let mut refusals = Vec::new();
 
     let mut per_module: Vec<Vec<NodeId>> = vec![Vec::new(); snapshot.modules.len()];
@@ -3380,7 +3407,7 @@ fn refused_initializers(
 ) -> rustc_hash::FxHashSet<u32> {
     let mut refused = rustc_hash::FxHashSet::default();
     for (symbol, initializer) in &shared.module.deferred {
-        let mut probe = shared.builder(snapshot, Copy::default());
+        let mut probe = shared.builder(snapshot, NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default), Copy::default());
         if let Err(diagnostic) = probe.lower_expression(*initializer) {
             lowered.diagnostics.push(diagnostic);
             refused.insert(*symbol);
@@ -3425,7 +3452,7 @@ fn lower_module_initializer(
         // that declares its own local also consumes it.
         let mut lost = Vec::new();
         statements.retain(|statement| {
-            let mut probe = shared.builder(snapshot, Copy::default());
+            let mut probe = shared.builder(snapshot, NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default), Copy::default());
             let attempt = if probe.kind_of(*statement) == Some(syntax::VARIABLE_STATEMENT) {
                 probe.lower_module_binding(*statement, refused)
             } else if probe.kind_of(*statement) == Some(syntax::CLASS_DECLARATION) {
@@ -3473,7 +3500,7 @@ fn lower_module_initializer(
             ));
         }
 
-        let mut builder = shared.builder(snapshot, Copy::default());
+        let mut builder = shared.builder(snapshot, NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default), Copy::default());
         match builder.lower_module_init(file, &statements, refused) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => {
@@ -3535,7 +3562,7 @@ fn initializer_function(
     snapshot: &SemanticSnapshot,
     declaration: NodeId,
 ) -> Option<(NodeId, String)> {
-    let probe = FuncBuilder::new(snapshot);
+    let probe = FuncBuilder::probe(snapshot);
     if probe.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION) {
         return None;
     }
@@ -3710,7 +3737,7 @@ fn namespace_of(
     naming: &Naming,
     declaration: NodeId,
 ) -> Option<Vec<(String, String)>> {
-    let probe = FuncBuilder::new(snapshot);
+    let probe = FuncBuilder::probe(snapshot);
     if probe.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION) {
         return None;
     }
@@ -3883,7 +3910,7 @@ fn record_unpublished(
 /// members at all is `unknown`, which is why that case answers `false` here
 /// rather than being special-cased.
 fn opaque_signature(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
-    let probe = FuncBuilder::new(snapshot);
+    let probe = FuncBuilder::probe(snapshot);
     let carried = |member: TypeId| -> bool {
         matches!(
             snapshot
@@ -3987,7 +4014,7 @@ fn implementation_of(
 }
 
 fn optional_scalars(snapshot: &SemanticSnapshot, declaration: NodeId) -> Vec<(u32, HirType)> {
-    let probe = FuncBuilder::new(snapshot);
+    let probe = FuncBuilder::probe(snapshot);
     // **The declaration with a body, which for an overloaded function is not
     // the first one.**
     //
@@ -4313,7 +4340,7 @@ fn publish_surface(
 
 #[must_use]
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
-    lower_with(snapshot, &[])
+    lower_with(snapshot, &[], &rustc_hash::FxHashMap::default())
 }
 
 /// As [`lower`], told which source files the project named as its roots.
@@ -4323,7 +4350,9 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
 /// using only `include` does. See [`public_api`] for what it decides and why
 /// there is no way to decide it without being told.
 #[must_use]
-pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
+pub fn lower_with(
+    snapshot: &SemanticSnapshot, entry: &[String], foreign: &super::runtime::ForeignTable,
+) -> Lowered {
     let mut lowered = Lowered::default();
     // Closures first, because a module-scope `const f = () => ...` is typed by
     // the *closure* the arrow becomes rather than by its function type, and the
@@ -4359,7 +4388,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
         // arrange: the checker resolved every call site, so a method call is a
         // static call and `this` is an ordinary argument.
         if node.kind == NodeKind::Syntax(syntax::CLASS_DECLARATION) {
-            lower_class(snapshot, id, &generic, &shared, &mut lowered, &mut wanted);
+            lower_class(snapshot, foreign, id, &generic, &shared, &mut lowered, &mut wanted);
             continue;
         }
 
@@ -4390,7 +4419,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
         if let Some(what) = refused_by_name(snapshot, id) {
             lowered
                 .diagnostics
-                .push(FuncBuilder::new(snapshot).unsupported(id, what));
+                .push(FuncBuilder::probe(snapshot).unsupported(id, what));
             continue;
         }
 
@@ -4400,7 +4429,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
         // too -- took every function that reaches the platform with it. An
         // overload signature has the same shape and the same answer: the
         // implementation that follows is the one to lower.
-        if !FuncBuilder::new(snapshot).has_a_body(id) {
+        if !FuncBuilder::probe(snapshot).has_a_body(id) {
             continue;
         }
         // Two functions cannot share a name: the emitted C would define one
@@ -4435,7 +4464,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
             continue;
         }
         for copy in copies {
-            let mut builder = shared.builder(snapshot, copy);
+            let mut builder = shared.builder(snapshot, foreign, copy);
             match builder.lower_function(id) {
                 Ok(func) => lowered.program.funcs.push(func),
                 Err(diagnostic) => {
@@ -4479,7 +4508,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
     while let Some(index) = wanted.iter().copied().find(|at| !done.contains(at)) {
         done.insert(index);
         let mut builder = FuncBuilder::within(
-            snapshot,
+            snapshot, foreign,
             module.clone(),
             hierarchy.clone(),
             closures.clone(),
@@ -4659,7 +4688,7 @@ fn nominal_name(name: &str) -> bool {
 /// no backend can undo, which is a stronger argument than "a collision is
 /// possible" and is why this belongs here rather than in a backend.
 fn is_foreign_name(name: &str) -> bool {
-    name.contains('/')
+    super::runtime::is_foreign_layout_name(name)
 }
 
 /// Every `InstanceOf` names classes this program has a layout for, and no
@@ -7040,6 +7069,9 @@ struct Edge {
 
 struct FuncBuilder<'a> {
     snapshot: &'a SemanticSnapshot,
+    /// Bound foreign members, keyed by `(source, span end)` of the declaration.
+    /// Empty for a probe builder; see [`FuncBuilder::probe`].
+    foreign: &'a super::runtime::ForeignTable,
     /// Every value the function defines.
     values: Vec<Op>,
     blocks: Vec<PartialBlock>,
@@ -7238,10 +7270,29 @@ struct FuncBuilder<'a> {
     used_closures: Vec<usize>,
 }
 
+/// The empty binding table, for the probe builders below.
+static NO_FOREIGN: std::sync::OnceLock<
+    super::runtime::ForeignTable,
+> = std::sync::OnceLock::new();
+
 impl<'a> FuncBuilder<'a> {
-    fn new(snapshot: &'a SemanticSnapshot) -> Self {
+    /// A builder for asking the snapshot a question -- a name, a location, a
+    /// refusal -- rather than for lowering a body.
+    ///
+    /// Seventeen of the nineteen construction sites are this, and most were
+    /// already called `probe`. They cannot reach a foreign call, so they get no
+    /// binding table rather than an argument threaded through them.
+    fn probe(snapshot: &'a SemanticSnapshot) -> Self {
+        Self::new(snapshot, NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default))
+    }
+
+    fn new(
+        snapshot: &'a SemanticSnapshot,
+        foreign: &'a super::runtime::ForeignTable,
+    ) -> Self {
         Self {
             snapshot,
+            foreign,
             boxed: Vec::new(),
             guarded: Vec::new(),
             in_closure: false,
@@ -7291,6 +7342,7 @@ impl<'a> FuncBuilder<'a> {
     /// The same, knowing what the module and its classes declare.
     fn within(
         snapshot: &'a SemanticSnapshot,
+        foreign: &'a super::runtime::ForeignTable,
         module: ModuleScope,
         hierarchy: Hierarchy,
         closures: Vec<ClosureInfo>,
@@ -7301,13 +7353,14 @@ impl<'a> FuncBuilder<'a> {
             boxed: boxed_symbols(&closures),
             guarded: guarded_symbols(&closures),
             closures,
-            ..Self::new(snapshot)
+            ..Self::new(snapshot, foreign)
         }
     }
 
     /// The same, lowering one instantiation of a generic class.
     fn instantiating(
         snapshot: &'a SemanticSnapshot,
+        foreign: &'a super::runtime::ForeignTable,
         module: ModuleScope,
         hierarchy: Hierarchy,
         closures: Vec<ClosureInfo>,
@@ -7317,7 +7370,7 @@ impl<'a> FuncBuilder<'a> {
         Self {
             suffix,
             substitution,
-            ..Self::within(snapshot, module, hierarchy, closures)
+            ..Self::within(snapshot, foreign, module, hierarchy, closures)
         }
     }
 
@@ -8428,7 +8481,7 @@ impl<'a> FuncBuilder<'a> {
         };
         // Collected first, because the checks below take `&mut self` and a
         // closure holding the iterator would hold a borrow across them.
-        let siblings: Vec<NodeId> = members_of(self.snapshot, class)
+        let siblings: Vec<NodeId> = members_of(self.snapshot, self.foreign, class)
             .into_iter()
             .filter(|sibling| *sibling != member)
             .collect();
@@ -9553,6 +9606,23 @@ impl<'a> FuncBuilder<'a> {
         {
             let origin = self.origin(id);
             return Ok(self.push(OpKind::ConstNull, want.clone(), origin));
+        }
+        // Any native pointer converts to `void *`, which is what C does at the
+        // call and the only pointer conversion it does without being asked. One
+        // direction: `void *` back to a typed pointer is where the mistakes
+        // live, and it stays refused here. TypeScript refuses it too, since
+        // `Ptr<unknown>` is not assignable to `Ptr<c_uint8>` -- this is the
+        // second of the two, not the only one.
+        //
+        // A `Convert` rather than a relabel: the address is unchanged, but the
+        // verifier checks call argument types, so the value reaching the call
+        // has to *be* of the parameter's type rather than merely share its
+        // representation.
+        if matches!(have, HirType::NativePointer(_))
+            && matches!(want, HirType::NativePointer(super::native::Pointee::Void))
+        {
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::Convert(value), want.clone(), origin));
         }
         if matches!(have, HirType::NativePointer(_)) || matches!(want, HirType::NativePointer(_)) {
             return Err(self.unsupported(id, "an opaque C pointer converted to a different representation"));
@@ -21896,6 +21966,28 @@ impl<'a> FuncBuilder<'a> {
             .is_some_and(|record| matches!(record.kind, TypeKind::Function(_)))
     }
 
+    /// The JVM binary name of the class a **bound** record stands for, if it
+    /// is one.
+    ///
+    /// Any member of the declaration carries it: every row for one class names
+    /// the same owner, so the first that resolves answers for all of them.
+    /// Split out of [`Self::layout_of`] to keep that function under its line
+    /// limit, and because "which jar class is this" is its own question.
+    fn foreign_owner(&self, record: &TypeRecord) -> Option<String> {
+        record
+            .symbol
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .map(|symbol| symbol.declarations.clone())
+            .into_iter()
+            .flatten()
+            .flat_map(|declaration| self.children(declaration))
+            .find_map(|member| {
+                let at = self.location(member);
+                let row = self.foreign.get(&(at.file.0, at.span.end))?;
+                row.key.split_once(':')?.0.rsplit_once('.').map(|(owner, _)| owner.to_owned())
+            })
+    }
+
     fn layout_of(&mut self, id: NodeId, ty: TypeId) -> Result<Layout, Diagnostic> {
         if let Some(known) = self
             .layouts
@@ -22011,6 +22103,17 @@ impl<'a> FuncBuilder<'a> {
         // The declared name where there is one. An anonymous object type —
         // `{ x: number }` written inline — has no symbol, so it is named after
         // its type id, which is at least stable and unique.
+        // **A bound foreign class is named by its binary name**, which is its
+        // identity: `com/probe/Box`, not `Box`. `nominal_name` already treats a
+        // name with a `/` as foreign and refuses to merge it with a differently
+        // named layout, so the family exists and only the name was missing.
+        //
+        // Taken from the binding table rather than invented. A row's key is
+        // `owner.member:descriptor`, and every member of one class carries the
+        // same owner, so the first row found answers it. Deriving it from the
+        // module specifier instead would put `java:` in the middle end, which
+        // `bind.rs` is deliberately the only place to know.
+        let bound = self.foreign_owner(record);
         let name = record
             .symbol
             .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
@@ -22020,7 +22123,11 @@ impl<'a> FuncBuilder<'a> {
         // widths. The type id tells them apart, and `<>` cannot appear in a
         // TypeScript identifier so the qualified name cannot collide with a
         // plain one. `nts types` is what reads the number back.
-        let name = format!("{name}{}", instantiation_suffix(self.snapshot, ty));
+        // A foreign class takes no instantiation suffix: its binary name is
+        // what the jar calls it, and `Box<T>` and `Box<U>` are one class there.
+        let name = bound.unwrap_or_else(|| {
+            format!("{name}{}", instantiation_suffix(self.snapshot, ty))
+        });
         // What this class does for each dispatch slot. Empty where nothing in
         // the hierarchy is overridden, which is most classes.
         let mut methods = vec![None; self.hierarchy.table_size()];
@@ -22721,6 +22828,34 @@ impl<'a> FuncBuilder<'a> {
         let HirType::Managed(ManagedType::Object(type_id)) = ty else {
             return Err(self.unsupported(id, "a `new` that does not produce an object"));
         };
+        // **A bound Java class is constructed on the other side.** Everything
+        // below this -- the layout, the allocation, the constructor call --
+        // describes building an object of ours. A foreign class has none of
+        // it: `layout_of` would emit a stub class that then *shadows the real
+        // one on the classpath*, which is how this was found, and `ObjectNew`
+        // would allocate a second object the `<init>` never touches.
+        //
+        // This is the third and last call shape the binding had to reach.
+        // `callee_for` had the instance case; `lower_static_call` had none
+        // until a moment ago; and `new` arrives here.
+        if let Some(bound) = self
+            .snapshot
+            .call_targets
+            .get(&id)
+            .and_then(|it| it.callee)
+            .map(|declaration| self.location(declaration))
+            .and_then(|at| self.foreign.get(&(at.file.0, at.span.end)))
+            .map(|row| row.key.clone())
+        {
+            let arguments = self.arguments_of(id);
+            let args = self.lower_arguments(id, &arguments)?;
+            let origin = self.origin(id);
+            return Ok(self.push(
+                OpKind::Call { callee: Callee::External(bound), args, frame: None },
+                ty.clone(),
+                origin,
+            ));
+        }
         // Laying the class out here is what makes its fields addressable; the
         // constructor is about to write every one of them.
         self.layout_of(id, type_id)?;
@@ -28182,12 +28317,26 @@ impl<'a> FuncBuilder<'a> {
             .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
         self.materialize(id, &ty)?;
         let origin = self.origin(id);
+        // **A bound static, selected the way an instance call already is.**
+        // `callee_for` resolves a bound member reached through a receiver; a
+        // static has no receiver to dispatch on, so it arrives here instead --
+        // and this was the one call shape the binding never reached. It is not
+        // an edge of the surface: `Integer.parseInt`, `Math.abs` and every
+        // factory method in the JDK are statics.
+        let bound = self
+            .snapshot
+            .call_targets
+            .get(&id)
+            .and_then(|it| it.callee)
+            .map(|declaration| self.location(declaration))
+            .and_then(|at| self.foreign.get(&(at.file.0, at.span.end)))
+            .map(|row| row.key.clone());
+        let callee = match bound {
+            Some(key) => Callee::External(key),
+            None => Callee::Direct(format!("{class_name}.{member_name}")),
+        };
         Ok(self.push(
-            OpKind::Call {
-                callee: Callee::Direct(format!("{class_name}.{member_name}")),
-                args,
-                frame: None,
-            },
+            OpKind::Call { callee, args, frame: None },
             ty,
             origin,
         ))
@@ -30800,6 +30949,19 @@ impl<'a> FuncBuilder<'a> {
         } else {
             member_name
         };
+        // **A bound foreign member, selected by the declaration the checker
+        // resolved to.** `call_targets` is keyed by call node -- the `id` this
+        // function already receives -- and its `callee` is the declaration
+        // after overload resolution, which is the only thing that selects among
+        // overloads: 4,973 of 52,171 member names in a generated Android SDK
+        // binding carry more than one, and 1,870 overload sets have two members
+        // at the same arity, so neither the name nor the arity is enough.
+        if let Some(declaration) = self.snapshot.call_targets.get(&id).and_then(|it| it.callee) {
+            let at = self.location(declaration);
+            if let Some(bound) = self.foreign.get(&(at.file.0, at.span.end)) {
+                return Ok(Callee::External(bound.key.clone()));
+            }
+        }
         let Some(declaring) = self.hierarchy.declaring(type_id, member_name) else {
             return Err(self.unsupported(
                 id,

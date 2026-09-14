@@ -1727,6 +1727,27 @@ pub const fn is_constructor_token(ty: TypeId) -> bool {
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub funcs: Vec<Func>,
+    /// Bound foreign members, keyed by the **foreign key** -- `owner.member:descriptor`.
+    ///
+    /// **On `Program` for the same reason `classes` is.** A backend turning
+    /// `Callee::External` into an instruction needs the invoke kind, and
+    /// `emit(&Program)` is its whole input -- threading the rows only as far as
+    /// `lower` would reach the half that builds the key and not the half that
+    /// spends it, and would force `emit`'s signature to change in two crates
+    /// that have no stake in this.
+    ///
+    /// **Keyed differently from `Options::foreign`, and deliberately.** The two
+    /// consumers look things up by different things: `lower` has a resolved
+    /// declaration and needs its key, so it wants `(source, span end)`; a
+    /// backend has `Callee::External(key)` and nothing else, so it wants the
+    /// key. One loaded set, each side indexed the way it actually asks.
+    ///
+    /// The first version kept one map and made the backend scan it. That is
+    /// O(rows) per call site, and the rows are not few: 78,948 for a bound
+    /// Android SDK, which is ~10^8 string comparisons across a few thousand
+    /// foreign calls -- invisible on a nine-class fixture and unusable on a
+    /// real jar.
+    pub foreign: rustc_hash::FxHashMap<String, runtime::ForeignCall>,
     /// Layouts for every object type the program uses.
     pub layouts: Vec<Layout>,
     /// The distinct classes the program declares, and the types of each.
@@ -2650,6 +2671,9 @@ pub struct Options<'a> {
     /// and [`lower::public_api`] falls back to inferring it from the import
     /// graph, which cannot be done correctly and says so.
     pub entry_files: &'a [String],
+    /// Bound foreign members, keyed by `(source, span end)`. Loaded by the
+    /// driver from the `.bind` file `nts bind` writes beside each `.d.ts`.
+    pub foreign: &'a runtime::ForeignTable,
 }
 
 impl Default for Options<'_> {
@@ -2665,6 +2689,12 @@ impl Default for Options<'_> {
             // that knows the tsconfig should say, and the ones that do not are
             // no worse off than before this existed.
             entry_files: &[],
+            foreign: {
+                static EMPTY: std::sync::OnceLock<
+                    runtime::ForeignTable,
+                > = std::sync::OnceLock::new();
+                EMPTY.get_or_init(rustc_hash::FxHashMap::default)
+            },
         }
     }
 }
@@ -3687,7 +3717,14 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis], roots: rea
 #[must_use]
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
-    let mut lowered = lower::lower_with(snapshot, options.entry_files);
+    let mut lowered = lower::lower_with(snapshot, options.entry_files, options.foreign);
+    // Re-keyed by the foreign key as lowering finishes: same rows, indexed for
+    // the reader that comes next. See `Program::foreign`.
+    lowered.program.foreign = options
+        .foreign
+        .values()
+        .map(|bound| (bound.key.clone(), bound.clone()))
+        .collect();
     settle(&mut lowered);
     let mut program = lowered.program;
 

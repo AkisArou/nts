@@ -24,25 +24,20 @@ mkdir -p "$out/classes"
 javac --release 8 -Xlint:all,-options -d "$out/classes" "$here"/java/com/example/*.java
 jar --create --file "$out/catalog.jar" -C "$out/classes" .
 
-# The declarations, from the class files rather than from the source. That is
-# the point: `nts bind` will read `android.jar`, where there is no source.
+# The declarations and the binding table, from the class files rather than from
+# the source. That is the point: this reads `android.jar`, where there is no
+# source.
 #
-# A directory rather than the jar, because a jar is a zip and the reader crate
-# deliberately has no zip dependency -- `unzip -o` is the caller's job, and here
-# the classes are already unpacked.
+# **One invocation, two files.** The `.d.ts` tells the checker what `index()`
+# returns; the `.bind` says which instruction the call becomes, keyed by the
+# byte offset of each declaration's end. Those offsets number the text the same
+# run produced, so generating the two separately would be two derivations of
+# one fact -- and the failure is silent, an offset landing one declaration over
+# and resolving a call to the wrong overload rather than to none.
 generated="$out/com.example.d.ts"
-( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" cargo run --release -q \
-    -p nts-jvm-emitter --example bind -- \
-    "$out/classes" com.example ) > "$generated"
-
-# The binding table: the half the compiler reads. The `.d.ts` tells the checker
-# what `index()` returns; this says which instruction the call becomes. Keyed by
-# line in the file beside it, because the checker has already picked the
-# overload and the declaration it picked selects the row.
 table="$out/com.example.bind"
-( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" NTS_BIND_TABLE=1 \
-    cargo run --release -q -p nts-jvm-emitter --example bind -- \
-    "$out/classes" com.example ) > "$table"
+( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" cargo run --release -q \
+    -p nts-cli -- bind --classes "$out/classes" --package com.example --out "$out" )
 
 if [ "${NTS_REGENERATE:-}" = "1" ]; then
   cp "$generated" "$here/types/com.example.d.ts"

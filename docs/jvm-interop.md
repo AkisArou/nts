@@ -297,22 +297,21 @@ public final class Session implements AutoCloseable {
 }
 ```
 
-`nts bind --jar app.jar --out types/` produces the two files below.
+`nts bind --jar app.jar --package com.example --out types/` produces the two
+files below.
 
-**That command does not exist**, and saying so here rather than leaving it
-implied: there is no `bind` subcommand on `nts` — it answers
-``unknown command `bind` `` — and the generator is an example binary that takes a
-**directory of class files**, because `nts-jvm-emitter` deliberately has no zip
-dependency and unpacking is the caller's job:
+**The command exists as of 2026-09-14**, and this paragraph used to say it did
+not. It had been quoted here as though it worked since this document's first
+draft, answered ``unknown command `bind` `` the whole time, and was copied into
+`docs/native-interop.md` on the strength of appearing in a worked example — a
+command nobody has run is a claim, and this one was believed twice.
 
-```
-cargo run --release -q -p nts-jvm-emitter --example bind -- <classes-dir> <package> [class...]
-```
+Both spellings work: `--classes` for a directory that is already unpacked, and
+`--jar`, which shells out to `unzip` because `nts-jvm-emitter` still has no zip
+dependency and will not grow one to open an archive the caller's machine can
+already open.
 
-The subcommand is the right end state and the `--jar` spelling is what the rest
-of this document assumes, so it stays written that way below. It was quoted as
-though it worked for long enough that `docs/native-interop.md` picked it up and
-credited this lane with a tool it does not have. What it produces is real; how
+What it produces is real; how
 you invoke it is not.
 
 ```ts

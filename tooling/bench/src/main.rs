@@ -2028,6 +2028,7 @@ fn prepared_program(
             // this harness synthesises for every case. It is also what this
             // call passed before the field existed, so the columns keep
             // measuring the program they measured yesterday.
+            foreign: &hir::runtime::ForeignTable::default(),
             entry_files: &[],
         },
     ) {

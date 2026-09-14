@@ -279,6 +279,48 @@ fn simple_name(binary: &str) -> String {
 /// Returning `None` is always allowed and always safe: the generator emits what
 /// it can see and nothing it cannot, which is how a partially-resolvable jar
 /// still produces usable declarations.
+/// Resolves a superclass out of a directory of class files, so inherited
+/// members render.
+///
+/// **Here rather than in the caller.** This and [`classes_under`] were written
+/// out in `examples/bind.rs`, and `nts bind` needs exactly the same two: a
+/// second copy is a second answer to "what is a class file directory", and the
+/// way that fails is a binding that silently omits inherited members on one
+/// path and not the other.
+#[derive(Debug)]
+pub struct FromDirectory(pub std::path::PathBuf);
+
+impl Resolve for FromDirectory {
+    fn find(&self, binary_name: &str) -> Option<crate::read::ClassFile> {
+        let bytes = std::fs::read(self.0.join(format!("{binary_name}.class"))).ok()?;
+        crate::read::class_file(&bytes).ok()
+    }
+}
+
+/// Every `.class` under `root`, as binary names, sorted so the output is
+/// stable -- a generated file that reorders itself between runs is a diff
+/// nobody can read and a drift test that fails for no reason.
+#[must_use]
+pub fn classes_under(root: &std::path::Path) -> Vec<String> {
+    fn walk(root: &std::path::Path, at: &std::path::Path, found: &mut Vec<String>) {
+        let Ok(entries) = std::fs::read_dir(at) else { return };
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(root, &path, found);
+            } else if path.extension().is_some_and(|it| it == "class")
+                && let Ok(relative) = path.strip_prefix(root)
+            {
+                found.push(relative.with_extension("").to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+    let mut found = Vec::new();
+    walk(root, root, &mut found);
+    found.sort();
+    found
+}
+
 pub trait Resolve {
     /// The class with this binary name, e.g. `java/lang/Enum`.
     fn find(&self, binary_name: &str) -> Option<ClassFile>;

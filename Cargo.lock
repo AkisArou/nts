@@ -164,11 +164,14 @@ dependencies = [
  "nts-codegen-napi",
  "nts-core",
  "nts-debug-lowering",
+ "nts-deps",
  "nts-diagnostics",
  "nts-differential",
  "nts-frontend-ts",
+ "nts-jvm-emitter",
  "nts-memory-lowering",
  "nts-semantic-schema",
+ "rustc-hash",
 ]
 
 [[package]]
@@ -253,6 +256,18 @@ dependencies = [
  "nts-diagnostics",
  "nts-semantic-schema",
  "serde",
+]
+
+[[package]]
+name = "nts-deps"
+version = "0.0.0"
+dependencies = [
+ "camino",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "xxhash-rust",
 ]
 
 [[package]]

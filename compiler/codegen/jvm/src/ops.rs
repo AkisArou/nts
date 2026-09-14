@@ -1615,6 +1615,97 @@ impl Emitter<'_> {
         Ok(())
     }
 
+    /// Arguments to a **bound Java member**, narrowed to the widths the jar
+    /// declared.
+    ///
+    /// Separate from [`Self::push_arguments`] because that one walks a
+    /// descriptor *this repository wrote*, where the declared width is already
+    /// the width the value is held in. Here the descriptor comes from a jar and
+    /// the value is a JavaScript `number` -- an `f64` -- so every integral
+    /// parameter needs a conversion, and it must be the one **JavaScript**
+    /// specifies rather than the one the JVM would do.
+    ///
+    /// **`d2i` is the wrong instruction and it is wrong quietly.** Java
+    /// saturates: `2**31` becomes `2147483647`. `ToInt32` wraps modulo `2^32`:
+    /// it becomes `-2147483648`, which is what node prints, and node is the
+    /// oracle. The two agree on every value anyone tries by hand and disagree
+    /// on exactly the ones a boundary is tested with, so the difference does
+    /// not fail to verify -- it prints a different number.
+    ///
+    /// Java's `char` is **unsigned** where its `byte` and `short` are not, so
+    /// they cannot share a helper. Passing `-1` is what shows it: `65535` into
+    /// a `char`, `-1` into a `short`.
+    fn push_foreign_arguments(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        args: &[ValueId],
+        descriptor: &str,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        use nts_jvm_emitter::insn::{self, Kind};
+        let Some(parameters) = nts_jvm_emitter::descriptor::parameters(descriptor) else {
+            return Err(refuse(
+                self.func,
+                &format!("a bound member whose descriptor `{descriptor}` this compiler cannot read"),
+            ));
+        };
+        if parameters.len() != args.len() {
+            return Err(refuse(
+                self.func,
+                &format!(
+                    "a bound member given {} argument(s) against `{descriptor}`",
+                    args.len()
+                ),
+            ));
+        }
+        for (&arg, want) in args.iter().zip(parameters) {
+            self.load(code, pool, arg)?;
+            // What the value *is*, not what its signature says: `intcall`
+            // holds some helper answers in an `int` slot, and starting from
+            // the declared `f64` would emit a conversion from a double that is
+            // not on the stack.
+            let integral = self.narrowed.contains(&arg)
+                || matches!(self.ty(arg), HirType::Int { .. } | HirType::Bool);
+            match (want, integral) {
+                // Already the width the jar asked for.
+                ("I" | "Z", true) | ("D", false) => {}
+                // The JavaScript conversions, one helper per width.
+                ("I", false) => code.invoke_static(origin, pool, RUNTIME, "toInt32", "(D)I"),
+                ("S", false) => code.invoke_static(origin, pool, RUNTIME, "toInt16", "(D)I"),
+                ("B", false) => code.invoke_static(origin, pool, RUNTIME, "toInt8", "(D)I"),
+                ("C", false) => code.invoke_static(origin, pool, RUNTIME, "toUint16", "(D)I"),
+                // Already an `int`, so the JVM's own narrowing is the same
+                // truncation `ToInt32` would do from here and is one byte.
+                ("S", true) => code.convert(origin, insn::I2S, Kind::Int, Kind::Int),
+                ("B", true) => code.convert(origin, insn::I2B, Kind::Int, Kind::Int),
+                ("C", true) => code.convert(origin, insn::I2C, Kind::Int, Kind::Int),
+                ("F", false) => code.convert(origin, insn::D2F, Kind::Double, Kind::Float),
+                ("D", true) => code.convert(origin, insn::I2D, Kind::Int, Kind::Double),
+                // A reference parameter: the callback coercion already owns
+                // this question and answers it for interfaces as well.
+                (other, _) if other.starts_with('L') || other.starts_with('[') => {
+                    self.coerce_callback(code, pool, arg, other, origin)?;
+                }
+                // **`J` lands here deliberately.** A `bigint` is an
+                // `NtsBigInt`, not a `long`, and the conversion between them is
+                // a decision this lane has not made. Refusing by name is the
+                // rule; emitting `d2l` would be a wrong number at every
+                // magnitude a `long` exists for.
+                (other, held) => {
+                    return Err(refuse(
+                        self.func,
+                        &format!(
+                            "a bound member wanting `{other}` for {}",
+                            if held { "an integer" } else { "a number" }
+                        ),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// The argument a fixed intrinsic declared as a callback interface,
     /// brought to that type on the stack.
     ///
@@ -4312,6 +4403,137 @@ impl Emitter<'_> {
         Ok(true)
     }
 
+    /// A call to a **bound Java member**, which `external` will never have
+    /// a row for: that table is this repository's own helpers and this name
+    /// came out of a jar.
+    ///
+    /// Split out of [`Self::call`] because it is a second dispatch living
+    /// inside the first -- six invocation kinds, a constructor that
+    /// allocates, and a return width the jar chose -- and because `call`
+    /// was 181 lines with it inlined.
+    fn foreign_call(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        name: &str,
+        args: &[ValueId],
+        result: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        use nts_core::hir::runtime::ForeignKind;
+                // Keyed by the foreign key, which is what a backend holds.
+                // Scanning the rows instead was O(rows) per call site
+                // against 78,948 of them for a bound Android SDK.
+                let Some(bound) = self.program.foreign.get(name) else {
+                    // Refused rather than guessed. `invokevirtual` on an
+                    // interface is an `IncompatibleClassChangeError` at
+                    // link time, in the user's program, which is far worse
+                    // than a refusal here.
+                    return Err(refuse(
+                        self.func,
+                        &format!(
+                            "a call to the bound member `{name}`, whose binding table row is \
+                             missing -- the `.bind` file beside the declaration says how to \
+                             invoke it, and without it this backend would have to guess \
+                             between `invokevirtual` and `invokeinterface`"
+                        ),
+                    ));
+                };
+                let Some((owner, member, descriptor)) =
+                    nts_jvm_emitter::bind::split_key(name)
+                else {
+                    return Err(refuse(
+                        self.func,
+                        &format!("a call to `{name}`, which is not a well-formed foreign key"),
+                    ));
+                };
+                // **A bound constructor allocates here, not in HIR.**
+                // `new` on a foreign class is the JVM's own `new; dup;
+                // invokespecial <init>`, so there is no layout of ours to
+                // fill and no receiver to load: this is the one bound
+                // member whose arguments are all of `args`. Lowering knows
+                // the same thing and emits no `ObjectNew` -- doing it in
+                // one place and not the other would either allocate twice
+                // or verify against an uninitialised reference.
+                if member == "<init>" {
+                    code.new_object(origin, pool, owner);
+                    code.dup(origin);
+                    self.push_foreign_arguments(code, pool, args, descriptor, origin)?;
+                    code.invoke_special(origin, pool, owner, member, descriptor);
+                    return Ok(Placed::OnStack);
+                }
+                // **The receiver is `args[0]` and the descriptor does not
+                // mention it.** HIR gives a foreign instance call the same
+                // shape every runtime helper has -- receiver first, then the
+                // declared arguments -- because `Callee::External` has no
+                // receiver of its own. A JVM instance invoke wants exactly
+                // that on the stack, but `push_arguments` walks the
+                // *descriptor*, which declares only the rest. Pushing all of
+                // `args` against it left the stack one short and the
+                // emitter's own accounting caught it.
+                let rest = if matches!(bound.kind, ForeignKind::Static) {
+                    args
+                } else {
+                    let Some((receiver, rest)) = args.split_first() else {
+                        return Err(refuse(
+                            self.func,
+                            &format!("an instance call to `{name}` with no receiver"),
+                        ));
+                    };
+                    self.load(code, pool, *receiver)?;
+                    rest
+                };
+                self.push_foreign_arguments(code, pool, rest, descriptor, origin)?;
+                match bound.kind {
+                    ForeignKind::Static => {
+                        code.invoke_static(origin, pool, owner, member, descriptor);
+                    }
+                    ForeignKind::Virtual => {
+                        code.invoke_virtual(origin, pool, owner, member, descriptor);
+                    }
+                    ForeignKind::Interface => {
+                        code.invoke_interface(origin, pool, owner, member, descriptor);
+                    }
+                    ForeignKind::Special => {
+                        code.invoke_special(origin, pool, owner, member, descriptor);
+                    }
+                    ForeignKind::Field | ForeignKind::StaticField => {
+                        return Err(refuse(
+                            self.func,
+                            &format!("`{name}` is a field, reached as a call"),
+                        ));
+                    }
+                }
+                // **Java's width is not TypeScript's.** `int size()` gives
+                // an `I` and a `number` is a `double`, so the value on the
+                // stack is one word where the accounting wants two -- which
+                // is what `moved the operand stack from 0 to -1` was. The
+                // conversion is the boundary rather than an optimisation:
+                // `hir::runtime` is the single answer about conversions for
+                // our own helpers, and a bound member needs the same rule
+                // applied to the descriptor the jar declared.
+                let returns = descriptor.rsplit(')').next().unwrap_or("");
+                if matches!(result, HirType::Float { bits: 64 }) {
+                    use nts_jvm_emitter::insn::{self, Kind};
+                    match returns {
+                        "I" | "S" | "B" | "C" | "Z" => {
+                            code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
+                        }
+                        "J" => code.convert(origin, insn::L2D, Kind::Long, Kind::Double),
+                        "F" => code.convert(origin, insn::F2D, Kind::Float, Kind::Double),
+                        _ => {}
+                    }
+                }
+                if matches!(result, HirType::Void) {
+                    let words = nts_jvm_emitter::descriptor::words(returns);
+                    if words > 0 {
+                        code.pop(origin, words);
+                    }
+                    return Ok(Placed::Stored);
+                }
+                Ok(Placed::OnStack)
+    }
+
     // Adding a method here: put it above this attribute, not below it. An
     // attribute belongs to the declaration that follows, so a function inserted
     // between the two takes the allow with it and leaves `call` bare -- which
@@ -4363,9 +4585,8 @@ impl Emitter<'_> {
                 // that carry the payload representation.
                 let which = usize::from(name == "nts_promise_all");
                 let subject = args.get(which).map(|&first| self.ty(first).clone());
-                let element = subject
-                    .as_ref()
-                    .and_then(|ty| self.array_element_descriptor(ty));
+                let element =
+                    subject.as_ref().and_then(|ty| self.array_element_descriptor(ty));
                 let found = if self.shape.grows {
                     // A growable program has no bare arrays, so every array
                     // helper is a method on a wrapper and the element-width
@@ -4383,8 +4604,7 @@ impl Emitter<'_> {
                 // refusal, so a name in both would keep the older answer; there
                 // is none, and this order makes adding one a visible decision
                 // rather than a silent override.
-                let found = found
-                    .or_else(|| view_helper(name, subject.as_ref(), self.ty(value)));
+                let found = found.or_else(|| view_helper(name, subject.as_ref(), self.ty(value)));
                 if self.integer_to_string(code, pool, name, args, origin)? {
                     return Ok(Placed::OnStack);
                 }
@@ -4425,6 +4645,15 @@ impl Emitter<'_> {
                     }
                     code.invoke_static(origin, pool, owner, narrow, &format!("{arguments})I"));
                     return Ok(Placed::OnStack);
+                }
+                // **A bound Java member**, which `external` will never have a
+                // row for: that table is this repository's own helpers, and
+                // this name came out of a jar. The kind travels with the rows
+                // on `Program` rather than in the key, because a key that names
+                // one method twice is not an identity -- `keeps` looks up the
+                // same string.
+                if found.is_none() && nts_core::hir::runtime::is_foreign_key(name) {
+                    return self.foreign_call(code, pool, name, args, result, origin);
                 }
                 let Some((owner, member, descriptor)) = found else {
                     // The cause, which is that *this table* has no entry, and

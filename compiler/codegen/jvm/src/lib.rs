@@ -251,6 +251,18 @@ pub fn emit(program: &Program) -> Emitted {
 
     let mut classes = Vec::new();
     for layout in &program.layouts {
+        // **A bound class is in somebody's jar and we must not write one.**
+        // Emitting `com/conv/Conv.class` beside the real one puts a stub with
+        // nothing but a default constructor on the classpath, and whichever
+        // entry comes first wins: with the emitted directory ahead of the jar
+        // -- the order a user would naturally write -- every call into the
+        // bound class becomes `NoSuchMethodError` at runtime.
+        //
+        // Loud rather than silent, so it is not the worst kind of defect. It
+        // is still a class this compiler had no business writing.
+        if nts_core::hir::runtime::is_foreign_layout_name(&layout.name) {
+            continue;
+        }
         match object_class(program, layout, &plan) {
             Ok(Some(class)) => classes.push(class),
             Ok(None) => {}

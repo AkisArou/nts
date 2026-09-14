@@ -23,23 +23,19 @@ jar --create --file "$here/target/ui.jar" -C "$here/target/classes" com
 # the interop plan, and it is four lines rather than an argument.
 java -Xverify:all -cp "$here/target/classes" Demo
 
-# The declarations, generated from the class files.
+# The declarations and the binding table -- see java-from-ts/build.sh for why
+# both come from one invocation.
+#
+# **The nine classes used to be listed here by hand**, to keep `Demo` and the
+# compiler's anonymous `Loader$1` out of the surface. `--package` selects
+# exactly the package now and skips anonymous classes, which no source can name
+# anyway, so the list said nothing the package name does not -- and a list is a
+# second place to update when a class is added.
 generated="$here/target/com.example.ui.d.ts"
-( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" cargo run --release -q \
-    -p nts-jvm-emitter --example bind -- \
-    "$here/target/classes" com.example.ui \
-    com/example/ui/Rect com/example/ui/Drawable com/example/ui/Widget com/example/ui/View com/example/ui/Loader \
-    'com/example/ui/View$OnTouch' 'com/example/ui/Loader$OnBytes' 'com/example/ui/Widget$Task' 'com/example/ui/Widget$Pressable' \
-    ) > "$generated"
-
-# The binding table -- see java-from-ts/build.sh for what it is for.
 table="$here/target/com.example.ui.bind"
-( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" NTS_BIND_TABLE=1 \
-    cargo run --release -q -p nts-jvm-emitter --example bind -- \
-    "$here/target/classes" com.example.ui \
-    com/example/ui/Rect com/example/ui/Drawable com/example/ui/Widget com/example/ui/View com/example/ui/Loader \
-    'com/example/ui/View$OnTouch' 'com/example/ui/Loader$OnBytes' 'com/example/ui/Widget$Task' 'com/example/ui/Widget$Pressable' \
-    ) > "$table"
+( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" cargo run --release -q \
+    -p nts-cli -- bind --classes "$here/target/classes" --package com.example.ui \
+    --out "$here/target" )
 
 if [ "${NTS_REGENERATE:-}" = "1" ]; then
   cp "$generated" "$here/types/com.example.ui.d.ts"

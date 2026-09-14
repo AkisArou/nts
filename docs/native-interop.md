@@ -456,12 +456,12 @@ difference in effort. **A class file carries types.**
 Two corrections to what that lane actually has, because the first version of
 this section credited it with more and a reader would have gone looking:
 
-- **There is no `nts bind` subcommand.** `nts bind --jar x --out y` answers
-  `unknown command`. The generator is an example binary —
-  `cargo run -p nts-jvm-emitter --example bind -- <classes-dir> <package>` —
-  and it takes a **directory of class files, not a jar**, because that crate
-  deliberately has no zip dependency. The subcommand appears in the plan's
-  worked example and was never built.
+- **`nts bind` is a real subcommand now**, as of 2026-09-14, and this bullet
+  used to say the opposite. It takes `--jar` or `--classes`, plus `--package`
+  and `--out`, and writes the declarations and the binding table together. The
+  example binary and the shell script that stood in for it are deleted rather
+  than kept beside it. `nts-jvm-emitter` still has no zip dependency — `--jar`
+  shells out to `unzip`, and says so if it is missing.
 - **Only one direction is finished.** Measured on the two fixtures:
 
   | fixture | refusals |
