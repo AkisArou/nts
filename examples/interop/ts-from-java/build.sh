@@ -9,6 +9,9 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+out=${1:-"$root/target/interop-ts-from-java"}
+nts=${NTS_BIN:-"$root/target/release/nts"}
+
 
 if ! command -v javac > /dev/null 2>&1; then
   echo "SKIP ts-from-java: no javac on PATH"

@@ -12,6 +12,8 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+nts=${NTS_BIN:-"$root/target/release/nts"}
+
 
 if ! command -v javac > /dev/null 2>&1; then
   echo "SKIP java-from-ts: no javac on PATH"

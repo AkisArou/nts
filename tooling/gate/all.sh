@@ -1383,6 +1383,58 @@ records() {
 
 step "build"   cargo build --release
 step "clippy"  lint
+# Every interop project, built the way its README says and then run.
+#
+# **The one path nothing else takes.** Eight of the nine are `include_str!`'d
+# into Rust tests, which compile and run the program -- but they reconstruct
+# the build in Rust, so a `build.sh` that has drifted from them is a README
+# that lies with every test green. `ts-from-c` is in no test at all. And the
+# example globs elsewhere in this file are `examples/*/tsconfig.json`, depth
+# one, so `examples/interop/<name>/` has never been in the 205.
+#
+# What that cost, before this existed: `new Catalog("widgets")` -- the first
+# line of `java-from-ts`, under a comment reading "This file compiles, and
+# lowers" -- was refused, and nothing ran it to find out. A bound Java method
+# returning an array miscompiled to a class that would not load, with zero
+# diagnostics.
+#
+# No per-example knowledge, deliberately: each script takes an output
+# directory as `$1`, honours `NTS_BIN` and `CC`, and exits non-zero if what it
+# built does not run. A step that knew which example needed what would be a
+# second place to update every time one is added.
+#
+# A missing toolchain is a skip and **the skip prints**. A skip that says
+# nothing is indistinguishable from a pass, which is the failure the projects
+# below exist to catch in the compiler and would be embarrassing here.
+interop() {
+  ran=0
+  skipped=0
+  for script in examples/interop/*/build.sh; do
+    name=$(basename "$(dirname "$script")")
+    out="$PWD/target/interop-$name"
+    rm -rf "$out"
+    if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" sh "$script" "$out" 2>&1); then
+      case $output in
+        *SKIP*) skipped=$((skipped + 1)); printf '  %-16s skipped: %s\n' "$name" \
+                  "$(printf '%s' "$output" | grep -m1 SKIP)" ;;
+        *) ran=$((ran + 1)); printf '  %-16s ok\n' "$name" ;;
+      esac
+    else
+      printf '  %-16s FAILED\n' "$name"
+      printf '%s\n' "$output" | tail -20 | sed 's/^/      /'
+      return 1
+    fi
+  done
+  printf '  %s built and ran, %s skipped for a missing toolchain\n' "$ran" "$skipped"
+  # A floor, so a project that stops being built is noticed rather than
+  # quietly dropping out of the loop.
+  if [ "$((ran + skipped))" -lt 9 ]; then
+    printf '  expected 9 interop project(s), saw %s\n' "$((ran + skipped))"
+    return 1
+  fi
+  return 0
+}
+
 step "format"  format
 step "reformat" reformatted
 step "records" records
@@ -1401,6 +1453,7 @@ step "corpus"  corpus
 # did: see the header of the script.
 step "benches"  ./tooling/gate/benches.sh
 step "example-refusals" example_refusals
+step "interop" interop
 
 # The 152 fixtures in `tooling/conformance/blockers`, which nothing ran.
 #
