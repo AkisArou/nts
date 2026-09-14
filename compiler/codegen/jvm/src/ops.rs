@@ -4417,6 +4417,94 @@ impl Emitter<'_> {
         Ok(true)
     }
 
+
+    /// Bring a bound member's result to the width and type the program holds
+    /// it in.
+    ///
+    /// Three conversions live here and each is a different kind of mismatch:
+    /// a Java integral width against our `f64`, a `long` against an
+    /// `NtsBigInt`, and an erased generic return against its instantiation.
+    /// Split out of [`Self::foreign_call`] to keep it under its line limit,
+    /// and because "what does this call leave on the stack" is one question.
+    fn narrow_foreign_return(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        descriptor: &str,
+        result: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        let returns = descriptor.rsplit(')').next().unwrap_or("");
+        if matches!(result, HirType::Float { bits: 64 }) {
+            use nts_jvm_emitter::insn::{self, Kind};
+            match returns {
+                "I" | "S" | "B" | "C" | "Z" => {
+                    code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
+                }
+                "J" => code.convert(origin, insn::L2D, Kind::Long, Kind::Double),
+                "F" => code.convert(origin, insn::F2D, Kind::Float, Kind::Double),
+                _ => {}
+            }
+        }
+        // **`long` is a `bigint` here, and it is two words becoming
+        // one.** A Java `long` occupies two operand-stack slots; an
+        // `NtsBigInt` is a single reference. Without this the value
+        // left behind is the wrong width, which is not a wrong number
+        // but a stack that stops balancing -- and it is what
+        // `emitting %74 moved the operand stack from 0 to 1` was.
+        //
+        // The emitter's own accounting caught it at the operation
+        // rather than at a block boundary or, worse, at class load in
+        // somebody's program. That is the whole argument for keeping
+        // the depth maintained by construction.
+        if matches!(result, HirType::BigInt) {
+            if returns != "J" {
+                return Err(refuse(
+                    self.func,
+                    &format!(
+                        "a bound member returning `{returns}` where the program wants a \
+                         bigint; only `long` has a lossless spelling as one"
+                    ),
+                ));
+            }
+            code.invoke_static(
+                origin,
+                pool,
+                types::BIGINT,
+                "fromLong",
+                "(J)Lnts/rt/NtsBigInt;",
+            );
+        }
+        // **A bound generic method erases its return, and the
+        // program's type is the instantiation.** `Map.get` is
+        // `(Ljava/lang/Object;)Ljava/lang/Object;` in the class file
+        // however the declaration is written, because that is what
+        // erasure leaves; the `.d.ts` says `V | null` and the checker
+        // resolved `V` to `Integer`. The verifier compares the
+        // *declared* descriptor, so without narrowing here the frame
+        // carries `java/lang/Object` where it promised
+        // `java/lang/Integer` and the class does not load.
+        //
+        // This is the instruction `javac` emits at the same place for
+        // the same reason, and it is checked rather than assumed: a
+        // binding naming the wrong type throws `ClassCastException` at
+        // the call instead of corrupting a frame.
+        //
+        // Not for `Erased`, which wants boxing into an `NtsValue` and
+        // is a different operation; not to `Object`, which is the
+        // no-op.
+        if !matches!(result, HirType::Void | HirType::Erased)
+            && returns.starts_with('L')
+            && let Some(want) = types::descriptor(self.shape, result)
+            && want.starts_with('L')
+            && want != returns
+            && want != "Ljava/lang/Object;"
+        {
+            code.check_cast(origin, pool, &want[1..want.len() - 1]);
+        }
+        Ok(())
+    }
+
     /// A call to a **bound Java member**, which `external` will never have
     /// a row for: that table is this repository's own helpers and this name
     /// came out of a jar.
@@ -4527,46 +4615,7 @@ impl Emitter<'_> {
                 // our own helpers, and a bound member needs the same rule
                 // applied to the descriptor the jar declared.
                 let returns = descriptor.rsplit(')').next().unwrap_or("");
-                if matches!(result, HirType::Float { bits: 64 }) {
-                    use nts_jvm_emitter::insn::{self, Kind};
-                    match returns {
-                        "I" | "S" | "B" | "C" | "Z" => {
-                            code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
-                        }
-                        "J" => code.convert(origin, insn::L2D, Kind::Long, Kind::Double),
-                        "F" => code.convert(origin, insn::F2D, Kind::Float, Kind::Double),
-                        _ => {}
-                    }
-                }
-                // **`long` is a `bigint` here, and it is two words becoming
-                // one.** A Java `long` occupies two operand-stack slots; an
-                // `NtsBigInt` is a single reference. Without this the value
-                // left behind is the wrong width, which is not a wrong number
-                // but a stack that stops balancing -- and it is what
-                // `emitting %74 moved the operand stack from 0 to 1` was.
-                //
-                // The emitter's own accounting caught it at the operation
-                // rather than at a block boundary or, worse, at class load in
-                // somebody's program. That is the whole argument for keeping
-                // the depth maintained by construction.
-                if matches!(result, HirType::BigInt) {
-                    if returns != "J" {
-                        return Err(refuse(
-                            self.func,
-                            &format!(
-                                "a bound member returning `{returns}` where the program wants a \
-                                 bigint; only `long` has a lossless spelling as one"
-                            ),
-                        ));
-                    }
-                    code.invoke_static(
-                        origin,
-                        pool,
-                        types::BIGINT,
-                        "fromLong",
-                        "(J)Lnts/rt/NtsBigInt;",
-                    );
-                }
+                self.narrow_foreign_return(code, pool, descriptor, result, origin)?;
                 if matches!(result, HirType::Void) {
                     let words = nts_jvm_emitter::descriptor::words(returns);
                     if words > 0 {
