@@ -24941,8 +24941,25 @@ the exports of by count.
 
 The interpreted lane has one module with a failing file and both of its failures are priced, so
 "passes node's suite" no longer discriminates. `tooling/conformance` holds six tools that ask a
-different question -- behaviour that differs from node on inputs no test uses -- and **only
-`agreement.mjs` is wired into `tooling/gate`.** Running the other five once:
+different question -- behaviour that differs from node on inputs no test uses -- and **none of them
+runs unless a person runs it by hand.**
+
+That sentence first read "only `agreement.mjs` is wired into `tooling/gate`", from a grep that
+counted the *word* "agreement" in that script's prose. Checked against the filename instead:
+
+    agreement.mjs           invoked nowhere
+    differential-ts.mjs     invoked nowhere
+    fuzz-deep-equal.mjs     invoked nowhere
+    fuzz-timer-order.mjs    invoked nowhere
+    spec-variance.mjs       invoked nowhere
+    self-oracle.mjs         invoked nowhere
+    skip-audit.mjs          invoked nowhere
+    stale-exclusions.mjs    invoked nowhere
+    differential-addon.mjs  `tooling/conformance/counted-lane.sh`
+    blockers-check.mjs      `tooling/gate/all.sh`
+
+A name-prefix count is not yield, which is written in this file already and which I walked into while
+writing the section that follows. Running the five never-run ones once:
 
     differential-ts --all     22 modules, ~4,000 inputs each      0 divergences
     fuzz-timer-order          216 programs agree, 0 differ, 84 nondeterministic
