@@ -235,7 +235,20 @@ for (let i = 0; i < PROGRAMS && differ.length < 5; i++) {
   const theirs = await stableTrace(program, nodeApi, expected);
   const mine = await stableTrace(program, ourApi, expected);
   const theirsAgain = await stableTrace(program, nodeApi, expected);
-  if (theirs !== theirsAgain) {
+  // **And ours twice as well, which the sentence above always claimed and the code
+  // did not do.** `theirsAgain` existed; there was no `mineAgain`, so node's
+  // nondeterminism was filtered and this profile's was not.
+  //
+  // The symptom was a fuzzer that disagreed with itself: five runs at seed 1 gave 0, 2,
+  // 0, 2 and 1 differing programs, and a *different* program each time -- which cannot
+  // happen from a deterministic generator if both sides are being held still. Every
+  // report was a program whose own order varied between the single `mine` sample and
+  // whatever it would have produced next.
+  //
+  // A one-sided stability check is worse than none: it reads as rigour, it removes the
+  // obvious false positives, and the ones it leaves look like findings.
+  const mineAgain = await stableTrace(program, ourApi, expected);
+  if (theirs !== theirsAgain || mine !== mineAgain) {
     skipped++;
     continue;
   }
@@ -249,7 +262,24 @@ for (let i = 0; i < PROGRAMS && differ.length < 5; i++) {
 
   compared++;
   if (theirs !== mine) {
-    differ.push({ program, theirs, mine });
+    // **A divergence is confirmed before it is reported.** Two samples per scheduler
+    // still admits the class this file's own header calls out -- `setImmediate` against
+    // `setTimeout(0)`, whose order "depends on how long the process took to start". With
+    // both sides sampled twice, five runs at seed 1 still produced a differing program in
+    // two of them, a *different* program each time, and the surviving reports were exactly
+    // that pair swapping places.
+    //
+    // Sampling every program more often would cost the whole run; a candidate divergence is
+    // rare, so the extra pair is taken only here. A real ordering difference reproduces and
+    // a jittery one does not.
+    const theirsConfirm = await stableTrace(program, nodeApi, expected);
+    const mineConfirm = await stableTrace(program, ourApi, expected);
+    if (theirsConfirm === theirs && mineConfirm === mine) {
+      differ.push({ program, theirs, mine });
+    } else {
+      compared--;
+      skipped++;
+    }
   }
 
   // Nothing may be left over. A program that finished but left a list in the
