@@ -1025,6 +1025,75 @@ export const CORPORA = {
     },
     calls: [
       {
+        // **`events.once` and `events.on`, the promise and async-iterator halves.**
+        //
+        // `corpus-reach.mjs` had this module at 22 of 34 published functions, and these two were
+        // among the missing: both answer with a promise, and until `differential-ts.mjs` and its
+        // probe learned to await, a spec could not hold one.
+        //
+        // Deterministic despite being asynchronous, because the emits are scheduled before the
+        // await and the order of a single emitter's listeners is defined. No timers are involved,
+        // so this is a value compare and not the ordering question `fuzz-timer-order.mjs` owns.
+        label: "once-and-on",
+        call: async (m, s) => {
+          const payload = Array.from(s).map((c) => c.charCodeAt(0));
+          const show = async (make) => {
+            try {
+              const v = await make();
+              return `ok:${Array.isArray(v) ? v.join(",") : String(v)}`;
+            } catch (error) {
+              return `${error.code ?? error.name ?? "?"}`;
+            }
+          };
+          return [
+            // `once` resolves with the whole argument list, which is the part a naive
+            // implementation gets wrong by resolving with the first argument only.
+            await show(() => {
+              const emitter = new m.EventEmitter();
+              queueMicrotask(() => emitter.emit("go", ...payload));
+              return m.once(emitter, "go");
+            }),
+            // and rejects on `error`, with the error itself rather than a wrapper.
+            await show(() => {
+              const emitter = new m.EventEmitter();
+              queueMicrotask(() => emitter.emit("error", new Error("boom")));
+              return m.once(emitter, "go");
+            }),
+            // `on` is an async iterator over every emit until the iterator is closed.
+            await show(async () => {
+              if (m.on === undefined) return "absent";
+              const emitter = new m.EventEmitter();
+              const iterator = m.on(emitter, "tick");
+              queueMicrotask(() => {
+                for (const value of payload) emitter.emit("tick", value);
+                emitter.emit("tick", null);
+              });
+              const seen = [];
+              for await (const [value] of iterator) {
+                if (value === null) break;
+                seen.push(value);
+              }
+              return seen;
+            }),
+            // The listener bookkeeping these two rest on, which is synchronous and is where a
+            // leak would show: `once` must not leave its listener behind on either path.
+            await show(async () => {
+              const emitter = new m.EventEmitter();
+              queueMicrotask(() => emitter.emit("go", 1));
+              await m.once(emitter, "go");
+              return `${emitter.listenerCount("go")}/${emitter.listenerCount("error")}`;
+            }),
+            await show(async () => {
+              const emitter = new m.EventEmitter();
+              emitter.prependOnceListener("x", () => {});
+              emitter.on("x", () => {});
+              return `${emitter.listenerCount("x")}/${emitter.getMaxListeners()}`;
+            }),
+          ].join("|");
+        },
+      },
+
+      {
         // **The module-level helpers**, which the corpus never called:
         // `listenerCount`, `getEventListeners`, `getMaxListeners`. They answer
         // *about* an emitter rather than driving one, so the program specs never
