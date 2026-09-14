@@ -75,6 +75,22 @@ So the honest reading of the `✅` column is **20 rows that show their work and
 is not to probe rows at random but to make a row cite the example that already
 covers it — which also reveals the rows where no example does.
 
+**Searched for those, and there are none — a negative result worth recording so
+nobody builds the instrument twice.** Taking every still-uncited `✅` row with a
+checkable identifier in its subject (52 of them) and asking whether *any*
+example source mentions any of those identifiers: **51 of 52 hit**. The single
+miss is `ToInt32`/`ToUint32`, which are specification names no program would
+ever contain — the operators themselves are in `examples/bitwise`. So the miss
+is the instrument's, not the ledger's.
+
+What that rules out: the uncited rows are **not** sitting on absent evidence.
+The example suite touches essentially all of them. What it does **not** rule
+out is the thing that actually goes wrong — `namespace` was wrong while the
+word appeared in the corpus, so "an example mentions the term" is far weaker
+than "an example covers the row" and cannot find a false `✅`. Those still need
+probing one at a time, and the citation pass is what turns up which row to
+probe, by failing to find an example that is *about* it.
+
 ---
 
 ## 1. Expressions and operators
