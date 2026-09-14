@@ -14,6 +14,10 @@
 # temporary path so it can rebuild and compare without touching the checked-in
 # artifact -- which is the whole point of a drift check.
 set -eu
+# Archive member ordering must not depend on the embedding shell's locale.
+# Fixed timestamps alone still let en_US and C produce different jar bytes.
+LC_ALL=C
+export LC_ALL
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 jar_path=${1:-$root/nts-runtime.jar}
 out="$root/classes"
