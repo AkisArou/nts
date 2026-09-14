@@ -119,6 +119,76 @@ provably inside any array, so the bounds check has to stay. One probe in four is
 the honest figure, and it would have been easy to run only the first and claim
 the feature.
 
+### The conversion policy, settled and verified — NOT yet in the patch
+
+The defect below is diagnosed, the rule is decided, and the implementation was
+written and verified and then **lost to a `/tmp` clear before it was committed**.
+What follows is everything needed to redo it in an hour rather than a day.
+
+**The rule is `ToInt32`, not `d2i`, not saturation.** Three camps exist across
+languages and the split is principled: WebAssembly's JS API, asm.js, `ctypes`
+and the LuaJIT FFI **wrap**, because the foreign `int` is the machine model the
+source language already emulates; GraalVM host interop and Dart FFI **refuse**,
+because two type systems are meeting; Java's own `d2i`, Kotlin's `toInt()` and
+Rust's `as` **saturate** — and nobody picks saturation for a *language
+boundary*. Three facts in this repository decide it independently of the survey:
+node is the oracle and node wraps, `NtsRuntime` already implements exactly that
+and documents it, and `hir::runtime` declares `nts_to_int32` as the single
+answer about conversions.
+
+**The mapping, one runtime helper per JVM width.** Java's `char` is unsigned and
+its `byte` and `short` are not, so they do not share a helper:
+
+| descriptor | Java | helper | node's analogue |
+| --- | --- | --- | --- |
+| `I` | `int`, signed 32 | `NtsRuntime.toInt32` | `Int32Array` |
+| `S` | `short`, signed 16 | `toInt16` | `Int16Array` |
+| `B` | `byte`, signed 8 | `toInt8` | `Int8Array` |
+| `C` | `char`, **unsigned** 16 | `toUint16` | `Uint16Array` |
+| `F` | `float` | `d2f` | `Float32Array` |
+
+**Verified against node, which is the oracle.** Nine values through four
+integral widths, run under `-Xverify:all` and diffed against the matching typed
+array — **identical on all 36**:
+
+```
+-1          i=-1          s=-1  b=-1   c=65535
+4294967295  i=-1          s=-1  b=-1   c=65535
+2147483648  i=-2147483648 s=0   b=0    c=0
+200         i=200         s=200 b=-56  c=200
+70000       i=70000       s=4464 b=112 c=4464
+1.9         i=1           s=1   b=1    c=1
+-1.9        i=-1          s=-1  b=-1   c=65535
+NaN         i=0           s=0   b=0    c=0
+16777217    i=16777217    s=1   b=1    c=1     (float32: 16777216)
+```
+
+The last row is the `float32` case the native lane asked for, and
+`4294967295` against `-1` is the `UINT32_MAX` one: identical for `int`,
+*different* for `char`, which is what makes the unsigned distinction load-bearing
+rather than cosmetic.
+
+**Statics take a different path and also need wiring.** `S2.twice(x)` never
+reaches `callee_for` — it has no receiver to dispatch on — and is built at
+`lower.rs`'s `Callee::Direct(format!("{class_name}.{member_name}"))` site. The
+same `call_targets` lookup goes there. Java's APIs are full of statics
+(`Integer.parseInt`, `Math.abs`), so this is not an edge case. Verified working:
+`invokestatic com/conv/S2.twice:(I)I` behind a `toInt32`, printing `42.0`.
+
+**Clippy items the patch introduces**, all found by the gate's own
+`cargo clippy --workspace --all-targets` and all fixed in the lost copy:
+
+- a `FxHashMap` parameter fixes the hasher for every caller — a
+  `pub type ForeignTable` in `hir::runtime` answers it everywhere;
+- `lower_with` goes one line over, from a lone `foreign,` inserted into a
+  multi-line `FuncBuilder::within` call — **clippy does not count comments**, so
+  only code lines help;
+- `ops.rs`'s `call` goes over; folding the foreign path and the
+  no-row refusal into one `not_in_this_table` helper puts it under, and is
+  better shaped anyway since both answer *is this name something we can call*;
+- `tooling/bench` builds `hir::Options` without `..default()`, so the new field
+  breaks it.
+
 ### A KNOWN DEFECT — do not apply this as-is
 
 **A foreign call with an integral parameter does not emit.** Found by building
