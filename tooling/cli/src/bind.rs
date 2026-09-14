@@ -256,6 +256,7 @@ pub(crate) fn run(request: &Request) -> Result<String> {
     let layouts = clang(&layout, &request.clang_args, &["-fdump-record-layouts"])?;
 
     binding.check(&parse_layouts(&layouts))?;
+    binding.check_contracts(request)?;
     Ok(binding.render(request))
 }
 
@@ -566,7 +567,24 @@ fn shape_of(
 /// target they are the same type spelled by two declarations that mean
 /// different things to a reader.
 fn shape(c_type: &str, typedefs: &BTreeMap<String, String>) -> Result<Shape> {
+    // `restrict` is dropped, and dropping it takes nothing away.
+    //
+    // It is a promise the **caller** makes about aliasing, not a property of
+    // the type: `const char *restrict` and `const char *` have one
+    // representation and one ABI. This surface has no way to state the promise,
+    // so a binding cannot make it -- and could not have enforced it either.
+    // What the obligation is, is unchanged; what is gone is a spelling that
+    // would otherwise refuse most of <string.h> and <stdio.h>.
+    let without_restrict = c_type.replace("restrict", " ");
+    let c_type = if c_type.contains("restrict") { without_restrict.as_str() } else { c_type };
     let c_type = c_type.trim();
+    let squeezed;
+    let c_type = if c_type.contains("  ") {
+        squeezed = c_type.split_whitespace().collect::<Vec<_>>().join(" ");
+        squeezed.as_str()
+    } else {
+        c_type
+    };
     if let Some(inner) = c_type.strip_suffix('*') {
         let inner = inner.trim();
         let (inner, constant) = match inner.strip_prefix("const ") {
@@ -922,6 +940,41 @@ impl Shape {
 }
 
 impl Binding {
+    /// Every `--no-escape f:p` names a function and a parameter that exist.
+    ///
+    /// Without this the tool emits `@ntsNoEscape path` for a parameter the
+    /// binding calls `file`, and the *compiler* refuses it -- one step later,
+    /// about a file nobody wrote, naming a tag rather than the flag that
+    /// produced it. A generator that can emit something the compiler rejects
+    /// has not finished checking its own output.
+    ///
+    /// The names are the header's, stripped of the leading underscores a
+    /// reserved spelling carries: `__file` becomes `file`. That is not
+    /// guessable from the header, which is the other reason to list them.
+    fn check_contracts(&self, request: &Request) -> Result<()> {
+        for (function, parameter) in &request.no_escape {
+            let Some(target) = self.functions.iter().find(|f| f.name == *function) else {
+                bail!(
+                    "`--no-escape {function}:{parameter}` names `{function}`, which is not one of \
+                     the functions being bound"
+                );
+            };
+            if !target.parameters.iter().any(|(name, _)| name == parameter) {
+                bail!(
+                    "`{function}` has no parameter `{parameter}`. Its parameters are: {}. \
+                     The names come from the header with leading underscores stripped.",
+                    target
+                        .parameters
+                        .iter()
+                        .map(|(name, _)| name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn render(&self, request: &Request) -> String {
         let mut needed: BTreeSet<&'static str> = BTreeSet::new();
         for record in self.records.values() {
