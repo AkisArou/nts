@@ -3537,6 +3537,74 @@ export const CORPORA = {
     },
     calls: [
       {
+        // **The module-level functions, which write to `process.stdout` and so were unreachable.**
+        //
+        // This corpus drives a `Console` built over two collecting streams, which is why
+        // `corpus-reach.mjs` reported `Console#log` as called and plain `log` as never called:
+        // they are different functions, and the bound ones are the pair every program actually
+        // uses. Reaching them means capturing the process's own streams.
+        //
+        // `write` is swapped and restored in a `finally`, because **the probe reports its answer
+        // on stdout**: a capture that leaked would eat the `NTSDIFF` line and the host would see
+        // a module that produced no results rather than one that diverged.
+        //
+        // The same exclusions as the instance spec below, for the same reasons: `time`/`timeEnd`
+        // write an elapsed duration and `trace` writes a stack, so both would differ every run
+        // for reasons that are not defects.
+        label: "bound-console",
+        call: (m, s) => {
+          const out = [];
+          const err = [];
+          const realOut = process.stdout.write;
+          const realErr = process.stderr.write;
+          process.stdout.write = (chunk) => { out.push(String(chunk)); return true; };
+          process.stderr.write = (chunk) => { err.push(String(chunk)); return true; };
+          try {
+            const attempt = (make) => {
+              try { make(); } catch (error) { out.push(`threw:${error?.code ?? error?.name ?? "?"}`); }
+            };
+            attempt(() => m.log("%s|%d", s, s.length));
+            attempt(() => m.info(s));
+            attempt(() => m.debug(s));
+            attempt(() => m.warn(s));
+            attempt(() => m.error(s));
+            attempt(() => m.dir({ value: s, nested: { deep: [s] } }));
+            attempt(() => m.dirxml(s));
+            attempt(() => m.assert(s.length % 2 === 0, "assertion about %s", s));
+            // `count` keeps a tally per label and `group` indents everything after it,
+            // including the multi-line output of `dir`. Both are state, and state is where a
+            // reimplementation of `console` actually differs.
+            //
+            // **The tally is reset at the end, because the bound console is a singleton and its
+            // state outlives one input.** Without the reset this diverged on 28 inputs with
+            // `l: 13` against `l: 15`: `differential-ts.mjs` runs a preflight over `corpus.fixed`
+            // on the **node side only**, to check node itself answers, so the host's counter was
+            // a few ahead of the child's for the whole run. The values were never wrong -- the
+            // spec was not a function of its input, which is the one property a spec needs.
+            //
+            // Resetting also reaches `countReset`, which the instance spec below excludes: it
+            // warns when the label does not exist, and here it always does.
+            attempt(() => m.count(s.slice(0, 3)));
+            attempt(() => m.count(s.slice(0, 3)));
+            attempt(() => m.countReset(s.slice(0, 3)));
+            attempt(() => m.group("g:%s", s));
+            attempt(() => m.log(`inside\n${s}`));
+            attempt(() => m.groupCollapsed("deeper"));
+            attempt(() => m.dir([s, { k: s }]));
+            attempt(() => m.groupEnd());
+            attempt(() => m.groupEnd());
+            attempt(() => m.log("after"));
+            attempt(() => m.table([{ a: s, b: s.length }, { a: "x", b: 1 }]));
+            attempt(() => m.clear());
+          } finally {
+            process.stdout.write = realOut;
+            process.stderr.write = realErr;
+          }
+          return `out=${JSON.stringify(out.join(""))}|err=${JSON.stringify(err.join(""))}`;
+        },
+      },
+
+      {
         label: "console-program",
         call: (m, program) => {
           let outText = "";
