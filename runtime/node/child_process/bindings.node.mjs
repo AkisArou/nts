@@ -309,6 +309,36 @@ globalThis.nts_child_process_read_start = (handle, which, onData, onEnd) => {
   if (!stream) return;
   stream.on("data", (chunk) => onData(new Uint8Array(chunk)));
   stream.on("end", () => onEnd());
+  // **`resume()`, because a listener does not restart an explicitly paused stream.**
+  //
+  // `Readable.prototype.on("data")` resumes only when `state.flowing !== false`. A stream that
+  // has merely never been read has `flowing === null` and starts; one that somebody *paused*
+  // has `flowing === false` and stays put, which is node's contract and not a quirk.
+  //
+  // node pauses exactly this stream when it hands it to another child. From
+  // `lib/internal/child_process.js`, the `type === 'wrap'` branch:
+  //
+  //     stream.handle.reading = false;
+  //     stream.handle.readStop();
+  //     stream._stdio.pause();
+  //     stream._stdio.readableFlowing = false;
+  //     stream._stdio._readableState.reading = false;
+  //     stream._stdio[kIsUsedAsStdio] = true;
+  //
+  // So after `spawn('head', ['-n1'], { stdio: [cat.stdout, ...] })` the parent's `cat.stdout` is
+  // explicitly paused, and `test-child-process-stdio-reuse-readable-stdio` then reads it once
+  // `head` has exited -- which is legal, and which node's own `p1.stdout.resume()` achieves
+  // because there it is the same object. Here the module's `resume()` reaches its own
+  // `ChildReadable`, whose `_read` arrives at this binding, and the host stream underneath was
+  // still parked.
+  //
+  // Measured, same fixture in two arms:
+  //
+  //     one child, reader attached late          `flowing=null`   DATA "world\n"
+  //     stdout handed over, reader attached late `flowing=false`  nothing, ever
+  //
+  // `read_start` means start reading, so it says so rather than hoping a listener implies it.
+  stream.resume();
 };
 
 globalThis.nts_child_process_write = (handle, bytes, callback) => {

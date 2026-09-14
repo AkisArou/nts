@@ -8,25 +8,41 @@ What is not deliberate is a failure nobody wrote down, so they are all below.
 
 ## Where it is
 
-    interpreted   119 file(s): 103 passed, 6 failed, 9 skipped, 1 not applicable
+    interpreted   120 file(s): 109 passed, 0 failed, 9 skipped, 2 not applicable
     compiled      119 file(s):   PUBLISHES NOTHING on that lane -- see below
 
-114 by `test-pattern`, 4 claimed in `extra-tests`, 2 local fixtures. 1 passed when the
-branch was parked, 42 when this work started.
+114 by `test-pattern`, 4 claimed in `extra-tests`, 3 local fixtures. 1 passed when the
+branch was parked, 42 when this work started. **Zero failing** as of the `resume()` below.
 
 Measured with `run.mjs --module child_process`, not added up: an earlier batch read 80
 where ten individual passes had predicted 81, because one of them came with a
 regression.
 
-## What is left: 6 files, each with a cause
+## What is left: nothing failing, and the six that were
+
+    interpreted   120 file(s): 109 passed, 0 failed, 9 skipped, 2 not applicable
 
 The IPC channel works -- fork, `send` each way, the child's `process.send`, `disconnect`,
 exit 0, held by `local/ipc-roundtrip-local.js`. Handle passing works: a socket crosses to a
-worker. What remains is six files. Three others sat here an hour ago under **observed, not
-diagnosed** -- a located assertion and no found mechanism -- and probing each one turned all
-three into fixes rather than causes, so that section is gone. The lesson is worth more than
-the section was: two of the three were bugs in this module that a plausible-sounding
-narrative had already explained away.
+worker.
+
+**All six files this section used to list are closed**, so what follows is the record of their
+causes rather than a list of remainders. Kept because the causes were instructive and two of them
+were instructive about *how the causes had been described*:
+
+    advanced-serialization.js             a Buffer comes back as a Uint8Array      -> passes
+    advanced-serialization-host-objects.js  needs `internal/test/binding`          -> n/a
+    fork-stdio.js                         a fourth stdio slot                      -> passes
+    constructor.js                        `ChildProcess.prototype.spawn`           -> passes
+    pipe-dataflow.js                      `cat.stdout._handle` is undefined        -> passes
+    stdio-reuse-readable-stdio.js         who owns the read                        -> passes
+
+Three others sat here once under **observed, not diagnosed** -- a located assertion and no found
+mechanism -- and probing each one turned all three into fixes rather than causes. The lesson is
+worth more than that section was: two of the three were bugs in this module that a
+plausible-sounding narrative had already explained away. `stdio-reuse-readable-stdio` below is the
+fourth and largest instance of the same thing, and the narrative there was one I had written and
+re-measured twice.
 
     advanced-serialization.js             a Buffer comes back as a Uint8Array
     advanced-serialization-host-objects.js  the same
@@ -73,46 +89,66 @@ narrative had already explained away.
 
     stdio-reuse-readable-stdio.js         who owns the read
 
-### `stdio-reuse-readable-stdio` and `pipe-dataflow` want opposite handoffs, and the price is measured
+### `stdio-reuse-readable-stdio` -- closed, and the price written here was the wrong direction
 
-**The earlier account here was wrong twice and is replaced.** It first called this "a decision
+**The earlier account was wrong three times and is replaced.** It first called this "a decision
 about who owns the read". It then said node calls `readStart` in neither arrangement -- a
 measurement whose hook was on the *instance*, installed after `spawn` had returned, while node
-calls it during `spawn`.
+calls it during `spawn`. The third error is the one worth keeping, because it was a *plan*: it
+proposed handing the descriptor instead of the stream and stopping the host's reader. That would
+have broken `pipe-dataflow` again, and the two tests never wanted opposite handoffs at all.
 
-Hooking `Pipe.prototype.readStart` before any child exists, for one `spawn`:
+The measurements that were right stay right. Hooking `Pipe.prototype.readStart` before any child
+exists, for one `spawn`:
 
     readStart calls during spawn   2      (stdout and stderr)
-    cat.stdout.fd                  undefined
-    cat.stdout.isPaused()          false
     readableLength after a turn    65536
 
-So node reads a child's stdio eagerly and buffers 64KB, exactly as this profile does.
-
-And hooking `Pipe.prototype.readStop` across a handoff:
+and hooking `readStop` across a handoff:
 
     before the handoff   isPaused=false destroyed=false
     after                isPaused=true  destroyed=false  readStop=1  handle=present
     later                readableLength=0
 
-**node pauses the parent's reader and keeps the handle.** The child gets a duplicate, the parent
-consumes nothing meanwhile, and the parent can `resume()` afterwards. One mechanism serving both
-tests.
+**node pauses the parent's reader and keeps the handle.** That was correct, and so was the reading
+that the parent "can `resume()` afterwards". What the note never asked is **which object the
+parent resumes**. Upstream it is one object, so `p1.stdout.resume()` reaches the socket. Here the
+module's `resume()` reaches its own `ChildReadable`, whose `_read` arrives at
+`nts_child_process_read_start` -- and that binding attached a `data` listener and stopped there.
 
-This stand-in cannot currently produce that combination, and the two arms have been measured:
+`Readable.prototype.on("data")` resumes only when `state.flowing !== false`. A stream that has
+merely never been read has `flowing === null` and starts; one that somebody *paused* has
+`flowing === false` and stays put. node pauses this exact stream when it gives it to another child,
+in `lib/internal/child_process.js`:
 
-    handing the host stream       pipe-dataflow PASSES,  stdio-reuse FAILS
-    handing its descriptor,       pipe-dataflow FAILS,   stdio-reuse PASSES
-    with the stream paused        (`wc` counts 983041 of 1048577 -- exactly 65536
-                                   short, one 64KB read, 4 of 5 runs)
+    if (stream.type === 'wrap') {
+      stream.handle.reading = false;
+      stream.handle.readStop();
+      stream._stdio.pause();
+      stream._stdio.readableFlowing = false;
+      stream._stdio._readableState.reading = false;
+      stream._stdio[kIsUsedAsStdio] = true;
+      continue;
+    }
 
-The stream is what the tree hands over, because that is node's branch and it keeps
-`pipe-dataflow`'s 1MB intact. `stdio-reuse-readable-stdio` is the price: with the handle
-transferred by node's wrap branch, the parent's later `resume()` reaches a socket that produces
-nothing, though it reports `destroyed=false readable=true`.
+So the host socket was parked and no listener was going to wake it. Two arms, one variable:
 
-**What would close it:** reproducing node's pause-and-keep rather than choosing between transfer
-and duplicate -- most likely handing the descriptor *and* stopping the host's reader before it
-has buffered anything, which `pause()` in `hostStream` did not achieve because the 64KB was
-already in flight. That is one more measurement, not a redesign.
+    one child, reader attached late            host `flowing=null`   delivers
+    stdout handed over, reader attached late   host `flowing=false`  nothing, ever
+
+**The fix is `stream.resume()` in `read_start`**, because `read_start` means start reading and
+should say so rather than hope a listener implies it. `pipe-dataflow` is untouched: a stream marked
+handed-over never reaches `read_start` at all, so nothing resumes it.
+
+The trace that found it had already printed `flowing=null` against `flowing=false` two runs
+earlier, next to six other fields, and I read past it. What finally separated the two was not a
+better trace but **the arm without a handover** -- the upstream file has only the handover arm, and
+with one arm "late reads are broken" and "handed-over streams are broken" are equally good
+explanations. `test/late-read-local.js` is that pair, kept.
+
+Also worth recording: three of the traces on the way here were **interventions**. A `console.error`
+in `cluster`'s `#handoff` bought enough latency to make a failing race pass, and an `fs.readSync`
+on the descriptor changed what the next read saw. Print-based tracing is not free on anything
+timing-shaped.
+
 
