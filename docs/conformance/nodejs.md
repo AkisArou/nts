@@ -24780,3 +24780,40 @@ Swept for further instances: `on("data")` without a `resume()` appears in no oth
 other stand-in accepts connections into host sockets. `nts_net_read_stop` was checked separately and
 is correct.
 
+## Three tools said "I did not attempt this" in the words they use for "this did not work"
+
+Collected in one night, from three different tools, each having cost someone a wrong conclusion:
+
+  * **`run-one.mjs` given a relative fixture path** answers `{"kind":"fail"}`. The path fails at
+    module load and is reported through the ordinary result channel, so a usage error arrives in
+    the vocabulary of a test result. Two files that already passed were recorded here as failing
+    because of it, and the only reason it was caught is that the number was implausible.
+  * **`loads.sh` reporting "no addon built"** means *not in `build-floor.sh`'s `FLOOR` list*, which
+    is a fixed 24 names with `child_process` and `cluster` absent. The gate never attempts them.
+    Read as a capability, it says a module cannot build when nothing tried.
+  * **`own-roots.sh` printing `0 0 0`** for a module whose `emit-c` had failed `TS2322`. A count
+    over a log that was never written is indistinguishable from a count over a clean one. This one
+    is fixed: the script now requires `wrote program.c` before reporting a number.
+
+The shared shape is that **not-attempted and attempted-and-failed leave the same trace**, and the
+second is always the reading a hurried person takes, because it is the one that sounds measured.
+A tool needs to be able to say "you called me wrong" or "I did not try this" in words it uses for
+nothing else.
+
+### And a count over artifacts needs the same discipline as a count over diagnostics
+
+`loads.sh` counts `.node` files in `$NTS_ADDON_OUT`. That directory accumulates whatever any
+session last built, so **its count is a property of a directory and not of a commit**. A stale
+`target/node/child_process.node` from the previous day made one gate report 25 loading addons where
+a pinned run reported 24, and the difference was attributed first to a commit and then to a floor
+before anyone stat-ed the file.
+
+Pass a private `NTS_ADDON_OUT` for any axis or load measurement. A future reader with a shared
+`target/node` will get a different number for the same commit and nothing in the output says so.
+
+The rule that would have caught all of it: **when two measurements disagree, diff what the tool
+said, not how much it said.** For diagnostics that means the message text -- `path` reported 3 roots
+under one pin and 5 under the next with no source change, because the compiler stopped naming
+symptoms and started naming the cause at every site. For artifacts it means the mtime, which is
+what the text is for a count.
+
