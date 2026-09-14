@@ -17,7 +17,7 @@ declare module "java:com.example" {
     static readonly DEFAULT_KIND: Kind | null;
     hits: number;
     constructor(a0: string);
-    index(): java.util.HashMap<string, java.lang.Integer> | null;
+    index(): java.util.HashMap<string, number> | null;
     names(): java.util.List<string> | null;
     counts(): Int32Array | null;
     bytes(): Uint8Array | null;
@@ -37,7 +37,7 @@ declare module "java:com.example" {
     parse(a0: string): number;
     repeat<T>(a0: T, a1: number): java.util.List<T> | null;
     tally<T>(a0: T, a1: Int32Array): java.util.List<T> | null;
-    total(a0: java.util.List<java.lang.Number>): number;
+    total(a0: java.util.List<number>): number;
     raw(): java.util.List | null;
     cursorAt(a0: number): Catalog.Cursor | null;
   }

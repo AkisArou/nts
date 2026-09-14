@@ -248,6 +248,20 @@ fn mapped_collection(binary: &str) -> Option<&'static str> {
 fn reference(binary: &str) -> String {
     match binary {
         "java/lang/String" | "java/lang/CharSequence" => "string".to_owned(),
+        // **A boxed primitive is the value it boxes**, which is Kotlin's answer
+        // again: `kotlin.Int` maps to `int` and `java.lang.Integer` both, with
+        // nullability telling them apart. Rendering `java.lang.Integer` as
+        // itself made `Map<String, Integer>` unreachable from a TypeScript
+        // `Map<string, number>` -- and a generic argument is where this bites,
+        // because a union cannot help there: TypeScript's `Map` is invariant in
+        // its key.
+        //
+        // `null` is not lost: `returns` adds `| null` to an unannotated
+        // reference return, and a boxed type is still a reference here.
+        "java/lang/Integer" | "java/lang/Double" | "java/lang/Short" | "java/lang/Byte"
+        | "java/lang/Float" | "java/lang/Character" | "java/lang/Number" => "number".to_owned(),
+        "java/lang/Boolean" => "boolean".to_owned(),
+        "java/lang/Long" => "bigint".to_owned(),
         // Refuse rather than miscompile: `any` would silence every later error.
         "java/lang/Object" => "unknown".to_owned(),
         // A nested class is `Outer$Inner` in the class file and `Outer.Inner`
@@ -340,11 +354,26 @@ fn is_reference(rendered: &str) -> bool {
 /// platform types: the class file genuinely does not say, and guessing
 /// non-null produces an NPE the type system promised could not happen. An
 /// overrides file is how a jar with no annotations gets cleaned up.
-fn returns(rendered: &str, annotations: &[String]) -> String {
-    if !is_reference(rendered) || nonnull(annotations) {
+fn returns(rendered: &str, annotations: &[String], descriptor: &str) -> String {
+    if !descriptor_is_reference(descriptor) || nonnull(annotations) {
         return rendered.to_owned();
     }
     format!("{rendered} | null")
+}
+
+/// Whether a **descriptor** names a reference, which is the only authority on
+/// whether a value can be null.
+///
+/// **Asked of the class file rather than of the rendering**, because the two
+/// stopped agreeing the moment a boxed primitive began rendering as the value
+/// it boxes. `java.lang.Integer` renders as `number`, and so does `int`; one
+/// can be null and the other cannot, and no test on the string can tell them
+/// apart. Rendering-based nullability silently dropped `| null` from every
+/// boxed return -- a value that can be null claiming it cannot, which is the
+/// direction that costs correctness rather than convenience.
+fn descriptor_is_reference(descriptor: &str) -> bool {
+    let returns = descriptor.rsplit(')').next().unwrap_or(descriptor);
+    returns.starts_with('L') || returns.starts_with('[')
 }
 
 fn simple_name(binary: &str) -> String {
@@ -919,7 +948,7 @@ fn render_fields_into(
             match field.constant_value.as_deref().filter(|it| spellable(it)) {
                 Some(value) => value.to_owned(),
                 None if provably_present => rendered.clone(),
-                None => returns(&rendered, &field.annotations),
+                None => returns(&rendered, &field.annotations, &field.descriptor),
             },
         );
     }
@@ -1392,7 +1421,7 @@ fn render_methods_into(
                 &mut *out_constants,
                 "    function {emitted}{}({rendered_arguments}): {};",
                 type_parameters(method.signature.as_deref()),
-                returns(&result, &method.annotations),
+                returns(&result, &method.annotations, &method.descriptor),
             );
             continue;
         }
@@ -1418,7 +1447,7 @@ fn render_methods_into(
             if is_static { "static " } else { "" },
             emitted,
             type_parameters(method.signature.as_deref()),
-            returns(&result, &method.annotations),
+            returns(&result, &method.annotations, &method.descriptor),
         );
     }
     Ok(())
@@ -1745,7 +1774,7 @@ fn render_inherited(
             } else {
                 field.name.clone()
             },
-            if field.constant { rendered.clone() } else { returns(&rendered, &field.annotations) },
+            if field.constant { rendered.clone() } else { returns(&rendered, &field.annotations, &field.descriptor) },
         );
     }
     for (declaring, method) in inherited(class, resolve) {
@@ -1820,7 +1849,7 @@ fn render_inherited(
             // one was not, because the fixture had no method with a type
             // parameter of its own until the test below added one.
             type_parameters(method.signature.as_deref()),
-            returns(&result, &method.annotations),
+            returns(&result, &method.annotations, &method.descriptor),
         );
     }
 }

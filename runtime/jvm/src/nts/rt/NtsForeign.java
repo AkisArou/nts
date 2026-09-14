@@ -272,4 +272,28 @@ public final class NtsForeign {
         if (from != null) { System.arraycopy(from.items, 0, out, 0, length); }
         return out;
     }
+
+    // --- a Java reference arriving where a JavaScript value is held ----------
+
+    /**
+     * A Java reference as the {@link NtsValue} a `number | null` is held in.
+     *
+     * **Where a boxed primitive stops being a Java-ism.** `nts bind` renders
+     * `java.lang.Integer` as `number`, so `map.get(k)` is `number | null` and
+     * the caller writes `?? 0` rather than a null check and an `intValue()`.
+     * The declared type erases to `Object` in the class file, so the unboxing
+     * has to happen here -- by the value's *runtime* type, because the
+     * declaration no longer says which it is.
+     *
+     * A `Number` becomes a number and a `Boolean` a boolean, which is what the
+     * mapping promised. Anything else keeps its identity, so an object a Java
+     * method returns comes back as itself rather than being flattened.
+     */
+    public static NtsValue value(Object from) {
+        if (from == null) { return NtsValue.NULL_VALUE; }
+        if (from instanceof Number) { return NtsValue.ofNumber(((Number) from).doubleValue()); }
+        if (from instanceof Boolean) { return NtsValue.ofBoolean((Boolean) from); }
+        if (from instanceof String) { return NtsValue.ofString((String) from); }
+        return NtsValue.ofObject(from);
+    }
 }

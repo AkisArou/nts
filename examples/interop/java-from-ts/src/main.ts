@@ -37,8 +37,11 @@ export function main(): string {
   // No copy on any of these lines: `index()` hands back the same HashMap the
   // Java method returned.
   const index = catalog.index();
-  const boxed = index === null ? null : index.get(label);
-  const count = boxed === null ? 0 : boxed.intValue();
+  // A boxed `Integer` is a `number`, so this is `?? 0` rather than a null
+  // check and an `intValue()`. The nullability survives the mapping -- `get`
+  // still returns `number | null`, because a Java map answers null for a key
+  // it does not have.
+  const count = index === null ? 0 : (index.get(label) ?? 0);
 
   const names = catalog.names();
   const first = names === null ? "" : names.get(0);

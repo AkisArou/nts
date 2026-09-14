@@ -60,7 +60,15 @@ fi
 # unknown length of time under a comment reading "This file compiles, and
 # lowers", and nothing here would ever have said so.
 emitted="$out/classes-ts"
-NTS_BACKEND=jvm "$nts" emit-jvm "$here/tsconfig.json" --out "$emitted" --entry main > "$out/emit.log" 2>&1
+# `|| true`, because `set -e` otherwise kills the script on a typecheck
+# failure *before* the grep below can print why -- which is how a `TS2339`
+# surfaced as a bare non-zero exit and an empty log.
+NTS_BACKEND=jvm "$nts" emit-jvm "$here/tsconfig.json" --out "$emitted" --entry main > "$out/emit.log" 2>&1 || true
+if grep -qE "^TS[0-9]{4}|does not typecheck" "$out/emit.log"; then
+  echo "java-from-ts: the program does not typecheck:"
+  sed 's/^/    /' "$out/emit.log"
+  exit 1
+fi
 if grep -qE "NTS[0-9]{4}" "$out/emit.log"; then
   echo "java-from-ts: the program did not lower:"
   sed 's/^/    /' "$out/emit.log"

@@ -1046,6 +1046,25 @@ pub fn external(name: &str) -> Option<(&'static str, &'static str, String)> {
 /// **`[Z` and nothing else**, and the siblings it obviously wants were written
 /// and deleted: `nts bind` maps every other primitive array to a typed array,
 /// and a typed array is a view that `arrays_can_grow` does not touch. So
+/// The boxing a bound parameter wants, as `(class, the primitive it takes)`.
+///
+/// `java.lang.Integer` renders as `number`, so a value reaching one of these is
+/// a `double` on the stack and has to be narrowed before it is boxed --
+/// `toInt32` and not `d2i`, the same rule as everywhere else at this boundary.
+fn boxed_primitive(want: &str) -> Option<(&'static str, &'static str)> {
+    Some(match want {
+        "Ljava/lang/Integer;" => ("java/lang/Integer", "I"),
+        "Ljava/lang/Double;" => ("java/lang/Double", "D"),
+        "Ljava/lang/Short;" => ("java/lang/Short", "S"),
+        "Ljava/lang/Byte;" => ("java/lang/Byte", "B"),
+        "Ljava/lang/Character;" => ("java/lang/Character", "C"),
+        "Ljava/lang/Float;" => ("java/lang/Float", "F"),
+        "Ljava/lang/Long;" => ("java/lang/Long", "J"),
+        "Ljava/lang/Boolean;" => ("java/lang/Boolean", "Z"),
+        _ => return None,
+    })
+}
+
 /// `grownI` and friends compiled, linked, and could not be reached by any
 /// program -- which is a shape this repository has a note about.
 fn grown_array(want: &str) -> Option<&'static str> {
@@ -1680,6 +1699,36 @@ impl Emitter<'_> {
 
 
 
+    /// A `number` on the stack, as the boxed primitive a bound parameter
+    /// declared.
+    ///
+    /// Narrowed first and by the same rule as everywhere else at this boundary
+    /// -- `toInt32`, not `d2i` -- and then `valueOf`, which is what `javac`
+    /// emits at the same place and is the cached box for the small integers.
+    fn box_primitive(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        want: &str,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        use nts_jvm_emitter::insn::{self, Kind};
+        let Some((class, from)) = boxed_primitive(want) else {
+            return Err(refuse(self.func, "a boxed primitive this lane cannot build"));
+        };
+        match from {
+            "I" => code.invoke_static(origin, pool, RUNTIME, "toInt32", "(D)I"),
+            "S" => code.invoke_static(origin, pool, RUNTIME, "toInt16", "(D)I"),
+            "B" => code.invoke_static(origin, pool, RUNTIME, "toInt8", "(D)I"),
+            "C" => code.invoke_static(origin, pool, RUNTIME, "toUint16", "(D)I"),
+            "J" => code.get_field(origin, pool, types::BIGINT, "lo", "J"),
+            "F" => code.convert(origin, insn::D2F, Kind::Double, Kind::Float),
+            _ => {}
+        }
+        code.invoke_static(origin, pool, class, "valueOf", &format!("({from}){want}"));
+        Ok(())
+    }
+
     /// One argument, brought to the width the jar declared.
     ///
     /// Split out of [`Self::push_foreign_arguments`], which is a loop and a
@@ -1801,6 +1850,19 @@ impl Emitter<'_> {
         {
             self.push_foreign_array(code, pool, arg, other, origin)?;
         }
+            // **A number meeting a boxed primitive.** `nts bind` renders
+            // `java.lang.Double` as `number`, so the value on the stack is a
+            // `double` where a reference is declared -- two words where one is
+            // wanted, which the emitter's own accounting catches before the
+            // verifier does. `valueOf` is what `javac` emits at the same place,
+            // and it is the cached box for the small integers, so the common
+            // case allocates nothing.
+            (other, _)
+                if boxed_primitive(other).is_some()
+                    && !matches!(self.ty(arg), HirType::Erased) =>
+            {
+                self.box_primitive(code, pool, other, origin)?;
+            }
         // **An erased value meeting a bound reference parameter.**
         // `setOnTouch(View.OnTouch | ((x, y) => boolean))` is a union,
         // so the argument is an `NtsValue` -- and handing that to Java
@@ -4896,6 +4958,22 @@ impl Emitter<'_> {
                 returns
             };
             code.invoke_static(origin, pool, wrapper, "adopt", &format!("({accepts}){want}"));
+            return Ok(());
+        }
+        // **A Java reference arriving where a JavaScript value is held.**
+        // `map.get(k)` is declared `number | null` now that a boxed primitive
+        // renders as the value it boxes, and its class-file return is a plain
+        // `Object`. The unboxing is by the value's *runtime* type, because the
+        // declaration no longer says which it is -- which is the same trade
+        // erasure already makes for the generic itself.
+        if matches!(result, HirType::Erased) && returns.starts_with('L') {
+            code.invoke_static(
+                origin,
+                pool,
+                types::ARRAYS,
+                "value",
+                "(Ljava/lang/Object;)Lnts/rt/NtsValue;",
+            );
             return Ok(());
         }
         if matches!(result, HirType::Float { bits: 64 }) {
