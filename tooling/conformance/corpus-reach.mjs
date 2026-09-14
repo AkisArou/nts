@@ -53,8 +53,13 @@
 import { loadNode } from "./surface-load.mjs";
 import { CORPORA } from "./differential-corpora.mjs";
 
-const MODULES = process.argv.length > 2
-  ? process.argv.slice(2)
+// **Flags are not module names.** `--ceiling` went straight into this list, so the run filtered
+// to a module by that name, found none, and printed a full classification of **zero** names --
+// clean-looking output from a run that had processed nothing. Exactly the shape this file exists
+// to catch one level down.
+const ARGS = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const MODULES = ARGS.length > 0
+  ? ARGS
   : Object.keys(CORPORA).sort();
 
 let totalNamed = 0;
@@ -205,6 +210,79 @@ for (const moduleName of MODULES) {
 }
 
 console.log(`corpus reach: ${totalCalled} of ${totalNamed} published function(s) called by a spec\n`);
+/**
+ * **What the remaining names are, so "reach N of M" has a ceiling instead of a wish.**
+ *
+ * `--ceiling` classifies every uncalled name. The reason this is here rather than in a reader's
+ * head: a target was once set at "700 of 1,087" by feel, and feel is not a measurement. Some of
+ * what is uncalled cannot be compared by a value differential at all, and saying which is the
+ * difference between a goal and a number someone liked.
+ *
+ * The categories are a judgement, recorded in one place so it can be argued with:
+ *
+ *   mutates shared state        the writing half of `fs`. A differential that mutates is one
+ *                               whose two sides ran against different filesystems -- the rule
+ *                               `fs`'s corpus states. Reachable only with a per-side sandbox,
+ *                               which is a design change and not a missing spec.
+ *   ends or reconfigures        `exit`, `abort`, `execve`, `chdir`, `umask`, the `set*id` family.
+ *                               Not comparable in-process; each would need its own child.
+ *   nondeterministic by design  `uptime`, `memoryUsage`, `cpuUsage`, `hrtime`. Their answer is
+ *                               not a function of the input, which is the one thing a spec needs.
+ *   GC-dependent                `finalization.*`.
+ *   internals or recorded       `_`-prefixed, plus names this profile deliberately does not
+ *                               publish with a reason on file.
+ *   class or instance method    reachable, and needs an instance constructed and driven rather
+ *                               than a call made. The largest bucket and the real headroom.
+ *   plainly reachable           a free function nobody compares yet. Write a spec.
+ */
+if (process.argv.includes("--ceiling")) {
+  const MUTATES = /^(promises\.)?(append|write|mkdir|mkdtemp|rm|rmdir|rename|unlink|link|symlink|truncate|ftruncate|chmod|fchmod|lchmod|chown|fchown|lchown|utimes|futimes|lutimes|copyFile|cp|fsync|fdatasync|watch|watchFile|unwatchFile|createWriteStream)/i;
+  const ENDS = new Set(["exit", "reallyExit", "abort", "execve", "_fatalException", "_kill", "kill",
+    "setuid", "setgid", "seteuid", "setegid", "setgroups", "initgroups", "chdir", "umask",
+    "_debugProcess", "_debugEnd", "openStdin", "ref", "unref", "loadEnvFile", "dlopen",
+    "_startProfilerIdleNotifier", "_stopProfilerIdleNotifier", "setSourceMapsEnabled"]);
+  const NONDET = new Set(["uptime", "memoryUsage", "cpuUsage", "threadCpuUsage", "resourceUsage",
+    "constrainedMemory", "availableMemory", "getActiveResourcesInfo", "_getActiveHandles",
+    "_getActiveRequests", "hrtime", "_tickCallback"]);
+  const buckets = new Map([
+    ["mutates shared state", []], ["ends or reconfigures the process", []],
+    ["nondeterministic by design", []], ["GC-dependent", []],
+    ["internals or recorded absence", []], ["class or instance method", []],
+    ["plainly reachable", []],
+  ]);
+  for (const r of rows) {
+    for (const name of r.untouched ?? []) {
+      const tail = name.includes("#") ? name.slice(name.indexOf("#") + 1) : name;
+      const put = (k) => buckets.get(k).push(`${r.moduleName}.${name}`);
+      if (MUTATES.test(name) || MUTATES.test(tail)) put("mutates shared state");
+      else if (ENDS.has(name) || ENDS.has(tail)) put("ends or reconfigures the process");
+      else if (NONDET.has(name) || NONDET.has(tail)) put("nondeterministic by design");
+      else if (name.startsWith("finalization.")) put("GC-dependent");
+      else if (/(^_)|(\._)|^(binding|_linkedBinding|getBuiltinModule)$/.test(name)) {
+        put("internals or recorded absence");
+      } else if (name.includes("#") || /^[A-Z]\w*\./.test(name)) put("class or instance method");
+      else put("plainly reachable");
+    }
+  }
+  const size = (k) => buckets.get(k).length;
+  console.log(`\n  uncalled, classified (${[...buckets.values()].reduce((n, v) => n + v.length, 0)}):`);
+  for (const [k, v] of [...buckets].sort((a, b) => b[1].length - a[1].length)) {
+    console.log(`    ${String(v.length).padStart(4)}  ${k}`);
+  }
+  const free = size("plainly reachable");
+  const methods = size("class or instance method");
+  const sandboxed = size("mutates shared state");
+  const never = size("ends or reconfigures the process") + size("nondeterministic by design") +
+    size("GC-dependent") + size("internals or recorded absence");
+  console.log(`\n    ${totalCalled} called now`);
+  console.log(`    ${totalCalled + free} if every plainly reachable free function gets a spec`);
+  console.log(`    ${totalCalled + free + methods} with class and instance methods driven too`);
+  console.log(`    ${totalCalled + free + methods + sandboxed} if the writing half of \`fs\` gets a per-side sandbox`);
+  console.log(`    ${totalNamed - never} is the hard ceiling: ${never} cannot be compared by a value`);
+  console.log("    differential at all, and that is a property of the question rather than of the corpus.");
+}
+
+
 for (const r of rows) {
   if (r.note !== undefined) {
     console.log(`  ${r.moduleName.padEnd(20)} not compared -- ${r.note}`);
