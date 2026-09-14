@@ -1,0 +1,58 @@
+# The vocabulary a generated binding is written in.
+#
+# Curated by hand, rendered by `nts bind --members`. A hand-written prelude
+# could be curated and could not carry a binding table: a table is numbered by
+# byte offsets into the text, and a person cannot maintain those. This list is
+# the half a person should write; the offsets come from the run that renders it.
+#
+# Named by the DECLARING class -- and that does not compose the way it looks
+# like it should, because a Java interface redeclares what it inherits.
+# `java.util.List` declares its own `size()`, so `Collection#size` does not put
+# one on `List`. Being explicit per class is the honest form, and the compiler
+# says which line is missing: `Property 'size' does not exist on type 'List'`.
+
+java.util.Iterator#hasNext
+java.util.Iterator#next
+
+java.util.Collection#size
+java.util.Collection#isEmpty
+java.util.Collection#contains
+java.util.Collection#iterator
+
+java.util.List#size
+java.util.List#isEmpty
+java.util.List#contains
+java.util.List#iterator
+java.util.List#get
+java.util.List#set
+java.util.List#add
+java.util.List#indexOf
+
+java.util.Set#size
+java.util.Set#isEmpty
+java.util.Set#contains
+java.util.Set#iterator
+
+java.util.Map#size
+java.util.Map#isEmpty
+java.util.Map#get
+java.util.Map#put
+java.util.Map#containsKey
+java.util.Map#remove
+java.util.Map#keySet
+java.util.Map#values
+
+java.util.HashMap#<init>
+java.util.HashMap#get
+java.util.HashMap#put
+java.util.HashMap#containsKey
+java.util.HashMap#remove
+java.util.HashMap#size
+java.util.HashMap#isEmpty
+
+java.lang.Number#intValue
+java.lang.Number#longValue
+java.lang.Number#doubleValue
+java.lang.Integer#intValue
+java.lang.Long#longValue
+java.lang.Double#doubleValue
