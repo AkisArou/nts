@@ -81,10 +81,10 @@ real traversal**; a conversion is an instruction.
 | `bigint` | `BigInteger` | **a copy**, and an allocating one |
 | `T[]` (non-growing program) | `T[]` of the same element | **nothing.** It is already that array. |
 | `T[]` (non-growing) | an array of a *different* width -- `number[]` to `int[]` | **a copy**, because the element widths differ |
-| `T[]` (growing program) | any `T[]` | **a copy.** The wrapper's `items` is longer than its `length`, so even the same-width case cannot be passed through |
+| `T[]` (growing program) | any `T[]` | **a copy**, as of 2026-09-15 -- it was refused by name until then, which is a different thing from what this row promised. The wrapper's `items` is longer than its `length`, so even the same-width case cannot be passed through. Reachable for a *reference* array and for `boolean[]` only: every other primitive array binds as a typed array, and a typed array is a view that `arrays_can_grow` does not touch |
 | `Uint8Array` spanning a whole buffer | `byte[]` | **nothing** -- `NtsBuffer.storage` is the array |
 | `Uint8Array` that is a subarray | `byte[]` | **a copy**, unless the callee takes `(byte[], int off, int len)` |
-| `Map` / `Set` | `java.util.Map` / `Set` | **a copy today, and avoidable** -- `NtsMap` can implement the interface. See "Avoiding the copy entirely" |
+| `Map` / `Set` | `java.util.Map` / `Set` | **refused by the checker today**, and avoidable -- `NtsMap` can implement the interface. Corrected 2026-09-15: this row said "a copy today" and there is no copy, because the call does not compile. `M.size(m)` with a TypeScript `Map` is `TS2739 Type 'Map<string, string>' is missing the following properties from type 'java.util.Map<string, string>': isEmpty, containsKey, put, remove, keySet`. The section below is about the *JVM* half and is still right; the half it does not mention is that `nts bind` renders a `java.util.Map` parameter as the prelude's structural type, so a caller cannot reach the copy that was never there. See "Avoiding the copy entirely" |
 | an object | a Java interface | **nothing**, if the generated class implements the interface |
 | a closure | a Java functional interface | **nothing**, if `Fn$<hash>` implements it; otherwise one adapter object per crossing |
 

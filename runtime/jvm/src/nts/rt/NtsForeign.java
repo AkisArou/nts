@@ -234,4 +234,42 @@ public final class NtsForeign {
         for (int i = 0; i < length; i++) { out[i] =  NtsViewF64.getAt(view, i); }
         return out;
     }
+
+    // --- a growable array meeting a Java array -------------------------------
+    //
+    // **The wrapper's `items` is longer than its `length`**, so even the
+    // same-element case cannot be handed over: the callee would see trailing
+    // slots the program does not consider part of the array. That is why
+    // `arrays_can_grow` makes every crossing a copy, and why the copy is here
+    // rather than at the call site.
+    //
+    // The reference case takes an **empty array of the wanted type** rather
+    // than a `Class`, because `Arrays.copyOf` preserves its argument's runtime
+    // type and the backend can build one with `anewarray` -- no class constant,
+    // no reflection, and the verifier checks the result is really a `String[]`.
+
+    /** A growable reference array as a Java array of `template`'s own type. */
+    public static Object[] objects(NtsArrayL from, Object[] template) {
+        int length = from == null ? 0 : (int) NtsArrayL.length(from);
+        Object[] out = java.util.Arrays.copyOf(template, length);
+        if (from != null) { System.arraycopy(from.items, 0, out, 0, length); }
+        return out;
+    }
+
+    /**
+     * A growable boolean array as a Java {@code boolean[]}.
+     *
+     * **The only primitive that reaches here**, which is worth saying because
+     * the obvious siblings were written first and could never run: `nts bind`
+     * maps `[I` to `Int32Array` and every other primitive array to a typed
+     * array, and a typed array is a *view* -- `arrays_can_grow` does not touch
+     * one. `boolean` has no typed array, so `[Z` is the one primitive that
+     * binds as a plain `T[]` and can therefore be behind the growable wrapper.
+     */
+    public static boolean[] grownZ(NtsArrayZ from) {
+        int length = from == null ? 0 : (int) NtsArrayZ.length(from);
+        boolean[] out = new boolean[length];
+        if (from != null) { System.arraycopy(from.items, 0, out, 0, length); }
+        return out;
+    }
 }

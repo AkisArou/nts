@@ -1040,6 +1040,18 @@ pub fn external(name: &str) -> Option<(&'static str, &'static str, String)> {
 }
 
 
+/// The `NtsForeign` conversion from a growable array to the Java array a bound
+/// parameter declared.
+///
+/// **`[Z` and nothing else**, and the siblings it obviously wants were written
+/// and deleted: `nts bind` maps every other primitive array to a typed array,
+/// and a typed array is a view that `arrays_can_grow` does not touch. So
+/// `grownI` and friends compiled, linked, and could not be reached by any
+/// program -- which is a shape this repository has a note about.
+fn grown_array(want: &str) -> Option<&'static str> {
+    (want == "[Z").then_some("grownZ")
+}
+
 /// The `NtsForeign` conversion from a typed array to the Java array a bound
 /// parameter declared, if there is one.
 ///
@@ -1666,6 +1678,230 @@ impl Emitter<'_> {
         Ok(())
     }
 
+
+
+    /// One argument, brought to the width the jar declared.
+    ///
+    /// Split out of [`Self::push_foreign_arguments`], which is a loop and a
+    /// dispatch and was over its line limit as both. Every width decision lives
+    /// here; the loop above only walks the descriptor.
+    fn narrow_one(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        arg: ValueId,
+        want: &str,
+        integral: bool,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        use nts_jvm_emitter::insn::{self, Kind};
+    match (want, integral) {
+        // Already the width the jar asked for.
+        ("I" | "Z", true) | ("D", false) => {}
+        // The JavaScript conversions, one helper per width.
+        ("I", false) => code.invoke_static(origin, pool, RUNTIME, "toInt32", "(D)I"),
+        ("S", false) => code.invoke_static(origin, pool, RUNTIME, "toInt16", "(D)I"),
+        ("B", false) => code.invoke_static(origin, pool, RUNTIME, "toInt8", "(D)I"),
+        ("C", false) => code.invoke_static(origin, pool, RUNTIME, "toUint16", "(D)I"),
+        // Already an `int`, so the JVM's own narrowing is the same
+        // truncation `ToInt32` would do from here and is one byte.
+        ("S", true) => code.convert(origin, insn::I2S, Kind::Int, Kind::Int),
+        ("B", true) => code.convert(origin, insn::I2B, Kind::Int, Kind::Int),
+        ("C", true) => code.convert(origin, insn::I2C, Kind::Int, Kind::Int),
+        ("F", false) => code.convert(origin, insn::D2F, Kind::Double, Kind::Float),
+        ("D", true) => code.convert(origin, insn::I2D, Kind::Int, Kind::Double),
+        // **A `bigint` into a `long` is its low 64 bits**, which is
+        // what `BigInt.asIntN(64, v)` specifies and what node does:
+        // `2**63` arrives as `-2**63` and `2**64` as `0`. Wrapping
+        // rather than refusing is the same rule the integral widths
+        // above follow, and the same one `ToInt32` follows -- a
+        // boundary conversion takes the low bits.
+        //
+        // `lo` *is* that value by construction: `fromLong` builds a
+        // bigint as `of(value >> 63, value)`, so `hi` is the sign
+        // extension and `lo` is the 64 bits. Reading it is the whole
+        // conversion, and it is one instruction.
+        ("J", _) if matches!(self.ty(arg), HirType::BigInt) => {
+            code.get_field(origin, pool, types::BIGINT, "lo", "J");
+        }
+        // A reference parameter: the callback coercion already owns
+        // this question and answers it for interfaces as well.
+        // **A `number[]` meeting a Java primitive array.** Ours is a
+        // `[D`; `sum(int...)` wants `[I`, and the two are unrelated
+        // types to the verifier however alike the values look. The
+        // elements move and each takes the narrowing a scalar would
+        // take here -- the same `ToInt32` rule, not `d2i`.
+        (other, _)
+            if matches!(other, "[I" | "[J" | "[S" | "[B" | "[C" | "[F")
+                && matches!(
+                    types::descriptor(self.shape, self.ty(arg)).as_deref(),
+                    Some("[D")
+                ) =>
+        {
+            let to = match other {
+                "[I" => "toI",
+                "[J" => "toJ",
+                "[S" => "toS",
+                "[B" => "toB",
+                "[C" => "toC",
+                _ => "toF",
+            };
+            code.invoke_static(origin, pool, types::ARRAYS, to, &format!("([D){other}"));
+        }
+        // **Under `arrays_can_grow` the wrapper's `items` is longer
+        // than its `length`**, so even the same-element case cannot be
+        // handed over: the callee would see trailing slots the program
+        // does not consider part of the array. A copy, which is what
+        // the cost table has always said this costs and what this
+        // refused to do until now.
+        //
+        // The reference case passes an **empty array of the wanted
+        // type** and lets `Arrays.copyOf` preserve it -- no class
+        // constant and no reflection, and the verifier checks the
+        // result really is a `String[]`.
+        (other, _) if other.starts_with('[') && self.shape.grows => {
+            if let Some(element) = other.strip_prefix('[').filter(|it| it.starts_with('L'))
+            {
+                code.const_int(origin, pool, 0);
+                // The *element descriptor*, `Ljava/lang/String;` --
+                // `new_array` spells a reference element the way the
+                // descriptor does, not the way `checkcast` spells a
+                // class.
+                code.new_array(origin, pool, element);
+                code.invoke_static(
+                    origin,
+                    pool,
+                    types::ARRAYS,
+                    "objects",
+                    "(Lnts/rt/NtsArrayL;[Ljava/lang/Object;)[Ljava/lang/Object;",
+                );
+                code.check_cast(origin, pool, other);
+            } else if let Some(member) = grown_array(other) {
+                code.invoke_static(
+                    origin,
+                    pool,
+                    types::ARRAYS,
+                    member,
+                    &format!("(Lnts/rt/NtsArrayZ;){other}"),
+                );
+            } else {
+                return Err(refuse(
+                    self.func,
+                    &format!(
+                        "a bound member wanting `{other}` from a growable array, whose \
+                         element this lane has no conversion for"
+                    ),
+                ));
+            }
+        }
+        // Any array crossing to Java; see `push_foreign_array`.
+        (other, _)
+            if other.starts_with('[')
+                && self.crosses_as_array(other, arg) =>
+        {
+            self.push_foreign_array(code, pool, arg, other, origin)?;
+        }
+        // **An erased value meeting a bound reference parameter.**
+        // `setOnTouch(View.OnTouch | ((x, y) => boolean))` is a union,
+        // so the argument is an `NtsValue` -- and handing that to Java
+        // is `IncompatibleClassChangeError` at the first dispatch:
+        // `NtsValue does not implement View$OnTouch`.
+        //
+        // `coerce_callback` answers this for *our* callback interfaces
+        // and does not recognise a jar's, so the unboxing is done here
+        // against the descriptor the jar declared. The `checkcast` is
+        // what makes a wrong binding a `ClassCastException` at the call
+        // rather than a corrupt frame.
+        (other, _)
+            if other.starts_with('L')
+                && matches!(self.ty(arg), HirType::Erased)
+                && !self.unboxed.contains(&arg) =>
+        {
+            code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+            code.check_cast(origin, pool, &other[1..other.len() - 1]);
+        }
+        (other, _) if other.starts_with('L') || other.starts_with('[') => {
+            self.coerce_callback(code, pool, arg, other, origin)?;
+        }
+        // **`J` lands here deliberately.** A `bigint` is an
+        // `NtsBigInt`, not a `long`, and the conversion between them is
+        // a decision this lane has not made. Refusing by name is the
+        // rule; emitting `d2l` would be a wrong number at every
+        // magnitude a `long` exists for.
+        (other, held) => {
+            return Err(refuse(
+                self.func,
+                &format!(
+                    "a bound member wanting `{other}` for {}",
+                    if held { "an integer" } else { "a number" }
+                ),
+            ));
+        }
+    }
+        Ok(())
+    }
+
+    /// Whether this argument is an array shape [`Self::push_foreign_array`]
+    /// knows how to hand over.
+    fn crosses_as_array(&self, want: &str, arg: ValueId) -> bool {
+        let held = types::descriptor(self.shape, self.ty(arg));
+        view_to_array(want, held.as_deref()).is_some()
+            || (self.shape.grows
+                && (want.starts_with("[L") || grown_array(want).is_some()))
+    }
+
+    /// An array of ours, as the Java array a bound parameter declared.
+    ///
+    /// Three shapes and each costs something different, which is why they are
+    /// together: a whole-buffer view hands over the buffer's own storage, a
+    /// `subarray` copies because an offset is something a Java array has
+    /// nowhere to put, and a growable array copies because its `items` is
+    /// longer than its `length`.
+    fn push_foreign_array(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        arg: ValueId,
+        want: &str,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        let held = types::descriptor(self.shape, self.ty(arg));
+        if let Some((member, signature)) = view_to_array(want, held.as_deref()) {
+            code.invoke_static(origin, pool, types::ARRAYS, member, &signature);
+            return Ok(());
+        }
+        if let Some(element) = want.strip_prefix('[').filter(|it| it.starts_with('L')) {
+            code.const_int(origin, pool, 0);
+            // The *element descriptor*, `Ljava/lang/String;` -- `new_array`
+            // spells a reference element the way the descriptor does, not the
+            // way `checkcast` spells a class.
+            code.new_array(origin, pool, element);
+            code.invoke_static(
+                origin,
+                pool,
+                types::ARRAYS,
+                "objects",
+                "(Lnts/rt/NtsArrayL;[Ljava/lang/Object;)[Ljava/lang/Object;",
+            );
+            code.check_cast(origin, pool, want);
+            return Ok(());
+        }
+        let Some(member) = grown_array(want) else {
+            return Err(refuse(
+                self.func,
+                &format!("a bound member wanting `{want}`, which this lane cannot hand over"),
+            ));
+        };
+        code.invoke_static(
+            origin,
+            pool,
+            types::ARRAYS,
+            member,
+            &format!("(Lnts/rt/NtsArrayZ;){want}"),
+        );
+        Ok(())
+    }
+
     /// Arguments to a **bound Java member**, narrowed to the widths the jar
     /// declared.
     ///
@@ -1694,7 +1930,6 @@ impl Emitter<'_> {
         descriptor: &str,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
-        use nts_jvm_emitter::insn::{self, Kind};
         let Some(parameters) = nts_jvm_emitter::descriptor::parameters(descriptor) else {
             return Err(refuse(
                 self.func,
@@ -1718,130 +1953,7 @@ impl Emitter<'_> {
             // not on the stack.
             let integral = self.narrowed.contains(&arg)
                 || matches!(self.ty(arg), HirType::Int { .. } | HirType::Bool);
-            match (want, integral) {
-                // Already the width the jar asked for.
-                ("I" | "Z", true) | ("D", false) => {}
-                // The JavaScript conversions, one helper per width.
-                ("I", false) => code.invoke_static(origin, pool, RUNTIME, "toInt32", "(D)I"),
-                ("S", false) => code.invoke_static(origin, pool, RUNTIME, "toInt16", "(D)I"),
-                ("B", false) => code.invoke_static(origin, pool, RUNTIME, "toInt8", "(D)I"),
-                ("C", false) => code.invoke_static(origin, pool, RUNTIME, "toUint16", "(D)I"),
-                // Already an `int`, so the JVM's own narrowing is the same
-                // truncation `ToInt32` would do from here and is one byte.
-                ("S", true) => code.convert(origin, insn::I2S, Kind::Int, Kind::Int),
-                ("B", true) => code.convert(origin, insn::I2B, Kind::Int, Kind::Int),
-                ("C", true) => code.convert(origin, insn::I2C, Kind::Int, Kind::Int),
-                ("F", false) => code.convert(origin, insn::D2F, Kind::Double, Kind::Float),
-                ("D", true) => code.convert(origin, insn::I2D, Kind::Int, Kind::Double),
-                // **A `bigint` into a `long` is its low 64 bits**, which is
-                // what `BigInt.asIntN(64, v)` specifies and what node does:
-                // `2**63` arrives as `-2**63` and `2**64` as `0`. Wrapping
-                // rather than refusing is the same rule the integral widths
-                // above follow, and the same one `ToInt32` follows -- a
-                // boundary conversion takes the low bits.
-                //
-                // `lo` *is* that value by construction: `fromLong` builds a
-                // bigint as `of(value >> 63, value)`, so `hi` is the sign
-                // extension and `lo` is the 64 bits. Reading it is the whole
-                // conversion, and it is one instruction.
-                ("J", _) if matches!(self.ty(arg), HirType::BigInt) => {
-                    code.get_field(origin, pool, types::BIGINT, "lo", "J");
-                }
-                // A reference parameter: the callback coercion already owns
-                // this question and answers it for interfaces as well.
-                // **A `number[]` meeting a Java primitive array.** Ours is a
-                // `[D`; `sum(int...)` wants `[I`, and the two are unrelated
-                // types to the verifier however alike the values look. The
-                // elements move and each takes the narrowing a scalar would
-                // take here -- the same `ToInt32` rule, not `d2i`.
-                (other, _)
-                    if matches!(other, "[I" | "[J" | "[S" | "[B" | "[C" | "[F")
-                        && matches!(
-                            types::descriptor(self.shape, self.ty(arg)).as_deref(),
-                            Some("[D")
-                        ) =>
-                {
-                    let to = match other {
-                        "[I" => "toI",
-                        "[J" => "toJ",
-                        "[S" => "toS",
-                        "[B" => "toB",
-                        "[C" => "toC",
-                        _ => "toF",
-                    };
-                    code.invoke_static(origin, pool, types::ARRAYS, to, &format!("([D){other}"));
-                }
-                // Under `arrays_can_grow` ours is an `NtsArrayL` and the jar
-                // declared a bare array; there is no store to hand over.
-                (other, _) if other.starts_with('[') && self.shape.grows => {
-                    return Err(refuse(
-                        self.func,
-                        &format!(
-                            "a bound member wanting `{other}` in a program where some array \
-                             grows: the growable representation is not a Java array"
-                        ),
-                    ));
-                }
-                // **A typed array meeting a Java primitive array.** A view is
-                // a window onto an `NtsBuffer`, and a Java array is not one --
-                // so the value that was on the stack was an `NtsViewU8` where
-                // `[B` was declared, with **no diagnostic**: the verifier was
-                // the only thing that noticed.
-                //
-                // `NtsForeign.bytes` hands back the buffer's own storage when
-                // the view spans it, which is the case a caller reading a whole
-                // file hits, and copies when it is a `subarray` -- an offset is
-                // something a Java array has nowhere to put. Every other width
-                // copies, because an `NtsBuffer` is `byte[]`-backed and an
-                // `int[]` is not a reinterpretation of one.
-                (other, _)
-                    if other.starts_with('[')
-                        && view_to_array(other, types::descriptor(self.shape, self.ty(arg)).as_deref()).is_some() =>
-                {
-                    let Some((member, signature)) =
-                        view_to_array(other, types::descriptor(self.shape, self.ty(arg)).as_deref())
-                    else {
-                        return Err(refuse(self.func, "a typed array this lane cannot hand to Java"));
-                    };
-                    code.invoke_static(origin, pool, types::ARRAYS, member, &signature);
-                }
-                // **An erased value meeting a bound reference parameter.**
-                // `setOnTouch(View.OnTouch | ((x, y) => boolean))` is a union,
-                // so the argument is an `NtsValue` -- and handing that to Java
-                // is `IncompatibleClassChangeError` at the first dispatch:
-                // `NtsValue does not implement View$OnTouch`.
-                //
-                // `coerce_callback` answers this for *our* callback interfaces
-                // and does not recognise a jar's, so the unboxing is done here
-                // against the descriptor the jar declared. The `checkcast` is
-                // what makes a wrong binding a `ClassCastException` at the call
-                // rather than a corrupt frame.
-                (other, _)
-                    if other.starts_with('L')
-                        && matches!(self.ty(arg), HirType::Erased)
-                        && !self.unboxed.contains(&arg) =>
-                {
-                    code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
-                    code.check_cast(origin, pool, &other[1..other.len() - 1]);
-                }
-                (other, _) if other.starts_with('L') || other.starts_with('[') => {
-                    self.coerce_callback(code, pool, arg, other, origin)?;
-                }
-                // **`J` lands here deliberately.** A `bigint` is an
-                // `NtsBigInt`, not a `long`, and the conversion between them is
-                // a decision this lane has not made. Refusing by name is the
-                // rule; emitting `d2l` would be a wrong number at every
-                // magnitude a `long` exists for.
-                (other, held) => {
-                    return Err(refuse(
-                        self.func,
-                        &format!(
-                            "a bound member wanting `{other}` for {}",
-                            if held { "an integer" } else { "a number" }
-                        ),
-                    ));
-                }
-            }
+            self.narrow_one(code, pool, arg, want, integral, origin)?;
         }
         Ok(())
     }
