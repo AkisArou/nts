@@ -166,4 +166,72 @@ public final class NtsForeign {
         for (int i = 0; i < xs.length; i++) { double x = xs[i]; out[i] = (float) x; }
         return out;
     }
+
+    // --- a typed array meeting a Java primitive array ------------------------
+    //
+    // **The storage itself when the view spans its whole buffer, a copy
+    // otherwise.** A `Uint8Array` is a window onto an `NtsBuffer` whose storage
+    // *is* a `byte[]`, so the no-copy case is real and is the one a caller
+    // reading a whole file hits. A `subarray` is not: it has an offset the
+    // array has nowhere to put, so its elements move.
+    //
+    // Every other width copies unconditionally, because an `NtsBuffer` is
+    // `byte[]`-backed and an `int[]` is not a reinterpretation of one.
+
+    /** A `Uint8Array` as a `byte[]`; the storage itself when it spans the buffer. */
+    public static byte[] bytes(NtsViewU8 view) {
+        if (view == null) { return new byte[0]; }
+        byte[] storage = NtsBuffer.storage(NtsAnyView.buffer(view));
+        int offset = (int) NtsAnyView.byteOffset(view);
+        int length = (int) NtsView.length(view);
+        if (offset == 0 && length == storage.length) { return storage; }
+        byte[] out = new byte[length];
+        System.arraycopy(storage, offset, out, 0, length);
+        return out;
+    }
+
+    /** A `NtsViewI32` as a Java {@code int[]}; always a copy, see the note above. */
+    public static int[] ints(NtsViewI32 view) {
+        if (view == null) { return new int[0]; }
+        int length = (int) NtsView.length(view);
+        int[] out = new int[length];
+        for (int i = 0; i < length; i++) { out[i] = (int) NtsViewI32.getAt(view, i); }
+        return out;
+    }
+
+    /** A `NtsViewI16` as a Java {@code short[]}; always a copy, see the note above. */
+    public static short[] shorts(NtsViewI16 view) {
+        if (view == null) { return new short[0]; }
+        int length = (int) NtsView.length(view);
+        short[] out = new short[length];
+        for (int i = 0; i < length; i++) { out[i] = (short) NtsViewI16.getAt(view, i); }
+        return out;
+    }
+
+    /** A `NtsViewU16` as a Java {@code char[]}; always a copy, see the note above. */
+    public static char[] chars(NtsViewU16 view) {
+        if (view == null) { return new char[0]; }
+        int length = (int) NtsView.length(view);
+        char[] out = new char[length];
+        for (int i = 0; i < length; i++) { out[i] = (char) NtsViewU16.getAt(view, i); }
+        return out;
+    }
+
+    /** A `NtsViewF32` as a Java {@code float[]}; always a copy, see the note above. */
+    public static float[] floats(NtsViewF32 view) {
+        if (view == null) { return new float[0]; }
+        int length = (int) NtsView.length(view);
+        float[] out = new float[length];
+        for (int i = 0; i < length; i++) { out[i] = (float) NtsViewF32.getAt(view, i); }
+        return out;
+    }
+
+    /** A `NtsViewF64` as a Java {@code double[]}; always a copy, see the note above. */
+    public static double[] doubles(NtsViewF64 view) {
+        if (view == null) { return new double[0]; }
+        int length = (int) NtsView.length(view);
+        double[] out = new double[length];
+        for (int i = 0; i < length; i++) { out[i] =  NtsViewF64.getAt(view, i); }
+        return out;
+    }
 }

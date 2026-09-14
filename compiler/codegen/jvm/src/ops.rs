@@ -1040,6 +1040,27 @@ pub fn external(name: &str) -> Option<(&'static str, &'static str, String)> {
 }
 
 
+/// The `NtsForeign` conversion from a typed array to the Java array a bound
+/// parameter declared, if there is one.
+///
+/// Paired by *both* sides: `[B` is served by a `Uint8Array` and by nothing
+/// else, so a `Float64Array` handed to a `byte[]` parameter falls through to
+/// the refusal rather than silently taking the wrong reinterpretation.
+fn view_to_array(want: &str, held: Option<&str>) -> Option<(&'static str, String)> {
+    let held = held?;
+    let (member, view) = match (want, held) {
+        ("[B", "Lnts/rt/NtsViewU8;") => ("bytes", "Lnts/rt/NtsViewU8;"),
+        ("[I", "Lnts/rt/NtsViewI32;") => ("ints", "Lnts/rt/NtsViewI32;"),
+        ("[S", "Lnts/rt/NtsViewI16;") => ("shorts", "Lnts/rt/NtsViewI16;"),
+        ("[C", "Lnts/rt/NtsViewU16;") => ("chars", "Lnts/rt/NtsViewU16;"),
+        ("[F", "Lnts/rt/NtsViewF32;") => ("floats", "Lnts/rt/NtsViewF32;"),
+        ("[D", "Lnts/rt/NtsViewF64;") => ("doubles", "Lnts/rt/NtsViewF64;"),
+        _ => return None,
+    };
+    Some((member, format!("({view}){want}")))
+}
+
+
 impl Emitter<'_> {
     /// One block: its operations, then its terminator.
     pub(crate) fn block(
@@ -1760,6 +1781,29 @@ impl Emitter<'_> {
                              grows: the growable representation is not a Java array"
                         ),
                     ));
+                }
+                // **A typed array meeting a Java primitive array.** A view is
+                // a window onto an `NtsBuffer`, and a Java array is not one --
+                // so the value that was on the stack was an `NtsViewU8` where
+                // `[B` was declared, with **no diagnostic**: the verifier was
+                // the only thing that noticed.
+                //
+                // `NtsForeign.bytes` hands back the buffer's own storage when
+                // the view spans it, which is the case a caller reading a whole
+                // file hits, and copies when it is a `subarray` -- an offset is
+                // something a Java array has nowhere to put. Every other width
+                // copies, because an `NtsBuffer` is `byte[]`-backed and an
+                // `int[]` is not a reinterpretation of one.
+                (other, _)
+                    if other.starts_with('[')
+                        && view_to_array(other, types::descriptor(self.shape, self.ty(arg)).as_deref()).is_some() =>
+                {
+                    let Some((member, signature)) =
+                        view_to_array(other, types::descriptor(self.shape, self.ty(arg)).as_deref())
+                    else {
+                        return Err(refuse(self.func, "a typed array this lane cannot hand to Java"));
+                    };
+                    code.invoke_static(origin, pool, types::ARRAYS, member, &signature);
                 }
                 // **An erased value meeting a bound reference parameter.**
                 // `setOnTouch(View.OnTouch | ((x, y) => boolean))` is a union,
