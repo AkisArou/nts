@@ -2019,7 +2019,7 @@ above are refused.
 | | | |
 |---|---|---|
 | ✅ | `ToBoolean` — including the tag switch for an erased value `examples/erased-truthiness` carries the erased half — `!x` where `x` is `unknown`, which is the tag switch this row names. |
-| ✅ | `ToString` on a number (`nts_number_to_string`) |
+| ✅ | `ToString` on a number (`nts_number_to_string`) `examples/number-strings` carries the requirement this row's helper exists to meet, and states it: `String(n)` is not a `printf` conversion — ECMAScript asks for the *shortest* decimal that round-trips, which is why there is a named helper rather than a format string. `examples/number-tostring-radix` carries the `toString(radix)` form and `examples/number-from-string` the inverse direction. |
 | ✅ | `ToInt32`, `ToUint32` — the bitwise operators `examples/bitwise` carries the operators these conversions are the meaning of; the conversions have no spelling of their own in a program, which is why this row names them and the example cannot. |
 | ✅ | `ToIntegerOrInfinity`, `ToLength`, `ToIndex` — array bounds `examples/an-out-of-range-read-the-program-handles` carries the bound being reached — a read past the end where the source is handling the absence itself. |
 | ✅ | `ToUint8`/`ToInt8`/`ToUint16`… — storing into a typed array |
