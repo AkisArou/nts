@@ -667,6 +667,62 @@ Reads versus writes, acquisition and release, outcome-dependent transitions --
 those are further axes. They belong beside this one when a binding needs them,
 not inside it, and not before.
 
+## Exact 64-bit integers
+
+`c_int64` used to be a branded `number`, and a `double` holds every integer to
+2^53 exactly and nothing beyond. Measured, with a correct `int64_t` prototype at
+both ends:
+
+    9007199254740993  ->  9007199254740992     rounded
+    INT64_MAX         ->  INT64_MIN            a sign flip
+    2 of 4 boundary values survived a round trip
+
+The prototypes were right, so nothing checking a binding against a real header
+could see it. The loss was entirely inside, in an `i64 -> f64 -> i64` detour.
+
+**The six LP64 spellings are `bigint`-branded now**: `c_int64`, `c_uint64`,
+`c_long`, `c_ulong`, `c_size_t`, `c_ptrdiff_t`. Narrower integers and floats
+stay `number`, because a double carries those exactly. Giving `int64_t` exact
+values while `size_t` -- the same 64 bits -- silently rounded would have been
+the worse of both.
+
+**The ABI did not move.** `Scalar::representation` still answers `i64`, the
+emitted prototype is still `int64_t`, and no C layout changed. What changed is
+the type a TypeScript value of the brand has *in between*, which is the only
+place the loss was happening. Confusing those two would have turned the ABI into
+`__int128`, which is a different boundary and the existing managed-host one.
+
+**The brand and its base must agree**, and a mismatch is refused rather than
+reinterpreted. A `c_int64` written over `number` would be exactly the lossy
+thing this prevents, and would still emit a correct prototype.
+
+**Conversions, by direction.** Widening reads the *source's* signedness:
+`UINT64_MAX` becomes 18446744073709551615 and not -1. Narrowing takes the low
+64 bits, which is `BigInt.asIntN(64, x)` for a signed destination and `asUintN`
+for an unsigned one. Both were missing from the LLVM conversion table and fell
+to its refusal; the C backend's casts already did the right thing, so only
+assembling the IR would have found it.
+
+**The cost is real and is at the boundary, which is where it belongs.** A
+`size_t` count converts explicitly on the way in and an `ssize_t` result on the
+way out:
+
+    read(fd as Fd, buf, BigInt(max) as Count)
+    Number(read(...))
+
+`sizeof`, `local` and `malloc`'s byte count keep their `number` API: they are
+compiler operations with their own checks, not a claim to expose the whole
+`size_t` domain.
+
+**Tested as two families rather than one.** The old test named every brand and
+asserted number semantics for all of them, which recorded a policy rather than a
+fact. There is no test spanning both now, because there is no expression that
+spans both -- mixing a bigint and a number is a type error, and that is the
+property that makes the exactness hold rather than a restriction beside it. The
+wide family round-trips INT64_MIN, INT64_MAX, UINT64_MAX, SIZE_MAX, PTRDIFF_MAX
+and 2^53+1 through a separately compiled C library, in both backends, and
+asserts that no value in either direction passed through a double.
+
 ## Direction for the next executable slices
 
 1. **More native storage and header-derived bindings.** `void *`, const-qualified

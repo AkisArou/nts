@@ -10,7 +10,10 @@ for file in caller layout; do
   "$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$out" \
     -c "$source/native/$file.c" -o "$out/$file.o"
 done
-"$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$out" \
-  -c "$out/program.c" -o "$out/program.o"
-"$cc" "$out/program.o" "$out/caller.o" "$out/layout.o" -o "$out/caller"
+for file in program nts_runtime; do
+  "$cc" -std=c11 -O2 -I"$out" -c "$out/$file.c" -o "$out/$file.o"
+done
+# The runtime is linked because converting a count to a 64-bit C integer is a
+# runtime call: `size_t` and `nfds_t` are bigint-branded on this target.
+"$cc" "$out/nts_runtime.o" "$out/program.o" "$out/caller.o" "$out/layout.o" -lm -o "$out/caller"
 "$out/caller"

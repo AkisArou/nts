@@ -31,8 +31,16 @@ fn snapshot(name: &str, source: &str) -> Option<nts_semantic_schema::SemanticSna
     Some(snapshot)
 }
 
+/// The brands a `number` can carry, in both signature positions.
+///
+/// This used to name every brand, which recorded a policy rather than a fact:
+/// the 64-bit spellings were `number`-based and so `INT64_MAX` came back as
+/// `INT64_MIN`. They are `bigint`-based now and have their own test below --
+/// the two families are asserted separately because a test spanning both
+/// would have to be written in whichever semantics they share, and they share
+/// none.
 #[test]
-fn every_brand_has_number_semantics_in_both_signature_positions() {
+fn a_narrow_brand_has_number_semantics_in_both_signature_positions() {
     for name in [
         "c_int",
         "c_uint",
@@ -42,12 +50,6 @@ fn every_brand_has_number_semantics_in_both_signature_positions() {
         "c_uint16",
         "c_int32",
         "c_uint32",
-        "c_int64",
-        "c_uint64",
-        "c_long",
-        "c_ulong",
-        "c_size_t",
-        "c_ptrdiff_t",
         "c_float",
         "c_double",
     ] {
@@ -272,7 +274,10 @@ fn scalar_pointees_survive_return_only_declarations_and_unrelated_types() {
     for brand in ["c_int", "c_uint", "c_int8", "c_uint8", "c_int16", "c_uint16", "c_int32", "c_uint32", "c_int64", "c_uint64", "c_long", "c_ulong", "c_size_t", "c_ptrdiff_t", "c_float", "c_double"] {
         for witness in ["", "type Unused = Ptr<c_double>;"] {
             let source = format!("import type {{ Ptr }} from \"c:types\"; declare function make(): Ptr<{brand}>;
-                export function run(): number {{ return make()[1]; }} {witness}");
+                // `void` rather than `number`: an element of a 64-bit brand is a
+                // bigint, and this test is about the *pointee* surviving, not
+                // about what the element projects to.
+                export function run(): void {{ void make()[1]; }} {witness}");
             let Some(snapshot) = snapshot(&format!("pointer-result-{brand}"), &source) else { return; };
             let prepared = hir::prepare(&snapshot).unwrap();
             assert!(prepared.diagnostics.is_empty(), "{brand}: {:?}", prepared.diagnostics);
@@ -299,7 +304,7 @@ fn local_storage_and_sizeof_lower_from_the_authored_types() {
         export function run(): number {
             const p = local<Request>(2);
             p[0].fd = -1 as c_int; p[1].fd = -1 as c_int;
-            const r = poll(p, 2 as c_ulong, 0 as c_int);
+            const r = poll(p, 2n as c_ulong, 0 as c_int);
             return r + read(addrOf(p[0].fd)) + sizeof<Request>() + sizeof<c_int>();
         }
         export function heap(bytes: number): number {
@@ -568,7 +573,7 @@ fn a_const_view_reads_and_does_not_write() {
     for (name, body, expected) in [
         (
             "mutable-satisfies-const",
-            "export function go(): void { const b = local<c_uint8>(4); wantsConst(b, 4 as c_size_t); }",
+            "export function go(): void { const b = local<c_uint8>(4); wantsConst(b, 4n as c_size_t); }",
             None,
         ),
         (
@@ -578,7 +583,7 @@ fn a_const_view_reads_and_does_not_write() {
         ),
         (
             "const-does-not-satisfy-mutable",
-            "export function go(p: ConstPtr<c_uint8>): void { wantsMutable(p, 4 as c_size_t); }",
+            "export function go(p: ConstPtr<c_uint8>): void { wantsMutable(p, 4n as c_size_t); }",
             Some("typescript"),
         ),
         (
@@ -591,7 +596,7 @@ fn a_const_view_reads_and_does_not_write() {
         // rather than laundering it.
         (
             "address-of-a-const-member",
-            "export function go(p: ConstPtr<c_uint8>): void { wantsMutable(addrOf(p[1]), 1 as c_size_t); }",
+            "export function go(p: ConstPtr<c_uint8>): void { wantsMutable(addrOf(p[1]), 1n as c_size_t); }",
             Some("lowering"),
         ),
     ] {
@@ -668,4 +673,48 @@ fn a_native_declaration_contributes_its_no_escape_contract() {
         "an authored @ntsNoEscape must reach escape analysis; if this fails the \
          declaration is being ignored and the contract exists only in lowering"
     );
+}
+
+/// The brands a `number` cannot carry, in both signature positions.
+///
+/// `bigint` all the way through: arithmetic on one is bigint arithmetic, and
+/// the brand selects the C boundary type rather than wrapping each
+/// intermediate. There is no `+ 0.25` arm because there is no such expression
+/// -- mixing the two is a type error, which is the property that makes the
+/// exactness hold rather than a restriction imposed beside it.
+#[test]
+fn a_wide_brand_has_bigint_semantics_in_both_signature_positions() {
+    for name in ["c_int64", "c_uint64", "c_long", "c_ulong", "c_size_t", "c_ptrdiff_t"] {
+        let Some(snapshot) = snapshot(
+            &format!("wide-{name}"),
+            &format!(
+                "export function argument(n: {name}): bigint {{ return n + 1n; }}\n\
+             export function result(n: bigint): {name} {{ return (n + 1n) as {name}; }}"
+            ),
+        ) else {
+            return;
+        };
+        let lowered = hir::lower::lower(&snapshot);
+        assert!(lowered.diagnostics.is_empty(), "{name}: {:?}", lowered.diagnostics);
+        for which in ["argument", "result"] {
+            let func = lowered.program.funcs.iter().find(|f| f.name == which).unwrap();
+            let seen: Vec<_> = func
+                .params
+                .iter()
+                .map(|p| p.ty.clone())
+                .chain(std::iter::once(func.return_type.clone()))
+                .collect();
+            assert!(
+                seen.iter().all(|ty| *ty == hir::HirType::BigInt),
+                "{name}/{which}: a wide brand reached a non-bigint representation: {seen:?}"
+            );
+            // The one that matters: nothing routed through a double. A `f64`
+            // anywhere here is the loss this family exists to prevent, and it
+            // would still emit a correct `int64_t` prototype.
+            assert!(
+                !func.values.iter().any(|v| v.ty == hir::HirType::Float { bits: 64 }),
+                "{name}/{which}: a value passed through a double"
+            );
+        }
+    }
 }

@@ -94,9 +94,10 @@ fn prepare_with_types(
 
 #[path = "../../common/test-support/native_cases.rs"]
 mod native_cases;
-use native_cases::CASES;
+use native_cases::{CASES, WIDE_CASES};
 
 #[test]
+#[allow(clippy::too_many_lines)] // Two generated families and their C consumer.
 fn scalar_abi_matches_an_independently_compiled_c_library() {
     let published = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -108,15 +109,25 @@ fn scalar_abi_matches_an_independently_compiled_c_library() {
         .filter(|line| line.starts_with("export type c_") && line.contains("unique symbol"))
         .map(|line| line.split_whitespace().nth(2).unwrap())
         .collect();
+    // Both families together: a brand belongs to exactly one, and a brand in
+    // neither is a shipped scalar nothing checks against C.
+    let covered: std::collections::BTreeSet<_> =
+        CASES.iter().chain(WIDE_CASES).map(|case| case.0).collect();
     assert_eq!(
-        published,
-        CASES.iter().map(|case| case.0).collect(),
+        published, covered,
         "each shipped scalar needs an independent C ABI case"
     );
+    for wide in WIDE_CASES {
+        assert!(
+            !CASES.iter().any(|narrow| narrow.0 == wide.0),
+            "{} is in both families; one of them is describing it wrongly",
+            wide.0
+        );
+    }
     let mut ts = String::new();
     let mut header = "#include <stdint.h>\n#include <stddef.h>\n".to_owned();
     let mut implementation = "#include \"native.h\"\n".to_owned();
-    let mut caller = "#include \"program.h\"\nint main(void) {\n".to_owned();
+    let mut caller = "#include \"program.h\"\n#include \"native.h\"\nint main(void) {\n".to_owned();
     for (i, (brand, c_type, input, expected)) in CASES.iter().enumerate() {
         write!(
             ts,
@@ -143,6 +154,43 @@ fn scalar_abi_matches_an_independently_compiled_c_library() {
             caller,
             "if (argument_{i}({input}) != {expected} || result_{i}() != 7.25 || wide_result_{i}() != {expected}) return {};",
             i + 1
+        )
+        .unwrap();
+    }
+    // The 64-bit family, whose values a `double` cannot carry. A round trip is
+    // the whole test: C seeds a value, TypeScript reads it and hands it back,
+    // and C compares. Nothing here is spelled as a `number`, which is the
+    // point -- the previous version of this file routed every one of these
+    // through one and returned INT64_MAX as INT64_MIN.
+    for (i, (brand, c_type, literal, c_literal)) in WIDE_CASES.iter().enumerate() {
+        write!(
+            ts,
+            "declare function wide_give_{i}(): {brand};\n\
+             declare function wide_take_{i}(n: {brand}): void;\n\
+             export function wide_round_{i}(): void {{ wide_take_{i}(wide_give_{i}()); }}\n\
+             export function wide_literal_{i}(): void {{ wide_take_{i}({literal} as {brand}); }}\n"
+        )
+        .unwrap();
+        write!(
+            header,
+            "{c_type} wide_give_{i}(void);\nvoid wide_take_{i}({c_type});\n{c_type} wide_seen_{i}(void);\nvoid wide_reset_{i}(void);\n"
+        )
+        .unwrap();
+        write!(
+            implementation,
+            "static {c_type} wide_held_{i};\n\
+             {c_type} wide_give_{i}(void) {{ return ({c_type})({c_literal}); }}\n\
+             void wide_take_{i}({c_type} n) {{ wide_held_{i} = n; }}\n\
+             {c_type} wide_seen_{i}(void) {{ return wide_held_{i}; }}\n\
+             void wide_reset_{i}(void) {{ wide_held_{i} = 0; }}\n"
+        )
+        .unwrap();
+        writeln!(
+            caller,
+            "wide_round_{i}(); if (wide_seen_{i}() != ({c_type})({c_literal})) return {};\n\
+             wide_reset_{i}(); wide_literal_{i}(); if (wide_seen_{i}() != ({c_type})({c_literal})) return {};",
+            100 + i * 2,
+            101 + i * 2,
         )
         .unwrap();
     }
@@ -341,17 +389,26 @@ fn unrelated_declarations_cannot_supply_a_calls_abi() {
         .filter(|line| line.starts_with("export type c_") && line.contains("unique symbol"))
     {
         let brand = declaration.split_whitespace().nth(2).unwrap();
+        // The base the brand is written over, read from the declaration rather
+        // than from a list here: a second list would be a second derivation of
+        // something this line already says, and it would go stale the first
+        // time a brand moved between the families.
+        let (base, unit) = if declaration.contains("= bigint") {
+            ("bigint", "1n")
+        } else {
+            ("number", "1")
+        };
         for (position, call) in [
             (
                 "parameter",
                 format!(
-                    "declare function native_value(n: {brand}): void;\nexport function run(n: number): void {{ native_value(n as {brand}); }}"
+                    "declare function native_value(n: {brand}): void;\nexport function run(n: {base}): void {{ native_value(n as {brand}); }}"
                 ),
             ),
             (
                 "return",
                 format!(
-                    "declare function native_value(): {brand};\nexport function run(): number {{ return native_value() + 0.25; }}"
+                    "declare function native_value(): {brand};\nexport function run(): {base} {{ return native_value() + {unit}; }}"
                 ),
             ),
         ] {
@@ -395,7 +452,10 @@ fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
         import { fabs, fabsf, sqrtf, pow, fmod, floor, ceil, trunc, copysign, ldexp } from "c:math";
         import * as math from "c:math";
         export function run(n: number): number {
-            return abs(n as c_int) + labs(n as c_long)
+            // `long` is 64 bits here and bigint-branded. A literal rather than
+            // `BigInt(n)`, which is a runtime call this translation unit does
+            // not link -- the value is the same one `(long)(-3.75)` gave.
+            return abs(n as c_int) + Number(labs(-3n as c_long))
                 + fabs(-1.25 as c_double) + fabsf(-1.25 as c_float)
                 + math.sqrt(4 as c_double) + sqrtf(4 as c_float)
                 + pow(2 as c_double, 3 as c_double)
@@ -480,7 +540,7 @@ fn type_headers_preserve_brands_and_boolean_abi() {
         import type { bool } from "c:stdbool";
         declare function native_alias(n: stdint.int32_t, length: size_t, flag: bool): bool;
         export function run(n: number): boolean {
-            return native_alias(n as stdint.int32_t, 1 as size_t, true);
+            return native_alias(n as stdint.int32_t, 1n as size_t, true);
         }
     "#;
     let Some((dir, prepared)) = prepare_with_types("type-headers", source, false) else {
@@ -557,7 +617,7 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
          import { local } from \"c:memory\";\n\
          export function go(timeout: number): number {\n\
          const fds = local<PollFd>();\n\
-         return poll(fds, 1 as Count, timeout as Timeout);\n\
+         return poll(fds, 1n as Count, timeout as Timeout);\n\
          }\n";
     let binding = |field: &str| {
         format!(

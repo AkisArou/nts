@@ -12,7 +12,10 @@ const CAPACITY = 64;
 export function readCount(fd: number, max: number): number {
   const buf = local<c_uint8>(CAPACITY);
   if (max > CAPACITY) return -1;
-  return read(fd as Fd, buf, max as Count);
+  // `size_t` and `ssize_t` are 64 bits here, so both are bigint-branded: the
+  // count converts on the way in and the result on the way out, and neither
+  // passes through a double. `Number` is safe on a result bounded by CAPACITY.
+  return Number(read(fd as Fd, buf, BigInt(max) as Count));
 }
 
 // Reads into storage TS owns and then reads it back, so a buffer that arrived
@@ -20,7 +23,7 @@ export function readCount(fd: number, max: number): number {
 export function readSum(fd: number, max: number): number {
   const buf = local<c_uint8>(CAPACITY);
   if (max > CAPACITY) return -1;
-  const got = read(fd as Fd, buf, max as Count);
+  const got = Number(read(fd as Fd, buf, BigInt(max) as Count));
   if (got < 0) return got;
   let total = 0;
   for (let i = 0; i < got; i++) total += buf[i];
@@ -34,5 +37,5 @@ export function writeBytes(fd: number, first: number, second: number): number {
   const buf = local<c_uint8>(CAPACITY);
   buf[0] = first;
   buf[1] = second;
-  return write(fd as Fd, buf, 2 as Count);
+  return Number(write(fd as Fd, buf, 2n as Count));
 }

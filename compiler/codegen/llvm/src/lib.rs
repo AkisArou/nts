@@ -3339,6 +3339,23 @@ fn conversion(from: &HirType, to: &HirType, func: &Func) -> Result<&'static str,
                 "zext"
             }
         }
+        // A native 64-bit integer and the bigint a program holds it in. The ABI
+        // stays `i64`; `BigInt` is the wider `i128` the source value lives in,
+        // so one direction widens and the other truncates.
+        //
+        // **Widening reads the source's signedness**, which is the whole point:
+        // `UINT64_MAX` must become 18446744073709551615, not -1. `zext` for an
+        // unsigned source, `sext` for a signed one -- the same rule the integer
+        // arm above states, and the reason this is not folded into it is that
+        // `BigInt` is its own `HirType` rather than a wide `Int`.
+        (HirType::Int { signed: from_signed, .. }, HirType::BigInt) => {
+            if *from_signed { "sext" } else { "zext" }
+        }
+        // And back: the low 64 bits, which is `BigInt.asIntN(64, x)` for a
+        // signed destination and `asUintN` for an unsigned one. Both are the
+        // same instruction -- what differs is how the bits are read afterwards,
+        // and that is the destination's business.
+        (HirType::BigInt, HirType::Int { .. }) => "trunc",
         _ => {
             return Err(refuse(
                 func,

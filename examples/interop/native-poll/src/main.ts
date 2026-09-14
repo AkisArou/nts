@@ -41,7 +41,9 @@ function waitRequests(requests: Ptr<PollFd>, count: number, timeoutMs: number): 
   // `&requests->revents`. The address is taken before the call and read after
   // it, so it must observe the write libc performed through it.
   const events = addrOf(requests.revents);
-  const ready = poll(requests, count as c_ulong, timeoutMs as c_int);
+  // `nfds_t` is 64 bits here, so its brand is a bigint: a count crossing into
+  // C is converted explicitly rather than through a double.
+  const ready = poll(requests, BigInt(count) as c_ulong, timeoutMs as c_int);
   if (ready <= 0) return ready;
   // Reading this address must observe the write performed inside libc.
   let readable = (events[0] & 1) !== 0 ? 1 : 0;

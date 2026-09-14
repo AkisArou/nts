@@ -8,7 +8,7 @@ use std::{fmt::Write, process::Command};
 
 #[path = "../../common/test-support/native_cases.rs"]
 mod native_cases;
-use native_cases::CASES;
+use native_cases::{CASES, WIDE_CASES};
 
 fn prepare(name: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
     prepare_with_provider(name, source, hir::Provider::NoGc)
@@ -612,6 +612,23 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
             if (data[0] != 11 || data[1] != ({ctype})({expected}) || data[2] != 7 || data[3] != 23) return {};
         }}", i * 2 + 1, i * 2 + 2).unwrap();
     }
+    // The 64-bit family through the same memory operations. Exactness has to
+    // hold in *this* backend too: the C one and this one convert between `i64`
+    // and the bigint separately, and a widening that read the destination's
+    // signedness instead of the source's would turn UINT64_MAX into -1 here
+    // while the C backend stayed right.
+    let wide_brands = WIDE_CASES.iter().map(|case| case.0).collect::<std::collections::BTreeSet<_>>();
+    let wide_brands = wide_brands.into_iter().collect::<Vec<_>>().join(", ");
+    writeln!(source, "import type {{ {wide_brands} }} from \"c:types\";").unwrap();
+    for (i, (brand, ctype, literal, c_literal)) in WIDE_CASES.iter().enumerate() {
+        writeln!(source, "export function wide_mem_{i}(p: Ptr<{brand}>): void {{
+            p[1] = {literal} as {brand};
+        }}").unwrap();
+        writeln!(caller, "{{ {ctype} slot[2] = {{0, 0}};
+            wide_mem_{i}(slot);
+            if (slot[1] != ({ctype})({c_literal})) return {};
+        }}", 200 + i).unwrap();
+    }
     source.push_str("declare function mutate(p: Ptr<c_uint8>): void;
         export function acrossCall(p: Ptr<c_uint8>, alias: Ptr<c_uint8>): number {
             const before = alias[0]; mutate(p); return before * 100 + alias[0];
@@ -783,7 +800,7 @@ fn a_typed_buffer_where_read_wants_void_is_refused_by_the_witness() {
          import type { c_uint8 } from \"c:types\";\n\
          export function readCount(fd: number): number {\n\
          const buf = local<c_uint8>(8);\n\
-         return read(fd as Fd, buf, 8 as Count);\n\
+         return Number(read(fd as Fd, buf, 8n as Count));\n\
          }\n";
     let Some((dir, prepared)) =
         prepare_with_files("native-fd-typed", source, hir::Provider::NoGc, &declarations)
@@ -837,7 +854,9 @@ fn an_inline_struct_member_agrees_with_the_system_header() {
     let source = "import type { Ptr, Struct, c_long } from 'c:types';
         type TimeVal = Struct<{tv_sec: c_long; tv_usec: c_long}, 'timeval'>;
         type ITimerVal = Struct<{it_interval: TimeVal; it_value: TimeVal}, 'itimerval'>;
-        export function seconds(p: Ptr<ITimerVal>): number { return p.it_value.tv_sec; }";
+        // `long` is 64 bits here and so bigint-branded; the conversion out is
+        // explicit rather than through a double.
+        export function seconds(p: Ptr<ITimerVal>): number { return Number(p.it_value.tv_sec); }";
     let Some((dir, prepared)) = prepare("inline-struct-member", source) else {
         return;
     };
@@ -1070,7 +1089,7 @@ fn authored_allocator_symbols_cannot_redefine_storage_operations() {
         declare function malloc(bytes: c_size_t): Ptr<c_int> | null;
         export function run(): number {
             const a = allocate<c_int>(4);
-            const b = malloc(4 as c_size_t);
+            const b = malloc(4n as c_size_t);
             if (a !== null) free(a);
             if (b !== null) free(b);
             return 1;

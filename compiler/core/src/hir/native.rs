@@ -566,6 +566,27 @@ impl Scalar {
 /// Recognize the reserved native brand shape itself, not the name of a type
 /// alias somebody happened to intern elsewhere. An arbitrary primitive/object
 /// intersection does not acquire a representation through this function.
+impl Scalar {
+    /// Whether this C type has values a TypeScript `number` cannot hold.
+    ///
+    /// A `double` represents every integer up to 2^53 exactly and nothing
+    /// above it, so the 64-bit spellings need `bigint` and the narrower ones do
+    /// not. On this target that is the whole LP64 family -- `long`, `size_t`
+    /// and `ptrdiff_t` are 64 bits here, and giving `int64_t` exact values
+    /// while its own underlying spelling rounded would be the worse of both.
+    ///
+    /// Target-dependent, and stated rather than assumed: LP64 is the model this
+    /// compiler implements, and a target where `long` is 32 bits would move
+    /// those three back.
+    #[must_use]
+    pub fn needs_exact_integer(self) -> bool {
+        matches!(
+            self,
+            Self::Int64 | Self::UInt64 | Self::Long | Self::ULong | Self::Size | Self::Ptrdiff
+        )
+    }
+}
+
 #[must_use]
 pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     let TypeKind::Intersection(parts) = &snapshot.types.get(ty.0 as usize)?.kind else {
@@ -574,11 +595,12 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     if parts.len() != 2 {
         return None;
     }
-    let mut number = false;
+    let mut base = None;
     let mut brand = None;
     for part in parts {
         match &snapshot.types.get(part.0 as usize)?.kind {
-            TypeKind::Number => number = true,
+            TypeKind::Number => base = Some(false),
+            TypeKind::BigInt => base = Some(true),
             TypeKind::Object { properties } if properties.len() == 1 => {
                 let property = &properties[0];
                 if !property.readonly || property.optional || property.kind != MemberKind::Field {
@@ -598,7 +620,13 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
             _ => return None,
         }
     }
-    number.then_some(brand).flatten()
+    // The base has to be the one the brand's range needs, and a mismatch is
+    // refused rather than reinterpreted. A `c_int64` spelled over `number`
+    // would silently be the lossy thing this pairing exists to prevent -- and
+    // it would still emit a correct `int64_t` prototype, so nothing downstream
+    // would notice.
+    let brand = brand?;
+    (base? == brand.needs_exact_integer()).then_some(brand)
 }
 
 mod schema;

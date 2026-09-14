@@ -60,14 +60,27 @@ declare module "c:types" {
   export type c_uint16 = number & { readonly __c_uint16: unique symbol };
   export type c_int32 = number & { readonly __c_int32: unique symbol };
   export type c_uint32 = number & { readonly __c_uint32: unique symbol };
-  // LP64 native ABI (checked by the generated C). JavaScript number precision
-  // still applies: integers outside the exact number range may round on return.
-  export type c_int64 = number & { readonly __c_int64: unique symbol };
-  export type c_uint64 = number & { readonly __c_uint64: unique symbol };
-  export type c_long = number & { readonly __c_long: unique symbol };
-  export type c_ulong = number & { readonly __c_ulong: unique symbol };
-  export type c_size_t = number & { readonly __c_size_t: unique symbol };
-  export type c_ptrdiff_t = number & { readonly __c_ptrdiff_t: unique symbol };
+  // LP64 native ABI, over `bigint` rather than `number`: a double holds every
+  // integer up to 2^53 exactly and nothing above it, so these six carry values
+  // a `number` cannot. Measured rather than assumed -- a round trip through a
+  // `number`-based `c_int64` returned INT64_MAX as INT64_MIN, with a correct
+  // `int64_t` prototype at both ends.
+  //
+  // Arithmetic on them is ordinary bigint arithmetic; the brand selects the C
+  // boundary type and does not wrap each intermediate. A value stored into
+  // signed 64-bit storage normalizes like `BigInt.asIntN(64, x)` and unsigned
+  // like `asUintN`, and one loaded back is the exact signed or unsigned value.
+  //
+  // `long`, `size_t` and `ptrdiff_t` are 64 bits on this target, and giving
+  // `int64_t` exact values while its own underlying spelling rounded would be
+  // the worse of both. A target where `long` is 32 bits would move them back;
+  // LP64 is the model implemented here.
+  export type c_int64 = bigint & { readonly __c_int64: unique symbol };
+  export type c_uint64 = bigint & { readonly __c_uint64: unique symbol };
+  export type c_long = bigint & { readonly __c_long: unique symbol };
+  export type c_ulong = bigint & { readonly __c_ulong: unique symbol };
+  export type c_size_t = bigint & { readonly __c_size_t: unique symbol };
+  export type c_ptrdiff_t = bigint & { readonly __c_ptrdiff_t: unique symbol };
   export type c_float = number & { readonly __c_float: unique symbol };
   export type c_double = number & { readonly __c_double: unique symbol };
 }

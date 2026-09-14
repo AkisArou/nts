@@ -972,11 +972,56 @@ fn is_module_declaration(kind: u16) -> bool {
 /// program used something new. This asks the question directly instead, so a
 /// construct nobody has seen yet is classified correctly the first time: it
 /// carries a statement or it does not.
+/// Whether a `VARIABLE_STATEMENT` has an initializer to run.
+///
+/// **An ambient one does not, and that is the whole difference.**
+/// [`is_module_statement`] counts a variable statement as code because "a
+/// declaration whose initializer is code runs at evaluation time, and its
+/// position among the other statements is observable" -- which is exactly
+/// right, and says nothing about a declaration that has no initializer.
+///
+/// A generated binding is full of them. An interface's `static final String
+/// KIND` cannot be `static readonly` in TypeScript -- that is class syntax --
+/// so it renders as `const KIND: "task";` inside a namespace, and one of those
+/// anywhere made [`carries_code`] answer yes for the whole `declare module`.
+/// `examples/interop/android-shape` was refused entire, at line 1 column 1, for
+/// a constant that runs nothing.
+///
+/// The initializer is found the way `initializer_function` and
+/// `collect_module_scope` find it: the last child that is neither the name nor
+/// a type annotation, by what it *is* rather than by what it is not.
+fn runs_an_initializer(probe: &FuncBuilder, statement: NodeId) -> bool {
+    fn declarations(probe: &FuncBuilder, id: NodeId, into: &mut Vec<NodeId>) {
+        for child in probe.children(id) {
+            if probe.kind_of(child) == Some(syntax::VARIABLE_DECLARATION) {
+                into.push(child);
+            } else {
+                declarations(probe, child, into);
+            }
+        }
+    }
+    let mut found = Vec::new();
+    declarations(probe, statement, &mut found);
+    found.iter().any(|declaration| {
+        let children = probe.children(*declaration);
+        let name = children.first().copied();
+        children.iter().rev().any(|child| {
+            Some(*child) != name
+                && !syntax::is_type_node(probe.kind_of(*child).unwrap_or_default())
+        })
+    })
+}
+
 fn carries_code(probe: &FuncBuilder, id: NodeId) -> bool {
     probe.children(id).iter().any(|child| {
         let Some(kind) = probe.kind_of(*child) else {
             return false;
         };
+        // A variable statement with nothing to run is a declaration, however
+        // it is spelled; see `runs_an_initializer`.
+        if kind == syntax::VARIABLE_STATEMENT && !runs_an_initializer(probe, *child) {
+            return false;
+        }
         if is_module_statement(kind) {
             return true;
         }
@@ -6369,14 +6414,31 @@ fn provided_representation(
     None
 }
 
+/// The *source* representation of a C scalar brand, which is not its ABI.
+///
+/// The ABI stays whatever `Scalar::representation` says: `int64_t` is still
+/// `i64` at the boundary and the emitted prototype does not move. What this
+/// decides is the type a TypeScript value of the brand has in between, and for
+/// the 64-bit spellings that has to be a bigint -- routing one through a double
+/// is the loss the pairing exists to prevent, and it happens with a correct
+/// `int64_t` prototype at both ends, where no check against a real header can
+/// see it.
+fn brand_representation(brand: super::native::Scalar) -> HirType {
+    if brand.needs_exact_integer() {
+        HirType::BigInt
+    } else {
+        HirType::NUMBER
+    }
+}
+
 fn representation_of(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     path: &mut Vec<TypeId>,
     subst: &Substitution,
 ) -> Option<HirType> {
-    if super::native::scalar(snapshot, ty).is_some() {
-        return Some(HirType::NUMBER);
+    if let Some(brand) = super::native::scalar(snapshot, ty) {
+        return Some(brand_representation(brand));
     }
     if let Some(name) = super::native::pointer(snapshot, ty) {
         return Some(HirType::NativePointer(name));
