@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 13;
+pub const SCHEMA_VERSION: u32 = 14;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -622,12 +622,22 @@ pub struct NodeRecord {
     pub flags: u32,
     /// Modifier keywords written on this declaration.
     pub modifiers: DeclarationModifiers,
-    /// Explicit `@ntsAbi` tag on this function declaration. Unknown values are
-    /// preserved so lowering refuses them rather than silently choosing an ABI.
-    pub native_abi: Option<String>,
+    /// Sparse declaration attributes. A box keeps annotation strings/lists out
+    /// of every ordinary AST node; only tagged declarations allocate them.
+    pub native: Option<Box<NativeAttributes>>,
     pub data: NodeData,
     /// Resolved text, for nodes whose data is a string index.
     pub text: Option<String>,
+}
+
+/// Explicit native contracts from leading declaration documentation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeAttributes {
+    /// Unknown and duplicate ABI tags survive for lowering to diagnose.
+    pub abi: Option<String>,
+    /// None is unclassified; Some(empty) is a malformed explicit annotation.
+    /// Named pointer parameters may not be retained or returned by the callee.
+    pub no_escape: Option<Vec<String>>,
 }
 
 /// Why a snapshot was rejected.
@@ -755,7 +765,7 @@ mod tests {
             symbol: None,
             flags: 0,
             modifiers: DeclarationModifiers::default(),
-            native_abi: None,
+            native: None,
             data: NodeData::Children {
                 present: 0,
                 small: 0,

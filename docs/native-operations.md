@@ -47,7 +47,8 @@ native storage access before choosing the aggregate and allocation APIs.
 - Indices must be finite integers representable as signed 64-bit offsets on the
   currently supported native targets. The complete access must designate live,
   correctly aligned, initialized storage for reads, and writable storage for
-  writes. These are caller obligations; there is no bounds or lifetime check.
+  writes. These are caller obligations for raw pointers. Local-storage escape checks
+  described below do not provide general bounds or heap-lifetime checking.
   Negative indices are valid only when they still designate an element of the
   same allocation. Invalid accesses and out-of-range integer conversions have
   no portable behavior promised by this slice.
@@ -68,7 +69,7 @@ native storage access before choosing the aggregate and allocation APIs.
 ## Second executable slice: borrowed native structs
 
 [The poll example](../examples/interop/native-poll/src/main.ts) now calls a real
-C library from TS. C owns a pipe and a `struct pollfd`; TS sets its fields,
+C library from TS. Its first version borrowed a `struct pollfd` from C; TS sets its fields,
 calls libc's `poll`, and observes the result through a previously taken address:
 
 ```ts
@@ -118,23 +119,110 @@ implementation and compare `pollfd` against the platform's `<poll.h>`. They run
 C and LLVM output; the poll case runs with both no-GC and reference counting.
 Changing only a generated LLVM field offset makes the unchanged C consumer fail.
 
-This slice targets the current Linux LP64 ABI. Inline nested aggregates, fixed
-arrays, unions, packed fields, bitfields, native const/volatile qualifiers,
-by-value calls, local allocation, `sizeof` in TS, and explicit aggregate copying
-remain unimplemented. Directly constructing a `Struct` schema as a JS object is
+This slice targets the current Linux LP64 ABI. Inline nested aggregates and array fields, unions, packed fields, bitfields,
+native const/volatile qualifiers, by-value calls, and explicit aggregate copying
+remain unimplemented. Fixed local array blocks, local allocation, and `sizeof`
+are implemented by the next slice below. Directly constructing a `Struct` schema as a JS object is
 refused. The poll declaration is hand-written and tested against the system
 header; it is not a header importer. Generated definitions and the original C
 header's definitions of the same tag must currently live in separate translation
 units, as the example's independent layout check does.
 
+## Third executable slice: TS-owned native storage
+
+The [poll example](../examples/interop/native-poll/src/main.ts) now creates its
+request storage in TS. The C caller only supplies file descriptors:
+
+```ts
+import { local, sizeof } from "c:memory";
+import { malloc, free } from "c:stdlib";
+import type { PollFd } from "c:poll";
+
+const request = local<PollFd>();       // one zero-initialized native struct
+const pair = local<PollFd>(2);        // two contiguous, zero-initialized elements
+request.fd = fd;
+pair[1].fd = otherFd;
+
+const heap = malloc<PollFd>(2 * sizeof<PollFd>()); // byte count, not element count
+if (heap !== null) {
+  try {
+    heap[0].fd = fd;
+    // Initialize every field that C will read, then call the library.
+  } finally {
+    free(heap);
+  }
+}
+```
+
+`local<T>()` and `local<T>(count)` return `Ptr<T>`. A count must be a positive
+compile-time constant (literals, literal-valued bindings, or constant arithmetic).
+Each function has a 65,536-byte source storage budget, including struct padding.
+Storage is naturally aligned and zero initialized on executing `local`.
+Assigning the pointer aliases the same storage. No aggregate copy is implied.
+The layout routine lives in HIR, shared with both emitters and `sizeof<T>()`;
+C still independently asserts size, alignment, and offsets.
+
+Local addresses cannot be returned, stored in native or managed storage,
+captured by closures, freed, or passed to a callee without a borrowing contract.
+Derived field/element addresses and control-flow aliases carry the restriction.
+Direct TS callees earn their borrowing facts from their bodies; unknown or
+recursive summaries remain unproved. Native calls require an explicit declaration
+contract, for example:
+
+```ts
+/** Uses the array synchronously; retains and returns no address into it.
+ * @ntsNoEscape fds
+ */
+export function poll(fds: Ptr<PollFd>, count: c_ulong, timeout: c_int): c_int;
+```
+
+This annotation is a borrowing promise made by the binding author, not proof
+about a C implementation. The callee must not retain or return an address into
+the storage, nor free, reallocate, or otherwise invalidate that storage. It may
+read and write live elements within the supplied bounds. Merely not retaining
+the address is insufficient: a deallocator cannot truthfully carry this contract.
+It names pointer parameters; missing names, nonpointer names,
+empty tags, and duplicates are refused. Unknown retention never means safe to
+borrow. Existing documentation can share the leading JSDoc block.
+
+This first local-storage contract also refuses allocation sites inside loops and
+any function that suspends. Allocate fixed scratch storage outside a loop and
+reuse it explicitly. The HIR inliner does not transplant a local-storage function
+into another frame. These restrictions prevent per-site stack slots from being
+reused while an earlier alias survives. They are checked before suspension and
+again by the prepared-HIR verifier.
+
+`sizeof<T>()` is the complete native storage size in bytes, including padding.
+It takes a type, creates no value, and has no runtime cost. Managed object types
+and incomplete struct schemas have no native payload size. A pointer type itself
+has pointer size, including an opaque pointer.
+
+`malloc<T>(byteCount)` calls C's allocator with the byte count after checking it.
+Nonfinite, negative, fractional, undersized (less than `sizeof<T>()`), and above
+`Number.MAX_SAFE_INTEGER` counts return null without calling malloc. Zero returns
+null deterministically. Allocation failure also returns null. Arithmetic before
+the call is still TS number arithmetic; these checks do not recover precision
+already lost while computing a number. Storage is uninitialized, suitably aligned
+for supported native types, and receives no managed header or automatic cleanup.
+`free(null)` is a no-op. A successful allocation's base address must be freed
+exactly once; aliases must not be used afterwards. Heap ownership, arbitrary
+pointer bounds, and those temporal obligations remain manual until ResourceFlow.
+
+Execution tests use a separately compiled C witness for zeroing, alignment,
+stride, and writes. An interposed allocator verifies exact byte counts, invalid
+counts making no call, real allocation failure, and cleanup. It consumes the
+allocated pointer so optimization cannot erase the allocation being measured.
+Removing only the integral-byte check from generated LLVM makes the unchanged
+caller fail. Refusal controls exercise returns, joins, field addresses, captures,
+stores, unclassified calls, freeing locals, suspension, loops, and the stack
+budget. The valid local-storage function stays in each refusal fixture.
+
 ## Direction for the next executable slices
 
-1. **Allocation and more native storage.** Exercise local storage, fixed arrays,
-   `sizeof`, allocation failure, byte-count overflow, alignment, `void *`, and
-   const-qualified pointers. Prefer a typed `malloc` that keeps malloc's
-   byte-count convention over a new allocation vocabulary. Decide explicit copy
-   semantics before lowering copies. Derive foreign declarations/layouts from
-   actual C headers rather than expanding a library of hand-written ABI copies.
+1. **More native storage and header-derived bindings.** `void *`, const-qualified
+   pointers, inline arrays/aggregates, and explicit copy semantics still need
+   executable examples. Derive foreign declarations/layouts from actual C headers
+   rather than expanding a library of hand-written ABI copies.
 2. **Callbacks, then retained asynchronous I/O.** Let application code use TS
    callback syntax, while binding information specifies the C function pointer,
    context, retention, thread, and exception contract. Prove synchronous callback

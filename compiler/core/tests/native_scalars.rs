@@ -156,7 +156,7 @@ fn managed_abi_belongs_only_to_the_annotated_declaration() {
         // Assert attachment within this fixture, independent of tags on the
         // imported library's own declarations.
         .filter(|node| snapshot.sources[node.origin.location.file.0 as usize].display_path.file_name() == Some("main.ts"))
-        .filter_map(|node| node.native_abi.as_deref())
+        .filter_map(|node| node.native.as_ref().and_then(|n| n.abi.as_deref()))
         .collect();
     assert_eq!(annotations, ["managed", "nonsense"]);
     let lowered = hir::lower::lower(&snapshot);
@@ -278,5 +278,135 @@ fn scalar_pointees_survive_return_only_declarations_and_unrelated_types() {
             let call = run.values.iter().find(|op| matches!(op.kind, hir::OpKind::Call { .. })).unwrap();
             assert_eq!(call.ty, expected, "{brand}");
         }
+    }
+}
+
+#[test]
+fn local_storage_and_sizeof_lower_from_the_authored_types() {
+    let Some(snapshot) = snapshot("local-storage", r#"
+        import { local, sizeof, addrOf } from "c:memory";
+        import { malloc, free } from "c:stdlib";
+        import type { Ptr, Struct } from "c:types";
+        type Request = Struct<{ fd: c_int; events: c_int16; revents: c_int16 }, "pollfd">;
+        /** Poll only borrows the request array.
+         * @ntsNoEscape p
+         */
+        declare function poll(p: Ptr<Request>, count: c_ulong, timeout: c_int): c_int;
+        function read(p: Ptr<c_int>): number { return p[0]; }
+        export function run(): number {
+            const p = local<Request>(2);
+            p[0].fd = -1; p[1].fd = -1;
+            const r = poll(p, 2 as c_ulong, 0 as c_int);
+            return r + read(addrOf(p, "fd")) + sizeof<Request>() + sizeof<c_int>();
+        }
+        export function heap(bytes: number): number {
+            const p = malloc<c_int>(bytes);
+            if (p === null) return -1;
+            p[0] = 31;
+            const result = p[0];
+            free(p);
+            return result;
+        }
+    "#) else { return; };
+    let prepared = hir::prepare(&snapshot).unwrap();
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(prepared.program.funcs.iter().any(|f| f.name == "run"));
+    assert!(prepared.program.funcs.iter().any(|f| f.name == "heap"));
+}
+
+#[test]
+fn local_addresses_cannot_outlive_or_free_their_storage() {
+    for (name, body, reason) in [
+        ("return", "export function bad(): Ptr<c_int> { return local<c_int>(); }", "escapes"),
+        ("field-return", "export function bad(): Ptr<c_int> { return addrOf(local<S>(), 'x'); }", "escapes"),
+        ("join-return", "export function bad(n: number): Ptr<c_int> { const p = local<c_int>(); const q = n > 0 ? p : local<c_int>(); return q; }", "escapes"),
+        ("global", "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } export function bad(): void { held = local<c_int>(); }", "module-scope variable"),
+        ("object", "export function bad(): {p: Ptr<c_int>} { return {p: local<c_int>()}; }", "escapes"),
+        ("closure", "export function bad(): () => number { const p = local<c_int>(); return () => p[0]; }", "escapes"),
+        ("store", "export function bad(out: Ptr<Ptr<c_int>>): void { out[0] = local<c_int>(); }", "escapes"),
+        ("unknown-call", "declare function consume(p: Ptr<c_int>): void; export function bad(): void { consume(local<c_int>()); }", "escapes"),
+        ("return-helper", "function alias(p: Ptr<c_int>): Ptr<c_int> { return p; } export function bad(): number { return alias(local<c_int>())[0]; }", "escapes"),
+        ("store-helper", "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } function keep(p: Ptr<c_int>): void { held = p; } export function bad(): void { keep(local<c_int>()); }", "module-scope variable"),
+        ("free", "export function bad(): void { const p = local<c_int>(); const q = addrOf(p, 0); free(q); }", "escapes"),
+        ("async", "export async function bad(): Promise<number> { const p = local<c_int>(); return p[0]; }", "suspending"),
+        ("generator", "export function* bad(): Generator<number> { const p = local<c_int>(); yield p[0]; }", "suspending"),
+        ("loop", "export function bad(n: number): number { let r=0; for(let i=0;i<n;i++) r+=local<c_int>()[0]; return r; }", "inside a loop"),
+        ("budget", "export function bad(): number { const a=local<c_int>(10000); const b=local<c_int>(10000); return a[0]+b[0]; }", "budget"),
+        ("dynamic", "export function bad(n: number): number { return local<c_int>(n)[0]; }", "compile-time constant"),
+        ("zero", "export function bad(): number { return local<c_int>(0)[0]; }", "positive fixed count"),
+        ("fraction", "export function bad(): number { return local<c_int>(1.5)[0]; }", "positive fixed count"),
+        ("size-managed", "export function bad(): number { return sizeof<{x:number}>(); }", "complete native storage"),
+    ] {
+        let source = format!(r#"
+            import {{ local, sizeof, addrOf }} from "c:memory";
+            import {{ free }} from "c:stdlib";
+            import type {{ Ptr, Struct }} from "c:types";
+            type S = Struct<{{x:c_int}}>;
+            export function good(): number {{ const p = local<c_int>(); p[0]=23; return p[0]; }}
+            {body}
+        "#);
+        let Some(snapshot) = snapshot(&format!("local-{name}"), &source) else { return; };
+        let prepared = hir::prepare(&snapshot).unwrap();
+        assert!(prepared.program.funcs.iter().any(|f| f.name == "good"), "{name}: {:?}", prepared.diagnostics);
+        assert!(!prepared.program.funcs.iter().any(|f| f.name == "bad"), "{name} was accepted: {:?}", prepared.diagnostics);
+        assert!(prepared.diagnostics.iter().any(|d| d.message.contains(reason)), "{name}: {:?}", prepared.diagnostics);
+    }
+}
+
+#[test]
+fn no_escape_annotations_are_checked_and_scoped_to_their_declaration() {
+    for (name, tag, signature, expected) in [
+        ("documented", "/** Reads synchronously.\n * @ntsNoEscape p\n */", "p: Ptr<c_int>", true),
+        ("empty", "/** @ntsNoEscape */", "p: Ptr<c_int>", false),
+        ("missing", "", "p: Ptr<c_int>", false),
+        ("ordinary-comment", "/* @ntsNoEscape p */", "p: Ptr<c_int>", false),
+        ("misspelled", "/** @ntsNoEscape absent */", "p: Ptr<c_int>", false),
+        ("duplicate", "/** @ntsNoEscape p p */", "p: Ptr<c_int>", false),
+    ] {
+        let Some(snapshot) = snapshot(&format!("no-escape-{name}"), &format!(r#"
+            import {{ local }} from "c:memory";
+            import type {{ Ptr }} from "c:types";
+            {tag}
+            declare function consume({signature}): c_int;
+            export function run(): number {{ return consume(local<c_int>()); }}
+        "#)) else { return; };
+        let prepared = hir::prepare(&snapshot).unwrap();
+        assert_eq!(prepared.diagnostics.is_empty(), expected, "{name}: {:?}", prepared.diagnostics);
+        assert_eq!(prepared.program.funcs.iter().any(|f| f.name == "run"), expected, "{name}");
+    }
+}
+
+#[test]
+fn prepared_storage_verifier_catches_corrupted_counts_and_borrow_contracts() {
+    let Some(snapshot) = snapshot("local-verifier", r#"
+        import { local } from "c:memory";
+        import type { Ptr } from "c:types";
+        /** @ntsNoEscape p */
+        declare function consume(p: Ptr<c_int>): c_int;
+        export function run(): number { return consume(local<c_int>()); }
+    "#) else { return; };
+    let prepared = hir::prepare(&snapshot).unwrap();
+    assert!(prepared.diagnostics.is_empty());
+    for kind in 0..4 {
+        let mut program = prepared.program.clone();
+        let mut changed = false;
+        for func in &mut program.funcs {
+            for op in &mut func.values {
+                match &mut op.kind {
+                    hir::OpKind::NativeLocal { count } if kind < 2 => {
+                        *count = if kind == 0 { 0 } else { u32::MAX };
+                        changed = true;
+                    }
+                    hir::OpKind::Call { callee: hir::Callee::Native(target), .. } if kind >= 2 => {
+                        let target = std::sync::Arc::make_mut(target);
+                        if kind == 2 { target.no_escape.fill(false); } else { target.no_escape.clear(); }
+                        changed = true;
+                    }
+                    _ => {},
+                }
+            }
+        }
+        assert!(changed);
+        assert!(hir::verify::verify(&program).is_err(), "mutation {kind}");
     }
 }

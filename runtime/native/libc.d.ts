@@ -46,6 +46,14 @@ declare module "c:types" {
 }
 
 declare module "c:memory" {
+  // Zero-initialized function-local storage; count is a positive compile-time
+  // constant. Local addresses cannot escape, suspend, or be freed manually.
+  /** @ntsAbi intrinsic */
+  export function local<T>(count?: number): Ptr<T>;
+  // Size in bytes, including native struct padding. Requires a complete type.
+  /** @ntsAbi intrinsic */
+  export function sizeof<T>(): number;
+
   import type { Ptr, Struct } from "c:types";
   // These operate on native storage, not JS temporaries. A field key preserves
   // its native type even though the field's value projects as a TS number.
@@ -78,6 +86,15 @@ declare module "c:stdbool" {
 declare module "c:stdlib" {
   // Hand-written, curated scalar bindings. Not generated from system headers.
   import type { c_int, c_long } from "c:types";
+
+  // Bytes, not elements. Invalid/nonintegral counts, counts below sizeof<T>(),
+  // counts above Number.MAX_SAFE_INTEGER, and allocator failure return null.
+  // Successful storage is uninitialized and must be explicitly freed.
+  /** @ntsAbi intrinsic */
+  export function malloc<T>(byteCount: number): import("c:types").Ptr<T> | null;
+  // free(null) does nothing. Only a live base address from malloc may be freed.
+  /** @ntsAbi intrinsic */
+  export function free<T>(pointer: import("c:types").Ptr<T> | null): void;
 
   export function abs(value: c_int): c_int;
   export function labs(value: c_long): c_long;

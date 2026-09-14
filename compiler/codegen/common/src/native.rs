@@ -49,6 +49,16 @@ impl Layouts {
 /// # Errors
 /// A tag has conflicting layouts, or a name cannot be represented in C.
 pub fn layouts(program: &Program) -> Result<Layouts, String> {
+    let storage = program.funcs.iter().flat_map(|f| &f.values).any(|v| matches!(v.kind,
+        nts_core::hir::OpKind::NativeMalloc { .. } | nts_core::hir::OpKind::NativeFree { .. }));
+    if storage {
+        for op in program.funcs.iter().flat_map(|f| f.blocks.iter().flat_map(|b| b.ops.iter().map(|v| f.value(*v)))) {
+            if let nts_core::hir::OpKind::Call { callee: nts_core::hir::Callee::Native(target), .. } = &op.kind
+                && matches!(target.name.as_str(), "malloc" | "free" | "nts_native_malloc") {
+                return Err(format!("native `{}` collides with the compiler's memory operations; use c:stdlib", target.name));
+            }
+        }
+    }
     let mut found = Layouts::default();
     for ty in program.funcs.iter().flat_map(|func| {
         std::iter::once(&func.return_type).chain(func.params.iter().map(|p| &p.ty)).chain(func.values.iter().map(|v| &v.ty))

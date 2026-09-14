@@ -29,7 +29,7 @@ pub mod syntax;
 pub use origin::{GeneratedReason, Origin, ScopeId};
 pub use schema::{
     Accessor, CallTarget, ConstantValue, DeclarationModifiers, HeritageKind, IndexSignature,
-    LiteralValue, ModuleId, ModuleRecord, NodeData, NodeId, NodeKind, NodeRecord, ParameterRecord,
+    LiteralValue, ModuleId, ModuleRecord, NodeData, NodeId, NodeKind, NodeRecord, NativeAttributes, ParameterRecord,
     MemberKind, PropertyRecord, SCHEMA_VERSION, SemanticSnapshot, SignatureId, SignatureRecord, SnapshotError,
     SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind, TypePredicate, TypeRecord, VariableKind,
 };

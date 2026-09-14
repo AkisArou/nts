@@ -193,7 +193,7 @@ mod tests {
             symbol,
             flags: 0,
             modifiers: DeclarationModifiers::default(),
-            native_abi: None,
+            native: None,
             data: NodeData::Children {
                 present: 0,
                 small: 0,

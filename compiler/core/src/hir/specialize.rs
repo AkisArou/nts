@@ -619,7 +619,7 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
             let kind = func.values[value.0 as usize].kind.clone();
             let produced = func.values[value.0 as usize].ty.clone();
             let updated = match kind {
-                kind @ (OpKind::NativeLoad { .. } | OpKind::NativeStore { .. } | OpKind::NativeIndexAddress { .. } | OpKind::ArraySet { .. }) =>
+                kind @ (OpKind::NativeMalloc { .. } | OpKind::NativeLoad { .. } | OpKind::NativeStore { .. } | OpKind::NativeIndexAddress { .. } | OpKind::ArraySet { .. }) =>
                     memory_operands(func, &mut rewritten, &mut count, &kind),
                 // Both operands of an operator at one type, which C picks for
                 // itself with its usual arithmetic conversions and never
@@ -723,6 +723,7 @@ fn memory_operands(
 ) -> Option<OpKind> {
     let native_index = HirType::Int { bits: 64, signed: true };
     match *kind {
+        OpKind::NativeMalloc { bytes } => Some(OpKind::NativeMalloc { bytes: convert(func, rewritten, count, bytes, &HirType::NUMBER) }),
         OpKind::NativeLoad { pointer, index } | OpKind::NativeIndexAddress { pointer, index } => {
             let index = convert(func, rewritten, count, index, &native_index);
             Some(if matches!(kind, OpKind::NativeLoad { .. }) { OpKind::NativeLoad { pointer, index } }

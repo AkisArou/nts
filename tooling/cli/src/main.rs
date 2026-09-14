@@ -1385,10 +1385,14 @@ fn render_shared_field(
     format!("%{index} = field.get.shared %{}.{field} over {arms} : {ty}", value.0)
 }
 
+#[allow(clippy::too_many_lines)] // One exhaustive HIR rendering dispatch.
 fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
     let ty = render(&op.ty);
     match &op.kind {
         OpKind::NativeLoad { pointer, index: offset } => format!("%{index} = native.load %{}[%{}] : {ty}", pointer.0, offset.0),
+        OpKind::NativeLocal { count } => format!("%{index} = native.local {count} : {ty}"),
+        OpKind::NativeMalloc { bytes } => format!("%{index} = native.malloc %{} : {ty}", bytes.0),
+        OpKind::NativeFree { pointer } => format!("native.free %{}", pointer.0),
         OpKind::NativeIndexAddress { pointer, index: offset } => format!("%{index} = native.index.addr %{}[%{}] : {ty}", pointer.0, offset.0),
         OpKind::NativeFieldAddress { pointer, field } => format!("%{index} = native.field.addr %{}.{field} : {ty}", pointer.0),
         OpKind::NativeStore { pointer, index, value } => format!("native.store %{}[%{}], %{}", pointer.0, index.0, value.0),

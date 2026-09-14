@@ -38,6 +38,7 @@ pub mod generics;
 pub mod globals;
 pub mod guards;
 pub mod interprocedural;
+pub mod layout;
 pub mod liveness;
 pub mod loops;
 pub mod presence;
@@ -50,6 +51,7 @@ pub mod lower;
 pub mod monomorphize;
 pub mod narrow;
 pub mod native;
+mod native_storage;
 /// Who owns what, and for how long: one answer per value, which the counting
 /// pass reads and does no reasoning of its own about.
 pub mod own;
@@ -727,6 +729,11 @@ pub enum OpKind {
     /// Indices count elements and must be signed native-width integers.
     NativeLoad { pointer: ValueId, index: ValueId },
     NativeStore { pointer: ValueId, index: ValueId, value: ValueId },
+    /// Fixed function-local zeroed storage. Count is positive and layout checked.
+    NativeLocal { count: u32 },
+    /// Byte count is a TS number, checked before conversion/allocation. Failure is null.
+    NativeMalloc { bytes: ValueId },
+    NativeFree { pointer: ValueId },
     /// Form an address, without reading storage or changing its lifetime.
     NativeIndexAddress { pointer: ValueId, index: ValueId },
     NativeFieldAddress { pointer: ValueId, field: u32 },
@@ -3196,6 +3203,14 @@ fn settle(lowered: &mut lower::Lowered) {
     // First of all: everything below reads the block graph, and a block nothing
     // can reach is not part of it. See `dce::prune_unreachable`.
     dce::prune_unreachable_blocks(&mut lowered.program);
+    let problems = native_storage::check(&lowered.program);
+    let mut refused = rustc_hash::FxHashSet::default();
+    for (at, value, why) in problems {
+        let func = &lowered.program.funcs[at];
+        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error("NTS2006", why, func.value(value).origin.location));
+        refused.insert(func.name.clone());
+    }
+    lowered.program.funcs.retain(|f| !refused.contains(&f.name));
     // Before `put_bases_first`, which reads bases to decide field order. A
     // token layout is empty, so the base this gives it moves no field -- but
     // the ordering is stated rather than left to look arbitrary, because a

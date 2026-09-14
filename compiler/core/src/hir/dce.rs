@@ -103,6 +103,10 @@ const PURE_RUNTIME_CALLS: &[&str] = &["nts_tag_name"];
 #[allow(clippy::match_same_arms)]
 fn has_effects(kind: &OpKind) -> bool {
     match kind {
+        OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. } => true,
+        // A fixed local has no allocator call or observable effect without a
+        // use of its address. Dropping it also drops its zero initialization.
+        OpKind::NativeLocal { .. } => false,
         // Erasing, reading a tag and unerasing are all pure: they read one
         // value and produce another. Dead ones go, like any other computation.
         OpKind::Erase { .. } | OpKind::TagOf { .. } | OpKind::Unerase { .. } => false,

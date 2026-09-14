@@ -87,3 +87,11 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
     }
     Some(Struct { name: if tag.is_empty() { format!("NtsNative_Type{}", shape.0) } else { tag.to_owned() }, fields })
 }
+
+/// Storage named by a native type argument; pointer types occupy one word.
+#[must_use]
+pub fn storage(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
+    if let Some(scalar) = scalar(snapshot, ty) { return Some(Pointee::Scalar(scalar)); }
+    if let Some(layout) = structure(snapshot, ty, &mut Vec::new()) { return Some(Pointee::Struct(layout.into())); }
+    pointer(snapshot, ty).map(|p| Pointee::Pointer(Box::new(p)))
+}

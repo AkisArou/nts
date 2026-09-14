@@ -107,6 +107,7 @@ fn worth_merging(program: &Program, by_name: &FxHashMap<String, usize>) -> FxHas
                     matches!(
                         op.kind,
                         OpKind::Suspend { .. } | OpKind::Await { .. } | OpKind::CellReady { .. }
+                            | OpKind::NativeLocal { .. }
                     )
                 })
                 && func.blocks.iter().any(|block| {

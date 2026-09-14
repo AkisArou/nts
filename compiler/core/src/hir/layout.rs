@@ -26,7 +26,7 @@
 //! does not have to: such a field is emitted as an opaque pointer, and a
 //! pointer is a pointer whatever it points at.
 
-use nts_core::hir::{Field, HirType, ManagedType};
+use crate::hir::{Field, HirType, ManagedType};
 
 /// How wide a value is, and what it must be aligned to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -165,13 +165,13 @@ pub fn place(fields: &[Field]) -> Option<Placement> {
 
 /// A native C payload starts at zero, independently of the managed header.
 #[must_use]
-pub fn native_place(layout: &nts_core::hir::native::Struct) -> Option<Placement> {
+pub fn native_place(layout: &crate::hir::native::Struct) -> Option<Placement> {
     place_shapes(layout.fields.iter().map(|field| native_shape(&field.ty)), Shape { size: 0, align: 1 })
 }
 
 #[must_use]
-pub fn native_shape(pointee: &nts_core::hir::native::Pointee) -> Option<Shape> {
-    use nts_core::hir::native::Pointee;
+pub fn native_shape(pointee: &crate::hir::native::Pointee) -> Option<Shape> {
+    use crate::hir::native::Pointee;
     match pointee {
         Pointee::Struct(layout) => native_place(layout).map(|p| Shape { size: p.size, align: p.align }),
         Pointee::Opaque(_) => None,
@@ -185,14 +185,14 @@ fn place_shapes(shapes: impl IntoIterator<Item = Option<Shape>>, prefix: Shape) 
     let mut offsets = Vec::new();
     for shape in shapes {
         let shape = shape?;
-        at = round_up(at, shape.align);
+        at = round_up(at, shape.align)?;
         offsets.push(at);
-        at += shape.size;
+        at = at.checked_add(shape.size)?;
         align = align.max(shape.align);
     }
     Some(Placement {
         offsets,
-        size: round_up(at, align),
+        size: round_up(at, align)?,
         align,
     })
 }
@@ -202,17 +202,15 @@ fn place_shapes(shapes: impl IntoIterator<Item = Option<Shape>>, prefix: Shape) 
 /// `align` is a power of two for every shape above, so this is the usual mask —
 /// written as arithmetic anyway, because the one case that is not a power of
 /// two would be silently wrong under the mask and merely wrong here.
-const fn round_up(value: u32, align: u32) -> u32 {
-    if align == 0 {
-        return value;
-    }
-    value.div_ceil(align) * align
+fn round_up(value: u32, align: u32) -> Option<u32> {
+    if align == 0 { return None; }
+    value.checked_add(align - 1).map(|n| n / align * align)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{place, shape_of, Placement, HEADER, POINTER};
-    use nts_core::hir::{Field, HirType, ManagedType};
+    use crate::hir::{Field, HirType, ManagedType};
 
     fn field(name: &str, ty: HirType) -> Field {
         Field {

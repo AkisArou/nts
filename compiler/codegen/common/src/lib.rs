@@ -17,7 +17,6 @@
 
 pub mod backend;
 pub mod symbols;
-pub mod layout;
 pub mod destruct;
 pub mod linearize;
 pub mod writer;

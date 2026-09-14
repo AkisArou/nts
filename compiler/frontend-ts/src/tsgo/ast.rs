@@ -377,13 +377,9 @@ fn decode_nodes(
             flags: raw.flags,
             // Filled once children are known; a modifier is a child keyword.
             modifiers: DeclarationModifiers::default(),
-            native_abi: if kind
-                == NodeKind::Syntax(nts_semantic_schema::syntax::FUNCTION_DECLARATION)
-            {
-                strings.source(raw.pos, raw.end).and_then(native_abi)
-            } else {
-                None
-            },
+            native: if kind == NodeKind::Syntax(nts_semantic_schema::syntax::FUNCTION_DECLARATION) {
+                strings.source(raw.pos, raw.end).and_then(native_attributes)
+            } else { None },
             data,
             text,
         });
@@ -395,7 +391,17 @@ fn decode_nodes(
 /// Only a tag in a leading documentation comment belongs to the declaration.
 /// Stop at the first token: a body string or a preceding statement cannot
 /// publish an ABI. Keep invalid and duplicate tags for lowering to diagnose.
-fn native_abi(mut source: &str) -> Option<String> {
+fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttributes>> {
+    let abi = native_abi(source);
+    let no_escape = leading_tag(source, "@ntsNoEscape")
+        .map(|names| names.split_whitespace().map(str::to_owned).collect());
+    if abi.is_none() && no_escape.is_none() { return None; }
+    Some(Box::new(nts_semantic_schema::NativeAttributes { abi, no_escape }))
+}
+
+fn native_abi(source: &str) -> Option<String> { leading_tag(source, "@ntsAbi") }
+
+fn leading_tag(mut source: &str, marker: &str) -> Option<String> {
     let mut tags = Vec::new();
     loop {
         source = source.trim_start();
@@ -406,7 +412,7 @@ fn native_abi(mut source: &str) -> Option<String> {
             if let Some(doc) = comment[..end].strip_prefix('*') {
                 for line in doc.lines() {
                     let line = line.trim().trim_start_matches('*').trim_start();
-                    if let Some(tag) = line.strip_prefix("@ntsAbi")
+                    if let Some(tag) = line.strip_prefix(marker)
                         && (tag.is_empty() || tag.starts_with(char::is_whitespace))
                     {
                         tags.push(tag.trim());

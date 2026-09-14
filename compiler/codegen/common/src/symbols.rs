@@ -434,7 +434,8 @@ pub fn c_identifier(name: &str) -> String {
         && name.len() > 1
         && name[1..].bytes().all(|b| b.is_ascii_digit());
 
-    if RESERVED.contains(&name)
+    if matches!(name, "malloc" | "free" | "nts_native_malloc")
+        || RESERVED.contains(&name)
         || collides_with_a_header(name)
         || generated
         || name.starts_with('_')

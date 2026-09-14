@@ -802,3 +802,61 @@ fn native_header_alias_survives_an_unrelated_layout_declaration() {
         assert!(Command::new(dir.join("caller")).status().unwrap().success());
     }
 }
+
+#[test]
+fn native_owned_storage_executes_on_c_and_llvm() {
+    let source = include_str!("../../common/test-support/native-storage/main.ts");
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some((dir, prepared)) = prepare_with_provider("native-storage", source, provider) else { return; };
+        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let c = nts_codegen_c::emit(&prepared.program);
+        let llvm = nts_codegen_llvm::emit(&prepared.program);
+        assert!(c.is_complete(), "{:?}", c.diagnostics);
+        assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+        std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+        std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+        std::fs::write(dir.join("caller.c"), include_str!("../../common/test-support/native-storage/caller.c")).unwrap();
+        std::fs::write(dir.join("native.c"), include_str!("../../common/test-support/native-storage/native.c")).unwrap();
+        for file in ["caller.c", "native.c", "nts_runtime.c"] {
+            clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+        }
+        for (file, object) in [("program.c", "c.o"), ("program.ll", "llvm.o")] {
+            clang(&dir, &["-O2", "-Wno-override-module", "-Wall", "-Wextra", "-Werror", "-c", file, "-o", object]);
+            clang(&dir, &[object, "caller.o", "native.o", "nts_runtime.o", "-lm", "-Wl,--wrap=malloc", "-Wl,--wrap=free", "-o", "caller"]);
+            let result = Command::new(dir.join("caller")).status().unwrap();
+            assert!(result.success(), "{file} {provider:?}: {result}");
+        }
+        // The caller and allocator objects are unchanged: removing ONLY the
+        // integer check must let heap(4.5) reach the allocator and fail.
+        let bad = llvm.text.replacen("%valid = and i1 %range, %integral", "%valid = and i1 %range, true", 1);
+        assert_ne!(bad, llvm.text);
+        std::fs::write(dir.join("bad.ll"), bad).unwrap();
+        clang(&dir, &["-O2", "-Wno-override-module", "-c", "bad.ll", "-o", "bad.o"]);
+        clang(&dir, &["bad.o", "caller.o", "native.o", "nts_runtime.o", "-lm", "-Wl,--wrap=malloc", "-Wl,--wrap=free", "-o", "bad"]);
+        assert_eq!(Command::new(dir.join("bad")).status().unwrap().code(), Some(2));
+    }
+}
+
+#[test]
+fn authored_allocator_symbols_cannot_redefine_storage_operations() {
+    let source = r"
+        import { malloc as allocate, free } from 'c:stdlib';
+        import type { Ptr, c_int, c_size_t } from 'c:types';
+        declare function malloc(bytes: c_size_t): Ptr<c_int> | null;
+        export function run(): number {
+            const a = allocate<c_int>(4);
+            const b = malloc(4 as c_size_t);
+            if (a !== null) free(a);
+            if (b !== null) free(b);
+            return 1;
+        }
+    ";
+    let Some((_, prepared)) = prepare("allocator-collision", source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    for diagnostics in [&c.diagnostics, &llvm.diagnostics] {
+        assert!(diagnostics.iter().any(|d| d.message.contains("collides with the compiler's memory operations")), "{diagnostics:?}");
+    }
+}

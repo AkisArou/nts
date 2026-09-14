@@ -497,6 +497,7 @@ pub fn emit(program: &Program) -> Emitted {
         writer.line(&origin, format!("#include \"{UNICODE_HEADER_NAME}\""));
     }
     writer.append(object_types);
+    native_memory::helpers(&mut writer, &origin, program);
 
     // Forward declarations, so a call does not depend on definition order — and
     // only for functions that actually have a definition. Before the
@@ -1870,7 +1871,7 @@ fn emit_object_types(
         origin,
         format!(
             "_Static_assert(NTS_IMMORTAL == {}u, \"NTS_IMMORTAL is not what nts writes\");",
-            nts_codegen_common::layout::IMMORTAL
+            nts_core::hir::layout::IMMORTAL
         ),
     );
     for layout in &program.layouts {
@@ -1970,14 +1971,14 @@ fn emit_object_types(
         // struct out says where its fields are. That is right while C owns the
         // layout and unavailable the moment a second backend does not have an
         // `offsetof` to ask -- so the placement is computed in
-        // `nts_codegen_common::layout` and this is where clang checks it, on
+        // `nts_core::hir::layout` and this is where clang checks it, on
         // every build, per field.
         //
         // The claim and the oracle, side by side, until the claim has gone long
         // enough without being wrong to become the authority. A `_Static_assert`
         // costs nothing at run time and fails at compile time with the field's
         // name in the message.
-        if let Some(placed) = nts_codegen_common::layout::place(&layout.fields) {
+        if let Some(placed) = nts_core::hir::layout::place(&layout.fields) {
             writer.line(
                 origin,
                 format!(
@@ -3170,7 +3171,7 @@ fn emit_body(
     // nothing to declare. `c.advance();` written for its effect is exactly that,
     // and a local assigned by nobody is `-Wunused-variable`.
     declared.retain(|value| {
-        read.contains(value) || !matches!(func.values[value.0 as usize].kind, OpKind::Call { .. })
+        read.contains(value) || !matches!(func.values[value.0 as usize].kind, OpKind::Call { .. } | OpKind::NativeMalloc { .. })
     });
 
     // A parameter nothing reads is an error under -Werror, and constant folding
@@ -3222,6 +3223,10 @@ fn emit_body(
             continue;
         }
         let ty = c_type_of(context.program, &op.ty, &op.origin)?;
+        if let OpKind::NativeLocal { count } = op.kind
+            && let HirType::NativePointer(element) = &op.ty {
+            writer.line(&op.origin, format!("{} {}_storage[{count}];", element.c_type(), value_name(ValueId(u32::try_from(index).unwrap_or(0)))));
+        }
         // An object that does not escape lives here rather than on the heap, so
         // it needs storage as well as a pointer to it. Declared with the other
         // locals, which means one slot per allocation site rather than one per
@@ -3829,8 +3834,11 @@ fn memory_op(
     let op = func.value(value);
     let name = value_name(value);
     let text = match &op.kind {
-        OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
-        | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. } => native_memory::operation(func, &op.kind, &name, &op.origin)?,
+        OpKind::NativeMalloc { .. } if !context.read.contains(&value) =>
+            native_memory::operation(func, &op.kind, &op.ty, "", &op.origin)?,
+        OpKind::NativeLocal { .. } | OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. }
+        | OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
+        | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. } => native_memory::operation(func, &op.kind, &op.ty, &name, &op.origin)?,
         // One predictable branch. The string is compile-time text and is only
         // touched on the path that ends the program.
         OpKind::CellReady { cell, name } => format!(
@@ -3970,6 +3978,7 @@ fn upcast_to_global(
     c_type_of(context.program, declared, origin).map_or_else(|_| String::new(), |ty| format!("({ty})"))
 }
 
+#[allow(clippy::too_many_lines)] // Keep the exhaustive operation dispatch together.
 fn emit_op(
     writer: &mut CodeWriter,
     func: &Func,
@@ -4084,7 +4093,8 @@ fn emit_op(
         OpKind::Unary { op: un, operand } => {
             unary_text(func, &name, *un, *operand, &op.ty, &op.origin)?
         }
-        OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
+        OpKind::NativeLocal { .. } | OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. }
+        | OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
         | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. }
         | OpKind::ObjectNew { .. }
         | OpKind::ClosureStatic

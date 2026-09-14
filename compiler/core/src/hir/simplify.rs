@@ -216,7 +216,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic
         | OpKind::ObjectNew { .. }
-        | OpKind::GlobalGet(_) => {}
+        | OpKind::GlobalGet(_) | OpKind::NativeLocal { .. } => {}
         OpKind::Yield { value } | OpKind::GlobalSet { value, .. } => *value = of(*value),
         OpKind::StringUnitAt { string, index, .. } => {
             *string = of(*string);
@@ -246,7 +246,8 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
             *object = of(*object);
             *value = of(*value);
         }
-        OpKind::NativeFieldAddress { pointer, .. } => *pointer = of(*pointer),
+        OpKind::NativeMalloc { bytes } => *bytes = of(*bytes),
+        OpKind::NativeFieldAddress { pointer, .. } | OpKind::NativeFree { pointer } => *pointer = of(*pointer),
         OpKind::NativeIndexAddress { pointer: array, index }
         | OpKind::NativeLoad { pointer: array, index }
         | OpKind::ArrayGet { array, index, .. } => {

@@ -51,6 +51,12 @@
 //! body can. What an exported function does with its parameters is visible here
 //! like any other.
 
+//! Native storage has explicit placement: `NativeLocal` is stack storage and
+//! `NativeMalloc` is manually released heap storage. This analysis does not
+//! choose their placement or cleanup. `native_storage::check` enforces local
+//! pointer lifetimes before suspension and again in HIR verification, including
+//! field/element addresses and block-argument aliases; unknown uses refuse.
+
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::liveness;

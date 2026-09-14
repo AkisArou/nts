@@ -68,5 +68,13 @@ captured handle alive for every closure use. Boxing into `unknown`, numeric
 conversions, property reads, forged object literals, and runtime containers of
 handles are refused. Node-API and JVM do not marshal opaque C pointers.
 
-C function-pointer callbacks, variadic functions, structs by value, pointer dereferencing, and
-ownership checking are outside this milestone; these files do not claim them.
+Native scalar/struct access, `addrOf`, `local<T>(count)`, `sizeof<T>()`, typed
+`malloc<T>(byteCount)` and `free` are described in
+[the native operations contract](../../docs/native-operations.md). The
+[poll example](../../examples/interop/native-poll/src/main.ts) uses local, fixed
+array, and heap request storage. Local addresses cannot escape; foreign borrowing
+uses the declaration's `@ntsNoEscape` contract. General heap ownership remains
+manual.
+
+C function-pointer callbacks, variadic functions, structs by value, and
+ResourceFlow ownership checking remain outside the implemented surface.

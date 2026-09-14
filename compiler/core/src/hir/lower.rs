@@ -14312,11 +14312,14 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
     ) -> Option<Result<ValueId, Diagnostic>> {
         if let Some(decl) = self.snapshot.call_targets.get(&id).and_then(|target| target.callee)
-            && self.node(decl).native_abi.as_deref() == Some("intrinsic")
+            && self.node(decl).native.as_ref().and_then(|n| n.abi.as_deref()) == Some("intrinsic")
             && !self.has_a_body(decl)
-            && self.declared_name(decl).as_deref() == Some("addrOf")
         {
-            return Some(self.native_address_of(id, arguments));
+            match self.declared_name(decl).as_deref() {
+                Some("addrOf") => return Some(self.native_address_of(id, arguments)),
+                Some(name @ ("local" | "sizeof" | "malloc" | "free")) => return Some(self.native_storage(id, name, arguments)),
+                _ => {},
+            }
         }
 
         // `Number.parseInt` before the intrinsic table, because that table's
@@ -19550,6 +19553,13 @@ impl<'a> FuncBuilder<'a> {
                 self.push(OpKind::GlobalSet { global, value }, HirType::Void, origin);
             }
             Place::Binding { symbol, .. } => {
+                // An unrepresented module slot is not a local SSA binding.
+                // Otherwise assigning a native address silently discards the
+                // global store before the lifetime checker can observe it.
+                if matches!(self.values[value.0 as usize].ty, HirType::NativePointer(_))
+                    && let Some(reason) = self.module.unsupported.get(&symbol) {
+                    return Err(self.unsupported(id, reason));
+                }
                 // A cell is storage, so the write is a store rather than a new
                 // binding: the closure holding the same cell has to see it.
                 match self
@@ -28027,15 +28037,26 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<Callee, Diagnostic> {
         let name = declaration.and_then(|decl| self.declared_name(decl)).unwrap_or(name);
         let abi = declaration
-            .and_then(|decl| self.snapshot.nodes[decl.0 as usize].native_abi.as_deref());
+            .and_then(|decl| self.snapshot.nodes[decl.0 as usize].native.as_ref().and_then(|n| n.abi.as_deref()));
         // An explicit request for a backend-owned intrinsic. Backends resolve
         // these against their closed tables and refuse unavailable names;
         // this does not authorize inventing an external C prototype.
         if abi == Some("intrinsic") {
             return Ok(Callee::External(name));
         }
-        let native = super::native::Function::from_signature(self.snapshot, name, signature, abi)
+        let mut native = super::native::Function::from_signature(self.snapshot, name, signature, abi)
             .map_err(|why| self.unsupported(call, &why))?;
+        if let Some(names) = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.no_escape.as_ref()) {
+            if names.is_empty() { return Err(self.unsupported(call, "@ntsNoEscape needs at least one native-pointer parameter")); }
+            for name in names {
+                let slot = signature.parameters.iter().position(|p| p.name == *name)
+                    .ok_or_else(|| self.unsupported(call, &format!("@ntsNoEscape names no parameter `{name}`")))?;
+                if !matches!(native.parameters[slot], super::native::Type::Pointer(_)) || native.no_escape[slot] {
+                    return Err(self.unsupported(call, "@ntsNoEscape needs distinct native-pointer parameters"));
+                }
+                native.no_escape[slot] = true;
+            }
+        }
         Ok(Callee::Native(std::sync::Arc::new(native)))
     }
 

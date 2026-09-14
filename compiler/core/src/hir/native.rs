@@ -13,6 +13,8 @@ pub struct Function {
     pub convention: Convention,
     pub parameters: Vec<Type>,
     pub result: Type,
+    /// True only under an authored no-retention/no-return contract.
+    pub no_escape: Vec<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -234,6 +236,7 @@ impl Function {
             } else {
                 Convention::C
             },
+            no_escape: vec![false; parameters.len()],
             parameters,
             result,
         })
@@ -398,4 +401,4 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
 }
 
 mod schema;
-pub use schema::{is_layout, pointer};
+pub use schema::{is_layout, pointer, storage};

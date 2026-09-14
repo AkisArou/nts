@@ -90,3 +90,63 @@ impl FuncBuilder<'_> {
         Ok(address)
     }
 }
+
+impl FuncBuilder<'_> {
+    pub(super) fn native_storage(&mut self, id: NodeId, operation: &str, args: &[NodeId]) -> Result<ValueId, Diagnostic> {
+        if operation == "sizeof" {
+            if self.type_of(id) != Some(HirType::NUMBER) { return Err(self.unsupported(id, "sizeof must return a number")); }
+            if !args.is_empty() { return Err(self.unsupported(id, "sizeof takes a type argument, not a value")); }
+            // Type-argument lists precede argument lists in the raw call AST.
+            let type_node = self.node(id).children.iter()
+                .filter_map(|list| (self.node(*list).kind == nts_semantic_schema::NodeKind::List).then_some(*list))
+                .find_map(|list| self.node(list).children.first().copied())
+                .ok_or_else(|| self.unsupported(id, "sizeof needs one explicit native type argument"))?;
+            let ty = *self.snapshot.node_types.get(&type_node).ok_or_else(|| self.unsupported(id, "sizeof type has no semantic type"))?;
+            let storage = crate::hir::native::storage(self.snapshot, ty).ok_or_else(|| self.unsupported(id, "sizeof needs a complete native storage type"))?;
+            let shape = crate::hir::layout::native_shape(&storage).ok_or_else(|| self.unsupported(id, "sizeof needs a complete native layout"))?;
+            return Ok(self.push(OpKind::ConstFloat(f64::from(shape.size)), HirType::NUMBER, self.origin(id)));
+        }
+        if operation == "free" {
+            let [arg] = args else { return Err(self.unsupported(id, "free needs one pointer")); };
+            let expecting = self.expecting.replace(HirType::NativePointer(Pointee::Scalar(crate::hir::native::Scalar::UInt8)));
+            let pointer = self.lower_expression(*arg);
+            self.expecting = expecting;
+            let pointer = pointer?;
+            if !matches!(self.values[pointer.0 as usize].ty, HirType::NativePointer(_)) {
+                return Err(self.unsupported(id, "free needs a typed native pointer (possibly null)"));
+            }
+            return Ok(self.push(OpKind::NativeFree { pointer }, HirType::Void, self.origin(id)));
+        }
+        let ty = self.type_of(id).ok_or_else(|| self.unsupported(id, "native allocation needs a complete native type argument"))?;
+        let HirType::NativePointer(ref element) = ty else { return Err(self.unsupported(id, "native allocation must return a typed pointer")); };
+        let shape = crate::hir::layout::native_shape(element).ok_or_else(|| self.unsupported(id, "native allocation needs a complete element layout"))?;
+        let kind = if operation == "local" {
+            let count = match args {
+                [] => 1.0,
+                [arg] => {
+                    let value = self.lower_expression(*arg)?;
+                    match self.values[value.0 as usize].kind {
+                        OpKind::ConstFloat(n) => n,
+                        OpKind::ConstInt(n) => f64::from(u32::try_from(n).map_err(|_| self.unsupported(id, "local needs a positive fixed count"))?),
+                        _ => self.constant_value(*arg, &rustc_hash::FxHashMap::default())
+                            .ok_or_else(|| self.unsupported(id, "local array count must be a compile-time constant"))?,
+                    }
+                }
+                _ => return Err(self.unsupported(id, "local takes at most one constant element count")),
+            };
+            if !count.is_finite() || count < 1.0 || count.fract() != 0.0 || count * f64::from(shape.size) > f64::from(crate::hir::native_storage::STACK_LIMIT) {
+                return Err(self.unsupported(id, "local needs a positive fixed count and at most 65536 bytes"));
+            }
+            // Positive, integral and bounded above by STACK_LIMIT above.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let count = count as u32;
+            OpKind::NativeLocal { count }
+        } else {
+            let [arg] = args else { return Err(self.unsupported(id, "malloc needs a byte count")); };
+            let bytes = self.lower_expression(*arg)?;
+            let bytes = self.coerce(bytes, &HirType::NUMBER, id)?;
+            OpKind::NativeMalloc { bytes }
+        };
+        Ok(self.push(kind, ty, self.origin(id)))
+    }
+}

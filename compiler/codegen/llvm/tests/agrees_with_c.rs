@@ -200,7 +200,7 @@ int main(void) {{
 
 /// Fields, at offsets nothing in the LLVM output could have got from clang.
 ///
-/// This is what makes `nts_codegen_common::layout` load-bearing rather than
+/// This is what makes `nts_core::hir::layout` load-bearing rather than
 /// merely checked. The C backend writes `p->x` and lets clang place it; the IR
 /// has no `p->x`, only `getelementptr i8, ptr %p, i64 24`, and the 24 came from
 /// the layout engine. If the two disagreed about an offset they would read

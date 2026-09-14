@@ -21,6 +21,8 @@ use super::{
 /// A way the IR was malformed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Invalid {
+    /// Native local storage escaped or could be reused while an alias survives.
+    NativeStorage { func: String, reason: &'static str },
     /// A branch names a block that does not exist.
     DanglingSuccessor { func: String, target: BlockId },
     /// A layout's base is not laid out as its prefix.
@@ -239,6 +241,9 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
     }
     check_calls(program, &mut problems);
     check_native_calls(program, &mut problems);
+    for (at, _, reason) in super::native_storage::check(program) {
+        problems.push(Invalid::NativeStorage { func: program.funcs[at].name.clone(), reason });
+    }
     check_layouts(program, &mut problems);
     if problems.is_empty() {
         Ok(())
@@ -266,6 +271,9 @@ fn check_native_calls(program: &Program, problems: &mut Vec<Invalid>) {
             else {
                 continue;
             };
+            if target.no_escape.len() != target.parameters.len() || target.no_escape.iter().zip(&target.parameters).any(|(borrow, ty)| *borrow && !matches!(ty, super::native::Type::Pointer(_))) {
+                problems.push(Invalid::NativeStorage { func: func.name.clone(), reason: "invalid native no-escape contract" });
+            }
             let result = target.result.representation();
             if op.ty != result {
                 problems.push(Invalid::CallResultType {
@@ -505,7 +513,16 @@ fn compatible(found: &HirType, want: &HirType) -> bool {
 }
 
 fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
-    for op in &func.values {
+    for op in func.blocks.iter().flat_map(|b| b.ops.iter().map(|v| func.value(*v))) {
+        let valid = match &op.kind {
+            OpKind::NativeLocal { count } => *count > 0 && matches!(&op.ty, HirType::NativePointer(p) if super::layout::native_shape(p).is_some()),
+            OpKind::NativeMalloc { bytes } => func.value(*bytes).ty == HirType::NUMBER
+                && matches!(&op.ty, HirType::NativePointer(p) if super::layout::native_shape(p).is_some()),
+            OpKind::NativeFree { pointer } => op.ty == HirType::Void && matches!(func.value(*pointer).ty, HirType::NativePointer(_)),
+            _ => true,
+        };
+        if !valid { problems.push(Invalid::OperandType { func: func.name.clone(), op: "native storage", found: op.ty.clone() }); }
+
         let (pointer, index) = match &op.kind {
             OpKind::NativeLoad { pointer, index } | OpKind::NativeStore { pointer, index, .. }
             | OpKind::NativeIndexAddress { pointer, index } => (*pointer, Some(*index)),
@@ -1060,7 +1077,9 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         }
         OpKind::FieldGet { object, .. } => vec![*object],
         OpKind::FieldSet { object, value, .. } => vec![*object, *value],
-        OpKind::NativeFieldAddress { pointer, .. } => vec![*pointer],
+        OpKind::NativeLocal { .. } => vec![],
+        OpKind::NativeMalloc { bytes } => vec![*bytes],
+        OpKind::NativeFieldAddress { pointer, .. } | OpKind::NativeFree { pointer } => vec![*pointer],
         OpKind::NativeIndexAddress { pointer, index }
         | OpKind::NativeLoad { pointer, index } => vec![*pointer, *index],
         OpKind::NativeStore { pointer, index, value } => vec![*pointer, *index, *value],

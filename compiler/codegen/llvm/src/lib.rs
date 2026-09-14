@@ -79,6 +79,7 @@ pub fn emit(program: &Program) -> Emitted {
     for line in native {
         let _ = writeln!(text, "{line}");
     }
+    text.push_str(&native_memory::helpers(program));
     // What the runtime offers this backend, declared up front.
     //
     // `nts_to_int32` is `static inline` in the C header, which is right for C
@@ -453,7 +454,7 @@ fn literals(program: &Program) -> String {
              [{count} x {element}] [{}] }}",
             data.join(", "),
             count = data.len(),
-            immortal = nts_codegen_common::layout::IMMORTAL,
+            immortal = nts_core::hir::layout::IMMORTAL,
             length = units.len(),
         );
     }
@@ -558,7 +559,7 @@ fn descriptors(program: &Program) -> String {
     let _ = writeln!(out, "{DESCRIPTOR_TYPE}");
     let cyclic = program.cyclic_layouts();
     for (index, layout) in program.layouts.iter().enumerate() {
-        let Some(placed) = nts_codegen_common::layout::place(&layout.fields) else {
+        let Some(placed) = nts_core::hir::layout::place(&layout.fields) else {
             continue;
         };
         let tag = descriptor_name(layout);
@@ -612,7 +613,7 @@ fn descriptors(program: &Program) -> String {
                 "@{} = internal global {{ ptr, i64, i32, i32 }} \
                  {{ ptr @nts_desc_{tag}, i64 {}, i32 0, i32 0 }}",
                 static_closure_name(layout),
-                nts_codegen_common::layout::IMMORTAL
+                nts_core::hir::layout::IMMORTAL
             );
         }
         name_constant(&mut out, &tag, &layout.name);
@@ -647,7 +648,7 @@ fn descriptors(program: &Program) -> String {
             if element.is_managed() {
                 continue;
             }
-            let Some(shape) = nts_codegen_common::layout::shape_of(element) else {
+            let Some(shape) = nts_core::hir::layout::shape_of(element) else {
                 continue;
             };
             let tag = element_tag(element);
@@ -719,7 +720,7 @@ fn index_lines(
             format!(
                 "{out}.blk = getelementptr i8, ptr {}, i64 {}",
                 name(array),
-                nts_codegen_common::layout::ELEMENTS_OFFSET
+                nts_core::hir::layout::ELEMENTS_OFFSET
             ),
             format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")),
         ]
@@ -804,7 +805,7 @@ fn suspension(
             .iter()
             .find(|layout| layout.types.contains(id))
             .ok_or_else(|| refuse(func, "a cell whose type has no layout"))?;
-        let placed = nts_codegen_common::layout::place(&layout.fields)
+        let placed = nts_core::hir::layout::place(&layout.fields)
             .ok_or_else(|| refuse(func, "a cell whose fields cannot be placed"))?;
         let at = layout
             .fields
@@ -1275,7 +1276,7 @@ fn frame_storage(program: &Program, func: &Func) -> Vec<String> {
 fn object_placement(
     program: &Program,
     ty: &HirType,
-) -> Option<nts_codegen_common::layout::Placement> {
+) -> Option<nts_core::hir::layout::Placement> {
     let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
         return None;
     };
@@ -1283,14 +1284,14 @@ fn object_placement(
         .layouts
         .iter()
         .find(|layout| layout.types.contains(id))?;
-    nts_codegen_common::layout::place(&layout.fields)
+    nts_core::hir::layout::place(&layout.fields)
 }
 
 fn one_frame(out: &str, units: u32) -> String {
-    let bytes = u64::from(nts_codegen_common::layout::HEADER.size) + 2 * (u64::from(units) + 1);
+    let bytes = u64::from(nts_core::hir::layout::HEADER.size) + 2 * (u64::from(units) + 1);
     format!(
         "{out}.frame = alloca i8, i64 {bytes}, align {}",
-        nts_codegen_common::layout::POINTER
+        nts_core::hir::layout::POINTER
     )
 }
 
@@ -1542,6 +1543,7 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     }
     prologue.extend(frame_storage(program, func));
     prologue.extend(native::stack_arguments(func));
+    prologue.extend(native_memory::stack_storage(func));
     let linkage = if func.exported { "" } else { "internal " };
     // `nounwind` on everything this compiler defines, for the reason above: the
     // language has no exceptions, so no frame here can be unwound through.
@@ -1708,7 +1710,7 @@ fn field_at(
         .iter()
         .find(|layout| layout.types.contains(id))
         .ok_or_else(|| refuse(func, "a field of a type with no layout"))?;
-    let placed = nts_codegen_common::layout::place(&layout.fields)
+    let placed = nts_core::hir::layout::place(&layout.fields)
         .ok_or_else(|| refuse(func, "an object whose fields cannot be placed"))?;
     let offset = *placed
         .offsets
@@ -1970,7 +1972,7 @@ fn allocation(
                 .iter()
                 .find(|layout| layout.types.contains(id))
                 .ok_or_else(|| refuse(func, "an allocation of a type with no layout"))?;
-            let placed = nts_codegen_common::layout::place(&layout.fields)
+            let placed = nts_core::hir::layout::place(&layout.fields)
                 .ok_or_else(|| refuse(func, "an object whose fields cannot be placed"))?;
             // The class being constructed, not the shape it shares.
             let tag = descriptor_for(program, layout, Some(*id));
@@ -1993,7 +1995,7 @@ fn allocation(
 fn frame_object(
     func: &Func,
     layout: &nts_core::hir::Layout,
-    placed: &nts_codegen_common::layout::Placement,
+    placed: &nts_core::hir::layout::Placement,
     tag: &str,
     out: &str,
 ) -> Result<String, Diagnostic> {
@@ -2017,7 +2019,7 @@ fn frame_object(
         format!("{out}.rc = getelementptr i8, ptr {out}, i64 8"),
         format!(
             "store i64 {}, ptr {out}.rc{}",
-            nts_codegen_common::layout::IMMORTAL,
+            nts_core::hir::layout::IMMORTAL,
             tbaa("i64")
         ),
         // And the flags word, at 16, for the same reason as the zeroes below:
@@ -2276,7 +2278,7 @@ fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
                 });
                 return Ok(lines.join("\n  "));
             }
-            let offset = nts_codegen_common::layout::LENGTH_OFFSET;
+            let offset = nts_core::hir::layout::LENGTH_OFFSET;
             let mut lines = vec![
                 format!("{at} = getelementptr i8, ptr {}, i64 {offset}", name(*of)),
                 format!("{raw} = load i32, ptr {at}{}", tbaa("i32")),
@@ -2718,7 +2720,7 @@ fn payload_into(func: &Func, out: &str, bits: &str, want: &HirType) -> Result<St
 /// The operations that read or write memory.
 ///
 /// Split from the rest because this is the half of the backend that depends on
-/// `nts_codegen_common::layout` -- every one of these needs to know where
+/// `nts_core::hir::layout` -- every one of these needs to know where
 /// something sits, and none of the arithmetic does.
 fn memory_operation(
     program: &Program,
@@ -2749,9 +2751,10 @@ fn memory_operation(
         OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
             return element_access(func, value, &out);
         }
-        OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
+        OpKind::NativeLocal { .. } | OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. }
+        | OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
         | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. } => {
-            return native_memory::operation(func, &op.kind, &out);
+            return native_memory::operation(func, &op.kind, &op.ty, &out);
         }
         OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
             return text_operation(func, value, &out);
@@ -2765,7 +2768,7 @@ fn memory_operation(
         // A field, at the offset this compiler computed.
         //
         // The C backend writes `p->x` and lets clang place it; there is no
-        // `p->x` here, so `nts_codegen_common::layout` is not merely checked by
+        // `p->x` here, so `nts_core::hir::layout` is not merely checked by
         // the `_Static_assert`s it emits -- it is the only thing that knows
         // where the field is. That is the whole reason the placement moved out
         // of the backend.
@@ -2806,7 +2809,7 @@ fn memory_operation(
                 .iter()
                 .find(|layout| layout.types.contains(first))
                 .ok_or_else(|| refuse(func, "a shared field read over a type with no layout"))?;
-            let placed = nts_codegen_common::layout::place(&layout.fields)
+            let placed = nts_core::hir::layout::place(&layout.fields)
                 .ok_or_else(|| refuse(func, "an object whose fields cannot be placed"))?;
             let offset = *placed
                 .offsets
