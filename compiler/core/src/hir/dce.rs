@@ -104,6 +104,10 @@ const PURE_RUNTIME_CALLS: &[&str] = &["nts_tag_name"];
 fn has_effects(kind: &OpKind) -> bool {
     match kind {
         OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. } => true,
+        // Taking a bridge's address computes a constant and observes nothing.
+        // Whether the *bridged function* survives is a different question, and
+        // not this one's to answer: `reachable.rs` keeps the bridged body alive.
+        OpKind::NativeBridge { .. } => false,
         // A fixed local has no allocator call or observable effect without a
         // use of its address. Dropping it also drops its zero initialization.
         OpKind::NativeLocal { .. } => false,

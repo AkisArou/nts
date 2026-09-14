@@ -1078,6 +1078,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         OpKind::FieldGet { object, .. } => vec![*object],
         OpKind::FieldSet { object, value, .. } => vec![*object, *value],
         OpKind::NativeLocal { .. } => vec![],
+        OpKind::NativeBridge { closure, .. } => vec![*closure],
         OpKind::NativeMalloc { bytes } => vec![*bytes],
         OpKind::NativeFieldAddress { pointer, .. } | OpKind::NativeFree { pointer } => vec![*pointer],
         OpKind::NativeIndexAddress { pointer, index }

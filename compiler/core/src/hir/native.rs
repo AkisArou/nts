@@ -34,6 +34,63 @@ pub enum Type {
     Managed(ManagedType),
     Erased,
     BigInt,
+    /// A C function pointer, `int (*)(const void *, const void *)`.
+    ///
+    /// Spelled in a binding as an ordinary TypeScript function type. At a C ABI
+    /// boundary a function-typed parameter can mean nothing else, so no wrapper
+    /// type is invented for it; what a *value* of this type is on the TS side is
+    /// a separate question, answered where the call is lowered, because a
+    /// TypeScript function and a C code pointer are not interchangeable and the
+    /// bridge between them has to exist somewhere visible.
+    FnPointer(std::sync::Arc<FnPointer>),
+}
+
+/// The shape of a C function pointer, and the name its typedef gets.
+///
+/// C spells a function pointer as a *declarator* wrapped around the name --
+/// `int (*cmp)(void)` -- which does not fit anywhere a type is written before a
+/// name. Every use therefore goes through a typedef, and the name is derived
+/// from the shape so that two identical signatures reach the same one and two
+/// different signatures cannot collide.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FnPointer {
+    pub name: String,
+    pub parameters: Vec<Type>,
+    pub result: Box<Type>,
+}
+
+impl FnPointer {
+    /// A typedef name derived from the signature itself.
+    ///
+    /// Not a counter: a counter depends on visit order, so the same signature
+    /// would get different names in two programs and the emitted C would differ
+    /// for no reason. This is a function of the shape alone.
+    #[must_use]
+    pub fn spell(parameters: Vec<Type>, result: Type) -> Self {
+        let mut name = String::from("NtsFn");
+        for part in std::iter::once(&result).chain(parameters.iter()) {
+            name.push('_');
+            for byte in part.c_type().bytes() {
+                match byte {
+                    b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' => name.push(byte as char),
+                    b'*' => name.push('p'),
+                    _ => name.push('_'),
+                }
+            }
+        }
+        Self { name, parameters, result: Box::new(result) }
+    }
+
+    /// `int (*NAME)(const void *, const void *)`, as a whole typedef.
+    #[must_use]
+    pub fn typedef(&self) -> String {
+        let parameters = if self.parameters.is_empty() {
+            "void".to_owned()
+        } else {
+            self.parameters.iter().map(Type::c_type).collect::<Vec<_>>().join(", ")
+        };
+        format!("typedef {} (*{})({parameters});", self.result.c_type(), self.name)
+    }
 }
 
 /// Native memory has a declared element layout, independently of ownership.
@@ -195,6 +252,18 @@ impl Type {
             Self::Managed(ty) => HirType::Managed(ty.clone()),
             Self::Erased => HirType::Erased,
             Self::BigInt => HirType::BigInt,
+            // One machine word holding an address this program never reads
+            // through, which is what `void *` already means here. C does not
+            // guarantee a code pointer and an object pointer share a
+            // representation; POSIX does, and this compiler targets Linux LP64
+            // only, which is where that assumption is stated.
+            //
+            // The *declared* type stays `FnPointer` and is what the emitted C
+            // is written from, so the ABI is not decided by this line -- only
+            // the width of the value carrying it. TypeScript keeps the two
+            // apart before here: a function type and a `Ptr<unknown>` are not
+            // assignable to each other.
+            Self::FnPointer(_) => HirType::NativePointer(Pointee::Void),
         }
     }
 
@@ -207,6 +276,10 @@ impl Type {
             Self::Void => "void",
             Self::Erased => "NtsValue",
             Self::BigInt => "__int128",
+            // The typedef's name. A function pointer's C spelling wraps the
+            // declarator around the name, so it cannot be written where a type
+            // precedes a name; every use goes through the typedef instead.
+            Self::FnPointer(signature) => return std::borrow::Cow::Borrowed(&signature.name),
             Self::Managed(ty) => match ty {
                 ManagedType::String => "NtsString *",
                 ManagedType::Object(_) => "NtsHeader *",
@@ -252,6 +325,29 @@ impl Function {
             match snapshot.types.get(ty.0 as usize)?.kind {
                 TypeKind::Boolean => Some(Type::Bool),
                 TypeKind::Void => Some(Type::Void),
+                // An ordinary TypeScript function type, which at a C ABI
+                // boundary can mean one thing: a function pointer. No wrapper
+                // type is invented to say so, because there is nothing else it
+                // could have meant and a second spelling would be a second
+                // fact to keep in agreement.
+                //
+                // Every parameter and the result go through this same function,
+                // so a callback taking a `Ptr<T>` or returning `c_int` is
+                // described by the rules already in use, and one that takes
+                // something with no C ABI is refused here rather than at the
+                // point where it would have been emitted.
+                TypeKind::Function(id) => {
+                    let signature = snapshot.signatures.get(id.0 as usize)?;
+                    let parameters = signature
+                        .parameters
+                        .iter()
+                        .map(|parameter| abi_type(snapshot, parameter.ty))
+                        .collect::<Option<Vec<_>>>()?;
+                    let result = abi_type(snapshot, signature.return_type)?;
+                    Some(Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
+                        parameters, result,
+                    ))))
+                }
                 _ => None,
             }
         }

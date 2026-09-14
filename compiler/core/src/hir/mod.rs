@@ -737,6 +737,27 @@ pub enum OpKind {
     /// Form an address, without reading storage or changing its lifetime.
     NativeIndexAddress { pointer: ValueId, index: ValueId },
     NativeFieldAddress { pointer: ValueId, field: u32 },
+    /// The address of a **bridge**: a generated C function with `signature`
+    /// that calls the compiled function `function`.
+    ///
+    /// A TypeScript function value is a managed closure object. Handing its
+    /// address to C as something to call is not a conversion, it is a wrong
+    /// answer that compiles -- and one a check against the real header cannot
+    /// see, because the header and the emitted prototype agree about the
+    /// parameter while the value passed for it is a heap object. So the bridge
+    /// is a *thing in the program* rather than a cast: the backend emits a
+    /// function with the foreign signature, and this is its address.
+    ///
+    /// The operand is a **static** closure -- one with no captured environment.
+    /// A capturing closure has state that a bare C function pointer has nowhere
+    /// to put; passing it would need a context parameter the callee agrees to
+    /// carry, which is a different contract and not this one. Lowering refuses
+    /// anything else, so by the time this exists the environment is known empty.
+    ///
+    /// Which compiled function it is comes from the closure's own type: its
+    /// layout's first method, the same route a virtual call takes. Naming the
+    /// function here as well would be a second derivation of that.
+    NativeBridge { closure: ValueId, signature: std::sync::Arc<native::FnPointer> },
     /// The nth parameter of the function, materialized as a value.
     Param(u32),
     /// The nth parameter of the block that defines it.

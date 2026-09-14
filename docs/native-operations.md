@@ -542,6 +542,63 @@ Neither path escapes the target question: triple, sysroot, defines, include
 paths and invalidation are required either way, and verification needs them too.
 That was never the difference between them.
 
+## Ninth executable slice: C calls a TypeScript function
+
+`examples/interop/native-callback` hands a compiled TypeScript function to a
+separately compiled C library, which calls it twice, synchronously, on the
+caller's thread. Non-capturing only; this is the ordered first half of callbacks
+and nothing here is retained past the call.
+
+**The binding writes an ordinary TypeScript function type.** At a C ABI boundary
+that can mean one thing, so no wrapper type is invented to say so. Every
+parameter and the result are described by the rules already in use.
+
+**A TypeScript function value is not a code pointer, and the bridge is a thing
+in the program rather than a cast.** This was not a theoretical hazard: the
+first version described the parameter correctly and left the argument alone, and
+the specializer -- which converts every native argument to its parameter's
+`representation()` -- took the *closure object's heap address* and handed it to
+C as something to call. `emit-c` reported success. The emitted prototype was
+right, so the witness could not see it: the header and the prototype agreed and
+only the value was wrong. That is the shape a header check is blind to.
+
+So `NativeBridge` is an operation, and each backend emits a real function with
+the foreign signature that calls the compiled one. Two backends, two texts, one
+symbol name derived the same way in both -- a program compiled by either links
+against the same consumer.
+
+**Non-capturing is checked by construction.** The argument's producing operation
+must be `ClosureStatic`. A capturing closure has state a bare code pointer has
+nowhere to put; an *inline* function expression is allocated as a closure object
+even when it captures nothing, so it is refused too and the diagnostic says
+which to write. Making a non-capturing arrow a static closure would remove that
+restriction and is a separate change.
+
+**Three things this broke on the way in, each invisible in a different way.**
+
+The bridged body was pruned. Nothing in the program calls it -- C does, later --
+so reachability dropped it, the vtable slot was emitted as a null, and the
+backend reported "a closure publishes no function". That walk matches `Call`
+specifically rather than exhaustively, so the compiler does not ask about a new
+operation that reaches a function without calling it.
+
+The closure's local became dead in C. A bridge names a symbol and reads nothing
+at run time, so the local was assigned and never read: `-Wunused-but-set-variable`,
+an error under the flags the generated file is compiled with. The operand is
+real in the HIR, where it identifies the function and keeps the body alive, so
+the C emitter asks a narrower question than `operands_of`.
+
+And the LLVM implementation was written and not routed. The dispatch that sends
+an operation to the renderer is a list, and the comment beside it already said
+what happens: an implementation nothing routes to reads exactly like one that
+was never written.
+
+**What libc's own callbacks still need.** `qsort` and its family take
+`void *` and expect the callback to cast. Reading through a `void *` is exactly
+what `Pointee::Void` refuses, so a real libc callback needs a checked way to
+turn an address of unstated type back into a typed one -- which is the direction
+mistakes live in, and is not this slice.
+
 ## Direction for the next executable slices
 
 1. **More native storage and header-derived bindings.** `void *`, const-qualified

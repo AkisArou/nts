@@ -259,6 +259,27 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             continue;
         };
         for op in &func.values {
+            // A bridge holds a closure that C will call and this program never
+            // does, so nothing here is a caller and the body would be pruned.
+            // The vtable slot is then emitted as a null and the bridge calls
+            // nothing -- which is what happened the first time, and reported as
+            // "a closure publishes no function" from the backend rather than
+            // from here.
+            //
+            // The closure was previously a direct argument of the call, so
+            // `callback_targets` below saw it. It is an operand of the bridge
+            // now, and this walk matches on `Call` rather than exhaustively, so
+            // the compiler does not ask about a new operation that reaches a
+            // function without calling it.
+            if let OpKind::NativeBridge { closure, .. } = &op.kind {
+                for target in callback_targets(program, func, std::slice::from_ref(closure)) {
+                    if let Some(callee) = program.funcs.iter().find(|f| f.name == target)
+                        && reached.insert(callee.name.as_str())
+                    {
+                        pending.push(callee.name.as_str());
+                    }
+                }
+            }
             let OpKind::Call { callee, args, .. } = &op.kind else {
                 continue;
             };

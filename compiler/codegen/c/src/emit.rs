@@ -210,14 +210,27 @@ pub fn standalone_main(initializes: bool) -> String {
 }
 
 /// Every value some operation or terminator in a function reads.
+/// The operands a value reads *in C*.
+///
+/// Everything `operands_of` says, less a bridge's closure. A bridge is emitted
+/// as the name of a generated function, so nothing reads the closure at run
+/// time -- but it is a real operand in the HIR, where it is what identifies the
+/// function and what keeps the body reachable. Counting it here would declare a
+/// local that is assigned and never read, which is `-Wunused-but-set-variable`
+/// and an error under the flags this file is compiled with.
+fn operands_in_c(kind: &OpKind) -> Vec<ValueId> {
+    match kind {
+        OpKind::NativeBridge { .. } => Vec::new(),
+        other => nts_core::hir::operands_of(other),
+    }
+}
+
 fn values_read(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
     let mut read = rustc_hash::FxHashSet::default();
     for block in &func.blocks {
         read.extend(nts_core::hir::operands_of_terminator(&block.terminator));
         for value in &block.ops {
-            read.extend(nts_core::hir::operands_of(
-                &func.values[value.0 as usize].kind,
-            ));
+            read.extend(operands_in_c(&func.values[value.0 as usize].kind));
         }
     }
     read
@@ -554,6 +567,8 @@ pub fn emit(program: &Program) -> Emitted {
     }
     emit_closure_call_slot(&mut writer, &origin, program);
 
+    emit_bridges(&mut writer, &origin, program, &mut diagnostics);
+
     for (_, body, _) in bodies {
         writer.append(body);
     }
@@ -576,6 +591,24 @@ pub fn emit(program: &Program) -> Emitted {
 /// calls must be declared by a runtime header. Neither path invents a prototype
 /// from argument representations: specialization cannot change a callee's ABI.
 type Prototypes = Result<Vec<String>, (Vec<String>, Vec<Diagnostic>)>;
+
+/// The callback bridges, after every prototype and before every body.
+///
+/// That position is the requirement: a bridge is a *definition* that calls a
+/// compiled function, so the function must already be declared, and nothing in
+/// a body refers to a bridge except by the name written here.
+fn emit_bridges(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    match native_memory::bridges(writer, origin, program) {
+        Ok(true) => writer.blank(origin),
+        Ok(false) => {}
+        Err(diagnostic) => diagnostics.push(diagnostic),
+    }
+}
 
 /// The claims this program makes about foreign declarations, as a file.
 ///
@@ -1901,6 +1934,40 @@ fn integer_literal(value: i128) -> String {
 }
 
 /// The name of the single instance a named function's closure has.
+/// The address of the one immortal instance of a closure with no captures.
+fn static_closure_text(
+    op: &nts_core::hir::Op,
+    name: &str,
+    context: &Context<'_>,
+) -> Result<String, Diagnostic> {
+    let layout = layout_of(context.program, &op.ty, &op.origin)?;
+    Ok(format!("{name} = &{};", static_closure_name(layout)))
+}
+
+/// The bridge's own name, as a value.
+///
+/// A function designator decays to a pointer to it, so there is no `&` and
+/// nothing taken at run time: this is a link-time constant. Which bridge it is
+/// comes from the closure's layout, the same route a virtual call takes.
+fn bridge_text(
+    func: &Func,
+    op: &nts_core::hir::Op,
+    closure: ValueId,
+    signature: &nts_core::hir::native::FnPointer,
+    name: &str,
+    context: &Context<'_>,
+) -> Result<String, Diagnostic> {
+    let layout = layout_of(context.program, &func.value(closure).ty, &op.origin)?;
+    let target = layout.methods.first().and_then(|method| method.as_deref()).ok_or_else(|| {
+        Diagnostic::error(
+            "NTS2006",
+            "a callback bridge whose closure publishes no function",
+            op.origin.location,
+        )
+    })?;
+    Ok(format!("{name} = {};", native_memory::bridge_name(target, signature)))
+}
+
 fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
     format!("nts_fnval_{}", object_type_name(layout))
 }
@@ -1917,6 +1984,7 @@ fn emit_object_types(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if let Err(diagnostic) = native_memory::types(writer, origin, program) { diagnostics.push(diagnostic); }
+    native_memory::function_pointer_types(writer, origin, program);
     // Every object type is forward-declared first, so a field may point at a
     // type declared later -- or at its own, which a linked structure does.
     for layout in &program.layouts {
@@ -3228,9 +3296,7 @@ fn emit_body(
         declared.extend(block.ops.iter().copied());
         read.extend(nts_core::hir::operands_of_terminator(&block.terminator));
         for value in &block.ops {
-            read.extend(nts_core::hir::operands_of(
-                &func.values[value.0 as usize].kind,
-            ));
+            read.extend(operands_in_c(&func.values[value.0 as usize].kind));
         }
     }
 
@@ -3238,7 +3304,7 @@ fn emit_body(
     // nothing to declare. `c.advance();` written for its effect is exactly that,
     // and a local assigned by nobody is `-Wunused-variable`.
     declared.retain(|value| {
-        read.contains(value) || !matches!(func.values[value.0 as usize].kind, OpKind::Call { .. } | OpKind::NativeMalloc { .. })
+        read.contains(value) || !matches!(func.values[value.0 as usize].kind, OpKind::ClosureStatic | OpKind::Call { .. } | OpKind::NativeMalloc { .. })
     });
 
     // A parameter nothing reads is an error under -Werror, and constant folding
@@ -3915,10 +3981,10 @@ fn memory_op(
         ),
         // One instance, emitted once beside its descriptor. No allocation and
         // no reference counting: it is immortal, and there is nothing in it.
-        OpKind::ClosureStatic => {
-            let layout = layout_of(context.program, &op.ty, &op.origin)?;
-            format!("{name} = &{};", static_closure_name(layout))
-        }
+        // Read only by a bridge, which names a symbol instead.
+        OpKind::ClosureStatic if !context.read.contains(&value) => return Ok(()),
+        OpKind::ClosureStatic => static_closure_text(op, &name, context)?,
+        OpKind::NativeBridge { closure, signature } => bridge_text(func, op, *closure, signature, &name, context)?,
         OpKind::ObjectNew { frame } => {
             allocate_object(writer, op, &name, *frame, context)?
         }
@@ -4165,6 +4231,7 @@ fn emit_op(
         | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. }
         | OpKind::ObjectNew { .. }
         | OpKind::ClosureStatic
+        | OpKind::NativeBridge { .. }
         | OpKind::CellReady { .. }
         | OpKind::FieldGet { .. }
         | OpKind::SharedFieldGet { .. }

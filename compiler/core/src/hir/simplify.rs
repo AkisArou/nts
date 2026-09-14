@@ -182,6 +182,7 @@ fn constant(func: &Func, value: ValueId) -> Option<i128> {
 /// instruction set grows.
 pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
     match kind {
+        OpKind::NativeBridge { closure, .. } => *closure = of(*closure),
         OpKind::Erase { value }
         | OpKind::TagOf { value }
         | OpKind::Unerase { value }

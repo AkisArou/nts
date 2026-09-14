@@ -28206,9 +28206,58 @@ impl<'a> FuncBuilder<'a> {
             self.native_callee(id, declaration, name, signature)?
         };
 
-        let args = self.lower_arguments(id, &arguments)?;
+        let mut args = self.lower_arguments(id, &arguments)?;
+        if let Callee::Native(target) = &callee {
+            self.bridge_callback_arguments(id, &target.clone(), &mut args)?;
+        }
 
         self.push_call(id, callee, args, declaration)
+    }
+
+    /// Turn each argument for a C function pointer parameter into a bridge.
+    ///
+    /// A TypeScript function value is a managed closure object, and the
+    /// specializer converts every native argument to its parameter's
+    /// `representation()` -- one machine word for a code pointer. Left alone
+    /// that took the closure's *heap address* and handed it to C as something
+    /// to call: a wrong answer that compiles, and one the witness cannot see,
+    /// because the emitted prototype and the real header agree about the
+    /// parameter. Only the value was wrong.
+    ///
+    /// So the value becomes a `NativeBridge`, which a backend emits as a real
+    /// function with the foreign signature.
+    ///
+    /// **Non-capturing only, and checked by construction.** The argument's
+    /// producing operation must be `ClosureStatic`, which is the closure with
+    /// no captured environment. A capturing one has state that a bare C
+    /// function pointer has nowhere to put; giving it one means a context
+    /// parameter the callee agrees to carry, and no C signature implies that.
+    /// Refused here rather than bridged into something that reads freed stack.
+    fn bridge_callback_arguments(
+        &mut self,
+        call: NodeId,
+        target: &super::native::Function,
+        args: &mut [ValueId],
+    ) -> Result<(), Diagnostic> {
+        for (at, parameter) in target.parameters.iter().enumerate() {
+            let super::native::Type::FnPointer(signature) = parameter else {
+                continue;
+            };
+            let Some(argument) = args.get_mut(at) else { continue };
+            if !matches!(self.values[argument.0 as usize].kind, OpKind::ClosureStatic) {
+                return Err(self.unsupported(
+                    call,
+                    "a C function pointer needs a function declared with `function`: an inline function expression is allocated as a closure object, and if it captures anything there is nowhere to put that in a bare code pointer",
+                ));
+            }
+            let origin = self.origin(call);
+            *argument = self.push(
+                OpKind::NativeBridge { closure: *argument, signature: signature.clone() },
+                HirType::NativePointer(super::native::Pointee::Void),
+                origin,
+            );
+        }
+        Ok(())
     }
 
     fn native_callee(

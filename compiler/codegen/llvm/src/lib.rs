@@ -188,6 +188,10 @@ pub fn emit(program: &Program) -> Emitted {
             }
         }
     }
+    match bridges(program) {
+        Ok(text_for_bridges) => text.push_str(&text_for_bridges),
+        Err(diagnostic) => diagnostics.push(diagnostic),
+    }
     text.push_str(&bodies);
     let _ = writeln!(text, "\n{TBAA_TREE}");
     Emitted { text, diagnostics }
@@ -954,6 +958,109 @@ fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) ->
 }
 
 /// The one instance of a closure class that captures nothing.
+/// The callback bridges this program needs, as LLVM definitions.
+///
+/// A real function with the foreign signature that calls the compiled one. It
+/// has to exist in each backend separately: the C backend's bridge is C, and a
+/// program compiled here links against the same consumer, so the symbol and the
+/// behaviour must match while the text cannot.
+///
+/// The receiver is the static closure's global. Only a closure with no captures
+/// is bridged, so one immortal instance is the whole of its state.
+fn bridges(program: &Program) -> Result<String, Diagnostic> {
+    let mut out = String::new();
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for func in &program.funcs {
+        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| func.value(*value)) {
+            let OpKind::NativeBridge { closure, signature } = &op.kind else { continue };
+            let layout = closure_layout(program, func, *closure)?;
+            let target = layout
+                .methods
+                .first()
+                .and_then(|method| method.as_deref())
+                .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
+            let name = bridge_name(target, signature);
+            if !seen.insert(name.clone()) {
+                continue;
+            }
+            let compiled = program
+                .funcs
+                .iter()
+                .find(|candidate| candidate.name == target)
+                .ok_or_else(|| refuse(func, "a callback bridge naming a function this program does not define"))?;
+            if compiled.params.len() != signature.parameters.len() + 1 {
+                return Err(refuse(func, "a callback bridge whose foreign signature and compiled function disagree about arity"));
+            }
+            let mut parameters = Vec::new();
+            let mut arguments = vec![format!("ptr @{}", static_closure_name(layout))];
+            let mut body = String::new();
+            for (at, foreign) in signature.parameters.iter().enumerate() {
+                let from = foreign.representation();
+                let to = compiled.params[at + 1].ty.clone();
+                let (from_ty, to_ty) = (ty_of(&from, compiled)?, ty_of(&to, compiled)?);
+                parameters.push(format!("{from_ty} %a{at}"));
+                if from == to {
+                    arguments.push(format!("{to_ty} %a{at}"));
+                } else {
+                    let instruction = conversion(&from, &to, compiled)?;
+                    let _ = writeln!(body, "  %p{at} = {instruction} {from_ty} %a{at} to {to_ty}");
+                    arguments.push(format!("{to_ty} %p{at}"));
+                }
+            }
+            let want = signature.result.representation();
+            let have = compiled.return_type.clone();
+            // `symbol` already carries the sigil; a second one is `@@f`, which
+            // the assembler reports as "expected value token" pointing at the
+            // call and not at the name.
+            let call = format!("call {} {}({})", ty_of(&have, compiled)?, symbol(&compiled.name), arguments.join(", "));
+            let parameters = parameters.join(", ");
+            if want == HirType::Void {
+                let _ = writeln!(out, "define internal void @{name}({parameters}) nounwind {{");
+                out.push_str(&body);
+                let _ = writeln!(out, "  {call}\n  ret void\n}}");
+            } else {
+                let want_ty = ty_of(&want, compiled)?;
+                let _ = writeln!(out, "define internal {want_ty} @{name}({parameters}) nounwind {{");
+                out.push_str(&body);
+                let _ = writeln!(out, "  %r = {call}");
+                if have == want {
+                    let _ = writeln!(out, "  ret {want_ty} %r\n}}");
+                } else {
+                    let instruction = conversion(&have, &want, compiled)?;
+                    let _ = writeln!(out, "  %c = {instruction} {} %r to {want_ty}", ty_of(&have, compiled)?);
+                    let _ = writeln!(out, "  ret {want_ty} %c\n}}");
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The layout of the closure a bridge names.
+fn closure_layout<'p>(
+    program: &'p Program,
+    func: &Func,
+    closure: nts_core::hir::ValueId,
+) -> Result<&'p nts_core::hir::Layout, Diagnostic> {
+    let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &func.value(closure).ty else {
+        return Err(refuse(func, "a callback bridge whose operand is not a closure"));
+    };
+    program
+        .layouts
+        .iter()
+        .find(|layout| layout.types.contains(id))
+        .ok_or_else(|| refuse(func, "a callback bridge whose closure type has no layout"))
+}
+
+/// The symbol of the bridge for one function reached through one signature.
+///
+/// The same name the C backend derives, because the two must not disagree: a
+/// program compiled by one and linked against a consumer built for the other
+/// would otherwise differ in a symbol nobody looked at.
+fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPointer) -> String {
+    format!("NtsBridge_{}_{}", nts_codegen_common::symbols::c_identifier(target), signature.name)
+}
+
 fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
     format!("nts_fnval_{}", descriptor_name(layout))
 }
@@ -1952,6 +2059,21 @@ fn allocation(
         // The address of the static instance emitted beside its descriptor.
         // No allocation and no counting: it is immortal and there is nothing
         // in it.
+        // A bridge's address is its symbol. `getelementptr i8, ptr @f, i64 0` for
+        // the same reason the static closure below uses one: a value needs a
+        // name, and there is no no-op cast between two `ptr`s.
+        OpKind::NativeBridge { closure, signature } => {
+            let layout = closure_layout(program, func, *closure)?;
+            let target = layout
+                .methods
+                .first()
+                .and_then(|method| method.as_deref())
+                .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
+            format!(
+                "{out} = getelementptr i8, ptr @{}, i64 0",
+                bridge_name(target, signature)
+            )
+        }
         OpKind::ClosureStatic => {
             let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &op.ty else {
                 return Err(refuse(func, "a closure value that is not an object"));
@@ -2746,6 +2868,10 @@ fn memory_operation(
         OpKind::ObjectNew { .. }
         | OpKind::ArrayNew { .. }
         | OpKind::ClosureStatic
+        // A bridge's address is a symbol rather than an allocation, but it is
+        // rendered beside the static closure it is derived from, which is where
+        // the layout lookup already lives.
+        | OpKind::NativeBridge { .. }
         | OpKind::Await { .. }
         // `CellReady` belongs with the other two halves of the suspension
         // machine, and was the one kind missing from this list -- so it fell

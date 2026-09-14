@@ -865,6 +865,66 @@ fn an_inline_struct_member_agrees_with_the_system_header() {
     );
 }
 
+/// C calling a compiled TypeScript function through a generated bridge.
+///
+/// A TypeScript function value is a managed closure object and C wants
+/// something it can call, so the compiler emits a real function with the
+/// foreign signature. The evidence is the separately compiled library actually
+/// entering it: `apply_twice` calls the callback twice, so a bridge entered
+/// once, or returning a constant, gives a different answer than 10 + 3 + 3.
+///
+/// Both backends, because the bridge is emitted per backend and a C-only check
+/// would not notice LLVM producing nothing.
+#[test]
+fn c_calls_a_typescript_function_through_a_bridge() {
+    let source = include_str!("../../../../examples/interop/native-callback/src/main.ts");
+    let declarations = [(
+        "library.d.ts",
+        include_str!("../../../../examples/interop/native-callback/types/library.d.ts"),
+    )];
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some((dir, prepared)) =
+            prepare_with_files("native-callback", source, provider, &declarations)
+        else {
+            return;
+        };
+        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let c = nts_codegen_c::emit(&prepared.program);
+        assert!(c.is_complete(), "{:?}", c.diagnostics);
+        let llvm = nts_codegen_llvm::emit(&prepared.program);
+        assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+        std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+        std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+        for file in c.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        std::fs::write(
+            dir.join("caller.c"),
+            include_str!("../../../../examples/interop/native-callback/native/caller.c"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("library.c"),
+            include_str!("../../../../examples/interop/native-callback/native/library.c"),
+        )
+        .unwrap();
+        for source in ["caller.c", "library.c", "nts_runtime.c"] {
+            clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+        }
+        for (source, object) in [("program.c", "c.o"), ("program.ll", "llvm.o")] {
+            clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+            clang(
+                &dir,
+                &[object, "caller.o", "library.o", "nts_runtime.o", "-lm", "-o", "caller"],
+            );
+            assert!(
+                Command::new(dir.join("caller")).status().unwrap().success(),
+                "{source} {provider:?}"
+            );
+        }
+    }
+}
+
 #[test]
 fn native_struct_rejections_preserve_the_valid_arm() {
     for (name, bad) in [

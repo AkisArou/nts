@@ -1470,6 +1470,12 @@ fn render_constant(index: usize, ty: &str, kind: &OpKind) -> String {
         // A constant with an address: the one instance of a named function's
         // closure. Nullary like the rest, which is why it renders here.
         OpKind::ClosureStatic => "closure.static".to_owned(),
+        // Named by the function it bridges rather than by the closure value, so
+        // reading the dump answers "which function does C get" without first
+        // resolving a layout by hand.
+        OpKind::NativeBridge { closure, signature } => {
+            format!("bridge %{} as {}", closure.0, signature.name)
+        }
         _ => unreachable!("only the constants reach here"),
     };
     format!("%{index} = const {value} : {ty}")
@@ -1594,6 +1600,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::NativeLocal { count } => format!("%{index} = native.local {count} : {ty}"),
         OpKind::NativeMalloc { bytes } => format!("%{index} = native.malloc %{} : {ty}", bytes.0),
         OpKind::NativeFree { pointer } => format!("native.free %{}", pointer.0),
+        OpKind::NativeBridge { closure, signature } => {
+            format!("%{index} = native.bridge %{} as {} : {ty}", closure.0, signature.name)
+        }
         OpKind::NativeIndexAddress { pointer, index: offset } => format!("%{index} = native.index.addr %{}[%{}] : {ty}", pointer.0, offset.0),
         OpKind::NativeFieldAddress { pointer, field } => format!("%{index} = native.field.addr %{}.{field} : {ty}", pointer.0),
         OpKind::NativeStore { pointer, index, value } => format!("native.store %{}[%{}], %{}", pointer.0, index.0, value.0),

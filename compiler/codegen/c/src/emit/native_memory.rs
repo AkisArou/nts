@@ -1,6 +1,6 @@
 //! Native payloads have no managed header. C independently checks the shared
 //! layout calculator on every emitted definition.
-use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype};
+use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name};
 use nts_core::hir::Callee;
 use nts_core::hir::native::{Pointee, Type};
 
@@ -179,6 +179,13 @@ fn names_only_foreign(ty: &Type) -> bool {
     match ty {
         Type::Pointer(pointee) => pointee_is_foreign(pointee),
         Type::Scalar(_) | Type::Bool | Type::Void => true,
+        // A function pointer names whatever its own signature names, so it is
+        // witnessable exactly when every part of that signature is.
+        Type::FnPointer(signature) => signature
+            .parameters
+            .iter()
+            .chain(std::iter::once(&*signature.result))
+            .all(names_only_foreign),
         Type::Managed(_) | Type::Erased | Type::BigInt => false,
     }
 }
@@ -191,5 +198,125 @@ fn pointee_is_foreign(pointee: &Pointee) -> bool {
         Pointee::Scalar(_) | Pointee::Opaque(_) | Pointee::Void => true,
         Pointee::Struct(layout) => layout.foreign,
         Pointee::Pointer(inner) | Pointee::Const(inner) => pointee_is_foreign(inner),
+    }
+}
+
+/// The C name of the bridge for one function reached through one signature.
+///
+/// Both halves are in it because neither alone identifies the bridge: the same
+/// function can be handed to two callbacks with different C signatures, and two
+/// functions can share one signature.
+pub(super) fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPointer) -> String {
+    format!("NtsBridge_{}_{}", c_identifier(target), signature.name)
+}
+
+/// The typedefs and definitions the program's `NativeBridge` operations need.
+///
+/// A bridge is a real C function with the foreign signature that calls the
+/// compiled one, which is the only honest way across: a TypeScript function
+/// value is a managed closure object, and C wants something it can call.
+///
+/// Emitted from a walk of the operations rather than from a list built at
+/// lowering, so the set cannot drift from the uses.
+///
+/// # Errors
+///
+/// If a bridge's closure has no method, if the function it names is not in this
+/// program, or if the foreign signature and the compiled function disagree
+/// about arity.
+pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<bool, Diagnostic> {
+    let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
+    let mut wanted: std::collections::BTreeMap<String, (std::sync::Arc<nts_core::hir::native::FnPointer>, &Func, String)> =
+        std::collections::BTreeMap::new();
+    for func in &program.funcs {
+        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
+            let OpKind::NativeBridge { closure, signature } = &op.kind else { continue };
+            let layout = layout_of(program, &func.values[closure.0 as usize].ty, origin)?;
+            let target = layout
+                .methods
+                .first()
+                .and_then(|method| method.as_deref())
+                .ok_or_else(|| refuse(&format!(
+                    "a callback bridge whose closure publishes no function (layout `{}`, {} method slot(s))",
+                    layout.name,
+                    layout.methods.len()
+                )))?;
+            let compiled = program
+                .funcs
+                .iter()
+                .find(|candidate| candidate.name == target)
+                .ok_or_else(|| refuse("a callback bridge naming a function this program does not define"))?;
+            // The closure's call method takes the closure as its first
+            // parameter -- that is how every call through one works -- so the
+            // bridge supplies it and the foreign signature describes the rest.
+            if compiled.params.len() != signature.parameters.len() + 1 {
+                return Err(refuse("a callback bridge whose foreign signature and compiled function disagree about arity"));
+            }
+            wanted.insert(
+                bridge_name(target, signature),
+                (signature.clone(), compiled, static_closure_name(layout)),
+            );
+        }
+    }
+    if wanted.is_empty() {
+        return Ok(false);
+    }
+    for (name, (signature, compiled, receiver)) in &wanted {
+        let mut parameters = Vec::new();
+        // The receiver is the static closure itself: one immortal object per
+        // closure with no captured state, which is exactly why only a
+        // non-capturing function may be bridged.
+        let mut arguments = vec![format!("&{receiver}")];
+        for (at, ty) in signature.parameters.iter().enumerate() {
+            let slot = format!("a{at}");
+            parameters.push(format!("{} {slot}", ty.c_type()));
+            // The compiled function takes the managed representation -- a
+            // `number` is a `double` there and an `int` here -- so each argument
+            // is converted on the way in and the result on the way out. C's own
+            // conversions do the work; what this supplies is the target type,
+            // which is the compiled function's and not the foreign one's.
+            let want = c_type_of(program, &compiled.params[at + 1].ty, &compiled.params[at + 1].origin)?;
+            arguments.push(format!("({want}){slot}"));
+        }
+        let parameters = if parameters.is_empty() { "void".to_owned() } else { parameters.join(", ") };
+        let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
+        let result = signature.result.c_type();
+        let body = if matches!(&*signature.result, nts_core::hir::native::Type::Void) {
+            format!("{call};")
+        } else {
+            let _ = return_c_type(program, &compiled.return_type, &compiled.origin)?;
+            format!("return ({result}){call};")
+        };
+        writer.line(origin, format!("static {result} {name}({parameters}) {{ {body} }}"));
+    }
+    Ok(true)
+}
+
+/// Every C function pointer typedef this program's foreign signatures need.
+///
+/// Separate from the bridge definitions and emitted much earlier, because a
+/// *prototype* mentions the typedef: `int takes(NtsFn_int_int);` is a syntax
+/// error before the typedef exists, and C reads it as an old-style parameter
+/// list rather than reporting the missing name. The same ordering trap as an
+/// inline struct member, in a different spelling.
+///
+/// Walked from the signatures rather than from a list built alongside them, so
+/// a signature that reaches a prototype cannot fail to reach this.
+pub(super) fn function_pointer_types(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+    let mut seen: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    for func in &program.funcs {
+        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
+            let nts_core::hir::OpKind::Call { callee: nts_core::hir::Callee::Native(target), .. } = &op.kind else {
+                continue;
+            };
+            for ty in target.parameters.iter().chain(std::iter::once(&target.result)) {
+                if let nts_core::hir::native::Type::FnPointer(signature) = ty {
+                    seen.insert(signature.name.clone(), signature.typedef());
+                }
+            }
+        }
+    }
+    for typedef in seen.values() {
+        writer.line(origin, typedef.clone());
     }
 }
