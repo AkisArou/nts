@@ -1328,6 +1328,58 @@ export const CORPORA = {
         // `crc32` is pure arithmetic over bytes and the cheapest thing in the module
         // to get subtly wrong -- a wrong polynomial or a missing final xor agrees
         // with itself on every round trip and with node on nothing.
+        // **The asynchronous half of this module, which nothing compared until now.**
+        //
+        // `corpus-reach.mjs` put zlib at 12 of 45 published functions called. The 33 it never
+        // reached were not an oversight in the specs: `differential-ts.mjs` and its probe were
+        // synchronous, so a spec could not await anything, and every callback-taking function in
+        // every module was structurally out of reach. Both halves now await, so these are
+        // reachable for the first time.
+        //
+        // Byte-for-byte against node's output, which is this corpus's standing rule for zlib --
+        // two correct implementations of one format may still disagree on the bytes, and which
+        // knob differs is worth knowing. The round trips are here as well because a compressor
+        // and a decompressor can be wrong together and agree with themselves.
+        label: "async-codecs",
+        call: async (m, s) => {
+          const bytes = Buffer.from(s, "utf8");
+          // A callback API turned into one promise, resolving to a comparable string either way.
+          // A synchronous throw and an error argument both become `threw:CODE`, because node
+          // reports validation one way and codec failure the other and this spec cares about
+          // neither distinction -- only about the two implementations agreeing.
+          const run = (fn, ...args) =>
+            new Promise((resolve) => {
+              if (typeof fn !== "function") { resolve("absent"); return; }
+              try {
+                fn(...args, (error, out) => {
+                  if (error) { resolve(`threw:${error.code ?? error.name ?? "?"}`); return; }
+                  resolve(out instanceof Uint8Array ? Buffer.from(out).toString("base64") : String(out));
+                });
+              } catch (error) {
+                resolve(`threw:${error.code ?? error.name ?? "?"}`);
+              }
+            });
+          const trip = async (compress, decompress) => {
+            const packed = await run(compress, bytes);
+            if (packed === "absent" || packed.startsWith("threw:")) return packed;
+            return run(decompress, Buffer.from(packed, "base64"));
+          };
+          return [
+            await run(m.deflate, bytes),
+            await run(m.gzip, bytes),
+            await run(m.deflateRaw, bytes),
+            await run(m.brotliCompress, bytes),
+            await run(m.zstdCompress, bytes),
+            await trip(m.deflate, m.inflate),
+            await trip(m.gzip, m.gunzip),
+            await trip(m.deflateRaw, m.inflateRaw),
+            await trip(m.gzip, m.unzip),
+            await trip(m.brotliCompress, m.brotliDecompress),
+            await trip(m.zstdCompress, m.zstdDecompress),
+          ].join("|");
+        },
+      },
+      {
         label: "unzip-zstd-crc32",
         call: (m, s) => {
           const bytes = Buffer.from(s, "utf8");

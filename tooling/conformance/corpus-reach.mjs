@@ -173,9 +173,18 @@ for (const moduleName of MODULES) {
     for (const spec of corpus.calls ?? []) {
       for (const input of corpus.fixed) {
         try {
-          if (typeof spec.call === "function") spec.call(subject, input);
+          // **Awaited, or an async spec is counted at its first suspension and no further.**
+          // `differential-ts.mjs` and its probe became async so that callback APIs could be
+          // compared at all; this instrument stayed synchronous, so when zlib's async codec
+          // spec landed it reported reach going from 12 of 45 to **13** -- the one function
+          // invoked before the first `await`. Ten more ran and were invisible here.
+          //
+          // A tool that measures coverage, reading a spec it cannot execute to the end, reports
+          // a smaller number rather than an error. That is the shape this directory keeps
+          // producing and it produced it again, one instrument behind the one that changed.
+          if (typeof spec.call === "function") await spec.call(subject, input);
           else if (spec.name !== undefined && typeof subject[spec.name] === "function") {
-            subject[spec.name](...(spec.args ? spec.args(input) : [input]));
+            await subject[spec.name](...(spec.args ? spec.args(input) : [input]));
           }
         } catch {
           // A spec that throws still counted its call, which is the measurement.

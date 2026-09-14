@@ -65,6 +65,43 @@ if (modules.length === 0) {
 }
 
 const show = (r) => JSON.stringify(r);
+
+const isThenable = (v) =>
+  v !== null && (typeof v === "object" || typeof v === "function") && typeof v.then === "function";
+
+/**
+ * **The same refusal `differential-probe.cjs` makes, on this side of the comparison.**
+ *
+ * `show` is `JSON.stringify`, and an unresolved promise renders as `{}`. A spec that forgets an
+ * `await` inside an array therefore *agrees* with itself across both implementations, for every
+ * input — a check whose answer cannot depend on what it measures. Both halves refuse it, because
+ * a guard on one side only would let a spec pass here and be caught in the child, or the reverse.
+ */
+function settled(value, label) {
+  // **A joined string is where this actually goes wrong.** The array check below never fired
+  // for the spec that prompted it, because the spec ends `[...].join("|")` -- so an unawaited
+  // promise is already `[object Promise]` inside a string by the time it arrives, identical on
+  // both sides. Removing one `await` from a real spec produced 0 divergences and no complaint.
+  if (typeof value === "string" && value.includes("[object Promise]")) {
+    console.error(
+      `${label}: an unawaited promise was stringified into the result. Await it inside the ` +
+      "spec; `[object Promise]` is identical on both sides and the comparison cannot fail.",
+    );
+    process.exit(2);
+  }
+  if (Array.isArray(value)) {
+    for (let at = 0; at < value.length; at++) {
+      if (isThenable(value[at])) {
+        console.error(
+          `${label}: element ${at} is a promise. Await it inside the spec; unresolved it renders`,
+        );
+        console.error("  as {} on both sides and the comparison cannot fail.");
+        process.exit(2);
+      }
+    }
+  }
+  return value;
+}
 let failed = false;
 
 for (const name of modules) {
@@ -224,11 +261,11 @@ try {
       let theirs;
       try {
         if (typeof spec.call === "function") {
-          theirs = { value: spec.call(upstream, inputs[i]) };
+          theirs = { value: settled(await spec.call(upstream, inputs[i]), fnName) };
         } else {
           const fn = upstream[spec.name];
           if (typeof fn !== "function") continue;
-          theirs = { value: fn(...spec.args(inputs[i])) };
+          theirs = { value: settled(await fn(...spec.args(inputs[i])), fnName) };
         }
       } catch (error) {
         // `code` as well as name and message. Node's errors carry one --
