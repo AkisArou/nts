@@ -24937,3 +24937,63 @@ implement", because the phrase was not in its regex, only exports were checked a
 across 26 modules where it previously examined 7 entries, and reports the modules it could not check
 the exports of by count.
 
+## Six divergence tools nothing gates, run once, and what they found
+
+The interpreted lane has one module with a failing file and both of its failures are priced, so
+"passes node's suite" no longer discriminates. `tooling/conformance` holds six tools that ask a
+different question -- behaviour that differs from node on inputs no test uses -- and **only
+`agreement.mjs` is wired into `tooling/gate`.** Running the other five once:
+
+    differential-ts --all     22 modules, ~4,000 inputs each      0 divergences
+    fuzz-timer-order          216 programs agree, 0 differ, 84 nondeterministic
+    self-oracle               1 finding, and it was the detector reading a comment
+    spec-variance             255 of 913 fields constant, 3 of them its own renderer
+    fuzz-deep-equal           10 divergences of 21,382            **a real bug**
+    differential-addon        `path` 40,084 and `util` 20,024     **a real bug, and an absence**
+
+### `isDeepStrictEqual` never compared symbol keys
+
+`{ [s]: 1 }` and `{ [s]: 2 }` were deep-strict-equal, and so were `{ [s]: 1 }` and `{}`.
+`ownEnumerableKeys` is `Object.keys` and its own doc comment said "own enumerable **string** keys";
+nothing else looked at symbols, so every symbol-keyed difference was invisible.
+
+**It hid a rule this profile had already implemented correctly.** `compareByKind` returns false for a
+`WeakMap`, `WeakSet` or `Promise` -- node's rule at `internal/util/comparisons.js:446` -- and that
+branch is reached only for a value the key walk descends into, so a `WeakMap` behind a symbol never
+got there. A correct rule guarded by a walk that cannot reach it reads exactly like a correct
+implementation, and the fuzzer's rendering pointed at `WeakMap` rather than at the symbol.
+
+Fixed to node's order from `keyCheck`, strict only. `util/test/symbol-keys-static.js` pins it, because
+a seeded fuzzer is not a regression test, and it was controlled by sabotage rather than trusted.
+
+### The compiled lane ignores the name passed to a validator
+
+`differential-addon` put `path` at 40,084 divergences while `differential-ts` put it at **zero** --
+the two lanes disagreeing about the same source, which is the shape worth noticing.
+
+`validateString(value, name)` is plain TypeScript that throws `ERR_INVALID_ARG_TYPE(name, ...)`.
+Compiled, the `name` it was given is discarded and the **caller's parameter identifier** is used
+instead, with `[i]` appended for a rest parameter. Three experiments, each a rebuild:
+
+    resolve's template changed to `ZZZ[${i}]`     neither message changed
+    join's rest parameter renamed to `segments`   compiled said `segments[1]`
+    normalize's call changed to pass "WANTED"     compiled said `path`
+
+**Why it stayed invisible.** This profile almost always passes a string equal to the parameter's own
+name, because that is node's convention. Across `path`'s eight exported functions seven agree by
+coincidence, and only `join` passes `"path"` for a parameter named `paths`. One function in eight, in
+one module, is the entire visible surface of a defect affecting every validator call in the tree.
+Reported to the compiler lane; it is not a `runtime/node` defect.
+
+### And two of the tools were measuring themselves
+
+`self-oracle` regexed raw file text, so its only finding was `buffer/slowbuffer-length-static.js`,
+whose sole mention of `require("node:buffer")` is a **comment** recording what the author checked.
+`spec-variance` rendered with `String()` first, so every object answered `[object Object]` for every
+input and `url/parse` read as a field that cannot discriminate -- it discriminates fine, because
+`differential-ts` compares with `JSON.stringify`. Both fixed and both controlled.
+
+`util`'s 20,024 is the third instance of the night's other pattern: the addon publishes 24 of node's
+35 `util.types.*` predicates, so eleven throw for every input, and the tool reports a missing name as
+a divergence in the vocabulary it uses for a wrong answer.
+
