@@ -60,7 +60,7 @@ index 482f61dc..829439b3 100644
              Ok(Some(class)) => classes.push(class),
              Ok(None) => {}
 diff --git a/compiler/codegen/jvm/src/ops.rs b/compiler/codegen/jvm/src/ops.rs
-index 8a8c2be5..34fe5bc9 100644
+index 8a8c2be5..1653c626 100644
 --- a/compiler/codegen/jvm/src/ops.rs
 +++ b/compiler/codegen/jvm/src/ops.rs
 @@ -1615,6 +1615,97 @@ impl Emitter<'_> {
@@ -161,7 +161,167 @@ index 8a8c2be5..34fe5bc9 100644
      /// The argument a fixed intrinsic declared as a callback interface,
      /// brought to that type on the stack.
      ///
-@@ -4426,6 +4517,126 @@ impl Emitter<'_> {
+@@ -4312,6 +4403,137 @@ impl Emitter<'_> {
+         Ok(true)
+     }
+ 
++    /// A call to a **bound Java member**, which `external` will never have
++    /// a row for: that table is this repository's own helpers and this name
++    /// came out of a jar.
++    ///
++    /// Split out of [`Self::call`] because it is a second dispatch living
++    /// inside the first -- six invocation kinds, a constructor that
++    /// allocates, and a return width the jar chose -- and because `call`
++    /// was 181 lines with it inlined.
++    fn foreign_call(
++        &mut self,
++        code: &mut Code,
++        pool: &mut Pool,
++        name: &str,
++        args: &[ValueId],
++        result: &HirType,
++        origin: &nts_semantic_schema::Origin,
++    ) -> Result<Placed, Diagnostic> {
++        use nts_core::hir::runtime::ForeignKind;
++                // Keyed by the foreign key, which is what a backend holds.
++                // Scanning the rows instead was O(rows) per call site
++                // against 78,948 of them for a bound Android SDK.
++                let Some(bound) = self.program.foreign.get(name) else {
++                    // Refused rather than guessed. `invokevirtual` on an
++                    // interface is an `IncompatibleClassChangeError` at
++                    // link time, in the user's program, which is far worse
++                    // than a refusal here.
++                    return Err(refuse(
++                        self.func,
++                        &format!(
++                            "a call to the bound member `{name}`, whose binding table row is \
++                             missing -- the `.bind` file beside the declaration says how to \
++                             invoke it, and without it this backend would have to guess \
++                             between `invokevirtual` and `invokeinterface`"
++                        ),
++                    ));
++                };
++                let Some((owner, member, descriptor)) =
++                    nts_jvm_emitter::bind::split_key(name)
++                else {
++                    return Err(refuse(
++                        self.func,
++                        &format!("a call to `{name}`, which is not a well-formed foreign key"),
++                    ));
++                };
++                // **A bound constructor allocates here, not in HIR.**
++                // `new` on a foreign class is the JVM's own `new; dup;
++                // invokespecial <init>`, so there is no layout of ours to
++                // fill and no receiver to load: this is the one bound
++                // member whose arguments are all of `args`. Lowering knows
++                // the same thing and emits no `ObjectNew` -- doing it in
++                // one place and not the other would either allocate twice
++                // or verify against an uninitialised reference.
++                if member == "<init>" {
++                    code.new_object(origin, pool, owner);
++                    code.dup(origin);
++                    self.push_foreign_arguments(code, pool, args, descriptor, origin)?;
++                    code.invoke_special(origin, pool, owner, member, descriptor);
++                    return Ok(Placed::OnStack);
++                }
++                // **The receiver is `args[0]` and the descriptor does not
++                // mention it.** HIR gives a foreign instance call the same
++                // shape every runtime helper has -- receiver first, then the
++                // declared arguments -- because `Callee::External` has no
++                // receiver of its own. A JVM instance invoke wants exactly
++                // that on the stack, but `push_arguments` walks the
++                // *descriptor*, which declares only the rest. Pushing all of
++                // `args` against it left the stack one short and the
++                // emitter's own accounting caught it.
++                let rest = if matches!(bound.kind, ForeignKind::Static) {
++                    args
++                } else {
++                    let Some((receiver, rest)) = args.split_first() else {
++                        return Err(refuse(
++                            self.func,
++                            &format!("an instance call to `{name}` with no receiver"),
++                        ));
++                    };
++                    self.load(code, pool, *receiver)?;
++                    rest
++                };
++                self.push_foreign_arguments(code, pool, rest, descriptor, origin)?;
++                match bound.kind {
++                    ForeignKind::Static => {
++                        code.invoke_static(origin, pool, owner, member, descriptor);
++                    }
++                    ForeignKind::Virtual => {
++                        code.invoke_virtual(origin, pool, owner, member, descriptor);
++                    }
++                    ForeignKind::Interface => {
++                        code.invoke_interface(origin, pool, owner, member, descriptor);
++                    }
++                    ForeignKind::Special => {
++                        code.invoke_special(origin, pool, owner, member, descriptor);
++                    }
++                    ForeignKind::Field | ForeignKind::StaticField => {
++                        return Err(refuse(
++                            self.func,
++                            &format!("`{name}` is a field, reached as a call"),
++                        ));
++                    }
++                }
++                // **Java's width is not TypeScript's.** `int size()` gives
++                // an `I` and a `number` is a `double`, so the value on the
++                // stack is one word where the accounting wants two -- which
++                // is what `moved the operand stack from 0 to -1` was. The
++                // conversion is the boundary rather than an optimisation:
++                // `hir::runtime` is the single answer about conversions for
++                // our own helpers, and a bound member needs the same rule
++                // applied to the descriptor the jar declared.
++                let returns = descriptor.rsplit(')').next().unwrap_or("");
++                if matches!(result, HirType::Float { bits: 64 }) {
++                    use nts_jvm_emitter::insn::{self, Kind};
++                    match returns {
++                        "I" | "S" | "B" | "C" | "Z" => {
++                            code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
++                        }
++                        "J" => code.convert(origin, insn::L2D, Kind::Long, Kind::Double),
++                        "F" => code.convert(origin, insn::F2D, Kind::Float, Kind::Double),
++                        _ => {}
++                    }
++                }
++                if matches!(result, HirType::Void) {
++                    let words = nts_jvm_emitter::descriptor::words(returns);
++                    if words > 0 {
++                        code.pop(origin, words);
++                    }
++                    return Ok(Placed::Stored);
++                }
++                Ok(Placed::OnStack)
++    }
++
+     // Adding a method here: put it above this attribute, not below it. An
+     // attribute belongs to the declaration that follows, so a function inserted
+     // between the two takes the allow with it and leaves `call` bare -- which
+@@ -4363,9 +4585,8 @@ impl Emitter<'_> {
+                 // that carry the payload representation.
+                 let which = usize::from(name == "nts_promise_all");
+                 let subject = args.get(which).map(|&first| self.ty(first).clone());
+-                let element = subject
+-                    .as_ref()
+-                    .and_then(|ty| self.array_element_descriptor(ty));
++                let element =
++                    subject.as_ref().and_then(|ty| self.array_element_descriptor(ty));
+                 let found = if self.shape.grows {
+                     // A growable program has no bare arrays, so every array
+                     // helper is a method on a wrapper and the element-width
+@@ -4383,8 +4604,7 @@ impl Emitter<'_> {
+                 // refusal, so a name in both would keep the older answer; there
+                 // is none, and this order makes adding one a visible decision
+                 // rather than a silent override.
+-                let found = found
+-                    .or_else(|| view_helper(name, subject.as_ref(), self.ty(value)));
++                let found = found.or_else(|| view_helper(name, subject.as_ref(), self.ty(value)));
+                 if self.integer_to_string(code, pool, name, args, origin)? {
+                     return Ok(Placed::OnStack);
+                 }
+@@ -4426,6 +4646,15 @@ impl Emitter<'_> {
                      code.invoke_static(origin, pool, owner, narrow, &format!("{arguments})I"));
                      return Ok(Placed::OnStack);
                  }
@@ -172,118 +332,7 @@ index 8a8c2be5..34fe5bc9 100644
 +                // one method twice is not an identity -- `keeps` looks up the
 +                // same string.
 +                if found.is_none() && nts_core::hir::runtime::is_foreign_key(name) {
-+                    // Keyed by the foreign key, which is what a backend holds.
-+                    // Scanning the rows instead was O(rows) per call site
-+                    // against 78,948 of them for a bound Android SDK.
-+                    let Some(bound) = self.program.foreign.get(name.as_str()) else {
-+                        // Refused rather than guessed. `invokevirtual` on an
-+                        // interface is an `IncompatibleClassChangeError` at
-+                        // link time, in the user's program, which is far worse
-+                        // than a refusal here.
-+                        return Err(refuse(
-+                            self.func,
-+                            &format!(
-+                                "a call to the bound member `{name}`, whose binding table row is \
-+                                 missing -- the `.bind` file beside the declaration says how to \
-+                                 invoke it, and without it this backend would have to guess \
-+                                 between `invokevirtual` and `invokeinterface`"
-+                            ),
-+                        ));
-+                    };
-+                    let Some((owner, member, descriptor)) =
-+                        nts_jvm_emitter::bind::split_key(name)
-+                    else {
-+                        return Err(refuse(
-+                            self.func,
-+                            &format!("a call to `{name}`, which is not a well-formed foreign key"),
-+                        ));
-+                    };
-+                    // **A bound constructor allocates here, not in HIR.**
-+                    // `new` on a foreign class is the JVM's own `new; dup;
-+                    // invokespecial <init>`, so there is no layout of ours to
-+                    // fill and no receiver to load: this is the one bound
-+                    // member whose arguments are all of `args`. Lowering knows
-+                    // the same thing and emits no `ObjectNew` -- doing it in
-+                    // one place and not the other would either allocate twice
-+                    // or verify against an uninitialised reference.
-+                    if member == "<init>" {
-+                        code.new_object(origin, pool, owner);
-+                        code.dup(origin);
-+                        self.push_foreign_arguments(code, pool, args, descriptor, origin)?;
-+                        code.invoke_special(origin, pool, owner, member, descriptor);
-+                        return Ok(Placed::OnStack);
-+                    }
-+                    use nts_core::hir::runtime::ForeignKind;
-+                    // **The receiver is `args[0]` and the descriptor does not
-+                    // mention it.** HIR gives a foreign instance call the same
-+                    // shape every runtime helper has -- receiver first, then the
-+                    // declared arguments -- because `Callee::External` has no
-+                    // receiver of its own. A JVM instance invoke wants exactly
-+                    // that on the stack, but `push_arguments` walks the
-+                    // *descriptor*, which declares only the rest. Pushing all of
-+                    // `args` against it left the stack one short and the
-+                    // emitter's own accounting caught it.
-+                    let rest = if matches!(bound.kind, ForeignKind::Static) {
-+                        args
-+                    } else {
-+                        let Some((receiver, rest)) = args.split_first() else {
-+                            return Err(refuse(
-+                                self.func,
-+                                &format!("an instance call to `{name}` with no receiver"),
-+                            ));
-+                        };
-+                        self.load(code, pool, *receiver)?;
-+                        rest
-+                    };
-+                    self.push_foreign_arguments(code, pool, rest, descriptor, origin)?;
-+                    match bound.kind {
-+                        ForeignKind::Static => {
-+                            code.invoke_static(origin, pool, owner, member, descriptor);
-+                        }
-+                        ForeignKind::Virtual => {
-+                            code.invoke_virtual(origin, pool, owner, member, descriptor);
-+                        }
-+                        ForeignKind::Interface => {
-+                            code.invoke_interface(origin, pool, owner, member, descriptor);
-+                        }
-+                        ForeignKind::Special => {
-+                            code.invoke_special(origin, pool, owner, member, descriptor);
-+                        }
-+                        ForeignKind::Field | ForeignKind::StaticField => {
-+                            return Err(refuse(
-+                                self.func,
-+                                &format!("`{name}` is a field, reached as a call"),
-+                            ));
-+                        }
-+                    }
-+                    // **Java's width is not TypeScript's.** `int size()` gives
-+                    // an `I` and a `number` is a `double`, so the value on the
-+                    // stack is one word where the accounting wants two -- which
-+                    // is what `moved the operand stack from 0 to -1` was. The
-+                    // conversion is the boundary rather than an optimisation:
-+                    // `hir::runtime` is the single answer about conversions for
-+                    // our own helpers, and a bound member needs the same rule
-+                    // applied to the descriptor the jar declared.
-+                    let returns = descriptor.rsplit(')').next().unwrap_or("");
-+                    if matches!(result, HirType::Float { bits: 64 }) {
-+                        use nts_jvm_emitter::insn::{self, Kind};
-+                        match returns {
-+                            "I" | "S" | "B" | "C" | "Z" => {
-+                                code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
-+                            }
-+                            "J" => code.convert(origin, insn::L2D, Kind::Long, Kind::Double),
-+                            "F" => code.convert(origin, insn::F2D, Kind::Float, Kind::Double),
-+                            _ => {}
-+                        }
-+                    }
-+                    if matches!(result, HirType::Void) {
-+                        let words = nts_jvm_emitter::descriptor::words(returns);
-+                        if words > 0 {
-+                            code.pop(origin, words);
-+                        }
-+                        return Ok(Placed::Stored);
-+                    }
-+                    return Ok(Placed::OnStack);
++                    return self.foreign_call(code, pool, name, args, result, origin);
 +                }
                  let Some((owner, member, descriptor)) = found else {
                      // The cause, which is that *this table* has no entry, and
@@ -362,7 +411,7 @@ index faa0ec48..497bc555 100644
      const INDEX: &[&str] = &[
          "nts_str_index_of",
 diff --git a/compiler/core/src/hir/lower.rs b/compiler/core/src/hir/lower.rs
-index ac9baa5d..7cb94d94 100644
+index ac9baa5d..26fed6e3 100644
 --- a/compiler/core/src/hir/lower.rs
 +++ b/compiler/core/src/hir/lower.rs
 @@ -354,7 +354,7 @@ fn generic_classes(
@@ -458,7 +507,7 @@ index ac9baa5d..7cb94d94 100644
 -    let probe = FuncBuilder::new(snapshot);
 +fn members_of(
 +    snapshot: &SemanticSnapshot,
-+    foreign: &rustc_hash::FxHashMap<(u32, u32), super::runtime::ForeignCall>,
++    foreign: &super::runtime::ForeignTable,
 +    id: NodeId,
 +) -> Vec<NodeId> {
 +    let probe = FuncBuilder::probe(snapshot);
@@ -491,7 +540,7 @@ index ac9baa5d..7cb94d94 100644
  /// what they are rather than as a lowering gap.
  fn lower_class(
      snapshot: &SemanticSnapshot,
-+    foreign: &rustc_hash::FxHashMap<(u32, u32), super::runtime::ForeignCall>,
++    foreign: &super::runtime::ForeignTable,
      class: NodeId,
      generic: &rustc_hash::FxHashMap<NodeId, Vec<super::generics::Instantiation>>,
      shared: &Shared,
@@ -519,7 +568,7 @@ index ac9baa5d..7cb94d94 100644
 +    fn builder<'a>(
 +        &self,
 +        snapshot: &'a SemanticSnapshot,
-+        foreign: &'a rustc_hash::FxHashMap<(u32, u32), super::runtime::ForeignCall>,
++        foreign: &'a super::runtime::ForeignTable,
 +        copy: Copy,
 +    ) -> FuncBuilder<'a> {
          let mut builder = FuncBuilder::instantiating(
@@ -618,20 +667,18 @@ index ac9baa5d..7cb94d94 100644
  }
  
  /// As [`lower`], told which source files the project named as its roots.
-@@ -4323,7 +4350,11 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
+@@ -4323,7 +4350,9 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
  /// using only `include` does. See [`public_api`] for what it decides and why
  /// there is no way to decide it without being told.
  #[must_use]
 -pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
 +pub fn lower_with(
-+    snapshot: &SemanticSnapshot,
-+    entry: &[String],
-+    foreign: &rustc_hash::FxHashMap<(u32, u32), super::runtime::ForeignCall>,
++    snapshot: &SemanticSnapshot, entry: &[String], foreign: &super::runtime::ForeignTable,
 +) -> Lowered {
      let mut lowered = Lowered::default();
      // Closures first, because a module-scope `const f = () => ...` is typed by
      // the *closure* the arrow becomes rather than by its function type, and the
-@@ -4359,7 +4390,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
+@@ -4359,7 +4388,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
          // arrange: the checker resolved every call site, so a method call is a
          // static call and `this` is an ordinary argument.
          if node.kind == NodeKind::Syntax(syntax::CLASS_DECLARATION) {
@@ -640,7 +687,7 @@ index ac9baa5d..7cb94d94 100644
              continue;
          }
  
-@@ -4390,7 +4421,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
+@@ -4390,7 +4419,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
          if let Some(what) = refused_by_name(snapshot, id) {
              lowered
                  .diagnostics
@@ -649,7 +696,7 @@ index ac9baa5d..7cb94d94 100644
              continue;
          }
  
-@@ -4400,7 +4431,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
+@@ -4400,7 +4429,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
          // too -- took every function that reaches the platform with it. An
          // overload signature has the same shape and the same answer: the
          // implementation that follows is the one to lower.
@@ -658,7 +705,7 @@ index ac9baa5d..7cb94d94 100644
              continue;
          }
          // Two functions cannot share a name: the emitted C would define one
-@@ -4435,7 +4466,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
+@@ -4435,7 +4464,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
              continue;
          }
          for copy in copies {
@@ -667,15 +714,16 @@ index ac9baa5d..7cb94d94 100644
              match builder.lower_function(id) {
                  Ok(func) => lowered.program.funcs.push(func),
                  Err(diagnostic) => {
-@@ -4480,6 +4511,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
+@@ -4479,7 +4508,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
+     while let Some(index) = wanted.iter().copied().find(|at| !done.contains(at)) {
          done.insert(index);
          let mut builder = FuncBuilder::within(
-             snapshot,
-+            foreign,
+-            snapshot,
++            snapshot, foreign,
              module.clone(),
              hierarchy.clone(),
              closures.clone(),
-@@ -4659,7 +4691,7 @@ fn nominal_name(name: &str) -> bool {
+@@ -4659,7 +4688,7 @@ fn nominal_name(name: &str) -> bool {
  /// no backend can undo, which is a stronger argument than "a collision is
  /// possible" and is why this belongs here rather than in a backend.
  fn is_foreign_name(name: &str) -> bool {
@@ -684,23 +732,23 @@ index ac9baa5d..7cb94d94 100644
  }
  
  /// Every `InstanceOf` names classes this program has a layout for, and no
-@@ -7040,6 +7072,9 @@ struct Edge {
+@@ -7040,6 +7069,9 @@ struct Edge {
  
  struct FuncBuilder<'a> {
      snapshot: &'a SemanticSnapshot,
 +    /// Bound foreign members, keyed by `(source, span end)` of the declaration.
 +    /// Empty for a probe builder; see [`FuncBuilder::probe`].
-+    foreign: &'a rustc_hash::FxHashMap<(u32, u32), super::runtime::ForeignCall>,
++    foreign: &'a super::runtime::ForeignTable,
      /// Every value the function defines.
      values: Vec<Op>,
      blocks: Vec<PartialBlock>,
-@@ -7238,10 +7273,29 @@ struct FuncBuilder<'a> {
+@@ -7238,10 +7270,29 @@ struct FuncBuilder<'a> {
      used_closures: Vec<usize>,
  }
  
 +/// The empty binding table, for the probe builders below.
 +static NO_FOREIGN: std::sync::OnceLock<
-+    rustc_hash::FxHashMap<(u32, u32), super::runtime::ForeignCall>,
++    super::runtime::ForeignTable,
 +> = std::sync::OnceLock::new();
 +
  impl<'a> FuncBuilder<'a> {
@@ -717,7 +765,7 @@ index ac9baa5d..7cb94d94 100644
 +
 +    fn new(
 +        snapshot: &'a SemanticSnapshot,
-+        foreign: &'a rustc_hash::FxHashMap<(u32, u32), super::runtime::ForeignCall>,
++        foreign: &'a super::runtime::ForeignTable,
 +    ) -> Self {
          Self {
              snapshot,
@@ -725,15 +773,15 @@ index ac9baa5d..7cb94d94 100644
              boxed: Vec::new(),
              guarded: Vec::new(),
              in_closure: false,
-@@ -7291,6 +7345,7 @@ impl<'a> FuncBuilder<'a> {
+@@ -7291,6 +7342,7 @@ impl<'a> FuncBuilder<'a> {
      /// The same, knowing what the module and its classes declare.
      fn within(
          snapshot: &'a SemanticSnapshot,
-+        foreign: &'a rustc_hash::FxHashMap<(u32, u32), super::runtime::ForeignCall>,
++        foreign: &'a super::runtime::ForeignTable,
          module: ModuleScope,
          hierarchy: Hierarchy,
          closures: Vec<ClosureInfo>,
-@@ -7301,13 +7356,14 @@ impl<'a> FuncBuilder<'a> {
+@@ -7301,13 +7353,14 @@ impl<'a> FuncBuilder<'a> {
              boxed: boxed_symbols(&closures),
              guarded: guarded_symbols(&closures),
              closures,
@@ -745,11 +793,11 @@ index ac9baa5d..7cb94d94 100644
      /// The same, lowering one instantiation of a generic class.
      fn instantiating(
          snapshot: &'a SemanticSnapshot,
-+        foreign: &'a rustc_hash::FxHashMap<(u32, u32), super::runtime::ForeignCall>,
++        foreign: &'a super::runtime::ForeignTable,
          module: ModuleScope,
          hierarchy: Hierarchy,
          closures: Vec<ClosureInfo>,
-@@ -7317,7 +7373,7 @@ impl<'a> FuncBuilder<'a> {
+@@ -7317,7 +7370,7 @@ impl<'a> FuncBuilder<'a> {
          Self {
              suffix,
              substitution,
@@ -758,7 +806,7 @@ index ac9baa5d..7cb94d94 100644
          }
      }
  
-@@ -8428,7 +8484,7 @@ impl<'a> FuncBuilder<'a> {
+@@ -8428,7 +8481,7 @@ impl<'a> FuncBuilder<'a> {
          };
          // Collected first, because the checks below take `&mut self` and a
          // closure holding the iterator would hold a borrow across them.
@@ -767,7 +815,36 @@ index ac9baa5d..7cb94d94 100644
              .into_iter()
              .filter(|sibling| *sibling != member)
              .collect();
-@@ -22011,6 +22067,28 @@ impl<'a> FuncBuilder<'a> {
+@@ -21896,6 +21949,28 @@ impl<'a> FuncBuilder<'a> {
+             .is_some_and(|record| matches!(record.kind, TypeKind::Function(_)))
+     }
+ 
++    /// The JVM binary name of the class a **bound** record stands for, if it
++    /// is one.
++    ///
++    /// Any member of the declaration carries it: every row for one class names
++    /// the same owner, so the first that resolves answers for all of them.
++    /// Split out of [`Self::layout_of`] to keep that function under its line
++    /// limit, and because "which jar class is this" is its own question.
++    fn foreign_owner(&self, record: &TypeRecord) -> Option<String> {
++        record
++            .symbol
++            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
++            .map(|symbol| symbol.declarations.clone())
++            .into_iter()
++            .flatten()
++            .flat_map(|declaration| self.children(declaration))
++            .find_map(|member| {
++                let at = self.location(member);
++                let row = self.foreign.get(&(at.file.0, at.span.end))?;
++                row.key.split_once(':')?.0.rsplit_once('.').map(|(owner, _)| owner.to_owned())
++            })
++    }
++
+     fn layout_of(&mut self, id: NodeId, ty: TypeId) -> Result<Layout, Diagnostic> {
+         if let Some(known) = self
+             .layouts
+@@ -22011,6 +22086,17 @@ impl<'a> FuncBuilder<'a> {
          // The declared name where there is one. An anonymous object type —
          // `{ x: number }` written inline — has no symbol, so it is named after
          // its type id, which is at least stable and unique.
@@ -781,22 +858,11 @@ index ac9baa5d..7cb94d94 100644
 +        // same owner, so the first row found answers it. Deriving it from the
 +        // module specifier instead would put `java:` in the middle end, which
 +        // `bind.rs` is deliberately the only place to know.
-+        let bound: Option<String> = record
-+            .symbol
-+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-+            .map(|symbol| symbol.declarations.clone())
-+            .into_iter()
-+            .flatten()
-+            .flat_map(|declaration| self.children(declaration))
-+            .find_map(|member| {
-+                let at = self.location(member);
-+                let row = self.foreign.get(&(at.file.0, at.span.end))?;
-+                row.key.split_once(':')?.0.rsplit_once('.').map(|(owner, _)| owner.to_owned())
-+            });
++        let bound = self.foreign_owner(record);
          let name = record
              .symbol
              .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-@@ -22020,7 +22098,11 @@ impl<'a> FuncBuilder<'a> {
+@@ -22020,7 +22106,11 @@ impl<'a> FuncBuilder<'a> {
          // widths. The type id tells them apart, and `<>` cannot appear in a
          // TypeScript identifier so the qualified name cannot collide with a
          // plain one. `nts types` is what reads the number back.
@@ -809,7 +875,7 @@ index ac9baa5d..7cb94d94 100644
          // What this class does for each dispatch slot. Empty where nothing in
          // the hierarchy is overridden, which is most classes.
          let mut methods = vec![None; self.hierarchy.table_size()];
-@@ -22721,6 +22803,34 @@ impl<'a> FuncBuilder<'a> {
+@@ -22721,6 +22811,34 @@ impl<'a> FuncBuilder<'a> {
          let HirType::Managed(ManagedType::Object(type_id)) = ty else {
              return Err(self.unsupported(id, "a `new` that does not produce an object"));
          };
@@ -844,7 +910,7 @@ index ac9baa5d..7cb94d94 100644
          // Laying the class out here is what makes its fields addressable; the
          // constructor is about to write every one of them.
          self.layout_of(id, type_id)?;
-@@ -28182,12 +28292,26 @@ impl<'a> FuncBuilder<'a> {
+@@ -28182,12 +28300,26 @@ impl<'a> FuncBuilder<'a> {
              .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
          self.materialize(id, &ty)?;
          let origin = self.origin(id);
@@ -876,7 +942,7 @@ index ac9baa5d..7cb94d94 100644
              ty,
              origin,
          ))
-@@ -30800,6 +30924,19 @@ impl<'a> FuncBuilder<'a> {
+@@ -30800,6 +30932,19 @@ impl<'a> FuncBuilder<'a> {
          } else {
              member_name
          };
@@ -897,7 +963,7 @@ index ac9baa5d..7cb94d94 100644
              return Err(self.unsupported(
                  id,
 diff --git a/compiler/core/src/hir/mod.rs b/compiler/core/src/hir/mod.rs
-index 8fac4a27..9eff1670 100644
+index 8fac4a27..8c675bda 100644
 --- a/compiler/core/src/hir/mod.rs
 +++ b/compiler/core/src/hir/mod.rs
 @@ -1727,6 +1727,27 @@ pub const fn is_constructor_token(ty: TypeId) -> bool {
@@ -934,7 +1000,7 @@ index 8fac4a27..9eff1670 100644
      pub entry_files: &'a [String],
 +    /// Bound foreign members, keyed by `(source, span end)`. Loaded by the
 +    /// driver from the `.bind` file `nts bind` writes beside each `.d.ts`.
-+    pub foreign: &'a rustc_hash::FxHashMap<(u32, u32), runtime::ForeignCall>,
++    pub foreign: &'a runtime::ForeignTable,
  }
  
  impl Default for Options<'_> {
@@ -944,7 +1010,7 @@ index 8fac4a27..9eff1670 100644
              entry_files: &[],
 +            foreign: {
 +                static EMPTY: std::sync::OnceLock<
-+                    rustc_hash::FxHashMap<(u32, u32), runtime::ForeignCall>,
++                    runtime::ForeignTable,
 +                > = std::sync::OnceLock::new();
 +                EMPTY.get_or_init(rustc_hash::FxHashMap::default)
 +            },
@@ -968,10 +1034,10 @@ index 8fac4a27..9eff1670 100644
      let mut program = lowered.program;
  
 diff --git a/compiler/core/src/hir/runtime.rs b/compiler/core/src/hir/runtime.rs
-index a135dfc2..a0d51e8f 100644
+index a135dfc2..f3d191f0 100644
 --- a/compiler/core/src/hir/runtime.rs
 +++ b/compiler/core/src/hir/runtime.rs
-@@ -321,11 +321,71 @@ pub fn foreign_key(owner: &str, member: &str, descriptor: &str) -> String {
+@@ -321,11 +321,80 @@ pub fn foreign_key(owner: &str, member: &str, descriptor: &str) -> String {
  /// `lower`: a runtime helper is a C identifier and can contain neither `/` nor
  /// `:`, and a JVM binary name always contains a `/` for anything outside the
  /// default package.
@@ -1013,6 +1079,15 @@ index a135dfc2..a0d51e8f 100644
 +    pub kind: ForeignKind,
 +}
 +
++/// Every bound member in a program, keyed by `(source, span end)` of the
++/// declaration the checker resolved to.
++///
++/// A named alias because the bare `FxHashMap` in a parameter position fixes
++/// the hasher for every caller, which clippy's `implicit_hasher` is right
++/// about -- and because the key is the load-bearing half: two tables of bound
++/// members exist and they are keyed differently on purpose.
++pub type ForeignTable = rustc_hash::FxHashMap<(u32, u32), ForeignCall>;
++
 +/// The six ways a bound member is reached.
 +#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 +pub enum ForeignKind {
@@ -1043,6 +1118,18 @@ index a135dfc2..a0d51e8f 100644
  /// What a **bound Java member** retains, if anything is known about it.
  ///
  /// Always `None` today, and that is the sound default: an absent entry means
+diff --git a/tooling/bench/src/main.rs b/tooling/bench/src/main.rs
+index 173cda9d..1e2bc35c 100644
+--- a/tooling/bench/src/main.rs
++++ b/tooling/bench/src/main.rs
+@@ -2028,6 +2028,7 @@ fn prepared_program(
+             // this harness synthesises for every case. It is also what this
+             // call passed before the field existed, so the columns keep
+             // measuring the program they measured yesterday.
++            foreign: &hir::runtime::ForeignTable::default(),
+             entry_files: &[],
+         },
+     ) {
 diff --git a/tooling/cli/Cargo.toml b/tooling/cli/Cargo.toml
 index cc85e6d3..c417f572 100644
 --- a/tooling/cli/Cargo.toml
@@ -1057,7 +1144,7 @@ index cc85e6d3..c417f572 100644
  nts-codegen-napi.workspace = true
  nts-core.workspace = true
 diff --git a/tooling/cli/src/main.rs b/tooling/cli/src/main.rs
-index 8694ec83..1c8c3661 100644
+index 8694ec83..329b383c 100644
 --- a/tooling/cli/src/main.rs
 +++ b/tooling/cli/src/main.rs
 @@ -1761,7 +1761,56 @@ fn named_entry() -> Vec<String> {
@@ -1080,7 +1167,7 @@ index 8694ec83..1c8c3661 100644
 +/// this function does not parse.
 +fn foreign_tables(
 +    snapshot: &nts_semantic_schema::SemanticSnapshot,
-+) -> rustc_hash::FxHashMap<(u32, u32), hir::runtime::ForeignCall> {
++) -> hir::runtime::ForeignTable {
 +    let mut out = rustc_hash::FxHashMap::default();
 +    for (index, source) in snapshot.sources.iter().enumerate() {
 +        let path = source.display_path.as_str();
@@ -1113,7 +1200,7 @@ index 8694ec83..1c8c3661 100644
 +fn emit_options<'a>(
 +    entry: &'a [String],
 +    entry_files: &'a [String],
-+    foreign: &'a rustc_hash::FxHashMap<(u32, u32), hir::runtime::ForeignCall>,
++    foreign: &'a hir::runtime::ForeignTable,
 +) -> hir::Options<'a> {
      // **`!entry.is_empty()` was never false.** `named_entry` returns
      // `vec![MODULE_INIT]` when nothing is named -- module evaluation is a root
