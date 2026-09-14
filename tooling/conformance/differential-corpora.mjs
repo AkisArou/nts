@@ -2322,7 +2322,87 @@ export const CORPORA = {
       }
       return out;
     },
-    calls: [
+    calls: (() => {
+      // One echo server and one keep-alive-free client per input, with the server created once.
+      // See `http`'s corpus above for why both of those matter: ~4,000 listens per side is the
+      // difference between eight seconds and a timeout, and an un-unreffed server keeps the
+      // probe's child alive after it has printed its answer.
+      let shared = null;
+      const serverFor = async (m) => {
+        if (shared !== null) return shared;
+        // **Echo on `end`, not on `data`.** Keyed off `data`, an empty input produces no event
+        // at all: the server never replies, the client never closes, and the run hangs rather
+        // than reporting anything. `net`'s generated inputs include `""`, so this was not a
+        // corner case -- it was the first one.
+        const server = m.createServer((socket) => {
+          const chunks = [];
+          socket.on("data", (chunk) => chunks.push(chunk));
+          socket.on("end", () => socket.end(Buffer.concat(chunks)));
+        });
+        await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+        server.unref();
+        shared = { server, port: server.address().port };
+        return shared;
+      };
+      return [
+        {
+          // **The socket half of `net`.** This corpus opens by saying sockets "answer over time"
+          // and keeping to the three address parsers, which was right while the harness was
+          // synchronous. A single echo exchange is a *value*: the bytes that came back, and the
+          // counters and address fields the socket reports afterwards.
+          //
+          // Ports are never compared -- the two sides listen on different ones. Neither is
+          // `localPort`, for the same reason.
+          label: "echo-round-trip",
+          call: async (m, s) => {
+            try {
+              const { port } = await serverFor(m);
+              const payload = Buffer.from(String(s), "utf8");
+              return await new Promise((resolve) => {
+                // A deadline, so a spec that stops answering is a *value* both sides can be
+                // compared on rather than a run that never ends. The first version of this had
+                // none and took a ten-minute timeout to say what "timeout" says in one second.
+                const deadline = setTimeout(() => {
+                  socket.destroy();
+                  resolve("timeout");
+                }, 5000);
+                deadline.unref();
+                const settle = (value) => { clearTimeout(deadline); resolve(value); };
+                const socket = m.connect({ host: "127.0.0.1", port }, () => {
+                  socket.end(payload);
+                });
+                const chunks = [];
+                socket.on("data", (chunk) => chunks.push(chunk));
+                socket.on("error", (error) => settle(`threw:${error.code ?? error.name}`));
+                socket.on("close", () => {
+                  const body = Buffer.concat(chunks);
+                  // **The address fields are deliberately not compared, and the reason is
+                  // worth more than they were.** Reading `remoteAddress`, `remoteFamily` and
+                  // `localAddress` in this handler, node answers them in a standalone program
+                  // and answers *nothing* here -- same code, same input, different arrangement.
+                  // Its post-destroy reporting depends on when the handler runs relative to
+                  // internal cleanup, not on the input.
+                  //
+                  // A field that is not a function of the input cannot be compared against
+                  // another implementation: it would report a divergence about scheduling and
+                  // call it a behaviour. (`localAddress` specifically does differ -- node
+                  // returns `undefined` once the handle is gone and this profile keeps the
+                  // cached value -- and that belongs in a fixture that controls the timing,
+                  // not in a fuzz over 4,000 inputs.)
+                  settle([
+                    body.equals(payload) ? "echoed" : `differs:${body.length}/${payload.length}`,
+                    socket.bytesWritten,
+                    socket.bytesRead,
+                    String(socket.destroyed),
+                    String(socket.readyState),
+                  ].join("~"));
+                });
+              });
+            } catch (error) {
+              return `threw:${error.code ?? error.name ?? "?"}`;
+            }
+          },
+        },
       {
         // **`BlockList` whole, and `SocketAddress`.** The corpus already reaches
         // `isIP` and the address parsers; the class that *uses* those answers was
@@ -2452,7 +2532,8 @@ export const CORPORA = {
           return out;
         },
       },
-    ],
+    ];
+    })(),
   },
   stream: {
     // The **synchronous** half of a stream, which is more than it sounds and is
