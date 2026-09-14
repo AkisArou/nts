@@ -177,6 +177,15 @@ concurrently() {
   cmd_bench_agree="./tooling/gate/bench-agree.sh"
   cmd_addons="./tooling/gate/addons.sh"
   cmd_blockers="blockers"
+  # The divergence checks in `tooling/conformance`, which until 2026-09-14 **nothing ran**.
+  # Nine instruments there compare this profile with node or audit the lists deciding what gets
+  # compared, and only `blockers-check.mjs` was reachable from here. The first run of the others
+  # found `isDeepStrictEqual` ignoring symbol keys -- `{ [s]: 1 }` and `{ [s]: 2 }` were equal --
+  # in a module that passes its entire upstream suite.
+  #
+  # Under a second for four of the five; `fuzz-timer-order` at 150 programs is the other 20. The
+  # script names what it excludes and why, so a check dropped for cost is not a check forgotten.
+  cmd_divergence="./tooling/conformance/divergence.sh"
   running=""
   chosen=""
   for name in "$@"; do
@@ -1515,7 +1524,7 @@ blockers() {
 # Everything left, at once. `benches` is above because `bench-agree` runs the
 # cases it compiles; nothing else here depends on anything else here.
 jobs=$(( jobs > 4 ? 4 : jobs ))
-concurrently profile sweep llvm llvm-rc jvm dex on-device bench-agree examples rc memory addons blockers
+concurrently profile sweep llvm llvm-rc jvm dex on-device bench-agree examples rc memory addons blockers divergence
 # Every node module built as an addon and *loaded*, under eager binding.
 #
 # The gap this fills was open for the whole of 2026-09-09 and had a crash in it.

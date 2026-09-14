@@ -53,8 +53,15 @@ for check in skip-audit stale-exclusions self-oracle fuzz-deep-equal "fuzz-timer
   # summary line rather than the exit status, which is the reason this step prints one.
   set -- $check
   output="$(node "tooling/conformance/$1.mjs" "${@:2}" 2>&1)"
-  check="$1"
+  # **`$?` immediately, before anything else runs.** `check="$1"` sat here and `$?` then read
+  # *its* status, which an assignment always makes zero -- so every check reported `ok` whatever
+  # it found. The gate ran green while `skip-audit` printed "1 without a reason" on the same line.
+  #
+  # Caught by the control rather than by reading: a deliberately unjustified exclusion was added
+  # and the gate stayed green. The summary line had the finding in it the whole time, which is
+  # the second time today one channel was right and the one being tested was not.
   code=$?
+  check="$1"
   elapsed=$(( $(date +%s) - started ))
   if [ "$code" -eq 0 ]; then
     # The line each tool counts on, rather than whatever it printed last: `self-oracle`
