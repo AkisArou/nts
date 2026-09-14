@@ -25117,3 +25117,42 @@ With a caller added, the refusal prints -- and names a different cause than the 
 
 `Object.setPrototypeOf` is not what stops it; writing `super_` with a descriptor is.
 
+## Two more, and a rule about which absences belong in a comparison
+
+    corpus reach   395 of 1,087 this morning  ->  540 of 1,087
+    all 21 modules clean, 37s, gate green
+
+    process    2 of 61  ->  14     nothing; validation and identity agree
+    readline   5 of 38  ->  12     nothing; line splitting agrees at every chunk boundary
+
+`readline` had excluded `createInterface` because it "answers over time". An `Interface` is an async
+iterable, and over a fixed in-memory source it is entirely deterministic -- the exclusion was about
+the harness, like `http`'s and `net`'s before it. Its input is fed **one character at a time** in one
+arm, because chunk boundaries must not decide where lines are and that is the arm a buffer-per-chunk
+implementation fails.
+
+`process` is compared without touching the host: argument validation throws before it reaches
+anything, and the identity reads answer the same for both sides because they are the same user on the
+same machine. `kill` only ever sees `NOTASIG_*`, a signal name no platform defines.
+
+### An absence belongs in the comparison until somebody writes down why it is there
+
+`process.binding` and `process.getBuiltinModule` are absent here, and the first run of the new spec
+reported that on all 4,013 inputs. They were removed from it -- which looks like the opposite of what
+`stream` taught two days ago, where three missing byte helpers were found precisely *because* a spec
+read `absent` against node's answer and a surface list had been reporting them unread for months.
+
+The difference is whether the absence has a reason on file. `stream`'s three had none.
+`process/test/export-surface-static.js` lists both of these -- "loader and V8 plumbing with no
+representation here" -- and `not-applicable` names the blocker: "getBuiltinModule needs the planned
+runtime builtin-module registry". A differential restating a decision thousands of times per run is
+noise, and noise is what teaches people to skim the output that also carries the real findings.
+
+### And a spec, not another `kind`
+
+`process`'s existing spec dispatches on a `kind|arg` string, and its own header records `uid|` and
+`umaskread|` sitting in `fixed` with **no branch to handle them**: they fell through to the `cwd()`
+arm, so two named cases silently measured a third thing. A `kind` runs only if the generator produces
+it. A separate spec runs for every input and therefore cannot be added without being exercised --
+which is the same property the `divergence` gate step has, and the reason both are worth preferring.
+
