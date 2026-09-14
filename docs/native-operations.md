@@ -519,12 +519,24 @@ interface: `clang_Type_getSizeOf`, `clang_Type_getAlignOf`,
 identity. On the same header it reported `struct outer` as `sizeof=40 align=8`
 with `const char *` still qualified and the bitfield flagged.
 
-**libclang, then.** Not to avoid a subprocess -- invoking clang is also a
-dependency, and a heavier one than it looks, since some of these options are
-`-cc1` only and `-cc1` does not apply the driver's include paths. The reason is
-that the subprocess path cannot answer the layout question from the same
-derivation as the type question, and a binding needs both to be about the same
-declaration.
+**libclang, then**, for one reason: the subprocess path cannot answer the layout
+question from the same derivation as the type question, and a binding needs both
+to be about the same declaration.
+
+Not because a subprocess is awkward to drive. An earlier version of this
+paragraph said some of these options are `-cc1` only and would mean
+reimplementing the driver's include discovery. **That is wrong.** `-Xclang`
+forwards a frontend option through the driver with its include paths intact:
+
+    clang -x c - -fsyntax-only -Xclang -fdump-record-layouts-complete
+
+reports `sizeof=16, align=8` with offsets 0 and 8 for a struct that includes
+`<stddef.h>`. A run in the same session had already shown exactly that, and it
+was written down backwards: `-cc1` was invoked directly, failed for want of
+include paths, and that was generalised into a property of the options. It is
+corrected here rather than quietly dropped, because it was given as a *reason*
+for a decision. Invoking clang remains a dependency -- a configured executable
+rather than a library -- but not a heavier one for that reason.
 
 Neither path escapes the target question: triple, sysroot, defines, include
 paths and invalidation are required either way, and verification needs them too.
