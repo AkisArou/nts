@@ -24729,3 +24729,54 @@ own `socket.pause()` behaves identically, and `onStreamRead` issues `readStop()`
 returns false, so a paused socket stops at its high-water mark on both sides. The accept path was
 the only place the claim was false.
 
+## child_process at zero, and the second host stream that was not reading
+
+    child_process   120 file(s): 109 passed, 0 failed, 9 skipped, 2 not applicable
+                    (was 107 / 1; 42 when the work started)
+    cluster          89 file(s):  83 passed, 4 failed, 2 skipped   (unchanged by this)
+
+Two defects in one night, in two modules, with the same shape: **the host stream below the stand-in
+seam was not in the read state the module had asked for.** Neither is visible from above the seam.
+
+    cluster        an accepted host socket was reading when the module had not asked
+    child_process  a handed-over host socket was parked when the module had asked
+
+The `child_process` half: `Readable.prototype.on("data")` resumes only when
+`state.flowing !== false`. A stream that has merely never been read has `flowing === null` and
+starts; one that somebody *paused* has `flowing === false` and stays put. node pauses exactly this
+stream when it gives it to another child, in `lib/internal/child_process.js`:
+
+    if (stream.type === 'wrap') {
+      stream.handle.reading = false;
+      stream.handle.readStop();
+      stream._stdio.pause();
+      stream._stdio.readableFlowing = false;
+      stream._stdio._readableState.reading = false;
+      stream._stdio[kIsUsedAsStdio] = true;
+      continue;
+    }
+
+`nts_child_process_read_start` attached a listener and stopped, which is enough for the first kind
+and nothing for the second. It now calls `resume()`, because `read_start` means start reading.
+
+**Both modules had a recorded price that was wrong in the same way**: a correct measurement plus an
+unasked question. `cluster` had measured that the descriptor arrives intact and concluded the
+descriptor was at fault. `child_process` had measured -- correctly -- that "node pauses the parent's
+reader and keeps the handle" and that "the parent can `resume()` afterwards", and never asked
+**which object the parent resumes**. From that it proposed handing the descriptor instead of the
+stream, which would have broken `pipe-dataflow` a second time.
+
+**What separated both was an arm that differed in one thing**, and in both cases the missing arm was
+the *baseline*, not a cleverer probe:
+
+    cluster        a worker that reads, not only one that writes
+    child_process  a late read with no handover at all
+
+Upstream files carry only the interesting arm, by nature. A module's local fixtures are where the
+baseline goes, and `cluster/test/listen-fd-net-local.js` and
+`child_process/test/late-read-local.js` are those two.
+
+Swept for further instances: `on("data")` without a `resume()` appears in no other stand-in, and no
+other stand-in accepts connections into host sockets. `nts_net_read_stop` was checked separately and
+is correct.
+
