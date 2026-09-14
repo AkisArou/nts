@@ -402,7 +402,7 @@ fn prepared_storage_verifier_catches_corrupted_counts_and_borrow_contracts() {
                     }
                     hir::OpKind::Call { callee: hir::Callee::Native(target), .. } if kind >= 2 => {
                         let target = std::sync::Arc::make_mut(target);
-                        if kind == 2 { target.no_escape.fill(false); } else { target.no_escape.clear(); }
+                        if kind == 2 { target.retention.fill(hir::native::Retention::Unknown); } else { target.retention.clear(); }
                         changed = true;
                     }
                     _ => {},

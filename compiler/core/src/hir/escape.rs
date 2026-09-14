@@ -741,7 +741,12 @@ fn gone_into_the_unknown(
         Callee::External(name) => super::runtime::keeps(name).map(<[usize]>::to_vec),
         Callee::Native(target) => Some(
             (0..target.parameters.len())
-                .filter(|slot| !target.no_escape.get(*slot).copied().unwrap_or(false))
+                .filter(|slot| {
+                    !matches!(
+                        target.retention.get(*slot),
+                        Some(super::native::Retention::NotRetained)
+                    )
+                })
                 .collect(),
         ),
         _ => None,

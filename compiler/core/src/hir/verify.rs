@@ -271,7 +271,12 @@ fn check_native_calls(program: &Program, problems: &mut Vec<Invalid>) {
             else {
                 continue;
             };
-            if target.no_escape.len() != target.parameters.len() || target.no_escape.iter().zip(&target.parameters).any(|(borrow, ty)| *borrow && !matches!(ty, super::native::Type::Pointer(_))) {
+            if target.retention.len() != target.parameters.len()
+                || target.retention.iter().zip(&target.parameters).any(|(kept, ty)| {
+                    *kept == super::native::Retention::NotRetained
+                        && !matches!(ty, super::native::Type::Pointer(_) | super::native::Type::FnPointer(_))
+                })
+            {
                 problems.push(Invalid::NativeStorage { func: func.name.clone(), reason: "invalid native no-escape contract" });
             }
             let result = target.result.representation();

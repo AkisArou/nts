@@ -28283,10 +28283,20 @@ impl<'a> FuncBuilder<'a> {
             for name in names {
                 let slot = signature.parameters.iter().position(|p| p.name == *name)
                     .ok_or_else(|| self.unsupported(call, &format!("@ntsNoEscape names no parameter `{name}`")))?;
-                if !matches!(native.parameters[slot], super::native::Type::Pointer(_)) || native.no_escape[slot] {
-                    return Err(self.unsupported(call, "@ntsNoEscape needs distinct native-pointer parameters"));
+                // A *callback* takes the same contract, and means the same
+                // thing by it: nothing of this argument outlives the call. For
+                // a pointer that is "no address into it is kept, freed or
+                // invalidated"; for a function pointer it is "not called after
+                // this returns". Both are what lets the caller pass storage,
+                // or a bridge, that it owns for the duration and no longer.
+                if !matches!(
+                    native.parameters[slot],
+                    super::native::Type::Pointer(_) | super::native::Type::FnPointer(_)
+                ) || native.retention[slot] == super::native::Retention::NotRetained
+                {
+                    return Err(self.unsupported(call, "@ntsNoEscape needs distinct native-pointer or callback parameters"));
                 }
-                native.no_escape[slot] = true;
+                native.retention[slot] = super::native::Retention::NotRetained;
             }
         }
         Ok(Callee::Native(std::sync::Arc::new(native)))

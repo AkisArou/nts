@@ -127,7 +127,7 @@ fn borrowed(func: &Func, root: ValueId, summaries: &Borrows) -> bool {
                     OpKind::Call { callee, args, .. } => args.iter().enumerate().all(|(at, arg)| {
                         if !is_alias(*arg) { return true; }
                         match callee {
-                            Callee::Native(target) => target.no_escape.get(at).copied().unwrap_or(false),
+                            Callee::Native(target) => matches!(target.retention.get(at), Some(crate::hir::native::Retention::NotRetained)),
                             Callee::Direct(name) => summaries.get(name).and_then(|s| s.get(at)).copied().unwrap_or(false),
                             _ => false,
                         }

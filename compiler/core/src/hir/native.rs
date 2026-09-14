@@ -13,8 +13,38 @@ pub struct Function {
     pub convention: Convention,
     pub parameters: Vec<Type>,
     pub result: Type,
-    /// True only under an authored no-retention/no-return contract.
-    pub no_escape: Vec<bool>,
+    /// What the callee may do with each argument beyond the call, one entry per
+    /// parameter. See [`Retention`].
+    pub retention: Vec<Retention>,
+}
+
+/// What a foreign call keeps of one argument after it returns.
+///
+/// **`Unknown` is not "may be retained" spelled pessimistically.** It is the
+/// absence of a claim, and keeping it distinct from a proved one is the whole
+/// content of this type: collapse them and an optimizer has a permission nobody
+/// established. Every analysis must assume the worst from `Unknown`, and that
+/// is a different statement from having been told the worst is true.
+///
+/// One axis today because one axis is what the published calls need. A pointer
+/// the callee does not keep and a callback the callee does not call later are
+/// the same fact about two kinds of value: *nothing of this argument outlives
+/// the call*. When a binding needs reads-versus-writes, or acquisition and
+/// release, those are further axes and belong beside this one rather than
+/// inside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Retention {
+    /// Nothing was established. The callee may keep, free, reallocate or
+    /// invalidate the argument, and may call it after returning.
+    Unknown,
+    /// Authored: no address into the argument is retained or returned, it is
+    /// not freed, reallocated or invalidated, and if it is a callback it is not
+    /// called after this call returns.
+    ///
+    /// Non-retention alone would not be enough for a pointer -- freeing it
+    /// invalidates it just as surely as keeping it -- which is why the
+    /// contract names those too.
+    NotRetained,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -407,7 +437,7 @@ impl Function {
             } else {
                 Convention::C
             },
-            no_escape: vec![false; parameters.len()],
+            retention: vec![Retention::Unknown; parameters.len()],
             parameters,
             result,
         })

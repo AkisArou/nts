@@ -624,6 +624,41 @@ what `Pointee::Void` refuses, so a real libc callback needs a checked way to
 turn an address of unstated type back into a typed one -- which is the direction
 mistakes live in, and is not this slice.
 
+## What a call keeps: the first effect, stated as one
+
+`native::Function` carried `no_escape: Vec<bool>`. It now carries
+`retention: Vec<Retention>`, with two cases:
+
+    Unknown       nothing was established
+    NotRetained   authored: nothing of this argument outlives the call
+
+**`Unknown` is not "may be retained" spelled pessimistically.** It is the
+absence of a claim, and keeping it distinct from a proved one is the whole
+content of the type. A `false` said both things at once; every analysis reading
+it had to know which was meant, and nothing in the type said.
+
+**One axis, because one axis is what the published calls need.** A pointer the
+callee does not keep and a callback the callee does not call later are the same
+fact about two kinds of value: nothing of this argument outlives the call. So
+`@ntsNoEscape` now applies to a function-pointer parameter as well, meaning
+there what it already meant for a pointer.
+
+For a pointer the contract has to name more than non-retention -- freeing or
+reallocating invalidates the storage as surely as keeping a pointer to it does
+-- and it does. For a callback it means the callee does not call it after
+returning.
+
+**What it does not do yet, said plainly.** Nothing turns on a callback's
+retention today: a non-capturing callback's bridge and its closure singleton are
+both immortal, so keeping one is harmless. It decides everything the moment a
+callback carries a *context* the caller owns, which is the next shape, and the
+contract exists now so that shape does not arrive needing a vocabulary invented
+under it.
+
+Reads versus writes, acquisition and release, outcome-dependent transitions --
+those are further axes. They belong beside this one when a binding needs them,
+not inside it, and not before.
+
 ## Direction for the next executable slices
 
 1. **More native storage and header-derived bindings.** `void *`, const-qualified
