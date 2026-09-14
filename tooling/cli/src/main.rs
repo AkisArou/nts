@@ -2281,6 +2281,33 @@ fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<(
     Ok(())
 }
 
+/// A refusal from the emitter is fatal, unlike one from lowering.
+///
+/// The two are not the same kind of thing and used to share an exit code.
+/// Lowering *drops* the function it refuses, so its output is consistent -- a
+/// smaller program, which is the right behaviour for a surface still growing,
+/// and `emit-c` exits 0 for it deliberately.
+///
+/// The emitter cannot drop anything: by then the body is written. So a program
+/// declaring one C symbol two ways got `NTS2007 foreign symbol `collide` has
+/// conflicting ABI declarations`, exit 0, and a `program.c` that **compiles** --
+/// with both functions in it and one of them calling through the other's
+/// prototype. Every `build.sh` here runs `set -e` against that exit code.
+///
+/// Measured before changing: zero emitter diagnostics across every example and
+/// sixty other fixtures, so nothing was relying on the old behaviour.
+fn refuse_if_the_emitter_declined(diagnostics: &[nts_diagnostics::Diagnostic]) -> Result<()> {
+    if diagnostics.is_empty() {
+        return Ok(());
+    }
+    bail!(
+        "{} emitter refusal(s): the C above is not a program to build. Unlike a \
+         lowering refusal, which drops the function it names, these leave it in \
+         with something else's ABI",
+        diagnostics.len()
+    )
+}
+
 fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
@@ -2343,6 +2370,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
             diagnostic.message
         );
     }
+    refuse_if_the_emitter_declined(&emitted.diagnostics)?;
 
     let Some(out) = out else {
         print!("{}", emitted.writer.text());

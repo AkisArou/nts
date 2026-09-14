@@ -597,6 +597,88 @@ fn type_headers_preserve_brands_and_boolean_abi() {
     assert!(Command::new(dir.join("caller")).status().unwrap().success());
 }
 
+/// Two declarations of one C symbol that disagree, and what the emitter does
+/// with a refusal it cannot act on.
+///
+/// Lowering refuses by **dropping** the function it names, so its output is a
+/// smaller program and `emit-c` exits 0 for it on purpose. The emitter cannot
+/// drop anything -- by then the body is written -- so this refusal leaves the
+/// function in, calling through the other declaration's prototype. The
+/// resulting `program.c` compiled, and every `build.sh` here runs `set -e`
+/// against an exit code that was 0.
+///
+/// So the emitter's diagnostics are fatal at the CLI, and this is the shape
+/// that has to produce one. The second arm is what makes it a check: the same
+/// program with the two declarations agreeing must emit cleanly, or this would
+/// pass on a compiler that refused every native call.
+#[test]
+fn two_declarations_of_one_symbol_that_disagree_are_refused() {
+    let program = |cast: &str| format!("import {{ collide as viaOne }} from \"c:a\";\n\
+         import {{ collide as viaTwo }} from \"c:b\";\n\
+         import type {{ Ptr, c_int, c_size_t }} from \"c:types\";\n\
+         export function one(fd: number, buf: Ptr<c_int>): number {{\n\
+         return Number(viaOne(fd as c_int, buf, 4 as c_int));\n\
+         }}\n\
+         export function two(fd: number, buf: Ptr<c_int>): number {{\n\
+         return Number(viaTwo(fd as c_int, buf, {cast}));\n\
+         }}\n");
+    // The arms differ in one thing: `b`'s third parameter. Both are pointers a
+    // caller passes in, so neither call is an escape of local storage -- which
+    // is what the first version of this measured instead, both arms having been
+    // refused before they reached the emitter.
+    let binding = |count: &str| {
+        format!(
+            "declare module \"c:a\" {{\n\
+             import type {{ Ptr, c_int }} from \"c:types\";\n\
+             export function collide(fd: c_int, buf: Ptr<c_int>, count: c_int): c_int;\n\
+             }}\n\
+             declare module \"c:b\" {{\n\
+             import type {{ Ptr, c_int, c_size_t }} from \"c:types\";\n\
+             export function collide(fd: c_int, buf: Ptr<c_int>, count: {count}): c_int;\n\
+             }}\n"
+        )
+    };
+
+    let Some((_, agreeing)) =
+        prepare_with_binding("abi-agree", &binding("c_int"), &program("4 as c_int"))
+    else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(agreeing.diagnostics.is_empty(), "{:?}", agreeing.diagnostics);
+    let emitted = nts_codegen_c::emit(&agreeing.program);
+    assert!(
+        emitted.diagnostics.is_empty(),
+        "two declarations that agree are one ABI: {:?}",
+        emitted.diagnostics
+    );
+
+    let (_, conflicting) =
+        prepare_with_binding("abi-conflict", &binding("c_size_t"), &program("4n as c_size_t"))
+            .unwrap();
+    assert!(conflicting.diagnostics.is_empty(), "{:?}", conflicting.diagnostics);
+    let emitted = nts_codegen_c::emit(&conflicting.program);
+    let refusal = emitted
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "NTS2007")
+        .unwrap_or_else(|| panic!("no NTS2007: {:?}", emitted.diagnostics));
+    assert!(
+        refusal.message.contains("conflicting ABI declarations"),
+        "{}",
+        refusal.message
+    );
+    // And the reason the CLI now treats this as fatal: what it emitted is a
+    // program, not a fragment. Both functions are in it, and one of them calls
+    // through the other's prototype.
+    let text = emitted.writer.text();
+    assert!(text.contains("double one("), "the first function is emitted:\n{text}");
+    assert!(
+        text.contains("double two("),
+        "and so is the one whose declaration lost, which is the whole problem:\n{text}"
+    );
+}
+
 /// The witness a program publishes about a foreign type, checked against the
 /// header that really declares it -- and checked that it can *fail*.
 ///
