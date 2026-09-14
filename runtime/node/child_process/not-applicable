@@ -6,15 +6,40 @@
 #
 #   test-child-process-fork-closed-channel-segfault.js
 #
-# Its subject is `cluster`, which this profile does not implement. It calls
-# `cluster.isPrimary` and forks through node's own cluster, so `child_process`
-# never comes into it -- and because `cluster` is not in this module's `uses`, the
-# runner hands it node's real one, which makes the file node-against-node. What it
-# asserts is the absence of a segfault, which an absent module satisfies for free.
+# Its subject is `cluster`. It calls `cluster.isPrimary` and forks through node's
+# own cluster -- because `cluster` is not in this module's `uses`, the runner hands
+# it node's real one -- so `child_process` never comes into it. What it asserts is
+# the absence of a segfault, which an absent module satisfies for free.
+#
+# **The reason as first written said "`cluster`, which this profile does not
+# implement", and that clause is now false**: `cluster` is at 85 of 89 on the
+# interpreted lane. It was true the day it was written, which is the whole hazard --
+# a rationale conditional on an absence stops being true without anything touching
+# the line. The same sentence about the same module was already found stale once, in
+# `cluster/extra-tests`, where it had kept a file claimed by the wrong module.
+#
+# The exclusion itself stands, on the half that was never about `cluster` existing:
+# the file passes against an emptied module on both lanes, so it cannot measure this
+# one. That was found by `--sabotage` rather than by reading.
+#
+# Re-examined 2026-09-14 rather than assumed. Run under `cluster`'s lane -- where
+# both `cluster` and `child_process` are substituted -- it reports `{"kind":"pass"}`
+# and **exits 1**, on
+#
+#     assert.strictEqual(worker.process.channel, null)   actual: undefined
+#
+# because this profile's `ChildProcess` has no `channel` property at all. That is a
+# real divergence and it is recorded rather than fixed, because the demand for it is
+# one assertion in this excluded file: across `test/parallel`, `.channel` appears as
+# `dc.channel` 16 times (`diagnostics_channel`, unrelated), `process.channel` 4 times
+# -- always inside a *child*, where `process` is node's own and it already works --
+# and `worker.process.channel` exactly here. Claiming the file for `cluster` instead
+# would add a hollow pass, since it is role-guarded on `cluster.isPrimary` and an
+# emptied `cluster` takes neither branch.
 #
 # Removing it lowers this module's count from 81 to 80 on the interpreted lane and
 # from 1 to **0** on the compiled lane. That second number is the honest one: the
 # compiled lane has no non-hollow pass here at all, and reporting 1 was reporting
 # this file.
-test-child-process-fork-closed-channel-segfault.js: the subject is cluster, which this profile does not implement; it forks through node's own cluster and passes against an emptied module on both lanes
+test-child-process-fork-closed-channel-segfault.js: the subject is cluster; it forks through node's own cluster, so this module never comes into it, and it passes against an emptied module on both lanes
 test-child-process-advanced-serialization-host-objects.js: unavailable provider; the child requires `internal/test/binding` for `internalBinding('messaging')` and the file carries `// Flags: --expose-internals`, both of which the RFC rules out. The ordinary `advanced` round trip -- typed arrays, Map, bigint, a circular reference, Errors -- is covered by test-child-process-advanced-serialization.js, which passes
