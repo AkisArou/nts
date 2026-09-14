@@ -970,6 +970,7 @@ fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) ->
 fn bridges(program: &Program) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut declared = false;
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| func.value(*value)) {
             let OpKind::NativeBridge { closure, signature } = &op.kind else { continue };
@@ -982,6 +983,11 @@ fn bridges(program: &Program) -> Result<String, Diagnostic> {
             let name = bridge_name(target, signature);
             if !seen.insert(name.clone()) {
                 continue;
+            }
+            if !declared {
+                declared = true;
+                out.push_str("declare void @nts_callback_enter()\n");
+                out.push_str("declare void @nts_callback_leave()\n");
             }
             let compiled = program
                 .funcs
@@ -1012,17 +1018,25 @@ fn bridges(program: &Program) -> Result<String, Diagnostic> {
             // `symbol` already carries the sigil; a second one is `@@f`, which
             // the assembler reports as "expected value token" pointing at the
             // call and not at the name.
+            // Raised around the call so a `throw` inside it stops at this
+            // boundary instead of jumping past the C frames that called us.
+            // Same two calls the C bridge makes, because the policy lives in
+            // the runtime and not in either backend's text.
+            let enter = "  call void @nts_callback_enter()";
+            let leave = "  call void @nts_callback_leave()";
             let call = format!("call {} {}({})", ty_of(&have, compiled)?, symbol(&compiled.name), arguments.join(", "));
             let parameters = parameters.join(", ");
             if want == HirType::Void {
                 let _ = writeln!(out, "define internal void @{name}({parameters}) nounwind {{");
                 out.push_str(&body);
-                let _ = writeln!(out, "  {call}\n  ret void\n}}");
+                let _ = writeln!(out, "{enter}\n  {call}\n{leave}\n  ret void\n}}");
             } else {
                 let want_ty = ty_of(&want, compiled)?;
                 let _ = writeln!(out, "define internal {want_ty} @{name}({parameters}) nounwind {{");
                 out.push_str(&body);
+                let _ = writeln!(out, "{enter}");
                 let _ = writeln!(out, "  %r = {call}");
+                let _ = writeln!(out, "{leave}");
                 if have == want {
                     let _ = writeln!(out, "  ret {want_ty} %r\n}}");
                 } else {

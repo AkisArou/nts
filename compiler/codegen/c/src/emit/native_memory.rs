@@ -281,11 +281,20 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         let parameters = if parameters.is_empty() { "void".to_owned() } else { parameters.join(", ") };
         let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
         let result = signature.result.c_type();
+        // `nts_callback_enter` around the call, so a `throw` inside it stops
+        // here instead of jumping past the C frames that called us. They belong
+        // to a library that knows nothing about a non-local jump, and a C
+        // function pointer's signature has no error channel to deliver one
+        // through -- inventing a return value would be worse than stopping,
+        // since a comparator answering 0 because it failed sorts wrongly and
+        // says nothing.
         let body = if matches!(&*signature.result, nts_core::hir::native::Type::Void) {
-            format!("{call};")
+            format!("nts_callback_enter(); {call}; nts_callback_leave();")
         } else {
             let _ = return_c_type(program, &compiled.return_type, &compiled.origin)?;
-            format!("return ({result}){call};")
+            format!(
+                "nts_callback_enter(); {result} r = ({result}){call}; nts_callback_leave(); return r;"
+            )
         };
         writer.line(origin, format!("static {result} {name}({parameters}) {{ {body} }}"));
     }

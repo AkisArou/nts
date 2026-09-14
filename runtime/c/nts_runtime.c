@@ -144,6 +144,13 @@ struct NtsEnvironment {
      whose outer edge is the end of the process. Not on the hot path and first
      only because it is the one field a `throw` reads. See `NtsLanding`. */
   NtsLanding *landing;
+  /* How many callback bridges are on the stack below here.
+     A `throw` inside a callback has C frames between it and any landing --
+     frames belonging to a library that called us and knows nothing about a
+     non-local jump. `longjmp` past them skips whatever they hold: a lock, an
+     allocation, an iterator half-advanced. So while this is non-zero the throw
+     is not delivered outward at all. See `nts_uncaught`. */
+  size_t in_callback;
   /* -- one cache line: the reference-counting and allocation hot path -- */
   size_t retains;
   size_t releases;
@@ -1249,10 +1256,38 @@ const char *nts_thrown_class(NtsValue value) {
   return object && object->descriptor ? object->descriptor->name : NULL;
 }
 
+/* A callback bridge is entering compiled code. Paired with `nts_callback_leave`
+   around the call and nothing else, so the count is the number of foreign
+   frames between here and the outermost landing. */
+void nts_callback_enter(void) { nts_environment_current()->in_callback++; }
+void nts_callback_leave(void) { nts_environment_current()->in_callback--; }
+
 _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail) {
   /* An embedder with somewhere to put it gets it, and the process survives.
      Popped here rather than by the caller, because the caller is reached by a
      jump and the frame it lands in is no longer the innermost one. */
+  /* A callback's throw stops here rather than jumping over the C frames that
+     called it. There is nowhere to deliver it to: a C function pointer's
+     signature has no error channel, and inventing a return value would be
+     worse than stopping -- a comparator that answers 0 because it failed sorts
+     the array wrongly and says nothing. */
+  if (nts_env->in_callback != 0) {
+    fputs("nts: a callback threw across a C boundary that cannot carry it: ",
+          stderr);
+    if (detail) {
+      for (uint32_t at = 0; at < detail->length; at++) {
+        fputc((int)nts_unit(detail, at), stderr);
+      }
+    } else {
+      fputs("(no message)", stderr);
+    }
+    fputc('\n', stderr);
+    /* `exit` for the reasons the uncaught path below gives -- an observable
+       status and a flushed `stdout` -- and status 1 because from the outside
+       this *is* an uncaught throw. What differs is only that it could not be
+       offered to a landing first. */
+    exit(1);
+  }
   NtsLanding *landing = nts_env->landing;
   if (landing) {
     nts_env->landing = landing->previous;

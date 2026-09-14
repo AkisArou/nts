@@ -1857,6 +1857,14 @@ typedef struct NtsLanding {
 } NtsLanding;
 
 /* Make `landing` the innermost one. Call after `setjmp` returns zero. */
+/* Raised by a callback bridge around the compiled function it calls.
+   While it is non-zero a `throw` is not delivered to a landing: there are C
+   frames in between, belonging to a library that called us and knows nothing
+   about a non-local jump, and `longjmp` past them skips whatever they hold.
+   The throw ends the process instead, naming the boundary. */
+void nts_callback_enter(void);
+void nts_callback_leave(void);
+
 void nts_landing_push(NtsLanding *landing);
 /* Remove `landing` if it is the innermost. Idempotent, and it names the frame
  * rather than popping blindly: the throw path pops on the way out, and the

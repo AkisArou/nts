@@ -1,5 +1,31 @@
 #include "program.h"
 #include <stdio.h>
+#include <setjmp.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+// Runs the throwing callback in a child, because the defined outcome is that
+// the process ends: checking it in-process would end this one. A landing is
+// installed first, so a throw that ignored the boundary would land instead of
+// exiting and the child would report 7.
+static int fork_and_check(void) {
+  pid_t child = fork();
+  if (child < 0) return -1;
+  if (child == 0) {
+    NtsLanding landing;
+    if (setjmp(landing.frame) == 0) {
+      nts_landing_push(&landing);
+      throwThrough(1);
+      nts_landing_pop(&landing);
+      _exit(8); /* returned normally: the throw vanished */
+    }
+    _exit(7); /* landed: the throw jumped past apply_twice's frame */
+  }
+  int status = 0;
+  if (waitpid(child, &status, 0) < 0) return -1;
+  /* Exit 1 is the boundary stopping it and naming itself. */
+  return (WIFEXITED(status) && WEXITSTATUS(status) == 1) ? 0 : -1;
+}
 
 int main(void) {
   // C calls the TypeScript function twice: 10 + 3 + 3.
@@ -9,6 +35,14 @@ int main(void) {
   // The same callback, never entered: the argument comes back untouched, which
   // a bridge called anyway would change.
   if (neverThrough(10) != 10) return 3;
-  puts("native callback: C called a TypeScript function through a bridge");
+  // A callback that throws must not travel through C. An embedder landing is
+  // installed here deliberately: that is the case where the two behaviours
+  // differ, because without the guard `nts_uncaught` longjmps straight to it
+  // and `apply_twice`'s frame never finishes. The child below must die at the
+  // boundary rather than land here.
+  if (fork_and_check() != 0) return 6;
+
+  puts("native callback: C called a TypeScript function through a bridge, "
+       "and a throw stopped at it");
   return 0;
 }

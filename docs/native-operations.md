@@ -593,6 +593,31 @@ an operation to the renderer is a list, and the comment beside it already said
 what happens: an implementation nothing routes to reads exactly like one that
 was never written.
 
+**A throw inside a callback stops at the boundary.** This had to be settled
+before the synchronous case could be claimed to work, and the answer was not the
+one already in place.
+
+A `throw` reaches `nts_uncaught`, which longjmps to the innermost landing an
+embedder installed. Between the throw and that landing are now *C frames* --
+belonging to a library that called us and knows nothing about a non-local jump.
+Jumping over them skips whatever they hold: a lock, an allocation, an iterator
+half-advanced. The runtime already states this cost for its own boundary; a
+callback extends it over code the runtime has never seen.
+
+So a bridge raises `nts_callback_enter` around the call, and while that count is
+non-zero a throw is not delivered outward at all. The process ends, naming the
+boundary and the message. The policy lives in the runtime, so both backends get
+it from two calls rather than each implementing a rule.
+
+**Not a return value**, deliberately. A C function pointer's signature has no
+error channel, and inventing one is worse than stopping: a comparator that
+answers 0 because it failed sorts the array wrongly and says nothing.
+
+The example checks this in a forked child, with an embedder landing installed --
+that is the case where the two behaviours differ. Disabling the guard turns the
+child's exit from 1 into 7, "the throw jumped out, skipping the C frame
+between", which is the hazard stated as an observation rather than a worry.
+
 **What libc's own callbacks still need.** `qsort` and its family take
 `void *` and expect the callback to cast. Reading through a `void *` is exactly
 what `Pointee::Void` refuses, so a real libc callback needs a checked way to
