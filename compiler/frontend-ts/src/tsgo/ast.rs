@@ -424,7 +424,15 @@ fn leading_tag(mut source: &str, marker: &str) -> Option<String> {
             break;
         }
     }
-    (!tags.is_empty()).then(|| tags.join(", "))
+    // A space, not a comma. `@ntsNoEscape` takes a *list* of parameter names, so
+    // two of them on separate lines have to compose into one list -- joined with
+    // a comma the first name came back as `cb,` and was reported as naming no
+    // parameter, which is true and unhelpful.
+    //
+    // It keeps the property the join was there for: a repeated `@ntsAbi managed`
+    // becomes `managed managed`, still not an ABI anyone declared, so lowering
+    // still reports the duplicate rather than honouring one of them.
+    (!tags.is_empty()).then(|| tags.join(" "))
 }
 
 /// Record each declaration's modifier keywords.
@@ -949,11 +957,16 @@ mod tests {
             super::native_abi("/** @ntsAbi */ declare function f(): void;"),
             Some(String::new())
         );
+        // Two tags survive as one string so that lowering can report the
+        // duplicate rather than honour whichever came first. What matters is
+        // that the result is not an ABI anyone declared -- the separator is how
+        // it is spelled, not what is being asserted, and it is a space because
+        // `@ntsNoEscape` carries a *list* of names that has to compose.
         assert_eq!(
             super::native_abi(
                 "/** @ntsAbi managed */\n/** @ntsAbi managed */ declare function f(): void;"
             ),
-            Some("managed, managed".to_owned())
+            Some("managed managed".to_owned())
         );
     }
 }

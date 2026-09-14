@@ -1,5 +1,6 @@
-import { apply_twice, apply_never } from "c:library";
-import type { c_int } from "c:types";
+import { apply_twice, apply_never, each_upto, type Counter } from "c:library";
+import type { Ptr, c_int } from "c:types";
+import { local } from "c:memory";
 
 // Non-capturing: no enclosing state, so the whole of it is code and a bare C
 // function pointer has everything it needs.
@@ -28,4 +29,17 @@ function refuses(n: c_int): c_int {
 
 export function throwThrough(x: number): number {
   return apply_twice(refuses, x as c_int);
+}
+
+// The context shape: C reaches our storage without the callback carrying any
+// state of its own, so the function stays non-capturing and the storage stays
+// a local. Both are borrowed for the call and neither outlives it.
+function accumulate(ctx: Ptr<Counter>, n: c_int): void {
+  ctx.total = (ctx.total + n) as c_int;
+}
+
+export function sumTo(upto: number): number {
+  const counter = local<Counter>();
+  each_upto(accumulate, counter, upto as c_int);
+  return counter.total;
 }

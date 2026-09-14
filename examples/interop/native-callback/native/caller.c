@@ -42,6 +42,12 @@ int main(void) {
   // boundary rather than land here.
   if (fork_and_check() != 0) return 6;
 
+  // The context shape: C drives the loop and hands our storage back each time.
+  // 1+2+3+4+5. A bridge that dropped the context, or passed a copy, gives
+  // something else.
+  if (sumTo(5) != 15) return 4;
+  if (sumTo(0) != 0) return 5;
+
   puts("native callback: C called a TypeScript function through a bridge, "
        "and a throw stopped at it");
   return 0;

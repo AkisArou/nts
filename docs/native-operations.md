@@ -648,12 +648,20 @@ reallocating invalidates the storage as surely as keeping a pointer to it does
 -- and it does. For a callback it means the callee does not call it after
 returning.
 
-**What it does not do yet, said plainly.** Nothing turns on a callback's
-retention today: a non-capturing callback's bridge and its closure singleton are
-both immortal, so keeping one is harmless. It decides everything the moment a
-callback carries a *context* the caller owns, which is the next shape, and the
-contract exists now so that shape does not arrive needing a vocabulary invented
-under it.
+**What turns on it, and what does not.** A non-capturing callback's own
+retention gates nothing today: its bridge and its closure singleton are both
+immortal, so a callee that keeps one harms nothing.
+
+The **context** is a different matter and gates immediately. `each_upto` takes a
+callback and a `Ptr<Counter>` the caller owns, and `native-callback` passes a
+*local*:
+
+    @ntsNoEscape f ctx      accepted -- the local may be the context
+    (ctx left Unknown)      refused  -- "native local address escapes"
+
+That is the same check that already governed a borrowed pointer, reached through
+a callback, and it is the reason the contract had to exist before this shape did
+rather than after.
 
 Reads versus writes, acquisition and release, outcome-dependent transitions --
 those are further axes. They belong beside this one when a binding needs them,
