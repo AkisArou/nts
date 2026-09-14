@@ -249,7 +249,10 @@ pub fn emit(program: &Program) -> Emitted {
         }
     }
 
-    let mut classes = Vec::new();
+    // Which bound interfaces each closure is handed to; see
+    // `closure_interfaces`. Computed once rather than per layout, because it
+    // is a walk of every operation in the program.
+    let (handed_to, mut classes) = (closure_interfaces(program), Vec::new());
     for layout in &program.layouts {
         // **A bound class is in somebody's jar and we must not write one.**
         // Emitting `com/conv/Conv.class` beside the real one puts a stub with
@@ -263,7 +266,7 @@ pub fn emit(program: &Program) -> Emitted {
         if nts_core::hir::runtime::is_foreign_layout_name(&layout.name) {
             continue;
         }
-        match object_class(program, layout, &plan) {
+        match object_class(program, layout, &plan, &handed_to) {
             Ok(Some(class)) => classes.push(class),
             Ok(None) => {}
             Err(diagnostic) => diagnostics.push(diagnostic),
@@ -487,10 +490,78 @@ fn identity_class(
     })
 }
 
+/// Which **bound Java interfaces** a closure is handed to.
+///
+/// A closure class is emitted once and which interface it should implement
+/// depends on where it is passed, so this is the one question in this backend
+/// that has to be asked of the whole program rather than of a layout.
+///
+/// **One hop backwards is enough.** `setOnTouch(View.OnTouch | ((x, y) =>
+/// boolean))` is a union, so the argument at the call is an `Erase` of the
+/// closure rather than the closure -- and `OpKind::Erase` carries its operand,
+/// so the closure is one step away. Without this the value reached Java as an
+/// `NtsValue` and the first dispatch was `IncompatibleClassChangeError`; with
+/// the unboxing but without the interface it was `ClassCastException` naming
+/// `nts/gen/Closure0`, which is the same gap said more precisely.
+fn closure_interfaces(program: &Program) -> FxHashMap<nts_semantic_schema::TypeId, Vec<String>> {
+    let mut found: FxHashMap<nts_semantic_schema::TypeId, Vec<String>> = FxHashMap::default();
+    let interfaces: std::collections::BTreeSet<&str> = program
+        .foreign
+        .iter()
+        .filter(|(_, row)| row.kind == nts_core::hir::runtime::ForeignKind::Interface)
+        .filter_map(|(key, _)| key.split_once(':')?.0.rsplit_once('.').map(|(owner, _)| owner))
+        .collect();
+    for func in &program.funcs {
+        for op in &func.values {
+            let nts_core::hir::OpKind::Call { callee: nts_core::hir::Callee::External(key), args, .. } = &op.kind
+            else {
+                continue;
+            };
+            let Some(row) = program.foreign.get(key.as_str()) else { continue };
+            let Some((_, descriptor)) = key.split_once(':') else { continue };
+            let Some(parameters) = nts_jvm_emitter::descriptor::parameters(descriptor) else {
+                continue;
+            };
+            // A bound instance call carries its receiver in `args[0]` and the
+            // descriptor does not mention it; see `push_foreign_arguments`.
+            let rest = if row.kind == nts_core::hir::runtime::ForeignKind::Static {
+                args.as_slice()
+            } else {
+                args.get(1..).unwrap_or(&[])
+            };
+            for (argument, want) in rest.iter().zip(parameters) {
+                let Some(name) = want.strip_prefix('L').and_then(|it| it.strip_suffix(';')) else {
+                    continue;
+                };
+                if !interfaces.contains(name) {
+                    continue;
+                }
+                let mut value = *argument;
+                if let Some(op) = func.values.get(value.0 as usize)
+                    && let nts_core::hir::OpKind::Erase { value: inner } = op.kind
+                {
+                    value = inner;
+                }
+                let Some(held) = func.values.get(value.0 as usize) else { continue };
+                if let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) =
+                    held.ty
+                {
+                    let seen = found.entry(id).or_default();
+                    if !seen.iter().any(|it| it == name) {
+                        seen.push(name.to_owned());
+                    }
+                }
+            }
+        }
+    }
+    found
+}
+
 fn object_class(
     program: &Program,
     layout: &nts_core::hir::Layout,
     plan: &widen::Plan,
+    handed_to: &FxHashMap<nts_semantic_schema::TypeId, Vec<String>>,
 ) -> Result<Option<Class>, Diagnostic> {
     let origin = program_origin(program);
     let mut pool = Pool::new();
@@ -548,6 +619,15 @@ fn object_class(
     // not -- an `AbstractMethodError` waiting for the first caller to reach it
     // through the interface, and one the verifier does not catch because
     // interface implementation is checked at the call, not at load.
+    // A closure handed to a bound Java interface implements it; the bridge
+    // below carries the jar's own widths.
+    for id in &layout.types {
+        for interface in handed_to.get(id).into_iter().flatten() {
+            if !builder.interfaces.iter().any(|it| it == interface) {
+                builder.interfaces.push(interface.clone());
+            }
+        }
+    }
     for interface in callback_interfaces(program, layout) {
         builder.interfaces.push(interface.to_owned());
     }
@@ -597,7 +677,7 @@ fn object_class(
     member_forwarders(program, layout, &mut builder, &mut pool)?;
     dispatch_forwarders(program, layout, &mut builder, &mut pool)?;
     // A bound interface declares its own widths; see `foreign_bridges`.
-    foreign_bridges(program, layout, &mut pool, &mut builder, &origin)?;
+    foreign_bridges(program, layout, handed_to, &mut pool, &mut builder, &origin)?;
     // A field the JVM zeroes to `null` where the language's zero is
     // `undefined`.
     //
@@ -749,14 +829,133 @@ fn callback_interfaces(
 /// under both. A width is not like that: the body would load an `int` where it
 /// expects a `double`. This converts each parameter, calls ours, and converts
 /// the result back.
+/// The body of a bridge: convert each parameter, call ours, convert the result.
+///
+/// Split out of [`foreign_bridges`] because "what does this method do" and
+/// "which methods does this class need" are two questions, and the first is
+/// where every width decision lives.
+fn bridge_body(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    ours: &nts_core::hir::Func,
+    want: &str,
+    full: &str,
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<nts_jvm_emitter::Body, Diagnostic> {
+    let Some(parameters) = nts_jvm_emitter::descriptor::parameters(want) else {
+        return Err(Diagnostic::error(
+            "NTS4008",
+            format!("a bridge against the unreadable descriptor `{want}`"),
+            origin.location,
+        ));
+    };
+    let mut locals = vec![VType::Object(types::class_name(layout))];
+    for spelled in &parameters {
+        locals.push(match *spelled {
+            "I" | "S" | "B" | "C" | "Z" => VType::Integer,
+            "J" => VType::Long,
+            "F" => VType::Float,
+            "D" => VType::Double,
+            other => VType::Object(other.trim_matches(|c| c == 'L' || c == ';').to_owned()),
+        });
+    }
+    let slots: u16 = locals.iter().map(VType::slots).sum();
+    let mut code = Code::new(locals, slots);
+    code.load(origin, Kind::Ref, 0);
+    let mut at: u16 = 1;
+    for (spelled, param) in parameters.iter().zip(ours.params.iter().skip(1)) {
+        let Some(kind) = types::kind(&param.ty) else { continue };
+        match *spelled {
+            "I" | "S" | "B" | "C" | "Z" => {
+                code.load(origin, Kind::Int, at);
+                if kind == Kind::Double {
+                    code.convert(origin, nts_jvm_emitter::insn::I2D, Kind::Int, Kind::Double);
+                }
+                at += 1;
+            }
+            "D" => {
+                code.load(origin, Kind::Double, at);
+                at += 2;
+            }
+            // A Java array meeting a typed array. The same copy a
+            // bound method's *return* takes -- `NtsViewU8.from` and
+            // its siblings -- because it is the same boundary read the
+            // other way: a view is a window onto a buffer and a Java
+            // array has none.
+            spelled if spelled.starts_with('[') => {
+                code.load(origin, Kind::Ref, at);
+                at += 1;
+                if let Some(want) = types::descriptor(types::Shape::of(program), &param.ty)
+                    && let Some(view) =
+                        want.strip_prefix('L').and_then(|it| it.strip_suffix(';'))
+                    && view.starts_with("nts/rt/NtsView")
+                {
+                    code.invoke_static(
+                        origin,
+                        pool,
+                        view,
+                        "from",
+                        &format!("({spelled}){want}"),
+                    );
+                }
+            }
+            _ => {
+                code.load(origin, kind, at);
+                at += kind.words();
+            }
+        }
+    }
+    code.invoke_static(origin, pool, PROGRAM, &body::method_name(&ours.name), full);
+    // The interface's return, from ours. `Z` against `Z` needs nothing;
+    // a `double` answering an `I` takes the same `ToInt32` a bound
+    // argument takes, because it is the same boundary.
+    let returns = want.rsplit(')').next().unwrap_or("");
+    let held = types::kind(&ours.return_type);
+    if returns == "I" && held == Some(Kind::Double) {
+        code.invoke_static(origin, pool, crate::body::RUNTIME, "toInt32", "(D)I");
+    }
+    code.ret(
+        origin,
+        match returns {
+            "V" => None,
+            "I" | "S" | "B" | "C" | "Z" => Some(Kind::Int),
+            "J" => Some(Kind::Long),
+            "F" => Some(Kind::Float),
+            "D" => Some(Kind::Double),
+            _ => Some(Kind::Ref),
+        },
+    );
+    code.finish(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4008",
+            format!("the bridge for `{}` could not be written: {error}", ours.name),
+            origin.location,
+        )
+    })
+}
+
 fn foreign_bridges(
     program: &Program,
     layout: &nts_core::hir::Layout,
+    handed_to: &FxHashMap<nts_semantic_schema::TypeId, Vec<String>>,
     pool: &mut Pool,
     builder: &mut ClassBuilder,
     origin: &nts_semantic_schema::Origin,
 ) -> Result<(), Diagnostic> {
-    for interface in hierarchy::implemented(program, layout) {
+    // Deduplicated: a class can both declare `implements View.OnTouch` and be
+    // handed to one, and emitting the bridge twice is a duplicate member the
+    // JVM refuses at load -- which the emitter's own accounting caught rather
+    // than the verifier, and said so by name.
+    let mut wanted: Vec<String> = hierarchy::implemented(program, layout);
+    for id in &layout.types {
+        for interface in handed_to.get(id).into_iter().flatten() {
+            if !wanted.iter().any(|it| it == interface) {
+                wanted.push(interface.clone());
+            }
+        }
+    }
+    for interface in wanted {
         if !nts_core::hir::runtime::is_foreign_layout_name(&interface) {
             continue;
         }
@@ -773,8 +972,18 @@ fn foreign_bridges(
         // Sorted, so the emitted class does not reorder between runs.
         rows.sort_unstable();
         for (member, want) in rows {
-            let wanted = format!("{}#{member}", layout.name);
-            let Some(ours) = program.funcs.iter().find(|f| f.name == wanted) else {
+            // A closure's single method is `call`, whatever the interface
+            // names its own -- `View.OnTouch.onTouch` is served by
+            // `Closure0#call`. Looked up by the interface's name first so a
+            // class that really declares it wins.
+            let named = format!("{}#{member}", layout.name);
+            let closure = format!("{}#call", layout.name);
+            let Some(ours) = program
+                .funcs
+                .iter()
+                .find(|f| f.name == named)
+                .or_else(|| program.funcs.iter().find(|f| f.name == closure))
+            else {
                 continue;
             };
             let Some(mine) = instance_descriptor(program, ours) else { continue };
@@ -782,70 +991,7 @@ fn foreign_bridges(
                 continue;
             }
             let Some(full) = body::signature(program, ours) else { continue };
-            let Some(parameters) = nts_jvm_emitter::descriptor::parameters(want) else {
-                continue;
-            };
-            let mut locals = vec![VType::Object(types::class_name(layout))];
-            for spelled in &parameters {
-                locals.push(match *spelled {
-                    "I" | "S" | "B" | "C" | "Z" => VType::Integer,
-                    "J" => VType::Long,
-                    "F" => VType::Float,
-                    "D" => VType::Double,
-                    other => VType::Object(other.trim_matches(|c| c == 'L' || c == ';').to_owned()),
-                });
-            }
-            let slots: u16 = locals.iter().map(VType::slots).sum();
-            let mut code = Code::new(locals, slots);
-            code.load(origin, Kind::Ref, 0);
-            let mut at: u16 = 1;
-            for (spelled, param) in parameters.iter().zip(ours.params.iter().skip(1)) {
-                let Some(kind) = types::kind(&param.ty) else { continue };
-                match *spelled {
-                    "I" | "S" | "B" | "C" | "Z" => {
-                        code.load(origin, Kind::Int, at);
-                        if kind == Kind::Double {
-                            code.convert(origin, nts_jvm_emitter::insn::I2D, Kind::Int, Kind::Double);
-                        }
-                        at += 1;
-                    }
-                    "D" => {
-                        code.load(origin, Kind::Double, at);
-                        at += 2;
-                    }
-                    _ => {
-                        code.load(origin, kind, at);
-                        at += kind.words();
-                    }
-                }
-            }
-            code.invoke_static(origin, pool, PROGRAM, &body::method_name(&ours.name), &full);
-            // The interface's return, from ours. `Z` against `Z` needs nothing;
-            // a `double` answering an `I` takes the same `ToInt32` a bound
-            // argument takes, because it is the same boundary.
-            let returns = want.rsplit(')').next().unwrap_or("");
-            let held = types::kind(&ours.return_type);
-            if returns == "I" && held == Some(Kind::Double) {
-                code.invoke_static(origin, pool, crate::body::RUNTIME, "toInt32", "(D)I");
-            }
-            code.ret(
-                origin,
-                match returns {
-                    "V" => None,
-                    "I" | "S" | "B" | "C" | "Z" => Some(Kind::Int),
-                    "J" => Some(Kind::Long),
-                    "F" => Some(Kind::Float),
-                    "D" => Some(Kind::Double),
-                    _ => Some(Kind::Ref),
-                },
-            );
-            let rendered = code.finish(pool).map_err(|error| {
-                Diagnostic::error(
-                    "NTS4008",
-                    format!("the bridge for `{wanted}` could not be written: {error}"),
-                    origin.location,
-                )
-            })?;
+            let rendered = bridge_body(program, layout, ours, want, &full, pool, origin)?;
             builder.method(
                 access::PUBLIC | access::BRIDGE | access::SYNTHETIC,
                 member.to_owned(),

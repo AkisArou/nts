@@ -3308,46 +3308,6 @@ impl Emitter<'_> {
         // arrays want: the member's type should come from the binding row,
         // which carries `com/example/Catalog.hits:I`, rather than from the
         // TypeScript the declaration was rendered as.
-        // **The layout's name, not the emitted class name.** `class_name`
-        // gives `nts/gen/Point` for a class of ours, which contains a `/` and
-        // so answered "foreign" for every class in the program -- 74 declined
-        // functions and the floor red. The `/` test belongs on the name the
-        // layout carries, which is `Point` for ours and `com/example/Catalog`
-        // for a bound one.
-        let foreign = self
-            .program
-            .layouts
-            .iter()
-            .find(|layout| layout.types.contains(&id))
-            .is_some_and(|layout| nts_core::hir::runtime::is_foreign_layout_name(&layout.name));
-        if foreign {
-            // **The jar's width, not the one the declaration was rendered as.**
-            // `hits: number` in a `.d.ts` becomes a layout field whose
-            // descriptor is our `D`; the jar declares `int hits`, and
-            // `getfield com/example/Catalog.hits:D` is `NoSuchFieldError` at
-            // run time with nothing said at compile time.
-            //
-            // The row carries it -- `com/example/Catalog.hits:I` -- and the
-            // key is `owner.member:descriptor`, so it cannot be looked up by
-            // owner and member without a scan. Linear, and only for a bound
-            // field, which most programs have none of; an index belongs here
-            // if a profile ever asks, and the shape of the fix is a map built
-            // once rather than a different answer.
-            let prefix = format!("{}.{}:", resolved.0, resolved.1);
-            let Some(row) = self.program.foreign.keys().find(|key| key.starts_with(&prefix)) else {
-                return Err(refuse(
-                    self.func,
-                    &format!(
-                        "the field `{}` of the bound class `{}`, which has no binding row",
-                        resolved.1, resolved.0
-                    ),
-                ));
-            };
-            let Some((_, descriptor)) = row.split_once(':') else {
-                return Err(refuse(self.func, &format!("a malformed binding row `{row}`")));
-            };
-            return Ok((resolved.0, resolved.1, descriptor.to_owned(), resolved.3));
-        }
         Ok(resolved)
     }
 
@@ -3373,6 +3333,37 @@ impl Emitter<'_> {
         // came from `Shape` is a `NoSuchFieldError` at link time rather than
         // anything the verifier catches.
         let owner = crate::hierarchy::declares_field(self.program, layout, field as usize);
+        // **Asked of the layout that *declares* the field, not the one the
+        // receiver has.** `panel.right` reads a field of `com/example/ui/View`
+        // through a `nts/gen/Panel`, and testing the receiver said "ours" -- so
+        // the width stayed the `double` the declaration was rendered as and
+        // the jar says `D`... or does not have the field at all.
+        // `NoSuchFieldError` at run time, with nothing said at compile time.
+        //
+        // And the layout's own name, not `class_name`'s: that gives
+        // `nts/gen/Point` for a class of ours, which contains a `/` and so
+        // answered "foreign" for every class in the program.
+        if nts_core::hir::runtime::is_foreign_layout_name(&owner.name) {
+            let prefix = format!("{}.{}:", owner.name, entry.name);
+            let Some(row) = self.program.foreign.keys().find(|key| key.starts_with(&prefix)) else {
+                return Err(refuse(
+                    self.func,
+                    &format!(
+                        "the field `{}` of the bound class `{}`, which has no binding row",
+                        entry.name, owner.name
+                    ),
+                ));
+            };
+            let Some((_, descriptor)) = row.split_once(':') else {
+                return Err(refuse(self.func, &format!("a malformed binding row `{row}`")));
+            };
+            return Ok((
+                owner.name.clone(),
+                entry.name.clone(),
+                descriptor.to_owned(),
+                entry.ty.clone(),
+            ));
+        }
         // A field this backend holds as a `double`; see `widen`. Keyed by the
         // *declaring* class and the field's name, which is the one identity the
         // declaration in `object_class` and this access can both compute.
