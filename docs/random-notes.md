@@ -7,3 +7,4 @@
 - for npm packages, will a exports {nts: "..."} apply to us so we can reference typescript source code?
 - JSON.parse() as T -> emit compiler error if T is not JSON compliant? For example if contains Map,Set etc. or it will be expensive for the compiler?
 - JSON.parse and other functions that can throw and are known to use, maybe emit a compilation error or warning if they are not wrapped in a try/catch or something?
+- Auto-JNI for some portion of code that has no performance penalty for many data exchanges? Same spirit like webworkers work. So some portion can be in native code, and pass some results automatically to jvm. What about debuggability? Are we being smart in a bad way?
