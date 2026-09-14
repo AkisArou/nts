@@ -35,8 +35,32 @@
  * results are exactly that -- a first version of this file died on them partway
  * through the sweep, after printing several modules' worth of output that looked
  * complete.
+ *
+ * # Objects are rendered structurally, or this reports its own renderer
+ *
+ * `String()` was tried first for everything, which meant every object answered
+ * `[object Object]` -- for every input, in every spec, forever. `url/parse` was
+ * reported as "1 of 1 field(s) constant: [object Object]" and read as a vacuous
+ * check on a real function. It is not: `differential-ts.mjs` compares with
+ * `JSON.stringify`, so a wrong parse there diverges and is caught.
+ *
+ * The constant was this file's rendering of the value rather than the value. A
+ * variance report whose renderer collapses a whole type is measuring itself, and
+ * it collapsed the type that most specs return.
+ *
+ * So an object goes through `JSON.stringify` first and falls back to `String`;
+ * everything else keeps the old order, which the null-prototype note above is
+ * still the reason for.
  */
 function render(value) {
+  if (value !== null && typeof value === "object") {
+    try {
+      const structural = JSON.stringify(value);
+      if (structural !== undefined) return structural;
+    } catch {
+      // Circular, a BigInt inside, or a throwing `toJSON`: fall through to `String`.
+    }
+  }
   try {
     return String(value);
   } catch {
