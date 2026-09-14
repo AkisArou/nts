@@ -44,6 +44,7 @@
 // What would fix it is a stable parameter type for callbacks at the runtime
 // boundary — `NtsHeader *`, or the `NtsTask` shape the runtime already uses —
 // so that a hand-written implementation has something it can name.
+/** @ntsAbi managed */
 declare function nts_take_callback(callback: () => void): void;
 
 let ran = 0;

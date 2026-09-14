@@ -100,11 +100,16 @@ pub enum Roots<'a> {
 /// declarations with no bodies. Hence the implementations, not just the layout.
 fn callback_targets<'p>(
     program: &'p Program,
-    func: &Func,
+    func: &'p Func,
     args: &[super::ValueId],
 ) -> Vec<&'p str> {
-    args.iter()
-        .filter_map(|arg| match &func.values[arg.0 as usize].ty {
+    let types = args
+        .iter()
+        .flat_map(|arg| super::carried_values(func, *arg))
+        .map(|arg| &func.values[arg.0 as usize].ty);
+    super::exposure::reachable_types(program, types)
+        .into_iter()
+        .filter_map(|ty| match ty {
             super::HirType::Managed(super::ManagedType::Object(ty)) => Some(*ty),
             _ => None,
         })
@@ -125,7 +130,12 @@ pub fn callback_names(program: &Program) -> Vec<&str> {
     let mut found = Vec::new();
     for func in &program.funcs {
         for op in &func.values {
-            let OpKind::Call { callee: Callee::External(_), args, .. } = &op.kind else {
+            let OpKind::Call {
+                callee: Callee::External(_) | Callee::Native(_),
+                args,
+                ..
+            } = &op.kind
+            else {
                 continue;
             };
             for name in callback_targets(program, func, args) {
@@ -275,7 +285,7 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
                 // supplies it -- but a *closure* handed to one is called back
                 // through its method table, which is what `setTimeout` does
                 // with its callback.
-                Callee::External(_) => callback_targets(program, func, args),
+                Callee::External(_) | Callee::Native(_) => callback_targets(program, func, args),
                 Callee::Virtual { slot, .. } | Callee::Closure { slot } => program
                     .layouts
                     .iter()

@@ -1,6 +1,7 @@
 // The process-wide `NODE_DEBUG` selector, from node v24.20.0
 // `lib/internal/util/debuglog.js`.
 
+/** @ntsAbi managed */
 declare function nts_process_env(name: string): string;
 
 const selectors = nts_process_env("NODE_DEBUG").toUpperCase().split(",");

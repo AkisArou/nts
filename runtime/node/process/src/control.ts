@@ -15,23 +15,39 @@ import { parseFileMode, validateArray, validateString } from "../../internal/val
 import { constants } from "../../os/src/main.ts";
 import { errnoException, uvException } from "../../internal/uv.ts";
 
+/** @ntsAbi managed */
 declare function nts_process_cwd(): string;
+/** @ntsAbi managed */
 declare function nts_process_chdir(directory: string): number;
 /** The previous mask. Reading is `umask(new)` followed by `umask(previous)`. */
+/** @ntsAbi managed */
 declare function nts_process_umask(mask: number): number;
+/** @ntsAbi managed */
 declare function nts_process_umask_read(): number;
+/** @ntsAbi managed */
 declare function nts_process_kill(pid: number, signal: number): number;
+/** @ntsAbi managed */
 declare function nts_process_abort(): never;
+/** @ntsAbi managed */
 declare function nts_process_really_exit(code: number): never;
 
+/** @ntsAbi managed */
 declare function nts_process_getuid(): number;
+/** @ntsAbi managed */
 declare function nts_process_getgid(): number;
+/** @ntsAbi managed */
 declare function nts_process_geteuid(): number;
+/** @ntsAbi managed */
 declare function nts_process_getegid(): number;
+/** @ntsAbi managed */
 declare function nts_process_getgroups(): number[];
+/** @ntsAbi managed */
 declare function nts_process_setuid(id: number, name: string): number;
+/** @ntsAbi managed */
 declare function nts_process_setgid(id: number, name: string): number;
+/** @ntsAbi managed */
 declare function nts_process_seteuid(id: number, name: string): number;
+/** @ntsAbi managed */
 declare function nts_process_setegid(id: number, name: string): number;
 /**
  * Two columns rather than one array of "number or string".
@@ -42,6 +58,7 @@ declare function nts_process_setegid(id: number, name: string): number;
  * placeholder id -- which this did at first -- turns "no such group" into "-1
  * is out of range".
  */
+/** @ntsAbi managed */
 declare function nts_process_setgroups(ids: number[], names: string[]): number;
 /**
  * Resolve the two credentials and call `initgroups(3)`.
@@ -51,6 +68,7 @@ declare function nts_process_setgroups(ids: number[], names: string[]): number;
  * failed system call. The two columns preserve the distinction between `0`
  * and `"0"`; they are different credential requests.
  */
+/** @ntsAbi managed */
 declare function nts_process_initgroups(
   userId: number,
   userName: string,

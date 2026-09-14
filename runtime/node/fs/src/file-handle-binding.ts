@@ -2,34 +2,41 @@
 // machines use already-validated arguments without paying the public
 // fs.open/read/close normalization path again.
 
+/** @ntsAbi managed */
 declare function nts_fs_open(
   path: string,
   flags: number,
   mode: number,
 ): number;
+/** @ntsAbi managed */
 declare function nts_fs_open_bytes(
   path: number[],
   flags: number,
   mode: number,
 ): number;
+/** @ntsAbi managed */
 declare function nts_fs_close(descriptor: number): number;
 
+/** @ntsAbi managed */
 declare function nts_fs_open_async(
   path: string,
   flags: number,
   mode: number,
   callback: (errno: number, descriptor: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_open_bytes_async(
   path: number[],
   flags: number,
   mode: number,
   callback: (errno: number, descriptor: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_close_async(
   descriptor: number,
   callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_read_async(
   descriptor: number,
   length: number,

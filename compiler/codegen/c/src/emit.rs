@@ -552,114 +552,85 @@ pub fn emit(program: &Program) -> Emitted {
 
 /// Prototypes for every function this program calls and does not define.
 ///
-/// The signature comes from the call sites, because that is the only place it
-/// exists: an external callee has no `Func` to read parameters off. Where two
-/// calls disagree the program is asking for one symbol with two signatures,
-/// which C would take and the linker would not, so it is a diagnostic here.
-///
-/// # Why the runtime's own helpers are excluded by asking rather than by name
-///
-/// They are already declared by the included header, and declaring them twice
-/// with types derived from a call site would conflict with the real
-/// declaration. The test is whether the header mentions the name, not whether
-/// the name starts with `nts_`: a program is entitled to write
-/// `declare function nts_process_cwd()`, and a naming convention would silently
-/// leave that one undeclared -- which is the bug this function exists to fix.
+/// Authored native declarations supply their ABI directly. Compiler runtime
+/// calls must be declared by a runtime header. Neither path invents a prototype
+/// from argument representations: specialization cannot change a callee's ABI.
 type Prototypes = Result<Vec<String>, (Vec<String>, Vec<Diagnostic>)>;
 
 fn external_prototypes(program: &Program) -> Prototypes {
-    let mut seen: rustc_hash::FxHashMap<&str, String> = rustc_hash::FxHashMap::default();
+    let mut seen: rustc_hash::FxHashMap<&str, (&nts_core::hir::native::Function, String)> =
+        rustc_hash::FxHashMap::default();
     let mut prototypes = Vec::new();
-    let mut refusals: Vec<Diagnostic> = Vec::new();
+    let mut refusals = Vec::new();
     for func in &program.funcs {
-        for op in &func.values {
-            let OpKind::Call {
-                callee: Callee::External(name),
-                args,
-                ..
-            } = &op.kind
-            else {
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .map(|value| &func.values[value.0 as usize])
+        {
+            let OpKind::Call { callee, .. } = &op.kind else {
                 continue;
             };
-            if runtime_declares(name) {
-                continue;
-            }
-            let mut parameters = Vec::new();
-            let mut unnameable = false;
-            for arg in args {
-                let ty = &func.values[arg.0 as usize].ty;
-                if crosses_as_header(ty) {
-                    parameters.push("NtsHeader *".to_owned());
-                    continue;
-                }
-                match c_type_of(program, ty, &op.origin) {
-                    Ok(named) => parameters.push(named),
-                    Err(why) => {
-                        refusals.push(why);
-                        unnameable = true;
-                        break;
-                    }
-                }
-            }
-            if unnameable {
-                continue;
-            }
-            if parameters.is_empty() {
-                parameters.push("void".to_owned());
-            }
-            // The return takes the same escape the parameters above take, and
-            // did not. A `declare function` returning an object emitted
-            // `NtsObj_AsyncContextFrame * nts_async_context_get(void);` -- a
-            // per-program struct name, which the one hand-written definition
-            // every program links against cannot spell. So the symbol stayed
-            // undefined in **14 of the 20 addons that build**, and a shared
-            // object binds lazily, so each of them loaded, reported "builds and
-            // loads", and would have aborted on the first call.
-            //
-            // Found with `nm -D` on the built artifacts rather than from the
-            // source, by the Node lane, after `build-floor.sh` had been saying
-            // "builds and loads" about all of them.
-            let returns = match returned_shape(program, &op.ty) {
-                Returned::Header => "NtsHeader *".to_owned(),
-                // Reported where the *caller* is dropped, not here. A
-                // prototype nothing calls is dead text; a body that calls it
-                // emits an assignment clang rejects, so the body is the thing
-                // that has to go and the diagnostic belongs beside it.
-                Returned::Tuple => continue,
-                Returned::Own => match c_type_of(program, &op.ty, &op.origin) {
-                    Ok(named) => named,
-                    Err(why) => {
-                        refusals.push(why);
-                        continue;
-                    }
-                },
-            };
-            let prototype = format!(
-                "{} {}({});",
-                returns,
-                c_identifier(name),
-                parameters.join(", ")
-            );
-            match seen.get(name.as_str()) {
-                Some(existing) if *existing != prototype => {
+            let target = match callee {
+                Callee::Native(target) => target,
+                Callee::External(name) if !runtime_declares(name) => {
                     refusals.push(Diagnostic::error(
                         "NTS2007",
-                        format!(
-                            "`{name}` is called with two different signatures, so there is no \
-                             one declaration to emit: `{existing}` and `{prototype}`"
-                        ),
+                        format!("runtime call `{name}` has no declared C ABI"),
                         op.origin.location,
                     ));
+                    continue;
+                }
+                _ => continue,
+            };
+            let name = target.name.as_str();
+            if (runtime_declares(name) && target.convention == nts_core::hir::native::Convention::C)
+                || program.funcs.iter().any(|f| c_identifier(&f.name) == name)
+            {
+                refusals.push(Diagnostic::error(
+                    "NTS2007",
+                    format!("foreign symbol `{name}` collides with a runtime or compiled function"),
+                    op.origin.location,
+                ));
+                continue;
+            }
+            if !nts_codegen_common::symbols::is_native_c_identifier(name) {
+                refusals.push(Diagnostic::error(
+                    "NTS2007",
+                    format!("foreign symbol `{name}` is not an available C identifier"),
+                    op.origin.location,
+                ));
+                continue;
+            }
+            let parameters = if target.parameters.is_empty() {
+                "void".to_owned()
+            } else {
+                target
+                    .parameters
+                    .iter()
+                    .map(nts_core::hir::native::Type::c_type)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let prototype = format!("{} {name}({parameters});", target.result.c_type());
+            match seen.get(name) {
+                Some((existing_abi, existing)) if !existing_abi.same_abi(target) => {
+                    refusals.push(Diagnostic::error("NTS2007",
+                        format!("foreign symbol `{name}` has conflicting ABI declarations: `{existing}` and `{prototype}`"), op.origin.location));
                 }
                 Some(_) => {}
                 None => {
-                    seen.insert(name.as_str(), prototype.clone());
+                    seen.insert(name, (target, prototype.clone()));
                     prototypes.push(prototype);
                 }
             }
         }
     }
     prototypes.sort();
+    if !seen.is_empty() {
+        prototypes.insert(0, "_Static_assert(sizeof(int) == 4 && sizeof(long) == 8 && sizeof(size_t) == 8 && sizeof(ptrdiff_t) == 8, \"native calls require the LP64 ABI\");".to_owned());
+    }
     if refusals.is_empty() {
         Ok(prototypes)
     } else {
@@ -667,10 +638,6 @@ fn external_prototypes(program: &Program) -> Prototypes {
     }
 }
 
-/// Whether the runtime header already declares a name.
-///
-/// A whole-word search, so `nts_str_slice` does not count as a declaration of
-/// `nts_str_slice_into`.
 /// Whether the program calls anything `nts_unicode.h` declares.
 ///
 /// Over the HIR rather than the emitted text, because this decides the
@@ -686,27 +653,12 @@ fn uses_unicode(program: &Program) -> bool {
 }
 
 fn runtime_declares(name: &str) -> bool {
-    // Every header the build force-includes, not only the main one.
-    //
-    // A prototype is emitted from the *call's* argument types, because for an
-    // arbitrary `declare function` that is all there is. Where a header already
-    // declares the name, the header is the one declaration and this must emit
-    // none -- and asking only `nts_runtime.h` meant `nts_unicode.h`'s helpers
-    // got a second, generated one:
-    //
-    //     nts_unicode.h  NtsString *nts_str_to_lower_case(const NtsString *s);
-    //     program.c      NtsString * nts_str_to_lower_case(NtsString *);
-    //
-    // A `const` apart, invisible while nothing included both, and
-    // `conflicting types` the moment `build.sh` force-included the header so
-    // that `process` could reach three declared-and-defined helpers. The node
-    // lane reverted that change rather than take a module's three errors at the
-    // cost of two modules that build.
-    //
-    // Listed rather than derived because the set is small and each entry is a
-    // decision: these are the headers a generated translation unit is compiled
-    // against, and a header it is *not* compiled against must still get a
-    // prototype or the call will not link.
+    // All headers supplied with generated C participate in collision checks.
+    // They already declare compiler runtime calls; authored native declarations
+    // cannot redefine those symbols. The former call-site prototype inference
+    // emitted a second nts_str_to_lower_case declaration without const, which
+    // disagreed as soon as the Unicode header was included. Native prototypes
+    // now come from authored ABI types, never specialized argument types.
     [RUNTIME_HEADER, UNICODE_HEADER, GRISU_HEADER]
         .iter()
         .any(|header| declares_the_name(header, name))
@@ -787,19 +739,8 @@ fn emit_bodies<'a>(
     diagnostics: &mut Vec<Diagnostic>,
     refused: &mut Vec<String>,
 ) -> Vec<(String, CodeWriter, &'a Func)> {
-    // The bindings whose return this backend cannot declare, and the bodies
-    // that call them. Computed before anything is emitted, because a body that
-    // calls one produces an assignment clang rejects -- `os` lost every export
-    // over `nts_os_cpus` alone, where dropping the one function that reads it
-    // leaves the other twenty-two.
-    let unspellable = unspellable_returns(program);
     let mut bodies = Vec::new();
     for func in &program.funcs {
-        if let Some((binding, origin)) = calls_unspellable(func, &unspellable) {
-            diagnostics.push(unspellable_refusal(&func.name, binding, origin));
-            refused.push(func.name.clone());
-            continue;
-        }
         // An `abstract` method is a signature and no body. It is in `funcs` so
         // that a call through the slot can take its function-pointer type from
         // it; nothing calls it and no vtable names it, because an abstract
@@ -826,102 +767,6 @@ fn emit_bodies<'a>(
     }
 
     bodies
-}
-
-/// Why a body that calls an unspellable binding is not emitted.
-fn unspellable_refusal(caller: &str, binding: &str, origin: &Origin) -> Diagnostic {
-    Diagnostic::error(
-        "NTS2010",
-        format!(
-            "`{caller}` cannot be emitted because it calls `{binding}`, which returns a \
-             tuple whose elements are not all one type -- its layout is numbered per \
-             program, so no C definition can name the type this call expects, and one \
-             returning an `NtsArray` would be read as a struct"
-        ),
-        origin.location,
-    )
-}
-
-/// The `declare function` names whose return no shared C definition can spell.
-fn unspellable_returns(program: &Program) -> rustc_hash::FxHashSet<String> {
-    let mut found = rustc_hash::FxHashSet::default();
-    for func in &program.funcs {
-        for op in &func.values {
-            if let OpKind::Call { callee: Callee::External(name), .. } = &op.kind
-                && !runtime_declares(name)
-                && matches!(returned_shape(program, &op.ty), Returned::Tuple)
-            {
-                found.insert(name.clone());
-            }
-        }
-    }
-    found
-}
-
-/// The first such binding this body calls, if any.
-///
-/// Over the blocks rather than `func.values`, for `drop_callers_of_refused`'s
-/// reason one layer up: a value list keeps every op the lowering ever made,
-/// including ones a pass has taken out of the control flow, so a call that
-/// cannot run would drop a body that is fine.
-fn calls_unspellable<'a>(
-    func: &'a Func,
-    unspellable: &rustc_hash::FxHashSet<String>,
-) -> Option<(&'a str, &'a Origin)> {
-    func.blocks
-        .iter()
-        .flat_map(|block| block.ops.iter())
-        .find_map(|value| {
-            let op = &func.values[value.0 as usize];
-            match &op.kind {
-                OpKind::Call { callee: Callee::External(name), .. }
-                    if unspellable.contains(name) =>
-                {
-                    Some((name.as_str(), &op.origin))
-                }
-                _ => None,
-            }
-        })
-}
-
-/// What a binding's *return* type can be written as.
-///
-/// The `NtsHeader *` escape that parameters take is right for a value the C
-/// side received and is handing back -- `nts_async_context_get` returns the
-/// pointer `nts_async_context_set` was given, so the C never builds one and the
-/// cast back at the call site is sound.
-///
-/// **It is wrong for a value the C side builds**, and a tuple is always that.
-/// `nts_os_cpus` constructs a two-element `NtsArray` of references while the
-/// compiler represents `[string[], number[]]` as a struct with two fields.
-/// Writing `NtsHeader *` on both makes the declarations agree and lets the
-/// program read struct fields out of an array header -- a build failure turned
-/// into a silently wrong program, which is the worse of the two. The clang
-/// error was doing useful work and this refuses in its place, with a sentence
-/// saying why rather than `conflicting types for 'nts_os_cpus'`.
-enum Returned {
-    /// An object the C side can only have been given: escapes to `NtsHeader *`.
-    Header,
-    /// A tuple, whose layout is per-program and which no binding can build.
-    Tuple,
-    /// Anything a shared definition can already name.
-    Own,
-}
-
-fn returned_shape(program: &Program, ty: &HirType) -> Returned {
-    let HirType::Managed(ManagedType::Object(id)) = ty else {
-        return Returned::Own;
-    };
-    let tuple = program
-        .layouts
-        .iter()
-        .find(|layout| layout.types.contains(id))
-        .is_some_and(|layout| nts_core::hir::is_tuple_layout_name(&layout.name));
-    if tuple { Returned::Tuple } else { Returned::Header }
-}
-
-fn crosses_as_header(ty: &HirType) -> bool {
-    matches!(ty, HirType::Managed(ManagedType::Object(_)))
 }
 
 /// Every parameter the runtime declares as `NtsHeader *`, by helper and
@@ -994,6 +839,18 @@ fn erases_result(callee: &str) -> bool {
     matches!(callee, "nts_promise_reference" | "nts_environment_platform")
 }
 
+fn callee_name(callee: &Callee) -> &str {
+    match callee {
+        Callee::Direct(target)
+        | Callee::External(target)
+        | Callee::Virtual {
+            declared: target, ..
+        } => target.as_str(),
+        Callee::Native(target) => &target.name,
+        Callee::Closure { .. } => "",
+    }
+}
+
 /// A call: static, external, or through the receiver's dispatch table.
 fn call_text(
     func: &Func,
@@ -1012,14 +869,7 @@ fn call_text(
     // A *closure* call has no such declaration -- every closure of a type has
     // its own implementation -- so its signature comes from the call site
     // instead, which knows the argument types and the result type exactly.
-    let target = match callee {
-        Callee::Direct(target)
-        | Callee::External(target)
-        | Callee::Virtual {
-            declared: target, ..
-        } => target.as_str(),
-        Callee::Closure { .. } => "",
-    };
+    let target = callee_name(callee);
 
     // A derived object passed where a base is expected. The layout is base
     // first, so the two agree on every field the base has and the cast is a
@@ -1039,18 +889,21 @@ fn call_text(
         .iter()
         .enumerate()
         .map(|(at, argument)| {
+            if let Callee::Native(native) = callee
+                && let Some(nts_core::hir::native::Type::Managed(_)) = native.parameters.get(at)
+            {
+                return format!(
+                    "({}){}",
+                    native.parameters[at].c_type(),
+                    value_name(*argument)
+                );
+            }
             // A runtime helper that takes a managed reference of *any* class
             // is declared in the header as `NtsHeader *`, and the emitter has
             // no signature for it -- `declared` only covers functions the
             // program itself defines. A string is already an `NtsHeader`, so
             // this went unnoticed until an object payload reached one.
-            // A runtime helper by name, or any object crossing to a binding
-            // the compiler declared itself -- see `crosses_as_header`.
-            if erases_class(target, at)
-                || (matches!(callee, Callee::External(_))
-                    && !runtime_declares(target)
-                    && crosses_as_header(&func.values[argument.0 as usize].ty))
-            {
+            if erases_class(target, at) {
                 return format!("(NtsHeader *){}", value_name(*argument));
             }
             let wanted = declared.and_then(|params| params.get(at)).map(|p| &p.ty);
@@ -1089,6 +942,14 @@ fn call_text(
             "(({signature}){receiver}->header.descriptor->methods[{slot}])({})",
             arguments.join(", ")
         )
+    } else if let Callee::Native(native) = callee {
+        native_call_expression(
+            native,
+            &arguments,
+            context.program,
+            &func.values[value.0 as usize].ty,
+            origin,
+        )?
     } else if matches!(
         func.values[value.0 as usize].kind,
         OpKind::Call { frame: Some(_), .. }
@@ -1102,20 +963,9 @@ fn call_text(
             c_identifier(target),
             arguments.join(", ")
         )
-    } else if erases_result(target)
-        || (matches!(callee, Callee::External(_))
-            && !runtime_declares(target)
-            && matches!(
-                returned_shape(context.program, &func.values[value.0 as usize].ty),
-                Returned::Header
-            ))
-    {
-        // The other half of the prototype's return escape: the binding is
-        // declared to hand back an `NtsHeader *`, and the program wants its own
-        // struct. Symmetrical with the argument cast above, and with the
-        // named-helper list `erases_result` carries -- the difference is only
-        // that this one is decided by the shape rather than by the name,
-        // because a `declare function` can be called anything.
+    } else if erases_result(target) {
+        // The runtime header returns a header pointer; the expression carries
+        // the concrete managed type supplied by lowering.
         let wanted = c_type_of(context.program, &func.values[value.0 as usize].ty, origin)?;
         format!(
             "({wanted}){}({})",
@@ -1156,6 +1006,22 @@ fn call_text(
         // The call still happens; only its result is unwanted.
         format!("{call};")
     })
+}
+
+fn native_call_expression(
+    target: &nts_core::hir::native::Function,
+    arguments: &[String],
+    program: &Program,
+    result: &HirType,
+    origin: &Origin,
+) -> Result<String, Diagnostic> {
+    let call = format!("{}({})", target.name, arguments.join(", "));
+    if matches!(target.result, nts_core::hir::native::Type::Managed(_)) {
+        let wanted = c_type_of(program, result, origin)?;
+        Ok(format!("({wanted}){call}"))
+    } else {
+        Ok(call)
+    }
 }
 
 /// Which layouts some `ObjectNew` in the program actually creates.
@@ -1800,13 +1666,7 @@ fn global_name(program: &Program, global: u32) -> String {
 /// the value is unused rather than wrong, and a declaration in `nts_runtime.h`
 /// that some translation unit references must resolve in every link.
 fn emit_closure_call_slot(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
-    let slot = program
-        .layouts
-        .iter()
-        .filter(|layout| layout.types.iter().copied().any(nts_core::hir::is_closure_type))
-        .find_map(|layout| layout.methods.iter().position(Option::is_some))
-        .and_then(|slot| u32::try_from(slot).ok())
-        .unwrap_or(0);
+    let slot = nts_core::hir::closure_call_slot(program);
     writer.line(
         origin,
         format!("const uint32_t nts_closure_call_slot = {slot}u;"),

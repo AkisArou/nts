@@ -17,20 +17,30 @@ import { uvException } from "../../internal/uv.ts";
 import { validateArray, validateNumber, validateObject } from "../../internal/validators.ts";
 import type { Platform } from "../../os/src/main.ts";
 
+/** @ntsAbi managed */
 declare function nts_hrtime_ns(): bigint;
+/** @ntsAbi managed */
 declare function nts_platform(): Platform;
 /** Seconds since the process started, fractional. */
+/** @ntsAbi managed */
 declare function nts_process_uptime(): number;
 /** Fill `[user, system]` with microseconds of CPU time; return a libuv errno. */
+/** @ntsAbi managed */
 declare function nts_process_cpu_usage(values: CpuValues): number;
+/** @ntsAbi managed */
 declare function nts_process_thread_cpu_usage(values: CpuValues): number;
 /** Fill `[rss, heapTotal, heapUsed, external, arrayBuffers]`; return an errno. */
+/** @ntsAbi managed */
 declare function nts_process_memory_usage(values: MemoryValues): number;
 /** Fill the single RSS value; return a libuv errno. */
+/** @ntsAbi managed */
 declare function nts_process_rss(values: RssValues): number;
 /** Fill the sixteen `uv_getrusage` columns below; return a libuv errno. */
+/** @ntsAbi managed */
 declare function nts_process_resource_usage(values: ResourceValues): number;
+/** @ntsAbi managed */
 declare function nts_process_available_memory(): number;
+/** @ntsAbi managed */
 declare function nts_process_constrained_memory(): number;
 
 const NANOSECONDS_PER_SECOND = 1_000_000_000n;

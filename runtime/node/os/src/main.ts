@@ -18,8 +18,10 @@ import { normalizeEncodingName, type Encoding } from "../../buffer/src/encodings
 
 // -------------------------------------------------------------- the bindings
 
+/** @ntsAbi managed */
 declare function nts_os_hostname(): string;
 /** Uname fields plus target architecture, platform, and byte order. */
+/** @ntsAbi managed */
 declare function nts_os_static_information(): [
   string,
   string,
@@ -29,19 +31,29 @@ declare function nts_os_static_information(): [
   Platform,
   "BE" | "LE",
 ];
+/** @ntsAbi managed */
 declare function nts_os_homedir(): string;
+/** @ntsAbi managed */
 declare function nts_os_tmpdir(): string;
+/** @ntsAbi managed */
 declare function nts_process_env(name: string): string;
+/** @ntsAbi managed */
 declare function nts_os_uptime(): number;
+/** @ntsAbi managed */
 declare function nts_os_totalmem(): number;
+/** @ntsAbi managed */
 declare function nts_os_freemem(): number;
+/** @ntsAbi managed */
 declare function nts_os_available_parallelism(): number;
+/** @ntsAbi managed */
 declare function nts_os_loadavg(): [number, number, number];
 
 /** Models plus six numeric columns per CPU: speed, user, nice, sys, idle, irq. */
+/** @ntsAbi managed */
 declare function nts_os_cpus(): [string[], number[]];
 
 /** Names, addresses, netmasks, families, MACs, internal flags, and scope ids. */
+/** @ntsAbi managed */
 declare function nts_os_network_interfaces(): [
   string[],
   string[],
@@ -53,13 +65,19 @@ declare function nts_os_network_interfaces(): [
 ];
 
 /** Numeric identity plus raw username, home-directory, and shell bytes. */
+/** @ntsAbi managed */
 declare function nts_os_user_info(): [number[], number[], number[], number[]];
 
+/** @ntsAbi managed */
 declare function nts_os_constants(): [string[], string[], number[]];
+/** @ntsAbi managed */
 declare function nts_os_udp_reuseaddr(): number;
 
+/** @ntsAbi managed */
 declare function nts_os_get_priority(pid: number): number;
+/** @ntsAbi managed */
 declare function nts_os_set_priority(pid: number, priority: number): number;
+/** @ntsAbi managed */
 declare function nts_errno(): number;
 
 // ----------------------------------------------------------------- the types

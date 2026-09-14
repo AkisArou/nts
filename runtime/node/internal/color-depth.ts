@@ -8,9 +8,13 @@
 
 import { emitWarning } from "./process-warning.ts";
 
+/** @ntsAbi managed */
 declare function nts_process_env(name: string): string;
+/** @ntsAbi managed */
 declare function nts_process_env_has(name: string): boolean;
+/** @ntsAbi managed */
 declare function nts_platform(): string;
+/** @ntsAbi managed */
 declare function nts_os_release(): string;
 
 const COLORS_2 = 1;

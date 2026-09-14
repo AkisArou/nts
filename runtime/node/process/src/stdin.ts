@@ -21,6 +21,7 @@ import { createReadStream } from "../../fs/src/streams.ts";
  * answer comes from the descriptor itself, not from how the program was
  * started.
  */
+/** @ntsAbi managed */
 declare function nts_stdin_handle_type(): string;
 
 let stream: Readable | undefined;

@@ -77,7 +77,9 @@
 // tuple struct in a header so a binding can return one. The declarations here
 // are not the problem and will not be edited to work around it.
 
+/** @ntsAbi managed */
 declare function nts_probe_homogeneous(): [number[], number[]];
+/** @ntsAbi managed */
 declare function nts_probe_heterogeneous(): [string[], number[]];
 
 export function homogeneous(): number {

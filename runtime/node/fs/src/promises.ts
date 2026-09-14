@@ -103,15 +103,20 @@ export { constants };
 // operations as fs.readSync/writeSync/writevSync/closeSync. They are declared
 // here too because importing main.ts would create the cycle main -> promises
 // -> main.
+/** @ntsAbi managed */
 declare function nts_fs_read(fd: number, length: number, position: number): number[];
+/** @ntsAbi managed */
 declare function nts_fs_write(fd: number, bytes: number[], position: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_writev(
   fd: number,
   bytes: number[],
   lengths: number[],
   position: number,
 ): number;
+/** @ntsAbi managed */
 declare function nts_fs_close(fd: number): number;
+/** @ntsAbi managed */
 declare function nts_errno(): number;
 
 /** A value-producing callback operation as a promise-returning one. */

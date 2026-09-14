@@ -247,62 +247,6 @@ pub(super) fn representations(
     narrowed
 }
 
-/// Fields a native caller can supply or mutate, including nested objects and
-/// containers. Compute once per analysis, outside its numeric fixpoint.
-#[must_use]
-pub(super) fn exposed_fields(program: &Program, outward: &FxHashSet<&str>) -> FxHashSet<(usize, u32)> {
-    let mut pending = Vec::new();
-    for func in &program.funcs {
-        if outward.contains(func.name.as_str()) {
-            pending.extend(func.params.iter().map(|param| &param.ty));
-            pending.push(&func.return_type);
-        }
-        for op in &func.values {
-            if let OpKind::Call {
-                callee: super::Callee::External(_), args, ..
-            } = &op.kind {
-                pending.push(&op.ty);
-                pending.extend(args.iter().map(|arg| &func.values[arg.0 as usize].ty));
-            }
-        }
-    }
-    let mut seen = FxHashSet::default();
-    let mut exposed = FxHashSet::default();
-    while let Some(ty) = pending.pop() {
-        if !seen.insert(ty) {
-            continue;
-        }
-        match ty {
-            HirType::Managed(ManagedType::Object(_)) => {
-                let Some(at) = layout_of(program, ty) else {
-                    continue;
-                };
-                let layout = &program.layouts[at];
-                for (index, field) in layout.fields.iter().enumerate() {
-                    let field_id = u32::try_from(index).unwrap_or(u32::MAX);
-                    pending.push(&field.ty);
-                    // A base pointer can address a derived prefix, and structurally
-                    // compatible layouts must retain the same storage widths.
-                    for (other, candidate) in program.layouts.iter().enumerate() {
-                        if shares_storage(layout, candidate, field_id) {
-                            exposed.insert((other, field_id));
-                        }
-                    }
-                }
-            }
-            HirType::Managed(
-                ManagedType::Array(element) | ManagedType::Set(element) | ManagedType::Promise(element),
-            ) => pending.push(element),
-            HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => {
-                pending.push(key);
-                pending.push(value);
-            }
-            _ => {}
-        }
-    }
-    exposed
-}
-
 /// The width a field's contents fit in, if any.
 fn width_for(held: Facts) -> Option<u8> {
     if held.is_bottom() || !held.whole || held.maybe_nan || held.maybe_negative_zero {
@@ -577,7 +521,7 @@ const RETURNS_ITS_ARRAY: &[&str] = &[
 /// on the field alone would not do: two classes can both have a third field
 /// named `n` with different second fields, and then no pointer converts between
 /// them and no store aliases.
-fn shares_storage(one: &super::Layout, other: &super::Layout, field: u32) -> bool {
+pub(super) fn shares_storage(one: &super::Layout, other: &super::Layout, field: u32) -> bool {
     let upto = field as usize;
     if one.fields.len() <= upto || other.fields.len() <= upto {
         return false;
@@ -597,7 +541,7 @@ fn is_number(program: &Program, layout: usize, field: u32) -> bool {
 }
 
 /// The layout an object-typed value refers to.
-fn layout_of(program: &Program, ty: &HirType) -> Option<usize> {
+pub(super) fn layout_of(program: &Program, ty: &HirType) -> Option<usize> {
     let HirType::Managed(ManagedType::Object(id)) = ty else {
         return None;
     };

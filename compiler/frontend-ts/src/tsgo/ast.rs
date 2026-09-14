@@ -377,12 +377,48 @@ fn decode_nodes(
             flags: raw.flags,
             // Filled once children are known; a modifier is a child keyword.
             modifiers: DeclarationModifiers::default(),
+            native_abi: if kind
+                == NodeKind::Syntax(nts_semantic_schema::syntax::FUNCTION_DECLARATION)
+            {
+                strings.source(raw.pos, raw.end).and_then(native_abi)
+            } else {
+                None
+            },
             data,
             text,
         });
     }
 
     Ok(nodes)
+}
+
+/// Only a tag in a leading documentation comment belongs to the declaration.
+/// Stop at the first token: a body string or a preceding statement cannot
+/// publish an ABI. Keep invalid and duplicate tags for lowering to diagnose.
+fn native_abi(mut source: &str) -> Option<String> {
+    let mut tags = Vec::new();
+    loop {
+        source = source.trim_start();
+        if let Some(comment) = source.strip_prefix("//") {
+            source = comment.find(['\n', '\r']).map_or("", |end| &comment[end..]);
+        } else if let Some(comment) = source.strip_prefix("/*") {
+            let Some(end) = comment.find("*/") else { break };
+            if let Some(doc) = comment[..end].strip_prefix('*') {
+                for line in doc.lines() {
+                    let line = line.trim().trim_start_matches('*').trim_start();
+                    if let Some(tag) = line.strip_prefix("@ntsAbi")
+                        && (tag.is_empty() || tag.starts_with(char::is_whitespace))
+                    {
+                        tags.push(tag.trim());
+                    }
+                }
+            }
+            source = &comment[end + 2..];
+        } else {
+            break;
+        }
+    }
+    (!tags.is_empty()).then(|| tags.join(", "))
 }
 
 /// Record each declaration's modifier keywords.
@@ -889,5 +925,29 @@ mod tests {
         // Just the sentinel. A file that fails to parse can legitimately be this.
         let decoded = decode(&payload(&[], &[]), SourceId(0)).unwrap();
         assert!(decoded.nodes.is_empty());
+    }
+
+    #[test]
+    fn native_abi_tags_cannot_escape_their_leading_documentation_comment() {
+        for source in [
+            "/* @ntsAbi managed */ declare function f(): void;",
+            "// @ntsAbi managed\ndeclare function f(): void;",
+            "declare function f(): void; /** @ntsAbi managed */",
+            "function f() { return '/** @ntsAbi managed */'; }",
+            "/** An example: @ntsAbi managed */ declare function f(): void;",
+            "/** @ntsAbiExtra managed */ declare function f(): void;",
+        ] {
+            assert_eq!(super::native_abi(source), None, "{source}");
+        }
+        assert_eq!(
+            super::native_abi("/** @ntsAbi */ declare function f(): void;"),
+            Some(String::new())
+        );
+        assert_eq!(
+            super::native_abi(
+                "/** @ntsAbi managed */\n/** @ntsAbi managed */ declare function f(): void;"
+            ),
+            Some("managed, managed".to_owned())
+        );
     }
 }

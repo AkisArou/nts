@@ -63,6 +63,7 @@ export type { AsyncResourceOptions } from "./resource.ts";
 export type { HookCallbacks };
 
 /** Enqueue a raw VM microtask without creating a promise. */
+/** @ntsAbi managed */
 declare function nts_node_enqueue_microtask(callback: () => void): void;
 
 const microtaskResourceOptions: Readonly<{ requireManualDestroy: true }> = {

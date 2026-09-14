@@ -283,17 +283,7 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
 /// So the rule is that no site marks a value escaped by hand. There is one door
 /// and this is it.
 fn escaped(escapes: &mut Escapes, func: &Func, value: ValueId) {
-    let mut at = value;
-    loop {
-        escapes.values.insert(at);
-        let OpKind::Erase { value: payload } = func.values[at.0 as usize].kind else {
-            return;
-        };
-        if escapes.values.contains(&payload) {
-            return;
-        }
-        at = payload;
-    }
+    escapes.values.extend(super::carried_values(func, value));
 }
 
 /// Whether the collector can buffer a container of this type as a cycle
@@ -756,7 +746,7 @@ fn bodies_reached<'a>(
     in_slot: &'a FxHashMap<u32, Vec<usize>>,
 ) -> Option<&'a [usize]> {
     match callee {
-        Callee::External(_) => None,
+        Callee::External(_) | Callee::Native(_) => None,
         Callee::Direct(name) => by_name.get(name.as_str()).map(std::slice::from_ref),
         Callee::Virtual { slot, .. } | Callee::Closure { slot } => {
             in_slot.get(slot).map(Vec::as_slice)

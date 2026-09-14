@@ -44,6 +44,7 @@ import {
   addInternalEventListener,
 } from "../../../web-platform/src/core/events.ts";
 
+/** @ntsAbi managed */
 declare function nts_node_enqueue_microtask(callback: () => void): void;
 
 export type Listener = (...args: unknown[]) => unknown;

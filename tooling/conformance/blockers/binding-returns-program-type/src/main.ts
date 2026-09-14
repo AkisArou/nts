@@ -36,12 +36,15 @@ interface Frame {
 }
 
 // Returns an object: the emitted prototype names a per-program struct.
+/** @ntsAbi managed */
 declare function nts_probe_returns_frame(): Frame | undefined;
 
 // Takes one: the emitted prototype uses the shared escape.
+/** @ntsAbi managed */
 declare function nts_probe_takes_frame(frame: Frame | undefined): void;
 
 // Takes a callback: fixed, and the control that says the escape exists.
+/** @ntsAbi managed */
 declare function nts_probe_takes_callback(fn: () => void): void;
 
 export function useReturn(): number {

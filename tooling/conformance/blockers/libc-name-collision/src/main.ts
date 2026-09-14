@@ -67,6 +67,7 @@
 // around a few of a module's bindings without compiling the module — so this was
 // reachable today rather than after `fs` compiles, which is the point of that
 // tool. It is the first defect it found and it found it in its first run.
+/** @ntsAbi managed */
 declare function nts_fs_access(path: string, mode: number): number;
 
 export function access(path: string, mode: number): number {

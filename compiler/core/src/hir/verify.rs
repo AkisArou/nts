@@ -238,11 +238,67 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
         verify_func(func, &mut problems);
     }
     check_calls(program, &mut problems);
+    check_native_calls(program, &mut problems);
     check_layouts(program, &mut problems);
     if problems.is_empty() {
         Ok(())
     } else {
         Err(problems)
+    }
+}
+
+/// Native signatures must agree exactly after reconciliation, including integer
+/// width and signedness. C's implicit conversions must not hide a broken HIR
+/// contract that a second backend will read literally.
+fn check_native_calls(program: &Program, problems: &mut Vec<Invalid>) {
+    for func in &program.funcs {
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .filter_map(|value| func.values.get(value.0 as usize))
+        {
+            let OpKind::Call {
+                callee: Callee::Native(target),
+                args,
+                ..
+            } = &op.kind
+            else {
+                continue;
+            };
+            let result = target.result.representation();
+            if op.ty != result {
+                problems.push(Invalid::CallResultType {
+                    func: func.name.clone(),
+                    callee: target.name.clone(),
+                    expected: result,
+                    found: op.ty.clone(),
+                });
+            }
+            if args.len() != target.parameters.len() {
+                problems.push(Invalid::CallArgumentCount {
+                    func: func.name.clone(),
+                    callee: target.name.clone(),
+                    expected: target.parameters.len(),
+                    found: args.len(),
+                });
+            }
+            for (at, (arg, want)) in args.iter().zip(&target.parameters).enumerate() {
+                let Some(found) = func.values.get(arg.0 as usize) else {
+                    continue;
+                };
+                let expected = want.representation();
+                if !want.accepts(&found.ty) {
+                    problems.push(Invalid::CallArgumentType {
+                        func: func.name.clone(),
+                        callee: target.name.clone(),
+                        at,
+                        expected,
+                        found: found.ty.clone(),
+                    });
+                }
+            }
+        }
     }
 }
 

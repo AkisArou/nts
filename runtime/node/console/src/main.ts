@@ -37,6 +37,7 @@ import {
   validateOneOf,
 } from "../../internal/validators.ts";
 
+/** @ntsAbi managed */
 declare function nts_process_env(name: string): string;
 
 export type { WritableLike };

@@ -62,6 +62,7 @@
 // Fourteen of the twenty-four built modules emit no `module__init`, `os`,
 // `querystring`, `url` and `util` among them, and those four are modules that
 // compile and publish nothing. This is worth checking against each of them.
+/** @ntsAbi managed */
 declare function info(): [string, string];
 const data = info();
 

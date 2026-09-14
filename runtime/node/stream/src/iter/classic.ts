@@ -35,6 +35,7 @@ import {
   type WriterOptions,
 } from "./utils.ts";
 
+/** @ntsAbi managed */
 declare function nts_node_enqueue_microtask(callback: () => void): void;
 
 const DEFAULT_READABLE_HIGH_WATER_MARK = 64 * 1024;

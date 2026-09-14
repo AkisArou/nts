@@ -20,6 +20,7 @@ import { URL } from "./url.ts";
 import { Buffer } from "../../buffer/src/main.ts";
 import { percentDecodeBytes } from "../../../web-platform/src/core/percent.ts";
 
+/** @ntsAbi managed */
 declare function nts_platform(): string;
 
 const CHAR_FORWARD_SLASH = 0x2f;

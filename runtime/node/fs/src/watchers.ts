@@ -56,9 +56,11 @@ import {
   type PathLike,
 } from "./options.ts";
 
+/** @ntsAbi managed */
 declare function nts_platform(): string;
 
 /** Start watching. The handle is what stops it again. */
+/** @ntsAbi managed */
 declare function nts_fs_watch_start(
   path: string,
   recursive: boolean,
@@ -70,10 +72,14 @@ declare function nts_fs_watch_start(
     filename: number[] | null,
   ) => void,
 ): number;
+/** @ntsAbi managed */
 declare function nts_fs_watch_stop(handle: number): void;
+/** @ntsAbi managed */
 declare function nts_fs_watch_ref(handle: number): void;
+/** @ntsAbi managed */
 declare function nts_fs_watch_unref(handle: number): void;
 /** Poll `path` every `interval` ms, reporting the two stat readings. */
+/** @ntsAbi managed */
 declare function nts_fs_watchfile_start(
   path: string,
   interval: number,
@@ -81,6 +87,7 @@ declare function nts_fs_watchfile_start(
   bigint: false,
   callback: (current: number[], previous: number[]) => void,
 ): number;
+/** @ntsAbi managed */
 declare function nts_fs_watchfile_start(
   path: string,
   interval: number,
@@ -88,8 +95,11 @@ declare function nts_fs_watchfile_start(
   bigint: true,
   callback: (current: string[], previous: string[]) => void,
 ): number;
+/** @ntsAbi managed */
 declare function nts_fs_watchfile_stop(handle: number): void;
+/** @ntsAbi managed */
 declare function nts_fs_watchfile_ref(handle: number): void;
+/** @ntsAbi managed */
 declare function nts_fs_watchfile_unref(handle: number): void;
 
 export interface WatchSignal {

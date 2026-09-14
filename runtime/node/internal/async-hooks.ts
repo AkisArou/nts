@@ -26,9 +26,11 @@
  * the right layer: this is the fatal path, and it should not depend on any
  * machinery that could itself be the thing that failed.
  */
+/** @ntsAbi managed */
 declare function nts_write_stderr(text: string): number;
 
 /** Stop the process. A hook that throws is not a recoverable condition. */
+/** @ntsAbi managed */
 declare function nts_process_really_exit(code: number): void;
 
 /**
@@ -57,12 +59,15 @@ declare function nts_promise_hook_uninstall(): void;
  * which the hook being torn down would report, which would schedule another.
  * Node uses a native `enqueueMicrotask` for the same reason.
  */
+/** @ntsAbi managed */
 declare function nts_node_enqueue_microtask(callback: () => void): void;
 
 /** Schedule work in the host's check phase without keeping its loop alive. */
+/** @ntsAbi managed */
 declare function nts_schedule_unreferenced_immediate(callback: () => void): void;
 
 /** Report `resource` as collected, so a `destroy` hook can fire for it. */
+/** @ntsAbi managed */
 declare function nts_on_collected(resource: object, onCollected: () => void): void;
 
 /** Identity retained for a VM-owned resource such as a promise. */

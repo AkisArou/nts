@@ -1,0 +1,500 @@
+//! Native ABI agreement against a separately compiled C implementation.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use camino::{Utf8Path, Utf8PathBuf};
+use nts_core::hir;
+use nts_frontend_ts::{SemanticSource, TsgoApi};
+use std::{fmt::Write, process::Command};
+
+#[path = "../../common/test-support/native_cases.rs"]
+mod native_cases;
+use native_cases::CASES;
+
+fn prepare(name: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize_utf8()
+        .unwrap();
+    let dir = root.join(format!(
+        "target/native-llvm-tests/{}-{name}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("tsconfig.json"), format!(
+        r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#
+    )).unwrap();
+    std::fs::write(dir.join("main.ts"), source).unwrap();
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&dir.join("tsconfig.json"))
+        .unwrap();
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    Some((dir, hir::prepare(&snapshot).unwrap()))
+}
+
+fn clang(dir: &Utf8Path, args: &[&str]) {
+    let result = Command::new("clang")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{args:?}: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
+fn managed_declarations_execute_with_the_nts_abi_on_c_and_llvm() {
+    let Some((dir, prepared)) = prepare(
+        "managed-abi",
+        include_str!("../../common/test-support/managed-abi/main.ts"),
+    ) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    std::fs::write(
+        dir.join("native.h"),
+        include_str!("../../common/test-support/managed-abi/native.h"),
+    )
+    .unwrap();
+    std::fs::write(dir.join("native.c"), include_str!("../../common/test-support/managed-abi/native.c")).unwrap();
+    std::fs::write(
+        dir.join("caller.c"),
+        include_str!("../../common/test-support/managed-abi/caller.c"),
+    )
+    .unwrap();
+    for source in ["native.c", "caller.c", "nts_runtime.c"] {
+        clang(
+            &dir,
+            &[
+                "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source,
+            ],
+        );
+    }
+    for (source, object, binary) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(
+            &dir,
+            &[
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-Wno-override-module",
+                "-c",
+                source,
+                "-o",
+                object,
+            ],
+        );
+        clang(
+            &dir,
+            &[
+                object,
+                "native.o",
+                "caller.o",
+                "nts_runtime.o",
+                "-lm",
+                "-o",
+                binary,
+            ],
+        );
+        assert!(
+            Command::new(dir.join(binary)).status().unwrap().success(),
+            "{binary}"
+        );
+    }
+    // One authored parameter changed, implementation unchanged. The generated
+    // prototype must disagree with the separately maintained native header.
+    let wrong = c.writer.text().replace(
+        "NtsValue bridge_value(NtsValue);",
+        "NtsValue bridge_value(double);",
+    );
+    assert_ne!(wrong, c.writer.text());
+    std::fs::write(dir.join("wrong.c"), wrong).unwrap();
+    let result = Command::new("clang")
+        .current_dir(&dir)
+        .args(["-include", "native.h", "-fsyntax-only", "wrong.c"])
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("conflicting types"));
+    // The unmodified generated declaration must agree with the same header.
+    clang(
+        &dir,
+        &["-include", "native.h", "-fsyntax-only", "program.c"],
+    );
+}
+
+#[test]
+fn aggregate_arguments_respect_register_exhaustion() {
+    let mut ts = String::new();
+    let mut c = "#include \"nts_runtime.h\"\n".to_owned();
+    let mut caller = "#include \"program.h\"\nint main(void) {\n".to_owned();
+    for count in 0..8 {
+        let (mut ts_params, mut c_params, mut ignore) = (String::new(), String::new(), String::new());
+        for i in 0..count {
+            write!(ts_params, "p{i}: string, ").unwrap();
+            write!(c_params, "NtsString *p{i}, ").unwrap();
+            write!(ignore, "(void)p{i}; ").unwrap();
+        }
+        let arguments = "\"x\", ".repeat(count);
+        writeln!(ts, "/** @ntsAbi managed */
+            declare function tagged_{count}({ts_params}v: unknown, tail: string): number;
+            /** @ntsAbi managed */
+            declare function wide_{count}({ts_params}v: bigint, tail: string): bigint;
+            export function run_{count}(n: number): number {{
+                if (wide_{count}({arguments}-18446744073709551619n, \"end\") !== -18446744073709551616n) return -1;
+                return tagged_{count}({arguments}n, \"end\");
+            }}").unwrap();
+        writeln!(c, "double tagged_{count}({c_params}NtsValue v, NtsString *tail) {{ {ignore}return v.as.number + tail->length; }}
+            __int128 wide_{count}({c_params}__int128 v, NtsString *tail) {{ {ignore}return v + tail->length; }}").unwrap();
+        writeln!(caller, "if (run_{count}(3.75) != 6.75) return {};", count + 1).unwrap();
+    }
+    caller.push_str("return 0; }\n");
+    let Some((dir, prepared)) = prepare("aggregate-registers", &ts) else { return };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c_program = nts_codegen_c::emit(&prepared.program);
+    assert!(c_program.is_complete(), "{:?}", c_program.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert!(llvm.text.contains("ptr byval({ i32, i64 }) align 8"));
+    for file in c_program.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    for (file, source) in [("native.c", c), ("caller.c", caller), ("program.c", c_program.writer.text().to_owned()), ("program.ll", llvm.text)] {
+        std::fs::write(dir.join(file), source).unwrap();
+    }
+    for source in ["native.c", "caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+    }
+    for (source, binary) in [("program.c", "c-run"), ("program.ll", "llvm-run")] {
+        clang(&dir, &["-O2", "-Wno-override-module", source, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", binary]);
+        assert!(Command::new(dir.join(binary)).status().unwrap().success(), "{binary}");
+    }
+}
+
+#[test]
+fn intrinsic_annotations_do_not_authorize_arbitrary_foreign_symbols() {
+    let Some((_, prepared)) = prepare("unknown-intrinsic", r"
+        /** @ntsAbi intrinsic */
+        declare function abs(n: number): number;
+        export function run(n: number): number { return abs(n); }
+    ") else { return };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(!c.is_complete());
+    assert!(c.diagnostics.iter().any(|d| d.message.contains("abs") && d.message.contains("no declared C ABI")));
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.iter().any(|d| d.message.contains("abs")));
+}
+
+#[test]
+fn managed_runtime_declarations_must_agree_with_the_header() {
+    for (label, signature, call, valid) in [
+        ("valid", "(): void", "nts_checkpoint(); return n", true),
+        (
+            "parameter",
+            "(n: number): void",
+            "nts_checkpoint(n); return n",
+            false,
+        ),
+        ("result", "(): number", "return nts_checkpoint() + n", false),
+    ] {
+        let source = format!(
+            "/** @ntsAbi managed */\ndeclare function nts_checkpoint{signature};\nexport function run(n: number): number {{ {call}; }}"
+        );
+        let Some((dir, prepared)) = prepare(&format!("runtime-abi-{label}"), &source) else {
+            return;
+        };
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
+        let llvm = nts_codegen_llvm::emit(&prepared.program);
+        if valid {
+            assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+            assert_eq!(
+                llvm.text.matches("declare void @nts_checkpoint(").count(),
+                1
+            );
+        } else {
+            assert!(llvm.text.is_empty());
+            assert!(
+                llvm.diagnostics
+                    .iter()
+                    .any(|d| d.message.contains("disagrees with the runtime header ABI"))
+            );
+        }
+        let c = nts_codegen_c::emit(&prepared.program);
+        assert!(c.is_complete(), "{:?}", c.diagnostics);
+        std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+        for file in c.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        let result = Command::new("clang")
+            .current_dir(&dir)
+            .args(["-fsyntax-only", "program.c"])
+            .output()
+            .unwrap();
+        assert_eq!(
+            result.status.success(),
+            valid,
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        if !valid {
+            assert!(String::from_utf8_lossy(&result.stderr).contains("conflicting types"));
+        }
+    }
+}
+
+#[test]
+fn every_scalar_and_libm_cross_the_real_c_abi() {
+    let brands = CASES
+        .iter()
+        .map(|case| case.0)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut ts = format!("import type {{ {brands} }} from \"c:types\";\n");
+    let mut header = "#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n".to_owned();
+    let mut implementation = "#include \"native.h\"\n".to_owned();
+    let mut prototypes = String::new();
+    let mut caller = "int main(void) {\n".to_owned();
+    for (i, (brand, c_type, input, expected)) in CASES.iter().enumerate() {
+        writeln!(
+            ts,
+            "declare function take_{i}(v: {brand}): c_double;
+            declare function give_{i}(): {brand};
+            export function argument_{i}(v: number): number {{ return take_{i}(v as {brand}); }}
+            export function result_{i}(): number {{ return give_{i}(); }}"
+        )
+        .unwrap();
+        writeln!(
+            header,
+            "double take_{i}({c_type});\n{c_type} give_{i}(void);"
+        )
+        .unwrap();
+        writeln!(
+            implementation,
+            "double take_{i}({c_type} v) {{ return v; }}
+            {c_type} give_{i}(void) {{ return ({c_type})({input}); }}"
+        )
+        .unwrap();
+        writeln!(
+            prototypes,
+            "double argument_{i}(double);\ndouble result_{i}(void);"
+        )
+        .unwrap();
+        writeln!(
+            caller,
+            "if (argument_{i}({input}) != {expected} || result_{i}() != {expected}) return {};",
+            i + 1
+        )
+        .unwrap();
+    }
+    ts.push_str("import { abs } from \"c:stdlib\"; import * as math from \"c:math\";
+        declare function native_not(v: boolean): boolean;
+        export function library(n: number): number { return abs(n as c_int) + math.sqrt(4 as c_double); }
+        export function toggle(v: boolean): boolean { return native_not(v); }");
+    header.push_str("bool native_not(bool);\n");
+    implementation.push_str("bool native_not(bool v) { return !v; }\n");
+    prototypes.push_str("double library(double);\n_Bool toggle(_Bool);\n");
+    caller
+        .push_str("if (library(-3.75) != 5 || toggle(1) || !toggle(0)) return 99;\nreturn 0; }\n");
+    let Some((dir, prepared)) = prepare("scalar-abi", &ts) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let emitted = nts_codegen_llvm::emit(&prepared.program);
+    assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
+    assert!(emitted.text.contains("declare double @sqrt(double)"));
+    assert!(
+        emitted
+            .text
+            .contains("declare zeroext i1 @native_not(i1 zeroext)")
+    );
+    for (file, contents) in [
+        ("native.h", header),
+        ("native.c", implementation),
+        ("caller.c", prototypes + &caller),
+        ("program.ll", emitted.text.clone()),
+    ] {
+        std::fs::write(dir.join(file), contents).unwrap();
+    }
+    for file in ["native.c", "caller.c"] {
+        clang(
+            &dir,
+            &[
+                "-std=c11",
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-fno-builtin",
+                "-c",
+                file,
+            ],
+        );
+    }
+    clang(&dir, &["-O2", "-c", "program.ll", "-o", "program.o"]);
+    clang(
+        &dir,
+        &["program.o", "native.o", "caller.o", "-lm", "-o", "caller"],
+    );
+    assert!(Command::new(dir.join("caller")).status().unwrap().success());
+
+    assert_clang_abi(&dir, &emitted.text);
+    assert_unsigned_return_control(&dir, &emitted.text);
+}
+
+fn assert_clang_abi(dir: &Utf8Path, ir: &str) {
+    // Execution on x86 alone can pass without extension attributes. Ask clang
+    // for the independent callee's ABI, including signed/unsigned narrow slots.
+    clang(
+        dir,
+        &["-S", "-emit-llvm", "-O0", "native.c", "-o", "native.ll"],
+    );
+    let reference = std::fs::read_to_string(dir.join("native.ll")).unwrap();
+    let names = (0..CASES.len())
+        .flat_map(|i| [format!("take_{i}"), format!("give_{i}")])
+        .chain(std::iter::once("native_not".to_owned()));
+    for name in names {
+        let pattern = format!("@{name}(");
+        let expected = reference
+            .lines()
+            .find(|line| line.starts_with("define ") && line.contains(&pattern))
+            .unwrap();
+        let actual = ir
+            .lines()
+            .find(|line| line.starts_with("declare ") && line.contains(&pattern))
+            .unwrap();
+        assert_eq!(
+            abi_tokens(actual),
+            abi_tokens(expected),
+            "{name}: {actual}\n{expected}"
+        );
+    }
+}
+
+fn abi_tokens(line: &str) -> Vec<&str> {
+    // Ignore optimization facts (noundef, local_unnamed_addr), parameter names,
+    // and linkage: machine scalar types and extension attributes form the ABI.
+    line.split(')')
+        .next()
+        .unwrap()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|word| {
+            matches!(
+                *word,
+                "void"
+                    | "float"
+                    | "double"
+                    | "i1"
+                    | "i8"
+                    | "i16"
+                    | "i32"
+                    | "i64"
+                    | "signext"
+                    | "zeroext"
+            )
+        })
+        .collect()
+}
+
+fn assert_unsigned_return_control(dir: &Utf8Path, ir: &str) {
+    // One changed conversion, with identical C callee and caller objects.
+    // Treating UINT32_MAX as signed must be observable in the return arm.
+    assert!(ir.contains("uitofp i32"));
+    let bad = ir.replacen("uitofp i32", "sitofp i32", 1);
+    std::fs::write(dir.join("bad.ll"), bad).unwrap();
+    clang(dir, &["-O2", "-c", "bad.ll", "-o", "bad.o"]);
+    clang(dir, &["bad.o", "native.o", "caller.o", "-lm", "-o", "bad"]);
+    assert!(!Command::new(dir.join("bad")).status().unwrap().success());
+}
+
+#[test]
+fn conflicting_abis_and_runtime_collisions_are_refused() {
+    for (name, source, expected) in [
+        ("overloads", "declare function foreign(v: c_int): c_int; declare function foreign(v: c_uint): c_uint;
+            export function run(n: number): number { return foreign(n as c_int) + foreign(n as c_uint); }", "conflicting ABI"),
+        ("runtime", "declare function nts_math_pow(v: c_int): c_int;
+            export function run(n: number): number { return nts_math_pow(n as c_int); }", "collides"),
+    ] {
+        let source = format!("import type {{ c_int, c_uint }} from \"c:types\";\n{source}");
+        let Some((_, prepared)) = prepare(name, &source) else { return; };
+        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let emitted = nts_codegen_llvm::emit(&prepared.program);
+        assert!(emitted.diagnostics.iter().any(|d| d.message.contains(expected)), "{:?}", emitted.diagnostics);
+        assert!(emitted.text.is_empty());
+    }
+}
+
+#[test]
+fn compatible_c_aliases_share_one_symbol_in_both_backends() {
+    let source = "import type { c_int, c_int32 } from \"c:types\";
+        declare function native_identity(v: c_int): c_int;
+        declare function native_identity(v: c_int32): c_int32;
+        export function run(n: number): number {
+            return native_identity(n as c_int) + native_identity(n as c_int32) + 0.5;
+        }";
+    let Some((dir, prepared)) = prepare("compatible-aliases", source) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert_eq!(
+        llvm.text
+            .matches("declare i32 @native_identity(i32)")
+            .count(),
+        1
+    );
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), llvm.text).unwrap();
+    std::fs::write(
+        dir.join("native.c"),
+        "int native_identity(int n) { return n; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("caller.c"),
+        "double run(double);\nint main(void) { return run(3.75) != 6.5; }\n",
+    )
+    .unwrap();
+    clang(&dir, &["-O2", "-c", "native.c", "-o", "native.o"]);
+    for source in ["program.c", "program.ll"] {
+        clang(&dir, &["-O2", "-c", source, "-o", "program.o"]);
+        clang(&dir, &["program.o", "native.o", "caller.c", "-o", "caller"]);
+        assert!(Command::new(dir.join("caller")).status().unwrap().success());
+    }
+}

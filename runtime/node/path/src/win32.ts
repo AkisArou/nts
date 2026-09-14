@@ -32,8 +32,10 @@ import {
 import { matchesGlobPattern } from "./glob-matcher.ts";
 
 /** The native half. Compiled these are externs; on node they are globals. */
+/** @ntsAbi managed */
 declare function nts_process_cwd(): string;
 /** `process.env[name]`, or the empty string. Drive-relative cwd on Windows. */
+/** @ntsAbi managed */
 declare function nts_process_env(name: string): string;
 
 /** True on a Windows host, where `process.cwd()` already uses backslashes. */

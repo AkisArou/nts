@@ -51,7 +51,7 @@ pub type ElementFacts = FxHashMap<HirType, Facts>;
 pub(super) fn analyze(
     program: &Program,
     analyses: &[Analysis],
-    outward: &rustc_hash::FxHashSet<&str>,
+    exposed: &rustc_hash::FxHashSet<HirType>,
 ) -> ElementFacts {
     // An allocation leaves zeros, and `new Array(n)` is reachable as an element
     // nothing wrote. Seeded per element type as the stores are found, so a type
@@ -60,20 +60,6 @@ pub(super) fn analyze(
     let mut opaque: rustc_hash::FxHashSet<HirType> = rustc_hash::FxHashSet::default();
 
     for (index, func) in program.funcs.iter().enumerate() {
-        // An array that crosses the boundary of the compiled set was filled
-        // where this cannot look.
-        if outward.contains(func.name.as_str()) {
-            for ty in func
-                .params
-                .iter()
-                .map(|param| &param.ty)
-                .chain(std::iter::once(&func.return_type))
-            {
-                if let HirType::Managed(ManagedType::Array(element)) = ty {
-                    opaque.insert((**element).clone());
-                }
-            }
-        }
         for op in &func.values {
             match &op.kind {
                 OpKind::ArrayNew { .. } => {
@@ -127,12 +113,20 @@ pub(super) fn analyze(
                         .or_insert(Facts::constant(0.0));
                     *entry = entry.join(analyses[index].get(*value));
                 }
+                OpKind::Call {
+                    callee: Callee::Native(_),
+                    ..
+                } => {
+                    if let HirType::Managed(ManagedType::Array(element)) = &op.ty {
+                        opaque.insert((**element).clone());
+                    }
+                }
                 _ => {}
             }
         }
     }
 
-    stored.retain(|element, _| !opaque.contains(element));
+    stored.retain(|element, _| !opaque.contains(element) && !exposed.contains(element));
     stored
 }
 
@@ -299,7 +293,7 @@ fn reaches_a_runtime_helper(program: &Program) -> rustc_hash::FxHashSet<HirType>
     for func in &program.funcs {
         for op in &func.values {
             let OpKind::Call {
-                callee: Callee::External(_),
+                callee: Callee::External(_) | Callee::Native(_),
                 args,
                 ..
             } = &op.kind

@@ -26,6 +26,7 @@
  * while the batch runs -- otherwise a long callback can push a timer that was
  * due into the next batch.
  */
+/** @ntsAbi managed */
 declare function nts_timers_install(
   onTimers: (now: number) => void,
   onImmediates: () => void,
@@ -37,6 +38,7 @@ declare function nts_timers_install(
  * Replaces any previous arrangement rather than adding to it: there is one
  * host timer, and it is always set for the earliest expiry known.
  */
+/** @ntsAbi managed */
 declare function nts_timers_schedule(delayMs: number): void;
 
 /**
@@ -47,15 +49,19 @@ declare function nts_timers_schedule(delayMs: number): void;
  * separate call rather than a sentinel delay because "no timer" is not a
  * duration.
  */
+/** @ntsAbi managed */
 declare function nts_timers_cancel(): void;
 
 /** Arrange for the immediate drain to run after the current operation. */
+/** @ntsAbi managed */
 declare function nts_timers_schedule_immediate(): void;
 
 /** Whether any live timeout should hold the process open. */
+/** @ntsAbi managed */
 declare function nts_timers_toggle_ref(hasRefs: boolean): void;
 
 /** Whether any live immediate should hold the process open. */
+/** @ntsAbi managed */
 declare function nts_timers_toggle_immediate_ref(hasRefs: boolean): void;
 
 /**
@@ -71,9 +77,11 @@ declare function nts_timers_toggle_immediate_ref(hasRefs: boolean): void;
  * A host that supplied `enqueue_microtask` owns checkpointing, and this
  * declines rather than draining beside it.
  */
+/** @ntsAbi intrinsic */
 declare function nts_checkpoint(): void;
 
 /** The active event loop's cached millisecond clock (`uv_now`). */
+/** @ntsAbi managed */
 declare function nts_timers_now(): number;
 
 export const install = nts_timers_install;

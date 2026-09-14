@@ -9,6 +9,7 @@
 import { stderr } from "./stdio.ts";
 import { getColorDepth } from "./color-depth.ts";
 
+/** @ntsAbi managed */
 declare function nts_process_env_has(name: string): boolean;
 
 /** Just enough of a stream for the decision: is it a terminal, and how deep. */

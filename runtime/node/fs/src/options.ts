@@ -34,6 +34,7 @@ import type { AbortSignalLike } from "../../internal/abort.ts";
 export type { AbortSignalLike } from "../../internal/abort.ts";
 
 /** Whether the active binding layer already emits mkdtemp's public warning. */
+/** @ntsAbi managed */
 declare function nts_fs_binding_warns_on_mkdtemp(): boolean;
 
 export interface FileOptions {

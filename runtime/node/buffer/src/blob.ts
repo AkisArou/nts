@@ -14,8 +14,11 @@ import {
 import { systemError } from "../../internal/uv.ts";
 import { byteLengthIn, decodeIn, writeIn } from "./encodings.ts";
 
+/** @ntsAbi managed */
 declare function nts_node_eol(): string;
+/** @ntsAbi managed */
 declare function nts_node_random_uuid(): string;
+/** @ntsAbi managed */
 declare function nts_node_random_uuid_status(): number;
 
 const BLOB_MAX_LENGTH = 2 ** 53 - 1;

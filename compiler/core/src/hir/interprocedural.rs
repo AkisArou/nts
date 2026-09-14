@@ -136,7 +136,7 @@ fn settle(
         .map(|(index, func)| (func.name.as_str(), index))
         .collect();
 
-    let exposed_fields = super::fields::exposed_fields(program, outward);
+    let exposed = super::exposure::analyze(program, outward);
     let mut crossing = Crossing {
         params: seed(program, outward),
         // BOTTOM rather than absent, for the same reason parameters start
@@ -152,7 +152,7 @@ fn settle(
         // Not empty: an absent entry reads as TOP at the use, and a field
         // whose value depends on its own then settles at TOP in round one and
         // never moves. See `fields::initial`.
-        fields: super::fields::initial(program, &exposed_fields),
+        fields: super::fields::initial(program, &exposed.fields),
         elements: FxHashMap::default(),
         globals: FxHashMap::default(),
         param_lengths: no_lengths(program),
@@ -204,8 +204,8 @@ fn settle(
         // In the same fixpoint as parameters and returns, because they feed
         // each other: a field is written with a value a call produced, and read
         // to make an argument for the next one.
-        let fields = super::fields::analyze(program, &analyses, &exposed_fields);
-        let elements = super::elements::analyze(program, &analyses, outward);
+        let fields = super::fields::analyze(program, &analyses, &exposed.fields);
+        let elements = super::elements::analyze(program, &analyses, &exposed.elements);
         let globals = super::globals::analyze(program, &analyses);
         let param_lengths = if growable {
             no_lengths(program)
@@ -275,7 +275,7 @@ pub(super) fn targets_of(
 ) -> Vec<usize> {
     match callee {
         Callee::Direct(name) => by_name.get(name.as_str()).copied().into_iter().collect(),
-        Callee::External(_) => Vec::new(),
+        Callee::External(_) | Callee::Native(_) => Vec::new(),
         Callee::Virtual { slot, .. } | Callee::Closure { slot } => {
             in_slot.get(slot).cloned().unwrap_or_default()
         }

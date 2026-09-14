@@ -61,18 +61,31 @@ export const O_RDONLY = 0;
 export const O_WRONLY = 1;
 export const O_RDWR = 2;
 
+/** @ntsAbi managed */
 declare function nts_fs_o_creat(): number;
+/** @ntsAbi managed */
 declare function nts_fs_o_excl(): number;
+/** @ntsAbi managed */
 declare function nts_fs_o_trunc(): number;
+/** @ntsAbi managed */
 declare function nts_fs_o_append(): number;
+/** @ntsAbi managed */
 declare function nts_fs_o_sync(): number;
+/** @ntsAbi managed */
 declare function nts_fs_o_direct(): number;
+/** @ntsAbi managed */
 declare function nts_fs_o_directory(): number;
+/** @ntsAbi managed */
 declare function nts_fs_o_dsync(): number;
+/** @ntsAbi managed */
 declare function nts_fs_o_noatime(): number;
+/** @ntsAbi managed */
 declare function nts_fs_o_noctty(): number;
+/** @ntsAbi managed */
 declare function nts_fs_o_nofollow(): number;
+/** @ntsAbi managed */
 declare function nts_fs_o_nonblock(): number;
+/** @ntsAbi managed */
 declare function nts_fs_o_filemap(): number;
 
 /** Platform-defined open flags, obtained from the same C constants libuv uses. */

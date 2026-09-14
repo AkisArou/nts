@@ -23,6 +23,7 @@ let processWarningHandler: ProcessWarningHandler | undefined;
  * receive it, so the C half writes the warning to the process's diagnostic
  * stream.
  */
+/** @ntsAbi managed */
 declare function nts_process_emit_warning_object(
   message: string,
   name: string,

@@ -83,8 +83,11 @@ export type { InspectOptions };
 // re-export a local declaration.
 export const isDeepStrictEqual = compareDeepStrict;
 
+/** @ntsAbi managed */
 declare function nts_process_env(name: string): string;
+/** @ntsAbi managed */
 declare function nts_process_signal_names(): string[];
+/** @ntsAbi managed */
 declare function nts_process_signal_exit_code(signalCode: string): number;
 
 /** Enabled sections of `NODE_DEBUG`, upstream `lib/internal/util/debuglog.js`. */
@@ -149,7 +152,9 @@ export function diff(actual: unknown, expected: unknown): DiffEntry[] {
   return myersDiff(actual, expected).reverse();
 }
 
+/** @ntsAbi managed */
 declare function nts_debug_write(text: string): number;
+/** @ntsAbi managed */
 declare function nts_process_pid(): number;
 
 /**
@@ -724,6 +729,7 @@ export function parseEnv(content: string): Record<string, string> {
   return out;
 }
 
+/** @ntsAbi managed */
 declare function nts_uv_err_name(code: number): string;
 
 /** Fixed-layout form of the properties Node exposes on system errors. */
@@ -790,8 +796,11 @@ export function _errnoException(err: number, syscall: string, original?: string)
   return new ErrnoException(message, code, err, syscall);
 }
 
+/** @ntsAbi managed */
 declare function nts_uv_err_message(code: number): string;
+/** @ntsAbi managed */
 declare function nts_uv_error_codes(): number[];
+/** @ntsAbi managed */
 declare function nts_uv_error_names(): string[];
 
 /**

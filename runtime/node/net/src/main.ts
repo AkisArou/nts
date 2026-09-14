@@ -91,7 +91,9 @@ export { BlockList, SocketAddress };
  * same from up here whichever it happens to be.
  */
 declare function nts_net_native_handle(handle: number, isServer: boolean): unknown;
+/** @ntsAbi managed */
 declare function nts_net_adopt_fd(fd: number, readable: boolean, writable: boolean): number;
+/** @ntsAbi managed */
 declare function nts_net_connect(
   host: string,
   port: number,
@@ -101,6 +103,7 @@ declare function nts_net_connect(
   callback: (errno: number) => void,
 ): number;
 /** Connect a role-neutral handle that was already bound to its local endpoint. */
+/** @ntsAbi managed */
 declare function nts_net_connect_bound(
   handle: number,
   host: string,
@@ -110,6 +113,7 @@ declare function nts_net_connect_bound(
 ): number;
 
 /** Bind without yet selecting the handle's listening or connecting role. */
+/** @ntsAbi managed */
 declare function nts_net_bind(
   host: string,
   port: number,
@@ -118,12 +122,17 @@ declare function nts_net_bind(
   ipv6Only: boolean,
   reusePort: boolean,
 ): number;
+/** @ntsAbi managed */
 declare function nts_net_bound_address_text(handle: number): string;
+/** @ntsAbi managed */
 declare function nts_net_bound_address_numbers(handle: number): number[];
+/** @ntsAbi managed */
 declare function nts_net_bound_fd(handle: number): number;
+/** @ntsAbi managed */
 declare function nts_net_bound_close(handle: number): number;
 
 /** Resolve one hostname to the address used for a connection. */
+/** @ntsAbi managed */
 declare function nts_net_lookup(
   host: string,
   family: number,
@@ -138,6 +147,7 @@ declare function nts_net_lookup(
  * of them: a host with an `AAAA` record and a service listening only on IPv4
  * connects in node and would fail here on the first address.
  */
+/** @ntsAbi managed */
 declare function nts_net_lookup_all(
   host: string,
   family: number,
@@ -145,29 +155,41 @@ declare function nts_net_lookup_all(
 ): void;
 
 /** Start delivering incoming bytes. Nothing arrives before this is called. */
+/** @ntsAbi managed */
 declare function nts_net_read_start(
   handle: number,
   onData: (bytes: Uint8Array) => void,
   onEnd: () => void,
   onError: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_net_read_stop(handle: number): void;
+/** @ntsAbi managed */
 declare function nts_net_write(
   handle: number,
   bytes: Uint8Array,
   callback: (errno: number) => void,
 ): number;
 /** Send `FIN`: nothing more will be written, but reading continues. */
+/** @ntsAbi managed */
 declare function nts_net_shutdown(handle: number, callback: (errno: number) => void): void;
+/** @ntsAbi managed */
 declare function nts_net_close(handle: number, callback: () => void): void;
 /** Close a TCP connection with RST rather than the ordinary FIN handshake. */
+/** @ntsAbi managed */
 declare function nts_net_reset(handle: number, callback: (errno: number) => void): void;
 /** Address text and `[family, port]`, kept in separately typed native values. */
+/** @ntsAbi managed */
 declare function nts_net_address_text(handle: number, remote: boolean): string;
+/** @ntsAbi managed */
 declare function nts_net_address_numbers(handle: number, remote: boolean): number[];
+/** @ntsAbi managed */
 declare function nts_net_set_no_delay(handle: number, enable: boolean): void;
+/** @ntsAbi managed */
 declare function nts_net_set_keepalive(handle: number, enable: boolean, delay: number): void;
+/** @ntsAbi managed */
 declare function nts_net_set_tos(handle: number, value: number): number;
+/** @ntsAbi managed */
 declare function nts_net_get_tos(handle: number): number;
 /**
  * Whether this connection should keep the process alive.
@@ -178,6 +200,7 @@ declare function nts_net_get_tos(handle: number): number;
  * hold keep-alive connections open without preventing the program from ever
  * exiting.
  */
+/** @ntsAbi managed */
 declare function nts_net_ref(handle: number, keepProcessAlive: boolean): void;
 
 /**
@@ -188,6 +211,7 @@ declare function nts_net_ref(handle: number, keepProcessAlive: boolean): void;
  * already taken -- and reporting success before it has succeeded means
  * emitting `listening` on a server that never will.
  */
+/** @ntsAbi managed */
 declare function nts_net_listen(
   host: string,
   port: number,
@@ -203,11 +227,17 @@ declare function nts_net_listen(
   onConnection: (connection: number) => void,
   onError: (errno: number) => void,
 ): number;
+/** @ntsAbi managed */
 declare function nts_net_server_address_text(handle: number): string;
+/** @ntsAbi managed */
 declare function nts_net_server_address_numbers(handle: number): number[];
+/** @ntsAbi managed */
 declare function nts_net_server_close(handle: number, callback: () => void): void;
+/** @ntsAbi managed */
 declare function nts_net_server_ref(handle: number, keepProcessAlive: boolean): void;
+/** @ntsAbi managed */
 declare function nts_net_default_auto_select_family(): boolean;
+/** @ntsAbi managed */
 declare function nts_net_default_auto_select_family_attempt_timeout(): number;
 
 /**

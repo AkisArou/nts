@@ -10,6 +10,7 @@ import { ERR_INVALID_ARG_VALUE, ERR_UNAVAILABLE_DURING_EXIT } from "../../intern
 import { validateUint32 } from "../../internal/validators.ts";
 import { AssertionError, type AssertionErrorDetail } from "./error.ts";
 
+/** @ntsAbi managed */
 declare function nts_process_is_exiting(): boolean;
 
 /** One recorded call: what it was called on, and with what. */

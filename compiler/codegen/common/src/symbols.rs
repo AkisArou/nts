@@ -30,6 +30,16 @@
 /// own `nts_` prefix. That is a separate slice; this list makes the current
 /// arrangement correct in the meantime.
 const RESERVED: &[&str] = &[
+    "_Alignas",
+    "_Alignof",
+    "_Atomic",
+    "_Bool",
+    "_Complex",
+    "_Generic",
+    "_Imaginary",
+    "_Noreturn",
+    "_Static_assert",
+    "_Thread_local",
     // C11 keywords and the macros `<stdbool.h>` defines. Header-declared names
     // are handled separately, by `collides_with_a_header`.
     "alignas",
@@ -78,6 +88,18 @@ const RESERVED: &[&str] = &[
     "volatile",
     "while",
 ];
+
+/// Foreign symbols already have their linker spelling. Standard library names
+/// are deliberately valid here: renaming `fabs` to protect a TS definition is
+/// correct, but renaming a call to libc would call a different symbol.
+#[must_use]
+pub fn is_native_c_identifier(name: &str) -> bool {
+    name.as_bytes()
+        .first()
+        .is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_')
+        && name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+        && !RESERVED.contains(&name)
+}
 
 /// Names the headers a generated file includes already use.
 ///

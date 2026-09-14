@@ -17,6 +17,7 @@
 import { ERR_INVALID_ARG_VALUE } from "../../internal/errors.ts";
 import { validateInteger } from "../../internal/validators.ts";
 
+/** @ntsAbi managed */
 declare function nts_platform(): string;
 
 // Node carries a note that Windows CI failed with a larger mark, and has never

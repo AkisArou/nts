@@ -103,7 +103,9 @@ interface Constants {
   errno: Record<string, number>;
 }
 
+/** @ntsAbi managed */
 declare function nts_names(): string[];
+/** @ntsAbi managed */
 declare function nts_values(): number[];
 
 function build(): Constants {

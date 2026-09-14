@@ -496,6 +496,7 @@ fn call_result(context: &Context, callee: &Callee) -> Facts {
             .copied()
             .unwrap_or(Facts::TOP),
         Callee::External(name) => runtime_result(name).unwrap_or(Facts::TOP),
+        Callee::Native(_) => Facts::TOP,
     }
 }
 

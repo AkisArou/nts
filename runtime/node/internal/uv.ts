@@ -5,7 +5,9 @@
 // table written here is the same argument as `os.constants`: the numbers and
 // the wording are the platform's, and a transcribed copy would drift.
 
+/** @ntsAbi managed */
 declare function nts_uv_err_name(code: number): string;
+/** @ntsAbi managed */
 declare function nts_uv_err_message(code: number): string;
 
 /** libuv's name for a negative errno: `-2` is `ENOENT`. */

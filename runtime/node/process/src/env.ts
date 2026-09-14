@@ -13,8 +13,10 @@
 // `getenv()` in native code still saw the old value.
 
 /** Read one variable. `keys` only returns names that exist. */
+/** @ntsAbi managed */
 declare function nts_process_env(name: string): string;
 /** Every name currently set, in the order the host reports them. */
+/** @ntsAbi managed */
 declare function nts_process_env_keys(): string[];
 
 const environment: Record<string, string | undefined> = {};

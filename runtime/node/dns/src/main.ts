@@ -37,6 +37,7 @@ import { isIP } from "../../net/src/address.ts";
  * One address, resolved. `errno` is 0 on success and a negative libuv code
  * otherwise, which is the convention every binding in this profile uses.
  */
+/** @ntsAbi managed */
 declare function nts_dns_getaddrinfo(
   hostname: string,
   family: number,
@@ -52,6 +53,7 @@ declare function nts_dns_getaddrinfo(
  * split: the two answer with different shapes, and one entry point would have to
  * describe both in a single signature.
  */
+/** @ntsAbi managed */
 declare function nts_dns_getaddrinfo_all(
   hostname: string,
   family: number,
@@ -61,6 +63,7 @@ declare function nts_dns_getaddrinfo_all(
 ): void;
 
 /** The reverse direction: an address and port to a hostname and service. */
+/** @ntsAbi managed */
 declare function nts_dns_getnameinfo(
   address: string,
   port: number,
@@ -68,6 +71,7 @@ declare function nts_dns_getnameinfo(
 ): void;
 
 /** `uv_err_name`, so an errno is reported the way node reports it. */
+/** @ntsAbi managed */
 declare function nts_dns_errname(errno: number): string;
 
 export interface LookupAddress {

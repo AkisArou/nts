@@ -8,6 +8,7 @@
 import { emitWarning } from "./process-warning.ts";
 
 /** Monotonic nanoseconds. A duration measured with a wall clock is not one. */
+/** @ntsAbi managed */
 declare function nts_hrtime_ns(): bigint;
 
 const kSecond = 1000;

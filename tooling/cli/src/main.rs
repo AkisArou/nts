@@ -1231,6 +1231,7 @@ fn render_callee(
     match callee {
         nts_core::hir::Callee::Direct(name) => ("call".to_owned(), name.clone()),
         nts_core::hir::Callee::External(name) => ("call.extern".to_owned(), name.clone()),
+        nts_core::hir::Callee::Native(target) => ("call.native".to_owned(), target.name.clone()),
         nts_core::hir::Callee::Virtual { slot, declared } => {
             (format!("call.virtual[{slot}]"), declared.clone())
         }

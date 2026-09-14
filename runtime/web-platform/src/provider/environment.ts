@@ -7,8 +7,11 @@ import type { WebPlatformRuntime } from "./web-platform-runtime.ts";
  * TypeScript calls a typed native ABI; host-only conformance providers may supply
  * equivalent globals while executing the same source as ordinary JavaScript.
  */
+/** @ntsAbi intrinsic */
 declare function nts_environment_install_platform(runtime: WebPlatformRuntime): void;
+/** @ntsAbi intrinsic */
 declare function nts_environment_platform(): WebPlatformRuntime;
+/** @ntsAbi intrinsic */
 declare function nts_environment_has_platform(): boolean;
 
 /** Associate the shared Web-platform state with the current NTS environment. */

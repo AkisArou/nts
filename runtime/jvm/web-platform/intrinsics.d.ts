@@ -74,6 +74,8 @@ declare const NTS_JVM_SOCKS_PROXY: 2;
  * **target**, never the proxy. `proxyHost` is `null` for a direct connection.
  *
  * WIRED.
+ 
+ * @ntsAbi intrinsic
  */
 declare function nts_jvm_web_connect(
   host: string,
@@ -105,6 +107,8 @@ declare function nts_jvm_web_connect(
  * Empty offers nothing, which is what {@link nts_jvm_web_connect} passes.
  *
  * WIRED.
+ 
+ * @ntsAbi intrinsic
  */
 declare function nts_jvm_web_connect_alpn(
   host: string,
@@ -126,10 +130,14 @@ declare function nts_jvm_web_connect_alpn(
  * side offered, and a handle that is not open. A caller cannot act on the
  * difference, and a nullable string here would be an ABI question answered as a
  * side effect of a socket call. WIRED.
+ 
+ * @ntsAbi intrinsic
  */
 declare function nts_jvm_web_protocol(handle: number): string;
 
-/** Idempotent, safe from any lane, and a late success still closes its socket. WIRED. */
+/** Idempotent, safe from any lane, and a late success still closes its socket. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_web_cancel_connect(request: number): void;
 
 /**
@@ -140,6 +148,8 @@ declare function nts_jvm_web_cancel_connect(request: number): void;
  * and not into its buffer -- the ones outside belong to whatever else is
  * looking at that buffer. A detached buffer is a synchronous `TypeError`, as
  * the language specifies, rather than a completion: the operation never starts.
+ 
+ * @ntsAbi intrinsic
  */
 declare function nts_jvm_web_read(
   handle: number,
@@ -148,7 +158,9 @@ declare function nts_jvm_web_read(
   onError: (code: string, message: string) => void,
 ): void;
 
-/** Write from a caller-owned view, borrowed until the completion. WIRED. */
+/** Write from a caller-owned view, borrowed until the completion. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_web_write(
   handle: number,
   from: Uint8Array,
@@ -156,7 +168,9 @@ declare function nts_jvm_web_write(
   onError: (code: string, message: string) => void,
 ): void;
 
-/** Idempotent, and what makes a blocked read or write return. WIRED. */
+/** Idempotent, and what makes a blocked read or write return. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_web_close(handle: number): void;
 
 /**
@@ -170,10 +184,14 @@ declare function nts_jvm_web_close(handle: number): void;
  * unblocks it -- so nothing the caller reserved is stranded.
  *
  * WIRED.
+ 
+ * @ntsAbi intrinsic
  */
 declare function nts_jvm_web_network_changed(): number;
 
-/** Live connections, for tests and for backpressure reporting. WIRED. */
+/** Live connections, for tests and for backpressure reporting. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_web_open_count(): number;
 
 // ---------------------------------------------------------------------------
@@ -207,6 +225,8 @@ declare function nts_jvm_web_open_count(): number;
  * Fills the view's **window**, not its buffer: a `Uint8Array` may be a view onto
  * part of a larger `ArrayBuffer`, and the bytes outside it belong to whatever
  * else is looking at that buffer.
+ 
+ * @ntsAbi intrinsic
  */
 declare function nts_jvm_web_random_fill(into: JvmBytes): void;
 
@@ -233,6 +253,8 @@ declare function nts_jvm_web_random_fill(into: JvmBytes): void;
  * `socksProxyVersion`. Answering `SOCKS5` for a SOCKS4 proxy would type-check,
  * look like support, and fail inside a handshake the peer never agreed to
  * speak. WIRED.
+ 
+ * @ntsAbi intrinsic
  */
 declare function nts_jvm_web_system_proxy_for(url: string): string;
 
@@ -290,10 +312,14 @@ declare function nts_jvm_web_system_proxy_for(url: string): string;
 // An empty chunk and the end of a stream are different answers. Making zero
 // unreachable is what stops every consumer having to know that.
 
-/** Points the store at a directory, and sweeps whatever a crashed run left. WIRED. */
+/** Points the store at a directory, and sweeps whatever a crashed run left. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_store_configure(root: string): void;
 
-/** Abandons every write and ranged view. Committed values stay; they are on disk. WIRED. */
+/** Abandons every write and ranged view. Committed values stay; they are on disk. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_store_close(): void;
 
 /**
@@ -306,10 +332,14 @@ declare function nts_jvm_store_close(): void;
  * value should win -- which the store cannot know.
  *
  * WIRED.
+ 
+ * @ntsAbi intrinsic
  */
 declare function nts_jvm_store_open(namespace: string, key: string): number;
 
-/** Appends a caller's window. Nothing is visible until the commit. WIRED. */
+/** Appends a caller's window. Nothing is visible until the commit. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_store_append(handle: number, from: JvmBytes): void;
 
 /**
@@ -319,16 +349,24 @@ declare function nts_jvm_store_append(handle: number, from: JvmBytes): void;
  * and the containing directory's, so the rename that published them is too.
  *
  * WIRED.
+ 
+ * @ntsAbi intrinsic
  */
 declare function nts_jvm_store_commit(handle: number): void;
 
-/** Abandons a write and releases the key. Idempotent, and a no-op once committed. WIRED. */
+/** Abandons a write and releases the key. Idempotent, and a no-op once committed. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_store_discard(handle: number): void;
 
-/** The value's full size, or `-1` when absent. Writes as much of it as fits. WIRED. */
+/** The value's full size, or `-1` when absent. Writes as much of it as fits. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_store_read(namespace: string, key: string, into: JvmBytes): number;
 
-/** Removes a key. Absent is not an error; the answer says whether anything went. WIRED. */
+/** Removes a key. Absent is not an error; the answer says whether anything went. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_store_delete(namespace: string, key: string): boolean;
 
 /**
@@ -343,10 +381,14 @@ declare function nts_jvm_store_delete(namespace: string, key: string): boolean;
  * with the names and the caller cannot tell which half is stale.
  *
  * WIRED.
+ 
+ * @ntsAbi intrinsic
  */
 declare function nts_jvm_store_list(namespace: string, into: JvmBytes): number;
 
-/** Total committed bytes in a namespace. WIRED. */
+/** Total committed bytes in a namespace. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_store_size(namespace: string): number;
 
 /**
@@ -363,6 +405,8 @@ declare function nts_jvm_store_size(namespace: string): number;
  * cannot change what this view sees.
  *
  * WIRED.
+ 
+ * @ntsAbi intrinsic
  */
 declare function nts_jvm_store_source_open(
   namespace: string,
@@ -371,11 +415,17 @@ declare function nts_jvm_store_source_open(
   length: number,
 ): number;
 
-/** The next chunk into a caller's window; how many bytes, or `-1` at the end. WIRED. */
+/** The next chunk into a caller's window; how many bytes, or `-1` at the end. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_store_source_read(handle: number, into: JvmBytes): number;
 
-/** Closes a ranged view. Safe on success, after a failed read, and twice. WIRED. */
+/** Closes a ranged view. Safe on success, after a failed read, and twice. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_store_source_close(handle: number): void;
 
-/** The value's byte length, or `-1` when the key is absent. WIRED. */
+/** The value's byte length, or `-1` when the key is absent. WIRED. 
+ * @ntsAbi intrinsic
+ */
 declare function nts_jvm_store_source_size(namespace: string, key: string): number;

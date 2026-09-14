@@ -47,6 +47,7 @@ import { History, type HistoryOptions } from "./history.ts";
 import { emitKeypressEvents, kSawKeyPress } from "./keypress.ts";
 import { charLengthAt, charLengthLeft, commonPrefix, type Key } from "./utils.ts";
 
+/** @ntsAbi managed */
 declare function nts_process_env(name: string): string;
 
 /**

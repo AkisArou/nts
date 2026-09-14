@@ -62,6 +62,7 @@ import { channel } from "../../diagnostics_channel/src/main.ts";
 export type { AddressInfo } from "../../net/src/main.ts";
 
 /** Open a datagram socket. `type` is `udp4` or `udp6`. */
+/** @ntsAbi managed */
 declare function nts_udp_new(
   type: string,
   reuseAddr: boolean,
@@ -76,7 +77,9 @@ declare function nts_udp_new(
  * Reporting success synchronously would let `address()` be called on a socket
  * that does not have one yet, which is exactly the failure it caused.
  */
+/** @ntsAbi managed */
 declare function nts_udp_bind_sync(handle: number, address: string, port: number): number;
+/** @ntsAbi managed */
 declare function nts_udp_close(handle: number): void;
 /**
  * `[address, family, port]`, or `[errno]` when there is none.
@@ -85,7 +88,9 @@ declare function nts_udp_close(handle: number): void;
  * that was never bound fails this with `EBADF`, and node's tests match on that
  * word. A stand-in error said `EPERM`, which is a different and wrong story.
  */
+/** @ntsAbi managed */
 declare function nts_udp_address(handle: number, remote: boolean): (string | number)[];
+/** @ntsAbi managed */
 declare function nts_udp_send(
   handle: number,
   chunks: Uint8Array[],
@@ -93,30 +98,42 @@ declare function nts_udp_send(
   address: string,
   callback: (errno: number, sent: number) => void,
 ): number;
+/** @ntsAbi managed */
 declare function nts_udp_recv_start(
   handle: number,
   onMessage: (bytes: Uint8Array, address: string, family: string, port: number) => void,
   onError: (errno: number) => void,
 ): number;
+/** @ntsAbi managed */
 declare function nts_udp_recv_stop(handle: number): number;
+/** @ntsAbi managed */
 declare function nts_udp_connect_sync(handle: number, address: string, port: number): number;
+/** @ntsAbi managed */
 declare function nts_udp_lookup(
   hostname: string,
   family: number,
   callback: (errno: number, address: string, family: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_udp_disconnect(handle: number): number;
+/** @ntsAbi managed */
 declare function nts_udp_set_broadcast(handle: number, on: boolean): number;
+/** @ntsAbi managed */
 declare function nts_udp_set_ttl(handle: number, ttl: number): number;
+/** @ntsAbi managed */
 declare function nts_udp_set_multicast_ttl(handle: number, ttl: number): number;
+/** @ntsAbi managed */
 declare function nts_udp_set_multicast_loopback(handle: number, on: boolean): number;
+/** @ntsAbi managed */
 declare function nts_udp_set_multicast_interface(handle: number, address: string): number;
+/** @ntsAbi managed */
 declare function nts_udp_membership(
   handle: number,
   address: string,
   iface: string,
   join: boolean,
 ): number;
+/** @ntsAbi managed */
 declare function nts_udp_source_membership(
   handle: number,
   source: string,
@@ -124,9 +141,13 @@ declare function nts_udp_source_membership(
   iface: string,
   join: boolean,
 ): number;
+/** @ntsAbi managed */
 declare function nts_udp_buffer_size(handle: number, size: number, receive: boolean): number;
+/** @ntsAbi managed */
 declare function nts_udp_send_queue_size(handle: number): number;
+/** @ntsAbi managed */
 declare function nts_udp_send_queue_count(handle: number): number;
+/** @ntsAbi managed */
 declare function nts_udp_ref(handle: number, keepProcessAlive: boolean): void;
 
 /**

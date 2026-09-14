@@ -184,75 +184,131 @@ export interface WriteOptions {
 
 // -------------------------------------------------------------- the bindings
 
+/** @ntsAbi managed */
 declare function nts_fs_statfs(path: string): number[];
+/** @ntsAbi managed */
 declare function nts_fs_statfs_bytes(path: number[]): number[];
+/** @ntsAbi managed */
 declare function nts_fs_statfs_bigint(path: string): string[];
+/** @ntsAbi managed */
 declare function nts_fs_statfs_bigint_bytes(path: number[]): string[];
+/** @ntsAbi managed */
 declare function nts_fs_read_file_bytes_fd(fd: number, expectedSize: number): number[];
+/** @ntsAbi managed */
 declare function nts_fs_read_file_utf8_fd(fd: number): string;
+/** @ntsAbi managed */
 declare function nts_fs_write_file_utf8_fd(fd: number, contents: string): number;
+/** @ntsAbi managed */
 declare function nts_fs_write_file_bytes_fd(
   fd: number, bytes: number[],
 ): number;
+/** @ntsAbi managed */
 declare function nts_fs_scandir(path: string): number[][];
+/** @ntsAbi managed */
 declare function nts_fs_scandir_bytes(path: number[]): number[][];
+/** @ntsAbi managed */
 declare function nts_fs_unlink(path: string): number;
+/** @ntsAbi managed */
 declare function nts_fs_mkdir(path: string, mode: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_rmdir(path: string): number;
+/** @ntsAbi managed */
 declare function nts_fs_rename(from: string, to: string): number;
+/** @ntsAbi managed */
 declare function nts_fs_copyfile(from: string, to: string, flags: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_access(path: string, mode: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_access_bytes(path: number[], mode: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_unlink_bytes(path: number[]): number;
+/** @ntsAbi managed */
 declare function nts_fs_mkdir_bytes(path: number[], mode: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_rmdir_bytes(path: number[]): number;
+/** @ntsAbi managed */
 declare function nts_fs_chmod_bytes(path: number[], mode: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_chown_bytes(path: number[], uid: number, gid: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_utimes_bytes(path: number[], atime: number, mtime: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_lutimes_bytes(path: number[], atime: number, mtime: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_rename_bytes(from: number[], to: number[]): number;
+/** @ntsAbi managed */
 declare function nts_fs_copyfile_bytes(from: number[], to: number[], flags: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_link_bytes(from: number[], to: number[]): number;
+/** @ntsAbi managed */
 declare function nts_fs_readlink_bytes(path: number[]): number[];
+/** @ntsAbi managed */
 declare function nts_fs_chmod(path: string, mode: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_chown(path: string, uid: number, gid: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_lchown(path: string, uid: number, gid: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_lchown_bytes(path: number[], uid: number, gid: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_utimes(path: string, atime: number, mtime: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_link(from: string, to: string): number;
+/** @ntsAbi managed */
 declare function nts_fs_symlink(target: string, at: string, flags: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_symlink_bytes(
   target: number[], at: number[], flags: number,
 ): number;
+/** @ntsAbi managed */
 declare function nts_fs_readlink(path: string): string;
+/** @ntsAbi managed */
 declare function nts_fs_realpath(path: string): string;
+/** @ntsAbi managed */
 declare function nts_fs_realpath_bytes(path: number[]): number[];
+/** @ntsAbi managed */
 declare function nts_fs_mkdtemp(template: string): string;
+/** @ntsAbi managed */
 declare function nts_fs_mkdtemp_bytes(template: number[]): number[];
+/** @ntsAbi managed */
 declare function nts_fs_read(
   fd: number, length: number, position: number,
 ): number[];
+/** @ntsAbi managed */
 declare function nts_fs_read_bigint(
   fd: number, length: number, position: bigint,
 ): number[];
+/** @ntsAbi managed */
 declare function nts_fs_write(
   fd: number, bytes: number[], position: number,
 ): number;
+/** @ntsAbi managed */
 declare function nts_fs_fsync(fd: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_fdatasync(fd: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_ftruncate(fd: number, length: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_fchmod(fd: number, mode: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_fchown(fd: number, uid: number, gid: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_futimes(fd: number, atime: number, mtime: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_lutimes(path: string, atime: number, mtime: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_readv(
   fd: number, lengths: number[], position: number,
 ): number[];
+/** @ntsAbi managed */
 declare function nts_fs_writev(
   fd: number, bytes: number[], lengths: number[], position: number,
 ): number;
+/** @ntsAbi managed */
 declare function nts_fs_eisdir(): number;
+/** @ntsAbi managed */
 declare function nts_fs_is_32_bit(): boolean;
+/** @ntsAbi managed */
 declare function nts_errno(): number;
 
 /** Raise whatever the last binding call failed with. */

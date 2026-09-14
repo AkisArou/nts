@@ -6331,6 +6331,9 @@ fn representation_of(
     path: &mut Vec<TypeId>,
     subst: &Substitution,
 ) -> Option<HirType> {
+    if super::native::scalar(snapshot, ty).is_some() {
+        return Some(HirType::NUMBER);
+    }
     let record = snapshot.types.get(ty.0 as usize)?;
     Some(match &record.kind {
         TypeKind::Unknown => HirType::Erased,
@@ -23489,6 +23492,7 @@ impl<'a> FuncBuilder<'a> {
 
     /// `xs[i]`, as a read. Writes are handled by the assignment lowering.
     fn lower_element_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        self.check_native_brand_read(id)?;
         // `xs?.[i]`, which is three children because the `?.` is a token of its
         // own between the receiver and the index -- the same shape `a?.b` has,
         // and it reaches here before the two-child forms below can fail on it.
@@ -24159,8 +24163,35 @@ impl<'a> FuncBuilder<'a> {
         self.unsupported(id, &format!("indexing {described}, which is not an array"))
     }
 
-    /// `xs.length`. Other members are not lowered yet.
+    /// A brand is a type-level ABI marker, not storage on a boxed number.
+    /// TypeScript permits reading its string-named key even when the key's
+    /// value type is `unique symbol`; erasure would return `undefined`.
+    fn check_native_brand_read(&self, id: NodeId) -> Result<(), Diagnostic> {
+        let children = self.children(id);
+        if let (Some(object), Some(member)) = (children.first(), children.last())
+            && let Some(ty) = self.snapshot.node_types.get(object)
+            && super::native::scalar(self.snapshot, *ty).is_some()
+            && let Some(name) = self
+                .snapshot
+                .node_types
+                .get(member)
+                .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
+                .and_then(|record| match &record.kind {
+                    TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+                    _ => None,
+                })
+                .or_else(|| self.literal_name(*member))
+            && super::native::Scalar::from_brand(&name).is_some()
+        {
+            return Err(
+                self.unsupported(id, "reading a native ABI brand, which has no runtime value")
+            );
+        }
+        Ok(())
+    }
+
     fn lower_property_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        self.check_native_brand_read(id)?;
         // `Colour.Red` is a constant, and the checker has already worked out
         // which one: it gives the access a *literal* type carrying the value.
         // So there is nothing to look up at run time and no object to look it
@@ -27897,12 +27928,34 @@ impl<'a> FuncBuilder<'a> {
         let callee = if defined {
             Callee::Direct(name)
         } else {
-            Callee::External(name)
+            let signature = &self.snapshot.signatures[target.signature.0 as usize];
+            self.native_callee(id, declaration, name, signature)?
         };
 
         let args = self.lower_arguments(id, &arguments)?;
 
         self.push_call(id, callee, args, declaration)
+    }
+
+    fn native_callee(
+        &self,
+        call: NodeId,
+        declaration: Option<NodeId>,
+        name: String,
+        signature: &nts_semantic_schema::SignatureRecord,
+    ) -> Result<Callee, Diagnostic> {
+        let name = declaration.and_then(|decl| self.declared_name(decl)).unwrap_or(name);
+        let abi = declaration
+            .and_then(|decl| self.snapshot.nodes[decl.0 as usize].native_abi.as_deref());
+        // An explicit request for a backend-owned intrinsic. Backends resolve
+        // these against their closed tables and refuse unavailable names;
+        // this does not authorize inventing an external C prototype.
+        if abi == Some("intrinsic") {
+            return Ok(Callee::External(name));
+        }
+        let native = super::native::Function::from_signature(self.snapshot, name, signature, abi)
+            .map_err(|why| self.unsupported(call, &why))?;
+        Ok(Callee::Native(std::sync::Arc::new(native)))
     }
 
     /// A lowered call, at the type its result actually has.

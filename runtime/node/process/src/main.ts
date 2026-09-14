@@ -78,21 +78,35 @@ import { channel } from "../../diagnostics_channel/src/main.ts";
 
 const execveChannel = channel("process.execve");
 
+/** @ntsAbi managed */
 declare function nts_process_pid(): number;
+/** @ntsAbi managed */
 declare function nts_process_ppid(): number;
+/** @ntsAbi managed */
 declare function nts_platform(): Platform;
+/** @ntsAbi managed */
 declare function nts_process_arch(): Architecture;
+/** @ntsAbi managed */
 declare function nts_process_argv(): string[];
+/** @ntsAbi managed */
 declare function nts_process_argv0(): string;
+/** @ntsAbi managed */
 declare function nts_process_exec_path(): string;
+/** @ntsAbi managed */
 declare function nts_process_exec_argv(): string[];
+/** @ntsAbi managed */
 declare function nts_process_version(): string;
 /** Component names and their versions, as two columns of one table. */
+/** @ntsAbi managed */
 declare function nts_process_version_names(): string[];
+/** @ntsAbi managed */
 declare function nts_process_version_values(): string[];
+/** @ntsAbi managed */
 declare function nts_process_title(): string;
+/** @ntsAbi managed */
 declare function nts_process_set_title(title: string): void;
 /** The flags this build accepts in `NODE_OPTIONS`. */
+/** @ntsAbi managed */
 declare function nts_process_allowed_env_flags(): string[];
 
 /**
@@ -105,20 +119,27 @@ declare function nts_process_allowed_env_flags(): string[];
  * need a schema on both sides of the seam.
  */
 type ProcessMetadataName = "release" | "features" | "config";
+/** @ntsAbi managed */
 declare function nts_process_metadata(name: ProcessMetadataName): string;
 
 /** Names of what is currently keeping the loop alive. */
+/** @ntsAbi managed */
 declare function nts_process_active_resources(): string[];
+/** @ntsAbi managed */
 declare function nts_process_active_handles(): unknown[];
+/** @ntsAbi managed */
 declare function nts_process_active_requests(): unknown[];
 /** Tell the host whether an uncaught exception should abort rather than exit. */
+/** @ntsAbi managed */
 declare function nts_process_execve(
   path: string,
   args: readonly string[],
   env: readonly string[],
 ): never;
 /** Zero on success, otherwise a negative libuv filesystem error. */
+/** @ntsAbi managed */
 declare function nts_process_load_env_file(path: string): number;
+/** @ntsAbi managed */
 declare function nts_process_raw_debug(text: string): void;
 
 /**
@@ -136,10 +157,14 @@ declare function nts_process_raw_debug(text: string): void;
  * work, and a program whose only remaining listener is a signal handler
  * should still exit when its work is done.
  */
+/** @ntsAbi managed */
 declare function nts_process_signal_start(name: string): number;
 /** Stop delivering `name`, restoring the operating system's default action. */
+/** @ntsAbi managed */
 declare function nts_process_signal_stop(name: string): void;
+/** @ntsAbi managed */
 declare function nts_process_on_before_exit(callback: (code: number) => void): void;
+/** @ntsAbi managed */
 declare function nts_process_on_exit(callback: (code: number) => void): void;
 
 /**

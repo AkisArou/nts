@@ -4,6 +4,7 @@
 // a core and would make the requested delay depend on optimizer behaviour;
 // libuv already exposes the platform sleep Node uses for this purpose.
 
+/** @ntsAbi managed */
 declare function nts_sleep(milliseconds: number): void;
 
 /** Block the current thread for at least `milliseconds`. */

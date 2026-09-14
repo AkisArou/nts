@@ -29,12 +29,13 @@ pub mod builtin;
 pub mod dce;
 pub mod elements;
 pub mod escape;
+mod exposure;
 pub mod facts;
 pub mod fields;
-pub mod globals;
 pub mod flow;
 pub mod fold;
 pub mod generics;
+pub mod globals;
 pub mod guards;
 pub mod interprocedural;
 pub mod liveness;
@@ -44,21 +45,22 @@ pub mod suspend;
 pub mod tags;
 pub mod unerase;
 
-pub mod lower;
 pub mod inline;
+pub mod lower;
 pub mod monomorphize;
 pub mod narrow;
+pub mod native;
 /// Who owns what, and for how long: one answer per value, which the counting
 /// pass reads and does no reasoning of its own about.
 pub mod own;
 pub mod rc;
-pub mod runtime;
 pub mod reachable;
+pub mod runtime;
 pub mod signatures;
 pub mod simplify;
+pub mod specialize;
 pub mod split;
 pub mod substring;
-pub mod specialize;
 pub mod verify;
 pub mod zero_sign;
 
@@ -1105,6 +1107,9 @@ pub enum Callee {
     /// exactly; what is missing is a definition to call, which the linker or the
     /// platform supplies.
     External(String),
+    /// A C function whose ABI is authored in its resolved declaration. Distinct
+    /// from runtime calls: a TypeScript `number` is not an ABI declaration.
+    Native(std::sync::Arc<native::Function>),
     /// A method something overrides, so which implementation runs depends on
     /// what the receiver *is* rather than on what its type says.
     ///
@@ -2212,13 +2217,97 @@ fn changes_array_length(name: &str) -> bool {
 pub fn arrays_can_grow(program: &Program) -> bool {
     program.funcs.iter().any(|func| {
         func.values.iter().any(|op| {
-            matches!(
-                &op.kind,
-                OpKind::Call { callee: Callee::External(name), .. }
-                    if changes_array_length(name)
-            )
+            match &op.kind {
+                OpKind::Call {
+                    callee: Callee::External(name),
+                    ..
+                } => changes_array_length(name),
+                // The host may keep an array or invoke a closure which mutates
+                // one. There is no proof of no mutation on an authored ABI.
+                OpKind::Call {
+                    callee: Callee::Native(target),
+                    ..
+                } => target.parameters.iter().any(|ty| {
+                    matches!(
+                        ty,
+                        native::Type::Erased
+                            | native::Type::Managed(
+                                ManagedType::Array(_)
+                                    | ManagedType::Object(_)
+                                    | ManagedType::Promise(_)
+                                    | ManagedType::Map(..)
+                                    | ManagedType::Table(..)
+                                    | ManagedType::Set(_)
+                            )
+                    )
+                }),
+                _ => false,
+            }
         })
     })
+}
+
+/// Slot published to C hosts that invoke managed closures. Every closure uses
+/// the same call method slot; the synthesized layouts are its authority.
+#[must_use]
+pub fn closure_call_slot(program: &Program) -> u32 {
+    program
+        .layouts
+        .iter()
+        .filter(|layout| layout.types.iter().copied().any(is_closure_type))
+        .find_map(|layout| layout.methods.iter().position(Option::is_some))
+        .and_then(|slot| u32::try_from(slot).ok())
+        .unwrap_or(0)
+}
+
+/// Values carried through boxing and control-flow joins. These operations
+/// preserve reference identity; escape, callback reachability and exposure
+/// follow the same graph. Visited values make loop-carried joins terminate.
+pub(super) fn carried_values(func: &Func, value: ValueId) -> impl Iterator<Item = ValueId> {
+    if !matches!(
+        func.values.get(value.0 as usize).map(|op| &op.kind),
+        Some(OpKind::Erase { .. } | OpKind::BlockParam(_))
+    ) {
+        return std::iter::once(value).chain(Vec::new());
+    }
+    let mut pending = vec![value];
+    let mut seen = rustc_hash::FxHashSet::default();
+    let mut values = Vec::new();
+    let mut incoming = None;
+    while let Some(at) = pending.pop() {
+        if !seen.insert(at) {
+            continue;
+        }
+        let Some(op) = func.values.get(at.0 as usize) else {
+            continue;
+        };
+        if at != value {
+            values.push(at);
+        }
+        match op.kind {
+            OpKind::Erase { value } => pending.push(value),
+            OpKind::BlockParam(_) => {
+                let Some((block, slot)) =
+                    func.blocks.iter().enumerate().find_map(|(block, body)| {
+                        body.params
+                            .iter()
+                            .position(|param| *param == at)
+                            .map(|slot| (block, slot))
+                    })
+                else {
+                    continue;
+                };
+                let incoming = incoming.get_or_insert_with(|| loops::predecessors(func));
+                for (_, args) in &incoming[block] {
+                    if let Some(arg) = args.get(slot) {
+                        pending.push(*arg);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    std::iter::once(value).chain(values)
 }
 
 /// The values a terminator reads.
@@ -3550,8 +3639,8 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis], roots: rea
         .into_iter()
         .chain(reachable::callback_names(program))
         .collect();
-    let exposed = fields::exposed_fields(program, &outward);
-    let widths = fields::representations(program, analyses, &exposed);
+    let exposed = exposure::analyze(program, &outward);
+    let widths = fields::representations(program, analyses, &exposed.fields);
     fields::narrow(program, &widths);
 
     // A global had no analysis at all until this, so every read of one was TOP
@@ -3561,6 +3650,12 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis], roots: rea
     let facts = globals::analyze(program, analyses);
     let widths = globals::representations(program, &facts);
     globals::narrow(program, &widths);
+
+    // An integral array element permits integer dispatch and smaller storage.
+    // It obeys the same external-mutation boundary as fields.
+    let facts = elements::analyze(program, analyses, &exposed.elements);
+    let widths = elements::representations(program, &facts);
+    elements::narrow(program, &widths);
 }
 
 #[must_use]
@@ -3612,16 +3707,6 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
 
         let analyses = interprocedural::analyze_program(&program, options.roots);
         narrow_storage(&mut program, &analyses, options.roots);
-
-        // And the same for what an array holds. An element that arrives as an
-        // integer is what lets a `switch` over one become a jump table, and it
-        // halves the memory besides.
-        let roots: rustc_hash::FxHashSet<&str> = reachable::root_names(&program, options.roots)
-            .into_iter()
-            .collect();
-        let element_widths =
-            elements::representations(&program, &elements::analyze(&program, &analyses, &roots));
-        elements::narrow(&mut program, &element_widths);
 
         // Signatures before bodies. A parameter narrowed to an integer changes
         // what its body can prove about everything derived from it, and every

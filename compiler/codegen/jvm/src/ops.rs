@@ -4333,6 +4333,16 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         let name = match callee {
+            Callee::Native(target) => {
+                return Err(Diagnostic::error(
+                    "NTS4001",
+                    format!(
+                        "native C function `{}` cannot be called by the JVM backend",
+                        target.name
+                    ),
+                    origin.location,
+                ));
+            }
             Callee::Direct(name) => name,
             Callee::External(name) => {
                 // The presence bits are a *field* on this lane, not a header

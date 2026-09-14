@@ -125,6 +125,7 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
         &hir::Options { provider: hir::Provider::NoGc, ..hir::Options::default() },
     )
     .expect("prepared HIR should verify");
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
 
     let emitted = nts_codegen_jvm::emit(&prepared.program);
     assert!(

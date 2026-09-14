@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 12;
+pub const SCHEMA_VERSION: u32 = 13;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -622,6 +622,9 @@ pub struct NodeRecord {
     pub flags: u32,
     /// Modifier keywords written on this declaration.
     pub modifiers: DeclarationModifiers,
+    /// Explicit `@ntsAbi` tag on this function declaration. Unknown values are
+    /// preserved so lowering refuses them rather than silently choosing an ABI.
+    pub native_abi: Option<String>,
     pub data: NodeData,
     /// Resolved text, for nodes whose data is a string index.
     pub text: Option<String>,
@@ -752,6 +755,7 @@ mod tests {
             symbol: None,
             flags: 0,
             modifiers: DeclarationModifiers::default(),
+            native_abi: None,
             data: NodeData::Children {
                 present: 0,
                 small: 0,

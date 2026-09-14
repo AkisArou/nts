@@ -16,6 +16,7 @@ import {
   validateUnion,
 } from "../../internal/validators.ts";
 
+/** @ntsAbi managed */
 declare function nts_process_argv(): string[];
 
 export type ParseArgsOptionsType = "boolean" | "string";

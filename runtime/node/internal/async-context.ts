@@ -25,9 +25,11 @@
  * call in wall-clock order, which is exactly the distinction that makes this a
  * VM primitive rather than a variable.
  */
+/** @ntsAbi managed */
 declare function nts_async_context_get(): AsyncContextFrame | undefined;
 
 /** Attach `frame` to the current continuation and every one derived from it. */
+/** @ntsAbi managed */
 declare function nts_async_context_set(frame: AsyncContextFrame | undefined): void;
 
 /**

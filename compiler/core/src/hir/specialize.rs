@@ -645,10 +645,10 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
                     Some(OpKind::Binary { op: bin, lhs, rhs })
                 }
                 OpKind::Call {
-                    callee: super::Callee::External(target),
+                    callee,
                     args,
                     frame,
-                } => runtime_arguments(func, &mut rewritten, &mut count, &target, &args, frame),
+                } => call_arguments(func, &mut rewritten, &mut count, &callee, &args, frame),
                 // A number goes into an erased value as a `double`, because
                 // that is what the payload holds -- the union's first member,
                 // and the thing every reader of a `NTS_TAG_NUMBER` takes back
@@ -735,6 +735,40 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
 
     func.blocks = blocks;
     count + reconcile_edges(func) + reconcile_call_results(func, returns)
+}
+
+fn call_arguments(
+    func: &mut Func,
+    rewritten: &mut Vec<ValueId>,
+    count: &mut usize,
+    callee: &super::Callee,
+    args: &[ValueId],
+    frame: Option<u32>,
+) -> Option<OpKind> {
+    match callee {
+        super::Callee::External(target) => {
+            runtime_arguments(func, rewritten, count, target, args, frame)
+        }
+        super::Callee::Native(target) => {
+            // Preserve malformed arity for the verifier rather than silently
+            // dropping arguments with a zip over the signature.
+            let args = args
+                .iter()
+                .enumerate()
+                .map(|(at, arg)| {
+                    target.parameters.get(at).map_or(*arg, |ty| {
+                        convert(func, rewritten, count, *arg, &ty.representation())
+                    })
+                })
+                .collect();
+            Some(OpKind::Call {
+                callee: callee.clone(),
+                args,
+                frame,
+            })
+        }
+        _ => None,
+    }
 }
 
 /// The arguments to a C runtime call, at the types C declares.
@@ -839,6 +873,10 @@ fn reconcile_call_results<S: std::hash::BuildHasher>(
         .enumerate()
         .filter_map(|(at, op)| {
             let declared = match &op.kind {
+                OpKind::Call {
+                    callee: super::Callee::Native(target),
+                    ..
+                } => target.result.representation(),
                 OpKind::Call {
                     callee: super::Callee::Direct(name),
                     ..

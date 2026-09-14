@@ -25,6 +25,7 @@
 // for colour and `assert` for terminal width. The goal text's "unblocks setRawMode
 // and isTTY on the stream" was half already done and half not reachable.
 
+/** @ntsAbi managed */
 declare function nts_tty_isatty(fd: number): boolean;
 
 /**

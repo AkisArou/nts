@@ -274,7 +274,9 @@ fn handing_over(
                     .unwrap_or_default(),
                 // Which body a dispatch reaches is decided by a receiver this
                 // cannot see, and they need not agree about what they keep.
-                super::Callee::Virtual { .. } | super::Callee::Closure { .. } => Vec::new(),
+                super::Callee::Virtual { .. }
+                | super::Callee::Closure { .. }
+                | super::Callee::Native(_) => Vec::new(),
             };
             if !taken.is_empty() {
                 over.insert(*value, taken);

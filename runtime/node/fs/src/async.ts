@@ -222,175 +222,232 @@ export function globIterator(
   );
 }
 
+/** @ntsAbi managed */
 declare function nts_fs_read_bigint_async(
   fd: number, length: number, position: bigint,
   callback: (errno: number, bytesRead: number, bytes: number[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_write_async(
   fd: number, bytes: number[], position: number,
   callback: (errno: number, written: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_readv_async(
   fd: number, lengths: number[], position: number,
   callback: (errno: number, bytesRead: number, bytes: number[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_writev_async(
   fd: number, bytes: number[], lengths: number[], position: number,
   callback: (errno: number, written: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_stat_async(
   path: string, follow: boolean, callback: (errno: number, columns: number[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_stat_bytes_async(
   path: number[], follow: boolean, callback: (errno: number, columns: number[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_stat_bigint_async(
   path: string, follow: boolean, callback: (errno: number, columns: string[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_stat_bigint_bytes_async(
   path: number[], follow: boolean, callback: (errno: number, columns: string[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_fstat_async(
   fd: number, callback: (errno: number, columns: number[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_fstat_bigint_async(
   fd: number, callback: (errno: number, columns: string[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_statfs_async(
   path: string, callback: (errno: number, columns: number[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_statfs_bytes_async(
   path: number[], callback: (errno: number, columns: number[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_statfs_bigint_async(
   path: string, callback: (errno: number, columns: string[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_statfs_bigint_bytes_async(
   path: number[], callback: (errno: number, columns: string[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_access_async(
   path: string, mode: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_access_bytes_async(
   path: number[], mode: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_scandir_async(
   path: string, callback: (errno: number, rows: number[][]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_scandir_bytes_async(
   path: number[], callback: (errno: number, rows: number[][]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_mkdir_async(
   path: string, mode: number, recursive: boolean, callback: (errno: number, first: string) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_rmdir_async(path: string, callback: (errno: number) => void): void;
+/** @ntsAbi managed */
 declare function nts_fs_rm_async(
   path: string, recursive: boolean, force: boolean, maxRetries: number, retryDelay: number,
   callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_unlink_async(path: string, callback: (errno: number) => void): void;
 // The byte-path half of the async family. Node accepts a Buffer wherever it
 // accepts a string path; the sync half grew these first and the promises half
 // rejected eleven of twenty-one until it grew them too.
+/** @ntsAbi managed */
 declare function nts_fs_unlink_async_bytes(
   path: number[], callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_chmod_async_bytes(
   path: number[], mode: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_chown_async_bytes(
   path: number[], uid: number, gid: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_utimes_async_bytes(
   path: number[], atime: number, mtime: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_rename_async_bytes(
   from: number[], to: number[], callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_copyfile_async_bytes(
   from: number[], to: number[], flags: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_link_async_bytes(
   from: number[], to: number[], callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_mkdir_async_bytes(
   path: number[], mode: number, recursive: boolean,
   callback: (errno: number, first: string) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_rmdir_async_bytes(
   path: number[], callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_rm_async_bytes(
   path: number[], recursive: boolean, force: boolean,
   maxRetries: number, retryDelay: number,
   callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_readlink_async_bytes(
   path: number[], callback: (errno: number, resolved: number[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_rename_async(
   from: string, to: string, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_copyfile_async(
   from: string, to: string, flags: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_link_async(
   from: string, to: string, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_symlink_async(
   target: string, at: string, flags: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_symlink_bytes_async(
   target: number[], at: number[], flags: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_readlink_async(
   path: string, callback: (errno: number, target: string) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_realpath_async(
   path: string, callback: (errno: number, resolved: string) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_realpath_bytes_async(
   path: number[], callback: (errno: number, resolved: number[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_chmod_async(
   path: string, mode: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_chown_async(
   path: string, uid: number, gid: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_lchown_async(
   path: string, uid: number, gid: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_lchown_bytes_async(
   path: number[], uid: number, gid: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_ftruncate_async(
   fd: number, length: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_utimes_async(
   path: string, atime: number, mtime: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_lutimes_async(
   path: string, atime: number, mtime: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_fsync_async(fd: number, callback: (errno: number) => void): void;
+/** @ntsAbi managed */
 declare function nts_fs_fdatasync_async(fd: number, callback: (errno: number) => void): void;
+/** @ntsAbi managed */
 declare function nts_fs_fchmod_async(
   fd: number, mode: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_fchown_async(
   fd: number, uid: number, gid: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_futimes_async(
   fd: number, atime: number, mtime: number, callback: (errno: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_mkdtemp_async(
   template: string, callback: (errno: number, path: string) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_mkdtemp_bytes_async(
   template: number[], callback: (errno: number, path: number[]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_is_32_bit(): boolean;
+/** @ntsAbi managed */
 declare function nts_fs_eisdir(): number;
 
 /**

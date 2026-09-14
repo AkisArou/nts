@@ -22,6 +22,7 @@ import {
 import { matchesGlobPattern } from "./glob-matcher.ts";
 
 /** The native half. Compiled this is an extern; on node it is a global. */
+/** @ntsAbi managed */
 declare function nts_process_cwd(): string;
 
 export const sep = "/";

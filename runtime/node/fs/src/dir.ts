@@ -24,24 +24,33 @@ import {
 } from "./options.ts";
 import { asRequest } from "./request.ts";
 
+/** @ntsAbi managed */
 declare function nts_errno(): number;
+/** @ntsAbi managed */
 declare function nts_fs_opendir(path: string): number;
+/** @ntsAbi managed */
 declare function nts_fs_opendir_bytes(path: number[]): number;
+/** @ntsAbi managed */
 declare function nts_fs_dir_read(handle: number, bufferSize: number): number[][];
+/** @ntsAbi managed */
 declare function nts_fs_dir_close(handle: number): number;
+/** @ntsAbi managed */
 declare function nts_fs_opendir_async(
   path: string,
   callback: (errno: number, handle: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_opendir_bytes_async(
   path: number[],
   callback: (errno: number, handle: number) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_dir_read_async(
   handle: number,
   bufferSize: number,
   callback: (errno: number, rows: number[][]) => void,
 ): void;
+/** @ntsAbi managed */
 declare function nts_fs_dir_close_async(
   handle: number,
   callback: (errno: number) => void,
