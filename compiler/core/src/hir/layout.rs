@@ -164,16 +164,50 @@ pub fn place(fields: &[Field]) -> Option<Placement> {
 }
 
 /// A native C payload starts at zero, independently of the managed header.
+///
+/// Three layouts, not one. A union's members all begin at the same address and
+/// the whole is as large as the largest, rounded to the strictest alignment. A
+/// packed struct has no padding anywhere and an alignment of one, so its members
+/// are a running sum. Only the ordinary struct is `place_shapes`.
 #[must_use]
-pub fn native_place(layout: &crate::hir::native::Struct) -> Option<Placement> {
-    place_shapes(layout.fields.iter().map(|field| native_shape(&field.ty)), Shape { size: 0, align: 1 })
+pub fn native_place(layout: &crate::hir::native::Record) -> Option<Placement> {
+    use crate::hir::native::RecordKind;
+    let shapes = layout
+        .fields
+        .iter()
+        .map(|field| native_shape(&field.ty))
+        .collect::<Option<Vec<_>>>()?;
+    if layout.kind == RecordKind::Union {
+        // A union of nothing has no alignment to round to, and C has no such
+        // type: a member list is required. Refused rather than given a size.
+        let align = shapes.iter().map(|s| s.align).max()?;
+        let largest = shapes.iter().map(|s| s.size).max()?;
+        return Some(Placement {
+            offsets: vec![0; shapes.len()],
+            size: round_up(largest, align)?,
+            align,
+        });
+    }
+    if layout.packed {
+        let mut at = 0u32;
+        let mut offsets = Vec::with_capacity(shapes.len());
+        for shape in &shapes {
+            offsets.push(at);
+            at = at.checked_add(shape.size)?;
+        }
+        // Alignment 1 and *no* final rounding: that pair is what makes
+        // `struct epoll_event` 12 bytes rather than 16, and an array of them
+        // contiguous rather than padded.
+        return Some(Placement { offsets, size: at, align: 1 });
+    }
+    place_shapes(shapes.into_iter().map(Some), Shape { size: 0, align: 1 })
 }
 
 #[must_use]
 pub fn native_shape(pointee: &crate::hir::native::Pointee) -> Option<Shape> {
     use crate::hir::native::Pointee;
     match pointee {
-        Pointee::Struct(layout) => native_place(layout).map(|p| Shape { size: p.size, align: p.align }),
+        Pointee::Record(layout) => native_place(layout).map(|p| Shape { size: p.size, align: p.align }),
         Pointee::Opaque(_) => None,
         // `T[N]` is N elements with the element's alignment, and named here
         // rather than left to the catch-all below: `element_type` decays an
@@ -189,6 +223,10 @@ pub fn native_shape(pointee: &crate::hir::native::Pointee) -> Option<Shape> {
                 align: inner.align,
             })
         }
+        // The same bytes, with no alignment to promise. Naming it here rather
+        // than letting it fall through matters for a packed record inside
+        // another: the inner one's alignment must not raise the outer's.
+        Pointee::Unaligned(inner) => native_shape(inner).map(|s| Shape { size: s.size, align: 1 }),
         _ => shape_of(&pointee.element_type()?),
     }
 }

@@ -22,7 +22,24 @@ pub(super) fn needs_headers(program: &Program) -> bool {
 pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<(), Diagnostic> {
     let layouts = nts_codegen_common::native::layouts(program)
         .map_err(|why| Diagnostic::error("NTS2006", why, origin.location))?;
-    for name in &layouts.tags { writer.line(origin, format!("struct {name};")); }
+    for (name, kind) in &layouts.tags {
+        writer.line(origin, format!("{} {name};", kind.keyword()));
+    }
+    // One typedef per distinct element reached through a packed member. They
+    // are what makes a load through such a pointer defined rather than merely
+    // usual: reducing a type's alignment is the only way C offers to say that
+    // the address may be any address.
+    let mut unaligned: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for value in program.funcs.iter().flat_map(|func| &func.values) {
+        if let HirType::NativePointer(pointee @ Pointee::Unaligned(_)) = &value.ty
+            && let Pointee::Unaligned(inner) = pointee
+        {
+            unaligned.insert(inner.unaligned_definition());
+        }
+    }
+    for definition in unaligned {
+        writer.line(origin, definition);
+    }
     // Definition order matters now that a member can be a struct stored inline:
     // C wants a *complete* type for that, and a forward declaration is not one.
     // `layouts.structs` is keyed by name, so emitting in map order put
@@ -34,7 +51,7 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
     // among those is a type C cannot express. The schema already refuses to
     // build one, so an unorderable set here would mean the two disagree; it is
     // reported rather than silently truncated.
-    let mut ordered: Vec<&std::sync::Arc<nts_core::hir::native::Struct>> = Vec::new();
+    let mut ordered: Vec<&std::sync::Arc<nts_core::hir::native::Record>> = Vec::new();
     let mut placed: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
     // A struct whose binding named a header is complete before this file says
     // anything: the include is above. It is placed first so that one of ours
@@ -50,7 +67,7 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
         for layout in layouts.structs.values() {
             if placed.contains(layout.name.as_str()) { continue; }
             let ready = layout.fields.iter().all(|field| match &field.ty {
-                Pointee::Struct(inner) => placed.contains(inner.name.as_str()),
+                Pointee::Record(inner) => placed.contains(inner.name.as_str()),
                 _ => true,
             });
             if ready {
@@ -77,7 +94,7 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
             layout_asserts(writer, origin, layout, &shape);
             continue;
         }
-        writer.line(origin, format!("struct {} {{", layout.name));
+        writer.line(origin, format!("{} {} {{", layout.kind.keyword(), layout.name));
         for field in &layout.fields {
             // C spells an array's length in the *declarator*, after the name:
             // `uint8_t bytes[8]`, never `uint8_t[8] bytes`. A type spelling
@@ -89,7 +106,12 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
             };
             writer.line(origin, format!("    {} {}{suffix};", field.ty.c_type(), field.name));
         }
-        writer.line(origin, "};");
+        // The attribute goes after the closing brace, where it applies to the
+        // type being defined. `__attribute__((packed))` is not ISO C, and there
+        // is no ISO spelling of this: a packed struct is a compiler extension
+        // both clang and gcc have, and a binding describing one has to say so
+        // or describe a different type.
+        writer.line(origin, if layout.packed { "} __attribute__((packed));" } else { "};" });
         layout_asserts(writer, origin, layout, &shape);
     }
     Ok(())
@@ -99,10 +121,10 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
 fn layout_asserts(
     writer: &mut CodeWriter,
     origin: &Origin,
-    layout: &nts_core::hir::native::Struct,
+    layout: &nts_core::hir::native::Record,
     shape: &nts_core::hir::layout::Placement,
 ) {
-    let tag = format!("struct {}", layout.name);
+    let tag = format!("{} {}", layout.kind.keyword(), layout.name);
     writer.line(origin, format!("_Static_assert(sizeof({tag}) == {}u, \"native struct size\");", shape.size));
     writer.line(origin, format!("_Static_assert(_Alignof({tag}) == {}u, \"native struct alignment\");", shape.align));
     for (field, offset) in layout.fields.iter().zip(&shape.offsets) {
@@ -126,9 +148,16 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
         OpKind::NativeStore { pointer, index, value } => format!("{}[{}] = {};", value_name(pointer), value_name(index), value_name(value)),
         OpKind::NativeIndexAddress { pointer, index } => format!("{name} = {} + {};", value_name(pointer), value_name(index)),
         OpKind::NativeFieldAddress { pointer, field } => {
-            let HirType::NativePointer(Pointee::Struct(layout)) = &func.value(pointer).ty else {
+            // Through a view as well: a record reached behind a packed member
+            // is still a record, and its members still need addresses.
+            let HirType::NativePointer(view) = &func.value(pointer).ty else {
                 return Err(Diagnostic::error("NTS2006", "field address without a native struct", origin.location));
             };
+            let through_packing = matches!(view, Pointee::Unaligned(_));
+            let Pointee::Record(layout) = view.viewed() else {
+                return Err(Diagnostic::error("NTS2006", "field address without a native struct", origin.location));
+            };
+            let field_index = field;
             let field = layout.fields.get(field as usize)
                 .ok_or_else(|| Diagnostic::error("NTS2006", "invalid native field index", origin.location))?;
             // An array member is already an address: `p->name` decays to a
@@ -136,6 +165,26 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
             // *array*, which is a different type C will not assign across.
             match &field.ty {
                 Pointee::Array { .. } => format!("{name} = {}->{};", value_name(pointer), field.name),
+                // `&p->member` on a **packed** record is `taking address of
+                // packed member`, which clang reports because the result has
+                // the member's type and not its alignment. Reached by byte
+                // arithmetic instead -- the offset is one this file already
+                // asserts against the C compiler -- so no address of a packed
+                // member is ever taken, and the pointer's own type says what
+                // may be read through it.
+                _ if layout.packed || through_packing => {
+                    let shape = nts_core::hir::layout::native_place(layout).ok_or_else(|| {
+                        Diagnostic::error("NTS2006", "native struct has no C layout", origin.location)
+                    })?;
+                    let offset = shape.offsets.get(field_index as usize).ok_or_else(|| {
+                        Diagnostic::error("NTS2006", "invalid native field index", origin.location)
+                    })?;
+                    format!(
+                        "{name} = ({} *)((char *){} + {offset});",
+                        Pointee::Unaligned(Box::new(field.ty.clone())).c_type(),
+                        value_name(pointer)
+                    )
+                }
                 _ => format!("{name} = &{}->{};", value_name(pointer), field.name),
             }
         }
@@ -200,7 +249,7 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         if !layout.foreign { continue; }
         let placed = nts_core::hir::layout::native_place(layout)
             .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
-        let tag = format!("struct {}", layout.name);
+        let tag = format!("{} {}", layout.kind.keyword(), layout.name);
         writer.line(origin, format!("_Static_assert(sizeof({tag}) == {}u, \"{} size\");", placed.size, layout.name));
         writer.line(origin, format!("_Static_assert(_Alignof({tag}) == {}u, \"{} alignment\");", placed.align, layout.name));
         for (field, offset) in layout.fields.iter().zip(placed.offsets) {
@@ -266,10 +315,11 @@ fn pointee_is_foreign(pointee: &Pointee) -> bool {
         // `void` name no struct at all, and an opaque tag names one the
         // declaration authored -- a header defines it or the witness will say so.
         Pointee::Scalar(_) | Pointee::Opaque(_) | Pointee::Void => true,
-        Pointee::Struct(layout) => layout.foreign,
-        Pointee::Pointer(inner) | Pointee::Const(inner) | Pointee::Array { element: inner, .. } => {
-            pointee_is_foreign(inner)
-        }
+        Pointee::Record(layout) => layout.foreign,
+        Pointee::Pointer(inner)
+        | Pointee::Const(inner)
+        | Pointee::Unaligned(inner)
+        | Pointee::Array { element: inner, .. } => pointee_is_foreign(inner),
     }
 }
 

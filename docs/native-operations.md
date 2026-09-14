@@ -318,6 +318,42 @@ The includes are emitted only where a layout needs them. An include is not free
 in this file -- `<stdlib.h>` declares `div`, a name a TypeScript program is
 entitled to export -- so a program naming no header-backed struct gets none.
 
+## Unions, packing, and the pointers that come out of them
+
+`native::Struct` is now `native::Record` and carries a `RecordKind`. One type
+for both because C has one: 6.2.5 says "structure or union type" throughout,
+they share a grammar, a tag namespace and a `->`, and everything except the
+keyword and the offsets is common to them. Two Rust types would have duplicated
+every match arm to say the same thing twice. A tag claimed as both is an error,
+which C's single tag namespace requires and nothing previously checked.
+
+`Packed<T>` composes rather than adding a third type argument, so everything
+that reads a struct keeps reading one. It has to be declared because it cannot
+be inferred: a packed and an unpacked declaration of the same members are the
+same text and different layouts.
+
+**The pointer out of a packed member is a different type, and that is where the
+fact has to live.** `&p->member` on a packed struct is `taking address of
+packed member` -- clang reports it because the result has the member's type and
+not its alignment, and loading through the aligned spelling is undefined. So
+`Pointee::Unaligned` wraps it, and both backends read it at the point of use:
+
+    typedef uint32_t NtsUnaligned_uint32_t __attribute__((aligned(1)));
+    v8 = (NtsUnaligned_uint32_t *)((char *)v7 + 0);   /* C */
+    store i32 %v, ptr %v8.at, align 1                 /* LLVM */
+
+It could not have gone on the field-address *operation*, because that is not
+where it is spent: the load and the store happen through the pointer value one
+op later, and a backend reading only that value would have to trace it back.
+It propagates through nesting too -- a record reached through a packed member
+is itself at an unpredictable address, so its own members are, however it was
+declared.
+
+`struct epoll_event` is the case that makes all three matter at once: a union
+of four members, packed so `data` sits at offset 4, and 12 bytes where the
+natural layout is 16. `examples/interop/native-epoll` hands a descriptor to the
+kernel through it and reads it back out.
+
 **Only foreign declarations appear.** `native::Struct` now records whether its
 name is a C tag the declaration authored or a spelling invented for a layout
 that exists only in this program. That is a fact, not a name prefix: an invented

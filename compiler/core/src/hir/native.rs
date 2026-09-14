@@ -163,7 +163,7 @@ impl Type {
 pub enum Pointee {
     Opaque(String),
     Scalar(Scalar),
-    Struct(std::sync::Arc<Struct>),
+    Record(std::sync::Arc<Record>),
     Pointer(Box<Pointee>),
     /// C's `void`, as the pointee of a `void *`. Storage of unstated element
     /// type: an address a callee interprets, carrying no extent and nothing
@@ -200,13 +200,43 @@ pub enum Pointee {
     /// A pointer to one is not this; this is the storage itself, which is why
     /// it appears as a member and decays to a pointer when read.
     Array { element: Box<Pointee>, length: u32 },
+    /// A view of the same thing that promises no alignment.
+    ///
+    /// Produced by taking the address of a member of a **packed** record, and a
+    /// distinct type because in C it is one: `uint32_t *` promises four-byte
+    /// alignment and a member at offset 4 of a 12-byte `struct epoll_event`
+    /// does not have it. Reading through the aligned spelling is undefined, and
+    /// clang says so rather than guessing -- `taking address of packed member`
+    /// is a correctness warning, not a style one.
+    ///
+    /// It has to be on the *type* rather than on the field-address operation,
+    /// because the operation is not where it is spent: the load and the store
+    /// happen through the pointer value, one op later, and a backend reading
+    /// only that value would have to trace it back to learn what it points at.
+    Unaligned(Box<Pointee>),
 }
 
 /// C storage order is declaration order, never the managed layout order.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Struct {
+pub struct Record {
     pub name: String,
     pub fields: Vec<Field>,
+    /// Whether the members follow one another or share an address.
+    ///
+    /// One type for both because C has one: 6.2.5 says "structure or union
+    /// type" throughout, they are declared by the same grammar, their members
+    /// are reached by the same `.` and `->`, and everything here except the
+    /// keyword and the offsets is common to them. Two types would have
+    /// duplicated every match arm to say the same thing twice.
+    pub kind: RecordKind,
+    /// `__attribute__((packed))` -- no padding anywhere, and an alignment of 1.
+    ///
+    /// Declared rather than inferred, because it cannot be inferred: a packed
+    /// and an unpacked declaration of the same members are the same text and
+    /// different layouts. `struct epoll_event` is the case that matters --
+    /// 12 bytes packed where the natural layout is 16 -- and getting it wrong
+    /// puts every member of an array at the wrong address.
+    pub packed: bool,
     /// Whether `name` is a C struct tag the declaration authored, rather than a
     /// spelling invented for a layout that exists only in this program.
     ///
@@ -237,6 +267,25 @@ pub struct Struct {
     pub from_header: bool,
 }
 
+/// Whether a record's members follow one another or share an address.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum RecordKind {
+    Struct,
+    Union,
+}
+
+impl RecordKind {
+    /// The C keyword, which is also half of the type's spelling: a tag lives in
+    /// one namespace but `struct x` and `union x` are different type names.
+    #[must_use]
+    pub const fn keyword(self) -> &'static str {
+        match self {
+            Self::Struct => "struct",
+            Self::Union => "union",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Field {
     pub name: String,
@@ -249,7 +298,7 @@ impl Pointee {
         match self {
             Self::Opaque(name) => format!("struct {name}"),
             Self::Scalar(scalar) => scalar.c_type().to_owned(),
-            Self::Struct(layout) => format!("struct {}", layout.name),
+            Self::Record(layout) => format!("{} {}", layout.kind.keyword(), layout.name),
             Self::Pointer(pointee) => pointee.pointer_type(),
             Self::Void => "void".to_owned(),
             Self::Const(pointee) => format!("const {}", pointee.c_type()),
@@ -257,6 +306,11 @@ impl Pointee {
             // -- `char name[65]`, not `char[65] name` -- so a member emits it
             // beside the name and a bare type spelling cannot carry it.
             Self::Array { element, .. } => element.c_type(),
+            // A typedef, because C has no inline spelling for this. The name is
+            // derived from the element so that two of them agree and two
+            // different ones cannot collide -- the same rule the function
+            // pointer typedefs follow, for the same reason.
+            Self::Unaligned(pointee) => pointee.unaligned_typedef(),
         }
     }
 
@@ -283,6 +337,47 @@ impl Pointee {
     #[must_use]
     pub fn pointer_type(&self) -> String { format!("{} *", self.c_type()) }
 
+    /// The typedef name for this pointee read without alignment.
+    ///
+    /// A C identifier derived from the spelling: `unsigned int` becomes
+    /// `NtsUnaligned_unsigned_int`, and the substitution is the same one the
+    /// function-pointer typedefs use so that one shape is always one name.
+    #[must_use]
+    pub fn unaligned_typedef(&self) -> String {
+        let mut name = String::from("NtsUnaligned_");
+        for byte in self.c_type().bytes() {
+            match byte {
+                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' => name.push(byte as char),
+                b'*' => name.push('p'),
+                _ => name.push('_'),
+            }
+        }
+        name
+    }
+
+    /// `typedef unsigned int NtsUnaligned_unsigned_int __attribute__((aligned(1)));`
+    ///
+    /// Not ISO C. There is no ISO way to say this: reducing a type's alignment
+    /// is an extension, which clang and gcc both have, and a program describing
+    /// a packed struct is already outside ISO by the time it gets here.
+    #[must_use]
+    pub fn unaligned_definition(&self) -> String {
+        format!(
+            "typedef {} {} __attribute__((aligned(1)));",
+            self.c_type(),
+            self.unaligned_typedef()
+        )
+    }
+
+    /// The pointee underneath any view -- const, unaligned, or both.
+    #[must_use]
+    pub fn viewed(&self) -> &Self {
+        match self {
+            Self::Const(inner) | Self::Unaligned(inner) => inner.viewed(),
+            other => other,
+        }
+    }
+
     /// A loadable scalar or pointer slot. Aggregates are addressable, but a
     /// whole-aggregate load/copy is not an implicit pointer assignment.
     #[must_use]
@@ -290,11 +385,13 @@ impl Pointee {
         match self {
             Self::Scalar(scalar) => Some(scalar.representation()),
             Self::Pointer(pointee) => Some(HirType::NativePointer((**pointee).clone())),
-            // Reading through a `const T *` is what C allows, so a const view
-            // loads exactly what the type underneath it does. What it must not
-            // do is store, and that is refused where stores are lowered rather
-            // than by pretending the element does not exist.
-            Self::Const(pointee) => pointee.element_type(),
+            // A view loads exactly what the type underneath it does, which is
+            // what C allows through both of these. What they restrict is
+            // elsewhere: a `const` view must not *store*, and that is refused
+            // where stores are lowered rather than by pretending the element
+            // does not exist; an unaligned one changes how a backend spells
+            // the access and not what is found there.
+            Self::Const(pointee) | Self::Unaligned(pointee) => pointee.element_type(),
             // Reading `p.name[i]` is reading a `T`: the array decays to a
             // pointer to its first element, exactly as it does in C.
             Self::Array { element, .. } => element.element_type(),
@@ -302,7 +399,7 @@ impl Pointee {
             // `p[i]` nor an index address exists for it. Refusing here is what
             // keeps a `void *` an address to hand onward rather than storage
             // this program may read through.
-            Self::Opaque(_) | Self::Struct(_) | Self::Void => None,
+            Self::Opaque(_) | Self::Record(_) | Self::Void => None,
         }
     }
 }
@@ -312,11 +409,12 @@ impl std::fmt::Display for Pointee {
         match self {
             Self::Opaque(name) => write!(f, "{name}"),
             Self::Scalar(scalar) => write!(f, "{}", scalar.c_type()),
-            Self::Struct(layout) => write!(f, "{}", layout.name),
+            Self::Record(layout) => write!(f, "{}", layout.name),
             Self::Pointer(pointee) => write!(f, "{pointee}*"),
             Self::Void => write!(f, "void"),
             Self::Const(pointee) => write!(f, "const {pointee}"),
             Self::Array { element, length } => write!(f, "{element}[{length}]"),
+            Self::Unaligned(pointee) => write!(f, "unaligned {pointee}"),
         }
     }
 }

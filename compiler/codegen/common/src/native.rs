@@ -1,13 +1,18 @@
 //! One native-layout inventory for both emitters. C tag collisions are errors,
 //! never resolved by whichever declaration happened to be visited first.
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
-use nts_core::hir::{HirType, Program, native::{Pointee, Struct}};
+use nts_core::hir::{HirType, Program, native::{Pointee, Record, RecordKind}};
 
 #[derive(Debug, Default)]
 pub struct Layouts {
-    pub tags: BTreeSet<String>,
-    pub structs: BTreeMap<String, Arc<Struct>>,
+    /// Every tag this program names, with the keyword that introduces it.
+    ///
+    /// The keyword is not decoration: C keeps one tag namespace for both, so
+    /// `struct x` and `union x` cannot both exist, and a forward declaration
+    /// spelled with the wrong one is a different type rather than a typo.
+    pub tags: BTreeMap<String, RecordKind>,
+    pub structs: BTreeMap<String, Arc<Record>>,
 }
 
 impl Layouts {
@@ -17,17 +22,19 @@ impl Layouts {
             // tag, and `void` has no type at all.
             Pointee::Scalar(_) | Pointee::Void => {}
 
-            // Both name whatever they are a view of, so the struct either one
+            // Each names whatever it is a view of, so the record any of them
             // reaches still needs its definition emitted. One arm rather than
-            // two identical ones: they differ in what they mean and not in what
-            // this has to do about it.
-            Pointee::Pointer(pointee) | Pointee::Const(pointee) => self.visit(pointee)?,
+            // three identical ones: they differ in what they mean and not in
+            // what this has to do about it.
+            Pointee::Pointer(pointee) | Pointee::Const(pointee) | Pointee::Unaligned(pointee) => {
+                self.visit(pointee)?;
+            }
             // An array's element may be a struct, and that struct still needs
             // its definition emitted -- stored inline, so before this one.
             Pointee::Array { element, .. } => self.visit(element)?,
-            Pointee::Opaque(name) => self.tag(name)?,
-            Pointee::Struct(layout) => {
-                self.tag(&layout.name)?;
+            Pointee::Opaque(name) => self.tag(name, RecordKind::Struct)?,
+            Pointee::Record(layout) => {
+                self.tag(&layout.name, layout.kind)?;
                 if let Some(existing) = self.structs.get(&layout.name) {
                     if existing != layout { return Err(format!("conflicting native layouts for C struct `{}`", layout.name)); }
                     return Ok(());
@@ -44,11 +51,19 @@ impl Layouts {
         Ok(())
     }
 
-    fn tag(&mut self, name: &str) -> Result<(), String> {
+    fn tag(&mut self, name: &str, kind: RecordKind) -> Result<(), String> {
         if !super::symbols::is_native_c_identifier(name) {
             return Err(format!("native pointee `{name}` is not a C struct tag"));
         }
-        self.tags.insert(name.to_owned());
+        if let Some(known) = self.tags.insert(name.to_owned(), kind)
+            && known != kind
+        {
+            return Err(format!(
+                "native tag `{name}` is declared as both a {} and a {}, which C's single tag namespace cannot hold",
+                known.keyword(),
+                kind.keyword(),
+            ));
+        }
         Ok(())
     }
 }

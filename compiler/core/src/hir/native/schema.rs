@@ -1,7 +1,7 @@
 //! Decode only authored native storage. An unsupported layout remains refused;
 //! it must not fall back to managed-object layout or guessed member offsets.
 use nts_semantic_schema::{LiteralValue, MemberKind, PropertyRecord, SemanticSnapshot, TypeId, TypeKind};
-use super::{Field, Pointee, Struct, scalar};
+use super::{Field, Pointee, Record, RecordKind, scalar};
 
 fn property<'a>(snapshot: &'a SemanticSnapshot, ty: TypeId, name: &str) -> Option<&'a PropertyRecord> {
     match &snapshot.types.get(ty.0 as usize)?.kind {
@@ -31,11 +31,11 @@ pub fn pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     pointer_within(snapshot, ty, &mut Vec::new())
 }
 
-/// A Struct describes native storage; constructing its phantom marker as a
+/// A `Struct<...>` describes native storage; constructing its phantom marker as a
 /// managed JS object is not constructing that storage.
 #[must_use]
 pub fn is_layout(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    marker(snapshot, ty, "___c_struct").is_some()
+    marker(snapshot, ty, "___c_struct").is_some() || marker(snapshot, ty, "___c_union").is_some()
 }
 
 fn pointer_within(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>) -> Option<Pointee> {
@@ -117,12 +117,19 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         return Some(qualify(Pointee::Void));
     }
     if let Some(scalar) = scalar(snapshot, element) { return Some(qualify(Pointee::Scalar(scalar))); }
-    if let Some(layout) = structure(snapshot, element, visiting) { return Some(qualify(Pointee::Struct(layout.into()))); }
+    if let Some(layout) = structure(snapshot, element, visiting) { return Some(qualify(Pointee::Record(layout.into()))); }
     pointer_within(snapshot, element, visiting).map(|p| qualify(Pointee::Pointer(Box::new(p))))
 }
 
-fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>) -> Option<Struct> {
-    let shape = marker(snapshot, ty, "___c_struct")?;
+fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>) -> Option<Record> {
+    // `Struct<F, Tag>` and `Union<F, Tag>` differ in one marker and nothing
+    // else: the same member list, read the same way, laid out differently.
+    let (shape, kind) = match marker(snapshot, ty, "___c_struct") {
+        Some(shape) => (shape, RecordKind::Struct),
+        None => (marker(snapshot, ty, "___c_union")?, RecordKind::Union),
+    };
+    // `Packed<T>` intersects a marker in, so this reads through to the `T`.
+    let packed = marker(snapshot, ty, "___c_packed").is_some();
     let tag = text(snapshot, marker(snapshot, ty, "___c_tag")?)?;
     let TypeKind::Object { properties } = &snapshot.types.get(shape.0 as usize)?.kind else { return None; };
     if properties.is_empty() { return None; }
@@ -164,7 +171,7 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
                 inner
             }
         {
-            Pointee::Struct(inner.into())
+            Pointee::Record(inner.into())
         } else {
             Pointee::Pointer(Box::new(pointer_within(snapshot, property.ty, visiting)?))
         };
@@ -173,7 +180,14 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
     }
     let foreign = !tag.is_empty();
     let name = if foreign { tag.to_owned() } else { format!("NtsNative_Type{}", shape.0) };
-    Some(Struct { name, fields, foreign, from_header: foreign && declares_a_header(snapshot, parent) })
+    Some(Record {
+        name,
+        fields,
+        kind,
+        packed,
+        foreign,
+        from_header: foreign && declares_a_header(snapshot, parent),
+    })
 }
 
 /// Whether the scope that declared this struct named any header.
@@ -202,6 +216,6 @@ fn declares_a_header(snapshot: &SemanticSnapshot, from: nts_semantic_schema::Nod
 #[must_use]
 pub fn storage(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     if let Some(scalar) = scalar(snapshot, ty) { return Some(Pointee::Scalar(scalar)); }
-    if let Some(layout) = structure(snapshot, ty, &mut Vec::new()) { return Some(Pointee::Struct(layout.into())); }
+    if let Some(layout) = structure(snapshot, ty, &mut Vec::new()) { return Some(Pointee::Record(layout.into())); }
     pointer(snapshot, ty).map(|p| Pointee::Pointer(Box::new(p)))
 }

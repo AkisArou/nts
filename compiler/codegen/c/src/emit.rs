@@ -732,6 +732,37 @@ fn native_preamble(writer: &mut CodeWriter, origin: &Origin, program: &Program) 
         }
     }
     header::include_headers(writer, origin, program);
+    // Every name this file is about to define, released from whatever macro a
+    // header just bound it to.
+    //
+    // A header's macros are the preprocessor's one global namespace, and a
+    // TypeScript program is entitled to a `const EPOLL_CTL_ADD` -- which
+    // <sys/epoll.h> defines as `1`, so the declaration came out as
+    // `static int32_t 1 = ...`. That is this hazard's whole shape: not a
+    // conflicting declaration, which C reports plainly, but a name replaced
+    // before the compiler ever sees it.
+    //
+    // `#undef` of a name that is not a macro is defined to do nothing (C11
+    // 6.10.3.5), so this is unconditional rather than conditional on knowing
+    // which of them a header took -- knowing that needs the preprocessor, and
+    // the answer would only be used to skip lines that already cost nothing.
+    //
+    // It does not touch a collision with a real *declaration*: a program
+    // exporting `read` while binding <unistd.h>'s still has two incompatible
+    // declarations of one symbol, which is a true conflict and is reported.
+    for name in program
+        .funcs
+        .iter()
+        .map(|f| c_identifier(&f.name))
+        .chain(
+            program
+                .globals
+                .iter()
+                .map(|g| c_global(&g.name, program.funcs.iter().map(|f| f.name.as_str()))),
+        )
+    {
+        writer.line(origin, format!("#undef {name}"));
+    }
 }
 
 fn native_prototype(

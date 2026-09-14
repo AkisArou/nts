@@ -19,6 +19,28 @@ declare module "c:types" {
     readonly __c_struct: Fields;
     readonly __c_tag: Tag;
   };
+  // The same member list at one address. Everything a `Struct` does, a `Union`
+  // does -- reached by the same `p.member`, described by the same fields --
+  // and only the layout differs, which is how C has it: one grammar, one `->`,
+  // and "structure or union type" throughout the standard.
+  //
+  // Reading one member after writing another is C's rule and not this
+  // compiler's: the bytes are whatever the write left there. Nothing here
+  // tracks which member is live, and nothing should pretend to.
+  export type Union<Fields, Tag extends string = ""> = {
+    readonly __c_union: Fields;
+    readonly __c_tag: Tag;
+  };
+  // `__attribute__((packed))`: no padding between members, no tail padding,
+  // and an alignment of one. It has to be declared because it cannot be seen --
+  // a packed and an unpacked declaration of the same members are the same text
+  // and different layouts, and `struct epoll_event` is 12 bytes where the
+  // natural layout is 16.
+  //
+  // It composes rather than taking a third argument, so a binding writes
+  // `Packed<Struct<{...}, "epoll_event">>` and everything that reads a struct
+  // keeps reading one.
+  export type Packed<T> = T & { readonly __c_packed: true };
   // A slot reads as the plain value it holds and remembers what it is a slot
   // *of*. The phantom is optional, which is the whole trick: a plain `number`
   // satisfies it, so `p[i] = n`, `p[i] += 1` and `p.count += 2` stay ordinary
@@ -49,13 +71,17 @@ declare module "c:types" {
     readonly __c_array: T;
     readonly __c_length: N;
   };
-  export type Ptr<T> = { readonly __c_pointer: T; readonly __c_writable: true } & (T extends Struct<infer Fields, string>
+  export type Ptr<T> = { readonly __c_pointer: T; readonly __c_writable: true } & (T extends
+    | Struct<infer Fields, string>
+    | Union<infer Fields, string>
     // A struct-typed member is stored inline and projects as a *pointer to it*,
     // never as a value: reading one as a value would be an aggregate copy, and
     // `p.inner.field` should reach the bytes that are there rather than a
     // duplicate of them. This is what `p[i]` already does for a block of
     // structs, for the same reason.
-    ? { [K in keyof Fields]: Fields[K] extends { readonly __c_struct: unknown }
+    ? { [K in keyof Fields]: Fields[K] extends
+          | { readonly __c_struct: unknown }
+          | { readonly __c_union: unknown }
           ? Ptr<Fields[K]>
           : Fields[K] extends CArray<infer E, number>
             ? Ptr<E>
@@ -66,7 +92,9 @@ declare module "c:types" {
   // is not a claim that the storage is immutable or unaliased, and nothing here
   // promises otherwise. Writing through one is `TS2542`, "only permits
   // reading", before the compiler is reached.
-  export type ConstPtr<T> = { readonly __c_pointer: T } & (T extends Struct<infer Fields, string>
+  export type ConstPtr<T> = { readonly __c_pointer: T } & (T extends
+    | Struct<infer Fields, string>
+    | Union<infer Fields, string>
     ? { readonly [K in keyof Fields]: Slot<Fields[K]> } & { readonly [index: number]: ConstPtr<T> }
     : { readonly [index: number]: Slot<T> });
   // Hand-written native ABI scalar declarations, maintained with hir/native.rs.

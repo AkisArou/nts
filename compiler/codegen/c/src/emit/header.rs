@@ -80,6 +80,9 @@ pub(super) fn emit(
     }
     writer.line(origin, "/* Object aliases below are named from the export and parameter; returns use <export>_return_t.");
     writer.line(origin, " * Regenerate this header together with program.c. Managed pointers must follow the runtime's lifetime rules.");
+    writer.line(origin, " * If `module__init` is declared below, call it once before any export: the");
+    writer.line(origin, " * program has module-level state, and an export that reads it before the");
+    writer.line(origin, " * initializer runs sees a zero rather than what the module assigned.");
     writer.line(origin, " * For promises: call, run nts_checkpoint(), then inspect nts_promise_state() (0 pending, 1 fulfilled, 2 rejected).");
     writer.line(origin, " * Read nts_promise_value() only after settlement. A checkpoint drains microtasks; pending I/O needs a host loop. */");
 
@@ -267,7 +270,7 @@ fn boundary_type(
     origin: &Origin,
     preferred: &str,
 ) -> Result<String, Diagnostic> {
-    if let HirType::NativePointer(nts_core::hir::native::Pointee::Struct(layout)) = ty {
+    if let HirType::NativePointer(nts_core::hir::native::Pointee::Record(layout)) = ty {
         let alias = unique_name(names, preferred);
         writer.line(origin, format!("typedef struct {} {alias};", layout.name));
         return Ok(format!("{alias} *"));

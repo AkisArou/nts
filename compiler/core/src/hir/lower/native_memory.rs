@@ -38,7 +38,15 @@ impl FuncBuilder<'_> {
     }
 
     pub(super) fn native_load(&mut self, id: NodeId, pointer: ValueId, index: ValueId) -> Result<ValueId, Diagnostic> {
-        if matches!(self.values[pointer.0 as usize].ty, HirType::NativePointer(Pointee::Struct(_))) {
+        // A record is storage, not a loadable value: reading `p.inner` gives
+        // its address, because reading it *as a value* would be an aggregate
+        // copy. Through any view of one as well -- a record behind a packed
+        // member is still a record, and matching the bare form alone meant
+        // `e.data.fd` was lowered as a scalar load of a struct and refused.
+        if matches!(
+            &self.values[pointer.0 as usize].ty,
+            HirType::NativePointer(view) if matches!(view.viewed(), Pointee::Record(_))
+        ) {
             return self.native_index_address(id, pointer, index);
         }
         // An array member decays to a pointer to its first element, which is
@@ -76,13 +84,32 @@ impl FuncBuilder<'_> {
         if let HirType::NativePointer(Pointee::Const(_)) = &self.values[pointer.0 as usize].ty {
             return Err(self.unsupported(id, "the address of a member of a `const` native view"));
         }
-        let HirType::NativePointer(Pointee::Struct(layout)) = &self.values[pointer.0 as usize].ty else {
+        // Through an unaligned view as well as a plain one. A record reached
+        // *through* a packed member is itself at an unpredictable address, so
+        // its own members are too however it was declared -- the property
+        // belongs to the path taken, not to the type at the end of it.
+        let base = &self.values[pointer.0 as usize].ty;
+        let through_packing = matches!(base, HirType::NativePointer(Pointee::Unaligned(_)));
+        let HirType::NativePointer(view) = base else {
+            return Err(self.unsupported(id, "a field address without a native struct layout"));
+        };
+        let Pointee::Record(layout) = view.viewed() else {
             return Err(self.unsupported(id, "a field address without a native struct layout"));
         };
         let (field, slot) = layout.fields.iter().enumerate().find(|(_, f)| f.name == name)
             .ok_or_else(|| self.unsupported(id, &format!("native struct `{}` has no field `{name}`", layout.name)))?;
         let field = u32::try_from(field).map_err(|_| self.unsupported(id, "too many native fields"))?;
-        let ty = HirType::NativePointer(slot.ty.clone());
+        // A member of a packed record sits wherever the packing put it, which
+        // is not necessarily an address its own type may be read through. The
+        // pointer says so, here, because here is the only place that knows:
+        // one op later there is a pointer value and nothing about where it came
+        // from.
+        let slot = if layout.packed || through_packing {
+            Pointee::Unaligned(Box::new(slot.ty.clone()))
+        } else {
+            slot.ty.clone()
+        };
+        let ty = HirType::NativePointer(slot);
         Ok(self.push(OpKind::NativeFieldAddress { pointer, field }, ty, self.origin(id)))
     }
 

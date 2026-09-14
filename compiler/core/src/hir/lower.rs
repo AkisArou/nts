@@ -9646,7 +9646,7 @@ impl<'a> FuncBuilder<'a> {
             // which has no own-source refusal of its own.
             Some(syntax::ELEMENT_ACCESS_EXPRESSION) => match self.children(id).as_slice() {
                 [object, index] => {
-                    if matches!(self.type_of(*object), Some(HirType::NativePointer(super::native::Pointee::Struct(_)))) {
+                    if matches!(self.type_of(*object), Some(HirType::NativePointer(super::native::Pointee::Record(_)))) {
                         return self.native_member_key(id, *index).is_some();
                     }
                     // **What the receiver is, not what the checker narrowed it
@@ -24612,7 +24612,7 @@ impl<'a> FuncBuilder<'a> {
                 && children.len() == 2
                 && children.last().and_then(|index| self.type_of(*index)).is_some_and(|ty| matches!(ty, HirType::Int { .. } | HirType::Float { .. }));
             let named_field = match &pointee {
-                super::native::Pointee::Struct(layout) => children.last().and_then(|member| self.native_member_key(id, *member))
+                super::native::Pointee::Record(layout) => children.last().and_then(|member| self.native_member_key(id, *member))
                     .is_some_and(|name| layout.fields.iter().any(|f| f.name == name)),
                 _ => false,
             };

@@ -546,15 +546,28 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
             // where it is the *decay* -- `a[i]` is an element, so the result
             // points at the element and not at another array. Same address
             // arithmetic, one fewer level of type.
-            OpKind::NativeIndexAddress { .. } => match element {
+            OpKind::NativeIndexAddress { .. } => match element.viewed() {
                 super::native::Pointee::Opaque(_) => None,
                 super::native::Pointee::Array { element, .. } => {
                     Some(HirType::NativePointer((**element).clone()))
                 }
                 _ => Some(found.clone()),
             },
-            OpKind::NativeFieldAddress { field, .. } => match element {
-                super::native::Pointee::Struct(layout) => layout.fields.get(*field as usize).map(|f| HirType::NativePointer(f.ty.clone())),
+            // Through a view as well as a plain pointer, and with the same two
+            // reasons to hand back an unaligned one: the record is packed, or
+            // it was reached through something that was. Lowering applies both,
+            // so this has to.
+            OpKind::NativeFieldAddress { field, .. } => match element.viewed() {
+                super::native::Pointee::Record(layout) => layout.fields.get(*field as usize).map(|f| {
+                    let through_packing =
+                        matches!(element, super::native::Pointee::Unaligned(_));
+                    let slot = if layout.packed || through_packing {
+                        super::native::Pointee::Unaligned(Box::new(f.ty.clone()))
+                    } else {
+                        f.ty.clone()
+                    };
+                    HirType::NativePointer(slot)
+                }),
                 _ => None,
             },
             _ => None,

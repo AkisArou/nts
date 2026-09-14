@@ -28,7 +28,7 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str)
     let base = name(pointer);
     Ok(match *kind {
         OpKind::NativeFieldAddress { field, .. } => {
-            let Pointee::Struct(layout) = storage else { return Err(refuse(func, "field address without a native struct")); };
+            let Pointee::Record(layout) = storage else { return Err(refuse(func, "field address without a native struct")); };
             let placed = nts_core::hir::layout::native_place(layout).ok_or_else(|| refuse(func, "native struct without a layout"))?;
             let offset = placed.offsets.get(field as usize).ok_or_else(|| refuse(func, "invalid native field index"))?;
             format!("{out} = getelementptr i8, ptr {base}, i64 {offset}")
@@ -41,9 +41,17 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str)
             let ty = storage.element_type().ok_or_else(|| refuse(func, "native memory without a loadable element"))?;
             let element = ty_of(&ty, func)?;
             let address = format!("{out}.at = getelementptr {element}, ptr {base}, i64 {}", name(index));
+            // An omitted `align` means the ABI alignment of the type, which for
+            // a member of a packed record is a promise nothing made: `data` sits
+            // at offset 4 of `struct epoll_event` and LLVM would assume 8. The
+            // suffix is spelled only where it is not the default, so ordinary
+            // native memory keeps the IR it had.
+            let aligned = if matches!(storage, Pointee::Unaligned(_)) { ", align 1" } else { "" };
             let access = match kind {
-                OpKind::NativeStore { value, .. } => format!("store {element} {}, ptr {out}.at", name(*value)),
-                _ => format!("{out} = load {element}, ptr {out}.at"),
+                OpKind::NativeStore { value, .. } => {
+                    format!("store {element} {}, ptr {out}.at{aligned}", name(*value))
+                }
+                _ => format!("{out} = load {element}, ptr {out}.at{aligned}"),
             };
             format!("{address}\n  {access}")
         }
