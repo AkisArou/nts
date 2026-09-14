@@ -84,13 +84,6 @@ javac -cp "$emitted:$emitted/nts-runtime.jar" -d "$out" "$out/Driver.java"
 answer=$(java -Xverify:all -cp "$out:$emitted:$out/classes:$emitted/nts-runtime.jar" Driver)
 echo "java-from-ts: $answer"
 
-# And every refusal this project documents, produced rather than asserted in
-# prose. `src/refused.ts` used to quote nine `NTS41xx` codes that do not exist
-# in the compiler; the first run of this script found a tenth kind of wrong --
-# a claim whose line could not reach the refusal it named, because the type was
-# never imported.
-sh "$root/tooling/jvm/check-refusals.sh" "$here"
-
 
 # **The whole line, now that none of it is knowingly wrong.** This used to
 # check two values and say why: `Catalog.MAX` read `0` where Java says `512`,
@@ -103,10 +96,24 @@ sh "$root/tooling/jvm/check-refusals.sh" "$here"
 # is `hits + MAX` computed in Java, `9007199254740993` is 2^53+1 surviving as a
 # bigint, `65535` is nowhere here but `s:x` is a bound `String` round trip, and
 # `k` and the trailing `widgets` are a static nested class and an inner one.
-expected="catalog 3 512 10 0 0 widgets 515 4 9007199254740993 1 3 0 3 s:x 6 6 widgets 3 2 k widgets"
+expected="catalog 3 512 10 0 0 widgets 515 4 9007199254740993 1 3 0 3 s:x 6 6 widgets 3 2 k widgets 4"  # the trailing 4 is `weigh`, a TypeScript Map crossing in with no copy
 if [ "$answer" != "$expected" ]; then
   echo "java-from-ts: the answer changed."
   echo "  expected: $expected"
   echo "  actual:   $answer"
   exit 1
 fi
+
+# **After the answer check, not before it.** This used to run above, and under
+# `set -e` its exit killed the script before the line was ever compared -- so
+# during any edit that left `refused.ts` dirty, which is the normal state while
+# working on it, the assertion this whole file is built around silently did not
+# run. It looked like a failing build either way, which is why it survived: the
+# exit code was 1 for a different reason than the one being read.
+# And every refusal this project documents, produced rather than asserted in
+# prose. `src/refused.ts` used to quote nine `NTS41xx` codes that do not exist
+# in the compiler; the first run of this script found a tenth kind of wrong --
+# a claim whose line could not reach the refusal it named, because the type was
+# never imported.
+sh "$root/tooling/jvm/check-refusals.sh" "$here"
+

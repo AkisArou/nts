@@ -32,7 +32,27 @@ export function refused(catalog: Catalog): void {
   //
   //   const n = catalog.describe(1).length;
 
-  // TS2339: Property 'forEach' does not exist on type 'HashMap<string, Integer>'.
+  // TS2739: Type 'Map<string, number>' is missing the following properties from type 'java.util.Map<string, number>': isEmpty, containsKey, put, remove, keySet
+  //
+  // **A TypeScript `Map` crosses into Java for free, but not into every
+  // signature.** `catalog.weigh(m)` in `main.ts` takes the same map with no
+  // copy, because it declares `Map<String, Double>`. `countOf` declares
+  // `Map<String, Integer>`, and a map arriving from TypeScript carries
+  // `java.lang.Double` for a number -- measured by reading `getClass()` on the
+  // Java side, not assumed.
+  //
+  // So the binder offers the TypeScript `Map` arm only where what we actually
+  // store satisfies the declaration. It used to offer it unconditionally, and
+  // that was worse than this refusal in the way that matters: the call
+  // type-checked on both sides, crossed with no copy, and threw
+  // `ClassCastException` from inside the callee's loop, with our frame no
+  // longer on the stack. Erasure means `javac` checks nothing here.
+  //
+  // The way through is `Double` on the Java side, or `keySet()` on ours.
+  //
+  //   catalog.countOf(new Map<string, number>());
+
+  // TS2339: Property 'forEach' does not exist on type 'HashMap<string, number>'.
   //
   // A Java `HashMap` is not a JavaScript `Map`, and this is what that costs at
   // a call site. Use `keySet()` with an iterator. There is no implicit

@@ -39,6 +39,8 @@ declare module "java:com.example" {
     tally<T>(a0: T, a1: Int32Array): java.util.List<T> | null;
     total(a0: java.util.List<number>): number;
     raw(): java.util.List | null;
+    weigh(a0: (Map<string, number> | java.util.Map<string, number>)): number;
+    countOf(a0: java.util.Map<string, number>): number;
     cursorAt(a0: number): Catalog.Cursor | null;
   }
 

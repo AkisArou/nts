@@ -98,11 +98,28 @@ export function main(): string {
   const anything = raw === null ? 0 : raw.size();
 
   // --- nested and inner -----------------------------------------------------
+  // --- a Map going IN, which is the direction the design is about ---------
+  //
+  // `NtsMap implements java.util.Map`, so this is a reference crossing: the
+  // table Java iterates IS the one built two lines up. No copy, no wrapper, no
+  // O(n) at the boundary.
+  //
+  // `weigh` takes `Map<String, Double>`. `countOf` next door takes
+  // `Map<String, Integer>` and **cannot** take this map -- see `refused.ts`.
+  // A map from TypeScript carries `java.lang.Double` for a number, so the
+  // binder offers the TypeScript `Map` arm only where a `Double` satisfies the
+  // declaration. It used to offer it everywhere, which type-checked on both
+  // sides and then threw `ClassCastException` inside the Java loop.
+  const weights = new Map<string, number>();
+  weights.set("a", 1.5);
+  weights.set("b", 2.5);
+  const weighed = catalog.weigh(weights);
+
   const entry = new Catalog.Entry("k");           // static nested: constructs directly
   const cursor = catalog.cursorAt(2); // inner: outer passed first
   const owner = cursor === null ? "" : cursor.owner();
 
   return `${label} ${hits} ${cap} ${weight} ${small} ${count} ${first} ${total} ` +
     `${head} ${idAsText} ${byNumber} ${byInt} ${byLong} ${byText} ${rendered} ` +
-    `${summed} ${describedLength} ${name} ${repeated} ${anything} ${entry.key} ${owner}`;
+    `${summed} ${describedLength} ${name} ${repeated} ${anything} ${entry.key} ${owner} ${weighed}`;
 }

@@ -33,18 +33,29 @@ if [ -n "$(cd "$here" && git status --porcelain -- "$file")" ]; then
 fi
 
 # Each claim is a `// TSxxxx:` line and the nearest `//   <code>` under it.
+#
+# **The message is carried too, and asserted.** Until 2026-09-15 only the code
+# was: a claim reading `TS2339: ... on type 'HashMap<string, Integer>'` passed
+# while the compiler said `HashMap<string, number>`, because both are TS2339.
+# That is the same failure this file exists to prevent, one level up -- the
+# prose was authoritative-looking and nothing read it. A code identifies a
+# *kind* of refusal; the message is the claim about this one.
 claims=$(awk '
-  /^[[:space:]]*\/\/ (TS|NTS)[0-9]+:/ { code = $2; sub(/:$/, "", code); next }
+  /^[[:space:]]*\/\/ (TS|NTS)[0-9]+:/ {
+    code = $2; sub(/:$/, "", code)
+    text = $0; sub(/^[[:space:]]*\/\/ (TS|NTS)[0-9]+: /, "", text)
+    next
+  }
   code != "" && /^[[:space:]]*\/\/   [^ ]/ {
     line = $0; sub(/^[[:space:]]*\/\/   /, "", line)
-    print code "\t" line; code = ""
+    print code "\t" text "\t" line; code = ""
   }
 ' "$file")
 
 [ -n "$claims" ] || { echo "check-refusals: $project documents no refusals"; exit 0; }
 
 checked=0
-printf '%s\n' "$claims" | while IFS="$(printf '\t')" read -r code line; do
+printf '%s\n' "$claims" | while IFS="$(printf '\t')" read -r code text line; do
   [ -n "$code" ] || continue
   # Uncomment exactly this line, ask, then put the file back.
   awk -v want="$line" '
@@ -56,10 +67,20 @@ printf '%s\n' "$claims" | while IFS="$(printf '\t')" read -r code line; do
   answer=$("$nts" check "$project/tsconfig.json" 2>&1 || true)
   ( cd "$here" && git checkout -- "$file" )
   case $answer in
-    *"$code"*) printf '  %-8s %s\n' "$code" "$line" ;;
+    *"$code"*) ;;
     *)
       printf '  %-8s NOT PRODUCED by: %s\n' "$code" "$line"
       printf '%s\n' "$answer" | sed 's/^/      /' | head -6
+      exit 1 ;;
+  esac
+  # The code matched. Now the words, which are the actual claim. A message that
+  # spans more than the first comment line is checked as far as that line goes.
+  case $answer in
+    *"$text"*) printf '  %-8s %s\n' "$code" "$line" ;;
+    *)
+      printf '  %-8s SAYS SOMETHING ELSE: %s\n' "$code" "$line"
+      printf '    claimed: %s\n' "$text"
+      printf '%s\n' "$answer" | grep -F "$code" | sed 's/^/    actual:  /' | head -3
       exit 1 ;;
   esac
   checked=$((checked + 1))

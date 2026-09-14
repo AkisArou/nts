@@ -135,6 +135,37 @@ public final class Catalog {
         return names();
     }
 
+    // --- a Map going the other way ------------------------------------------
+
+    /**
+     * Takes a map. A TypeScript {@code Map} is one already -- {@code NtsMap
+     * implements java.util.Map} -- so this crossing is a reference, not a copy.
+     *
+     * <p>The value type is {@code Double} and that is load-bearing: a map
+     * arriving from TypeScript carries {@code java.lang.Double} for a number.
+     */
+    public double weigh(java.util.Map<String, Double> byName) {
+        double total = 0;
+        for (Double v : byName.values()) {
+            total += v;
+        }
+        return total;
+    }
+
+    /**
+     * The same method with {@code Integer} values, which a TypeScript map
+     * cannot satisfy -- see {@code src/refused.ts}. It is here so the binder's
+     * refusal has something real to refuse; deleting it would make that claim
+     * untestable.
+     */
+    public int countOf(java.util.Map<String, Integer> counts) {
+        int n = 0;
+        for (Integer v : counts.values()) {
+            n += v;
+        }
+        return n;
+    }
+
     // --- nested and inner ---------------------------------------------------
 
     /** Static nested: binary name `com/example/Catalog$Entry`, no outer instance. */

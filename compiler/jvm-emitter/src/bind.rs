@@ -244,6 +244,35 @@ fn mapped_collection(binary: &str) -> Option<&'static str> {
     (binary == "java/util/Map").then_some("Map")
 }
 
+/// Whether an `NtsMap` can hold a value satisfying this Java type argument.
+///
+/// A map crossing from TypeScript carries `java.lang.String` for a string,
+/// `java.lang.Double` for a number and `java.lang.Boolean` for a boolean --
+/// measured by reading `getClass()` on the other side rather than assumed. So a
+/// declaration naming any *other* boxed primitive cannot be satisfied by one,
+/// and the six below are refused as type arguments.
+///
+/// This is a blacklist rather than a whitelist deliberately: the open set is the
+/// safe one. Every reference type we do not name -- `String`, `Number`,
+/// `Object`, a wildcard, a type variable, an interface, a user class -- is
+/// satisfiable by the `Object` an `NtsMap` slot holds, and a whitelist would
+/// have to grow to admit each of them.
+///
+/// The failure this prevents is silent and remote: erasure means `javac` sees
+/// `Map` and checks nothing, so the cast that fails is in the *callee's* loop
+/// body, with our frame no longer on the stack.
+fn holdable(raw: &str) -> bool {
+    !matches!(
+        raw,
+        "Ljava/lang/Integer;"
+            | "Ljava/lang/Long;"
+            | "Ljava/lang/Short;"
+            | "Ljava/lang/Byte;"
+            | "Ljava/lang/Float;"
+            | "Ljava/lang/Character;"
+    )
+}
+
 /// A reference type's binary name, as TypeScript.
 fn reference(binary: &str) -> String {
     match binary {
@@ -2105,6 +2134,11 @@ fn generic_type(signature: &str) -> Option<(String, usize)> {
             let mut at = 1usize;
             let mut name = String::new();
             let mut arguments: Vec<String> = Vec::new();
+            // The *raw* signature of each argument, kept beside the rendered
+            // one because rendering is lossy exactly where it matters here:
+            // `Integer` and `Double` both render `number`, and only one of them
+            // is what an `NtsMap` actually holds. See `holdable`.
+            let mut raw_arguments: Vec<String> = Vec::new();
             while at < signature.len() {
                 match signature.as_bytes()[at] {
                     b';' => {
@@ -2119,6 +2153,7 @@ fn generic_type(signature: &str) -> Option<(String, usize)> {
                                 // `*` is an unbounded wildcard: `List<?>`.
                                 b'*' => {
                                     arguments.push("unknown".to_owned());
+                                    raw_arguments.push("*".to_owned());
                                     at += 1;
                                 }
                                 // `+X` is `? extends X`, covariant and so
@@ -2131,11 +2166,13 @@ fn generic_type(signature: &str) -> Option<(String, usize)> {
                                 b'+' | b'-' => {
                                     let (rendered, used) = generic_type(&signature[at + 1..])?;
                                     arguments.push(rendered);
+                                    raw_arguments.push(signature[at + 1..at + 1 + used].to_owned());
                                     at += used + 1;
                                 }
                                 _ => {
                                     let (rendered, used) = generic_type(&signature[at..])?;
                                     arguments.push(rendered);
+                                    raw_arguments.push(signature[at..at + used].to_owned());
                                     at += used;
                                 }
                             }
@@ -2169,9 +2206,23 @@ fn generic_type(signature: &str) -> Option<(String, usize)> {
             // a namespace that shadows it, so the mapping belongs at the call
             // sites outside.
             if let Some(mapped) = mapped_collection(&name).filter(|it| *it != base) {
-                let arguments =
+                let rendered =
                     if arguments.is_empty() { String::new() } else { format!("<{}>", arguments.join(", ")) };
-                return Some((format!("({mapped}{arguments} | {base}{arguments})"), at));
+                // **Only when an `NtsMap` can actually satisfy the declaration.**
+                // Offering the union unconditionally type-checked on both sides
+                // and then threw `ClassCastException` *inside the Java method*,
+                // because generics are erased and our numbers are `Double`:
+                //
+                //     public int sumMap(Map<String, Integer> counts)
+                //
+                // took a TypeScript `Map<string, number>` with no copy and no
+                // diagnostic, and died at the first `checkcast` in the loop body.
+                // Measured, not reasoned: a map crossing carries `String` for a
+                // string, **`Double`** for a number and `Boolean` for a boolean.
+                if raw_arguments.iter().all(|it| holdable(it)) {
+                    return Some((format!("({mapped}{rendered} | {base}{rendered})"), at));
+                }
+                return Some((format!("{base}{rendered}"), at));
             }
             if arguments.is_empty() || base == "string" || base == "unknown" {
                 Some((base, at))

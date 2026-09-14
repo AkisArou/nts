@@ -1972,7 +1972,7 @@ Rows corrected in place carry an inline comment with what the artefact said.
 
 | | 1. java-from-ts | 2. ts-from-java | 3. android-shape |
 | --- | --- | --- | --- |
-| `HashMap` in and out | ● | out only | |  <!-- corrected 2026-09-15: a Map crosses **out** as `NtsMap`, which IS a `java.util.Map`, at no cost. It does not cross **in**: a `Map` parameter publishes as the concrete `nts.rt.NtsMap`, so a caller holding a `HashMap` must build an `NtsMap` with `newMap`/`set` and copy entry by entry -- there is no `fromMap`. Out is free, in is a copy. -->
+| `HashMap` in and out | ● | out only | |  <!-- corrected 2026-09-15. java-from-ts: out via `index()`, and **in** via `weigh`, where a TypeScript `Map` crosses as a reference because `NtsMap implements java.util.Map`. The inward direction is conditional and the condition is not obvious: a map from TypeScript carries `java.lang.Double` for a number, so `Map<String, Integer>` cannot take one. That used to type-check and throw `ClassCastException` inside the callee; the binder now withholds the TypeScript arm, and `countOf` in `refused.ts` is the case. ts-from-java: out only -- a `Map` *parameter* publishes as the concrete `nts.rt.NtsMap`, so a caller holding a `HashMap` must build one entry by entry. -->
 | `NtsMap implements java.util.Map` | | ● | |
 | `List<String>` / `string[]` | ● | ● | |
 | `int[]` / `byte[]` / subarray | ● | | ● |

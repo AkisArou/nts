@@ -463,6 +463,46 @@ fn enum_constants_are_not_nullable() {
 /// Generics survive into the declarations, which is what makes an element
 /// access typed rather than a cast.
 #[test]
+fn a_map_parameter_takes_a_typescript_map_only_when_one_would_fit() {
+    let Some(classes) = fixture() else {
+        eprintln!("SKIP reads: no JDK");
+        return;
+    };
+    let body = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Catalog"))
+        .expect("renders")
+        .0;
+
+    // `NtsMap implements java.util.Map`, so a TypeScript `Map` crosses into a
+    // Java `Map` parameter as a reference. Both spellings are offered, because
+    // a map that came *out* of Java must be able to go back in.
+    assert!(
+        body.contains(
+            "weigh(a0: (Map<string, number> | java.util.Map<string, number>)): number;"
+        ),
+        "a Double-valued map takes either spelling:\n{body}"
+    );
+
+    // **And the arm is withdrawn where it would not survive the call.** A map
+    // from TypeScript carries `java.lang.Double` for a number, so a signature
+    // demanding `Integer` cannot be satisfied by one. Offering it anyway
+    // type-checked on both sides -- erasure means `javac` sees a bare `Map` --
+    // and threw `ClassCastException` inside the callee's loop body, which is
+    // the worst place for it: our frame is gone by then.
+    //
+    // This assertion is the whole of the fix. The rule lives in `holdable`, and
+    // without a fixture method shaped like `countOf` there is nothing to catch
+    // it being widened back.
+    assert!(
+        body.contains("countOf(a0: java.util.Map<string, number>): number;"),
+        "an Integer-valued map takes only the Java spelling:\n{body}"
+    );
+    assert!(
+        !body.contains("countOf(a0: (Map"),
+        "the TypeScript arm must not be offered for countOf:\n{body}"
+    );
+}
+
+#[test]
 fn generic_signatures_are_rendered() {
     let Some(classes) = fixture() else {
         eprintln!("SKIP reads: no JDK");
