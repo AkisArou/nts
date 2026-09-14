@@ -221,6 +221,20 @@ pub struct Struct {
     /// described it correctly. An invented one names nothing outside this
     /// program and has no such witness to offer.
     pub foreign: bool,
+    /// Whether the scope that declared it named a header -- so the definition
+    /// is that header's and not ours.
+    ///
+    /// `program.h` includes what a binding names and defines only what nothing
+    /// else does. Without this it defined every foreign struct itself, and a C
+    /// consumer that included both `program.h` and the real header got
+    /// `redefinition of 'struct utsname'` -- the two cannot meet, which is an
+    /// odd thing for a header whose purpose is being included.
+    ///
+    /// *Whether*, not *which*: a module may name several headers, they are all
+    /// included together, and which of them carries a given tag is a fact the
+    /// preprocessor already holds. Deriving it a second time here would produce
+    /// something that can disagree with it.
+    pub from_header: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]

@@ -45,18 +45,32 @@ which has `char`'s size, `char`'s alignment and `char`'s offsets -- and is a
 different type, which is why the witness asserts each member's type and not
 only where it sits. The first version of this binding said `c_uint8`.
 
-## A limitation this example runs into
+## Where the definition comes from
 
-`native/caller.c` does **not** include the generated `program.h`, because it
-cannot: that header *defines* `struct utsname` instead of including the header
-that declares it, so a translation unit holding both is a redefinition error.
-The two exports are declared by hand there instead.
+`program.h` and `program.c` **include `<sys/utsname.h>`** rather than defining
+their own `struct utsname`. That is why `native/caller.c` can include both the
+real header and the generated one; while nts defined its own copy, a
+translation unit holding both got `redefinition of 'struct utsname'` and the
+two could never meet.
 
-The fix is for `program.h` to include what the binding names, which is now
-possible -- `@ntsHeader` is exactly that information. It needs per-struct
-provenance first: the program knows the set of headers it declares, not which
-header covers which struct, and skipping a definition no header supplies would
-turn a working build into an undefined tag.
+It also moves the check. The `_Static_assert`s in `program.c` used to compare
+nts against nts -- both sides computed from one field list, so they checked the
+arithmetic and nothing else. Against the included header they are the C
+compiler answering about the real type:
+
+| change to the binding | program.c | native_witness.c |
+|---|---|---|
+| one member length 64 | refused | refused |
+| sixth member dropped | refused | refused |
+| `_GNU_SOURCE` removed | refused | refused |
+
+The witness still carries what `program.c` cannot: each member's exact type,
+and the prototype re-declared beside the real one.
+
+`_GNU_SOURCE` is defined at the top of `program.c`, which nts owns to the first
+line. `program.h` cannot do that -- an includer that reached for `<stdio.h>`
+first has already fixed what `struct utsname` is -- so it *requires* the macro
+and stops the build with a message naming the flag.
 
 ## Build
 

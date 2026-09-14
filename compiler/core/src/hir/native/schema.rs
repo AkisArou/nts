@@ -173,7 +173,29 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
     }
     let foreign = !tag.is_empty();
     let name = if foreign { tag.to_owned() } else { format!("NtsNative_Type{}", shape.0) };
-    Some(Struct { name, fields, foreign })
+    Some(Struct { name, fields, foreign, from_header: foreign && declares_a_header(snapshot, parent) })
+}
+
+/// Whether the scope that declared this struct named any header.
+///
+/// Walks out from the type literal to the enclosing `declare module` or source
+/// file, which are the two scopes a header tag can sit on. It answers *whether*
+/// and not *which*: a module may name several headers, all of them are included
+/// together, and which one carries a given tag is the C compiler's to know --
+/// claiming to know it here would be a second derivation of a fact the
+/// preprocessor already holds, and the two could disagree.
+fn declares_a_header(snapshot: &SemanticSnapshot, from: nts_semantic_schema::NodeId) -> bool {
+    let mut at = Some(from);
+    while let Some(id) = at {
+        let Some(node) = snapshot.nodes.get(id.0 as usize) else { return false };
+        if node.native.as_ref().is_some_and(|native| {
+            native.headers.as_ref().is_some_and(|headers| !headers.is_empty())
+        }) {
+            return true;
+        }
+        at = node.parent;
+    }
+    false
 }
 
 /// Storage named by a native type argument; pointer types occupy one word.

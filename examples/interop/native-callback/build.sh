@@ -12,11 +12,13 @@ source="$root/examples/interop/native-callback"
 # what it is compared against.
 "$cc" -std=c11 -Wall -Wextra -Werror -I"$source/native" -fsyntax-only "$out/native_witness.c"
 for file in caller library; do
-  "$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$out" \
+  "$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$out" -I"$source/native" \
     -c "$source/native/$file.c" -o "$out/$file.o"
 done
+# `-I$source/native`: program.c includes "library.h" now, because the
+# binding names it and the struct it describes is that header's.
 for file in program nts_runtime; do
-  "$cc" -std=c11 -O2 -I"$out" -c "$out/$file.c" -o "$out/$file.o"
+  "$cc" -std=c11 -O2 -I"$out" -I"$source/native" -c "$out/$file.c" -o "$out/$file.o"
 done
 # The runtime is linked because a bridge calls into it: `nts_callback_enter`
 # marks the frames a throw must not jump past.

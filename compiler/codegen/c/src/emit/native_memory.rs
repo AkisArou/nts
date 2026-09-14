@@ -4,6 +4,21 @@ use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, valu
 use nts_core::hir::Callee;
 use nts_core::hir::native::{Pointee, Type};
 
+/// Whether this program needs a type one of its bindings' headers defines.
+///
+/// The includes exist to supply *struct definitions*, so a program that names
+/// no header-backed struct gets none -- which matters because an include is not
+/// free here. `<stdlib.h>` declares `div`, a name a TypeScript program is
+/// entitled to export, and the C compiler would then have two incompatible
+/// declarations of it. Including only what a layout needs keeps that collision
+/// confined to programs that actually describe a C struct, where the alternative
+/// is worse: this file defining its own copy of a type a header also defines.
+#[must_use]
+pub(super) fn needs_headers(program: &Program) -> bool {
+    nts_codegen_common::native::layouts(program)
+        .is_ok_and(|layouts| layouts.structs.values().any(|layout| layout.from_header))
+}
+
 pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<(), Diagnostic> {
     let layouts = nts_codegen_common::native::layouts(program)
         .map_err(|why| Diagnostic::error("NTS2006", why, origin.location))?;
@@ -21,6 +36,15 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
     // reported rather than silently truncated.
     let mut ordered: Vec<&std::sync::Arc<nts_core::hir::native::Struct>> = Vec::new();
     let mut placed: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    // A struct whose binding named a header is complete before this file says
+    // anything: the include is above. It is placed first so that one of ours
+    // containing it inline is orderable, and it is never defined below.
+    for layout in layouts.structs.values() {
+        if layout.from_header {
+            placed.insert(layout.name.as_str());
+            ordered.push(layout);
+        }
+    }
     while placed.len() < layouts.structs.len() {
         let before = placed.len();
         for layout in layouts.structs.values() {
@@ -43,8 +67,16 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
         }
     }
     for layout in ordered {
-        let placed = nts_core::hir::layout::native_place(layout)
+        let shape = nts_core::hir::layout::native_place(layout)
             .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
+        // Asserted for every native struct, whether defined here or included.
+        // For one of ours both sides come from a single field list and this
+        // only checks the arithmetic; for a header's, the C compiler answers
+        // about the real type, which makes it the strongest check emitted.
+        if layout.from_header {
+            layout_asserts(writer, origin, layout, &shape);
+            continue;
+        }
         writer.line(origin, format!("struct {} {{", layout.name));
         for field in &layout.fields {
             // C spells an array's length in the *declarator*, after the name:
@@ -58,14 +90,24 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
             writer.line(origin, format!("    {} {}{suffix};", field.ty.c_type(), field.name));
         }
         writer.line(origin, "};");
-        let tag = format!("struct {}", layout.name);
-        writer.line(origin, format!("_Static_assert(sizeof({tag}) == {}u, \"native struct size\");", placed.size));
-        writer.line(origin, format!("_Static_assert(_Alignof({tag}) == {}u, \"native struct alignment\");", placed.align));
-        for (field, offset) in layout.fields.iter().zip(placed.offsets) {
-            writer.line(origin, format!("_Static_assert(offsetof({tag}, {}) == {offset}u, \"native field offset\");", field.name));
-        }
+        layout_asserts(writer, origin, layout, &shape);
     }
     Ok(())
+}
+
+/// The size, alignment and offsets this program believes, put to the C compiler.
+fn layout_asserts(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    layout: &nts_core::hir::native::Struct,
+    shape: &nts_core::hir::layout::Placement,
+) {
+    let tag = format!("struct {}", layout.name);
+    writer.line(origin, format!("_Static_assert(sizeof({tag}) == {}u, \"native struct size\");", shape.size));
+    writer.line(origin, format!("_Static_assert(_Alignof({tag}) == {}u, \"native struct alignment\");", shape.align));
+    for (field, offset) in layout.fields.iter().zip(&shape.offsets) {
+        writer.line(origin, format!("_Static_assert(offsetof({tag}, {}) == {offset}u, \"native field offset\");", field.name));
+    }
 }
 
 pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str, origin: &Origin) -> Result<String, Diagnostic> {

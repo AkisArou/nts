@@ -3,19 +3,22 @@
 // reports -- so both numbers come from the platform rather than one of them
 // from a constant written here.
 //
-// **It does not include `program.h`, and cannot.** That header *defines*
-// `struct utsname` rather than including the header that declares it, so a
-// translation unit holding both gets `redefinition of 'struct utsname'`. The
-// two exports are therefore declared by hand below. That is a limitation of
-// the generated header and not of this example: see the README.
+// It includes **both** the real header and the generated `program.h`, which is
+// the thing a binding is for. That did not work while `program.h` defined its
+// own `struct utsname`: a translation unit holding both got `redefinition of
+// 'struct utsname'`, and the two could never meet. `program.h` now includes
+// what the binding names and defines only what nothing else does.
+//
+// `_GNU_SOURCE` before any include, because it decides what `struct utsname`
+// *is*. `program.h` checks that it was defined and refuses the build with a
+// message if it was not, rather than accepting a different struct.
 #define _GNU_SOURCE 1
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/utsname.h>
 
-double sysnameLength(void);
-double machineFirstByte(void);
+#include "program.h"
 
 int main(void) {
   struct utsname theirs;

@@ -294,6 +294,30 @@ which a feature-test macro does anything.
 the assertion mechanism and `uint8_t` is how a scalar is spelled, so both are
 emitted unless a binding already names them.
 
+**The program includes what a binding names, and defines only what nothing else
+does.** A foreign struct is a type some header defines, and `program.h` used to
+define its own copy -- so a C consumer could not include both it and the real
+header, which is an odd property for a file whose purpose is being included.
+`native::Struct` records whether the scope that declared it named a header;
+where one did, the include supplies the definition.
+
+That moves a check rather than only removing a wart. The `_Static_assert`s in
+`program.c` compared two derivations of one field list, so they verified the
+arithmetic and could not notice a wrong binding; against the included header
+they are the C compiler answering about the real type. A length of 64 where the
+header says 65, or a missing sixth member, now refuses `program.c` itself --
+verified by making each change.
+
+Macros are *defined* at the top of `program.c`, which nts owns to the first
+line, and *required* by `program.h`, which cannot be first: an includer that
+reached for `<stdio.h>` has already fixed what `struct utsname` is, so a
+`#define` there would work in the easy case and silently produce a different
+struct in the other. `program.h` stops the build with a message naming the flag.
+
+The includes are emitted only where a layout needs them. An include is not free
+in this file -- `<stdlib.h>` declares `div`, a name a TypeScript program is
+entitled to export -- so a program naming no header-backed struct gets none.
+
 **Only foreign declarations appear.** `native::Struct` now records whether its
 name is a C tag the declaration authored or a spelling invented for a layout
 that exists only in this program. That is a fact, not a name prefix: an invented
