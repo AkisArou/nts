@@ -4660,6 +4660,25 @@ fn is_signature_name(name: &str) -> bool {
 /// So the rule is stated once and over both sides rather than one side twice: a
 /// layout whose name is its identity does not merge with a differently-named
 /// layout, whatever family the other one is in.
+/// Whether two layouts may be merged on shape alone, by their names.
+///
+/// **One derivation, because there were two and only one of them checked.**
+/// `collapse` asked this and `layout_of` did not, so a layout that reached
+/// `layout_of` first joined whatever field-less layout was already there --
+/// and a bound Java class is deliberately field-less, because the binding
+/// surfaces its members through the table rather than as our field ops.
+///
+/// `java.util.HashMap`, `java.lang.Integer` and `com.example.Kind` therefore
+/// became one layout, and the store of a `HashMap` into a slot the frame
+/// declared as `Kind` failed at class load with `Inconsistent stackmap
+/// frames`. The verifier caught it; nothing before the verifier did.
+fn may_merge(one: &str, other: &str) -> bool {
+    let named_apart = one != other && (nominal_name(one) || nominal_name(other));
+    let tuple_apart =
+        super::is_tuple_layout_name(one) != super::is_tuple_layout_name(other);
+    !named_apart && !tuple_apart
+}
+
 fn nominal_name(name: &str) -> bool {
     super::builtin::is_error(name)
         || is_signature_name(name)
@@ -4840,26 +4859,8 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
             // what that missed and what node's `path` did with it. The names
             // are structural, so this still merges two ids for one written
             // signature and separates two signatures.
-            let named_apart = known.name != layout.name
-                && (nominal_name(&known.name) || nominal_name(&layout.name));
-            // A tuple is the one family that is nominal in one direction only,
-            // so it is not in `nominal_name`. Two tuples with the same fields
-            // MUST merge -- the checker hands out more than one id for one
-            // written tuple type, which is the whole reason `Layout::types` is
-            // a list -- and blocking that would emit two identical structs and
-            // then refuse to pass one where the other is wanted.
-            //
-            // But a tuple must not merge with anything else, because since
-            // `NTS_KIND_TUPLE` its name decides a descriptor kind and that kind
-            // decides what `Array.isArray` answers. The merge would have to be
-            // with a layout whose fields are literally `_0`, `_1`, which only a
-            // tuple normally produces -- and a program may write one, and the
-            // wrong answer would be silent.
-            let tuple_apart = super::is_tuple_layout_name(&known.name)
-                != super::is_tuple_layout_name(&layout.name);
             known.types.iter().any(|ty| layout.types.contains(ty))
-                || (!named_apart
-                    && !tuple_apart
+                || (may_merge(&known.name, &layout.name)
                     && known.same_shape(&layout.fields, &layout.methods, layout.base))
         }) {
             for ty in layout.types {
@@ -22168,7 +22169,10 @@ impl<'a> FuncBuilder<'a> {
         if let Some(existing) = self
             .layouts
             .iter_mut()
-            .find(|layout| layout.same_shape(&fields, &methods, base))
+            .find(|layout| {
+                may_merge(&layout.name, &name)
+                    && layout.same_shape(&fields, &methods, base)
+            })
         {
             existing.types.push(ty);
             // A declared name beats a generated one, whichever was seen first.
