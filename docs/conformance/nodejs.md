@@ -24897,3 +24897,43 @@ worker could be logged side by side against real node. No access to `child.js` w
 it. **A cause that names another codebase as the place to look should be checked for whether the
 question can be asked from here first.**
 
+## One module in the tree has a failing file, and both of its failures are priced
+
+`interpreted-lane.sh`, all twenty-six modules, measured 2026-09-14:
+
+    assert         13/0     async_hooks   117/0    buffer         56/0    child_process 109/0
+    cluster        85/2     console        21/0    dgram          77/0    diagnostics_channel 33/0
+    dns             1/0     events         32/0    fs            349/0    http          408/0
+    net           154/0     os             10/0    path           20/0    process        90/0
+    punycode        3/0     querystring     8/0    readline       27/0    stream        252/0
+    string_decoder  5/0     timers         60/0    tty             1/0    url            50/0
+    util           25/0     zlib           68/0
+
+**One module with a failing file**, and `cluster`'s two are `net-send` and `uncaught-exception`, both
+carrying a named cause and a measured price and both refused. So there is no failure anywhere on this
+lane that is not accounted for.
+
+These are not summed. Eight conformance files are claimed by two modules each, so a total across
+modules double-counts; `double-claimed.mjs` is what answers that question and the rows above are what
+answers this one.
+
+### Which moves the argument to the 458 exclusions, and they now have three checks instead of two
+
+`skip-audit.mjs` documented three ways a `not-applicable` entry can be wrong and implemented two --
+`unclaimed` appeared in its header and nowhere else in the file, while the summary printed two counts
+as though that were the set. An unclaimed entry is inert differently from a stale one: the file exists
+upstream and the reason is sound, but the module's `test-pattern` never matches it, so it excludes
+nothing while inflating the count that is quoted as judgement.
+
+Implemented by mirroring `run.mjs`'s selection rather than guessing it, and controlled: an entry naming
+`test-fs-open.js` under `os` reports UNCLAIMED rather than STALE, which is the distinction the check
+exists to make. All three are clean: **458 entries, 0 without a reason, 0 naming a file the suite does
+not have, 0 the module's own suite never contains.**
+
+`stale-exclusions.mjs` was extended the same night for the same reason -- it answered "0 whose named
+export is now published" over a file whose rationale said "cluster, which this profile does not
+implement", because the phrase was not in its regex, only exports were checked and never modules, and
+**a module with no addon was skipped entirely so its whole list went unread**. It now reads 35 lists
+across 26 modules where it previously examined 7 entries, and reports the modules it could not check
+the exports of by count.
+
