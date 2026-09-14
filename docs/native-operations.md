@@ -666,6 +666,26 @@ tool will not invent it. Without it the compiler refuses `local<PollFd>()` as an
 escape -- correctly -- which is what makes the flag a claim and not a
 formality.
 
+### What blocks real headers, counted
+
+Twenty-six POSIX records, asked for one at a time. **Nineteen work.** The seven
+that do not are three causes, and their frequencies are not the order this
+document's own gap list is written in:
+
+| cause | records |
+|---|---|
+| an **anonymous** union or struct | `sockaddr_in6`, `in6_addr`, `rusage`, `tcphdr` |
+| a flexible array member (`unsigned char[]`, no length) | `cmsghdr` |
+| a bit-field | `iphdr` |
+
+Anonymous records block **four times** what bit-fields do, and every one of the
+four is a header a network program reaches for immediately. Recorded rather
+than acted on, because the count is the argument: a gap list written from the
+C standard's table of contents ranks by what C *has*, and this ranks by what
+these headers *use*.
+
+Neither is described wrongly. Each refusal names the member and the reason.
+
 ### What it refuses, surveyed against real headers
 
 Twelve POSIX records, asked for one at a time. The survey is the instrument:
