@@ -17,6 +17,17 @@
 // the same tag with a field, and the witness checks that layout.
 struct counter { int total; };
 
+// A registration table: the shape of `struct sigaction`, of every `_ops`
+// struct in the kernel headers, and of most C libraries that take more than
+// one callback. The caller fills the members in and hands the struct over.
+struct handlers {
+  int (*on_value)(int);
+  int fallback;
+};
+
+// Calls `h->on_value(n)` if it is set, and returns `h->fallback` if it is not.
+int dispatch(const struct handlers *h, int n);
+
 int apply_twice(int (*f)(int), int x);
 int apply_never(int (*f)(int), int x);
 void each_upto(void (*f)(struct counter *, int), struct counter *ctx, int upto);

@@ -9,7 +9,7 @@
  * @ntsHeader "library.h"
  */
 declare module "c:library" {
-  import type { Ptr, Struct, c_int } from "c:types";
+  import type { ConstPtr, Ptr, Struct, c_int } from "c:types";
   // The context the C library hands back. It never looks inside; only this
   // program does, which is what an opaque context is for.
   export type Counter = Struct<{ total: c_int }, "counter">;
@@ -23,6 +23,19 @@ declare module "c:library" {
    * everything once a callback carries a context the caller owns.
    * @ntsNoEscape f
    */
+  /** A registration table, filled in by the caller. The member is written as
+   * an ordinary function type, exactly as the parameter of `apply_twice` is,
+   * because at a C boundary a function-typed thing can mean one thing. */
+  export type Handlers = Struct<{
+    on_value: (n: c_int) => c_int;
+    fallback: c_int;
+  }, "handlers">;
+
+  /** Calls `h->on_value` during the call and keeps no address into `h`.
+   * @ntsNoEscape h
+   */
+  export function dispatch(h: ConstPtr<Handlers>, n: c_int): c_int;
+
   export function apply_twice(f: (n: c_int) => c_int, x: c_int): c_int;
   /** Takes the same callback and never calls it.
    * @ntsNoEscape f

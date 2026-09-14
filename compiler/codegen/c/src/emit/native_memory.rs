@@ -272,6 +272,14 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 Pointee::Array { element, length } => {
                     format!("{} (*)[{length}]", element.c_type())
                 }
+                // A member holding a callback: its address is a pointer to a
+                // function pointer, and the typedef that would spell it lives
+                // in `program.h`, which this file must not include. Written
+                // out, the way the prototypes here already are.
+                Pointee::Pointer(pointee) => match &**pointee {
+                    Pointee::FnPointer(signature) => signature.anonymous_pointer(),
+                    _ => field.ty.pointer_type(),
+                },
                 other => other.pointer_type(),
             };
             writer.line(origin, format!(
@@ -457,6 +465,23 @@ pub(super) fn function_pointer_types(writer: &mut CodeWriter, origin: &Origin, p
             };
             for ty in target.parameters.iter().chain(std::iter::once(&target.result)) {
                 if let nts_core::hir::native::Type::FnPointer(signature) = ty {
+                    seen.insert(signature.name.clone(), signature.typedef());
+                }
+            }
+        }
+    }
+    // And every one a *record* holds. A member is a use like a parameter is,
+    // and the struct's own definition names the typedef -- so without this the
+    // emitted `struct ops { int code; NtsFn_int_int run; };` referred to a
+    // name no line declared and program.c did not compile.
+    if let Ok(layouts) = nts_codegen_common::native::layouts(program) {
+        for record in layouts.structs.values() {
+            for field in &record.fields {
+                // `Pointer(FnPointer)`: a member holding a callback is a
+                // pointer to a function, so the signature is one level in.
+                if let Pointee::Pointer(pointee) = &field.ty
+                    && let Pointee::FnPointer(signature) = &**pointee
+                {
                     seen.insert(signature.name.clone(), signature.typedef());
                 }
             }

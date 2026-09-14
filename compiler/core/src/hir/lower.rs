@@ -19585,6 +19585,24 @@ impl<'a> FuncBuilder<'a> {
         place: &Place,
         value: ValueId,
     ) -> Result<ValueId, Diagnostic> {
+        // A function into a function-pointer slot becomes a bridge, exactly as
+        // it does at a call: `p.run = twice` and `apply_twice(twice, n)` want
+        // the same thing, a real C function with the declared signature. The
+        // closure's own value is a heap address and handing C that to call is
+        // the miscompile bridges exist to prevent -- it was refused here as
+        // "an opaque C pointer converted to a different type", which is true
+        // and unhelpful.
+        let value = match *place {
+            Place::NativeElement { pointer, .. } => {
+                match self.native_element_type(id, pointer)? {
+                    HirType::NativePointer(super::native::Pointee::FnPointer(signature)) => {
+                        self.bridged(id, value, &signature)?
+                    }
+                    _ => value,
+                }
+            }
+            _ => value,
+        };
         let want = match *place {
             Place::NativeElement { pointer, .. } => Some(self.native_element_type(id, pointer)?),
             Place::Element { array, .. } => return Ok(self.coerce_element(id, array, value)),
@@ -28498,6 +28516,32 @@ impl<'a> FuncBuilder<'a> {
     /// function pointer has nowhere to put; giving it one means a context
     /// parameter the callee agrees to carry, and no C signature implies that.
     /// Refused here rather than bridged into something that reads freed stack.
+    /// One closure, as a real C function with the declared signature.
+    ///
+    /// The same construction `bridge_callback_arguments` makes for a call, in
+    /// the one other place a function crosses into C: a store into a
+    /// function-pointer member. Non-capturing only, checked the same way --
+    /// see that function for why.
+    fn bridged(
+        &mut self,
+        at: NodeId,
+        value: ValueId,
+        signature: &std::sync::Arc<super::native::FnPointer>,
+    ) -> Result<ValueId, Diagnostic> {
+        if !matches!(self.values[value.0 as usize].kind, OpKind::ClosureStatic) {
+            return Err(self.unsupported(
+                at,
+                "a C function pointer needs a function declared with `function`: an inline function or arrow capturing anything has state a bare C function pointer has nowhere to put",
+            ));
+        }
+        let origin = self.origin(at);
+        Ok(self.push(
+            OpKind::NativeBridge { closure: value, signature: signature.clone() },
+            HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
+            origin,
+        ))
+    }
+
     fn bridge_callback_arguments(
         &mut self,
         call: NodeId,

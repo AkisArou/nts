@@ -172,6 +172,14 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
             }
         {
             Pointee::Record(inner.into())
+        } else if let Some(signature) = super::fn_pointer(snapshot, property.ty) {
+            // A member written as an ordinary TypeScript function type, which
+            // at a C boundary can mean one thing -- `struct sigaction` and
+            // every registration table in C is this shape. It is read by the
+            // same function a *parameter* goes through, because a
+            // function-typed member is a function pointer for the same reason
+            // a function-typed parameter is.
+            Pointee::Pointer(Box::new(Pointee::FnPointer(signature)))
         } else {
             Pointee::Pointer(Box::new(pointer_within(snapshot, property.ty, visiting)?))
         };

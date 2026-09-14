@@ -56,6 +56,14 @@ int main(void) {
   // accumulating into whatever the first run left behind.
   if (retainedTotal(1, 1) != 2) return 11;
 
+  // A callback stored in a struct and called by C through it. The first arm is
+  // the control: `local` zeroes the storage, so with the member unset
+  // `dispatch` takes the fallback -- a store that did nothing would return -1
+  // there and the TypeScript would answer -2 rather than 42.
+  double table = throughTable(21);
+  printf("throughTable(21) = %d\n", (int)table);
+  assert(table == 42);
+
   puts("native callback: C called a TypeScript function through a bridge, "
        "a throw stopped at it, and a retained one outlived its call");
   return 0;

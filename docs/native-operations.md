@@ -466,6 +466,44 @@ thing a header cannot state, and it is emitted as `...rest: unknown[]` with a
 TODO, which does not compile -- deliberately, so it stops at the declaration
 rather than at a call.
 
+## A callback in a struct
+
+`struct sigaction`, every `_ops` table in the kernel headers, and most C
+libraries taking more than one callback have this shape: the caller fills
+members in and hands the struct over.
+
+    export type Handlers = Struct<{ on_value: (n: c_int) => c_int; fallback: c_int }, "handlers">;
+    table.on_value = double;
+    dispatch(table, value)
+
+The member is written as an ordinary TypeScript function type, exactly as a
+*parameter* is, and is read by the same function -- a function-typed member is
+a function pointer for the same reason a function-typed parameter is, and two
+answers to that would be two places to keep in agreement. A store into one
+becomes the same bridge a call argument gets.
+
+**`Pointee::FnPointer` is the function, not the pointer.** The surrounding
+convention is that `NativePointer(P)` spells `P *`, so a member holding a
+callback is `Pointer(FnPointer)` and `&p->run` is
+`NativePointer(Pointer(FnPointer))`, spelled `NtsFn_int_int *`. Reading the
+variant as "the pointer" instead made those two the same type, and the emitted
+`v5 = &v0->run` was declared `NtsFn_int_int` and then subscripted. The one
+irregularity C does have -- that `int (*)(int)` cannot be written as a spelling
+followed by a `*` -- is absorbed in `pointer_type`, which answers with the
+typedef and adds nothing.
+
+Two things the witness caught, both the same shape as the prototype it already
+checks. The typedef has to be emitted **before** the record that names it, and
+was emitted after. And `_Generic` on the member's address was spelled
+`NtsFn_int_int *` -- a typedef that exists only in `program.h`, which the
+witness must not include -- so it is written out as `int (**)(int)`, the `*`
+inside the parentheses where the declarator is.
+
+The fixture's control is `fallback`: `local` zeroes the storage, so with the
+member unset `dispatch` returns -1. Removing the store and rebuilding gives
+`throughTable(21) = -1` and the caller aborts, which is what makes the 42 mean
+something.
+
 ## Aggregate copy
 
     copy(destination, source)

@@ -6,6 +6,10 @@
 // would be looking.
 #include "library.h"
 
+int dispatch(const struct handlers *h, int n) {
+  return h->on_value ? h->on_value(n) : h->fallback;
+}
+
 int apply_twice(int (*f)(int), int x) { return f(f(x)); }
 
 // And one that calls it zero times, so a bridge that is never entered is

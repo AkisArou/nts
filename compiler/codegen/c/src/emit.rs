@@ -2133,8 +2133,11 @@ fn emit_object_types(
     program: &Program,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    if let Err(diagnostic) = native_memory::types(writer, origin, program) { diagnostics.push(diagnostic); }
+    // Typedefs first: a record may hold a function pointer, and its own
+    // definition then names the typedef. Emitted after, `struct ops { int
+    // code; NtsFn_int_int run; };` referred to a name no line had declared yet.
     native_memory::function_pointer_types(writer, origin, program);
+    if let Err(diagnostic) = native_memory::types(writer, origin, program) { diagnostics.push(diagnostic); }
     // Every object type is forward-declared first, so a field may point at a
     // type declared later -- or at its own, which a linked structure does.
     for layout in &program.layouts {

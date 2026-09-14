@@ -1,4 +1,4 @@
-import { apply_twice, apply_never, each_upto, subscribe, unsubscribe, deliver, type Counter } from "c:library";
+import { apply_twice, apply_never, dispatch, each_upto, subscribe, unsubscribe, deliver, type Counter, type Handlers } from "c:library";
 import type { Ptr, c_int } from "c:types";
 import { local, sizeof } from "c:memory";
 import { malloc, free } from "c:stdlib";
@@ -68,3 +68,23 @@ export function retainedTotal(first: number, second: number): number {
   deliver(99 as c_int);
   return total;
 }
+
+// A callback stored *in a struct* rather than passed as an argument. The member
+// is written as an ordinary function type and becomes a real C function with
+// the declared signature -- the same bridge a parameter gets, in the one other
+// place a function crosses into C.
+//
+// `fallback` is what `dispatch` returns when the member is null, which is what
+// `local<Handlers>()` leaves it: the storage is zeroed. So the two arms below
+// separate "the member was written" from "the struct was filled with
+// something" -- a store that did nothing would return the fallback.
+export function throughTable(value: number): number {
+  const table = local<Handlers>();
+  table.fallback = -1 as c_int;
+  const unset = dispatch(table, value as c_int);
+  table.on_value = double;
+  const set = dispatch(table, value as c_int);
+  return unset === -1 ? set : -2;
+}
+
+function double(n: c_int): c_int { return (n * 2) as c_int; }

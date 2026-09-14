@@ -162,6 +162,18 @@ impl FnPointer {
         format!("typedef {} (*{})({parameters});", self.result.c_type(), self.name)
     }
 
+    /// `int (**)(int)` -- a pointer *to* one, with no typedef in it.
+    ///
+    /// The extra `*` goes inside the parentheses, where the declarator is.
+    /// The witness needs this for `_Generic` on the address of a member that
+    /// holds a callback: it does not include `program.h`, so `NtsFn_int_int *`
+    /// names nothing there -- which is what it emitted, and what the witness
+    /// refused.
+    #[must_use]
+    pub fn anonymous_pointer(&self) -> String {
+        self.anonymous().replacen("(*)", "(**)", 1)
+    }
+
     /// `int (*)(int)` -- the same shape with no name and no typedef in it.
     ///
     /// The witness needs this and the typedef cannot serve. It deliberately
@@ -240,16 +252,18 @@ pub enum Pointee {
     /// A pointer to one is not this; this is the storage itself, which is why
     /// it appears as a member and decays to a pointer when read.
     Array { element: Box<Pointee>, length: u32 },
-    /// A C function pointer, as a thing a value can *be*.
+    /// A C **function**, which is what a function pointer points at.
     ///
-    /// [`Type::FnPointer`] is the same shape in a signature; this is it in the
-    /// places a `Pointee` goes -- the type of a bridge, and the type of a
-    /// struct member that holds a callback.
+    /// The function and not the pointer, so the surrounding convention holds:
+    /// `NativePointer(P)` spells `P *`, and `NativePointer(FnPointer)` is
+    /// therefore `int (*)(int)` -- which is exactly `NtsFn_int_int`, the
+    /// typedef, because C has no other spelling where a type precedes a name.
     ///
-    /// **Its `pointer_type` adds no `*`.** `NtsFn_int_int` already *is*
-    /// `int (*)(int)`, so `NtsFn_int_int *` would be a pointer to a function
-    /// pointer, which is a different type and not one anything here means.
-    /// That irregularity is C's, and this is where it is absorbed.
+    /// A struct member holding a callback is `Pointer(FnPointer)`: a pointer
+    /// to a function. Then `&p->run` is `NativePointer(Pointer(FnPointer))`
+    /// and spells `NtsFn_int_int *`, which is what it is. Reading this variant
+    /// as "the pointer" instead made those two the same type, and the emitted
+    /// `v5 = &v0->run` was declared `NtsFn_int_int` and subscripted.
     FnPointer(std::sync::Arc<FnPointer>),
     /// A view of the same thing that promises no alignment.
     ///
@@ -362,8 +376,9 @@ impl Pointee {
             // different ones cannot collide -- the same rule the function
             // pointer typedefs follow, for the same reason.
             Self::Unaligned(pointee) => pointee.unaligned_typedef(),
-            // The typedef, which is C's only spelling for this where a type
-            // precedes a name.
+            // A bare function type has no spelling here and should not be
+            // reached: every use is `Pointer(FnPointer)`, whose `c_type` is
+            // this one's `pointer_type` and therefore the typedef.
             Self::FnPointer(signature) => signature.name.clone(),
         }
     }
@@ -388,10 +403,14 @@ impl Pointee {
         }
     }
 
+    /// `T *`, with C's one irregularity absorbed.
+    ///
+    /// A pointer to a function is `int (*)(int)`, which cannot be written as a
+    /// spelling followed by a `*` -- the declarator wraps the name. The typedef
+    /// is that whole thing, so this answers with the typedef and adds nothing.
     #[must_use]
     pub fn pointer_type(&self) -> String {
         match self {
-            // Already a pointer. See the variant's own note.
             Self::FnPointer(signature) => signature.name.clone(),
             other => format!("{} *", other.c_type()),
         }
@@ -452,20 +471,22 @@ impl Pointee {
             // does not exist; an unaligned one changes how a backend spells
             // the access and not what is found there.
             Self::Const(pointee) | Self::Unaligned(pointee) => pointee.element_type(),
-            // A function pointer is a value -- one word, loadable and storable
-            // -- not something to step through or dereference. Its element is
-            // itself, which is what makes `p.run = f` an ordinary store.
-            Self::FnPointer(signature) => {
-                Some(HirType::NativePointer(Self::FnPointer(signature.clone())))
-            }
             // Reading `p.name[i]` is reading a `T`: the array decays to a
             // pointer to its first element, exactly as it does in C.
             Self::Array { element, .. } => element.element_type(),
-            // `void` has no element to load and no size to step by, so neither
-            // `p[i]` nor an index address exists for it. Refusing here is what
+            // Nothing here is a value this can load, for four different
+            // reasons that come to one answer.
+            //
+            // `void` has no element and no size to step by, which is what
             // keeps a `void *` an address to hand onward rather than storage
-            // this program may read through.
-            Self::Opaque(_) | Self::Record(_) | Self::Void => None,
+            // this program may read through. An opaque tag and a record are
+            // storage whose *address* is the thing -- reading a record as a
+            // value would be an aggregate copy, which `copy` is for. And a
+            // function is not a value at all: `Pointer(FnPointer)` is the
+            // loadable thing, and the pointer arm above answers for it with
+            // `NativePointer(FnPointer)`, one word holding a function's
+            // address, which is what `p.run` reads and what a bridge produces.
+            Self::FnPointer(_) | Self::Opaque(_) | Self::Record(_) | Self::Void => None,
         }
     }
 }
@@ -558,6 +579,65 @@ impl Type {
     }
 }
 
+/// A C ABI type read from a TypeScript type, for the plain (unmanaged) case.
+///
+/// Hoisted out of `Function::from_signature` so the struct schema can ask the
+/// same question about a *member*: a function-typed member is a C function
+/// pointer for exactly the reason a function-typed parameter is, and two
+/// answers to that would be two places to keep in agreement.
+    fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
+        if let Some(name) = pointer(snapshot, ty) {
+            return Some(Type::Pointer(name));
+        }
+        if let Some(scalar) = scalar(snapshot, ty) {
+            return Some(Type::Scalar(scalar));
+        }
+        match snapshot.types.get(ty.0 as usize)?.kind {
+            TypeKind::Boolean => Some(Type::Bool),
+            TypeKind::Void => Some(Type::Void),
+            // An ordinary TypeScript function type, which at a C ABI
+            // boundary can mean one thing: a function pointer. No wrapper
+            // type is invented to say so, because there is nothing else it
+            // could have meant and a second spelling would be a second
+            // fact to keep in agreement.
+            //
+            // Every parameter and the result go through this same function,
+            // so a callback taking a `Ptr<T>` or returning `c_int` is
+            // described by the rules already in use, and one that takes
+            // something with no C ABI is refused here rather than at the
+            // point where it would have been emitted.
+            TypeKind::Function(id) => {
+                let signature = snapshot.signatures.get(id.0 as usize)?;
+                let parameters = signature
+                    .parameters
+                    .iter()
+                    .map(|parameter| abi_type(snapshot, parameter.ty))
+                    .collect::<Option<Vec<_>>>()?;
+                let result = abi_type(snapshot, signature.return_type)?;
+                Some(Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
+                    parameters, result,
+                ))))
+            }
+            _ => None,
+        }
+    }
+
+/// A C function pointer read from an ordinary TypeScript function type.
+///
+/// `None` for anything else, including a function whose signature names
+/// something with no C ABI -- refused here rather than where it would have
+/// been emitted.
+#[must_use]
+pub fn fn_pointer(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+) -> Option<std::sync::Arc<FnPointer>> {
+    match abi_type(snapshot, ty)? {
+        Type::FnPointer(signature) => Some(signature),
+        _ => None,
+    }
+}
+
 impl Function {
     /// Aliases such as `int`/`int32_t` agree on the supported LP64 targets;
     /// signedness remains part of the contract even where LLVM erases it.
@@ -578,42 +658,6 @@ impl Function {
         signature: &nts_semantic_schema::SignatureRecord,
         abi: Option<&str>,
     ) -> Result<Self, String> {
-        fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
-            if let Some(name) = pointer(snapshot, ty) {
-                return Some(Type::Pointer(name));
-            }
-            if let Some(scalar) = scalar(snapshot, ty) {
-                return Some(Type::Scalar(scalar));
-            }
-            match snapshot.types.get(ty.0 as usize)?.kind {
-                TypeKind::Boolean => Some(Type::Bool),
-                TypeKind::Void => Some(Type::Void),
-                // An ordinary TypeScript function type, which at a C ABI
-                // boundary can mean one thing: a function pointer. No wrapper
-                // type is invented to say so, because there is nothing else it
-                // could have meant and a second spelling would be a second
-                // fact to keep in agreement.
-                //
-                // Every parameter and the result go through this same function,
-                // so a callback taking a `Ptr<T>` or returning `c_int` is
-                // described by the rules already in use, and one that takes
-                // something with no C ABI is refused here rather than at the
-                // point where it would have been emitted.
-                TypeKind::Function(id) => {
-                    let signature = snapshot.signatures.get(id.0 as usize)?;
-                    let parameters = signature
-                        .parameters
-                        .iter()
-                        .map(|parameter| abi_type(snapshot, parameter.ty))
-                        .collect::<Option<Vec<_>>>()?;
-                    let result = abi_type(snapshot, signature.return_type)?;
-                    Some(Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
-                        parameters, result,
-                    ))))
-                }
-                _ => None,
-            }
-        }
         let abi_type = |ty| {
             if abi == Some("managed") {
                 match super::lower::representation(snapshot, ty)? {
