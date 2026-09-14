@@ -1682,6 +1682,20 @@ impl Emitter<'_> {
                 ("C", true) => code.convert(origin, insn::I2C, Kind::Int, Kind::Int),
                 ("F", false) => code.convert(origin, insn::D2F, Kind::Double, Kind::Float),
                 ("D", true) => code.convert(origin, insn::I2D, Kind::Int, Kind::Double),
+                // **A `bigint` into a `long` is its low 64 bits**, which is
+                // what `BigInt.asIntN(64, v)` specifies and what node does:
+                // `2**63` arrives as `-2**63` and `2**64` as `0`. Wrapping
+                // rather than refusing is the same rule the integral widths
+                // above follow, and the same one `ToInt32` follows -- a
+                // boundary conversion takes the low bits.
+                //
+                // `lo` *is* that value by construction: `fromLong` builds a
+                // bigint as `of(value >> 63, value)`, so `hi` is the sign
+                // extension and `lo` is the 64 bits. Reading it is the whole
+                // conversion, and it is one instruction.
+                ("J", _) if matches!(self.ty(arg), HirType::BigInt) => {
+                    code.get_field(origin, pool, types::BIGINT, "lo", "J");
+                }
                 // A reference parameter: the callback coercion already owns
                 // this question and answers it for interfaces as well.
                 (other, _) if other.starts_with('L') || other.starts_with('[') => {
