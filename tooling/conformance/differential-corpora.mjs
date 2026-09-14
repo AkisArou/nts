@@ -1507,6 +1507,76 @@ export const CORPORA = {
         // two correct implementations of one format may still disagree on the bytes, and which
         // knob differs is worth knowing. The round trips are here as well because a compressor
         // and a decompressor can be wrong together and agree with themselves.
+        // **The stream constructors, which are the last 22 of this module's 45.** `create*`
+        // and the classes they wrap are the same codecs reached a third way, and the corpus had
+        // neither: they are transforms, so they answer over several events, and nothing could
+        // await one until the harness learned to.
+        //
+        // Byte-for-byte against node's output, as everything else in this corpus is. A transform
+        // is written to and drained here rather than piped, which needs no `Readable` and so
+        // keeps this a comparison of `zlib` and not of whatever `stream` either side is using.
+        label: "stream-codecs",
+        call: async (m, s) => {
+          const bytes = Buffer.from(s, "utf8");
+          const through = (make, input) =>
+            new Promise((resolve) => {
+              let z;
+              try {
+                z = make();
+              } catch (error) {
+                resolve(`threw:${error?.code ?? error?.name ?? "?"}`);
+                return;
+              }
+              if (z === undefined || z === null) { resolve("absent"); return; }
+              const chunks = [];
+              z.on("data", (chunk) => chunks.push(chunk));
+              z.on("end", () => resolve(Buffer.concat(chunks)));
+              z.on("error", (error) => resolve(`threw:${error?.code ?? error?.name ?? "?"}`));
+              z.end(input);
+            });
+          const render = (v) => (Buffer.isBuffer(v) ? v.toString("base64") : String(v));
+          const has = (name) => typeof m[name] === "function";
+          const packed = async (name) => (has(name) ? render(await through(() => m[name](), bytes)) : "absent");
+          // A round trip through two transforms, which is the arm that catches a compressor and
+          // a decompressor that are wrong together and agree with each other.
+          const trip = async (out, back) => {
+            if (!has(out) || !has(back)) return "absent";
+            const compressed = await through(() => m[out](), bytes);
+            if (!Buffer.isBuffer(compressed)) return compressed;
+            const restored = await through(() => m[back](), compressed);
+            return Buffer.isBuffer(restored)
+              ? (restored.equals(bytes) ? "round-trip" : `differs:${restored.length}/${bytes.length}`)
+              : restored;
+          };
+          return [
+            await packed("createDeflate"),
+            await packed("createGzip"),
+            await packed("createDeflateRaw"),
+            await packed("createBrotliCompress"),
+            await packed("createZstdCompress"),
+            await trip("createDeflate", "createInflate"),
+            await trip("createGzip", "createGunzip"),
+            await trip("createDeflateRaw", "createInflateRaw"),
+            await trip("createGzip", "createUnzip"),
+            await trip("createBrotliCompress", "createBrotliDecompress"),
+            await trip("createZstdCompress", "createZstdDecompress"),
+            // **Every class behind them, constructed directly.** node publishes both spellings
+            // and a reimplementation can wire `createGzip` to something the class is not. The
+            // decompressors are fed the same plain bytes as the compressors: they fail, and
+            // *how* they fail is the comparison -- an unrecognised header has a specific code
+            // and a reimplementation that answers a generic error looks fine until someone
+            // catches on it.
+            (await Promise.all(
+              ["Deflate", "Inflate", "Gzip", "Gunzip", "DeflateRaw", "InflateRaw", "Unzip",
+                "BrotliCompress", "BrotliDecompress", "ZstdCompress", "ZstdDecompress"]
+                .map(async (name) => (typeof m[name] === "function"
+                  ? `${name}=${render(await through(() => new m[name](), bytes))}`
+                  : `${name}=absent`)),
+            )).join(";"),
+          ].join("|");
+        },
+      },
+      {
         label: "async-codecs",
         call: async (m, s) => {
           const bytes = Buffer.from(s, "utf8");
