@@ -442,6 +442,31 @@ function ownPropertiesEqual(
   if (aKeys.length !== bKeys.length) {
     return false;
   }
+  // **Own enumerable symbol keys, which `Object.keys` does not return.**
+  //
+  // Without this, `{ [s]: 1 }` and `{ [s]: 2 }` are deep-strict-equal, and so are
+  // `{ [s]: 1 }` and `{}`. Every symbol-keyed difference was invisible: the key walk saw
+  // two objects with the same (empty) string-key set and agreed.
+  //
+  // It also hid a rule this file already implements. `compareByKind` returns false for a
+  // `WeakMap`, `WeakSet` or `Promise` because two distinct ones can never be shown equal --
+  // node's own rule, at `internal/util/comparisons.js:446`. That branch is only reached for
+  // a value the walk actually descends into, so `{ [s]: new WeakMap() }` never got there.
+  // A correct rule guarded by a walk that cannot reach it reads exactly like a correct
+  // implementation.
+  //
+  // node's order, from `keyCheck`: string keys first and their counts compared, then own
+  // **enumerable** symbols pushed onto both sides and the totals compared. Enumerability is
+  // checked per side, so a symbol that is enumerable on one and not the other fails on the
+  // count rather than silently matching.
+  //
+  // Strict only. node adds symbols under `kStrict`/`kStrictWithoutPrototypes` and not for
+  // `deepEqual`, and `looseOwnPropertiesEqual` is correct to ignore them.
+  const aSymbols = ownEnumerableSymbols(a);
+  const bSymbols = ownEnumerableSymbols(b);
+  if (aSymbols.length !== bSymbols.length) {
+    return false;
+  }
   for (const key of aKeys) {
     if (!Object.hasOwn(b, key)) {
       return false;
@@ -450,7 +475,26 @@ function ownPropertiesEqual(
       return false;
     }
   }
+  for (const symbol of aSymbols) {
+    if (!Object.prototype.propertyIsEnumerable.call(b, symbol)) {
+      return false;
+    }
+    if (!equal(a[symbol], b[symbol], ctx)) {
+      return false;
+    }
+  }
   return true;
+}
+
+/** Own **enumerable** symbol keys, the half of an object `Object.keys` cannot see. */
+function ownEnumerableSymbols(value: IndexableObject): symbol[] {
+  const symbols: symbol[] = [];
+  for (const symbol of Object.getOwnPropertySymbols(value)) {
+    if (Object.prototype.propertyIsEnumerable.call(value, symbol)) {
+      symbols.push(symbol);
+    }
+  }
+  return symbols;
 }
 
 /** Own enumerable string keys from the object's static field layout. */
