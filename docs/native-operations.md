@@ -388,11 +388,38 @@ and every answer from it is wrong in a way no later step could notice. Adding
 the resource dir gives `size_t`. The driver adds it for you; the library is not
 the driver, which is the whole difference.
 
-**So: libclang, with two non-negotiables** — pass the resource dir, and treat
-any diagnostic at error severity or above as fatal *before* reading a cursor.
-It gives prototypes and layouts in one typed walk, with array element counts,
-`const` qualification and variadic detection, and needs neither a forced
-instance per record nor a megabyte of JSON per header.
+**So: the subprocess** — and the first draft of this section said libclang,
+which was wrong for a reason the measurements could not show.
+
+`Cargo.toml` says of its external dependencies: *"Deliberately small; every
+addition is a maintenance obligation."* libclang costs `clang-sys` plus
+`libclang.so` on every machine that runs the tool. The subprocess costs
+nothing: `serde_json` is already a dependency, and `-ast-dump=json` carries
+prototypes, parameter names, `const` qualification and a `variadic` flag --
+
+    open   int (const char *, int, ...)        variadic=true
+    write  ssize_t (int, const void *, size_t) variadic=absent
+
+-- while `-fdump-record-layouts` carries the layouts, correctly, packed ones
+included.
+
+And the two failure modes point the same way. The driver supplies its own
+resource directory, so the `size_t`-becomes-`int` recovery above cannot happen;
+a header it cannot find is a nonzero exit rather than a diagnostic someone has
+to remember to read. **libclang's failures are silent and the subprocess's are
+loud**, which decides it for a tool whose output is a claim about someone
+else's ABI.
+
+Three costs accepted, each with its handling:
+
+- Layouts need the record to be laid out, so the tool generates a probe
+  translation unit with one forced instance per requested type. It writes that
+  file, so this is bookkeeping rather than a limit.
+- `-fdump-record-layouts-complete` must never be used. See above.
+- The JSON location model is **sticky**: of 156 `FunctionDecl`s in one parse,
+  **5** carried an explicit `loc.file`, the rest inheriting the last one seen.
+  Filtering by header means carrying that forward, and a reader that checks
+  `loc.file` per node finds almost nothing and reports an empty header.
 
 And whichever route: **a derived binding is still a claim.** It is generated
 from one compiler's reading of one set of headers under one set of macros, and
