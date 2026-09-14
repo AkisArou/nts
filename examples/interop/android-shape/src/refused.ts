@@ -5,7 +5,7 @@
 // written and run through `nts check` to find out what actually happens --
 // and the most useful result is the one where *nothing* happens.
 
-import { Loader, View } from "java:com.example.ui";
+import { Drawable, Loader, View } from "java:com.example.ui";
 
 export function refused(view: View): void {
   // ---------------------------------------------------------------------

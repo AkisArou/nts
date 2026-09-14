@@ -53,3 +53,11 @@ elif ! diff -u "$here/types/com.example.ui.d.ts" "$generated" \
 fi
 
 echo "android-shape: demo ran and declarations agree"
+
+# And every refusal this project documents, produced rather than asserted in
+# prose. `src/refused.ts` used to quote nine `NTS41xx` codes that do not exist
+# in the compiler; the first run of this script found a tenth kind of wrong --
+# a claim whose line could not reach the refusal it named, because the type was
+# never imported.
+sh "$root/tooling/jvm/check-refusals.sh" "$here"
+

@@ -76,6 +76,14 @@ javac -cp "$emitted:$emitted/nts-runtime.jar" -d "$out" "$out/Driver.java"
 answer=$(java -Xverify:all -cp "$out:$emitted:$out/classes:$emitted/nts-runtime.jar" Driver)
 echo "java-from-ts: $answer"
 
+# And every refusal this project documents, produced rather than asserted in
+# prose. `src/refused.ts` used to quote nine `NTS41xx` codes that do not exist
+# in the compiler; the first run of this script found a tenth kind of wrong --
+# a claim whose line could not reach the refusal it named, because the type was
+# never imported.
+sh "$root/tooling/jvm/check-refusals.sh" "$here"
+
+
 # **The whole line, now that none of it is knowingly wrong.** This used to
 # check two values and say why: `Catalog.MAX` read `0` where Java says `512`,
 # because a declared numeric constant folded to zero in shared lowering, and
