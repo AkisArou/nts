@@ -22,6 +22,36 @@ import fixtures from "./fixtures.mjs";
 import * as hijackstdio from "./hijackstdio.mjs";
 
 const [, , moduleName, file, addon, ...fixtureArgs] = process.argv;
+
+// **A usage error must not be reported as a test result, and this reported one.**
+//
+// There was no check here. A `file` this process could not load failed at module load and was
+// reported through the ordinary channel as `{"kind":"fail"}`, so calling the harness wrongly and
+// running a broken test left the identical trace. A relative path is the common way in: `run.mjs`
+// always passes absolute ones and a person at a shell rarely does.
+//
+// It cost two wrong readings on 2026-09-14. `test-listen-fd-cluster` and `test-cluster-http-pipe`
+// were recorded as still failing, from a loop that interpolated a repo-relative path, when both had
+// already been fixed and passed. The `why` said so -- "The argument 'filename' must be ... absolute
+// path string" -- and anything counting reads `kind`, which cannot say "you called me wrong".
+//
+// So: exit with a usage error and print no result at all. A count is only entitled to speak about a
+// file the harness actually attempted.
+if (
+  moduleName === undefined || moduleName === "" ||
+  file === undefined || !isAbsolute(file) || !existsSync(file)
+) {
+  const why = file === undefined ? "no fixture path given"
+    : !isAbsolute(file) ? `fixture path is not absolute: ${file}`
+    : !existsSync(file) ? `fixture does not exist: ${file}`
+    : "no module name given";
+  process.stderr.write(
+    `run-one.mjs: ${why}\n` +
+    "usage: run-one.mjs <module> <absolute fixture path> [<addon.node>|-] [fixture args...]\n" +
+    "This is a usage error and is deliberately not reported as a test result.\n",
+  );
+  process.exit(2);
+}
 const RESULT_PREFIX = "NTS_CONFORMANCE_RESULT ";
 const nestedConformanceChild = process.env.NTS_CONFORMANCE_NESTED_CHILD === "1";
 
