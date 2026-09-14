@@ -512,6 +512,104 @@ export const CORPORA = {
         { label: "readFileSync!", throws: true, call: (m, s) => m.readFileSync(rejectedNonNumeric(s)) },
         { label: "openSync!", throws: true, call: (m, s) => m.openSync(rejectedNonNumeric(s)) },
         { label: "existsSync", call: (m, s) => attempt(() => m.existsSync(BASE + s)) },
+        // **The asynchronous read-only half, unreachable until the harness could await.**
+        //
+        // `corpus-reach.mjs` put this module at 9 of 169 published functions called, and the
+        // reason was structural rather than a thin corpus: the differential was synchronous, so
+        // every callback form and the whole of `fs.promises` was out of reach by construction.
+        //
+        // Read-only, for the reason stated at the top of this corpus: a differential that mutates
+        // shared state is one whose two sides ran against different filesystems. Nothing below
+        // creates, moves or removes anything, and `open` closes in every path -- 4,000 inputs
+        // against a leaking descriptor would exhaust the process rather than report a divergence.
+        {
+          // **`fs.promises`, the other half that could not be awaited.** Same read-only rule,
+          // same base directory. `open` is included because a `FileHandle` must be closed and
+          // this is the only spec in a position to prove that it can be -- 4,000 inputs holding
+          // handles would exhaust the process rather than report a divergence.
+          label: "promises-read-only",
+          call: async (m, s) => {
+            const at = BASE + s;
+            const p = m.promises;
+            if (p === undefined) return "absent";
+            const settle = async (make) => {
+              try {
+                return `ok:${await make()}`;
+              } catch (error) {
+                return `${error.code ?? error.name}`;
+              }
+            };
+            const kind = (st) => `${st.isFile()}/${st.isDirectory()}/${st.isSymbolicLink()}`;
+            return [
+              await settle(async () => { await p.access(at, 0); return "yes"; }),
+              await settle(async () => kind(await p.stat(at))),
+              await settle(async () => kind(await p.lstat(at))),
+              await settle(async () => (await p.readdir(at)).slice().sort().join(",")),
+              await settle(async () => (await p.readFile(at)).length),
+              await settle(async () => { await p.realpath(at); return "resolved"; }),
+              await settle(async () => { await p.readlink(at); return "link"; }),
+              await settle(async () => {
+                const handle = await p.open(at, "r");
+                try { return `opened:${(await handle.stat()).isFile()}`; }
+                finally { await handle.close(); }
+              }),
+            ].join("|");
+          },
+        },
+        {
+          label: "async-read-only",
+          call: async (m, s) => {
+            const at = BASE + s;
+            const cb = (fn, ...args) =>
+              new Promise((resolve) => {
+                if (typeof fn !== "function") { resolve("absent"); return; }
+                try {
+                  fn(...args, (error, out) => {
+                    resolve(error ? `${error.code ?? error.name}` : `ok:${out}`);
+                  });
+                } catch (error) {
+                  resolve(`${error.code ?? error.name}`);
+                }
+              });
+            const kind = async (fn) => {
+              const st = await new Promise((resolve) => {
+                try { fn(at, (error, v) => resolve(error ? null : v)); } catch { resolve(null); }
+              });
+              return st === null ? "err" : `${st.isFile()}/${st.isDirectory()}/${st.isSymbolicLink()}`;
+            };
+            // `open` then `close` on both outcomes, so a descriptor never outlives one input.
+            const opened = await new Promise((resolve) => {
+              try {
+                m.open(at, "r", (error, fd) => {
+                  if (error) { resolve(`${error.code ?? error.name}`); return; }
+                  m.close(fd, () => resolve("ok:opened"));
+                });
+              } catch (error) { resolve(`${error.code ?? error.name}`); }
+            });
+            return [
+              await cb(m.access, at, 0),
+              await kind(m.stat),
+              await kind(m.lstat),
+              await cb(m.realpath, at).then((r) => (r.startsWith("ok:") ? "ok:resolved" : r)),
+              await cb(m.readlink, at).then((r) => (r.startsWith("ok:") ? "ok:link" : r)),
+              await new Promise((resolve) => {
+                try {
+                  m.readdir(at, (error, names) => {
+                    resolve(error ? `${error.code ?? error.name}` : `ok:${names.slice().sort().join(",")}`);
+                  });
+                } catch (error) { resolve(`${error.code ?? error.name}`); }
+              }),
+              await new Promise((resolve) => {
+                try {
+                  m.readFile(at, (error, data) => {
+                    resolve(error ? `${error.code ?? error.name}` : `ok:${data.length}`);
+                  });
+                } catch (error) { resolve(`${error.code ?? error.name}`); }
+              }),
+              opened,
+            ].join("|");
+          },
+        },
         {
           label: "statSync kind",
           call: (m, s) =>

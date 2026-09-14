@@ -311,10 +311,23 @@ globalThis.nts_fs_symlink_bytes = (target, at, flags) =>
       flags === 1 ? "dir" : flags === 2 ? "junction" : "file",
     ));
 globalThis.nts_fs_readlink = (path) => attempt(() => fs.readlinkSync(path), "");
-globalThis.nts_fs_realpath = (path) => attempt(() => fs.realpathSync(path), "");
+// **`.native`, which is `uv_fs_realpath`, and not the JavaScript walk beside it.**
+//
+// node ships two resolvers under one name. `fs.realpathSync` / `fs.realpath` walk the path in
+// JavaScript with an `lstat` cache; `fs.realpathSync.native` / `fs.realpath.native` call the
+// binding, and `fs.promises.realpath` calls the binding too. They disagree -- a file path with a
+// trailing slash is `ENOTDIR` from the binding and resolves through the walk -- and node ships
+// the disagreement.
+//
+// These two bindings back `_realpathSyncNative` and `_realpathNative`, which exist precisely to
+// be the binding half. Standing them in with the walk made this profile self-consistent, which
+// is the reasonable behaviour and the wrong one: `fs.promises.realpath` then resolved where
+// node's threw. The differential found it on 719 of 4,024 generated paths the first time it
+// could await.
+globalThis.nts_fs_realpath = (path) => attempt(() => fs.realpathSync.native(path), "");
 globalThis.nts_fs_realpath_bytes = (path) =>
   attempt(
-    () => Array.from(fs.realpathSync(Buffer.from(path), { encoding: "buffer" })),
+    () => Array.from(fs.realpathSync.native(Buffer.from(path), { encoding: "buffer" })),
     [],
   );
 globalThis.nts_fs_mkdtemp = (template) => attempt(() => fs.mkdtempSync(template.replace(/X{6}$/, "")), "");
@@ -531,9 +544,9 @@ globalThis.nts_fs_symlink_bytes_async = (target, at, flags, cb) =>
     relay(cb),
   );
 globalThis.nts_fs_readlink_async = (path, cb) => fs.readlink(path, relay(cb));
-globalThis.nts_fs_realpath_async = (path, cb) => fs.realpath(path, relay(cb));
+globalThis.nts_fs_realpath_async = (path, cb) => fs.realpath.native(path, relay(cb));
 globalThis.nts_fs_realpath_bytes_async = (path, cb) =>
-  fs.realpath(
+  fs.realpath.native(
     Buffer.from(path),
     { encoding: "buffer" },
     relay(cb, (resolved) => Array.from(resolved)),

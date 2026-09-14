@@ -1750,7 +1750,27 @@ export function glob(pattern: unknown, options?: unknown): AsyncIterableIterator
   return callbacks.globIterator(pattern, options);
 }
 export const readlink = promisifyValue(callbacks.readlink, "readlink");
-export const realpath = promisifyValue(callbacks.realpath, "realpath");
+/**
+ * **The binding, not the JavaScript walk, because node's promises half uses the binding.**
+ *
+ * `lib/internal/fs/promises.js` calls `binding.realpath(...)` directly, while `lib/fs.js`'s
+ * `realpath` and `realpathSync` resolve the path themselves with a cache of `lstat` results.
+ * The two disagree in node, and node ships both:
+ *
+ *     a file path with a trailing slash    promises  ENOTDIR
+ *                                          callback  resolves
+ *                                          sync      resolves
+ *
+ * Promisifying `callbacks.realpath` made this profile *self-consistent* -- all three resolved --
+ * which is the reasonable behaviour and the wrong one. `_realpathNative` is the same
+ * `uv_fs_realpath` that node's binding reaches, so this is node's inconsistency reproduced
+ * rather than smoothed over.
+ *
+ * Found by the differential once it could await: 719 of 4,024 generated paths diverged here and
+ * nowhere else. No test in node's own suite reaches it, because a trailing slash on a file
+ * through `fs.promises.realpath` is not a case anyone wrote down.
+ */
+export const realpath = promisifyValue(callbacks._realpathNative, "realpath");
 export const rename = promisifyVoid(callbacks.rename);
 export function rm(path: PathLike, options?: RmOptions): Promise<void> {
   return new Promise<void>((resolve, reject) => {
