@@ -36,8 +36,31 @@ index 891c49cd..9f979bf3 100644
  [[package]]
  name = "nts-diagnostics"
  version = "0.0.0"
+diff --git a/compiler/codegen/jvm/src/lib.rs b/compiler/codegen/jvm/src/lib.rs
+index 482f61dc..829439b3 100644
+--- a/compiler/codegen/jvm/src/lib.rs
++++ b/compiler/codegen/jvm/src/lib.rs
+@@ -251,6 +251,18 @@ pub fn emit(program: &Program) -> Emitted {
+ 
+     let mut classes = Vec::new();
+     for layout in &program.layouts {
++        // **A bound class is in somebody's jar and we must not write one.**
++        // Emitting `com/conv/Conv.class` beside the real one puts a stub with
++        // nothing but a default constructor on the classpath, and whichever
++        // entry comes first wins: with the emitted directory ahead of the jar
++        // -- the order a user would naturally write -- every call into the
++        // bound class becomes `NoSuchMethodError` at runtime.
++        //
++        // Loud rather than silent, so it is not the worst kind of defect. It
++        // is still a class this compiler had no business writing.
++        if nts_core::hir::runtime::is_foreign_layout_name(&layout.name) {
++            continue;
++        }
+         match object_class(program, layout, &plan) {
+             Ok(Some(class)) => classes.push(class),
+             Ok(None) => {}
 diff --git a/compiler/codegen/jvm/src/ops.rs b/compiler/codegen/jvm/src/ops.rs
-index 8a8c2be5..da7c11e5 100644
+index 8a8c2be5..34fe5bc9 100644
 --- a/compiler/codegen/jvm/src/ops.rs
 +++ b/compiler/codegen/jvm/src/ops.rs
 @@ -1615,6 +1615,97 @@ impl Emitter<'_> {
@@ -138,7 +161,7 @@ index 8a8c2be5..da7c11e5 100644
      /// The argument a fixed intrinsic declared as a callback interface,
      /// brought to that type on the stack.
      ///
-@@ -4426,6 +4517,111 @@ impl Emitter<'_> {
+@@ -4426,6 +4517,126 @@ impl Emitter<'_> {
                      code.invoke_static(origin, pool, owner, narrow, &format!("{arguments})I"));
                      return Ok(Placed::OnStack);
                  }
@@ -175,6 +198,21 @@ index 8a8c2be5..da7c11e5 100644
 +                            &format!("a call to `{name}`, which is not a well-formed foreign key"),
 +                        ));
 +                    };
++                    // **A bound constructor allocates here, not in HIR.**
++                    // `new` on a foreign class is the JVM's own `new; dup;
++                    // invokespecial <init>`, so there is no layout of ours to
++                    // fill and no receiver to load: this is the one bound
++                    // member whose arguments are all of `args`. Lowering knows
++                    // the same thing and emits no `ObjectNew` -- doing it in
++                    // one place and not the other would either allocate twice
++                    // or verify against an uninitialised reference.
++                    if member == "<init>" {
++                        code.new_object(origin, pool, owner);
++                        code.dup(origin);
++                        self.push_foreign_arguments(code, pool, args, descriptor, origin)?;
++                        code.invoke_special(origin, pool, owner, member, descriptor);
++                        return Ok(Placed::OnStack);
++                    }
 +                    use nts_core::hir::runtime::ForeignKind;
 +                    // **The receiver is `args[0]` and the descriptor does not
 +                    // mention it.** HIR gives a foreign instance call the same
@@ -251,7 +289,7 @@ index 8a8c2be5..da7c11e5 100644
                      // The cause, which is that *this table* has no entry, and
                      // not the remedy, which would be to build the helper.
 diff --git a/compiler/codegen/jvm/src/types.rs b/compiler/codegen/jvm/src/types.rs
-index 9376d5cd..de4d159a 100644
+index 9376d5cd..0cbd0199 100644
 --- a/compiler/codegen/jvm/src/types.rs
 +++ b/compiler/codegen/jvm/src/types.rs
 @@ -65,6 +65,17 @@ pub const STRING_DESCRIPTOR: &str = "Ljava/lang/String;";
@@ -266,7 +304,7 @@ index 9376d5cd..de4d159a 100644
 +    //
 +    // The `/` is the test, matching `hir::lower`'s `is_foreign_name`: a name we
 +    // generate is a TypeScript identifier and cannot contain one.
-+    if layout.name.contains('/') {
++    if nts_core::hir::runtime::is_foreign_layout_name(&layout.name) {
 +        return layout.name.clone();
 +    }
      jvm_class_name(&layout.name)
@@ -324,7 +362,7 @@ index faa0ec48..497bc555 100644
      const INDEX: &[&str] = &[
          "nts_str_index_of",
 diff --git a/compiler/core/src/hir/lower.rs b/compiler/core/src/hir/lower.rs
-index ac9baa5d..2df96afc 100644
+index ac9baa5d..7cb94d94 100644
 --- a/compiler/core/src/hir/lower.rs
 +++ b/compiler/core/src/hir/lower.rs
 @@ -354,7 +354,7 @@ fn generic_classes(
@@ -637,6 +675,15 @@ index ac9baa5d..2df96afc 100644
              module.clone(),
              hierarchy.clone(),
              closures.clone(),
+@@ -4659,7 +4691,7 @@ fn nominal_name(name: &str) -> bool {
+ /// no backend can undo, which is a stronger argument than "a collision is
+ /// possible" and is why this belongs here rather than in a backend.
+ fn is_foreign_name(name: &str) -> bool {
+-    name.contains('/')
++    super::runtime::is_foreign_layout_name(name)
+ }
+ 
+ /// Every `InstanceOf` names classes this program has a layout for, and no
 @@ -7040,6 +7072,9 @@ struct Edge {
  
  struct FuncBuilder<'a> {
@@ -762,7 +809,42 @@ index ac9baa5d..2df96afc 100644
          // What this class does for each dispatch slot. Empty where nothing in
          // the hierarchy is overridden, which is most classes.
          let mut methods = vec![None; self.hierarchy.table_size()];
-@@ -28182,12 +28264,26 @@ impl<'a> FuncBuilder<'a> {
+@@ -22721,6 +22803,34 @@ impl<'a> FuncBuilder<'a> {
+         let HirType::Managed(ManagedType::Object(type_id)) = ty else {
+             return Err(self.unsupported(id, "a `new` that does not produce an object"));
+         };
++        // **A bound Java class is constructed on the other side.** Everything
++        // below this -- the layout, the allocation, the constructor call --
++        // describes building an object of ours. A foreign class has none of
++        // it: `layout_of` would emit a stub class that then *shadows the real
++        // one on the classpath*, which is how this was found, and `ObjectNew`
++        // would allocate a second object the `<init>` never touches.
++        //
++        // This is the third and last call shape the binding had to reach.
++        // `callee_for` had the instance case; `lower_static_call` had none
++        // until a moment ago; and `new` arrives here.
++        if let Some(bound) = self
++            .snapshot
++            .call_targets
++            .get(&id)
++            .and_then(|it| it.callee)
++            .map(|declaration| self.location(declaration))
++            .and_then(|at| self.foreign.get(&(at.file.0, at.span.end)))
++            .map(|row| row.key.clone())
++        {
++            let arguments = self.arguments_of(id);
++            let args = self.lower_arguments(id, &arguments)?;
++            let origin = self.origin(id);
++            return Ok(self.push(
++                OpKind::Call { callee: Callee::External(bound), args, frame: None },
++                ty.clone(),
++                origin,
++            ));
++        }
+         // Laying the class out here is what makes its fields addressable; the
+         // constructor is about to write every one of them.
+         self.layout_of(id, type_id)?;
+@@ -28182,12 +28292,26 @@ impl<'a> FuncBuilder<'a> {
              .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
          self.materialize(id, &ty)?;
          let origin = self.origin(id);
@@ -794,7 +876,7 @@ index ac9baa5d..2df96afc 100644
              ty,
              origin,
          ))
-@@ -30800,6 +30896,19 @@ impl<'a> FuncBuilder<'a> {
+@@ -30800,6 +30924,19 @@ impl<'a> FuncBuilder<'a> {
          } else {
              member_name
          };
@@ -886,10 +968,31 @@ index 8fac4a27..9eff1670 100644
      let mut program = lowered.program;
  
 diff --git a/compiler/core/src/hir/runtime.rs b/compiler/core/src/hir/runtime.rs
-index a135dfc2..0875038e 100644
+index a135dfc2..a0d51e8f 100644
 --- a/compiler/core/src/hir/runtime.rs
 +++ b/compiler/core/src/hir/runtime.rs
-@@ -326,6 +326,50 @@ pub fn is_foreign_key(name: &str) -> bool {
+@@ -321,11 +321,71 @@ pub fn foreign_key(owner: &str, member: &str, descriptor: &str) -> String {
+ /// `lower`: a runtime helper is a C identifier and can contain neither `/` nor
+ /// `:`, and a JVM binary name always contains a `/` for anything outside the
+ /// default package.
++/// Whether a **layout** stands for a class in somebody's jar.
++///
++/// The `/` is the whole test: a name this compiler generates is a TypeScript
++/// identifier and cannot contain one, while a bound class is named by its JVM
++/// binary name -- `com/example/Catalog`.
++///
++/// **One definition because there were two.** `hir::lower`'s `is_foreign_name`
++/// and `codegen/jvm`'s `types::class_name` each had this test written out, and
++/// the second carried a comment asserting it matched the first. A comment is
++/// not an agreement: it cannot fail when one of them changes. Both now call
++/// here.
++#[must_use]
++pub fn is_foreign_layout_name(name: &str) -> bool {
++    name.contains('/')
++}
++
+ #[must_use]
+ pub fn is_foreign_key(name: &str) -> bool {
      name.contains(':') && name.contains('/')
  }
  
