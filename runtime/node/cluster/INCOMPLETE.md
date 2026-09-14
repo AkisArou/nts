@@ -5,7 +5,7 @@ below is worth less than the paragraph after it.
 
 ## Where it is
 
-    interpreted   86 file(s): 78 passed, 6 failed, 2 skipped, 0 not applicable
+    interpreted   89 file(s): 83 passed, 4 failed, 2 skipped, 0 not applicable
 
 84 by `test-pattern`, 1 claimed in `extra-tests`, 2 local fixtures. The claimed one --
 `test-listen-fd-cluster.js` -- fails, and claiming a failing test is the honest direction:
@@ -83,7 +83,7 @@ different**. Only then do the broken arms' counts mean anything.
 
 ## The compiled lane publishes nothing, and its 25 passes were all hollow
 
-    interpreted   86 file(s): 78 passed, 6 failed, 2 skipped
+    interpreted   89 file(s): 83 passed, 4 failed, 2 skipped
     compiled      86 file(s): 25 printed, and every one of them asserted nothing
 
 `shape.mjs` reads `exports.default`. The addon exports no `default` -- its six keys are
@@ -119,25 +119,63 @@ same way, the other small compiled surfaces are real: `stream`'s single pass and
 surface is not by itself a hollow one -- an absent one is.
 
 
-## The six that remain, each with a cause and a price
+## Two closed by one line, and the price on one of them had been wrong
 
-    interpreted   86 file(s): 78 passed, 6 failed, 2 skipped
+`http-pipe` and `listen-fd-cluster` were recorded here as two files with two causes. They were
+one, and it was not in this module.
 
-### `http-pipe` -- `http` over a **distributed** pipe, isolated to three arms
+    interpreted   89 file(s): 83 passed, 4 failed, 2 skipped     (was 78 / 6)
 
-    plain `net` over a distributed pipe, primary -> worker   served, data flows
-    plain `net` over a distributed pipe, worker -> itself     served, data flows
-    `http` over a **plain** pipe, no cluster                  response 200
-    `http` over a distributed pipe                           request handler never runs
+### What the wrong price looked like
 
-So the handoff works, pipes work, and `http` works; only the combination fails. `http` is node's
-own in this lane -- `uses` is `child_process events net` -- so what is missing is something node's
-`http` server wants from a connection this module handed it that a plain `net` consumer does not.
+`listen-fd-cluster` was priced as *"the descriptor the worker is given is not a socket by the time
+it binds"*, from an observed `bind ENOTSOCK`. That is false, and a probe with no cluster in it at
+all says so: `server._handle` through stdio slot 3 arrives in the child as the **same** listening
+socket -- same port, accepts, data flows, byte-identical to node.
 
-**Price:** one more arm, comparing what node's `http` server reads off a connection it accepted
-itself against one delivered as a `newconn` handle. Not the pipe's length, which was measured away
-(`common.PIPE` is 54 bytes here against node's 33, both far inside `sockaddr_un`'s 108), and not
-flakiness -- the failing arm fails identically on repeat.
+`http-pipe` was priced at *"one more arm, comparing what node's `http` server reads off a
+connection it accepted itself against one delivered as a `newconn` handle"*. That arm was the
+right idea and the wrong subject: what mattered was not what `http` reads but **when**.
+
+### The arm that found it separated read from write
+
+The first control here used a plain `net` consumer in the worker and passed -- and it passed by
+only ever *writing*. Adding a worker that reads first, on the identical handoff:
+
+    worker only writes                        served, data flows
+    worker reads, client writes on connect    `connection`, `end`, and no data
+    worker reads, client writes 300ms later   `worker read "ping"`
+
+The third arm is the proof. The descriptor is right, the read direction works, and only the timing
+was wrong -- which is why every HTTP client fails on it, since they all write on `connect`, and why
+a `net` consumer that answers first never noticed.
+
+### The cause was under the module seam, and our side looked innocent
+
+`adoptAt` in `net/bindings.node.mjs` claimed *"Paused until the module asks: nothing should arrive
+before `read_start`"* and called `socket.pause()`. node's `Socket.prototype.pause` calls
+`readStop()` only when `this[kBuffer]` is set, and `kBuffer` exists only for a socket built with
+the `onread` option. So the accepted socket's constructor `read(0)` armed libuv and the host socket
+read on **below** the seam, into a buffer nothing above ever looks at. The primary then hands the
+descriptor to a worker one IPC round trip later, by which time the bytes are gone.
+
+At handoff the primary's own `Socket` reports `bytesRead=0`, `readableLength=0`, `flowing=false`.
+Everything visible from inside this module was clean, which is why looking here found nothing.
+
+The fix is `pauseOnConnect: true` on both sides of the seam -- the stand-in's host server, which is
+the line that moves the files, and this module's distribution server, so the primary's `Socket`
+never resumes either. node reaches the same end differently: `RoundRobinHandle` steals the
+listening handle and installs its own `onconnection`, so no `Socket` exists in a primary at all.
+
+### An instrument that fixed the bug it was measuring
+
+A `console.error` in `#handoff` made the failing fixture pass, every time. Two synchronous writes
+were enough latency for the handoff to win the race. Anything timing-shaped here has to be measured
+without adding a print, and the three fixtures do that by moving the client's write instead.
+
+## The four that remain, each with a cause and a price
+
+    interpreted   89 file(s): 83 passed, 4 failed, 2 skipped
 
 ### `net-send` -- the child holds one of *our* sockets and node's `send` refuses it
 
@@ -166,17 +204,6 @@ A cluster *worker* is unaffected and that was checked rather than assumed, since
 design rests on it: a worker reports `nts_cluster_self_send` undefined and carries node's own
 `_getServer`.
 
-### `listen-fd-cluster` -- ENOTSOCK inside the worker's own `rr()`
-
-`{ fd, backlog }` is now the first of the three listen branches, as node has it, so a
-caller-supplied descriptor reaches `RoundRobinHandle` rather than the shared path. The worker then
-fails in node's own `rr()` with `bind ENOTSOCK`.
-
-**Price:** the descriptor the worker is given is not a socket by the time it binds. Establishing
-whether the primary sends the wrong handle or the worker receives a dup of the wrong fd is one
-instrumented run of node's `rr` against ours -- the same method that settled the relative-path
-question in one command.
-
 ### `net-server-drop-connection` -- a disconnect mid-handoff
 
 Three workers on one pipe, ten connections, and the workers disconnected while connections are
@@ -185,7 +212,8 @@ still being counted. The single-worker pipe case works.
 **Price:** `#handoff` parks a socket against its sequence number so a refusal can put it back, and
 **no passing test exercises that path**. Pricing it means writing the control first -- a fixture
 that refuses a handoff deliberately -- because a fix to an unexercised path cannot be shown to
-work.
+work. The `pauseOnConnect` change above did not move this file, which is worth knowing: it is not
+another instance of the same race.
 
 ### `shared-leak` -- w1 does not exit, and two hypotheses are dead
 

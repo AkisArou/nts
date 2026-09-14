@@ -24684,3 +24684,48 @@ the 1,180 own roots between them.
 one side only -- so no refusal was ever written, and counting a log that does not exist reads exactly
 like counting a clean one. The script now requires `wrote program.c` before reporting a number.
 
+## Two cluster files, one cause, and it was under the module seam
+
+`test-listen-fd-cluster` and `test-cluster-http-pipe` were carried here as two remainders with two
+prices. They were one defect, in neither of the places either price named.
+
+    cluster    89 file(s): 83 passed, 4 failed, 2 skipped     (was 78 / 6)
+
+**The mechanism.** `adoptAt` in `runtime/node/net/bindings.node.mjs` promised *"Paused until the
+module asks: nothing should arrive before `read_start`"* and delivered `socket.pause()`. node's
+`Socket.prototype.pause` calls `readStop()` only when `this[kBuffer]` is set, and `kBuffer` exists
+only for a socket created with the `onread` option. So an accepted socket's constructor `read(0)`
+armed libuv, and the host socket kept reading **below** the seam into a buffer nothing above it ever
+reads. `cluster`'s primary hands the descriptor to a worker one IPC round trip later, and whatever
+the client wrote on `connect` is already gone -- which is every HTTP client there is.
+
+**Why every census missed it.** From inside the module everything is clean: at handoff the primary's
+`Socket` reports `bytesRead=0`, `readableLength=0`, `flowing=false`. The loss is one layer down, in
+node's own buffer, reached through a stand-in. A refusal count cannot see it, a root census cannot
+see it, and the two files it broke each carried a plausible and wrong cause instead.
+
+**What separated it was an arm that read.** The existing control used a plain `net` consumer and
+passed -- by only ever *writing*. Three arms on the identical handoff:
+
+    worker only writes                        served, data flows
+    worker reads, client writes on connect    `connection`, `end`, and no data
+    worker reads, client writes 300ms later   `worker read "ping"`
+
+The third is the proof that the descriptor and the read path are both fine and only the timing was
+wrong. A control that answers without reading tests half a socket, and this ledger had recorded it
+as if it tested the whole one.
+
+**An instrument that fixed the bug it was measuring.** A `console.error` in `#handoff` made the
+failing fixture pass, every time -- two synchronous writes were enough latency for the handoff to
+win the race. Print-based tracing cannot be used on anything timing-shaped here; move the client's
+write instead. This is the fourth entry in this file where the instrument was the finding.
+
+No regressions in any module that uses `net`, each re-measured rather than assumed:
+
+    net 154/0    http 408/0    dgram 77/0    async_hooks 117/0    diagnostics_channel 33/0
+
+`nts_net_read_stop`'s `socket.pause()` was checked for the same defect and is **correct**: node's
+own `socket.pause()` behaves identically, and `onStreamRead` issues `readStop()` once `push()`
+returns false, so a paused socket stops at its high-water mark on both sides. The accept path was
+the only place the claim was false.
+
