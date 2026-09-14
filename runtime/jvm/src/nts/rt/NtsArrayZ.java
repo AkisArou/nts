@@ -296,4 +296,9 @@ public final class NtsArrayZ {
         int i = NtsArrays.offset(index, a.length);
         return i < 0 ? NtsValue.UNDEFINED_VALUE : NtsValue.ofBoolean(a.items[i]);
     }
+
+    /** A Java {@code boolean[]}, used directly; see {@link NtsArrayL#adopt}. */
+    public static NtsArrayZ adopt(boolean[] items) {
+        return new NtsArrayZ(items == null ? EMPTY : items, items == null ? 0 : items.length);
+    }
 }

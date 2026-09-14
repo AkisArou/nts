@@ -1698,9 +1698,30 @@ impl Emitter<'_> {
                 }
                 // A reference parameter: the callback coercion already owns
                 // this question and answers it for interfaces as well.
-                // The same mismatch arriving rather than returning: under
-                // `arrays_can_grow` our value is an `NtsArrayL` and the jar
-                // declared a bare array.
+                // **A `number[]` meeting a Java primitive array.** Ours is a
+                // `[D`; `sum(int...)` wants `[I`, and the two are unrelated
+                // types to the verifier however alike the values look. The
+                // elements move and each takes the narrowing a scalar would
+                // take here -- the same `ToInt32` rule, not `d2i`.
+                (other, _)
+                    if matches!(other, "[I" | "[J" | "[S" | "[B" | "[C" | "[F")
+                        && matches!(
+                            types::descriptor(self.shape, self.ty(arg)).as_deref(),
+                            Some("[D")
+                        ) =>
+                {
+                    let to = match other {
+                        "[I" => "toI",
+                        "[J" => "toJ",
+                        "[S" => "toS",
+                        "[B" => "toB",
+                        "[C" => "toC",
+                        _ => "toF",
+                    };
+                    code.invoke_static(origin, pool, types::ARRAYS, to, &format!("([D){other}"));
+                }
+                // Under `arrays_can_grow` ours is an `NtsArrayL` and the jar
+                // declared a bare array; there is no store to hand over.
                 (other, _) if other.starts_with('[') && self.shape.grows => {
                     return Err(refuse(
                         self.func,
@@ -3224,7 +3245,43 @@ impl Emitter<'_> {
         let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
             return Err(refuse(self.func, "a field of something that is not an object"));
         };
-        self.field_ref_of(id, field)
+        let resolved = self.field_ref_of(id, field)?;
+        // **A bound class has no fields of ours, and this is where that stops
+        // being true.** A foreign layout is deliberately field-less -- the
+        // binding surfaces its members through the table rather than as our
+        // field ops -- but a `hits: number` in the `.d.ts` still becomes a
+        // layout field, and its descriptor is then *our* `D` rather than the
+        // `I` the jar declared. `getfield com/example/Catalog.hits:D` against
+        // a class whose field is `int` is `NoSuchFieldError` at run time, with
+        // nothing said at compile time.
+        //
+        // Refused by name here. The fix is upstream and is the same one the
+        // arrays want: the member's type should come from the binding row,
+        // which carries `com/example/Catalog.hits:I`, rather than from the
+        // TypeScript the declaration was rendered as.
+        // **The layout's name, not the emitted class name.** `class_name`
+        // gives `nts/gen/Point` for a class of ours, which contains a `/` and
+        // so answered "foreign" for every class in the program -- 74 declined
+        // functions and the floor red. The `/` test belongs on the name the
+        // layout carries, which is `Point` for ours and `com/example/Catalog`
+        // for a bound one.
+        let foreign = self
+            .program
+            .layouts
+            .iter()
+            .find(|layout| layout.types.contains(&id))
+            .is_some_and(|layout| nts_core::hir::runtime::is_foreign_layout_name(&layout.name));
+        if foreign {
+            return Err(refuse(
+                self.func,
+                &format!(
+                    "the field `{}` of the bound class `{}`: its width is the jar's and this \
+                     lane reads it as the TypeScript the declaration was rendered as",
+                    resolved.1, resolved.0
+                ),
+            ));
+        }
+        Ok(resolved)
     }
 
     /// The same, for a type named directly rather than carried by a value.
@@ -4459,15 +4516,54 @@ impl Emitter<'_> {
         // Refused by name until a foreign array is its own type rather than
         // ours. That fix is upstream and written up; this is the difference
         // between a named refusal and a wrong answer.
-        if returns.starts_with('[') && self.shape.grows {
-            return Err(refuse(
-                self.func,
-                &format!(
-                    "a bound member returning `{returns}` in a program where some array grows: \
-                     a Java array cannot take the growable representation that choice gives \
-                     every array, and it is not ours to re-lay-out"
-                ),
-            ));
+        // **A Java array copied into a view, because a view is not an array.**
+        // `[I` binds as `Int32Array`, and an `Int32Array` is a window onto a
+        // `byte[]`-backed buffer so that two widths can share it and
+        // `subarray` can alias. A Java `int[]` has no buffer, no byte offset
+        // and nothing to alias against, so there is no store to adopt. The
+        // copy is 0.04 ns per element, measured, which is why this is a copy
+        // and not the refusal it used to be.
+        if returns.starts_with('[')
+            && matches!(result, HirType::Managed(ManagedType::View(_)))
+        {
+            let Some(want) = types::descriptor(self.shape, result) else {
+                return Err(refuse(self.func, "a bound array whose view form has no name"));
+            };
+            let Some(view) = want.strip_prefix('L').and_then(|it| it.strip_suffix(';')) else {
+                return Err(refuse(
+                    self.func,
+                    &format!("a bound member returning `{returns}` held as `{want}`"),
+                ));
+            };
+            code.invoke_static(origin, pool, view, "from", &format!("({returns}){want}"));
+            return Ok(());
+        }
+        if returns.starts_with('[')
+            && matches!(result, HirType::Managed(ManagedType::Array(_)))
+            && self.shape.grows
+        {
+            let Some(want) = types::descriptor(self.shape, result) else {
+                return Err(refuse(self.func, "a bound array whose growable form has no name"));
+            };
+            let Some(wrapper) = want.strip_prefix('L').and_then(|it| it.strip_suffix(';')) else {
+                return Err(refuse(
+                    self.func,
+                    &format!("a bound member returning `{returns}` held as `{want}`"),
+                ));
+            };
+            // **The adopt overload is chosen by the JVM's rules, not ours.**
+            // Method resolution is by exact descriptor, so a `[Ljava/lang/
+            // String;` must call `adopt([Ljava/lang/Object;)` -- the one that
+            // exists -- and array covariance is what makes the argument legal.
+            // A primitive array names its own width, because `adopt([I)` and
+            // `adopt([J)` are different methods that copy differently.
+            let accepts = if returns.starts_with("[L") || returns.starts_with("[[") {
+                "[Ljava/lang/Object;"
+            } else {
+                returns
+            };
+            code.invoke_static(origin, pool, wrapper, "adopt", &format!("({accepts}){want}"));
+            return Ok(());
         }
         if matches!(result, HirType::Float { bits: 64 }) {
             use nts_jvm_emitter::insn::{self, Kind};

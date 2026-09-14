@@ -321,4 +321,33 @@ public final class NtsArrayL {
     public static boolean includesStr(NtsArrayL a, Object value) {
         return indexOfStr(a, value) >= 0.0;
     }
+
+    /**
+     * A Java array, used directly as this array's storage.
+     *
+     * <p><strong>Zero copy, because a {@code String[]} is an {@code Object[]}.</strong>
+     * Java's array covariance is usually a hazard and is exactly the right
+     * thing here: the elements are not touched and the wrapper is one
+     * allocation.
+     *
+     * <p>Why a wrapper at all, when the array is already an array: {@code
+     * arrays_can_grow} is whole-program, so one {@code push} anywhere puts
+     * every array behind this class. That decision is about arrays this
+     * compiler allocates; a jar's array is fixed. Adopting is how a foreign
+     * array joins a representation it cannot be re-laid-out into -- the
+     * alternative was refusing the call, and before that it was a frame that
+     * said wrapper over a value that was a bare array, which the verifier
+     * caught at class load and nothing caught before.
+     *
+     * <p><strong>The store stays Java's until it grows.</strong> Writes are
+     * visible on both sides, which is what a reference to an array means in
+     * either language. A {@code push} past the end reallocates -- the same
+     * detachment a JS engine's backing store undergoes -- and after that the
+     * two are separate. And a store of the wrong element type throws {@code
+     * ArrayStoreException} at the store rather than corrupting the array,
+     * which is the covariance hole doing the right thing.
+     */
+    public static NtsArrayL adopt(Object[] items) {
+        return new NtsArrayL(items == null ? EMPTY : items, items == null ? 0 : items.length);
+    }
 }

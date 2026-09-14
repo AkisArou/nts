@@ -363,6 +363,8 @@ pub const WEB: &str = "nts/rt/NtsWeb";
 
 /// The 128-bit integer, which the JVM has no primitive for.
 pub const BIGINT: &str = "nts/rt/NtsBigInt";
+/// The array helpers, including the `number[]` to Java-primitive-array copies.
+pub const ARRAYS: &str = "nts/rt/NtsArrays";
 pub const BIGINT_DESCRIPTOR: &str = "Lnts/rt/NtsBigInt;";
 
 /// The descriptor for a parameter, result or field.
