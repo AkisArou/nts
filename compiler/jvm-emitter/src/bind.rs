@@ -1397,8 +1397,8 @@ fn render_methods_into(
         if !method.throws.is_empty() {
             let _ = writeln!(
                 out,
-                "    /** Throws {}. Caught at the call site and raised as an `NtsRefusal`; not \
-                 catchable by a TypeScript `try` yet. */",
+                "    /** Throws {}. Propagates as the Java exception itself, terminating the \
+                 program; not catchable by a TypeScript `try` yet. */",
                 method.throws.iter().map(|it| it.replace('/', ".")).collect::<Vec<_>>().join(", ")
             );
         }

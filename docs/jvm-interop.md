@@ -1962,26 +1962,26 @@ separate `interop/` tree that no floor counts until they are ready.
 
 | | 1. java-from-ts | 2. ts-from-java | 3. android-shape |
 | --- | --- | --- | --- |
-| `HashMap` in and out | ● | ● | |
+| `HashMap` in and out | ● | out only | |  <!-- corrected 2026-09-15: a Map crosses **out** as `NtsMap`, which IS a `java.util.Map`, at no cost. It does not cross **in**: a `Map` parameter publishes as the concrete `nts.rt.NtsMap`, so a caller holding a `HashMap` must build an `NtsMap` with `newMap`/`set` and copy entry by entry -- there is no `fromMap`. Out is free, in is a copy. -->
 | `NtsMap implements java.util.Map` | | ● | |
 | `List<String>` / `string[]` | ● | ● | |
 | `int[]` / `byte[]` / subarray | ● | | ● |
-| Generics, wildcards, raw types | ● | ● | |
+| Generics, wildcards, raw types | ● | raw | |  <!-- corrected 2026-09-15: nothing generic crosses in this direction: `tags()` publishes a **raw** `NtsMap` and the consumer writes `Map<Object, Object>` with an unchecked conversion and a cast per value. The project README said so and the matrix did not. -->
 | Overloads, primitive-preferred | ● | | ● |
 | Nullability, annotated and not | ● | | ● |
-| Exceptions | ● | ● | |
+| Exceptions | | | |  <!-- corrected 2026-09-15: neither project has a `try`, `catch` or `throw` outside the refusals file, and a Java exception propagates as itself rather than as an `NtsRefusal` -- no exception table is emitted -->
 | Public fields (`Rect`-shaped) | ● | | ● |
 | Accessors, not public fields | | ● | ● |
 | Static constants and enums | ● | | |
 | Nested and inner classes | ● | | |
 | Varargs | ● | | |
 | `long` / `bigint` | ● | ● | |
-| Branded `int` | ● | | ● |
+| Overloads separated by **name**, not by type | ● | | ● |  <!-- was "Branded `int`", corrected 2026-09-15: brands were removed and `find$int` replaced them -->
 | TS implements a Java interface | | | ● |
 | TS extends a Java class | | | ● |
 | Callback returning a value, same thread | | | ● |
 | Callback void, foreign thread, via inbox | | | ● |
-| Closure as a functional interface | | ● | ● |
+| Closure as a functional interface | | | ● |  <!-- corrected 2026-09-15: not exercised in ts-from-java: neither file contains a lambda, a method reference or a functional interface. Its README already listed closures under "what is not here yet". -->
 
 ## 1. `java-from-ts` — TypeScript consumes Java
 
@@ -2341,10 +2341,14 @@ The hand-written `examples/interop/java-from-ts/types/com.example.d.ts` was the
 spec stopped being aspirational.
 
 Every type-mapping row is forced by something measured rather than chosen: `J`
-is `bigint` because a `long` exceeds 2^53; `I` is a branded `int` because a
-brand in a **declared** signature lowers cleanly and the checker rejects a plain
-`number` with `TS2345`, which is the whole mechanism separating `find(int)` from
-`find(double)`; `[I` is `Int32Array` because a branded array does not lower at
+is `bigint` because a `long` exceeds 2^53; `I` is **plain `number`**, corrected 2026-09-15: this said a branded `int`, and
+that a brand in a declared signature separates `find(int)` from `find(double)`.
+Brands were measured and removed, and the generator says so in as many words --
+`bind.rs`'s `find$int` comment reads "since brands were removed". What separates
+the overloads is a **mangled name**: `find$int` beside `find`, which
+`examples/interop/java-from-ts/src/main.ts` explains at the call site and
+`android-shape` exercises as `drawingOrder$int$int`. The row in the matrix said
+the same thing and is renamed; `[I` is `Int32Array` because a branded array does not lower at
 all while a typed array gives a real `managed<view<i32>>`.
 
 ## Two things the generated output got wrong, and the class file could prove
@@ -2376,7 +2380,7 @@ follow it.
 
 - ~~**Generics are read but not rendered.**~~ **Closed.** `names()` now
   surfaces as `java.util.List<string> | null`, `index()` as
-  `java.util.HashMap<string, java.lang.Integer>`, `repeat` keeps its own type
+  `java.util.HashMap<string, number>`, `repeat` keeps its own type
   variable `T`, and `List<? extends Number>` renders as its bound because
   TypeScript has no wildcard. The control that proves the `Signature` attribute
   is what is being read: `raw()` has the *same erased descriptor* as `names()`

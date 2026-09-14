@@ -477,8 +477,18 @@ fn generic_signatures_are_rendered() {
     // the Signature attribute still has the `String`.
     expect("names(): java.util.List<string> | null;");
     // Two arguments, one of them boxed because a Java map cannot hold a
-    // primitive -- Java's cost, and visible rather than hidden.
-    expect("index(): java.util.HashMap<string, java.lang.Integer> | null;");
+    // primitive -- and the box is **mapped away**: `java.lang.Integer` is
+    // `number`, on Kotlin's rule that `java.lang.Integer` is `Int`.
+    //
+    // This assertion used to demand `java.lang.Integer` here, on the argument
+    // that Java's cost should be visible rather than hidden. That was changed
+    // deliberately, not by accident: a consumer writing `map.get(k) + 1` is
+    // what a TypeScript caller expects, and `Integer` would make them unwrap a
+    // class the prelude only declares by luck. What the old rendering bought
+    // was not honesty about nullability -- neither form says the *value* can be
+    // null -- so the only thing it carried was the allocation, and that belongs
+    // in the cost table where a number can sit beside it.
+    expect("index(): java.util.HashMap<string, number> | null;");
     // A method's own type variable, **declared** as well as used. Without the
     // `<T>` the generated file does not compile: the `T` in the body would
     // refer to nothing. Found by running the generator on the real jar and
@@ -487,11 +497,11 @@ fn generic_signatures_are_rendered() {
     // The control: a method with no type parameters of its own gains no angle
     // brackets, so this is about the `<...>` block rather than about every
     // method.
-    expect("total(a0: java.util.List<java.lang.Number>): number;");
+    expect("total(a0: java.util.List<number>): number;");
     assert!(!body.contains("total<"), "a non-generic method declares no parameters:\n{body}");
     // `List<? extends Number>`: TypeScript has no wildcard, so a covariant
     // bound renders as the bound itself.
-    expect("total(a0: java.util.List<java.lang.Number>): number;");
+    expect("total(a0: java.util.List<number>): number;");
 
     // **The control, and it is the one that proves the Signature attribute is
     // what is being read.** `raw()` has the same erased descriptor as

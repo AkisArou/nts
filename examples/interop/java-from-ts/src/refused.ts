@@ -64,11 +64,20 @@ export function refused(catalog: Catalog): void {
 
   // `catalog.parse("abc")` **compiles**, and fails at run time.
   //
-  // `parse` declares `throws NumberFormatException`. The call is wrapped and
-  // the exception is raised as an `NtsRefusal` naming the Java exception and
-  // the method -- so the program *declines* rather than dying with a stack
-  // trace, which also keeps the differential harness from reading it as a
-  // defect. It is not yet catchable by a TypeScript `try`/`catch`.
+  // `parse` declares `throws NumberFormatException`, and **the exception
+  // propagates as itself**: `java.lang.NumberFormatException: For input string:
+  // "abc"` with a Java stack trace, terminating the program.
+  //
+  // Corrected 2026-09-15. This said the call was wrapped and the exception
+  // raised as an `NtsRefusal` naming the Java exception and the method, so that
+  // the program declined rather than dying -- and none of that happens. The
+  // emitted method has **no exception table** and the class references
+  // `NtsRefusal` zero times; `javap -c` says so in one line each. The stated
+  // benefit, that the differential harness would not read it as a defect, was
+  // therefore not being obtained either.
+  //
+  // Nor is it catchable by a TypeScript `try`/`catch`, which is the one part
+  // of the old comment that was right.
 
   // A value-returning callback on a foreign thread is refused at bind time.
   // That one lives in `examples/interop/android-shape`, because it needs a

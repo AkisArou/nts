@@ -114,6 +114,27 @@ rules coincide on every input.
 `live=true` is the load-bearing one. Every other assertion here passes just as
 well against a copy.
 
+## The Map boundary is asymmetric, and that is worth knowing before you design against it
+
+A `Map` crossing **out** is free. `NtsMap implements java.util.Map`, so the
+reference Java receives IS the table, and the section above proves it by writing
+through the Java interface and seeing the TypeScript side change.
+
+A `Map` crossing **in** is not. A `Map` parameter publishes as the concrete
+`nts.rt.NtsMap`, not as `java.util.Map`:
+
+    public static double countOf(nts.rt.NtsMap);
+
+so a caller holding a `HashMap` cannot pass it. There is no `NtsMap.fromMap`;
+the supported route is `newMap` and then `set` per entry, through `NtsValue`.
+That is a copy, and it is O(n) on every call rather than once.
+
+Widening the parameter to `java.util.Map` would let any map in, and would cost
+the thing that makes the outward direction worth having: the body would be
+dispatching through an interface to a table it no longer owns the layout of.
+Both directions cheap is a real design question, not an oversight to patch.
+
 ## What is not here yet
 
-Closures as Java lambdas, and generics across the boundary.
+Closures as Java lambdas, and generics across the boundary -- `tags()` publishes
+a **raw** `NtsMap`, which is why `Main.java` casts every value it reads out.

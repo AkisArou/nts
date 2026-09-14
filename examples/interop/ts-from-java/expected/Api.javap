@@ -11,6 +11,8 @@ public final class nts.gen.Program {
   public static double total(double[]);
   public static nts.rt.NtsMap tags();
   public static nts.rt.NtsMap zeroKeyed();
+  public static nts.rt.NtsBigInt scaled(nts.rt.NtsBigInt);
+  public static java.lang.String joined(java.lang.String[], java.lang.String);
 }
 Compiled from "nts"
 public final class nts.gen.Session {

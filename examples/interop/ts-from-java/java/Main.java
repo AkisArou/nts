@@ -50,6 +50,23 @@ public final class Main {
         java.util.Map<Object, Object> zeroes = nts.gen.Program.zeroKeyed();
         String byNegativeZero = (String) zeroes.get(Double.valueOf(-0.0));
 
+        // A TypeScript `string[]` is a Java `String[]`, on the same
+        // no-copy rule as the `double[]` above.
+        String joined =
+            nts.gen.Program.joined(new String[] { "a", "b", "c" }, "-");
+
+        // **A TypeScript `bigint` is `nts.rt.NtsBigInt`, not a `long`.**
+        // A Java caller builds one with a factory rather than passing a
+        // primitive, and reads it back as text or a `BigInteger`.
+        //
+        // `exceedsLong` is the argument for not publishing `long` here: that
+        // signature would have truncated this result silently.
+        nts.rt.NtsBigInt big =
+            nts.gen.Program.scaled(nts.rt.NtsBigInt.fromLong(10000000000L));
+        String scaled = nts.rt.NtsBigInt.toText(big);
+        boolean exceedsLong = nts.rt.NtsBigInt.toBigInteger(big)
+            .compareTo(java.math.BigInteger.valueOf(Long.MAX_VALUE)) > 0;
+
         // s.$hits is NOT reachable from here: the field is package-private and
         // this class is not in `nts.gen`. Uncommenting the next line is a
         // compile error, and that error is item 0 working.
@@ -58,6 +75,7 @@ public final class Main {
 
         System.out.println(greeting + " " + first + " " + second + " " + hits + " " + sum
             + " | " + kind + " " + size + " [" + order.toString().trim() + "]"
-            + " live=" + live + " svz=" + byNegativeZero);
+            + " live=" + live + " svz=" + byNegativeZero
+            + " joined=" + joined + " big=" + scaled + " exceedsLong=" + exceedsLong);
     }
 }

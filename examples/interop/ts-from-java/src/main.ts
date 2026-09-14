@@ -56,3 +56,37 @@ export function zeroKeyed(): Map<number, string> {
   m.set(0, "positive zero");
   return m;
 }
+
+/// `long` and `bigint` do not meet in the middle, and here the friction lands
+/// on the *Java* side.
+///
+/// A TypeScript `bigint` is `nts.rt.NtsBigInt` -- 128 bits, wrapping, two
+/// `long` slots and no allocation per operation -- so this publishes as
+/// `NtsBigInt scaled(NtsBigInt)` and a Java caller cannot hand it a primitive.
+/// They write `NtsBigInt.fromLong(n)` and read the result back with
+/// `toBigInteger`, `toText` or `toNumber`.
+///
+/// Publishing `long` would be the smaller-looking API and the wrong one: the
+/// result below exceeds `Long.MAX_VALUE`, so that signature would truncate
+/// precisely the range a program reaches for `bigint` to get.
+export function scaled(seed: bigint): bigint {
+  return seed * 1000000007n;
+}
+
+/// A `string[]` is a `java.lang.String[]`, on the same no-copy rule as
+/// `number[]` -> `double[]` above: the array a Java caller passes IS the array
+/// this loop reads.
+///
+/// That holds only because nothing in this program can `push`. `arrays_can_grow`
+/// is whole-program, so one `push` anywhere moves *every* array in the program
+/// behind a growable wrapper and this signature becomes a wrapper type.
+export function joined(names: string[], sep: string): string {
+  let out = "";
+  for (let i = 0; i < names.length; i++) {
+    if (i > 0) {
+      out = out + sep;
+    }
+    out = out + names[i];
+  }
+  return out;
+}
