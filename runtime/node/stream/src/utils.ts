@@ -18,6 +18,8 @@
 // that collapses them treats a plain object as a finished stream.
 
 /** Loose enough for an object from anywhere. Every field is a maybe. */
+import { Buffer } from "../../buffer/src/main.ts";
+
 export interface StreamLike {
   [key: string | symbol]: unknown;
   _readableState?: StreamState;
@@ -441,4 +443,36 @@ export function isErrored(stream: unknown): boolean {
     stream._readableState?.errored ??
     stream._writableState?.errored
   );
+}
+
+/**
+ * **node's three undocumented byte helpers, which it publishes on `stream` and on `Stream`.**
+ *
+ * `lib/stream.js` hangs `_isUint8Array`, `_isArrayBufferView` and `_uint8ArrayToBuffer` off the
+ * module and the `Stream` object both. They are prefixed and undocumented, and they are also
+ * *there*: `surface-absence.mjs` counted six of this module's seven missing names as these three
+ * seen twice.
+ *
+ * Found by the differential rather than by the surface tool, which is the part worth noting. The
+ * surface tool had reported them for a while; what made them worth writing was a spec calling
+ * them and getting `absent` against node's answer, on every input. An absence is easy to read
+ * past in a list and hard to read past in a comparison.
+ */
+export function _isUint8Array(value: unknown): boolean {
+  return value instanceof Uint8Array;
+}
+
+export function _isArrayBufferView(value: unknown): boolean {
+  return ArrayBuffer.isView(value);
+}
+
+/**
+ * A `Buffer` over the same memory, not a copy. node's is
+ * `Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength)`, and the offset and length
+ * matter: a view into the middle of a larger buffer must not become the whole of it.
+ */
+export function _uint8ArrayToBuffer(chunk: Uint8Array): Buffer {
+  // `chunk.buffer` is `ArrayBufferLike`, which admits a `SharedArrayBuffer`; the overload takes
+  // an `ArrayBuffer`. node does not distinguish here and neither does the runtime behaviour.
+  return Buffer.from(chunk.buffer as ArrayBuffer, chunk.byteOffset, chunk.byteLength);
 }

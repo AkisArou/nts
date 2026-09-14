@@ -2329,6 +2329,82 @@ export const CORPORA = {
       return out;
     },
     calls: [
+      {
+        // **The deterministic part of the asynchronous half.** The note above excludes events
+        // and `pipe` because comparing them means comparing *ordering*, which belongs to
+        // `fuzz-timer-order.mjs`. That still holds. What it ruled out along with them, and did
+        // not have to, is the part of the async surface whose answer is a **value**: given a
+        // synchronous source, `toArray` and its siblings produce the same array every time.
+        //
+        // Unreachable until `differential-ts.mjs` and its probe learned to await; `stream` sat
+        // at 25 of 108 published functions called, and the iterator helpers were most of the
+        // rest. No timers, no sockets, no events compared -- only what the pipeline returns.
+        label: "async-iterator-helpers",
+        call: async (m, s) => {
+          const items = Array.from(s).map((c) => c.charCodeAt(0));
+          const from = () => m.Readable.from(items);
+          const show = async (make) => {
+            try {
+              const v = await make();
+              return `ok:${Array.isArray(v) ? v.join(",") : String(v)}`;
+            } catch (error) {
+              return `${error.code ?? error.name ?? "?"}`;
+            }
+          };
+          return [
+            await show(() => from().toArray()),
+            await show(() => from().map((v) => v * 2).toArray()),
+            await show(() => from().filter((v) => v % 2 === 0).toArray()),
+            await show(() => from().take(2).toArray()),
+            await show(() => from().drop(2).toArray()),
+            await show(() => from().flatMap((v) => [v, v]).toArray()),
+            await show(() => from().reduce((a, b) => a + b, 0)),
+            await show(() => from().every((v) => v > 0)),
+            await show(() => from().some((v) => v > 100)),
+            await show(() => from().find((v) => v > 100)),
+            await show(async () => { let seen = 0; await from().forEach(() => { seen += 1; }); return seen; }),
+            await show(async () => { const out = []; for await (const v of from().iterator()) out.push(v); return out; }),
+          ].join("|");
+        },
+      },
+      {
+        // `pipeline` and `finished` in their promise forms, plus the module-level helpers that
+        // answer synchronously. A pipeline over a fixed array settles to one value, so this is a
+        // value compare and not an ordering one.
+        label: "pipeline-and-helpers",
+        call: async (m, s) => {
+          const items = Array.from(s).map((c) => c.charCodeAt(0));
+          const show = async (make) => {
+            try { return `ok:${String(await make())}`; } catch (error) { return `${error.code ?? error.name ?? "?"}`; }
+          };
+          return [
+            await show(async () => {
+              if (m.promises?.pipeline === undefined) return "absent";
+              const out = [];
+              await m.promises.pipeline(
+                m.Readable.from(items),
+                async function* (source) { for await (const v of source) yield `${v};`; },
+                async function (source) { for await (const v of source) out.push(v); },
+              );
+              return out.join("");
+            }),
+            await show(async () => {
+              if (m.promises?.finished === undefined) return "absent";
+              const readable = m.Readable.from(items);
+              readable.resume();
+              await m.promises.finished(readable);
+              return "finished";
+            }),
+            await show(async () => (m.compose === undefined ? "absent" : typeof m.compose)),
+            await show(async () => (m.duplexPair === undefined ? "absent" : m.duplexPair().length)),
+            await show(async () => (m.getDefaultHighWaterMark === undefined ? "absent" : m.getDefaultHighWaterMark(false))),
+            await show(async () => (m._isUint8Array === undefined ? "absent" : m._isUint8Array(new Uint8Array(1)))),
+            await show(async () => (m._isArrayBufferView === undefined ? "absent" : m._isArrayBufferView(new DataView(new ArrayBuffer(2))))),
+            await show(async () => (m._uint8ArrayToBuffer === undefined ? "absent" : m._uint8ArrayToBuffer(new Uint8Array([1, 2])).length)),
+          ].join("|");
+        },
+      },
+
       // Error paths. See `REJECTED` above.
       { label: "pipeline!", throws: true, call: (m, s) => m.pipeline(rejected(s)) },
       {

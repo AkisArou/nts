@@ -59,6 +59,9 @@ import {
   isErrored,
   isReadable,
   isWritable,
+  _isUint8Array,
+  _isArrayBufferView,
+  _uint8ArrayToBuffer,
 } from "./utils.ts";
 
 export {
@@ -94,6 +97,10 @@ export {
   isWritable,
   kSynchronousCallback,
   addAbortSignalNoValidate,
+  // node publishes these three on the module and on `Stream`; see `utils.ts`.
+  _isUint8Array,
+  _isArrayBufferView,
+  _uint8ArrayToBuffer,
 };
 
 export default Stream;
