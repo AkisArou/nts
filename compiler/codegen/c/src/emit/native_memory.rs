@@ -8,7 +8,41 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
     let layouts = nts_codegen_common::native::layouts(program)
         .map_err(|why| Diagnostic::error("NTS2006", why, origin.location))?;
     for name in &layouts.tags { writer.line(origin, format!("struct {name};")); }
-    for layout in layouts.structs.values() {
+    // Definition order matters now that a member can be a struct stored inline:
+    // C wants a *complete* type for that, and a forward declaration is not one.
+    // `layouts.structs` is keyed by name, so emitting in map order put
+    // `itimerval` before the `timeval` it contains and produced a translation
+    // unit that says `field has incomplete type`.
+    //
+    // A pointer member needs no such ordering -- that is the whole reason C can
+    // have recursive types -- so only inline members constrain this, and a cycle
+    // among those is a type C cannot express. The schema already refuses to
+    // build one, so an unorderable set here would mean the two disagree; it is
+    // reported rather than silently truncated.
+    let mut ordered: Vec<&std::sync::Arc<nts_core::hir::native::Struct>> = Vec::new();
+    let mut placed: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    while placed.len() < layouts.structs.len() {
+        let before = placed.len();
+        for layout in layouts.structs.values() {
+            if placed.contains(layout.name.as_str()) { continue; }
+            let ready = layout.fields.iter().all(|field| match &field.ty {
+                Pointee::Struct(inner) => placed.contains(inner.name.as_str()),
+                _ => true,
+            });
+            if ready {
+                placed.insert(layout.name.as_str());
+                ordered.push(layout);
+            }
+        }
+        if placed.len() == before {
+            return Err(Diagnostic::error(
+                "NTS2006",
+                "native structs contain each other by value, which C cannot lay out",
+                origin.location,
+            ));
+        }
+    }
+    for layout in ordered {
         let placed = nts_core::hir::layout::native_place(layout)
             .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
         writer.line(origin, format!("struct {} {{", layout.name));

@@ -817,6 +817,54 @@ fn a_typed_buffer_where_read_wants_void_is_refused_by_the_witness() {
     assert!(refused, "the real <unistd.h> accepted `read` with a uint8_t * buffer");
 }
 
+/// A struct stored inline in another, checked against the header that declares
+/// both.
+///
+/// `struct itimerval` is two `struct timeval`s by value, which is the shape most
+/// real C structs have and the one a header importer will meet immediately. The
+/// point is not that a size comes out right -- it is that the *system header*
+/// accepts every claim: both sizes, both alignments, every offset, and
+/// `_Generic` on the nested member itself, which is `struct timeval *` and would
+/// not be if the member had been described as a pointer or flattened away.
+///
+/// It also pins the emission order. A struct containing another by value needs
+/// the inner one *complete*, and a forward declaration is not: emitting these in
+/// name order put `itimerval` first and produced `field has incomplete type`.
+/// `emit-c` reported success while doing it, so only compiling the output
+/// catches it, which is what this does.
+#[test]
+fn an_inline_struct_member_agrees_with_the_system_header() {
+    let source = "import type { Ptr, Struct, c_long } from 'c:types';
+        type TimeVal = Struct<{tv_sec: c_long; tv_usec: c_long}, 'timeval'>;
+        type ITimerVal = Struct<{it_interval: TimeVal; it_value: TimeVal}, 'itimerval'>;
+        export function seconds(p: Ptr<ITimerVal>): number { return p.it_value.tv_sec; }";
+    let Some((dir, prepared)) = prepare("inline-struct-member", source) else {
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    // The program's own translation unit: an inline member the definitions were
+    // emitted out of order for would fail here and nowhere earlier.
+    clang(&dir, &["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "program.c"]);
+    // And the witness, where the real <sys/time.h> is the one answering.
+    std::fs::write(
+        dir.join("witness.c"),
+        "#include <sys/time.h>\n#include <stdint.h>\n#include <stddef.h>\n#include \"native_witness.h\"\n",
+    )
+    .unwrap();
+    clang(&dir, &["-std=c11", "-fsyntax-only", "witness.c"]);
+    let witness = std::fs::read_to_string(dir.join("native_witness.h")).unwrap();
+    assert!(
+        witness.contains("struct timeval *: 1"),
+        "the nested member's own type must be asserted, not only its offset:\n{witness}"
+    );
+}
+
 #[test]
 fn native_struct_rejections_preserve_the_valid_arm() {
     for (name, bad) in [
@@ -825,7 +873,11 @@ fn native_struct_rejections_preserve_the_valid_arm() {
         ("managed-address", "export function bad(): number { const p = {count: 1}; return addrOf(p.count)[0]; }"),
         ("plain-field", "type Bad = Struct<{count: number}>; export function bad(p: Ptr<Bad>): number { return p.count; }"),
         ("optional-field", "type Bad = Struct<{count?: c_int32}>; export function bad(p: Ptr<Bad>): number { return p.count ?? 0; }"),
-        ("nested-field", "type Bad = Struct<{inner: State}>; export function bad(p: Ptr<Bad>): void { void p; }"),
+        // A struct stored inline is supported; a struct that contains *itself*
+        // by value is not a type C can lay out, and is the limit that replaced
+        // this arm when nested members landed.
+        ("self-nested", "type Loop = Struct<{n: c_int32; self: Loop}, 'loopy'>; export function bad(p: Ptr<Loop>): void { void p; }"),
+        ("mutually-nested", "type L = Struct<{n: c_int32; r: R}, 'l'>; type R = Struct<{n: c_int32; l: L}, 'r'>; export function bad(p: Ptr<L>): void { void p; }"),
         ("schema-value", "export function bad(p: State): void { void p; }"),
         ("lying-address", "/** @ntsAbi intrinsic */ declare function addrOf(p: unknown): Ptr<c_double>; export function bad(p: Ptr<State>): number { return addrOf(p.count)[0]; }"),
     ] {

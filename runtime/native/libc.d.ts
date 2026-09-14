@@ -31,7 +31,13 @@ declare module "c:types" {
   // C's qualification conversion, in the one direction C performs it, out of
   // TypeScript's own assignability rather than a rule written here.
   export type Ptr<T> = { readonly __c_pointer: T; readonly __c_writable: true } & (T extends Struct<infer Fields, string>
-    ? { [K in keyof Fields]: Slot<Fields[K]> } & { [index: number]: Ptr<T> }
+    // A struct-typed member is stored inline and projects as a *pointer to it*,
+    // never as a value: reading one as a value would be an aggregate copy, and
+    // `p.inner.field` should reach the bytes that are there rather than a
+    // duplicate of them. This is what `p[i]` already does for a block of
+    // structs, for the same reason.
+    ? { [K in keyof Fields]: Fields[K] extends { readonly __c_struct: unknown } ? Ptr<Fields[K]> : Slot<Fields[K]> }
+      & { [index: number]: Ptr<T> }
     : { [index: number]: Slot<T> });
   // A view that may be read and not written. `const` restricts this holder; it
   // is not a claim that the storage is immutable or unaliased, and nothing here

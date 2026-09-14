@@ -439,6 +439,45 @@ The test asserts the verdict from `escape::analyze_program` directly, on two
 programs differing in one line of JSDoc, because a check that went through
 placement would pass for a reason unrelated to whether the declaration was read.
 
+## Eighth executable slice: a struct stored inline in another
+
+`struct itimerval` is two `struct timeval`s by value. That shape is most real C
+structs, and a header importer meets it immediately, so it was the gap worth
+closing before deriving anything.
+
+A struct-typed member is stored **inline**: the nested layout's bytes sit in the
+outer one. `native_shape` already knew how to size and align that -- the missing
+piece was the schema, which pushed every non-scalar member through the pointer
+case and so refused a `Struct<...>` as "not a pointer".
+
+**A member projects as a pointer to itself, never as a value.** Reading one as a
+value would be an aggregate copy, and `p.it_value.tv_sec` should reach the bytes
+that are there rather than a duplicate. This is what `p[i]` already does for a
+block of structs, for the same reason.
+
+**What is refused is a type C cannot lay out.** A struct containing itself by
+value, or two containing each other, have no size; `visiting` refuses them where
+the members are read. A struct containing a *pointer* to itself is a different
+thing and remains refused for its own older reason -- a recursive pointee needs
+a separately named incomplete type -- which predates this and was checked
+against the previous compiler rather than assumed.
+
+**Emission order became load-bearing.** C wants a *complete* type for an inline
+member and a forward declaration is not one. `layouts.structs` is keyed by name,
+so `itimerval` was emitted before the `timeval` inside it and the translation
+unit said `field has incomplete type`. `emit-c` reported success while doing
+it. Definitions are now ordered by their inline dependencies, and a set that
+cannot be ordered is reported rather than truncated -- it would mean the emitter
+and the schema disagree about a cycle.
+
+Only compiling the output catches that, so the test compiles `program.c` as well
+as the witness, and a sabotage back to name order fails it.
+
+**The witness carries the whole claim.** Against the real `<sys/time.h>`: both
+sizes, both alignments, every offset, and `_Generic` on the nested member, which
+must answer `struct timeval *` and would not if the member had been described as
+a pointer or flattened into its fields.
+
 ## Direction for the next executable slices
 
 1. **More native storage and header-derived bindings.** `void *`, const-qualified

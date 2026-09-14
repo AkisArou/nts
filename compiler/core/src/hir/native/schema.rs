@@ -95,8 +95,27 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
         // Inheritance, optional fields, methods and synthesized members do not
         // define a C declaration order. Refuse until their contract is explicit.
         if property.optional || property.kind != MemberKind::Field || property.declaration.is_none() { return None; }
+        // A struct-typed member is stored *inline*, the way C stores it: the
+        // nested layout's bytes sit in this one, and `native_shape` already
+        // knew how to size and align that. It is tried before the pointer case
+        // because a `Struct<...>` is not a pointer and would otherwise be
+        // refused as one.
+        //
+        // `visiting` is what stops a type that contains itself by value. C has
+        // no such type -- a struct may contain a pointer to itself, never a
+        // copy -- so the guard refuses rather than recursing, and the pointer
+        // form remains available and is unaffected.
         let ty = if let Some(scalar) = scalar(snapshot, property.ty) {
             Pointee::Scalar(scalar)
+        } else if !visiting.contains(&property.ty)
+            && let Some(inner) = {
+                visiting.push(property.ty);
+                let inner = structure(snapshot, property.ty, visiting);
+                visiting.pop();
+                inner
+            }
+        {
+            Pointee::Struct(inner.into())
         } else {
             Pointee::Pointer(Box::new(pointer_within(snapshot, property.ty, visiting)?))
         };
