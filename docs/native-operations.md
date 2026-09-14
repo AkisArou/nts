@@ -371,6 +371,43 @@ address is identical either way, so nothing in the emitted C would have looked
 wrong; `native-structs` caught it at run time by counting the calls. A computed
 key is an expression and still runs.
 
+## Seventh executable slice: `const` views
+
+`write` takes `const void *`, and until now nothing could say so. `ConstPtr<T>`
+is that view, and `examples/interop/native-fd` writes through it.
+
+**What it claims, and what it does not.** `const` in C restricts *this holder*.
+It is not a claim that the storage is immutable, and not a claim that nobody
+else holds a mutable pointer to the same bytes. Saying more than that would be
+an ownership promise with no checker behind it.
+
+**The marker sits on the mutable type.** `Ptr<T>` carries `__c_writable`;
+`ConstPtr<T>` does not, so const is the *smaller* type. A `Ptr<T>` therefore
+satisfies a `ConstPtr<T>` and a `ConstPtr<T>` does not satisfy a `Ptr<T>` --
+exactly C's qualification conversion, in the one direction C performs it, out of
+TypeScript's own assignability rather than a rule written here. Put the marker
+on the const type instead and the relation inverts, forcing a conversion at
+every call site that passes its own buffer.
+
+TypeScript enforces the rest as well: writing through a const view is `TS2542`,
+"only permits reading". Lowering refuses the store again rather than trusting
+that, because a program can declare an intrinsic for itself whose type and
+contract disagree.
+
+**`Pointee::converts_to` is where the conversion set is stated.** C performs two
+implicit pointer conversions -- any object pointer to `void *`, and adding
+qualification -- and they compose, so `uint8_t *` reaches `const void *`. It
+recurses rather than listing pairs. Neither direction that loses information is
+in it.
+
+**What is refused, and named.** The address of a member or element of a const
+view: in C that is a `const U *`, and `addrOf` hands back a writable pointer, so
+returning one would launder the qualifier. Giving it back qualified needs the
+surface to tell a const slot from a mutable one, and today `Slot<T>` is the same
+type in both -- the read-only-ness lives on the container. Refused with a
+diagnostic that says which, rather than the general "without a native struct
+layout" that was true and useless.
+
 ## Direction for the next executable slices
 
 1. **More native storage and header-derived bindings.** `void *`, const-qualified

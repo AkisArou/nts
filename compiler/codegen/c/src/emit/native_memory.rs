@@ -156,6 +156,6 @@ fn pointee_is_foreign(pointee: &Pointee) -> bool {
         // declaration authored -- a header defines it or the witness will say so.
         Pointee::Scalar(_) | Pointee::Opaque(_) | Pointee::Void => true,
         Pointee::Struct(layout) => layout.foreign,
-        Pointee::Pointer(inner) => pointee_is_foreign(inner),
+        Pointee::Pointer(inner) | Pointee::Const(inner) => pointee_is_foreign(inner),
     }
 }

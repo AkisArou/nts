@@ -57,6 +57,15 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         return Some(Pointee::Opaque(text(snapshot, tag)?.to_owned()));
     }
     let element = marker(snapshot, ty, "___c_pointer")?;
+    // `ConstPtr<T>` is `Ptr<T>` without the writable marker. The marker sits on
+    // the *mutable* type on purpose: the const one is then the smaller of the
+    // two, so a `Ptr<T>` satisfies a `ConstPtr<T>` and not the reverse, which is
+    // exactly the one direction C converts. A marker on the const type would
+    // invert that and make every call site convert explicitly.
+    let writable = marker(snapshot, ty, "___c_writable").is_some();
+    let qualify = |pointee: Pointee| {
+        if writable { pointee } else { Pointee::Const(Box::new(pointee)) }
+    };
     // `Ptr<unknown>` is C's `void *`. Only `unknown`: `Ptr<any>` stays refused,
     // because `any` is what a program ends up with by accident and `unknown` is
     // what someone writes on purpose. `TypeKind::Unsupported` is a third thing
@@ -64,11 +73,11 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
     // and reading that as `void *` would turn every unmodelled type into a
     // pointer nobody declared.
     if matches!(snapshot.types.get(element.0 as usize)?.kind, TypeKind::Unknown) {
-        return Some(Pointee::Void);
+        return Some(qualify(Pointee::Void));
     }
-    if let Some(scalar) = scalar(snapshot, element) { return Some(Pointee::Scalar(scalar)); }
-    if let Some(layout) = structure(snapshot, element, visiting) { return Some(Pointee::Struct(layout.into())); }
-    pointer_within(snapshot, element, visiting).map(|p| Pointee::Pointer(Box::new(p)))
+    if let Some(scalar) = scalar(snapshot, element) { return Some(qualify(Pointee::Scalar(scalar))); }
+    if let Some(layout) = structure(snapshot, element, visiting) { return Some(qualify(Pointee::Struct(layout.into()))); }
+    pointer_within(snapshot, element, visiting).map(|p| qualify(Pointee::Pointer(Box::new(p))))
 }
 
 fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>) -> Option<Struct> {

@@ -1,4 +1,4 @@
-import { read, type Fd, type Count } from "c:unistd";
+import { read, write, type Fd, type Count } from "c:unistd";
 import { local } from "c:memory";
 import type { c_uint8 } from "c:types";
 
@@ -25,4 +25,14 @@ export function readSum(fd: number, max: number): number {
   let total = 0;
   for (let i = 0; i < got; i++) total += buf[i];
   return total;
+}
+
+// Writes bytes TS owns out to a descriptor. `write` takes `const void *`, so
+// the same buffer that `read` fills can be handed to it -- a `Ptr<T>` satisfies
+// a `ConstPtr<T>` and not the reverse, which is C's rule and, here, TypeScript's.
+export function writeBytes(fd: number, first: number, second: number): number {
+  const buf = local<c_uint8>(CAPACITY);
+  buf[0] = first;
+  buf[1] = second;
+  return write(fd as Fd, buf, 2 as Count);
 }

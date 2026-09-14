@@ -24,6 +24,12 @@ impl FuncBuilder<'_> {
 
     pub(super) fn native_index_address(&mut self, id: NodeId, pointer: ValueId, index: ValueId) -> Result<ValueId, Diagnostic> {
         let ty = self.values[pointer.0 as usize].ty.clone();
+        // Same reason as the field case: the element address of a `const T *`
+        // is a `const T *`, and handing back a writable one would launder the
+        // qualifier this view exists to carry.
+        if matches!(&ty, HirType::NativePointer(Pointee::Const(_))) {
+            return Err(self.unsupported(id, "the address of an element of a `const` native view"));
+        }
         if !matches!(&ty, HirType::NativePointer(p) if !matches!(p, Pointee::Opaque(_))) {
             return Err(self.unsupported(id, "address arithmetic without a native element layout"));
         }
@@ -43,6 +49,19 @@ impl FuncBuilder<'_> {
     }
 
     pub(super) fn native_field_address(&mut self, id: NodeId, pointer: ValueId, name: &str) -> Result<ValueId, Diagnostic> {
+        // Named before the general refusal, because "without a native struct
+        // layout" is true of a const view and says nothing a reader can act on.
+        //
+        // The address of a member of a `const T *` is a `const U *` in C, and
+        // that is what it would have to be here -- an address that dropped the
+        // qualifier would launder it, and `addrOf` returns a writable pointer.
+        // Giving it back as const needs the surface to tell a const slot from a
+        // mutable one, and today `Slot<T>` is the same type in both, the
+        // read-only-ness living on the container. Refused until it can be
+        // returned with the qualifier it must carry.
+        if let HirType::NativePointer(Pointee::Const(_)) = &self.values[pointer.0 as usize].ty {
+            return Err(self.unsupported(id, "the address of a member of a `const` native view"));
+        }
         let HirType::NativePointer(Pointee::Struct(layout)) = &self.values[pointer.0 as usize].ty else {
             return Err(self.unsupported(id, "a field address without a native struct layout"));
         };

@@ -4198,7 +4198,15 @@ fn emit_op(
             // A C cast. Between an integer and a double this is one instruction,
             // and every one is a place specialization decided two adjacent
             // values should live in different machine types.
-            let target = c_type(&op.ty, &op.origin)?;
+            //
+            // A native pointer is spelled from its pointee rather than through
+            // `c_type`: the spelling is built from a layout's own tag or a
+            // qualifier, so it is a `String` and not one of the fixed names
+            // that function can return.
+            let target = match &op.ty {
+                HirType::NativePointer(pointee) => pointee.pointer_type(),
+                other => c_type(other, &op.origin)?.to_owned(),
+            };
             format!("{name} = ({target}){};", value_name(*operand))
         }
     };

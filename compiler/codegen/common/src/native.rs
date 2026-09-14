@@ -16,7 +16,12 @@ impl Layouts {
             // Neither names a struct this program must define: a scalar has no
             // tag, and `void` has no type at all.
             Pointee::Scalar(_) | Pointee::Void => {}
-            Pointee::Pointer(pointee) => self.visit(pointee)?,
+
+            // Both name whatever they are a view of, so the struct either one
+            // reaches still needs its definition emitted. One arm rather than
+            // two identical ones: they differ in what they mean and not in what
+            // this has to do about it.
+            Pointee::Pointer(pointee) | Pointee::Const(pointee) => self.visit(pointee)?,
             Pointee::Opaque(name) => self.tag(name)?,
             Pointee::Struct(layout) => {
                 self.tag(&layout.name)?;

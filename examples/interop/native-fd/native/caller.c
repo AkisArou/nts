@@ -40,6 +40,21 @@ int main(void) {
   // kernel: 65 never reaches `read`.
   if (readCount(0, 65) != -1) return 5;
 
-  puts("native fd: bounded read through void *; count, contents, eof, error, capacity");
+  // The other direction, through `const void *`: TS fills a buffer it owns and
+  // hands it out for reading only. The bytes are checked on the way back, so a
+  // call that wrote nothing is distinguishable from one that wrote zeroes.
+  {
+    int fds[2];
+    if (pipe(fds) != 0) return 6;
+    if (writeBytes((double)fds[1], 'o', 'k') != 2) return 7;
+    close(fds[1]);
+    char got[2] = {0, 0};
+    if (read(fds[0], got, 2) != 2) return 8;
+    close(fds[0]);
+    if (got[0] != 'o' || got[1] != 'k') return 9;
+  }
+
+  puts("native fd: read through void * and write through const void *; "
+       "count, contents, eof, error, capacity, round trip");
   return 0;
 }

@@ -222,7 +222,10 @@ fn scalar_pointer_access_does_not_admit_object_or_pointer_forgery() {
         ("erase", "export function bad(): unknown { return make(); }"),
         ("brand", "export function bad(): c_uint8 { return make().__c_pointer; }"),
         ("in", "export function bad(): boolean { return '__c_pointer' in make(); }"),
-        ("forged", "export function bad(): Bytes { return { __c_pointer: 0 as c_uint8 }; }"),
+        // The forgery has to carry `__c_writable` too, or TypeScript refuses it
+        // before lowering is reached and this arm stops testing the lowering
+        // guard it exists for.
+        ("forged", "export function bad(): Bytes { return { __c_pointer: 0 as c_uint8, __c_writable: true }; }"),
         ("cast", "export function bad(n: number): Bytes { return n as unknown as Bytes; }"),
         ("reinterpret", "export function bad(): Ptr<c_double> { return make() as unknown as Ptr<c_double>; }"),
         ("array", "export function bad(): number { const a = [make()]; return a[0]![0]; }"),
@@ -539,4 +542,77 @@ fn snapshot_allowing_errors(
         .unwrap();
     let errors = snapshot.has_errors();
     Some((snapshot, errors))
+}
+
+/// What a `const` native view permits, and which mechanism refuses the rest.
+///
+/// `const` in C restricts the holder of a pointer; it does not claim the
+/// storage is immutable or unaliased, and nothing here promises that. What it
+/// must do is refuse a write through this view and refuse becoming a writable
+/// view, in the one direction C converts and not the other.
+///
+/// Most of that is TypeScript's own assignability: the writable marker sits on
+/// `Ptr`, so `ConstPtr` is the smaller type, a `Ptr<T>` satisfies it, and a
+/// `ConstPtr<T>` does not satisfy a `Ptr<T>`. Writing through one is `TS2542`.
+///
+/// The arms are labelled with which mechanism must catch them, because a
+/// mechanism that stops working otherwise hides behind the other.
+#[test]
+fn a_const_view_reads_and_does_not_write() {
+    let header = "import type { ConstPtr, Ptr, c_uint8, c_size_t } from \"c:types\";\n\
+         import { addrOf, local } from \"c:memory\";\n\
+         /** @ntsNoEscape p */\n\
+         declare function wantsConst(p: ConstPtr<unknown>, n: c_size_t): void;\n\
+         /** @ntsNoEscape p */\n\
+         declare function wantsMutable(p: Ptr<c_uint8>, n: c_size_t): void;\n";
+    for (name, body, expected) in [
+        (
+            "mutable-satisfies-const",
+            "export function go(): void { const b = local<c_uint8>(4); wantsConst(b, 4 as c_size_t); }",
+            None,
+        ),
+        (
+            "read-through-const",
+            "export function go(p: ConstPtr<c_uint8>): number { return p[0]; }",
+            None,
+        ),
+        (
+            "const-does-not-satisfy-mutable",
+            "export function go(p: ConstPtr<c_uint8>): void { wantsMutable(p, 4 as c_size_t); }",
+            Some("typescript"),
+        ),
+        (
+            "write-through-const",
+            "export function go(p: ConstPtr<c_uint8>): void { p[0] = 1; }",
+            Some("typescript"),
+        ),
+        // An address taken out of a const view would have to carry the
+        // qualifier; `addrOf` hands back a writable pointer, so it is refused
+        // rather than laundering it.
+        (
+            "address-of-a-const-member",
+            "export function go(p: ConstPtr<c_uint8>): void { wantsMutable(addrOf(p[1]), 1 as c_size_t); }",
+            Some("lowering"),
+        ),
+    ] {
+        let Some((snapshot, typescript)) =
+            snapshot_allowing_errors(&format!("const-{name}"), &format!("{header}{body}"))
+        else {
+            return;
+        };
+        let mut why = String::new();
+        let caught = if typescript {
+            why = format!("{:?}", snapshot.diagnostics);
+            Some("typescript")
+        } else {
+            let prepared = hir::prepare(&snapshot).unwrap();
+            if prepared.diagnostics.is_empty() {
+                None
+            } else {
+                why = format!("{:?}", prepared.diagnostics);
+                Some("lowering")
+            }
+        };
+        assert_eq!(caught, expected, "{name}: {why}");
+    }
 }

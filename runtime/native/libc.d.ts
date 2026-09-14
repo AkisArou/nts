@@ -25,9 +25,21 @@ declare module "c:types" {
   type Slot<T> = T extends number
     ? number & { readonly __c_of?: T }
     : T & { readonly __c_of?: T };
-  export type Ptr<T> = { readonly __c_pointer: T } & (T extends Struct<infer Fields, string>
+  // `__c_writable` is what separates `Ptr` from `ConstPtr`, and it sits on the
+  // mutable one so that const is the *smaller* type: a `Ptr<T>` then satisfies
+  // a `ConstPtr<T>` and a `ConstPtr<T>` does not satisfy a `Ptr<T>`, which is
+  // C's qualification conversion, in the one direction C performs it, out of
+  // TypeScript's own assignability rather than a rule written here.
+  export type Ptr<T> = { readonly __c_pointer: T; readonly __c_writable: true } & (T extends Struct<infer Fields, string>
     ? { [K in keyof Fields]: Slot<Fields[K]> } & { [index: number]: Ptr<T> }
     : { [index: number]: Slot<T> });
+  // A view that may be read and not written. `const` restricts this holder; it
+  // is not a claim that the storage is immutable or unaliased, and nothing here
+  // promises otherwise. Writing through one is `TS2542`, "only permits
+  // reading", before the compiler is reached.
+  export type ConstPtr<T> = { readonly __c_pointer: T } & (T extends Struct<infer Fields, string>
+    ? { readonly [K in keyof Fields]: Slot<Fields[K]> } & { readonly [index: number]: ConstPtr<T> }
+    : { readonly [index: number]: Slot<T> });
   // Hand-written native ABI scalar declarations, maintained with hir/native.rs.
   // Import the required types from "c:types".
   // Brands select the C boundary type; arithmetic inside TypeScript is ordinary

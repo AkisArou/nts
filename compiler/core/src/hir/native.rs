@@ -58,6 +58,20 @@ pub enum Pointee {
     /// accepted -- it would make an unchecked type into a pointer silently,
     /// where `unknown` is the one a person writes on purpose.
     Void,
+    /// `const T`, as the pointee of a `const T *`.
+    ///
+    /// A restriction on access *through this view*, and nothing more. It is not
+    /// a claim that the storage is immutable, nor that no one else holds a
+    /// mutable pointer to it: `const` in C constrains the holder, not the
+    /// memory. Saying otherwise would be an ownership promise with no checker
+    /// behind it.
+    ///
+    /// Spelled `ConstPtr<T>`, which a `Ptr<T>` satisfies and which does not
+    /// satisfy a `Ptr<T>` -- TypeScript's own assignability, giving exactly C's
+    /// qualification conversion in the one direction C allows. Writing through
+    /// one is a type error before lowering sees it (`TS2542`, "only permits
+    /// reading"); lowering refuses it again rather than trusting that.
+    Const(Box<Pointee>),
 }
 
 /// C storage order is declaration order, never the managed layout order.
@@ -96,6 +110,27 @@ impl Pointee {
             Self::Struct(layout) => format!("struct {}", layout.name),
             Self::Pointer(pointee) => pointee.pointer_type(),
             Self::Void => "void".to_owned(),
+            Self::Const(pointee) => format!("const {}", pointee.c_type()),
+        }
+    }
+
+    /// Whether a `Self *` may become a `to *` with no cast, as C does at a call.
+    ///
+    /// C performs exactly two implicit pointer conversions and this is both of
+    /// them: any object pointer to `void *`, and adding qualification. They
+    /// compose -- `uint8_t *` reaches `const void *` -- which is why this
+    /// recurses rather than listing pairs.
+    ///
+    /// One direction only. Dropping `const`, or turning a `void *` back into a
+    /// typed pointer, are the conversions mistakes are made of, and C requires a
+    /// cast for both. TypeScript refuses them too, `ConstPtr<T>` not satisfying
+    /// `Ptr<T>`; this is the second of two guards rather than the only one.
+    #[must_use]
+    pub fn converts_to(&self, to: &Self) -> bool {
+        match to {
+            Self::Void => true,
+            Self::Const(inner) => self == &**inner || self.converts_to(inner),
+            _ => false,
         }
     }
 
@@ -109,6 +144,11 @@ impl Pointee {
         match self {
             Self::Scalar(scalar) => Some(scalar.representation()),
             Self::Pointer(pointee) => Some(HirType::NativePointer((**pointee).clone())),
+            // Reading through a `const T *` is what C allows, so a const view
+            // loads exactly what the type underneath it does. What it must not
+            // do is store, and that is refused where stores are lowered rather
+            // than by pretending the element does not exist.
+            Self::Const(pointee) => pointee.element_type(),
             // `void` has no element to load and no size to step by, so neither
             // `p[i]` nor an index address exists for it. Refusing here is what
             // keeps a `void *` an address to hand onward rather than storage
@@ -126,6 +166,7 @@ impl std::fmt::Display for Pointee {
             Self::Struct(layout) => write!(f, "{}", layout.name),
             Self::Pointer(pointee) => write!(f, "{pointee}*"),
             Self::Void => write!(f, "void"),
+            Self::Const(pointee) => write!(f, "const {pointee}"),
         }
     }
 }
