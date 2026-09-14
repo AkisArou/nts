@@ -24817,3 +24817,48 @@ under one pin and 5 under the next with no source change, because the compiler s
 symptoms and started naming the cause at every site. For artifacts it means the mtime, which is
 what the text is for a count.
 
+## Both modules at their floor, and the axis re-measured
+
+    child_process   120 file(s): 109 passed, 0 failed, 9 skipped, 2 n/a      (42 at the start)
+    cluster          89 file(s):  85 passed, 2 failed, 2 skipped             (42 that morning)
+
+`cluster`'s two remaining files are both priced and refused: `net-send` needs the host's
+`net.Socket[Symbol.hasInstance]` patched so node's own `process.send` will accept one of our sockets,
+and `uncaught-exception` costs eleven files to substitute `process`. Nothing in either module is
+failing for a reason that has not been named.
+
+### The axis, re-measured rather than quoted
+
+    TOTAL   46 passed, 1722 failed, 4 hollow (not counted)
+
+Twenty-six modules, one compiler, a private `NTS_ADDON_OUT`. The hollow figure counts the modules
+that publish something: `dns` 1, `fs` 1, `net` 2. Separately, **`cluster` reports 0 real passes and
+25 that survive emptying** -- it publishes nothing, so its 25 are not in the total and were never
+part of the 46.
+
+46 is the same number as the morning's measurement, from a compiler that had changed underneath in
+ways that *did* move other counts. That it did not move is worth as much as the number.
+
+**Its provenance is an mtime, not a hash.** The binary was a copy of `target/release/nts`, which is a
+shared working tree another session rebuilds continuously, and it contained uncommitted work. So this
+is the tree at 04:30 and it is not reproducible from any commit. A hash-attributed axis needs a
+pinned-worktree build, which this session does not do.
+
+### Four recorded causes for one defect, and the pattern in them
+
+`test-cluster-shared-leak` carried four causes in `cluster/INCOMPLETE.md` over its life and none was
+the defect. "Only one worker queries" -- traced, both do. "Our `net` misses a peer FIN" -- an unread
+socket does not close on a peer FIN on node either. "A shared descriptor outlives its workers" --
+true, fixed, and did not move the file. "The hold is inside the worker, so pricing it means
+instrumenting node's `child.js`" -- wrong about which process and wrong about the cost.
+
+Each was a mechanism that could have caused a hang, verified to exist, and **never checked against
+the ordering the test actually asserts**. The defect was that a worker left `cluster.workers` on exit
+where node removes it inside `disconnect()`, so the first `exit` handler saw a non-empty map and the
+two workers waited on each other.
+
+What settled it in one run: both halves of that test live in the same file, so the primary and the
+worker could be logged side by side against real node. No access to `child.js` was needed for any of
+it. **A cause that names another codebase as the place to look should be checked for whether the
+question can be asked from here first.**
+

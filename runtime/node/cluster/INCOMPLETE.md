@@ -5,7 +5,7 @@ below is worth less than the paragraph after it.
 
 ## Where it is
 
-    interpreted   89 file(s): 83 passed, 4 failed, 2 skipped, 0 not applicable
+    interpreted   89 file(s): 85 passed, 2 failed, 2 skipped, 0 not applicable
 
 84 by `test-pattern`, 1 claimed in `extra-tests`, 2 local fixtures. The claimed one --
 `test-listen-fd-cluster.js` -- fails, and claiming a failing test is the honest direction:
@@ -83,7 +83,7 @@ different**. Only then do the broken arms' counts mean anything.
 
 ## The compiled lane publishes nothing, and its 25 passes were all hollow
 
-    interpreted   89 file(s): 83 passed, 4 failed, 2 skipped
+    interpreted   89 file(s): 85 passed, 2 failed, 2 skipped
     compiled      86 file(s): 25 printed, and every one of them asserted nothing
 
 `shape.mjs` reads `exports.default`. The addon exports no `default` -- its six keys are
@@ -124,7 +124,7 @@ surface is not by itself a hollow one -- an absent one is.
 `http-pipe` and `listen-fd-cluster` were recorded here as two files with two causes. They were
 one, and it was not in this module.
 
-    interpreted   89 file(s): 83 passed, 4 failed, 2 skipped     (was 78 / 6)
+    interpreted   89 file(s): 85 passed, 2 failed, 2 skipped     (was 78 / 6)
 
 ### What the wrong price looked like
 
@@ -173,9 +173,65 @@ A `console.error` in `#handoff` made the failing fixture pass, every time. Two s
 were enough latency for the handoff to win the race. Anything timing-shaped here has to be measured
 without adding a print, and the three fixtures do that by moving the client's write instead.
 
-## The four that remain, each with a cause and a price
+## Two more closed, and `shared-leak` had four recorded causes, none of them right
 
-    interpreted   89 file(s): 83 passed, 4 failed, 2 skipped
+    interpreted   89 file(s): 85 passed, 2 failed, 2 skipped     (from 83 / 4)
+
+### `net-server-drop-connection` -- a refusal is ordinary traffic, and the primary kept a copy
+
+Two defects in one acknowledgement handler. node's is three lines:
+
+    if (reply.accepted) handle.close();
+    else this.distribute(0, handle);
+    this.handoff(worker);
+
+**The refusal branch was the wrong shape.** The comment here said a refusal means the worker "is
+shutting down", which is one of node's two reasons. The other is `maxConnections`, checked *before*
+the acknowledgement in node's own `child.js`, so `accepted: false` is ordinary traffic from a healthy
+worker. This profile put the refused connection back at the **head** of the queue and then offered
+the next one to the **same worker**, which is the same socket again. A worker with
+`maxConnections: 0` therefore sat on the queue head trading one connection back and forth while the
+other nine went around it: 8 acknowledgements of 10. node appends and offers it to a *free* worker.
+
+**And the accepted branch did nothing at all.** `handle.close()` was missing, which is one live
+socket in the primary per served connection -- so the primary's loop never empties. With the first
+half fixed the file reported every assertion passing and then hung: `{"kind":"pass"}` on stdout,
+`exit code 124`, and `an exit handler failed` from the suite. Closing after the acknowledgement is
+both safe and necessary, because the handle crosses as a descriptor and the host's `send` dups it.
+
+### `shared-leak` -- a worker leaves `workers` on disconnect, not on exit
+
+node's `Worker.prototype.disconnect` calls `removeWorker` on itself **synchronously**, before any
+reply. This profile removed a worker only in its `exit` handler -- and a comment in the source
+asserted that *as node's behaviour*.
+
+Two workers share a listening descriptor, one has accepted the primary's connection, and both are
+disconnected together. The test destroys that connection from an `exit` handler when
+`Object.keys(cluster.workers).length === 0`. On node the **first** exit already sees an empty map:
+
+    P exit w=2 code=0 remaining=0      <- w1 has not exited yet
+    P destroying conn
+    W1 server closed / conn closed / exiting 0
+
+So the connection dies at the first exit and that releases the other worker's blocked
+`server.close()`. Keeping a disconnected worker in the map makes the two wait on each other, and one
+`exit` fires instead of two -- the "called 1 times, expected 2" this file reported.
+
+**Four causes were recorded here for this one defect and none of them was it.** "Only one worker
+queries" (traced; both do). "Our `net` misses a peer FIN" (an unread socket does not close on a peer
+FIN on node either). "A shared descriptor outlives its workers" (true, fixed, and did not move the
+file). And finally "the remaining hold is inside the worker, which is node's own code, so pricing it
+means instrumenting node's `child.js`" -- wrong about *which process* and wrong about the cost. The
+hold was in the primary, and both halves of this test live in one file, so logging the primary and
+the worker side by side against real node showed the ordering in a single run. No access to
+`child.js` was needed for any of it.
+
+The pattern across all four: each was a mechanism that *could* have caused a hang, verified to exist,
+and never checked against the ordering the test actually asserts.
+
+## The two that remain, both priced and refused
+
+    interpreted   89 file(s): 85 passed, 2 failed, 2 skipped
 
 ### `net-send` -- the child holds one of *our* sockets and node's `send` refuses it
 
@@ -186,59 +242,45 @@ The child's `process.send('handle', socket)` throws before anything crosses:
       at #completeConnection (runtime/node/net/src/main.ts:1189)
 
 The bottom frame is the finding: the socket came from **this profile's `net`**, which `cluster`'s
-lane substitutes and `child_process`'s does not -- the same file passes there.
-
-node dispatches on identity and nothing else:
+lane substitutes and `child_process`'s does not -- the same file passes there. node dispatches on
+identity and nothing else:
 
     if (handle instanceof net.Socket) ... else if (handle instanceof net.Server) ...
     else if (handle instanceof TCP || handle instanceof Pipe) ...
     else throw new ERR_INVALID_HANDLE_TYPE();
 
-**Price: patching the host's `net.Socket[Symbol.hasInstance]`** so node's `instanceof` accepts one
-of ours. The child is real node and its `process.send` is node's own, so there is no seam of ours
-to intervene at -- the only lever is changing what the host's `instanceof` answers, for all host
-code, from a stand-in. That is a larger change to someone else's semantics than the file is worth,
-and it is why this is recorded rather than done.
+**Price: patching the host's `net.Socket[Symbol.hasInstance]`** so node's `instanceof` accepts one of
+ours. The child is real node and its `process.send` is node's own, so there is no seam of ours to
+intervene at -- the only lever is changing what the host's `instanceof` answers, for all host code,
+from a stand-in. That is a larger change to someone else's semantics than the file is worth.
 
-A cluster *worker* is unaffected and that was checked rather than assumed, since this module's
-design rests on it: a worker reports `nts_cluster_self_send` undefined and carries node's own
-`_getServer`.
-
-### `net-server-drop-connection` -- a disconnect mid-handoff
-
-Three workers on one pipe, ten connections, and the workers disconnected while connections are
-still being counted. The single-worker pipe case works.
-
-**Price:** `#handoff` parks a socket against its sequence number so a refusal can put it back, and
-**no passing test exercises that path**. Pricing it means writing the control first -- a fixture
-that refuses a handoff deliberately -- because a fix to an unexercised path cannot be shown to
-work. The `pauseOnConnect` change above did not move this file, which is worth knowing: it is not
-another instance of the same race.
-
-### `shared-leak` -- w1 does not exit, and two hypotheses are dead
-
-Both workers reach `queryServer` and report `listening`; w2 exits 0; the workers map reaches zero;
-the primary sits on a bound socket. Two explanations tested and refuted:
-
-  * **Not "only one worker queries."** Traced; both do. An earlier note here said otherwise.
-  * **Not our `net` missing a peer FIN.** An unread socket does not close on a peer FIN -- *on node
-    either*, measured with one fixture on both lanes.
-
-**Price:** why w1 does not exit once its server handle is closed and its accepted socket is
-half-closed. A shared descriptor is now closed when the workers map empties, which is node's
-`removeWorker` condition, and it did not move this file -- so the remaining hold is inside the
-worker, which is node's own code, and pricing it means instrumenting node's `child.js` rather than
-ours.
+A cluster *worker* is unaffected and that was checked rather than assumed: a worker carries node's
+own `cluster`, which is now established directly rather than inferred -- see below.
 
 ### `uncaught-exception` -- priced at eleven files, and refused
 
-`run-one.mjs` hands an escaped exception only to a module that declares the hook, and `process`
-owns it. Adding `process` to this module's `uses`:
+`run-one.mjs` hands an escaped exception only to a module that declares the hook, and `process` owns
+it. Adding `process` to this module's `uses`:
 
-    86 file(s): 66 passed, 18 failed    (against 78 / 6)
+    86 file(s): 66 passed, 18 failed    (against 78 / 6 at the time)
 
-**Eleven files lost, none gained.** Substituting `process` changes what a primary *is* far more
-than it changes what one throw does. Reverted; the price is the record.
+**Eleven files lost, none gained.** Substituting `process` changes what a primary *is* far more than
+it changes what one throw does. Reverted; the price is the record.
+
+### Which processes carry this profile, established rather than assumed
+
+This had been asserted from `NTS_CONFORMANCE_NESTED_CHILD`, which **every descendant inherits**, so
+it cannot tell a re-entered runner from the child of one -- the check's answer did not depend on the
+thing it was asked. Asking instead whether `cluster._getServer` throws this profile's "not
+implemented" error:
+
+    runner    cluster OURS
+    primary   cluster OURS      (a sibling-file `spawn` re-enters the runner)
+    worker    cluster node's    (`cluster.fork()` does not)
+
+So the primary under test is ours and the worker is node's, which is the stronger arrangement and is
+what makes the acknowledgement protocol above a real check: the worker refusing over
+`maxConnections` is node's own code, telling us the truth.
 
 ## What is here
 
