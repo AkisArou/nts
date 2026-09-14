@@ -720,14 +720,36 @@ fn gone_into_the_unknown(
     callee: &Callee,
     args: &[ValueId],
 ) {
-    let kept = match callee {
-        Callee::External(name) => super::runtime::keeps(name),
+    // Which argument slots a call this analysis cannot see into may keep. `None`
+    // is *unknown*, and unknown means all of them -- the distinction between
+    // "nothing was proved" and "nothing escapes" is the whole content of this
+    // function, and collapsing the two is how an optimizer gets an optimistic
+    // answer nobody established.
+    //
+    // Two foreign populations answer here and they answer from different
+    // evidence. A runtime helper or a bound Java member answers from
+    // `runtime::keeps`, keyed by name. A `declare`d C function answers from its
+    // own declaration: `@ntsNoEscape` is validated where the signature is built,
+    // and it is the same fact `native_storage` already trusts to decide that a
+    // local address may be passed at all. Reading it here rather than assuming
+    // the worst is not a new claim, it is the claim already made, used twice.
+    //
+    // Deliberately not a name table for the native side. A prefix list would be
+    // a second derivation of a fact the declaration already states, and the two
+    // would disagree the first time someone renamed a binding.
+    let kept: Option<Vec<usize>> = match callee {
+        Callee::External(name) => super::runtime::keeps(name).map(<[usize]>::to_vec),
+        Callee::Native(target) => Some(
+            (0..target.parameters.len())
+                .filter(|slot| !target.no_escape.get(*slot).copied().unwrap_or(false))
+                .collect(),
+        ),
         _ => None,
     };
     match kept {
         Some(slots) => {
             for slot in slots {
-                if let Some(argument) = args.get(*slot) {
+                if let Some(argument) = args.get(slot) {
                     escaped(escapes, func, *argument);
                 }
             }

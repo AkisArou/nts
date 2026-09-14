@@ -616,3 +616,56 @@ fn a_const_view_reads_and_does_not_write() {
         assert_eq!(caught, expected, "{name}: {why}");
     }
 }
+
+/// A `declare`d C function contributes what its declaration says to escape
+/// analysis, instead of being treated as reaching anything at all.
+///
+/// `escape.rs` answers for two foreign populations through one path. A runtime
+/// helper or a bound Java member answers from `runtime::keeps`, keyed by name; a
+/// native declaration answers from itself. `None` there means *unknown*, and
+/// unknown means every argument escapes -- keeping that distinct from "nothing
+/// escapes" is the whole content of the function, since collapsing them hands an
+/// optimizer a permission nobody established.
+///
+/// The two arms differ in one line of `JSDoc` and nothing else, so a verdict that
+/// is the same for both means the declaration is not being read.
+///
+/// This changes no placement today, and the test does not claim it does:
+/// `@ntsNoEscape` is accepted only on native pointer parameters, and those never
+/// reach `place_allocations`. It is the attachment point the effect work needs,
+/// asserted at the level where it is actually decided.
+#[test]
+fn a_native_declaration_contributes_its_no_escape_contract() {
+    let program = |tag: &str| {
+        format!(
+            "import type {{ Ptr }} from \"c:types\";\n\
+             {tag}declare function f(p: Ptr<c_int>): void;\n\
+             export function go(p: Ptr<c_int>): void {{ f(p); }}\n"
+        )
+    };
+    let escaping = |name: &str, tag: &str| -> Option<bool> {
+        let snapshot = snapshot(name, &program(tag))?;
+        let prepared = hir::prepare(&snapshot).unwrap();
+        assert!(prepared.diagnostics.is_empty(), "{name}: {:?}", prepared.diagnostics);
+        let escapes = hir::escape::analyze_program(&prepared.program);
+        let at = prepared
+            .program
+            .funcs
+            .iter()
+            .position(|f| f.name == "go")
+            .expect("go was not lowered");
+        // The argument is `go`'s own parameter, which is value 0.
+        Some(escapes[at].escapes(hir::ValueId(0)))
+    };
+    let Some(without) = escaping("no-escape-absent", "") else { return };
+    let with = escaping("no-escape-present", "/** @ntsNoEscape p */\n").unwrap();
+    assert!(
+        without,
+        "an unclassified foreign callee must be assumed to keep its arguments"
+    );
+    assert!(
+        !with,
+        "an authored @ntsNoEscape must reach escape analysis; if this fails the \
+         declaration is being ignored and the contract exists only in lowering"
+    );
+}

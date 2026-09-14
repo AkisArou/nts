@@ -408,6 +408,37 @@ type in both -- the read-only-ness lives on the container. Refused with a
 diagnostic that says which, rather than the general "without a native struct
 layout" that was true and useless.
 
+## Where a foreign call's facts attach
+
+`escape.rs` treated every foreign callee as reaching anything at all:
+`bodies_reached` answered `None` for `Callee::External` and `Callee::Native`
+together, and every argument was assumed kept. `@ntsNoEscape` was authored,
+validated where the signature is built, and consulted by `native_storage` -- and
+the analysis that decides placement never read it.
+
+It does now, through `gone_into_the_unknown`, which already received the callee.
+Two foreign populations answer there and they answer from different evidence: a
+runtime helper or a bound Java member from `runtime::keeps`, keyed by name; a
+`declare`d C function from its own declaration. Deliberately *not* a name table
+for the native side -- that would be a second derivation of what the declaration
+already states, and the two would disagree the first time a binding was renamed.
+
+`None` means **unknown**, and unknown means every argument escapes. Keeping that
+distinct from "nothing escapes" is the whole content of the function: collapsing
+them hands an optimizer a permission nobody established.
+
+**This changes no placement today and the test says so.** `@ntsNoEscape` is
+accepted only on native pointer parameters, and those never reach
+`place_allocations` -- `NativeMalloc` is its own operation precisely so the
+frame-capacity name list cannot catch it, and `NativeLocal` is placed
+explicitly. The two populations are disjoint by construction. What this buys is
+the attachment point: one place where a foreign call's declared facts are read,
+before there are more of them to read.
+
+The test asserts the verdict from `escape::analyze_program` directly, on two
+programs differing in one line of JSDoc, because a check that went through
+placement would pass for a reason unrelated to whether the declaration was read.
+
 ## Direction for the next executable slices
 
 1. **More native storage and header-derived bindings.** `void *`, const-qualified
