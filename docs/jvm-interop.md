@@ -1336,6 +1336,38 @@ Calling the closure directly would pass every "did the callback happen" check
 and mutate the lane's heap from outside it. Sabotaged to call instead of post,
 and it fails on `the callback does not run on the posting thread`.
 
+**The runtime half is built and the codegen half is not, measured 2026-09-15.**
+`NtsForeign.post` has exactly one caller in the tree and it is that test. No
+generated closure has ever posted: `foreign_bridges` emits a bridge that loads
+the receiver, converts the arguments and calls straight into `Program`,
+whichever thread it is on. `android-shape` proves it -- the project whose whole
+subject is this shape -- where `Closure1.onBytes` wraps the `byte[]` and calls
+`Program.Closure1$call` on the loader's thread, and **no emitted class in the
+project references `NtsInbox` at all**: zero, five classes of five.
+
+That is the disease this document has had all night in smaller forms. Both
+halves exist, each is correct, each has a comment describing the joint -- and
+nothing joins them, so the prose above reads as a finished story. It is finished
+on the runtime side.
+
+What it costs to close, now that the mechanism is not in question: the bridge
+needs the environment its closure was created on, so that entry can compare it
+against `NtsEnv.current()` and take the direct call when they match. They will
+match for the UI case and differ for a completion. The post path then needs the
+arguments to outlive the frame, which means a small generated holder per void
+bridge implementing `NtsResumable` -- a class per bridge, not a helper call,
+because the closure body is generated and the runtime cannot reach it except
+through the very interface the bridge implements.
+
+**And it should be loud before it is complete.** A bridge entered from a thread
+with no environment is today a silent write into another lane's heap with no
+happens-before edge -- `NtsInbox`'s own header says such a reader "may observe
+stale bytes indefinitely with no race in the JavaScript sense. On x86 it will
+appear to work. Android is ARM." A named refusal there costs six instructions
+and converts an ARM-only corruption into a diagnostic. It is not landed because
+it would turn `android-shape` red, and the thing that makes it green again is
+the post path -- so the two go together.
+
 **And the inbox is not the only route, which matters for the callbacks that must
 return a value.** `NtsEnv.CURRENT` is a `ThreadLocal`, not a singleton pinned to
 a thread the runtime chose, so an environment can be *installed* on the thread a
