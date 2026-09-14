@@ -57,6 +57,15 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         return Some(Pointee::Opaque(text(snapshot, tag)?.to_owned()));
     }
     let element = marker(snapshot, ty, "___c_pointer")?;
+    // `Ptr<unknown>` is C's `void *`. Only `unknown`: `Ptr<any>` stays refused,
+    // because `any` is what a program ends up with by accident and `unknown` is
+    // what someone writes on purpose. `TypeKind::Unsupported` is a third thing
+    // again -- the checker telling us it rendered something we do not model --
+    // and reading that as `void *` would turn every unmodelled type into a
+    // pointer nobody declared.
+    if matches!(snapshot.types.get(element.0 as usize)?.kind, TypeKind::Unknown) {
+        return Some(Pointee::Void);
+    }
     if let Some(scalar) = scalar(snapshot, element) { return Some(Pointee::Scalar(scalar)); }
     if let Some(layout) = structure(snapshot, element, visiting) { return Some(Pointee::Struct(layout.into())); }
     pointer_within(snapshot, element, visiting).map(|p| Pointee::Pointer(Box::new(p)))

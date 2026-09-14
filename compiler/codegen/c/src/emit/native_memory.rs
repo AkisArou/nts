@@ -151,9 +151,10 @@ fn names_only_foreign(ty: &Type) -> bool {
 
 fn pointee_is_foreign(pointee: &Pointee) -> bool {
     match pointee {
-        // A scalar names no struct at all, and an opaque tag names one the
+        // None of these names a struct this program invented: a scalar and
+        // `void` name no struct at all, and an opaque tag names one the
         // declaration authored -- a header defines it or the witness will say so.
-        Pointee::Scalar(_) | Pointee::Opaque(_) => true,
+        Pointee::Scalar(_) | Pointee::Opaque(_) | Pointee::Void => true,
         Pointee::Struct(layout) => layout.foreign,
         Pointee::Pointer(inner) => pointee_is_foreign(inner),
     }

@@ -44,6 +44,20 @@ pub enum Pointee {
     Scalar(Scalar),
     Struct(std::sync::Arc<Struct>),
     Pointer(Box<Pointee>),
+    /// C's `void`, as the pointee of a `void *`. Storage of unstated element
+    /// type: an address a callee interprets, carrying no extent and nothing
+    /// this program may read or write through.
+    ///
+    /// Distinct from [`Opaque`], which names a type some header defines and
+    /// this program merely cannot see into. `void` names no type at all, so
+    /// two `void *` say nothing about pointing at the same kind of thing.
+    ///
+    /// Spelled `Ptr<unknown>`, which is not a workaround: every `Ptr<T>` is
+    /// already assignable to it under TypeScript's own variance, which is
+    /// exactly the conversion C performs at the call. `any` is deliberately not
+    /// accepted -- it would make an unchecked type into a pointer silently,
+    /// where `unknown` is the one a person writes on purpose.
+    Void,
 }
 
 /// C storage order is declaration order, never the managed layout order.
@@ -81,6 +95,7 @@ impl Pointee {
             Self::Scalar(scalar) => scalar.c_type().to_owned(),
             Self::Struct(layout) => format!("struct {}", layout.name),
             Self::Pointer(pointee) => pointee.pointer_type(),
+            Self::Void => "void".to_owned(),
         }
     }
 
@@ -94,7 +109,11 @@ impl Pointee {
         match self {
             Self::Scalar(scalar) => Some(scalar.representation()),
             Self::Pointer(pointee) => Some(HirType::NativePointer((**pointee).clone())),
-            Self::Opaque(_) | Self::Struct(_) => None,
+            // `void` has no element to load and no size to step by, so neither
+            // `p[i]` nor an index address exists for it. Refusing here is what
+            // keeps a `void *` an address to hand onward rather than storage
+            // this program may read through.
+            Self::Opaque(_) | Self::Struct(_) | Self::Void => None,
         }
     }
 }
@@ -106,6 +125,7 @@ impl std::fmt::Display for Pointee {
             Self::Scalar(scalar) => write!(f, "{}", scalar.c_type()),
             Self::Struct(layout) => write!(f, "{}", layout.name),
             Self::Pointer(pointee) => write!(f, "{pointee}*"),
+            Self::Void => write!(f, "void"),
         }
     }
 }

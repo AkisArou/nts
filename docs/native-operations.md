@@ -279,6 +279,48 @@ symbol the linker finds is the one the header described. `examples/interop/
 native-poll` keeps its runtime comparison and its linked, executed caller for
 those.
 
+## Fifth executable slice: `void *`
+
+`Ptr<unknown>` is C's `void *`. `examples/interop/native-fd` is the consumer: a
+bounded `read` into a fixed local byte buffer TypeScript owns.
+
+**The conversion is TypeScript's, not an invented rule.** Every `Ptr<T>` is
+assignable to `Ptr<unknown>` under ordinary variance, which is precisely the
+conversion C performs at the call. The reverse is not assignable, and that is
+the direction mistakes live in -- turning an address of unstated type back into
+a typed pointer is a claim nobody checked. Lowering refuses it a second time,
+so the type system is the first of two guards rather than the only one.
+
+Only `unknown`. `Ptr<any>` stays refused: `any` is what a program ends up with
+by accident and `unknown` is what someone writes on purpose.
+`TypeKind::Unsupported` is a third thing again -- the checker saying it rendered
+something we do not model -- and reading that as `void *` would turn every
+unmodelled type into a pointer nobody declared.
+
+**`void` has no element type.** `Pointee::Void` answers `None` to
+`element_type`, so `p[i]` and an index address do not exist for it. A `void *`
+is an address to hand onward, not storage this program may read through.
+
+**What the witness found.** The first binding written for `read` declared the
+buffer as `Ptr<c_uint8>`. It typechecked, lowered without a diagnostic, and
+produced a `program.c` that compiles -- `program.c` declares `read` itself and
+never sees `<unistd.h>`. The witness translation unit does, and refused with
+`conflicting types for 'read'`. Narrowing it against the header showed the
+buffer was the *only* conflict: `ssize_t` and `ptrdiff_t` are the same type on
+this target, so `c_ptrdiff_t` is accepted for the result. The witness
+establishes ABI identity, not that a binding names the same typedef a header
+does, and that limit is worth stating rather than discovering.
+
+That arm is checked as a control, and checked to fail: if the typed-buffer
+binding ever compiles, the witness has stopped checking prototypes and the
+example proves nothing.
+
+**One backend bug, found by having two.** LLVM emitted `add ptr %v, 0` for the
+conversion -- the no-op idiom the backend uses for same-width integers, which is
+not an instruction for a pointer. A pointer's no-op is a zero-offset
+`getelementptr`. The C backend had been correct throughout; only assembling the
+IR found it.
+
 ## Direction for the next executable slices
 
 1. **More native storage and header-derived bindings.** `void *`, const-qualified

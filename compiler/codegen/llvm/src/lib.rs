@@ -1828,7 +1828,16 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
             // There is no no-op cast, so this is the same `add x, 0` the
             // backend already uses to give a constant a name.
             if from_ty == to_ty {
-                format!("{out} = add {from_ty} {}, 0", name(*operand))
+                // `add ptr %v, 0` is not an instruction -- `add` wants an
+                // integer. A pointer's no-op is a zero-offset `getelementptr`,
+                // which is what a `T *` to `void *` conversion is here: the
+                // address does not change, and under opaque pointers the type
+                // does not either. C spells the same thing `(void *)p`.
+                if matches!(to, HirType::NativePointer(_) | HirType::Managed(_)) {
+                    format!("{out} = getelementptr i8, {from_ty} {}, i64 0", name(*operand))
+                } else {
+                    format!("{out} = add {from_ty} {}, 0", name(*operand))
+                }
             } else {
                 let instruction = conversion(from, to, func)?;
                 format!(

@@ -708,6 +708,116 @@ fn native_poll_calls_libc_and_matches_the_platform_header() {
 }
 
 #[test]
+fn native_fd_reads_through_a_void_pointer_and_agrees_with_unistd() {
+    let source = include_str!("../../../../examples/interop/native-fd/src/main.ts");
+    let declarations = [(
+        "unistd.d.ts",
+        include_str!("../../../../examples/interop/native-fd/types/unistd.d.ts"),
+    )];
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some((dir, prepared)) = prepare_with_files("native-fd", source, provider, &declarations)
+        else {
+            return;
+        };
+        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let c = nts_codegen_c::emit(&prepared.program);
+        assert!(c.is_complete(), "{:?}", c.diagnostics);
+        let llvm = nts_codegen_llvm::emit(&prepared.program);
+        assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+        std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+        std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+        for file in c.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        std::fs::write(
+            dir.join("caller.c"),
+            include_str!("../../../../examples/interop/native-fd/native/caller.c"),
+        )
+        .unwrap();
+        // The witness translation unit is the check: it includes the real
+        // <unistd.h>, so `read`'s generated prototype has to agree with the
+        // system one. It is compiled here rather than only in build.sh.
+        std::fs::write(
+            dir.join("witness.c"),
+            include_str!("../../../../examples/interop/native-fd/native/witness.c"),
+        )
+        .unwrap();
+        for source in ["caller.c", "witness.c", "nts_runtime.c"] {
+            clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+        }
+        for (source, object) in [("program.c", "c.o"), ("program.ll", "llvm.o")] {
+            clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+            clang(
+                &dir,
+                &[object, "caller.o", "witness.o", "nts_runtime.o", "-lm", "-o", "caller"],
+            );
+            assert!(
+                Command::new(dir.join("caller")).status().unwrap().success(),
+                "{source} {provider:?}"
+            );
+        }
+    }
+}
+
+/// The control for the slice above: a buffer declared as a typed pointer rather
+/// than `void *`.
+///
+/// It typechecks, it lowers without a diagnostic, and `program.c` compiles --
+/// because `program.c` declares `read` itself and never sees <unistd.h>. Only
+/// the witness, which does see it, can refuse. If this arm ever compiles, the
+/// witness has stopped checking prototypes and the example above proves nothing.
+#[test]
+fn a_typed_buffer_where_read_wants_void_is_refused_by_the_witness() {
+    let declarations = [(
+        "unistd.d.ts",
+        "declare module \"c:unistd\" {\n\
+         import type { Ptr, c_int, c_size_t, c_ptrdiff_t, c_uint8 } from \"c:types\";\n\
+         export type Fd = c_int;\n\
+         export type Count = c_size_t;\n\
+         /** @ntsNoEscape buf */\n\
+         export function read(fd: Fd, buf: Ptr<c_uint8>, count: Count): c_ptrdiff_t;\n\
+         }\n",
+    )];
+    let source = "import { read, type Fd, type Count } from \"c:unistd\";\n\
+         import { local } from \"c:memory\";\n\
+         import type { c_uint8 } from \"c:types\";\n\
+         export function readCount(fd: number): number {\n\
+         const buf = local<c_uint8>(8);\n\
+         return read(fd as Fd, buf, 8 as Count);\n\
+         }\n";
+    let Some((dir, prepared)) =
+        prepare_with_files("native-fd-typed", source, hir::Provider::NoGc, &declarations)
+    else {
+        return;
+    };
+    // The point of the control: lowering is happy with the wrong declaration.
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    let witness = dir.join("native_witness.h");
+    assert!(
+        witness.exists(),
+        "a program calling a foreign function published no witness"
+    );
+    std::fs::write(
+        dir.join("witness.c"),
+        "#include <unistd.h>\n#include <stdint.h>\n#include <stddef.h>\n#include \"native_witness.h\"\n",
+    )
+    .unwrap();
+    let refused = !Command::new("clang")
+        .args(["-std=c11", "-fsyntax-only", "-I"])
+        .arg(&dir)
+        .arg(dir.join("witness.c"))
+        .status()
+        .unwrap()
+        .success();
+    assert!(refused, "the real <unistd.h> accepted `read` with a uint8_t * buffer");
+}
+
+#[test]
 fn native_struct_rejections_preserve_the_valid_arm() {
     for (name, bad) in [
         ("aggregate-store", "export function bad(p: Ptr<State>): void { p[0] = p[1]; }"),

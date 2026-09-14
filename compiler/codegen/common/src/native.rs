@@ -13,7 +13,9 @@ pub struct Layouts {
 impl Layouts {
     fn visit(&mut self, pointee: &Pointee) -> Result<(), String> {
         match pointee {
-            Pointee::Scalar(_) => {}
+            // Neither names a struct this program must define: a scalar has no
+            // tag, and `void` has no type at all.
+            Pointee::Scalar(_) | Pointee::Void => {}
             Pointee::Pointer(pointee) => self.visit(pointee)?,
             Pointee::Opaque(name) => self.tag(name)?,
             Pointee::Struct(layout) => {

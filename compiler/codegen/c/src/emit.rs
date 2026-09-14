@@ -3040,6 +3040,10 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
 
 fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
     Ok(match ty {
+        // `void *` is the one native pointer with a fixed spelling, so it fits a
+        // `&'static str` where a named pointee does not: those are built from
+        // the layout's own tag and go through `pointer_type`.
+        HirType::NativePointer(nts_core::hir::native::Pointee::Void) => "void *",
         HirType::NativePointer(_) => return Err(Diagnostic::error("NTS2006", "an opaque pointer needs its declared C pointee name", origin.location)),
         HirType::Void => "void",
         HirType::Bool => "bool",
