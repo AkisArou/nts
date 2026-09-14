@@ -283,8 +283,11 @@ fn leak(name: String) -> &'static str {
 const D_TO_D: &str = "(D)D";
 const STRING_TO_STRING: &str = "(Ljava/lang/String;)Ljava/lang/String;";
 const STRING_D_TO_STRING: &str = "(Ljava/lang/String;D)Ljava/lang/String;";
-const MAP_KEY_TO_VALUE: &str = "(Lnts/rt/NtsMap;Lnts/rt/NtsValue;)Lnts/rt/NtsValue;";
-const MAP_AT_TO_VALUE: &str = "(Lnts/rt/NtsMap;D)Lnts/rt/NtsValue;";
+const MAP_KEY_TO_VALUE: &str = "(Lnts/rt/NtsTable;Lnts/rt/NtsValue;)Lnts/rt/NtsValue;";
+const MAP_AT_TO_VALUE: &str = "(Lnts/rt/NtsTable;D)Lnts/rt/NtsValue;";
+/// The `int` cursor forms, for a walk `narrow` has proved stays in range.
+const CURSOR_NEXT: &str = "(Lnts/rt/NtsTable;I)I";
+const CURSOR_KEY: &str = "(Lnts/rt/NtsTable;I)Lnts/rt/NtsValue;";
 const BIGINT_BINARY: &str = "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
 const BIGINT_BITS: &str = "(DLnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
 const STRING_STRING_TO_D: &str = "(Ljava/lang/String;Ljava/lang/String;)D";
@@ -668,30 +671,39 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
             (types::PROMISE, "rejectValue", "(Lnts/rt/NtsPromise;Lnts/rt/NtsValue;)V")
         }
 
+        // **Three owners, and the name says which.** A helper that does not care
+        // which kind it was handed lives on `NtsTable` and takes one; the ones
+        // whose result is stored into a slot the HIR types are declared on the
+        // subclass, because `NtsTable` would need a checkcast at every call.
+        //
+        // `nts_map_copy` is Map-only for a reason that had to be measured rather
+        // than assumed: it is reachable only from a record spread, because
+        // `new Map(contents)` and `new Set(contents)` are both refused for want
+        // of the iteration protocol. If that refusal lifts, this needs a Set arm.
         "nts_map_new" => (types::MAP, "newMap", "(D)Lnts/rt/NtsMap;"),
-        "nts_set_new" => (types::MAP, "newSet", "(D)Lnts/rt/NtsMap;"),
-        "nts_map_get" => (types::MAP, "get", MAP_KEY_TO_VALUE),
-        "nts_map_has" => (types::MAP, "has", "(Lnts/rt/NtsMap;Lnts/rt/NtsValue;)Z"),
+        "nts_set_new" => (types::SET, "newSet", "(D)Lnts/rt/NtsSet;"),
+        "nts_map_get" => (types::TABLE, "get", MAP_KEY_TO_VALUE),
+        "nts_map_has" => (types::TABLE, "has", "(Lnts/rt/NtsTable;Lnts/rt/NtsValue;)Z"),
         "nts_map_set" => (
             types::MAP,
             "set",
             "(Lnts/rt/NtsMap;Lnts/rt/NtsValue;Lnts/rt/NtsValue;)Lnts/rt/NtsMap;",
         ),
         "nts_set_add" => (
-            types::MAP,
+            types::SET,
             "add",
-            "(Lnts/rt/NtsMap;Lnts/rt/NtsValue;)Lnts/rt/NtsMap;",
+            "(Lnts/rt/NtsSet;Lnts/rt/NtsValue;)Lnts/rt/NtsSet;",
         ),
-        "nts_map_delete" => (types::MAP, "delete", "(Lnts/rt/NtsMap;Lnts/rt/NtsValue;)Z"),
-        "nts_map_clear" => (types::MAP, "clear", "(Lnts/rt/NtsMap;)V"),
-        "nts_map_size" => (types::MAP, "size", "(Lnts/rt/NtsMap;)D"),
+        "nts_map_delete" => (types::TABLE, "delete", "(Lnts/rt/NtsTable;Lnts/rt/NtsValue;)Z"),
+        "nts_map_clear" => (types::TABLE, "clear", "(Lnts/rt/NtsTable;)V"),
+        "nts_map_size" => (types::TABLE, "size", "(Lnts/rt/NtsTable;)D"),
         "nts_map_copy" => (types::MAP, "copy", "(Lnts/rt/NtsMap;)Lnts/rt/NtsMap;"),
         "nts_map_keys_str" => {
-            (types::MAP, "keysStr", "(Lnts/rt/NtsMap;)[Ljava/lang/Object;")
+            (types::TABLE, "keysStr", "(Lnts/rt/NtsTable;)[Ljava/lang/Object;")
         }
-        "nts_map_next" => (types::MAP, "next", "(Lnts/rt/NtsMap;D)D"),
-        "nts_map_key_at" => (types::MAP, "keyAt", MAP_AT_TO_VALUE),
-        "nts_map_value_at" => (types::MAP, "valueAt", MAP_AT_TO_VALUE),
+        "nts_map_next" => (types::TABLE, "next", "(Lnts/rt/NtsTable;D)D"),
+        "nts_map_key_at" => (types::TABLE, "keyAt", MAP_AT_TO_VALUE),
+        "nts_map_value_at" => (types::TABLE, "valueAt", MAP_AT_TO_VALUE),
 
         "nts_bigint_from_number" => (types::BIGINT, "fromNumber", "(D)Lnts/rt/NtsBigInt;"),
         "nts_bigint_to_string" => (types::BIGINT, "toText", "(Lnts/rt/NtsBigInt;)Ljava/lang/String;"),
@@ -3247,7 +3259,7 @@ impl Emitter<'_> {
                 ) =>
             {
                 self.load(code, pool, *of)?;
-                code.invoke_static(origin, pool, types::MAP, "size", "(Lnts/rt/NtsMap;)D");
+                code.invoke_static(origin, pool, types::TABLE, "size", "(Lnts/rt/NtsTable;)D");
                 self.adapt_to(code, Kind::Double, value, origin)?;
                 Ok(Placed::OnStack)
             }
@@ -5282,8 +5294,8 @@ impl Emitter<'_> {
                         return None;
                     }
                     Some(match narrow {
-                        "nextI" => (types::MAP, "nextI", "(Lnts/rt/NtsMap;I)I".to_owned()),
-                        _ => (types::MAP, "keyAtI", "(Lnts/rt/NtsMap;I)Lnts/rt/NtsValue;".to_owned()),
+                        "nextI" => (types::TABLE, "nextI", CURSOR_NEXT.to_owned()),
+                        _ => (types::TABLE, "keyAtI", CURSOR_KEY.to_owned()),
                     })
                 });
                 let found = cursor_form.or(found);

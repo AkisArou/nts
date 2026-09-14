@@ -13,6 +13,7 @@ public final class nts.gen.Program {
   public static nts.rt.NtsMap zeroKeyed();
   public static nts.rt.NtsBigInt scaled(nts.rt.NtsBigInt);
   public static java.lang.String joined(java.lang.String[], java.lang.String);
+  public static nts.rt.NtsSet labels();
 }
 Compiled from "nts"
 public final class nts.gen.Session {

@@ -176,6 +176,21 @@ thread_local! {
     /// This is that fact, supplied out of band and applied by `returns`.
     static NONNULL: std::cell::RefCell<std::collections::BTreeSet<String>> =
         const { std::cell::RefCell::new(std::collections::BTreeSet::new()) };
+    /// Whether the type being rendered is a **return** rather than a parameter.
+    ///
+    /// A mapped collection is offered as a union -- `Map<K, V> | java.util.Map<K,
+    /// V>` -- so a caller may hand over either ours or one that came out of
+    /// Java. That is right for an argument, which we *supply*, and pointless for
+    /// a return, which we *receive*: an `NtsMap` already **is** a
+    /// `java.util.Map` by subtyping, so the plain Java type describes both
+    /// possible values and needs no narrowing.
+    ///
+    /// The union in return position is not *unsound* -- TypeScript refuses
+    /// `asMap()!.has(k)` with TS2339 because `has` is not on both arms, which
+    /// was checked rather than assumed. It is unusable: a caller can reach only
+    /// the intersection and has no way to narrow, since nothing distinguishes
+    /// the arms at run time.
+    static RETURNING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// Packages this module referred to and does not itself declare, collected
     /// while rendering so `module_of` can import them.
     ///
@@ -245,31 +260,34 @@ fn typed_array(element: &str, rendered: &str) -> String {
 ///
 /// Kotlin calls these *mapped types*: `kotlin.collections.List` **is**
 /// `java.util.List`, so Kotlin never converts a collection when calling Java --
-/// there is nothing to convert. We can take the same answer for `Map` because
-/// `NtsMap implements java.util.Map`, and because the one place JavaScript and
-/// Java disagree about keys is `-0`, which `NtsMap` normalises at insertion so
-/// that Java's `equals`/`hashCode` implement `SameValueZero` exactly.
+/// there is nothing to convert. We take the same answer for `Map` and `Set`
+/// because `NtsMap implements java.util.Map` and `NtsSet implements
+/// java.util.Set`, and because the one place JavaScript and Java disagree about
+/// keys is `-0`, which the table normalises at insertion so that Java's
+/// `equals`/`hashCode` implement `SameValueZero` exactly.
 ///
-/// **`Set` does not follow, and the reason is our toolchain rather than the
-/// platform.** A TypeScript `Set` is also an `NtsMap` at run time, so it would
-/// have to implement `java.util.Set` as well. `Map.remove(Object)` returns `V`
-/// and `Set.remove(Object)` returns `boolean`, and this comment used to say that
-/// was "a return-type clash the JVM rejects outright".
+/// **`Set` joined on 2026-09-15, and this comment used to say it could not.**
+/// The argument was that one class would have to implement both `java.util.Map`
+/// and `java.util.Set`, and that `Map.remove(Object)` returning `V` against
+/// `Set.remove(Object)` returning `boolean` was "a return-type clash the JVM
+/// rejects outright". The JVM does not reject it -- a descriptor includes the
+/// return type, so those are two methods, and `jvm-emitter/tests/runs.rs` builds
+/// such a class and calls both through their own interfaces. What rejects it is
+/// `javac`, which the runtime is compiled with.
 ///
-/// **Measured 2026-09-15, and the JVM does not reject it.** A JVM method is
-/// identified by name *and* descriptor, and a descriptor includes the return
-/// type, so those are two methods at the class-file level -- which is how every
-/// covariant override gets its bridge. `jvm-emitter/tests/runs.rs` builds such a
-/// class, loads it under `-Xverify:all`, and calls both through their own
-/// interfaces: each reaches its own code.
-///
-/// What rejects it is `javac`, with "both define remove(Object), but with
-/// unrelated return types" -- and `NtsMap` is Java source compiled by `javac`.
-/// So the obstacle is real and it is in our build, not in the JVM. Making `Set`
-/// a mapped type means that one class file coming from somewhere else, which is
-/// a decision about the runtime jar rather than an impossibility.
+/// So the answer was neither the clash nor a wrapper: `NtsMap` and `NtsSet` are
+/// siblings over a shared `NtsTable`, each implementing one interface, and both
+/// cross free. The kind is a class rather than a bit, which also makes
+/// `nts_is_map` and `nts_is_set` two `instanceof`s that cannot both be true.
 fn mapped_collection(binary: &str) -> Option<&'static str> {
-    (binary == "java/util/Map").then_some("Map")
+    if RETURNING.with(std::cell::Cell::get) {
+        return None;
+    }
+    match binary {
+        "java/util/Map" => Some("Map"),
+        "java/util/Set" => Some("Set"),
+        _ => None,
+    }
 }
 
 /// Whether an `NtsMap` can hold a value satisfying this Java type argument.
@@ -2407,8 +2425,10 @@ fn generic_signature(signature: &str) -> Option<(Vec<String>, String)> {
     // The return type, stopping before any `^ThrowsSignature`.
     let after = &rest[close + 1..];
     let end = after.find('^').unwrap_or(after.len());
-    let (returns, _) = generic_type(&after[..end])?;
-    Some((parameters, returns))
+    RETURNING.with(|it| it.set(true));
+    let returns = generic_type(&after[..end]).map(|(rendered, _)| rendered);
+    RETURNING.with(|it| it.set(false));
+    Some((parameters, returns?))
 }
 
 // ---------------------------------------------------------------------------

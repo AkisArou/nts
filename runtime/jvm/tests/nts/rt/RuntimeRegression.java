@@ -203,7 +203,11 @@ public final class RuntimeRegression {
             check(NtsMap.next(map, i) == i, "clear cursor");
             NtsMap.clear(map);
         }
-        java.lang.reflect.Field storage = NtsMap.class.getDeclaredField("keys"); storage.setAccessible(true);
+        // `NtsTable`, not `NtsMap`: the storage moved to the shared base when
+        // `Set` became its own class. `getDeclaredField` does not search
+        // superclasses, so this threw rather than silently reading something
+        // else -- the failure mode worth having.
+        java.lang.reflect.Field storage = NtsTable.class.getDeclaredField("keys"); storage.setAccessible(true);
         check(((Object[]) storage.get(map)).length <= 8, "clear storage bounded");
         map = NtsMap.newMap(0);
         for (int i = 0; i < 80; ++i) { NtsMap.set(map, keys.get(i), keys.get(i)); }
@@ -216,10 +220,21 @@ public final class RuntimeRegression {
         NtsMap.clear(map);
         NtsMap.set(map, keys.get(300), keys.get(301));
         check(NtsMap.next(map, cursor + 1) > cursor, "append after clear visible");
-        NtsMap set = NtsMap.newSet(0);
-        NtsMap.add(set, NtsValue.ofNumber(-0.0));
-        number(NtsMap.keyAt(set, 0).num, 0.0, "set key +0");
-        number(NtsMap.valueAt(set, 0).num, 0.0, "set value +0");
+        NtsSet set = NtsSet.newSet(0);
+        NtsSet.add(set, NtsValue.ofNumber(-0.0));
+        number(NtsTable.keyAt(set, 0).num, 0.0, "set key +0");
+        number(NtsTable.valueAt(set, 0).num, 0.0, "set value +0");
+        // The split is the point of these four: a Set is a `java.util.Set` and
+        // is not a `java.util.Map`, which is what a Java caller sees.
+        check(set instanceof java.util.Set, "a Set is a java.util.Set");
+        // Through `Object`, because `set instanceof java.util.Map` does not
+        // compile: javac proves an `NtsSet` can never be one. That refusal is
+        // better evidence than this assertion and cannot be written down, so
+        // the assertion stands in for it.
+        Object asObject = set;
+        check(!(asObject instanceof java.util.Map), "a Set is not a java.util.Map");
+        check(NtsValue.isSet(NtsValue.ofObject(set)), "isSet");
+        check(!NtsValue.isMap(NtsValue.ofObject(set)), "a Set is not a Map");
     }
     private static int oldClamp(double x, int length) {
         double at = Double.isNaN(x) ? 0 : x < 0 ? Math.ceil(x) : Math.floor(x);

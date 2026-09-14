@@ -90,3 +90,24 @@ export function joined(names: string[], sep: string): string {
   }
   return out;
 }
+
+/// A JavaScript `Set`, handed to Java as a `java.util.Set` with **no copy**.
+///
+/// `NtsSet implements java.util.Set`, the sibling of `NtsMap` over a shared
+/// `NtsTable`. Until 2026-09-15 there was one class carrying a boolean for
+/// which it was, so it implemented `java.util.Map` whichever it was -- and this
+/// function would have handed Java a `Map` whose values equalled its keys.
+/// Coherent, and not what the TypeScript says.
+///
+/// The obstacle was never the JVM. `Map.remove` returns `V` and `Set.remove`
+/// returns `boolean`, and the design doc called that "a return-type clash the
+/// JVM rejects outright" -- measured false: a descriptor includes the return
+/// type, so those are two methods, and a class implementing both loads and
+/// dispatches correctly under `-Xverify:all`. What refuses is `javac`, which
+/// this runtime is compiled with, so the answer was two classes.
+export function labels(): Set<string> {
+  const s = new Set<string>();
+  s.add("alpha");
+  s.add("beta");
+  return s;
+}

@@ -179,6 +179,23 @@ public final class Catalog {
         return n;
     }
 
+    /**
+     * Takes a set. A TypeScript {@code Set} is one already -- {@code NtsSet
+     * implements java.util.Set} -- so this is a reference, not a copy.
+     *
+     * <p>The element type is {@code String}, which matters for the same reason
+     * {@link #weigh}'s value type does: a table arriving from TypeScript carries
+     * {@code java.lang.String} for a string and {@code java.lang.Double} for a
+     * number, so a set of {@code Integer} could not be satisfied by one.
+     */
+    public int countIn(java.util.Set<String> names) {
+        int n = 0;
+        for (String name : names) {
+            n += name.length();
+        }
+        return n;
+    }
+
     // --- nested and inner ---------------------------------------------------
 
     /** Static nested: binary name `com/example/Catalog$Entry`, no outer instance. */

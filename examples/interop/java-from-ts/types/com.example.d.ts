@@ -41,6 +41,7 @@ declare module "java:com.example" {
     raw(): java.util.List | null;
     weigh(a0: (Map<string, number> | java.util.Map<string, number>)): number;
     countOf(a0: java.util.Map<string, number>): number;
+    countIn(a0: (Set<string> | java.util.Set<string>)): number;
     cursorAt(a0: number): Catalog.Cursor | null;
   }
 

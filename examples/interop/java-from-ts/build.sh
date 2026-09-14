@@ -97,7 +97,7 @@ echo "java-from-ts: $answer"
 # is `hits + MAX` computed in Java, `9007199254740993` is 2^53+1 surviving as a
 # bigint, `65535` is nowhere here but `s:x` is a bound `String` round trip, and
 # `k` and the trailing `widgets` are a static nested class and an inner one.
-expected="catalog 3 512 10 0 0 widgets 515 4 9007199254740993 1 3 0 3 s:x 6 6 widgets 3 2 k widgets 4"  # the trailing 4 is `weigh`, a TypeScript Map crossing in with no copy
+expected="catalog 3 512 10 0 0 widgets 515 4 9007199254740993 1 3 0 3 s:x 6 6 widgets 3 2 k widgets 4 5"  # the trailing 4 is `weigh`, a TypeScript Map crossing in with no copy
 if [ "$answer" != "$expected" ]; then
   echo "java-from-ts: the answer changed."
   echo "  expected: $expected"

@@ -55,6 +55,13 @@ public final class Main {
         String joined =
             nts.gen.Program.joined(new String[] { "a", "b", "c" }, "-");
 
+        // **A TypeScript `Set`, held as a java.util.Set.** Not a `Map`, not a
+        // view, not a copy: this reference IS the table, and every `Set` API
+        // works on it because it implements the interface.
+        java.util.Set<Object> labels = nts.gen.Program.labels();
+        java.util.List<Object> ordered = new java.util.ArrayList<Object>(labels);
+        boolean isNotAMap = !(((Object) labels) instanceof java.util.Map);
+
         // **A TypeScript `bigint` is `nts.rt.NtsBigInt`, not a `long`.**
         // A Java caller builds one with a factory rather than passing a
         // primitive, and reads it back as text or a `BigInteger`.
@@ -76,6 +83,7 @@ public final class Main {
         System.out.println(greeting + " " + first + " " + second + " " + hits + " " + sum
             + " | " + kind + " " + size + " [" + order.toString().trim() + "]"
             + " live=" + live + " svz=" + byNegativeZero
+            + " labels=" + labels + " n=" + ordered.size() + " notAMap=" + isNotAMap
             + " joined=" + joined + " big=" + scaled + " exceedsLong=" + exceedsLong);
     }
 }

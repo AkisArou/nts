@@ -60,7 +60,7 @@ decision left to make -- it is what the backend emits today.
 | `T[]`, program never grows one | a **bare JVM array** -- `[D`, `[Ljava/lang/String;` | `types.rs:450` |
 | `T[]`, program grows any array | `NtsArrayD` / `NtsArrayL` / `NtsArrayZ`: a wrapper with `items` and a `length` | `types.rs:437` |
 | `Uint8Array` etc. | `NtsViewU8`…, a window onto an `NtsBuffer` whose storage **is** a `byte[]` | `NtsBuffer.java:194` |
-| `Map`, `Set` | `NtsMap` -- open addressing over `NtsValue[]` and `long[]`, "no boxed keys, boxed slots or HashMap nodes" | `NtsMap.java:9` |
+| `Map`, `Set` | `NtsMap` and `NtsSet` over a shared `NtsTable` -- open addressing over `NtsValue[]` and `long[]`, "no boxed keys, boxed slots or HashMap nodes" | `NtsTable.java:9` |
 | an object or class instance | one `final class nts/gen/<Layout>` | |
 | a closure | `nts/gen/Fn$<hash>` with a `call` method | |
 | `unknown` / erased | `NtsValue`: `int tag`, `double num`, `Object ref` | `NtsValue.java` |
@@ -85,7 +85,7 @@ real traversal**; a conversion is an instruction.
 | `Uint8Array` spanning a whole buffer | `byte[]` | **nothing** -- `NtsBuffer.storage` is the array |
 | `Uint8Array` that is a subarray | `byte[]` | **a copy**, unless the callee takes `(byte[], int off, int len)` |
 | `Map` | `java.util.Map` | **nothing**, as of 2026-09-15 -- the same object, and Java writing through it is visible from TypeScript. `NtsMap implements java.util.Map` was already built; what was missing was that `nts bind` rendered the parameter as the prelude's structural type, so a caller could not reach it. It now renders `(Map<K, V> | java.util.Map<K, V>)` and both spellings work, which is Kotlin's mapped-type answer. Checked: a Java caller's `get(Double.valueOf(-0.0))` finds the entry JavaScript stored as `0`, and `NaN` matches `NaN` -- SameValueZero exactly, through Java's own `equals`/`hashCode`, because `NtsMap` normalises `-0` at insertion |
-| `Set` | `java.util.Set` | **not possible**, and structurally rather than by omission. A TypeScript `Set` is also an `NtsMap` at run time, so it would have to implement `java.util.Set` as well -- and one class cannot implement both: `Map.remove(Object)` returns `V` and `Set.remove(Object)` returns `boolean`, a return-type clash the JVM rejects. A wrapper implementing `Set` over the same table is the fallback, at one allocation |
+| `Set` | `java.util.Set` | **nothing**, as of 2026-09-15, and this row said "not possible, and structurally rather than by omission" until it was measured. The argument was that one class would have to implement both `java.util.Map` and `java.util.Set`, and that `Map.remove(Object)` returning `V` against `Set.remove(Object)` returning `boolean` was a clash "the JVM rejects". **The JVM does not reject it** -- a descriptor includes the return type, so those are two methods, and `jvm-emitter/tests/runs.rs` builds such a class, loads it under `-Xverify:all`, and calls both through their own interfaces. What refuses is `javac`, which the runtime is compiled with -- an obstacle in our build, not in the platform. The answer was neither the clash nor the wrapper this row offered as a fallback: `NtsMap` and `NtsSet` are siblings over a shared `NtsTable`, each implementing one interface, and both cross at no cost |
 | an object | a Java interface | **nothing**, if the generated class implements the interface |
 | a closure | a Java functional interface | **nothing**, if `Fn$<hash>` implements it; otherwise one adapter object per crossing |
 
@@ -1973,7 +1973,7 @@ Rows corrected in place carry an inline comment with what the artefact said.
 | | 1. java-from-ts | 2. ts-from-java | 3. android-shape |
 | --- | --- | --- | --- |
 | `HashMap` in and out | ● | out only | |  <!-- corrected 2026-09-15. java-from-ts: out via `index()`, and **in** via `weigh`, where a TypeScript `Map` crosses as a reference because `NtsMap implements java.util.Map`. The inward direction is conditional and the condition is not obvious: a map from TypeScript carries `java.lang.Double` for a number, so `Map<String, Integer>` cannot take one. That used to type-check and throw `ClassCastException` inside the callee; the binder now withholds the TypeScript arm, and `countOf` in `refused.ts` is the case. ts-from-java: out only -- a `Map` *parameter* publishes as the concrete `nts.rt.NtsMap`, so a caller holding a `HashMap` must build one entry by entry. -->
-| `NtsMap implements java.util.Map` | | ● | |
+| `NtsMap` is a `java.util.Map`, `NtsSet` a `java.util.Set` | ● | ● | |  <!-- 2026-09-15: ts-from-java returns both and Java uses them through the interfaces; java-from-ts passes both *in* to `weigh` and `countIn`. One class used to serve both kinds, so a `Set` reached Java as a `Map` whose values equalled its keys. -->
 | `List<String>` / `string[]` | ● | ● | |
 | `int[]` / `byte[]` / subarray | ● | | ● |
 | Generics, wildcards, raw types | ● | raw | |  <!-- corrected 2026-09-15: nothing generic crosses in this direction: `tags()` publishes a **raw** `NtsMap` and the consumer writes `Map<Object, Object>` with an unchecked conversion and a cast per value. The project README said so and the matrix did not. -->

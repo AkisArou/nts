@@ -268,8 +268,24 @@ pub const PRESENCE_INTERFACE: &str = "nts/rt/NtsPresence";
 /// one level over.
 pub const PRESENCE_MEMBER: &str = "ntsPresence";
 
-/// `Map` and `Set`, which are one table with the values left out of one of them.
+/// The shared storage under [`MAP`] and [`SET`]: an insertion-ordered
+/// `SameValueZero` table, and the owner of every helper that does not care which
+/// of the two it was handed.
+pub const TABLE: &str = "nts/rt/NtsTable";
+/// A JavaScript `Map`, and a `java.util.Map`. Also carries `ManagedType::Table`
+/// -- a `Record<string, V>` -- whose storage that type's own comment calls
+/// identical, deliberately.
 pub const MAP: &str = "nts/rt/NtsMap";
+/// A JavaScript `Set`, and a `java.util.Set`.
+///
+/// **A separate class as of 2026-09-15, and the reason is the Java face.** One
+/// class served both, carrying a boolean for which it was, so it implemented
+/// `java.util.Map` whichever it was -- and a TypeScript `Set` reached a Java
+/// caller as a `Map` whose values equalled its keys. `javac` will not compile a
+/// class implementing both `Map` and `Set`, because `remove` differs only in
+/// return type. The kind is the class now instead of a bit, which also makes
+/// `nts_is_map` and `nts_is_set` two `instanceof`s that cannot both be true.
+pub const SET: &str = "nts/rt/NtsSet";
 /// A `Date`: a `double` and an identity, and the two operations that reach it.
 pub const DATE: &str = "nts/rt/NtsDate";
 /// A symbol: a description and an identity, and five operations.
@@ -349,6 +365,10 @@ pub fn view_class(element: &HirType) -> Option<&'static str> {
     })
 }
 pub const MAP_DESCRIPTOR: &str = "Lnts/rt/NtsMap;";
+/// The descriptor for [`SET`].
+pub const SET_DESCRIPTOR: &str = "Lnts/rt/NtsSet;";
+/// The descriptor for [`TABLE`], which is what a helper shared by both takes.
+pub const TABLE_DESCRIPTOR: &str = "Lnts/rt/NtsTable;";
 
 /// The fixed networking intrinsics: the one runtime class a *program* reaches
 /// by an intrinsic rather than by a type.
@@ -426,15 +446,17 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // `agrees_with_c` as the oracle because node's arbitrary precision is
         // not one.
         HirType::BigInt => BIGINT_DESCRIPTOR.to_owned(),
-        // One runtime class for both, and its keys and values are erased --
-        // which is why the payload types in `ManagedType::Map` are for the
-        // compiler rather than the runtime, exactly as that type's own comment
-        // says. This is not a monomorphization.
-        HirType::Managed(
-            ManagedType::Map(..) | ManagedType::Table(..) | ManagedType::Set(_),
-        ) => {
+        // `Map` and `Table` are one runtime class, and their keys and values
+        // are erased -- which is why the payload types in `ManagedType::Map` are
+        // for the compiler rather than the runtime, exactly as that type's own
+        // comment says. This is not a monomorphization, and the pairing is that
+        // comment's "expected shape" rather than an oversight.
+        HirType::Managed(ManagedType::Map(..) | ManagedType::Table(..)) => {
             MAP_DESCRIPTOR.to_owned()
         }
+        // **`Set` is its own class**, so that a `Set` crossing to Java is a
+        // `java.util.Set`. The storage is still the shared table; see [`SET`].
+        HirType::Managed(ManagedType::Set(_)) => SET_DESCRIPTOR.to_owned(),
         // One runtime class whatever it settles with, which is what
         // `ManagedType::Promise`'s payload type says it is for: the payload is
         // in the type for the *compiler*, to choose which `fulfill` to emit and
@@ -577,11 +599,17 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
         Kind::Ref => match ty {
             HirType::Erased => VType::Object(VALUE.to_owned()),
             HirType::BigInt => VType::Object(BIGINT.to_owned()),
-            HirType::Managed(
-                ManagedType::Map(..) | ManagedType::Table(..) | ManagedType::Set(_),
-            ) => {
+            // **The same split as `descriptor`'s, and the second place it had
+            // to be made.** Leaving `Set` on `MAP` here while `descriptor`
+            // answered `NtsSet` produced `VerifyError: Type 'nts/rt/NtsSet' is
+            // not assignable to 'nts/rt/NtsMap'` -- a slot whose frame said one
+            // class and whose value was the other. Two derivations of one fact,
+            // caught by the verifier rather than by a test, which is the free
+            // second opinion `-Xverify:all` is in the loop for.
+            HirType::Managed(ManagedType::Map(..) | ManagedType::Table(..)) => {
                 VType::Object(MAP.to_owned())
             }
+            HirType::Managed(ManagedType::Set(_)) => VType::Object(SET.to_owned()),
             HirType::Managed(ManagedType::Promise(_)) => VType::Object(PROMISE.to_owned()),
             HirType::Managed(ManagedType::String) => VType::Object(STRING.to_owned()),
             // An array's *class* constant is named by its descriptor rather
@@ -708,6 +736,72 @@ mod tests {
 
     fn empty() -> Program {
         Program::default()
+    }
+
+    /// **`descriptor` and `vtype` must name the same class, and they are two
+    /// derivations of that one fact.**
+    ///
+    /// Splitting `Set` off `NtsMap` meant editing both. Editing only
+    /// `descriptor` produced `VerifyError: Type 'nts/rt/NtsSet' is not
+    /// assignable to 'nts/rt/NtsMap'` -- a slot whose frame said one class and
+    /// whose value was the other, on five examples. The verifier caught it,
+    /// which is what `-Xverify:all` is in the loop for, but only for HIR types
+    /// some example happens to use.
+    ///
+    /// So this asserts the agreement directly, over every managed type that
+    /// names a runtime class. A reference descriptor is `L<name>;` and a
+    /// `VType::Object` carries `<name>`, so the two are one substitution apart.
+    #[test]
+    fn a_reference_descriptor_and_its_frame_type_name_one_class() {
+        let cases = [
+            HirType::Erased,
+            HirType::BigInt,
+            HirType::Managed(ManagedType::String),
+            HirType::Managed(ManagedType::Symbol),
+            HirType::Managed(ManagedType::Date),
+            HirType::Managed(ManagedType::Buffer),
+            HirType::Managed(ManagedType::DataView),
+            HirType::Managed(ManagedType::Map(
+                Box::new(HirType::Managed(ManagedType::String)),
+                Box::new(HirType::Erased),
+            )),
+            HirType::Managed(ManagedType::Table(
+                Box::new(HirType::Managed(ManagedType::String)),
+                Box::new(HirType::Erased),
+            )),
+            HirType::Managed(ManagedType::Set(Box::new(HirType::Managed(ManagedType::String)))),
+            HirType::Managed(ManagedType::Promise(Box::new(HirType::Erased))),
+        ];
+        for ty in cases {
+            let Some(rendered) = descriptor(Shape::of(&empty()), &ty) else {
+                continue;
+            };
+            let Some(VType::Object(named)) = vtype(Shape::of(&empty()), &ty) else {
+                continue;
+            };
+            assert_eq!(
+                rendered,
+                format!("L{named};"),
+                "`descriptor` and `vtype` disagree about {ty:?}: a frame saying one class and a \
+                 value of the other is a VerifyError, and only on the examples that reach it"
+            );
+        }
+    }
+
+    #[test]
+    fn a_map_and_a_set_are_different_classes() {
+        let string = || Box::new(HirType::Managed(ManagedType::String));
+        let map = HirType::Managed(ManagedType::Map(string(), Box::new(HirType::Erased)));
+        let set = HirType::Managed(ManagedType::Set(string()));
+        // A `Record<string, V>` is `ManagedType::Table` and shares `NtsMap`'s
+        // storage deliberately -- that type's own comment calls the pairing the
+        // expected shape. `Set` is the one that had to move, so that a `Set`
+        // crossing to Java is a `java.util.Set` rather than a `Map` whose values
+        // equal its keys.
+        let table = HirType::Managed(ManagedType::Table(string(), Box::new(HirType::Erased)));
+        assert_eq!(descriptor(Shape::of(&empty()), &map), descriptor(Shape::of(&empty()), &table));
+        assert_ne!(descriptor(Shape::of(&empty()), &map), descriptor(Shape::of(&empty()), &set));
+        assert_eq!(descriptor(Shape::of(&empty()), &set).as_deref(), Some(SET_DESCRIPTOR));
     }
 
     #[test]

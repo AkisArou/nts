@@ -121,8 +121,8 @@ pub(crate) fn fused(func: &Func) -> FxHashSet<ValueId> {
 #[must_use]
 pub(crate) fn object_key_form(name: &str) -> Option<(&'static str, &'static str)> {
     Some(match name {
-        "nts_map_get" => ("getObject", "(Lnts/rt/NtsMap;Ljava/lang/Object;)Lnts/rt/NtsValue;"),
-        "nts_map_has" => ("hasObject", "(Lnts/rt/NtsMap;Ljava/lang/Object;)Z"),
+        "nts_map_get" => ("getObject", "(Lnts/rt/NtsTable;Ljava/lang/Object;)Lnts/rt/NtsValue;"),
+        "nts_map_has" => ("hasObject", "(Lnts/rt/NtsTable;Ljava/lang/Object;)Z"),
         _ => return None,
     })
 }

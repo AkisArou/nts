@@ -492,18 +492,22 @@ public final class NtsValue {
      * allocation to the byte before and after, because a boolean fits in the
      * padding the object already had.
      *
-     * <p>Written as one predicate and its negation rather than two independent
-     * tests, so they cannot drift into both answering true.
+     * <p>Was one predicate and its negation over a boolean field, written that
+     * way so the two could not drift into both answering true. **The classes
+     * carry it now**, so they cannot: `NtsMap` and `NtsSet` are siblings under
+     * {@link NtsTable} and no object is both. A bit that two predicates had to
+     * agree about became a fact only one of them can match, which is the
+     * stronger form of the same guarantee -- and one fewer field per table.
      */
     public static boolean isMap(NtsValue value) {
         Object ref = value == null ? null : value.ref;
-        return ref instanceof NtsMap && NtsMap.builtAsMap((NtsMap) ref);
+        return ref instanceof NtsMap;
     }
 
-    /** `instanceof Set`; see {@link #isMap}, whose bit this reads the other way. */
+    /** `instanceof Set`; the sibling of {@link #isMap} under `NtsTable`. */
     public static boolean isSet(NtsValue value) {
         Object ref = value == null ? null : value.ref;
-        return ref instanceof NtsMap && !NtsMap.builtAsMap((NtsMap) ref);
+        return ref instanceof NtsSet;
     }
 
     /**

@@ -115,11 +115,18 @@ export function main(): string {
   weights.set("b", 2.5);
   const weighed = catalog.weigh(weights);
 
+  // A `Set` goes in on the same terms as the `Map` above: `NtsSet implements
+  // java.util.Set`, so Java iterates the table this built.
+  const words = new Set<string>();
+  words.add("ab");
+  words.add("cde");
+  const counted = catalog.countIn(words);
+
   const entry = new Catalog.Entry("k");           // static nested: constructs directly
   const cursor = catalog.cursorAt(2); // inner: outer passed first
   const owner = cursor === null ? "" : cursor.owner();
 
   return `${label} ${hits} ${cap} ${weight} ${small} ${count} ${first} ${total} ` +
     `${head} ${idAsText} ${byNumber} ${byInt} ${byLong} ${byText} ${rendered} ` +
-    `${summed} ${describedLength} ${name} ${repeated} ${anything} ${entry.key} ${owner} ${weighed}`;
+    `${summed} ${describedLength} ${name} ${repeated} ${anything} ${entry.key} ${owner} ${weighed} ${counted}`;
 }
