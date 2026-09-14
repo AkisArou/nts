@@ -25067,3 +25067,53 @@ sufficient; a candidate divergence is now confirmed three times before it is rep
 consecutive clean runs and still five divergences when `setImmediate` is deliberately swapped for
 `setTimeout(fn, 0)`.
 
+## The socket half, and what it cost to compare it
+
+    corpus reach   395 of 1,087 published function(s)  ->  521 of 1,087
+    all 21 modules clean, 35s
+
+    module   before   after     what the new specs found
+    http      2 of 78   35      nothing; the round trip agrees
+    net      12 of 86   40      `localAddress` outlived the handle
+    fs        9 of 169  26      `fs.promises.realpath` walked where node calls the binding
+    stream   25 of 108  56      three byte helpers this profile never published
+    events   22 of 34   28      nothing; `once` and `on` agree
+    zlib     12 of 45   23      nothing; the async codecs agree byte-for-byte
+
+`http` and `net` both said in their corpora that sockets were out of scope -- "every part of `http`
+that speaks to a socket", "sockets answer over time". Both were statements about the harness, which
+could not await, rather than about the modules.
+
+### Three spec bugs, and each one is a rule
+
+**A cost that does not grow with the work is not a cost, it is a wait.** The `http` round trip hit a
+ten-minute timeout. I assumed throughput and added a keep-alive agent; it still timed out. What
+settled it was a ratio rather than a stack: 200 inputs and 800 inputs both took six seconds. A
+listening server keeps the probe's child alive after it has printed its answer, and the host reads
+that child with `spawnSync`. `server.unref()` was the whole fix.
+
+**An empty input is the first input, not a corner case.** `net`'s echo keyed off `data` never replied
+to `""` -- no event, no echo, no close, no end of run. It keys off `end` now, and the spec carries a
+deadline so a stall resolves to `"timeout"` instead of taking a kill to say so.
+
+**A field that is not a function of the input cannot be compared.** Reading `remoteAddress`,
+`remoteFamily` and `localAddress` after close, node answers them in a standalone program and answers
+nothing under the differential -- same code, same input, different arrangement, because its
+post-destroy reporting depends on when the handler runs relative to internal cleanup. Comparing them
+would report a divergence about scheduling and call it a behaviour. They were dropped from the fuzz
+and the real difference underneath -- node's local getters read the handle and go with it, while
+`remoteAddress` is cached and survives -- is pinned by a fixture that controls the timing.
+
+### And a correction: a reachability dump is evidence about reach
+
+`util.inherits` was recorded as absent because "this profile does not do prototype surgery", and I
+confirmed it with `nts hir --prepared` showing no `inherits` function. **That measurement could not
+distinguish its two explanations**: an absent function with no caller looks exactly like a supported
+one with no caller. The dump says what a backend receives, not what the compiler declines.
+
+With a caller added, the refusal prints -- and names a different cause than the note gave:
+
+    no wrapper for inherits: `Object.defineProperty`, a global member with no definition here
+
+`Object.setPrototypeOf` is not what stops it; writing `super_` with a descriptor is.
+
