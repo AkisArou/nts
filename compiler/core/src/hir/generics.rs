@@ -503,6 +503,9 @@ fn spell(ty: &super::HirType) -> String {
         HirType::NativePointer(super::native::Pointee::Struct(layout)) => format!("native_struct_{}_{}", layout.name.len(), layout.name),
         HirType::NativePointer(super::native::Pointee::Pointer(pointee)) => format!("ptr_{}", spell(&HirType::NativePointer((**pointee).clone()))),
         HirType::NativePointer(super::native::Pointee::Void) => "native_void".to_owned(),
+        HirType::NativePointer(super::native::Pointee::Array { element, length }) => {
+            format!("arr{length}_{}", spell(&HirType::NativePointer((**element).clone())))
+        }
         HirType::NativePointer(super::native::Pointee::Const(pointee)) => {
             format!("const_{}", spell(&HirType::NativePointer((**pointee).clone())))
         }

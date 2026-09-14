@@ -22,6 +22,9 @@ impl Layouts {
             // two identical ones: they differ in what they mean and not in what
             // this has to do about it.
             Pointee::Pointer(pointee) | Pointee::Const(pointee) => self.visit(pointee)?,
+            // An array's element may be a struct, and that struct still needs
+            // its definition emitted -- stored inline, so before this one.
+            Pointee::Array { element, .. } => self.visit(element)?,
             Pointee::Opaque(name) => self.tag(name)?,
             Pointee::Struct(layout) => {
                 self.tag(&layout.name)?;

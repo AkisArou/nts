@@ -1,6 +1,13 @@
 // The callback is written as an ordinary TypeScript function type. At a C ABI
 // boundary that can mean one thing -- a function pointer -- so no wrapper type
 // is invented to say so.
+/**
+ * The header is quoted, not angled: this is the example's own
+ * `native/library.h` found on the quoted include path, and not some system
+ * header that happens to share the name.
+ *
+ * @ntsHeader "library.h"
+ */
 declare module "c:library" {
   import type { Ptr, Struct, c_int } from "c:types";
   // The context the C library hands back. It never looks inside; only this

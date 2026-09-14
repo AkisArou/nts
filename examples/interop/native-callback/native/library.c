@@ -1,7 +1,10 @@
 // A separately compiled C library that calls back into the program. Nothing
 // here knows the callback is TypeScript: it takes a function pointer with a C
 // signature and calls it, twice, synchronously, on the caller's thread.
-struct counter { int total; };
+// Included so the definitions below are checked against the declarations the
+// binding is checked against. Without it the two could drift and nothing
+// would be looking.
+#include "library.h"
 
 int apply_twice(int (*f)(int), int x) { return f(f(x)); }
 

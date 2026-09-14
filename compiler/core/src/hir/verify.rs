@@ -541,7 +541,18 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
         };
         let expected = match &op.kind {
             OpKind::NativeLoad { .. } | OpKind::NativeStore { .. } => element.element_type(),
-            OpKind::NativeIndexAddress { .. } => (!matches!(element, super::native::Pointee::Opaque(_))).then(|| found.clone()),
+            // An index address normally keeps the pointer's type: `p + i` points
+            // at the same kind of thing `p` did. The exception is an array,
+            // where it is the *decay* -- `a[i]` is an element, so the result
+            // points at the element and not at another array. Same address
+            // arithmetic, one fewer level of type.
+            OpKind::NativeIndexAddress { .. } => match element {
+                super::native::Pointee::Opaque(_) => None,
+                super::native::Pointee::Array { element, .. } => {
+                    Some(HirType::NativePointer((**element).clone()))
+                }
+                _ => Some(found.clone()),
+            },
             OpKind::NativeFieldAddress { field, .. } => match element {
                 super::native::Pointee::Struct(layout) => layout.fields.get(*field as usize).map(|f| HirType::NativePointer(f.ty.clone())),
                 _ => None,

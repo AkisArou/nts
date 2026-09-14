@@ -41,6 +41,20 @@ impl FuncBuilder<'_> {
         if matches!(self.values[pointer.0 as usize].ty, HirType::NativePointer(Pointee::Struct(_))) {
             return self.native_index_address(id, pointer, index);
         }
+        // An array member decays to a pointer to its first element, which is
+        // what C does and what the surface says it gives back. The address is
+        // the same one -- `&a` and `&a[0]` differ only in type -- so this is a
+        // retyping and not a computation.
+        if let HirType::NativePointer(Pointee::Array { element, .. }) =
+            self.values[pointer.0 as usize].ty.clone()
+        {
+            let origin = self.origin(id);
+            return Ok(self.push(
+                OpKind::NativeIndexAddress { pointer, index },
+                HirType::NativePointer((*element).clone()),
+                origin,
+            ));
+        }
         let ty = self.native_element_type(id, pointer)?;
         let number = matches!(ty, HirType::Int { .. } | HirType::Float { .. });
         let index = self.coerce(index, &HirType::Int { bits: 64, signed: true }, id)?;

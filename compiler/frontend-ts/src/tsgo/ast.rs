@@ -377,7 +377,23 @@ fn decode_nodes(
             flags: raw.flags,
             // Filled once children are known; a modifier is a child keyword.
             modifiers: DeclarationModifiers::default(),
-            native: if kind == NodeKind::Syntax(nts_semantic_schema::syntax::FUNCTION_DECLARATION) {
+            // A module declaration carries the header tags and a function
+            // declaration the ABI ones. Both go through one parser, which
+            // simply finds no tag of the other kind -- a module has no
+            // parameters to name and a function declares no header.
+            //
+            // A source file too, and for the same reason a `declare module`
+            // does: it is a module. A program declaring a foreign struct
+            // inline, rather than importing a binding, has nowhere else to say
+            // which header it is describing.
+            native: if matches!(
+                kind,
+                NodeKind::Syntax(
+                    nts_semantic_schema::syntax::FUNCTION_DECLARATION
+                        | nts_semantic_schema::syntax::MODULE_DECLARATION
+                        | nts_semantic_schema::syntax::SOURCE_FILE
+                )
+            ) {
                 strings.source(raw.pos, raw.end).and_then(native_attributes)
             } else { None },
             data,
@@ -395,8 +411,17 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let abi = native_abi(source);
     let no_escape = leading_tag(source, "@ntsNoEscape")
         .map(|names| names.split_whitespace().map(str::to_owned).collect());
-    if abi.is_none() && no_escape.is_none() { return None; }
-    Some(Box::new(nts_semantic_schema::NativeAttributes { abi, no_escape }))
+    // `<sys/utsname.h>` and `"local.h"` name the same thing to a reader and
+    // differ only in where the preprocessor looks. Keep the spelling: a
+    // project header found on the quoted path is not the system one.
+    let headers = leading_tag(source, "@ntsHeader")
+        .map(|names| names.split_whitespace().map(str::to_owned).collect());
+    let defines = leading_tag(source, "@ntsDefine")
+        .map(|names| names.split_whitespace().map(str::to_owned).collect());
+    if abi.is_none() && no_escape.is_none() && headers.is_none() && defines.is_none() {
+        return None;
+    }
+    Some(Box::new(nts_semantic_schema::NativeAttributes { abi, no_escape, headers, defines }))
 }
 
 fn native_abi(source: &str) -> Option<String> { leading_tag(source, "@ntsAbi") }

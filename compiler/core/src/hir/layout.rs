@@ -175,6 +175,20 @@ pub fn native_shape(pointee: &crate::hir::native::Pointee) -> Option<Shape> {
     match pointee {
         Pointee::Struct(layout) => native_place(layout).map(|p| Shape { size: p.size, align: p.align }),
         Pointee::Opaque(_) => None,
+        // `T[N]` is N elements with the element's alignment, and named here
+        // rather than left to the catch-all below: `element_type` decays an
+        // array to its element, so falling through would have sized a
+        // `char[65]` as one byte -- a wrong answer that the emitted
+        // `_Static_assert` would have caught only because the C compiler
+        // disagreed, and nothing would have caught at all had the assert not
+        // existed.
+        Pointee::Array { element, length } => {
+            let inner = native_shape(element)?;
+            Some(Shape {
+                size: inner.size.checked_mul(*length)?,
+                align: inner.align,
+            })
+        }
         _ => shape_of(&pointee.element_type()?),
     }
 }

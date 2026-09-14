@@ -121,6 +121,40 @@ impl FnPointer {
         };
         format!("typedef {} (*{})({parameters});", self.result.c_type(), self.name)
     }
+
+    /// `int (*)(int)` -- the same shape with no name and no typedef in it.
+    ///
+    /// The witness needs this and the typedef cannot serve. It deliberately
+    /// does not include `program.h`, which is where the typedef is defined, so
+    /// a prototype it re-declares has to spell the shape out or name something
+    /// that does not exist there. That is what it did: `native-callback`'s
+    /// witness said `extern int apply_twice(NtsFn_int_int, int);` and had never
+    /// been compiled, because that example had no file that included it.
+    #[must_use]
+    pub fn anonymous(&self) -> String {
+        let parameters = if self.parameters.is_empty() {
+            "void".to_owned()
+        } else {
+            self.parameters.iter().map(Type::c_type_expanded).collect::<Vec<_>>().join(", ")
+        };
+        format!("{} (*)({parameters})", self.result.c_type_expanded())
+    }
+}
+
+impl Type {
+    /// The C spelling with every typedef expanded in place.
+    ///
+    /// Differs from [`Type::c_type`] only for a function pointer, and only
+    /// where the typedef is not in scope. Everywhere in `program.c` it is, and
+    /// the typedef is the better spelling -- this is for the one consumer that
+    /// cannot see it.
+    #[must_use]
+    pub fn c_type_expanded(&self) -> String {
+        match self {
+            Self::FnPointer(signature) => signature.anonymous(),
+            other => other.c_type().into_owned(),
+        }
+    }
 }
 
 /// Native memory has a declared element layout, independently of ownership.
@@ -159,6 +193,13 @@ pub enum Pointee {
     /// one is a type error before lowering sees it (`TS2542`, "only permits
     /// reading"); lowering refuses it again rather than trusting that.
     Const(Box<Pointee>),
+    /// `T[N]` stored inline, as a struct member is: `char name[65]`.
+    ///
+    /// The length is part of the type because it is part of the *layout* --
+    /// `struct utsname` is five of these and its size is nothing without them.
+    /// A pointer to one is not this; this is the storage itself, which is why
+    /// it appears as a member and decays to a pointer when read.
+    Array { element: Box<Pointee>, length: u32 },
 }
 
 /// C storage order is declaration order, never the managed layout order.
@@ -198,6 +239,10 @@ impl Pointee {
             Self::Pointer(pointee) => pointee.pointer_type(),
             Self::Void => "void".to_owned(),
             Self::Const(pointee) => format!("const {}", pointee.c_type()),
+            // The element's spelling. C writes the length in the *declarator*
+            // -- `char name[65]`, not `char[65] name` -- so a member emits it
+            // beside the name and a bare type spelling cannot carry it.
+            Self::Array { element, .. } => element.c_type(),
         }
     }
 
@@ -236,6 +281,9 @@ impl Pointee {
             // do is store, and that is refused where stores are lowered rather
             // than by pretending the element does not exist.
             Self::Const(pointee) => pointee.element_type(),
+            // Reading `p.name[i]` is reading a `T`: the array decays to a
+            // pointer to its first element, exactly as it does in C.
+            Self::Array { element, .. } => element.element_type(),
             // `void` has no element to load and no size to step by, so neither
             // `p[i]` nor an index address exists for it. Refusing here is what
             // keeps a `void *` an address to hand onward rather than storage
@@ -254,6 +302,7 @@ impl std::fmt::Display for Pointee {
             Self::Pointer(pointee) => write!(f, "{pointee}*"),
             Self::Void => write!(f, "void"),
             Self::Const(pointee) => write!(f, "const {pointee}"),
+            Self::Array { element, length } => write!(f, "{element}[{length}]"),
         }
     }
 }
@@ -458,6 +507,13 @@ impl Type {
 /// contract, not an integer width inferred from a particular argument.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Scalar {
+    /// C's `char`, which is a **third** type: distinct from both `signed char`
+    /// and `unsigned char` however it happens to be signed on a target. A
+    /// `char[65]` member described as `uint8_t[65]` has the same size, the same
+    /// alignment and the same offsets, and is a different type -- which is
+    /// exactly what the witness caught when `struct utsname` was first written
+    /// with `c_uint8`.
+    Char,
     Int,
     UInt,
     Int8,
@@ -480,6 +536,7 @@ impl Scalar {
     #[must_use]
     pub fn from_brand(name: &str) -> Option<Self> {
         Some(match name {
+            "__c_char" => Self::Char,
             "__c_int" => Self::Int,
             "__c_uint" => Self::UInt,
             "__c_int8" => Self::Int8,
@@ -503,6 +560,10 @@ impl Scalar {
     #[must_use]
     pub const fn representation(self) -> HirType {
         match self {
+            // Signed here because it is signed on this target. The *type* is
+            // distinct from `signed char` regardless; the representation is
+            // what the target says, and LP64 Linux says signed.
+
             Self::Int | Self::Int32 => HirType::Int {
                 bits: 32,
                 signed: true,
@@ -511,10 +572,7 @@ impl Scalar {
                 bits: 32,
                 signed: false,
             },
-            Self::Int8 => HirType::Int {
-                bits: 8,
-                signed: true,
-            },
+            Self::Char | Self::Int8 => HirType::Int { bits: 8, signed: true },
             Self::UInt8 => HirType::Int {
                 bits: 8,
                 signed: false,
@@ -543,6 +601,7 @@ impl Scalar {
     #[must_use]
     pub const fn c_type(self) -> &'static str {
         match self {
+            Self::Char => "char",
             Self::Int => "int",
             Self::UInt => "unsigned int",
             Self::Int8 => "int8_t",

@@ -241,6 +241,9 @@ pub const INTERFACE_DECLARATION: u16 = 265;
 /// tell a type-only export from a value one.
 pub const TYPE_ALIAS_DECLARATION: u16 = 266;
 pub const ENUM_DECLARATION: u16 = 267;
+/// `declare module "c:utsname" { ... }`. Named so a native binding module can
+/// carry the headers its declarations describe; nothing else reads it.
+pub const MODULE_DECLARATION: u16 = 268;
 pub const EXPRESSION_WITH_TYPE_ARGUMENTS: u16 = 234;
 /// `value is string`, the return type of a type guard.
 pub const TYPE_PREDICATE: u16 = 183;

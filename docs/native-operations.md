@@ -225,9 +225,9 @@ struct *this program declared*, since both sides are computed from one field
 list. Those assertions cannot notice that the declaration disagrees with the
 library it names.
 
-`nts emit-c` now also writes `native_witness.h`: the same claims, plus two the
-numbers cannot express, for a translation unit that includes the real headers to
-accept or refuse.
+`nts emit-c` now also writes `native_witness.c`: the same claims, plus two the
+numbers cannot express, in a translation unit that includes the real headers and
+is compiled on its own.
 
     _Static_assert(sizeof(struct pollfd) == 8u, "pollfd size");
     _Static_assert(offsetof(struct pollfd, events) == 4u, "pollfd.events offset");
@@ -249,6 +249,10 @@ verified, not assumed.
 It is one text. `native_prototype` builds the string that `program.c` declares
 the symbol with and that the witness re-declares it with; two derivations could
 drift, and a witness agreeing with a prototype nobody emitted checks nothing.
+It takes a `Spelling`, which is the one thing the two consumers may differ on:
+`program.c` defines the function-pointer typedefs and names them, the witness
+has none of them in scope and spells `int (*)(int)` out. Order, arity and the
+`void` for an empty list are still produced once, for both.
 
 **Why the layout numbers are not enough, demonstrated rather than argued.**
 Change `events` from `c_int16` to `c_uint16`: size, alignment and every offset
@@ -257,11 +261,38 @@ test asserts that identity, and then asserts that the real `<poll.h>` accepts
 one and refuses the other. Removing the `_Generic` emission makes the test fail
 -- checked by doing it, because a control that cannot fail measures nothing.
 
-**No `#include` for the bindings.** Which header declares `poll`, under which
-target, sysroot and defines, is the consumer's fact rather than the program's;
-inventing one here would assert something nobody said. The consumer includes its
-headers and then the witness. `<stddef.h>` is not an exception -- `offsetof` is
-the assertion mechanism, not a binding.
+**The binding names its own headers, and this reversed an earlier decision.**
+It first shipped as a `.h` fragment with no includes, on the reasoning that
+which header declares `poll` is the consumer's fact rather than the program's.
+That was wrong, and not subtly. A fragment is compared against whatever the
+enclosing file includes, so the file that discharges the check also *chooses*
+the check -- a binding naming the wrong header would still have been compared
+against the right one, and agreed. Four of the five witnesses in this tree were
+wrapped by hand, each wrapper repeating an include; the fifth,
+`native-callback`, had no wrapper at all, so its witness had never once been
+compiled. It named a typedef that exists only in `program.h`.
+
+So a binding declares what it describes, and the generated file is a complete
+translation unit:
+
+    /**
+     * @ntsHeader sys/utsname.h
+     * @ntsDefine _GNU_SOURCE
+     */
+    declare module "c:utsname" {
+
+The tags sit on the `declare module`, which is the scope a header corresponds
+to; a source file may carry them too, for a program that declares a foreign
+struct inline rather than importing a binding. `@ntsDefine` is not a
+convenience. glibc's `struct utsname` names its sixth member `domainname` under
+`__USE_GNU` and `__domainname` without it, so the same header is two different
+structs and a witness that does not say which one it read is not making a
+claim. Macros are emitted before every include, which is the only position in
+which a feature-test macro does anything.
+
+`<stddef.h>` and `<stdint.h>` are the exception that proves it -- `offsetof` is
+the assertion mechanism and `uint8_t` is how a scalar is spelled, so both are
+emitted unless a binding already names them.
 
 **Only foreign declarations appear.** `native::Struct` now records whether its
 name is a C tag the declaration authored or a spelling invented for a layout

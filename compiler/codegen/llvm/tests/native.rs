@@ -713,6 +713,15 @@ fn native_poll_calls_libc_and_matches_the_platform_header() {
         for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
         std::fs::write(dir.join("caller.c"), include_str!("../../../../examples/interop/native-poll/native/caller.c")).unwrap();
         std::fs::write(dir.join("layout.c"), include_str!("../../../../examples/interop/native-poll/native/layout.c")).unwrap();
+        // The check, compiled and never linked. It used to live inside
+        // `layout.c`, which also defines the functions `caller.c` prints from;
+        // that file supplied the `#include <poll.h>` the witness was compared
+        // against, so the comparison was against a header this test named
+        // rather than one the binding did.
+        clang(
+            &dir,
+            &["-Wall", "-Wextra", "-Werror", "-fsyntax-only", nts_codegen_c::NATIVE_WITNESS_NAME],
+        );
         for source in ["caller.c", "layout.c", "nts_runtime.c"] {
             clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
         }
@@ -751,22 +760,22 @@ fn native_fd_reads_through_a_void_pointer_and_agrees_with_unistd() {
             include_str!("../../../../examples/interop/native-fd/native/caller.c"),
         )
         .unwrap();
-        // The witness translation unit is the check: it includes the real
-        // <unistd.h>, so `read`'s generated prototype has to agree with the
-        // system one. It is compiled here rather than only in build.sh.
-        std::fs::write(
-            dir.join("witness.c"),
-            include_str!("../../../../examples/interop/native-fd/native/witness.c"),
-        )
-        .unwrap();
-        for source in ["caller.c", "witness.c", "nts_runtime.c"] {
+        // The witness is the check: it includes the real <unistd.h>, named by
+        // the binding itself, so `read`'s generated prototype has to agree with
+        // the system one. Compiled here rather than only in build.sh, and never
+        // linked -- it declares no symbol and defines no function.
+        clang(
+            &dir,
+            &["-Wall", "-Wextra", "-Werror", "-fsyntax-only", nts_codegen_c::NATIVE_WITNESS_NAME],
+        );
+        for source in ["caller.c", "nts_runtime.c"] {
             clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
         }
         for (source, object) in [("program.c", "c.o"), ("program.ll", "llvm.o")] {
             clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
             clang(
                 &dir,
-                &[object, "caller.o", "witness.o", "nts_runtime.o", "-lm", "-o", "caller"],
+                &[object, "caller.o", "nts_runtime.o", "-lm", "-o", "caller"],
             );
             assert!(
                 Command::new(dir.join("caller")).status().unwrap().success(),
@@ -787,7 +796,8 @@ fn native_fd_reads_through_a_void_pointer_and_agrees_with_unistd() {
 fn a_typed_buffer_where_read_wants_void_is_refused_by_the_witness() {
     let declarations = [(
         "unistd.d.ts",
-        "declare module \"c:unistd\" {\n\
+        "/** @ntsHeader unistd.h */\n\
+         declare module \"c:unistd\" {\n\
          import type { Ptr, c_int, c_size_t, c_ptrdiff_t, c_uint8 } from \"c:types\";\n\
          export type Fd = c_int;\n\
          export type Count = c_size_t;\n\
@@ -814,20 +824,18 @@ fn a_typed_buffer_where_read_wants_void_is_refused_by_the_witness() {
     for file in c.support_files() {
         file.write(dir.as_std_path()).unwrap();
     }
-    let witness = dir.join("native_witness.h");
+    let witness = dir.join(nts_codegen_c::NATIVE_WITNESS_NAME);
     assert!(
         witness.exists(),
         "a program calling a foreign function published no witness"
     );
-    std::fs::write(
-        dir.join("witness.c"),
-        "#include <unistd.h>\n#include <stdint.h>\n#include <stddef.h>\n#include \"native_witness.h\"\n",
-    )
-    .unwrap();
+    // No wrapper: the binding names <unistd.h> and the generated file includes
+    // it. What refuses this arm is therefore the declaration's own claim about
+    // which header it describes, not a line in this test that could just as
+    // easily have named a header the binding never mentioned.
     let refused = !Command::new("clang")
-        .args(["-std=c11", "-fsyntax-only", "-I"])
-        .arg(&dir)
-        .arg(dir.join("witness.c"))
+        .args(["-std=c11", "-fsyntax-only"])
+        .arg(&witness)
         .status()
         .unwrap()
         .success();
@@ -851,7 +859,12 @@ fn a_typed_buffer_where_read_wants_void_is_refused_by_the_witness() {
 /// catches it, which is what this does.
 #[test]
 fn an_inline_struct_member_agrees_with_the_system_header() {
-    let source = "import type { Ptr, Struct, c_long } from 'c:types';
+    let source = "/** The structs are declared here rather than imported from a binding
+          * module, so the *file* names the header -- a source file is a module
+          * and this is the only place the claim can live.
+          * @ntsHeader sys/time.h
+          */
+        import type { Ptr, Struct, c_long } from 'c:types';
         type TimeVal = Struct<{tv_sec: c_long; tv_usec: c_long}, 'timeval'>;
         type ITimerVal = Struct<{it_interval: TimeVal; it_value: TimeVal}, 'itimerval'>;
         // `long` is 64 bits here and so bigint-branded; the conversion out is
@@ -871,13 +884,8 @@ fn an_inline_struct_member_agrees_with_the_system_header() {
     // emitted out of order for would fail here and nowhere earlier.
     clang(&dir, &["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "program.c"]);
     // And the witness, where the real <sys/time.h> is the one answering.
-    std::fs::write(
-        dir.join("witness.c"),
-        "#include <sys/time.h>\n#include <stdint.h>\n#include <stddef.h>\n#include \"native_witness.h\"\n",
-    )
-    .unwrap();
-    clang(&dir, &["-std=c11", "-fsyntax-only", "witness.c"]);
-    let witness = std::fs::read_to_string(dir.join("native_witness.h")).unwrap();
+    clang(&dir, &["-std=c11", "-fsyntax-only", nts_codegen_c::NATIVE_WITNESS_NAME]);
+    let witness = std::fs::read_to_string(dir.join(nts_codegen_c::NATIVE_WITNESS_NAME)).unwrap();
     assert!(
         witness.contains("struct timeval *: 1"),
         "the nested member's own type must be asserted, not only its offset:\n{witness}"
@@ -927,6 +935,19 @@ fn c_calls_a_typescript_function_through_a_bridge() {
             include_str!("../../../../examples/interop/native-callback/native/library.c"),
         )
         .unwrap();
+        // The library's header, which both `library.c` and the witness include.
+        // It is what makes the callback signatures checkable at all: while this
+        // library declared its functions only in its own `.c`, the witness
+        // re-declared them next to nothing and agreed with itself.
+        std::fs::write(
+            dir.join("library.h"),
+            include_str!("../../../../examples/interop/native-callback/native/library.h"),
+        )
+        .unwrap();
+        clang(
+            &dir,
+            &["-Wall", "-Wextra", "-Werror", "-fsyntax-only", nts_codegen_c::NATIVE_WITNESS_NAME],
+        );
         for source in ["caller.c", "library.c", "nts_runtime.c"] {
             clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
         }

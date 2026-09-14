@@ -8,6 +8,11 @@
 pub(crate) const CASES: &[(&str, &str, &str, &str)] = &[
     ("c_int", "int", "-3.75", "-3"),
     ("c_uint", "unsigned int", "4294967295", "4294967295"),
+    // `char` is a third type, distinct from both `signed char` and `unsigned
+    // char` even where it has one of their representations, and a case of its
+    // own because that distinctness is what a `_Generic` witness asserts on.
+    // It is signed on this target; a build where it is not fails right here.
+    ("c_char", "char", "-127.75", "-127"),
     ("c_int8", "int8_t", "-127.75", "-127"),
     ("c_uint8", "uint8_t", "255.75", "255"),
     ("c_int16", "int16_t", "-32767.75", "-32767"),

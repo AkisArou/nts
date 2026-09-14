@@ -23,7 +23,7 @@ is an address to hand onward, not storage this program may read through.
 ## The witness
 
 `native/witness.c` includes the real `<unistd.h>` and then the generated
-`native_witness.h`. That is the check, and it is not decoration.
+`native_witness.c`. That is the check, and it is not decoration.
 
 A binding declaring the buffer as `uint8_t *` typechecks, lowers without one
 diagnostic, and produces a `program.c` that compiles — because `program.c`

@@ -1,6 +1,6 @@
 //! Native payloads have no managed header. C independently checks the shared
 //! layout calculator on every emitted definition.
-use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name};
+use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name, Spelling};
 use nts_core::hir::Callee;
 use nts_core::hir::native::{Pointee, Type};
 
@@ -46,7 +46,17 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
         let placed = nts_core::hir::layout::native_place(layout)
             .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
         writer.line(origin, format!("struct {} {{", layout.name));
-        for field in &layout.fields { writer.line(origin, format!("    {} {};", field.ty.c_type(), field.name)); }
+        for field in &layout.fields {
+            // C spells an array's length in the *declarator*, after the name:
+            // `uint8_t bytes[8]`, never `uint8_t[8] bytes`. A type spelling
+            // alone cannot carry it, which is why it is written here and why
+            // `Pointee::Array::c_type` answers with the element.
+            let suffix = match &field.ty {
+                Pointee::Array { length, .. } => format!("[{length}]"),
+                _ => String::new(),
+            };
+            writer.line(origin, format!("    {} {}{suffix};", field.ty.c_type(), field.name));
+        }
         writer.line(origin, "};");
         let tag = format!("struct {}", layout.name);
         writer.line(origin, format!("_Static_assert(sizeof({tag}) == {}u, \"native struct size\");", placed.size));
@@ -79,7 +89,13 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
             };
             let field = layout.fields.get(field as usize)
                 .ok_or_else(|| Diagnostic::error("NTS2006", "invalid native field index", origin.location))?;
-            format!("{name} = &{}->{};", value_name(pointer), field.name)
+            // An array member is already an address: `p->name` decays to a
+            // pointer to its first element, and `&p->name` is a pointer to the
+            // *array*, which is a different type C will not assign across.
+            match &field.ty {
+                Pointee::Array { .. } => format!("{name} = {}->{};", value_name(pointer), field.name),
+                _ => format!("{name} = &{}->{};", value_name(pointer), field.name),
+            }
         }
         _ => unreachable!("only native memory operations are routed here"),
     })
@@ -149,9 +165,19 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             writer.line(origin, format!(
                 "_Static_assert(offsetof({tag}, {}) == {offset}u, \"{}.{} offset\");",
                 field.name, layout.name, field.name));
+            // The address of a member, spelled as its own type. An array's is
+            // `T (*)[N]` -- a pointer to the array, not to an element -- and
+            // writing `T *` there would assert something true of a decayed
+            // value and not of the member, which is what is being checked.
+            let address = match &field.ty {
+                Pointee::Array { element, length } => {
+                    format!("{} (*)[{length}]", element.c_type())
+                }
+                other => other.pointer_type(),
+            };
             writer.line(origin, format!(
-                "_Static_assert(_Generic(&((({tag} *)0)->{}), {}: 1, default: 0), \"{}.{} type\");",
-                field.name, field.ty.pointer_type(), layout.name, field.name));
+                "_Static_assert(_Generic(&((({tag} *)0)->{}), {address}: 1, default: 0), \"{}.{} type\");",
+                field.name, layout.name, field.name));
         }
         wrote = true;
     }
@@ -160,7 +186,9 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
             let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
             if !target.parameters.iter().chain(std::iter::once(&target.result)).all(names_only_foreign) { continue; }
-            declared.entry(target.name.as_str()).or_insert_with(|| native_prototype(&target.name, target));
+            declared
+                .entry(target.name.as_str())
+                .or_insert_with(|| native_prototype(&target.name, target, Spelling::Expanded));
         }
     }
     for prototype in declared.values() {
@@ -197,7 +225,9 @@ fn pointee_is_foreign(pointee: &Pointee) -> bool {
         // declaration authored -- a header defines it or the witness will say so.
         Pointee::Scalar(_) | Pointee::Opaque(_) | Pointee::Void => true,
         Pointee::Struct(layout) => layout.foreign,
-        Pointee::Pointer(inner) | Pointee::Const(inner) => pointee_is_foreign(inner),
+        Pointee::Pointer(inner) | Pointee::Const(inner) | Pointee::Array { element: inner, .. } => {
+            pointee_is_foreign(inner)
+        }
     }
 }
 

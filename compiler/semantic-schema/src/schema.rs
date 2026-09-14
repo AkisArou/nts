@@ -638,6 +638,19 @@ pub struct NativeAttributes {
     /// None is unclassified; Some(empty) is a malformed explicit annotation.
     /// Named pointer parameters may not be retained or returned by the callee.
     pub no_escape: Option<Vec<String>>,
+    /// The headers a native binding **module** describes, e.g. `sys/utsname.h`.
+    ///
+    /// A module tag, unlike the two above: a header declares the whole binding,
+    /// not one function in it. Angle brackets and quotes are stripped here so
+    /// the emitter decides how to spell the include.
+    pub headers: Option<Vec<String>>,
+    /// Feature-test macros the headers are read under, e.g. `_GNU_SOURCE`.
+    ///
+    /// Also a module tag, and not cosmetic: glibc's `struct utsname` names its
+    /// sixth member `domainname` under `__USE_GNU` and `__domainname` without
+    /// it, so the same header yields two different structs and only one of them
+    /// is the one a binding was written against.
+    pub defines: Option<Vec<String>>,
 }
 
 /// Why a snapshot was rejected.

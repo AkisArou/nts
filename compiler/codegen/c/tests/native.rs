@@ -80,7 +80,7 @@ fn prepare_with_types(
     )
     .unwrap();
     let imports = if include_types {
-        "import type { c_int, c_uint, c_int8, c_uint8, c_int16, c_uint16, c_int32, c_uint32, c_int64, c_uint64, c_long, c_ulong, c_size_t, c_ptrdiff_t, c_float, c_double } from \"c:types\";\n"
+        "import type { c_char, c_int, c_uint, c_int8, c_uint8, c_int16, c_uint16, c_int32, c_uint32, c_int64, c_uint64, c_long, c_ulong, c_size_t, c_ptrdiff_t, c_float, c_double } from \"c:types\";\n"
     } else {
         ""
     };
@@ -621,7 +621,8 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
          }\n";
     let binding = |field: &str| {
         format!(
-            "declare module \"c:poll\" {{\n\
+            "/** @ntsHeader poll.h */\n\
+             declare module \"c:poll\" {{\n\
              import type {{ Ptr, Struct, c_int, {field}, c_ulong }} from \"c:types\";\n\
              export type PollFd = Struct<{{ fd: c_int; events: {field}; revents: {field} }}, \"pollfd\">;\n\
              export type Count = c_ulong;\n\
@@ -682,17 +683,17 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
     );
     assert_ne!(signed, unsigned, "the field types must distinguish them");
 
+    // Compiled as it is generated. Nothing here supplies `#include <poll.h>`:
+    // the binding names the header and the witness includes it, so what this
+    // program is compared against is the binding's own claim rather than a
+    // line in this test. While that line lived here, a binding naming the
+    // wrong header would still have been checked against the right one.
     let accepted = |dir: &Utf8Path, witness: &str| -> bool {
-        std::fs::write(dir.join("native_witness.h"), witness).unwrap();
-        std::fs::write(
-            dir.join("witness.c"),
-            "#include <poll.h>\n#include <stdint.h>\n#include \"native_witness.h\"\n",
-        )
-        .unwrap();
+        let file = dir.join(nts_codegen_c::NATIVE_WITNESS_NAME);
+        std::fs::write(&file, witness).unwrap();
         Command::new("clang")
-            .args(["-std=c11", "-fsyntax-only", "-I"])
-            .arg(dir)
-            .arg(dir.join("witness.c"))
+            .args(["-std=c11", "-fsyntax-only"])
+            .arg(&file)
             .status()
             .unwrap()
             .success()

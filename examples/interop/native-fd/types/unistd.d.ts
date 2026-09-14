@@ -2,6 +2,14 @@
 // `native_witness.h`, generated beside program.c, checks this against the real
 // <unistd.h>: the buffer really is `void *` and not a typed pointer, and the
 // generated prototype has to agree with the system one exactly.
+/**
+ * `read`, `write`, `close`. Naming the header is what makes the prototype
+ * check real -- `program.c` declares these itself and never sees this file,
+ * so a buffer declared `uint8_t *` instead of `void *` compiles there and
+ * only a translation unit holding both declarations can object.
+ *
+ * @ntsHeader unistd.h
+ */
 declare module "c:unistd" {
   import type { ConstPtr, Ptr, c_int, c_size_t, c_ptrdiff_t } from "c:types";
   export type Fd = c_int;

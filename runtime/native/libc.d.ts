@@ -1,6 +1,13 @@
 // Hand-written, curated C ABI declarations. Not generated from system headers.
 // Module members enter scope only through imports.
 
+/**
+ * The brand vocabulary. **No `@ntsHeader`, and deliberately**: nothing here is
+ * a declaration of anything C declares. `c_int` is how this compiler spells a
+ * target's `int`, not a name <stdint.h> or any other header publishes, so
+ * there is no header for a witness to compare it against -- the comparison
+ * happens wherever a *binding* uses one of these to describe a real function.
+ */
 declare module "c:types" {
   // A pointer to a C struct tag, with no managed header or implicit lifetime.
   // Construct and destroy it through the library's functions. `| null` admits
@@ -30,13 +37,29 @@ declare module "c:types" {
   // a `ConstPtr<T>` and a `ConstPtr<T>` does not satisfy a `Ptr<T>`, which is
   // C's qualification conversion, in the one direction C performs it, out of
   // TypeScript's own assignability rather than a rule written here.
+  // `T[N]` stored inline, which is what a C struct member like `char name[65]`
+  // is. The length is part of the type because it is part of the layout: a
+  // struct holding one has no size without it.
+  //
+  // Reading the member gives a `Ptr<T>` -- the array decays to a pointer to its
+  // first element, exactly as in C -- so `p.name[0]` reads a byte and
+  // `addrOf(p.name[0])` is its address. There is no value form: an array is
+  // storage, and reading one *as a value* would be an aggregate copy.
+  export type CArray<T, N extends number> = {
+    readonly __c_array: T;
+    readonly __c_length: N;
+  };
   export type Ptr<T> = { readonly __c_pointer: T; readonly __c_writable: true } & (T extends Struct<infer Fields, string>
     // A struct-typed member is stored inline and projects as a *pointer to it*,
     // never as a value: reading one as a value would be an aggregate copy, and
     // `p.inner.field` should reach the bytes that are there rather than a
     // duplicate of them. This is what `p[i]` already does for a block of
     // structs, for the same reason.
-    ? { [K in keyof Fields]: Fields[K] extends { readonly __c_struct: unknown } ? Ptr<Fields[K]> : Slot<Fields[K]> }
+    ? { [K in keyof Fields]: Fields[K] extends { readonly __c_struct: unknown }
+          ? Ptr<Fields[K]>
+          : Fields[K] extends CArray<infer E, number>
+            ? Ptr<E>
+            : Slot<Fields[K]> }
       & { [index: number]: Ptr<T> }
     : { [index: number]: Slot<T> });
   // A view that may be read and not written. `const` restricts this holder; it
@@ -52,6 +75,11 @@ declare module "c:types" {
   // number arithmetic. An assertion requests a conversion at a foreign call;
   // it does not validate the value's range. The __c_* properties are phantom
   // markers and cannot be read by compiled code.
+  // C's `char` is a third type, distinct from both `signed char` and
+  // `unsigned char` however it is signed on a target. A `char[65]` member
+  // described with `c_uint8` has the same size, alignment and offsets and is
+  // still the wrong type -- which the generated witness refuses.
+  export type c_char = number & { readonly __c_char: unique symbol };
   export type c_int = number & { readonly __c_int: unique symbol };
   export type c_uint = number & { readonly __c_uint: unique symbol };
   export type c_int8 = number & { readonly __c_int8: unique symbol };
@@ -85,6 +113,12 @@ declare module "c:types" {
   export type c_double = number & { readonly __c_double: unique symbol };
 }
 
+/**
+ * The block functions. `memcpy` and friends are declared in <string.h>, not
+ * in <memory.h>, which is a non-standard alias glibc keeps for compatibility.
+ *
+ * @ntsHeader string.h
+ */
 declare module "c:memory" {
   // Zero-initialized function-local storage; count is a positive compile-time
   // constant. Local addresses cannot escape, suspend, or be freed manually.
@@ -108,6 +142,12 @@ declare module "c:memory" {
   export function addrOf<T>(place: { readonly __c_of?: T }): Ptr<T>;
 }
 
+/**
+ * The fixed-width integers. This header is what makes `uint8_t` a name at all,
+ * so a witness spelling one without it does not compile.
+ *
+ * @ntsHeader stdint.h
+ */
 declare module "c:stdint" {
   // Hand-written fixed-width C integer aliases. JavaScript number precision applies.
   export type {
@@ -122,16 +162,32 @@ declare module "c:stdint" {
   } from "c:types";
 }
 
+/**
+ * `size_t` and `ptrdiff_t`.
+ *
+ * @ntsHeader stddef.h
+ */
 declare module "c:stddef" {
   // Hand-written aliases for the supported LP64 C data model.
   export type { c_size_t as size_t, c_ptrdiff_t as ptrdiff_t } from "c:types";
 }
 
+/**
+ * `bool`. Since C23 it is a keyword and the header is empty, which is fine:
+ * including it is still correct and still says where the name came from.
+ *
+ * @ntsHeader stdbool.h
+ */
 declare module "c:stdbool" {
   // Hand-written: C bool has the same value domain as TypeScript boolean.
   export type bool = boolean;
 }
 
+/**
+ * Allocation, conversion, and the integer absolute values.
+ *
+ * @ntsHeader stdlib.h
+ */
 declare module "c:stdlib" {
   // Hand-written, curated scalar bindings. Not generated from system headers.
   import type { c_int, c_long } from "c:types";
@@ -149,6 +205,12 @@ declare module "c:stdlib" {
   export function labs(value: c_long): c_long;
 }
 
+/**
+ * The floating-point functions. A program using these links `-lm`, which the
+ * witness does not need -- it declares no `main` and is never linked.
+ *
+ * @ntsHeader math.h
+ */
 declare module "c:math" {
   // Hand-written, curated scalar bindings. Not generated from system headers.
   // Link libm where required.

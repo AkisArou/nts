@@ -1748,6 +1748,18 @@ pub const fn is_constructor_token(ty: TypeId) -> bool {
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub funcs: Vec<Func>,
+    /// The C headers this program's native bindings claim to describe, and the
+    /// feature-test macros to read them under. Sorted and deduplicated.
+    ///
+    /// **On `Program` because the witness is generated from `&Program`.** The
+    /// asserts are derived from the native types and prototypes reached by
+    /// lowering; the headers say what to compare them *against*, and without
+    /// them the generated file is a fragment whose meaning depends on whoever
+    /// writes the enclosing translation unit. That reader chose the answer.
+    pub native_headers: Vec<String>,
+    /// See [`Program::native_headers`]. Emitted before every include, which is
+    /// the only order in which a feature-test macro does anything.
+    pub native_defines: Vec<String>,
     /// Bound foreign members, keyed by the **foreign key** -- `owner.member:descriptor`.
     ///
     /// **On `Program` for the same reason `classes` is.** A backend turning

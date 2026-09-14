@@ -56,6 +56,47 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
     if let Some(tag) = marker(snapshot, ty, "___c_opaque") {
         return Some(Pointee::Opaque(text(snapshot, tag)?.to_owned()));
     }
+    // `CArray<T, N>` -- storage of N elements inline. Read before the pointer
+    // cases because it is not a pointer: it is the thing a pointer to it would
+    // point at, and the length is part of the layout rather than of a value.
+    if let Some(element) = marker(snapshot, ty, "___c_array")
+        && let Some(count) = marker(snapshot, ty, "___c_length")
+    {
+        let TypeKind::Literal(LiteralValue::Number(length)) = &snapshot.types.get(count.0 as usize)?.kind
+        else {
+            return None;
+        };
+        // A count, so a fractional or out-of-range literal is not a small count
+        // -- it is not a count. `CArray<c_char, 64.5>` truncating to 64 would
+        // produce a struct 65 bytes short of the one the header defines, and
+        // the only thing that would have noticed is the witness.
+        //
+        // `float_cmp` is allowed because exact equality is the question: the
+        // cast is accepted exactly when it round-trips, which is what makes
+        // the truncation the other two lints warn about unreachable.
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::float_cmp
+        )]
+        let length = {
+            let count = *length;
+            if !(count >= 1.0 && count <= f64::from(u32::MAX)) {
+                return None;
+            }
+            let narrowed = count as u32;
+            if f64::from(narrowed) != count {
+                return None;
+            }
+            narrowed
+        };
+        let inner = if let Some(scalar) = scalar(snapshot, element) {
+            Pointee::Scalar(scalar)
+        } else {
+            pointer_within(snapshot, element, visiting)?
+        };
+        return Some(Pointee::Array { element: Box::new(inner), length });
+    }
     let element = marker(snapshot, ty, "___c_pointer")?;
     // `ConstPtr<T>` is `Ptr<T>` without the writable marker. The marker sits on
     // the *mutable* type on purpose: the const one is then the smaller of the
@@ -105,8 +146,16 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
         // no such type -- a struct may contain a pointer to itself, never a
         // copy -- so the guard refuses rather than recursing, and the pointer
         // form remains available and is unaffected.
+        // A member's own type, which for an array is the array and not a
+        // pointer to one: `char name[65]` occupies 65 bytes here, and the
+        // pointer path below would have made it 8. Tried before that path for
+        // the same reason the struct case is.
         let ty = if let Some(scalar) = scalar(snapshot, property.ty) {
             Pointee::Scalar(scalar)
+        } else if let Some(array @ Pointee::Array { .. }) =
+            pointer_body(snapshot, property.ty, visiting)
+        {
+            array
         } else if !visiting.contains(&property.ty)
             && let Some(inner) = {
                 visiting.push(property.ty);
