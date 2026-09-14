@@ -334,10 +334,14 @@ fn the_generator_produces_declarations_for_the_fixture() {
         assert!(body.contains(needle), "expected `{needle}` in:\n{body}");
     };
 
-    expect("static readonly MAX: number;");    // every integral width is `number` now
-    // A `ConstantValue` field IS its constant, so it is provably never null --
-    // without this it read `string | null` for a compile-time string literal.
-    expect("static readonly NAME: string;");
+    // **A `ConstantValue` renders as its value**, which is the only way a
+    // declaration can carry one. It used to render as its width -- `number`,
+    // `string` -- and the note above it said "Inlined at the call site", so the
+    // compiler knew a constant was inlinable and not what it was. It folded to
+    // `0`, and the example printed `0` where Java says `512`.
+    expect("static readonly MAX: 512;");
+    // Also provably never null, which is why it is not `"catalog" | null`.
+    expect(r#"static readonly NAME: "catalog";"#);
     // But a `static final` reference that is NOT a constant stays nullable,
     // because the class file genuinely cannot prove it. That pair is the
     // control: a rule that made every static non-null would pass the line
@@ -1179,7 +1183,11 @@ fn an_interface_constant_becomes_a_merged_namespace() {
         .0;
 
     assert!(task.contains("export namespace Task {"), "a merged namespace:\n{task}");
-    assert!(task.contains("const KIND: string;"), "carrying a const:\n{task}");
+    // **Its value, not its width.** A `ConstantValue` renders as a literal
+    // type, because that is the only place a declaration can carry a value --
+    // and without one the compiler folded `Catalog.MAX` to `0` where Java says
+    // `512`, with no diagnostic anywhere.
+    assert!(task.contains(r#"const KIND: "task";"#), "carrying a const:\n{task}");
     // Neither spelling that TypeScript rejects.
     assert!(!task.contains("static readonly KIND"), "`static` is not a type member:\n{task}");
     assert!(

@@ -378,6 +378,51 @@ fn main() -> Result<()> {
     }
 }
 
+
+
+/// A jar, unpacked into a directory this run owns.
+///
+/// **`nts-jvm-emitter` has no zip dependency and will not grow one to open an
+/// archive the caller's machine can already open.** The workspace manifest
+/// says every external dependency is a maintenance obligation, and a zip plus
+/// a deflate crate would be two. `unzip` is already on any machine that has a
+/// jar to bind.
+fn unpacked(archive: &Utf8Path) -> Result<Utf8PathBuf> {
+    let into = Utf8PathBuf::from(format!(
+        "{}/nts-bind-{}",
+        std::env::temp_dir().display(),
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&into)?;
+    let status = std::process::Command::new("unzip")
+        .args(["-o", "-q", archive.as_str(), "-d", into.as_str()])
+        .status()
+        .map_err(|why| anyhow!("could not run `unzip`, which --jar needs: {why}"))?;
+    if !status.success() {
+        bail!("`unzip` could not read {archive}");
+    }
+    Ok(into)
+}
+
+/// The member list `--members` names, as the binder wants it.
+///
+/// Blank lines and `#`-comments are skipped so the list can explain itself,
+/// and `.` becomes `/` so a curator writes `java.util.Map#get` rather than the
+/// binary name. `None` keeps everything, which is what binding somebody's jar
+/// wants -- there the closure is the point.
+fn curated(path: Option<&Utf8PathBuf>) -> Result<Option<std::collections::BTreeSet<String>>> {
+    let Some(path) = path else { return Ok(None) };
+    let text = std::fs::read_to_string(path.as_std_path())
+        .map_err(|why| anyhow!("cannot read {path}: {why}"))?;
+    Ok(Some(
+        text.lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .map(|line| line.replace('.', "/"))
+            .collect(),
+    ))
+}
+
 /// `nts bind` -- a jar or a directory of class files in, TypeScript
 /// declarations and a binding table out.
 ///
@@ -413,6 +458,7 @@ fn bind_java(args: &[String]) -> Result<()> {
     let mut prelude = false;
     let mut keeps = false;
     let mut self_contained = false;
+    let mut members: Option<Utf8PathBuf> = None;
     let mut at = 0;
     while at < args.len() {
         let value = |at: usize, what: &str| -> Result<String> {
@@ -426,9 +472,10 @@ fn bind_java(args: &[String]) -> Result<()> {
             "--prelude" => { prelude = true; at += 1 }
             "--keeps" => { keeps = true; at += 1 }
             "--self-contained" => { self_contained = true; at += 1 }
+            "--members" => { members = Some(Utf8PathBuf::from(value(at, "--members")?)); at += 2 }
             // Refused rather than ignored. A misspelled flag that is skipped
             // produces a correct-looking file built with the wrong options.
-            other => bail!("unknown argument `{other}`; nts bind takes --jar or --classes, --package, --out, --prelude, --keeps, --self-contained"),
+            other => bail!("unknown argument `{other}`; nts bind takes --jar or --classes, --package, --out, --prelude, --keeps, --self-contained, --members"),
         }
     }
     let (Some(package), Some(out)) = (package, out) else {
@@ -442,22 +489,7 @@ fn bind_java(args: &[String]) -> Result<()> {
         // -- the workspace manifest says every external dependency is a
         // maintenance obligation, and a zip plus a deflate crate would be two.
         // `unzip` is already on the machine that has a jar.
-        (Some(archive), None) => {
-            let into = Utf8PathBuf::from(format!(
-                "{}/nts-bind-{}",
-                std::env::temp_dir().display(),
-                std::process::id()
-            ));
-            std::fs::create_dir_all(&into)?;
-            let status = std::process::Command::new("unzip")
-                .args(["-o", "-q", archive.as_str(), "-d", into.as_str()])
-                .status()
-                .map_err(|why| anyhow!("could not run `unzip`, which --jar needs: {why}"))?;
-            if !status.success() {
-                bail!("`unzip` could not read {archive}");
-            }
-            into
-        }
+        (Some(archive), None) => unpacked(&archive)?,
     };
     // **Exactly this package, and no anonymous classes.**
     //
@@ -492,6 +524,14 @@ fn bind_java(args: &[String]) -> Result<()> {
     // against a type nothing declares -- which is a `.d.ts` that does not
     // compile, measured at 60 errors before this existed. The count is printed
     // below rather than swallowed: leaving a member out is a decision.
+    // **A curated prelude is a vocabulary, not a jar.** `java.lang.Integer`
+    // has fifty methods and a caller wants three. Naming the members is how a
+    // person curates one -- and the byte offsets the table needs come from the
+    // same run that renders the text, which is the half a hand-written prelude
+    // cannot have and the reason one had no table at all.
+    //
+    // Blank lines and `#`-comments are skipped so the list can explain itself.
+    nts_jvm_emitter::bind::keep_members(curated(members.as_ref())?);
     nts_jvm_emitter::bind::prune_to(self_contained.then(|| {
         nts_jvm_emitter::bind::classes_under(root.as_std_path()).into_iter().collect()
     }));

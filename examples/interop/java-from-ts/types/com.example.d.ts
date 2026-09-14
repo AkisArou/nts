@@ -10,9 +10,9 @@ declare module "java:com.example" {
   /** com.example.Catalog Final: cannot be extended. */
   export class Catalog {
     /** Inlined at the call site: the class is never loaded for this. */
-    static readonly MAX: number;
+    static readonly MAX: 512;
     /** Inlined at the call site: the class is never loaded for this. */
-    static readonly NAME: string;
+    static readonly NAME: "catalog";
     /** A real `getstatic`, and it runs the owner's `<clinit>`. */
     static readonly DEFAULT_KIND: Kind | null;
     hits: number;

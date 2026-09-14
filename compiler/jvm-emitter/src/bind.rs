@@ -36,6 +36,44 @@ use crate::read::ClassFile;
 use std::fmt::Write as _;
 
 
+/// Whether a member is left out of a curated binding, counting it if so.
+///
+/// Two questions with one answer: the caller named which members it wants
+/// ([`keep_members`]), and the binding must close over the classes it may
+/// mention ([`prune_to`]). Both were four lines at each of four render sites,
+/// which is a lot of room for the fourth to disagree with the first three.
+fn omit_type(descriptor: &str, signature: Option<&str>) -> bool {
+    if member_within(descriptor, signature) {
+        return false;
+    }
+    PRUNED.with(|it| it.set(it.get() + 1));
+    true
+}
+
+/// The same, plus the member list -- for a site that knows its declaring class.
+fn omit(owner: &str, name: &str, descriptor: &str, signature: Option<&str>) -> bool {
+    if kept(owner, name) && member_within(descriptor, signature) {
+        return false;
+    }
+    PRUNED.with(|it| it.set(it.get() + 1));
+    true
+}
+
+/// Whether a rendered constant is something TypeScript can spell as a literal.
+///
+/// `inf` and `NaN` are what `f64`'s formatter gives for values a declaration
+/// cannot carry, and emitting one would trade a wrong number for a file that
+/// does not parse.
+fn spellable(value: &str) -> bool {
+    !value.is_empty()
+        && (value.starts_with('"')
+            || value
+                .strip_prefix('-')
+                .unwrap_or(value)
+                .chars()
+                .all(|c| c.is_ascii_digit() || c == '.' || c == 'n' || c == 'e' || c == '-'))
+}
+
 /// One Java type, as TypeScript.
 ///
 /// Takes a descriptor slice and returns the rendered type plus how many bytes
@@ -110,6 +148,16 @@ thread_local! {
     /// member is a decision, and a binding that quietly lacks one is a binding
     /// its caller cannot tell from a jar that never had it.
     static KNOWN: std::cell::RefCell<Option<std::collections::BTreeSet<String>>> =
+        const { std::cell::RefCell::new(None) };
+    /// The members a curated binding keeps, as `owner/binary/Name#member`.
+    ///
+    /// **A prelude is a vocabulary, not a jar.** `java.lang.Integer` has fifty
+    /// methods and a caller wants three; binding the class wholesale gives a
+    /// file nobody reads and a surface nobody asked for. Naming the members is
+    /// how a person curates one -- and the byte offsets its table needs are
+    /// generated from the same run that renders the text, which is the half a
+    /// hand-written prelude cannot have.
+    static MEMBERS: std::cell::RefCell<Option<std::collections::BTreeSet<String>>> =
         const { std::cell::RefCell::new(None) };
     static PRUNED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static PACKAGE: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
@@ -763,8 +811,7 @@ fn render_fields_into(
         .collect();
 
     for field in class.fields.iter().filter(|f| visible(f.access)) {
-        if !member_within(&field.descriptor, field.signature.as_deref()) {
-            PRUNED.with(|it| it.set(it.get() + 1));
+        if omit(&class.binary_name, &field.name, &field.descriptor, field.signature.as_deref()) {
             continue;
         }
         let Some((rendered, _)) = field
@@ -840,7 +887,22 @@ fn render_fields_into(
                 )
             },
             emitted,
-            if provably_present { rendered.clone() } else { returns(&rendered, &field.annotations) },
+            // **A `ConstantValue` renders as its value, not as its width.**
+            // The note above this declaration says "Inlined at the call site",
+            // and for a long time the type beside it said `number` -- so the
+            // compiler knew a constant was inlinable and not what it was,
+            // folded it to `0`, and `Catalog.MAX` printed `0` where Java says
+            // `512`. No diagnostic, no crash, a different number.
+            //
+            // A literal type is the one place a declaration can carry a value.
+            // Only where this slice could render one: an infinity or a NaN has
+            // no TypeScript spelling, and a literal that does not parse would
+            // trade a wrong number for a file that does not compile.
+            match field.constant_value.as_deref().filter(|it| spellable(it)) {
+                Some(value) => value.to_owned(),
+                None if provably_present => rendered.clone(),
+                None => returns(&rendered, &field.annotations),
+            },
         );
     }
     Ok(())
@@ -1007,6 +1069,24 @@ pub fn declarations(class: &ClassFile) -> Result<(String, Vec<Bound>), String> {
 pub fn prune_to(types: Option<std::collections::BTreeSet<String>>) {
     KNOWN.with(|it| *it.borrow_mut() = types);
     PRUNED.with(|it| it.set(0));
+}
+
+/// Keep only these members, named `owner/binary/Name#member`.
+///
+/// `None` keeps everything, which is what binding somebody's jar wants. A
+/// constructor is `#<init>` and a field is named like a method, because the
+/// caller writing the list should not have to know which it is.
+pub fn keep_members(members: Option<std::collections::BTreeSet<String>>) {
+    MEMBERS.with(|it| *it.borrow_mut() = members);
+}
+
+/// Whether a member survives [`keep_members`].
+fn kept(owner: &str, member: &str) -> bool {
+    MEMBERS.with(|list| {
+        let list = list.borrow();
+        let Some(list) = list.as_ref() else { return true };
+        list.contains(&format!("{owner}#{member}"))
+    })
 }
 
 /// How many members [`prune_to`] has left out since it was last called.
@@ -1223,10 +1303,7 @@ fn render_methods_into(
     let (out_constants, constants_table) = constants;
     let is_interface = class.access & access::INTERFACE != 0;
     for method in class.methods.iter().filter(|m| visible(m.access) && is_api(m)) {
-        // Left out rather than rendered against a type this binding does not
-        // declare, which would be a `.d.ts` that does not compile.
-        if !member_within(&method.descriptor, method.signature.as_deref()) {
-            PRUNED.with(|it| it.set(it.get() + 1));
+        if omit(&class.binary_name, &method.name, &method.descriptor, method.signature.as_deref()) {
             continue;
         }
         // The `Signature` attribute first, because it is the one that still has
@@ -1610,8 +1687,7 @@ fn render_inherited(
         )
         .collect();
     for field in inherited_fields(class, resolve) {
-        if !member_within(&field.descriptor, field.signature.as_deref()) {
-            PRUNED.with(|it| it.set(it.get() + 1));
+        if omit_type(&field.descriptor, field.signature.as_deref()) {
             continue;
         }
         let Some((rendered, _)) = type_of(&field.descriptor) else { continue };
@@ -1655,12 +1731,18 @@ fn render_inherited(
         );
     }
     for (declaring, method) in inherited(class, resolve) {
+        // Filtered by the *declaring* class, so naming
+        // `java/util/Collection#size` once puts `size` on `Collection`, `List`,
+        // `Set` and `HashMap` -- which is what a curator means by naming it.
+        if !kept(&declaring.binary_name, &method.name) {
+            PRUNED.with(|it| it.set(it.get() + 1));
+            continue;
+        }
         // The inherited half of the same question. `Set` declares none of
         // `toArray(IntFunction)`, `removeIf`, `stream` or `parallelStream` --
         // it gets all four from `Collection`, and guarding only the declared
         // loop left exactly those four names unresolved.
-        if !member_within(&method.descriptor, method.signature.as_deref()) {
-            PRUNED.with(|it| it.set(it.get() + 1));
+        if omit_type(&method.descriptor, method.signature.as_deref()) {
             continue;
         }
         let Some((parameters, result)) = method

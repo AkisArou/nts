@@ -79,6 +79,9 @@ pub struct Member {
     /// makes a `static final` primitive or `String` inline to an `ldc` instead
     /// of a `getstatic`.
     pub constant: bool,
+    /// The constant's value as a TypeScript literal, when this slice could
+    /// render one. `None` for a shape the pool holds and this does not read.
+    pub constant_value: Option<String>,
     /// The method's bytecode, when it has any.
     ///
     /// `None` for a field, for an `abstract` method and for a `native` one --
@@ -175,6 +178,16 @@ impl<'a> Reader<'a> {
 struct Pool {
     utf8: Vec<Option<String>>,
     class: Vec<Option<u16>>,
+    /// A `ConstantValue`'s value, rendered as the TypeScript literal for it.
+    ///
+    /// **Kept because the flag alone was a wrong answer that ran.** The
+    /// declaration for a `static final int MAX = 512` said "Inlined at the
+    /// call site" and then wrote `MAX: number`, so the compiler had a constant
+    /// it could not see the value of, folded it to `0`, and the example
+    /// printed `0` where Java says `512` -- no diagnostic, no crash, a
+    /// different number.
+    constant: Vec<Option<String>>,
+
 }
 
 impl Pool {
@@ -194,10 +207,31 @@ impl Pool {
     }
 }
 
+/// A `double` as a TypeScript numeric literal.
+///
+/// Whole values render without a fractional part, because `512.0` in a
+/// declaration is the same number and reads as though the width mattered.
+/// A value TypeScript cannot spell -- an infinity or a NaN -- gets `None`
+/// from the caller rather than a literal that does not parse.
+fn literal(value: f64) -> String {
+    if value.is_finite() && value.fract() == 0.0 && value.abs() < 9.007_199_254_740_992e15 {
+        // Exact by the guard: a finite whole `f64` under 2^53 is an `i64`.
+        #[expect(clippy::cast_possible_truncation, reason = "the guard above is the proof")]
+        let whole = value as i64;
+        format!("{whole}")
+    } else {
+        format!("{value}")
+    }
+}
+
 fn constant_pool(reader: &mut Reader) -> Result<Pool, Error> {
     let count = reader.u2()? as usize;
     let mut utf8 = vec![None; count.max(1)];
     let mut class = vec![None; count.max(1)];
+    let mut constant: Vec<Option<String>> = vec![None; count.max(1)];
+    let mut string: Vec<Option<u16>> = vec![None; count.max(1)];
+    // Local to the parse; a `String` entry is folded into `constant` below and
+    // nothing outside this function wants the indirection.
 
     let mut index = 1usize;
     while index < count {
@@ -208,18 +242,38 @@ fn constant_pool(reader: &mut Reader) -> Result<Pool, Error> {
                 utf8[index] = Some(reader.utf8(len)?);
             }
             tag::CLASS => class[index] = Some(reader.u2()?),
-            tag::STRING | tag::METHOD_TYPE | tag::MODULE | tag::PACKAGE => reader.skip(2)?,
+            tag::STRING => string[index] = Some(reader.u2()?),
+            tag::METHOD_TYPE | tag::MODULE | tag::PACKAGE => reader.skip(2)?,
             tag::METHOD_HANDLE => reader.skip(3)?,
-            tag::INTEGER
-            | tag::FLOAT
-            | tag::FIELDREF
+            tag::INTEGER => {
+                // JVMS 4.4.4: an Integer entry *is* a signed 32-bit value, so
+                // this is a reinterpretation and not a narrowing.
+                #[expect(clippy::cast_possible_wrap, reason = "the pool entry is already signed")]
+                let value = reader.u4()? as i32;
+                constant[index] = Some(value.to_string());
+            }
+            tag::FLOAT => {
+                constant[index] = Some(literal(f64::from(f32::from_bits(reader.u4()?))));
+            }
+            tag::FIELDREF
             | tag::METHODREF
             | tag::INTERFACE_METHODREF
             | tag::NAME_AND_TYPE
             | tag::DYNAMIC
             | tag::INVOKE_DYNAMIC => reader.skip(4)?,
-            tag::LONG | tag::DOUBLE => {
-                reader.skip(8)?;
+            tag::LONG => {
+                // A `long` is a `bigint` here, so its literal carries the `n`.
+                let hi = u64::from(reader.u4()?);
+                let lo = u64::from(reader.u4()?);
+                #[expect(clippy::cast_possible_wrap, reason = "JVMS 4.4.5: a Long entry is signed")]
+                let value = ((hi << 32) | lo) as i64;
+                constant[index] = Some(format!("{value}n"));
+                index += 1;
+            }
+            tag::DOUBLE => {
+                let hi = u64::from(reader.u4()?);
+                let lo = u64::from(reader.u4()?);
+                constant[index] = Some(literal(f64::from_bits((hi << 32) | lo)));
                 // **The one rule a reader gets wrong first and notices last.**
                 // JVMS 4.4.5: a Long or a Double takes two pool slots and the
                 // second is unusable. Miss this and every index after the first
@@ -231,7 +285,16 @@ fn constant_pool(reader: &mut Reader) -> Result<Pool, Error> {
         }
         index += 1;
     }
-    Ok(Pool { utf8, class })
+    // A `String` constant points at a Utf8 that may come later in the pool,
+    // so it is resolved here rather than where it was read.
+    for index in 0..constant.len() {
+        if let Some(at) = string[index]
+            && let Some(Some(text)) = utf8.get(at as usize)
+        {
+            constant[index] = Some(format!("{text:?}"));
+        }
+    }
+    Ok(Pool { utf8, class, constant })
 }
 
 /// Everything a member or a class can carry that this slice reads.
@@ -241,6 +304,7 @@ struct Attributes {
     throws: Vec<String>,
     annotations: Vec<String>,
     constant: bool,
+    constant_value: Option<String>,
     inner_classes: Vec<(String, String)>,
     parameter_annotations: Vec<Vec<String>>,
     code: Option<Code>,
@@ -256,8 +320,9 @@ fn attributes(reader: &mut Reader, pool: &Pool) -> Result<Attributes, Error> {
         match name.as_str() {
             "Signature" => found.signature = Some(pool.text(reader.u2()?)?),
             "ConstantValue" => {
-                reader.skip(2)?;
+                let at = reader.u2()?;
                 found.constant = true;
+                found.constant_value = pool.constant.get(at as usize).and_then(Clone::clone);
             }
             "Exceptions" => {
                 let n = reader.u2()?;
@@ -386,6 +451,7 @@ fn members(reader: &mut Reader, pool: &Pool) -> Result<Vec<Member>, Error> {
             annotations: extra.annotations,
             parameter_annotations: extra.parameter_annotations,
             constant: extra.constant,
+            constant_value: extra.constant_value.clone(),
             code: extra.code,
         });
     }

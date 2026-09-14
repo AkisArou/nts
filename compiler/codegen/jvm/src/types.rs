@@ -363,8 +363,11 @@ pub const WEB: &str = "nts/rt/NtsWeb";
 
 /// The 128-bit integer, which the JVM has no primitive for.
 pub const BIGINT: &str = "nts/rt/NtsBigInt";
-/// The array helpers, including the `number[]` to Java-primitive-array copies.
-pub const ARRAYS: &str = "nts/rt/NtsArrays";
+/// The foreign boundary: callbacks arriving from Java, and the `number[]` to
+/// Java-primitive-array copies. Public, unlike `NtsArrays`, which is an
+/// internal helper a generated class cannot legally touch -- reaching for it
+/// was `IllegalAccessError` at run time and nothing at compile time.
+pub const ARRAYS: &str = "nts/rt/NtsForeign";
 pub const BIGINT_DESCRIPTOR: &str = "Lnts/rt/NtsBigInt;";
 
 /// The descriptor for a parameter, result or field.

@@ -5,7 +5,7 @@
 # <end-byte> <line> <column> <call> <keeps> <owner.member:descriptor>
 # <keeps> is `-` when the analysis could not read the method, `.` when it
 # proved nothing escapes, and a comma-separated parameter list otherwise.
-589 13 5 staticfield - com/example/Catalog.MAX:I
+586 13 5 staticfield - com/example/Catalog.MAX:I
 696 15 5 staticfield - com/example/Catalog.NAME:Ljava/lang/String;
 810 17 5 staticfield - com/example/Catalog.DEFAULT_KIND:Lcom/example/Kind;
 828 18 5 field - com/example/Catalog.hits:I

@@ -1224,67 +1224,40 @@ impl Emitter<'_> {
                 self.shared_field_get(code, pool, value, *receiver, arms, *field)?
             }
             OpKind::ObjectNew { .. } => self.object_new(code, pool, &op.ty, &origin)?,
-            OpKind::FieldGet { object, field } => {
-                let (class, name, descriptor, _) = self.field_ref(*object, *field)?;
-                self.load(code, pool, *object)?;
-                code.get_field(&origin, pool, &class, &name, &descriptor);
-                Placed::OnStack
+            OpKind::FieldGet { .. } | OpKind::FieldSet { .. } => {
+                match self.field_op(code, pool, &op.kind, &origin)? {
+                    Some(placed) => placed,
+                    None => return Ok(()),
+                }
             }
-            OpKind::FieldSet { object, field, value: stored } => {
-                let (class, name, descriptor, declared) = self.field_ref(*object, *field)?;
-                // **A store into a field is an assignment to its declared type,
-                // and this was the last of the three that did not check.**
-                // `Return` checks, and the global store checks; a `putfield`
-                // did not, so a value the program could not license became a
-                // `VerifyError` at class load instead of a refusal by name.
-                //
-                // `examples/function-in-an-object-literal` is the shape:
-                // `const table = { doubled }` gives `Type5.doubled` the
-                // *function type* as its descriptor and stores the *closure
-                // class* into it, and with one closure of that signature
-                // nothing relates the two -- so the verifier said "Type
-                // 'nts/gen/Closure0' is not assignable to 'nts/gen/Fn2__2'"
-                // and the emitter had said nothing at all. Two closures of one
-                // signature and `Layout.base` relates them, which is why a
-                // second function in any object literal made it disappear.
-                //
-                // This does not make that program work; the relation is the
-                // middle end's to record. It makes the backend say so, which
-                // is the whole of what `unverifiable class` being a hard zero
-                // in the corpus is worth.
-                self.assignable_types(&self.ty(*stored).clone(), &declared)?;
-                self.load(code, pool, *object)?;
-                self.load(code, pool, *stored)?;
-                code.put_field(&origin, pool, &class, &name, &descriptor);
-                return Ok(());
-            }
-            // A closed set of classes, so `instanceof` answers it directly --
-            // one instruction against the C backend's chain of descriptor
-            // pointer comparisons, and a fixed few when the set is larger.
-            // Subscribe the frame to the promise. The `Return` that follows is
-            // the suspension itself -- this operation only records who to come
-            // back to.
-            //
-            // The frame's class implements `NtsResumable`, which is the one
-            // nominal relationship this backend *creates* rather than recovers:
-            // `Suspend` names a frame and a function, and both are emitted
-            // here, so nothing upstream has to carry it.
-            // A retain under a tracing collector has nothing to do, and the
-            // guard was never about the operation -- it was about not knowing
-            // why it was there.
-            //
-            // `hir::suspend` emits one regardless of provider, because a frame
-            // outliving its function is a lifetime question the provider does
-            // not answer: the resume *consumes* a reference, so the runtime
-            // holds one until the resumption runs. Here that reference is the
-            // frame sitting in the promise's waiting list, which is a strong
-            // reference and is the whole of what keeps it alive.
-            //
-            // So this refuses only under `ReferenceCounting`, where a retain
-            // means the middle end expects *this backend* to be counting and it
-            // is not. Under `NoGc` the pair is dropped, both halves together --
-            // `suspend.rs` emits the matching `Release` and ignoring one
-            // without the other is not a thing.
+
+        // A closed set of classes, so `instanceof` answers it directly --
+        // one instruction against the C backend's chain of descriptor
+        // pointer comparisons, and a fixed few when the set is larger.
+        // Subscribe the frame to the promise. The `Return` that follows is
+        // the suspension itself -- this operation only records who to come
+        // back to.
+        //
+        // The frame's class implements `NtsResumable`, which is the one
+        // nominal relationship this backend *creates* rather than recovers:
+        // `Suspend` names a frame and a function, and both are emitted
+        // here, so nothing upstream has to carry it.
+        // A retain under a tracing collector has nothing to do, and the
+        // guard was never about the operation -- it was about not knowing
+        // why it was there.
+        //
+        // `hir::suspend` emits one regardless of provider, because a frame
+        // outliving its function is a lifetime question the provider does
+        // not answer: the resume *consumes* a reference, so the runtime
+        // holds one until the resumption runs. Here that reference is the
+        // frame sitting in the promise's waiting list, which is a strong
+        // reference and is the whole of what keeps it alive.
+        //
+        // So this refuses only under `ReferenceCounting`, where a retain
+        // means the middle end expects *this backend* to be counting and it
+        // is not. Under `NoGc` the pair is dropped, both halves together --
+        // `suspend.rs` emits the matching `Release` and ignoring one
+        // without the other is not a thing.
             OpKind::Retain(_) | OpKind::Release(_)
                 if self.program.provider != nts_core::hir::Provider::ReferenceCounting =>
             {
@@ -1404,6 +1377,63 @@ impl Emitter<'_> {
             return Err(refuse(self.func, "a global of unrepresentable type"));
         };
         let name = crate::body::method_name(&entry.name);
+        // **A bound static is the jar's field, not a copy in our class.**
+        // `Kind.SMALL` arrives here as one of our globals -- the declaration
+        // says `static readonly SMALL: Kind` and nothing distinguishes it from
+        // a module-scope constant of ours -- so it was read from
+        // `nts/gen/Program.Kind$SMALL`, which nothing ever writes. Null at run
+        // time, and an enum constant is the one thing a caller is told needs
+        // no null check.
+        //
+        // Reading the jar's field instead also runs the owner's `<clinit>`,
+        // which is the whole reason a reference static is a real `getstatic`
+        // and not an `ldc`: the constant does not exist until the class is
+        // initialised.
+        //
+        // Matched by simple name and member, because that is what the global
+        // carries. Two bound classes with one simple name would be ambiguous,
+        // and ambiguity is refused rather than guessed -- picking the first
+        // would be a wrong field that loads.
+        let foreign_static = {
+            let (class, member) = entry.name.split_once('.').unwrap_or(("", ""));
+            let mut hits = self.program.foreign.iter().filter(|(key, row)| {
+                matches!(row.kind, nts_core::hir::runtime::ForeignKind::StaticField)
+                    && key.split_once(':').is_some_and(|(head, _)| {
+                        head.rsplit_once('.').is_some_and(|(owner, name)| {
+                            name == member
+                                && (owner == class || owner.ends_with(&format!("/{class}")))
+                        })
+                    })
+            });
+            match (hits.next(), hits.next()) {
+                (Some((key, _)), None) => Some(key.clone()),
+                (Some(_), Some(_)) => {
+                    return Err(refuse(
+                        self.func,
+                        &format!("the bound static `{}`, which more than one binding row names", entry.name),
+                    ));
+                }
+                _ => None,
+            }
+        };
+        if let Some(key) = foreign_static {
+            let Some((head, field)) = key.split_once(':') else {
+                return Err(refuse(self.func, &format!("a malformed binding row `{key}`")));
+            };
+            let Some((owner, member)) = head.rsplit_once('.') else {
+                return Err(refuse(self.func, &format!("a malformed binding row `{key}`")));
+            };
+            let field = field.to_owned();
+            if storing.is_some() {
+                return Err(refuse(
+                    self.func,
+                    &format!("a write to the bound static `{}`", entry.name),
+                ));
+            }
+            code.get_static(origin, pool, owner, member, &field);
+            self.convert_field(code, pool, &field, &entry.ty.clone(), true, origin)?;
+            return Ok(Placed::OnStack);
+        }
         let Some(stored) = storing else {
             code.get_static(origin, pool, PROGRAM, &name, &descriptor);
             return Ok(Placed::OnStack);
@@ -3272,14 +3302,32 @@ impl Emitter<'_> {
             .find(|layout| layout.types.contains(&id))
             .is_some_and(|layout| nts_core::hir::runtime::is_foreign_layout_name(&layout.name));
         if foreign {
-            return Err(refuse(
-                self.func,
-                &format!(
-                    "the field `{}` of the bound class `{}`: its width is the jar's and this \
-                     lane reads it as the TypeScript the declaration was rendered as",
-                    resolved.1, resolved.0
-                ),
-            ));
+            // **The jar's width, not the one the declaration was rendered as.**
+            // `hits: number` in a `.d.ts` becomes a layout field whose
+            // descriptor is our `D`; the jar declares `int hits`, and
+            // `getfield com/example/Catalog.hits:D` is `NoSuchFieldError` at
+            // run time with nothing said at compile time.
+            //
+            // The row carries it -- `com/example/Catalog.hits:I` -- and the
+            // key is `owner.member:descriptor`, so it cannot be looked up by
+            // owner and member without a scan. Linear, and only for a bound
+            // field, which most programs have none of; an index belongs here
+            // if a profile ever asks, and the shape of the fix is a map built
+            // once rather than a different answer.
+            let prefix = format!("{}.{}:", resolved.0, resolved.1);
+            let Some(row) = self.program.foreign.keys().find(|key| key.starts_with(&prefix)) else {
+                return Err(refuse(
+                    self.func,
+                    &format!(
+                        "the field `{}` of the bound class `{}`, which has no binding row",
+                        resolved.1, resolved.0
+                    ),
+                ));
+            };
+            let Some((_, descriptor)) = row.split_once(':') else {
+                return Err(refuse(self.func, &format!("a malformed binding row `{row}`")));
+            };
+            return Ok((resolved.0, resolved.1, descriptor.to_owned(), resolved.3));
         }
         Ok(resolved)
     }
@@ -4486,6 +4534,125 @@ impl Emitter<'_> {
         Ok(true)
     }
 
+
+
+    /// A field read or write, ours or a bound class's.
+    ///
+    /// Split out of [`Self::operation`] because the two arms are one question
+    /// -- which field, at which width -- and because a bound field's width is
+    /// the jar's rather than the one its declaration was rendered as, which is
+    /// several lines of its own.
+    fn field_op(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        kind: &OpKind,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Option<Placed>, Diagnostic> {
+        Ok(match kind {
+        OpKind::FieldGet { object, field } => {
+            let (class, name, descriptor, declared) = self.field_ref(*object, *field)?;
+            self.load(code, pool, *object)?;
+            code.get_field(origin, pool, &class, &name, &descriptor);
+            self.convert_field(code, pool, &descriptor, &declared, true, origin)?;
+            Some(Placed::OnStack)
+        }
+        OpKind::FieldSet { object, field, value: stored } => {
+            let (class, name, descriptor, declared) = self.field_ref(*object, *field)?;
+            // **A store into a field is an assignment to its declared type,
+            // and this was the last of the three that did not check.**
+            // `Return` checks, and the global store checks; a `putfield`
+            // did not, so a value the program could not license became a
+            // `VerifyError` at class load instead of a refusal by name.
+            //
+            // `examples/function-in-an-object-literal` is the shape:
+            // `const table = { doubled }` gives `Type5.doubled` the
+            // *function type* as its descriptor and stores the *closure
+            // class* into it, and with one closure of that signature
+            // nothing relates the two -- so the verifier said "Type
+            // 'nts/gen/Closure0' is not assignable to 'nts/gen/Fn2__2'"
+            // and the emitter had said nothing at all. Two closures of one
+            // signature and `Layout.base` relates them, which is why a
+            // second function in any object literal made it disappear.
+            //
+            // This does not make that program work; the relation is the
+            // middle end's to record. It makes the backend say so, which
+            // is the whole of what `unverifiable class` being a hard zero
+            // in the corpus is worth.
+            self.assignable_types(&self.ty(*stored).clone(), &declared)?;
+            self.load(code, pool, *object)?;
+            self.load(code, pool, *stored)?;
+            self.convert_field(code, pool, &descriptor, &declared, false, origin)?;
+            code.put_field(origin, pool, &class, &name, &descriptor);
+            // **`None`, not `Placed::Stored`.** A store produces no value, and
+            // the original arm returned from `operation` early rather than
+            // falling through to the code that puts a result in its slot.
+            // Extracting it had to carry that: `Stored` would have run the
+            // store-the-result path over a value that does not exist.
+            None
+        }
+            _ => return Err(refuse(self.func, "a field operation that is neither")),
+        })
+    }
+
+    /// Bring a **bound field** to and from the width the jar declared.
+    ///
+    /// The same mismatch a bound method's result has, one op over: the
+    /// declaration renders `int hits` as `hits: number`, so the program holds
+    /// a `double` and the class file says `I`. A read widens; a write narrows
+    /// the way JavaScript narrows, which is `ToInt32` and not `d2i`.
+    ///
+    /// Silent when the two already agree, which is every field of ours.
+    fn convert_field(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        descriptor: &str,
+        declared: &HirType,
+        reading: bool,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        use nts_jvm_emitter::insn::{self, Kind};
+        if types::descriptor(self.shape, declared).as_deref() == Some(descriptor) {
+            return Ok(());
+        }
+        if !matches!(declared, HirType::Float { bits: 64 }) {
+            return Err(refuse(
+                self.func,
+                &format!("a bound field declared `{descriptor}` held as something other than a number"),
+            ));
+        }
+        if reading {
+            match descriptor {
+                "I" | "S" | "B" | "C" | "Z" => {
+                    code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
+                }
+                "J" => code.convert(origin, insn::L2D, Kind::Long, Kind::Double),
+                "F" => code.convert(origin, insn::F2D, Kind::Float, Kind::Double),
+                other => {
+                    return Err(refuse(
+                        self.func,
+                        &format!("a bound field returning `{other}` where a number is held"),
+                    ));
+                }
+            }
+            return Ok(());
+        }
+        match descriptor {
+            "I" => code.invoke_static(origin, pool, RUNTIME, "toInt32", "(D)I"),
+            "S" => code.invoke_static(origin, pool, RUNTIME, "toInt16", "(D)I"),
+            "B" => code.invoke_static(origin, pool, RUNTIME, "toInt8", "(D)I"),
+            "C" => code.invoke_static(origin, pool, RUNTIME, "toUint16", "(D)I"),
+            "F" => code.convert(origin, insn::D2F, Kind::Double, Kind::Float),
+            other => {
+                return Err(refuse(
+                    self.func,
+                    &format!("a bound field taking `{other}` from a number"),
+                ));
+            }
+        }
+        Ok(())
+    }
 
     /// Bring a bound member's result to the width and type the program holds
     /// it in.
