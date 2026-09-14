@@ -281,9 +281,50 @@ export class Worker extends EventEmitter {
       const disconnect = this.process.disconnect;
       if (disconnect !== undefined) disconnect();
     }
+    // node's `removeHandlesForWorker` and `removeWorker`, in node's position: after the message
+    // and without waiting for a reply. See `workerRelease`.
+    workerRelease.get(this)?.();
     return this;
   }
 }
+
+/**
+ * The primary's bookkeeping for one worker being asked to disconnect, installed by `fork`.
+ *
+ * **node removes a worker from `cluster.workers` inside `disconnect()` itself**, synchronously,
+ * before the worker has acknowledged anything. `lib/internal/cluster/primary.js`:
+ *
+ *     Worker.prototype.disconnect = function() {
+ *       this.exitedAfterDisconnect = true;
+ *       send(this, { act: 'disconnect' });
+ *       removeHandlesForWorker(this);
+ *       removeWorker(this);
+ *       return this;
+ *     };
+ *
+ * The comment on `Cluster.disconnect` here used to state the opposite -- "a worker stays in
+ * `workers` until it *exits*" -- and that was this profile's behaviour, not node's. It matters
+ * because a test can read `Object.keys(cluster.workers).length` from an `exit` handler and get a
+ * different answer. `test-cluster-shared-leak` does exactly that, and the difference is the whole
+ * file: two workers share a listening descriptor, one of them has accepted the primary's
+ * connection, and both are disconnected together.
+ *
+ * Traced on node:
+ *
+ *     P exit w=2 code=0 remaining=0      <- already empty, w1 has not exited yet
+ *     P destroying conn
+ *     W1 server closed / conn closed / exiting 0
+ *
+ * So the **first** exit sees an empty map, the primary destroys the connection, and that is what
+ * releases the other worker's blocked `server.close()`. Keeping w1 in the map until it exits makes
+ * the two wait on each other: the primary will not destroy the connection until w1 goes, and w1
+ * cannot go until the connection does. One `exit` fires instead of two.
+ *
+ * A `WeakMap` rather than a field on `Worker`, because a field would be an own enumerable key and
+ * `Object.keys(worker)` is observable -- the same reason `net` keeps `acceptedSocketClosing` out
+ * of its sockets.
+ */
+const workerRelease = new WeakMap<Worker, () => void>();
 
 class Cluster extends EventEmitter {
   /**
@@ -455,6 +496,14 @@ class Cluster extends EventEmitter {
       delete this.workers[`${id}`];
       worker.emit("exit", code, signal);
       this.emit("exit", worker, code, signal);
+      this.#workerLeft();
+    });
+    workerRelease.set(worker, (): void => {
+      // Idempotent: the `exit` handler above does the same work for a worker that was never
+      // asked to disconnect, and a worker that was asked reaches both.
+      if (this.workers[`${id}`] === undefined) return;
+      this.#releaseWorker(worker);
+      delete this.workers[`${id}`];
       this.#workerLeft();
     });
     child.on("disconnect", (): void => {
@@ -931,9 +980,15 @@ class Cluster extends EventEmitter {
       const worker = this.workers[id];
       // **node's guard, and it is load-bearing.** `worker.disconnect()` on a worker whose
       // channel has already gone emits `error` with ERR_IPC_DISCONNECTED, and nothing is
-      // listening, so it throws as an unhandled `error` event. A worker stays in `workers`
-      // until it *exits*, and its `disconnect` fires first -- which is precisely when the
-      // three tests that chain `cluster.disconnect` off a `disconnect` event call this.
+      // listening, so it throws as an unhandled `error` event. The three tests that chain
+      // `cluster.disconnect` off a `disconnect` event reach this with workers in exactly that
+      // state.
+      //
+      // The sentence that used to be here -- "a worker stays in `workers` until it *exits*" --
+      // described this profile and **not node**, where `Worker.prototype.disconnect` calls
+      // `removeWorker` on itself synchronously. It has been made true of node instead; see
+      // `workerRelease`. Which is why the `undefined` half of this guard now does work: a
+      // worker asked to disconnect is gone from the map before its `exit` arrives.
       if (worker !== undefined && worker.isConnected()) worker.disconnect();
     }
   }
