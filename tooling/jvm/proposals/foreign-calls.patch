@@ -37,10 +37,10 @@ index 891c49cd..9f979bf3 100644
  name = "nts-diagnostics"
  version = "0.0.0"
 diff --git a/compiler/codegen/jvm/src/ops.rs b/compiler/codegen/jvm/src/ops.rs
-index 3788ee1a..00e0651e 100644
+index 8a8c2be5..8ad2dbaa 100644
 --- a/compiler/codegen/jvm/src/ops.rs
 +++ b/compiler/codegen/jvm/src/ops.rs
-@@ -4416,6 +4416,111 @@ impl Emitter<'_> {
+@@ -4426,6 +4426,111 @@ impl Emitter<'_> {
                      code.invoke_static(origin, pool, owner, narrow, &format!("{arguments})I"));
                      return Ok(Placed::OnStack);
                  }
@@ -153,7 +153,7 @@ index 3788ee1a..00e0651e 100644
                      // The cause, which is that *this table* has no entry, and
                      // not the remedy, which would be to build the helper.
 diff --git a/compiler/codegen/jvm/src/types.rs b/compiler/codegen/jvm/src/types.rs
-index 18b8696b..89c4f51f 100644
+index 9376d5cd..de4d159a 100644
 --- a/compiler/codegen/jvm/src/types.rs
 +++ b/compiler/codegen/jvm/src/types.rs
 @@ -65,6 +65,17 @@ pub const STRING_DESCRIPTOR: &str = "Ljava/lang/String;";
@@ -175,10 +175,10 @@ index 18b8696b..89c4f51f 100644
  }
  
 diff --git a/compiler/core/src/hir/flow.rs b/compiler/core/src/hir/flow.rs
-index c49d52e7..8fe315ea 100644
+index faa0ec48..497bc555 100644
 --- a/compiler/core/src/hir/flow.rs
 +++ b/compiler/core/src/hir/flow.rs
-@@ -495,7 +495,9 @@ fn call_result(context: &Context, callee: &Callee) -> Facts {
+@@ -495,7 +495,13 @@ fn call_result(context: &Context, callee: &Callee) -> Facts {
              .get(slot)
              .copied()
              .unwrap_or(Facts::TOP),
@@ -186,10 +186,14 @@ index c49d52e7..8fe315ea 100644
 +        Callee::External(name) => {
 +            runtime_result(name).or_else(|| foreign_result(name)).unwrap_or(Facts::TOP)
 +        }
++        // A native callee's declared return type would seed this the same way
++        // `foreign_result` seeds a JVM descriptor -- the native lane owns that
++        // answer and does not have it yet, so TOP, which is pessimistic and
++        // never wrong.
+         Callee::Native(_) => Facts::TOP,
      }
  }
- 
-@@ -621,6 +623,31 @@ fn upto(hi: f64) -> Facts {
+@@ -622,6 +628,31 @@ fn upto(hi: f64) -> Facts {
      Facts::new(0.0, hi.min(facts::U32_MAX), true, false, false)
  }
  
@@ -222,7 +226,7 @@ index c49d52e7..8fe315ea 100644
      const INDEX: &[&str] = &[
          "nts_str_index_of",
 diff --git a/compiler/core/src/hir/lower.rs b/compiler/core/src/hir/lower.rs
-index a68bd64d..9e9df66e 100644
+index ac9baa5d..4951a699 100644
 --- a/compiler/core/src/hir/lower.rs
 +++ b/compiler/core/src/hir/lower.rs
 @@ -354,7 +354,7 @@ fn generic_classes(
@@ -442,7 +446,7 @@ index a68bd64d..9e9df66e 100644
      if probe.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION) {
          return None;
      }
-@@ -3696,7 +3723,7 @@ fn namespace_of(
+@@ -3710,7 +3737,7 @@ fn namespace_of(
      naming: &Naming,
      declaration: NodeId,
  ) -> Option<Vec<(String, String)>> {
@@ -451,7 +455,7 @@ index a68bd64d..9e9df66e 100644
      if probe.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION) {
          return None;
      }
-@@ -3869,7 +3896,7 @@ fn record_unpublished(
+@@ -3883,7 +3910,7 @@ fn record_unpublished(
  /// members at all is `unknown`, which is why that case answers `false` here
  /// rather than being special-cased.
  fn opaque_signature(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
@@ -460,7 +464,7 @@ index a68bd64d..9e9df66e 100644
      let carried = |member: TypeId| -> bool {
          matches!(
              snapshot
-@@ -3973,7 +4000,7 @@ fn implementation_of(
+@@ -3987,7 +4014,7 @@ fn implementation_of(
  }
  
  fn optional_scalars(snapshot: &SemanticSnapshot, declaration: NodeId) -> Vec<(u32, HirType)> {
@@ -469,7 +473,7 @@ index a68bd64d..9e9df66e 100644
      // **The declaration with a body, which for an overloaded function is not
      // the first one.**
      //
-@@ -4299,7 +4326,7 @@ fn publish_surface(
+@@ -4313,7 +4340,7 @@ fn publish_surface(
  
  #[must_use]
  pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
@@ -478,7 +482,7 @@ index a68bd64d..9e9df66e 100644
  }
  
  /// As [`lower`], told which source files the project named as its roots.
-@@ -4309,7 +4336,11 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
+@@ -4323,7 +4350,11 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
  /// using only `include` does. See [`public_api`] for what it decides and why
  /// there is no way to decide it without being told.
  #[must_use]
@@ -491,7 +495,7 @@ index a68bd64d..9e9df66e 100644
      let mut lowered = Lowered::default();
      // Closures first, because a module-scope `const f = () => ...` is typed by
      // the *closure* the arrow becomes rather than by its function type, and the
-@@ -4345,7 +4376,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
+@@ -4359,7 +4390,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
          // arrange: the checker resolved every call site, so a method call is a
          // static call and `this` is an ordinary argument.
          if node.kind == NodeKind::Syntax(syntax::CLASS_DECLARATION) {
@@ -500,7 +504,7 @@ index a68bd64d..9e9df66e 100644
              continue;
          }
  
-@@ -4376,7 +4407,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
+@@ -4390,7 +4421,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
          if let Some(what) = refused_by_name(snapshot, id) {
              lowered
                  .diagnostics
@@ -509,7 +513,7 @@ index a68bd64d..9e9df66e 100644
              continue;
          }
  
-@@ -4386,7 +4417,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
+@@ -4400,7 +4431,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
          // too -- took every function that reaches the platform with it. An
          // overload signature has the same shape and the same answer: the
          // implementation that follows is the one to lower.
@@ -518,7 +522,7 @@ index a68bd64d..9e9df66e 100644
              continue;
          }
          // Two functions cannot share a name: the emitted C would define one
-@@ -4421,7 +4452,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
+@@ -4435,7 +4466,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
              continue;
          }
          for copy in copies {
@@ -527,7 +531,7 @@ index a68bd64d..9e9df66e 100644
              match builder.lower_function(id) {
                  Ok(func) => lowered.program.funcs.push(func),
                  Err(diagnostic) => {
-@@ -4466,6 +4497,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
+@@ -4480,6 +4511,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
          done.insert(index);
          let mut builder = FuncBuilder::within(
              snapshot,
@@ -535,7 +539,7 @@ index a68bd64d..9e9df66e 100644
              module.clone(),
              hierarchy.clone(),
              closures.clone(),
-@@ -7007,6 +7039,9 @@ struct Edge {
+@@ -7040,6 +7072,9 @@ struct Edge {
  
  struct FuncBuilder<'a> {
      snapshot: &'a SemanticSnapshot,
@@ -545,7 +549,7 @@ index a68bd64d..9e9df66e 100644
      /// Every value the function defines.
      values: Vec<Op>,
      blocks: Vec<PartialBlock>,
-@@ -7205,10 +7240,29 @@ struct FuncBuilder<'a> {
+@@ -7238,10 +7273,29 @@ struct FuncBuilder<'a> {
      used_closures: Vec<usize>,
  }
  
@@ -576,7 +580,7 @@ index a68bd64d..9e9df66e 100644
              boxed: Vec::new(),
              guarded: Vec::new(),
              in_closure: false,
-@@ -7258,6 +7312,7 @@ impl<'a> FuncBuilder<'a> {
+@@ -7291,6 +7345,7 @@ impl<'a> FuncBuilder<'a> {
      /// The same, knowing what the module and its classes declare.
      fn within(
          snapshot: &'a SemanticSnapshot,
@@ -584,7 +588,7 @@ index a68bd64d..9e9df66e 100644
          module: ModuleScope,
          hierarchy: Hierarchy,
          closures: Vec<ClosureInfo>,
-@@ -7268,13 +7323,14 @@ impl<'a> FuncBuilder<'a> {
+@@ -7301,13 +7356,14 @@ impl<'a> FuncBuilder<'a> {
              boxed: boxed_symbols(&closures),
              guarded: guarded_symbols(&closures),
              closures,
@@ -600,7 +604,7 @@ index a68bd64d..9e9df66e 100644
          module: ModuleScope,
          hierarchy: Hierarchy,
          closures: Vec<ClosureInfo>,
-@@ -7284,7 +7340,7 @@ impl<'a> FuncBuilder<'a> {
+@@ -7317,7 +7373,7 @@ impl<'a> FuncBuilder<'a> {
          Self {
              suffix,
              substitution,
@@ -609,7 +613,7 @@ index a68bd64d..9e9df66e 100644
          }
      }
  
-@@ -8391,7 +8447,7 @@ impl<'a> FuncBuilder<'a> {
+@@ -8428,7 +8484,7 @@ impl<'a> FuncBuilder<'a> {
          };
          // Collected first, because the checks below take `&mut self` and a
          // closure holding the iterator would hold a borrow across them.
@@ -618,7 +622,7 @@ index a68bd64d..9e9df66e 100644
              .into_iter()
              .filter(|sibling| *sibling != member)
              .collect();
-@@ -21919,6 +21975,28 @@ impl<'a> FuncBuilder<'a> {
+@@ -22011,6 +22067,28 @@ impl<'a> FuncBuilder<'a> {
          // The declared name where there is one. An anonymous object type —
          // `{ x: number }` written inline — has no symbol, so it is named after
          // its type id, which is at least stable and unique.
@@ -647,7 +651,7 @@ index a68bd64d..9e9df66e 100644
          let name = record
              .symbol
              .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-@@ -21928,7 +22006,11 @@ impl<'a> FuncBuilder<'a> {
+@@ -22020,7 +22098,11 @@ impl<'a> FuncBuilder<'a> {
          // widths. The type id tells them apart, and `<>` cannot appear in a
          // TypeScript identifier so the qualified name cannot collide with a
          // plain one. `nts types` is what reads the number back.
@@ -660,7 +664,7 @@ index a68bd64d..9e9df66e 100644
          // What this class does for each dispatch slot. Empty where nothing in
          // the hierarchy is overridden, which is most classes.
          let mut methods = vec![None; self.hierarchy.table_size()];
-@@ -30627,6 +30709,19 @@ impl<'a> FuncBuilder<'a> {
+@@ -30800,6 +30882,19 @@ impl<'a> FuncBuilder<'a> {
          } else {
              member_name
          };
@@ -681,10 +685,10 @@ index a68bd64d..9e9df66e 100644
              return Err(self.unsupported(
                  id,
 diff --git a/compiler/core/src/hir/mod.rs b/compiler/core/src/hir/mod.rs
-index 3f8ce000..7d24a0b0 100644
+index 8fac4a27..9eff1670 100644
 --- a/compiler/core/src/hir/mod.rs
 +++ b/compiler/core/src/hir/mod.rs
-@@ -1694,6 +1694,27 @@ pub const fn is_constructor_token(ty: TypeId) -> bool {
+@@ -1727,6 +1727,27 @@ pub const fn is_constructor_token(ty: TypeId) -> bool {
  #[derive(Debug, Clone, Default)]
  pub struct Program {
      pub funcs: Vec<Func>,
@@ -712,7 +716,7 @@ index 3f8ce000..7d24a0b0 100644
      /// Layouts for every object type the program uses.
      pub layouts: Vec<Layout>,
      /// The distinct classes the program declares, and the types of each.
-@@ -2532,6 +2553,9 @@ pub struct Options<'a> {
+@@ -2650,6 +2671,9 @@ pub struct Options<'a> {
      /// and [`lower::public_api`] falls back to inferring it from the import
      /// graph, which cannot be done correctly and says so.
      pub entry_files: &'a [String],
@@ -722,7 +726,7 @@ index 3f8ce000..7d24a0b0 100644
  }
  
  impl Default for Options<'_> {
-@@ -2547,6 +2571,12 @@ impl Default for Options<'_> {
+@@ -2665,6 +2689,12 @@ impl Default for Options<'_> {
              // that knows the tsconfig should say, and the ones that do not are
              // no worse off than before this existed.
              entry_files: &[],
@@ -735,7 +739,7 @@ index 3f8ce000..7d24a0b0 100644
          }
      }
  }
-@@ -3550,7 +3580,14 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis]) {
+@@ -3687,7 +3717,14 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis], roots: rea
  #[must_use]
  pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
      let specialize_numbers = options.specialize_numbers;
@@ -820,10 +824,10 @@ index cc85e6d3..c417f572 100644
  nts-codegen-napi.workspace = true
  nts-core.workspace = true
 diff --git a/tooling/cli/src/main.rs b/tooling/cli/src/main.rs
-index 458e6d28..6f16d521 100644
+index 8694ec83..1c8c3661 100644
 --- a/tooling/cli/src/main.rs
 +++ b/tooling/cli/src/main.rs
-@@ -1751,7 +1751,56 @@ fn named_entry() -> Vec<String> {
+@@ -1761,7 +1761,56 @@ fn named_entry() -> Vec<String> {
  /// thing on the C side, where the flag existed and was not known. A command
  /// whose output does not match what is built is worse than no command, because
  /// its answers are specific and wrong.
@@ -881,7 +885,7 @@ index 458e6d28..6f16d521 100644
      // **`!entry.is_empty()` was never false.** `named_entry` returns
      // `vec![MODULE_INIT]` when nothing is named -- module evaluation is a root
      // in the same sense a named entry is -- so this read `standalone` for every
-@@ -1787,6 +1836,7 @@ fn emit_options<'a>(entry: &'a [String], entry_files: &'a [String]) -> hir::Opti
+@@ -1797,6 +1846,7 @@ fn emit_options<'a>(entry: &'a [String], entry_files: &'a [String]) -> hir::Opti
          // decides whose exports the addon publishes. A tsconfig with no
          // `files` array gives an empty slice and the old inference stands.
          entry_files,
@@ -889,7 +893,7 @@ index 458e6d28..6f16d521 100644
          ..hir::Options::default()
      }
  }
-@@ -1798,7 +1848,7 @@ fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
+@@ -1808,7 +1858,7 @@ fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
      report_snapshot_diagnostics(&snapshot)?;
      let entry = named_entry();
      let entry_files = nts_frontend_ts::entry_uris(tsconfig, &snapshot);
@@ -898,7 +902,7 @@ index 458e6d28..6f16d521 100644
          Ok(prepared) => prepared,
          Err(problems) => {
              for problem in &problems {
-@@ -1841,7 +1891,7 @@ fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<(
+@@ -1851,7 +1901,7 @@ fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<(
      report_snapshot_diagnostics(&snapshot)?;
      let entry = named_entry();
      let entry_files = nts_frontend_ts::entry_uris(tsconfig, &snapshot);
