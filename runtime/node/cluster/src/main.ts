@@ -500,7 +500,21 @@ class Cluster extends EventEmitter {
         if (pending === undefined) continue;
         distribution.waiting.delete(ack);
         if (acceptedOf(message)) {
-          // The worker took it. Nothing to do but offer the next one.
+          // **The worker took it, so this copy of the descriptor has to go.**
+          //
+          // node's line is `if (reply.accepted) handle.close();` and the omission here was not
+          // a leak in the abstract -- it is a live socket in the primary per served connection,
+          // and a primary whose loop therefore never empties. The file that showed it reported
+          // every assertion passing and then hung: `test-cluster-net-server-drop-connection`
+          // printed `{"kind":"pass"}` and was killed at the per-file timeout, which the suite
+          // reads as `an exit handler failed` and a single run reads as a pass if you look at
+          // the result line and not the exit status.
+          //
+          // Closing is safe exactly here and not earlier: the handle crossed the channel as a
+          // descriptor and the host's `send` dups it into the worker, so the worker holds its
+          // own. Before the acknowledgement there is no guarantee it does.
+          const taken = distribution.handedTo.get(ack);
+          taken?.destroy();
         } else {
           // **A refusal goes to the back of the queue and to a *free* worker, not to the
           // front and back to the worker that just refused.**
