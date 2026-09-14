@@ -272,9 +272,18 @@ for (let i = 0; i < PROGRAMS && differ.length < 5; i++) {
     // Sampling every program more often would cost the whole run; a candidate divergence is
     // rare, so the extra pair is taken only here. A real ordering difference reproduces and
     // a jittery one does not.
-    const theirsConfirm = await stableTrace(program, nodeApi, expected);
-    const mineConfirm = await stableTrace(program, ourApi, expected);
-    if (theirsConfirm === theirs && mineConfirm === mine) {
+    // Three confirmations rather than one. A program whose order is near enough to a
+    // coin flip reproduces a single confirmation about a quarter of the time, and that is
+    // what one confirmation left behind: `immediate3` and `timeout4` trading places in
+    // roughly one run of three. Three independent reproductions of *both* traces put that
+    // below a few percent, and a genuine ordering difference reproduces every time.
+    let confirmed = true;
+    for (let attempt = 0; attempt < 3 && confirmed; attempt++) {
+      const theirsConfirm = await stableTrace(program, nodeApi, expected);
+      const mineConfirm = await stableTrace(program, ourApi, expected);
+      confirmed = theirsConfirm === theirs && mineConfirm === mine;
+    }
+    if (confirmed) {
       differ.push({ program, theirs, mine });
     } else {
       compared--;
