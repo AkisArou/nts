@@ -2814,6 +2814,68 @@ export const CORPORA = {
     },
     calls: [
       {
+        // **A separate spec rather than another `kind` in `process-op`.** The header above
+        // records two seeds -- `uid|` and `umaskread|` -- that were in `fixed` with no branch to
+        // handle them and fell through to the `cwd()` arm, so two named cases silently measured
+        // a third thing. A `kind` only runs if the generator produces it; a spec runs for every
+        // input, and so cannot be added without being exercised.
+        //
+        // `corpus-reach.mjs` had this module at **2 of 61** published functions. Everything below
+        // is either argument validation -- which throws before it touches the host -- or a read
+        // whose answer is the same for both processes, because they run as the same user on the
+        // same machine. Nothing here mutates: no `exit`, `abort`, `execve`, `chdir` with a usable
+        // path, or any of the `set*id` family, and `kill` only ever sees a signal name no
+        // platform defines.
+        label: "process-validation",
+        call: (m, spec) => {
+          const arg = spec.includes("|") ? spec.slice(spec.indexOf("|") + 1) : spec;
+          const attempt = (make) => {
+            try {
+              const v = make();
+              return `ok:${typeof v === "object" && v !== null ? "object" : String(v)}`;
+            } catch (error) {
+              return `${error?.code ?? error?.name ?? "?"}`;
+            }
+          };
+          // **`binding` and `getBuiltinModule` are deliberately not here**, and the difference
+          // from `stream`'s three missing byte helpers is the point. Those were undocumented
+          // absences nobody had acted on, and a comparison is exactly how such a thing gets
+          // noticed. These two are *recorded decisions*: `process/test/export-surface-static.js`
+          // lists both as absent -- "loader and V8 plumbing with no representation here" -- and
+          // `not-applicable` names the blocker, "getBuiltinModule needs the planned runtime
+          // builtin-module registry". A spec reporting a decision back 4,000 times a run is
+          // noise, and noise in a differential is what teaches people to skim its output.
+          const absent = (fn) => typeof fn !== "function";
+          return [
+            // A pid that is not a number cannot reach a signal.
+            attempt(() => (absent(m.kill) ? "absent" : m.kill({ pid: arg }, "SIGTERM"))),
+            // A signal name no platform defines, so validation is reached and nothing else is.
+            attempt(() => (absent(m.kill) ? "absent" : m.kill(m.pid, `NOTASIG_${arg}`))),
+            // `chdir` of a non-string throws before it changes the working directory.
+            attempt(() => (absent(m.chdir) ? "absent" : m.chdir({ toString: () => arg }))),
+            attempt(() => (absent(m.cpuUsage) ? "absent" : m.cpuUsage(arg))),
+            attempt(() => (absent(m.nextTick) ? "absent" : m.nextTick(arg))),
+            attempt(() =>
+              (absent(m.setUncaughtExceptionCaptureCallback)
+                ? "absent"
+                : m.setUncaughtExceptionCaptureCallback(arg))),
+            attempt(() =>
+              (absent(m.hasUncaughtExceptionCaptureCallback)
+                ? "absent"
+                : m.hasUncaughtExceptionCaptureCallback())),
+            // Identity, the same for both processes because they are the same user on the same
+            // machine. A difference here would be a real one.
+            attempt(() => (absent(m.getuid) ? "absent" : typeof m.getuid())),
+            attempt(() => (absent(m.geteuid) ? "absent" : typeof m.geteuid())),
+            attempt(() => (absent(m.getgid) ? "absent" : typeof m.getgid())),
+            attempt(() => (absent(m.getegid) ? "absent" : typeof m.getegid())),
+            attempt(() => (absent(m.getgroups) ? "absent" : Array.isArray(m.getgroups()))),
+            // `umask()` with no argument reads; it does not set.
+            attempt(() => (absent(m.umask) ? "absent" : typeof m.umask())),
+          ].join("|");
+        },
+      },
+      {
         label: "process-op",
         call: (m, spec) => {
           const bar = spec.indexOf("|");
