@@ -596,6 +596,8 @@ fn object_class(
 
     member_forwarders(program, layout, &mut builder, &mut pool)?;
     dispatch_forwarders(program, layout, &mut builder, &mut pool)?;
+    // A bound interface declares its own widths; see `foreign_bridges`.
+    foreign_bridges(program, layout, &mut pool, &mut builder, &origin)?;
     // A field the JVM zeroes to `null` where the language's zero is
     // `undefined`.
     //
@@ -731,6 +733,128 @@ fn callback_interfaces(
         }
     }
     found
+}
+
+/// A method with a **bound interface's own descriptor**, delegating to ours.
+///
+/// A TypeScript class may `implements View.OnTouch`, and the emitted class says
+/// so -- but the interface declares `onTouch(II)Z` and every TypeScript
+/// `number` is a `double`, so ours is `onTouch(DD)Z`. Those are different
+/// methods to the JVM, so the class claimed an interface it did not implement
+/// and the first dispatch through it was `IncompatibleClassChangeError`, at run
+/// time, in the caller's Java.
+///
+/// **Not the byte-identical bridge [`bridge_for`] emits.** That one exists for
+/// descriptors differing only in reference types, where the same code verifies
+/// under both. A width is not like that: the body would load an `int` where it
+/// expects a `double`. This converts each parameter, calls ours, and converts
+/// the result back.
+fn foreign_bridges(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    pool: &mut Pool,
+    builder: &mut ClassBuilder,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+    for interface in hierarchy::implemented(program, layout) {
+        if !nts_core::hir::runtime::is_foreign_layout_name(&interface) {
+            continue;
+        }
+        let mut rows: Vec<(&str, &str)> = program
+            .foreign
+            .iter()
+            .filter(|(_, row)| row.kind == nts_core::hir::runtime::ForeignKind::Interface)
+            .filter_map(|(key, _)| {
+                let (head, want) = key.split_once(':')?;
+                let (owner, member) = head.rsplit_once('.')?;
+                (owner == interface).then_some((member, want))
+            })
+            .collect();
+        // Sorted, so the emitted class does not reorder between runs.
+        rows.sort_unstable();
+        for (member, want) in rows {
+            let wanted = format!("{}#{member}", layout.name);
+            let Some(ours) = program.funcs.iter().find(|f| f.name == wanted) else {
+                continue;
+            };
+            let Some(mine) = instance_descriptor(program, ours) else { continue };
+            if mine == want {
+                continue;
+            }
+            let Some(full) = body::signature(program, ours) else { continue };
+            let Some(parameters) = nts_jvm_emitter::descriptor::parameters(want) else {
+                continue;
+            };
+            let mut locals = vec![VType::Object(types::class_name(layout))];
+            for spelled in &parameters {
+                locals.push(match *spelled {
+                    "I" | "S" | "B" | "C" | "Z" => VType::Integer,
+                    "J" => VType::Long,
+                    "F" => VType::Float,
+                    "D" => VType::Double,
+                    other => VType::Object(other.trim_matches(|c| c == 'L' || c == ';').to_owned()),
+                });
+            }
+            let slots: u16 = locals.iter().map(VType::slots).sum();
+            let mut code = Code::new(locals, slots);
+            code.load(origin, Kind::Ref, 0);
+            let mut at: u16 = 1;
+            for (spelled, param) in parameters.iter().zip(ours.params.iter().skip(1)) {
+                let Some(kind) = types::kind(&param.ty) else { continue };
+                match *spelled {
+                    "I" | "S" | "B" | "C" | "Z" => {
+                        code.load(origin, Kind::Int, at);
+                        if kind == Kind::Double {
+                            code.convert(origin, nts_jvm_emitter::insn::I2D, Kind::Int, Kind::Double);
+                        }
+                        at += 1;
+                    }
+                    "D" => {
+                        code.load(origin, Kind::Double, at);
+                        at += 2;
+                    }
+                    _ => {
+                        code.load(origin, kind, at);
+                        at += kind.words();
+                    }
+                }
+            }
+            code.invoke_static(origin, pool, PROGRAM, &body::method_name(&ours.name), &full);
+            // The interface's return, from ours. `Z` against `Z` needs nothing;
+            // a `double` answering an `I` takes the same `ToInt32` a bound
+            // argument takes, because it is the same boundary.
+            let returns = want.rsplit(')').next().unwrap_or("");
+            let held = types::kind(&ours.return_type);
+            if returns == "I" && held == Some(Kind::Double) {
+                code.invoke_static(origin, pool, crate::body::RUNTIME, "toInt32", "(D)I");
+            }
+            code.ret(
+                origin,
+                match returns {
+                    "V" => None,
+                    "I" | "S" | "B" | "C" | "Z" => Some(Kind::Int),
+                    "J" => Some(Kind::Long),
+                    "F" => Some(Kind::Float),
+                    "D" => Some(Kind::Double),
+                    _ => Some(Kind::Ref),
+                },
+            );
+            let rendered = code.finish(pool).map_err(|error| {
+                Diagnostic::error(
+                    "NTS4008",
+                    format!("the bridge for `{wanted}` could not be written: {error}"),
+                    origin.location,
+                )
+            })?;
+            builder.method(
+                access::PUBLIC | access::BRIDGE | access::SYNTHETIC,
+                member.to_owned(),
+                want.to_owned(),
+                Some(rendered),
+            );
+        }
+    }
+    Ok(())
 }
 
 fn dispatch_forwarders(

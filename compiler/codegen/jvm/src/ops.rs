@@ -1761,6 +1761,25 @@ impl Emitter<'_> {
                         ),
                     ));
                 }
+                // **An erased value meeting a bound reference parameter.**
+                // `setOnTouch(View.OnTouch | ((x, y) => boolean))` is a union,
+                // so the argument is an `NtsValue` -- and handing that to Java
+                // is `IncompatibleClassChangeError` at the first dispatch:
+                // `NtsValue does not implement View$OnTouch`.
+                //
+                // `coerce_callback` answers this for *our* callback interfaces
+                // and does not recognise a jar's, so the unboxing is done here
+                // against the descriptor the jar declared. The `checkcast` is
+                // what makes a wrong binding a `ClassCastException` at the call
+                // rather than a corrupt frame.
+                (other, _)
+                    if other.starts_with('L')
+                        && matches!(self.ty(arg), HirType::Erased)
+                        && !self.unboxed.contains(&arg) =>
+                {
+                    code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+                    code.check_cast(origin, pool, &other[1..other.len() - 1]);
+                }
                 (other, _) if other.starts_with('L') || other.starts_with('[') => {
                     self.coerce_callback(code, pool, arg, other, origin)?;
                 }
@@ -4855,6 +4874,28 @@ impl Emitter<'_> {
                 // one place and not the other would either allocate twice
                 // or verify against an uninitialised reference.
                 if member == "<init>" {
+                    // **Told apart by arity, which is the only thing that
+                    // distinguishes them.** Constructing a bound class gives
+                    // exactly the descriptor's parameters and this allocates;
+                    // a TypeScript class extending a bound one gives those
+                    // *plus the object it already allocated*, and this runs
+                    // the jar's constructor on that object.
+                    //
+                    // `class Panel extends View` is the second shape. Taking
+                    // the first for it emitted `new com/example/ui/View` where
+                    // a `Panel` was wanted -- a field then held the base and
+                    // the class did not load.
+                    let declared =
+                        nts_jvm_emitter::descriptor::parameters(descriptor).map_or(0, |it| it.len());
+                    if args.len() == declared + 1 {
+                        let Some((receiver, rest)) = args.split_first() else {
+                            return Err(refuse(self.func, "a super-constructor with no receiver"));
+                        };
+                        self.load(code, pool, *receiver)?;
+                        self.push_foreign_arguments(code, pool, rest, descriptor, origin)?;
+                        code.invoke_special(origin, pool, owner, member, descriptor);
+                        return Ok(Placed::Stored);
+                    }
                     code.new_object(origin, pool, owner);
                     code.dup(origin);
                     self.push_foreign_arguments(code, pool, args, descriptor, origin)?;

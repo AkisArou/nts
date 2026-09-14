@@ -22823,6 +22823,25 @@ impl<'a> FuncBuilder<'a> {
             .map(|declaration| self.location(declaration))
             .and_then(|at| self.foreign.get(&(at.file.0, at.span.end)))
             .map(|row| row.key.clone())
+            // **The class being constructed must itself be bound, not merely
+            // inherit a bound constructor.** `class Panel extends View` is
+            // ours and `View` is the jar's, so overload resolution hands back
+            // `View.<init>` -- which has a row, and taking it emitted `new
+            // com/example/ui/View` for `new Panel()`. A `Panel` field then held
+            // a `View` and the class did not load.
+            //
+            // Asked of the constructed *type* rather than of the resolved
+            // declaration, because the declaration is the base's in exactly
+            // the case that must not take this path.
+            .filter(|_| {
+                self.type_of(id)
+                    .and_then(|ty| match self.widened(id, ty) {
+                        HirType::Managed(ManagedType::Object(id)) => Some(id),
+                        _ => None,
+                    })
+                    .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
+                    .is_some_and(|record| self.foreign_owner(record).is_some())
+            })
         {
             let ty = self.type_of(id);
             let ty = self.widened(id, ty.ok_or_else(|| self.unrepresentable(id, "a `new`"))?);
@@ -23030,6 +23049,45 @@ impl<'a> FuncBuilder<'a> {
 
         let mut args = vec![object];
         args.extend(self.lower_arguments(id, &arguments)?);
+        // **A TypeScript class extending a bound Java one.** `class Panel
+        // extends View` allocates a `Panel` -- ours, and a real subclass of
+        // `com/example/ui/View` -- and then has to run the *jar's* constructor
+        // on it. Naming `View#constructor` names a function of ours that does
+        // not exist, because a bound member contributes none.
+        //
+        // Receiver first, which is the shape the backend already has for every
+        // other bound instance call. It is told apart from constructing a
+        // bound class by arity: there `args` is exactly the descriptor's
+        // parameters, here it is those plus the object.
+        // **A bound base's constructor has already run.** `class Panel extends
+        // View` emits `nts/gen/Panel extends com/example/ui/View`, and the
+        // generated `<init>` chains to `View.<init>()V` the way javac would --
+        // that is what makes the class load at all. So the `super()` the
+        // TypeScript writes has nothing left to do, and emitting a call for it
+        // was `invokespecial` on an already-initialised reference, which the
+        // JVM rejects by name: "Bad operand type when invoking <init>".
+        //
+        // Arguments are the case this does not cover, and it says so rather
+        // than dropping them: the generated `<init>` takes none, so there is
+        // nowhere for `super(x)` to put one.
+        let inherited = self
+            .snapshot
+            .call_targets
+            .get(&id)
+            .and_then(|it| it.callee)
+            .map(|declaration| self.location(declaration))
+            .and_then(|at| self.foreign.get(&(at.file.0, at.span.end)))
+            .is_some();
+        if inherited {
+            if args.len() > 1 {
+                return Err(self.unsupported(
+                    id,
+                    "a `super(...)` with arguments into a bound Java class, whose generated                      constructor takes none",
+                ));
+            }
+            self.initialize_fields(id, object, type_id, owed)?;
+            return Ok(object);
+        }
         self.push(
             OpKind::Call {
                 callee: Callee::Direct(format!("{owner}#constructor")),
