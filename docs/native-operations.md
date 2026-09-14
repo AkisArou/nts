@@ -576,8 +576,19 @@ to try would have found neither of the two it did.
 | | before | after |
 |---|---|---|
 | `stat`, `tm`, `timeval`, `sockaddr`, `msghdr`, `dirent`, `rlimit`, `statvfs`, `iovec`, `addrinfo`, `epoll_event`, `sockaddr_in` | 8 ok | **12 ok** |
-| `sigaction` | `void (*)(void)` unknown | a function-pointer *member*, which the compiler refuses too |
-| `termios` | `cc_t` unknown | an unnamed member: an anonymous union, which the surface cannot spell |
+| `sigaction` | `void (*)(void)` unknown | *an anonymous union*, which has no tag to name |
+| `termios` | `cc_t` unknown | an unnamed member, also an anonymous union |
+
+Both remaining refusals are now the same fact, and it is the surface's limit
+rather than the tool's: clang spells an anonymous record by where it was
+written -- `(unnamed at /usr/include/bits/sigaction.h:31:5)` -- which is a
+location and not a tag. A binding has no way to name a type the header did not
+name.
+
+The function-pointer member that refused first is described now, because the
+compiler describes one: `int (*)(int)` is read as `(arg0: c_int) => c_int`, and
+the parameter list is split on *top-level* commas only, since a parameter may
+itself be a function pointer.
 
 **A typedef reached through an array had nothing to fall back on.**
 `desugaredQualType` is absent for an array type, so `cc_t[32]` and

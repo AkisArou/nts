@@ -89,6 +89,10 @@ enum Shape {
     Array(Box<Shape>, u64),
     /// A struct or union this binding also describes.
     Record(String),
+    /// `int (*)(int)` -- a C function pointer, which the surface spells as an
+    /// ordinary TypeScript function type because at this boundary that can
+    /// mean nothing else.
+    FnPointer(Vec<Shape>, Box<Option<Shape>>),
 }
 
 #[derive(Debug, Clone)]
@@ -581,9 +585,40 @@ fn shape(c_type: &str, typedefs: &BTreeMap<String, String>) -> Result<Shape> {
             .with_context(|| format!("`{c_type}` has no constant length"))?;
         return Ok(Shape::Array(Box::new(shape(element, typedefs)?), count));
     }
+    // `R (*)(A, B)`. The declarator wraps the name, so the parentheses are
+    // where the type is: everything before `(*)(` is the result and everything
+    // inside the second pair is the parameters.
+    if let Some((result, rest)) = c_type.split_once("(*)(")
+        && let Some(parameters) = rest.strip_suffix(')')
+    {
+        let result = result.trim();
+        let result = if result == "void" { None } else { Some(shape(result, typedefs)?) };
+        let parameters = if parameters.trim() == "void" || parameters.trim().is_empty() {
+            Vec::new()
+        } else {
+            split_arguments(parameters)
+                .into_iter()
+                .map(|one| shape(&one, typedefs))
+                .collect::<Result<Vec<_>>>()?
+        };
+        return Ok(Shape::FnPointer(parameters, Box::new(result)));
+    }
     for keyword in ["struct ", "union "] {
         if let Some(tag) = c_type.strip_prefix(keyword) {
-            return Ok(Shape::Record(tag.trim().to_owned()));
+            let tag = tag.trim();
+            // clang spells an anonymous record by where it was written --
+            // `(unnamed at /usr/include/bits/sigaction.h:31:5)`. That is a
+            // location, not a tag, and the surface has no way to name a type
+            // the header did not name. `struct sigaction` holds one.
+            if tag.starts_with('(') {
+                bail!(
+                    "an anonymous {}, which this surface cannot describe: it has no tag to \
+                     name and clang spells it as {tag}. Bind the record through an opaque \
+                     pointer, or reach the member from C.",
+                    keyword.trim()
+                );
+            }
+            return Ok(Shape::Record(tag.to_owned()));
         }
     }
     // The fixed-width and pointer-width typedefs first, by their written name:
@@ -628,6 +663,31 @@ fn shape(c_type: &str, typedefs: &BTreeMap<String, String>) -> Result<Shape> {
         }
     };
     Ok(Shape::Scalar(brand))
+}
+
+/// A C parameter list split on its top-level commas.
+///
+/// Depth-aware, because a parameter may itself be a function pointer and
+/// `void (*)(int, char)` inside one is a single argument. Splitting on every
+/// comma would have read that as two.
+fn split_arguments(list: &str) -> Vec<String> {
+    let (mut out, mut depth, mut current) = (Vec::new(), 0i32, String::new());
+    for ch in list.chars() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(std::mem::take(&mut current));
+                continue;
+            }
+            _ => {}
+        }
+        current.push(ch);
+    }
+    if !current.trim().is_empty() {
+        out.push(current);
+    }
+    out.into_iter().map(|one| one.trim().to_owned()).collect()
 }
 
 /// `epoll_event` becomes `EpollEvent`. The tag itself stays in the type, where
@@ -769,7 +829,7 @@ impl Binding {
 
     fn size_align(&self, shape: &Shape) -> Result<(u64, u64)> {
         Ok(match shape {
-            Shape::Pointer(..) | Shape::VoidPointer(_) => (8, 8),
+            Shape::Pointer(..) | Shape::VoidPointer(_) | Shape::FnPointer(..) => (8, 8),
             Shape::Array(element, count) => {
                 let (size, align) = self.size_align(element)?;
                 (size * count, align)
@@ -815,6 +875,16 @@ impl Shape {
             Self::Pointer(inner, false) => format!("Ptr<{}>", inner.spell(aliases)),
             Self::Array(element, count) => format!("CArray<{}, {count}>", element.spell(aliases)),
             Self::Record(tag) => alias_for(tag, aliases),
+            Self::FnPointer(parameters, result) => format!(
+                "({}) => {}",
+                parameters
+                    .iter()
+                    .enumerate()
+                    .map(|(at, ty)| format!("arg{at}: {}", ty.spell(aliases)))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                result.as_ref().as_ref().map_or_else(|| "void".to_owned(), |ty| ty.spell(aliases))
+            ),
         }
     }
 
@@ -839,6 +909,14 @@ impl Shape {
                 element.imports(into);
             }
             Self::Record(_) => {}
+            Self::FnPointer(parameters, result) => {
+                for parameter in parameters {
+                    parameter.imports(into);
+                }
+                if let Some(result) = result.as_ref() {
+                    result.imports(into);
+                }
+            }
         }
     }
 }
@@ -1005,6 +1083,32 @@ mod tests {
             Shape::Array(Box::new(Shape::Scalar("c_char")), 65)
         );
         assert_eq!(shape("struct pollfd").unwrap(), Shape::Record("pollfd".to_owned()));
+        // A function pointer, which is a member of `struct sigaction` and of
+        // every registration table in C.
+        assert_eq!(
+            shape("int (*)(int)").unwrap(),
+            Shape::FnPointer(
+                vec![Shape::Scalar("c_int")],
+                Box::new(Some(Shape::Scalar("c_int")))
+            )
+        );
+        assert_eq!(
+            shape("void (*)(void)").unwrap(),
+            Shape::FnPointer(Vec::new(), Box::new(None))
+        );
+        // The parameter list is split on *top-level* commas only: a parameter
+        // that is itself a function pointer holds its own, and splitting on
+        // every comma would read `void (*)(int, char)` as two arguments.
+        assert_eq!(
+            split_arguments("int, void (*)(int, char), char *"),
+            vec!["int", "void (*)(int, char)", "char *"]
+        );
+        // An anonymous record has no tag to name -- clang spells it as a source
+        // location -- and `struct sigaction` holds one.
+        let anonymous = shape("union (unnamed at /usr/include/bits/sigaction.h:31:5)")
+            .unwrap_err()
+            .to_string();
+        assert!(anonymous.contains("anonymous union"), "{anonymous}");
         // Through a typedef, and through one reached inside an array -- which
         // is the shape with no `desugaredQualType` to fall back on.
         assert_eq!(shape("cc_t").unwrap(), Shape::Scalar("c_uint8"));
