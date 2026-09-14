@@ -172,6 +172,7 @@ dependencies = [
  "nts-memory-lowering",
  "nts-semantic-schema",
  "rustc-hash",
+ "serde_json",
 ]
 
 [[package]]

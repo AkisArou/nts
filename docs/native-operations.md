@@ -426,6 +426,46 @@ from one compiler's reading of one set of headers under one set of macros, and
 `native_witness.c` is still what proves it against the headers the consumer
 actually compiles with.
 
+## `nts bind-c`
+
+    nts bind-c --module c:epoll --header sys/epoll.h \
+      --record epoll_event --record epoll_data \
+      --fn epoll_create1 --fn epoll_ctl --fn epoll_wait \
+      --no-escape epoll_ctl:event --no-escape epoll_wait:events \
+      --alias epoll_event=EpollEvent --out types/epoll.d.ts
+
+Two clang runs over two generated translation units. The first is the headers
+alone, read as JSON, which says what each tag *is* and what every prototype
+takes. The second adds a `_Static_assert(sizeof(union epoll_data) > 0, ...)`
+per record -- a tentative definition does **not** force a layout, checked: it
+produced an empty dump -- and is read with `-fdump-record-layouts`.
+
+**The generator checks itself before it writes.** It recomputes each record's
+layout by the same rules `hir::layout` uses and compares with the one clang
+reported, refusing with both numbers if they differ. That caught its own first
+bug: `c_uint32` had been added to the type mapping and not to the size table,
+whose catch-all made it eight bytes, which put `epoll_event`'s union at offset
+8 and the struct at 16. The table has no catch-all now.
+
+It is not a substitute for `native_witness.c`. This compares against the same
+clang invocation that produced the binding; the witness compares against the
+headers a consumer really compiles with, under their macros.
+
+**Two things a header does not say, so two flags.** `--no-escape f:p` is the
+borrow contract, which is author knowledge: that `poll` reads its array during
+the call and keeps no address into it is true, is what makes passing
+`local<PollFd>()` legal, and appears nowhere a compiler could read it. Without
+it a generated binding is structurally right and refuses every such call --
+checked, by generating `poll.d.ts` without one and watching `emit-c` say
+*native local address escapes*. `--alias tag=Name` is the other: the tag is the
+header's, the declaration file's name for it is not.
+
+Generated `utsname` and `pollfd` bindings compile their examples and their
+witnesses agree with the real headers. A variadic function's tail is the third
+thing a header cannot state, and it is emitted as `...rest: unknown[]` with a
+TODO, which does not compile -- deliberately, so it stops at the declaration
+rather than at a call.
+
 ## Variadics
 
 `int open(const char *, int, ...)` cannot be reached without them: with

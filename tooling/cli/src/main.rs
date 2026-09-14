@@ -5,6 +5,8 @@
 //! than no command: RFC §4.1 requires that unsupported reachable behavior be
 //! diagnosed precisely, and that promise starts here.
 
+mod bind;
+
 use anyhow::{Context, Result, anyhow, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir::facts;
@@ -244,6 +246,58 @@ fn check(rest: &[String]) -> Result<()> {
     )
 }
 
+/// `nts bind-c --header sys/epoll.h --record epoll_event --fn epoll_ctl ...`
+///
+/// Repeatable flags rather than a request file: the command *is* the record of
+/// how a binding was produced, and it belongs beside the generated file in a
+/// script that can be re-run when a header moves.
+fn bind_c(rest: &[String]) -> Result<()> {
+    let repeated = |flag: &str| -> Vec<String> {
+        rest.windows(2)
+            .filter(|pair| pair[0] == flag)
+            .map(|pair| pair[1].clone())
+            .collect()
+    };
+    let single = |flag: &str| -> Option<String> {
+        rest.windows(2).find(|pair| pair[0] == flag).map(|pair| pair[1].clone())
+    };
+    let request = bind::Request {
+        headers: repeated("--header"),
+        defines: repeated("--define"),
+        module: single("--module")
+            .ok_or_else(|| anyhow::anyhow!("`nts bind-c` needs `--module <name>`"))?,
+        records: repeated("--record"),
+        functions: repeated("--fn"),
+        clang_args: repeated("--clang"),
+        no_escape: repeated("--no-escape")
+            .iter()
+            .map(|pair| {
+                pair.split_once(':')
+                    .map(|(f, p)| (f.to_owned(), p.to_owned()))
+                    .ok_or_else(|| anyhow::anyhow!("`--no-escape` takes `function:parameter`, not `{pair}`"))
+            })
+            .collect::<Result<_>>()?,
+        aliases: repeated("--alias")
+            .iter()
+            .map(|pair| {
+                pair.split_once('=')
+                    .map(|(tag, name)| (tag.to_owned(), name.to_owned()))
+                    .ok_or_else(|| anyhow::anyhow!("`--alias` takes `tag=Name`, not `{pair}`"))
+            })
+            .collect::<Result<_>>()?,
+    };
+    let text = bind::run(&request)?;
+    match single("--out") {
+        Some(path) => {
+            std::fs::write(&path, &text)
+                .with_context(|| format!("writing the binding to {path}"))?;
+            println!("wrote {path}");
+        }
+        None => print!("{text}"),
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
@@ -256,6 +310,10 @@ fn main() -> Result<()> {
             frontend(&tsconfig, decompose, calls, constants)
         }
         Some("check") => check(&args.collect::<Vec<String>>()),
+        // `bind-c`, not `bind`: `bind` is the Java binding generator below, and
+        // an arm added above it silently shadowed that command. Named for what
+        // it emits, the way `emit-c` is.
+        Some("bind-c") => bind_c(&args.collect::<Vec<String>>()),
         Some("emit-c") => {
             let rest: Vec<String> = args.collect();
             // Through `project`, like every other command that builds a
