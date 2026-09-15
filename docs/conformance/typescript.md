@@ -2391,9 +2391,28 @@ Counted at the surface, 2026-09-15: of 506 declined exports, **431 name a
 lowering refusal and 62 name a boundary one** (31 "exported as a value of type
 `X`, which does not cross", 16 "takes an object", 6 "returns an object"). That
 split is *also* a measurement of what is in front rather than of what is
-terminal — which is this section's whole subject — and the three probes are the
-evidence that the terminal distribution is much more boundary-weighted than the
-surface one.
+terminal, which is this section's whole subject.
+
+**And the three probes do not fix that, which corrects what this entry said an
+hour ago.** It claimed they were evidence that the terminal distribution is more
+boundary-weighted than the surface one. They are not, and the reason is
+selection: all three roots were chosen *because they sat at the top of the
+queue*, and a root is at the top precisely because many exports stand behind it
+— which is the population with the most elaborate signatures, and therefore the
+one most likely to hit the boundary. The sample is biased toward the answer it
+gave, and a fourth top-root probe would inherit the bias rather than be a fourth
+independent point.
+
+What the three support is narrower and still worth having: **for the three
+largest roots on this corpus, the exports behind them terminate at the
+boundary** — enough to say the top of this queue is mis-ranked as a publishing
+plan, and not enough to say where chains end in general.
+
+Nor can this method answer it. Removal reveals the *next* blocker, never the
+last, because the compiler reports one at a time — three probes bought two hops.
+A real terminal distribution needs the removal iterated per export until each
+one either publishes or reaches the boundary, which is forty-odd worktree runs
+and not worth anybody's afternoon.
 
 **What this does not say.** It is not an argument against fixing the refusals:
 `asRequest` moving one link is real, and a compiler that refuses a call any
