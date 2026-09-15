@@ -11,6 +11,13 @@
  * address the kernel does not agree with.
  *
  * @ntsHeader sys/epoll.h
+ *
+ * And `unistd.h`, because `close` is declared there and not by `sys/epoll.h`.
+ * A module may name several headers and this one needs both: until the witness
+ * began asserting that a named header actually declares each symbol, the
+ * prototype for `close` was emitted, compiled and checked against **nothing**,
+ * and happened to be right.
+ * @ntsHeader unistd.h
  */
 declare module "c:sys/epoll" {
   import type { Packed, Ptr, Struct, Union, c_int, c_uint32, c_uint64 } from "c:types";

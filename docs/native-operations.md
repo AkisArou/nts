@@ -1099,6 +1099,27 @@ first use.
 Both arms verified against real headers: `unistd.h` compiles clean, `stdio.h`
 now gives `error: use of undeclared identifier 'getpid'`.
 
+**Only where a header was named**, which is the precondition and not a detail.
+`c-from-ts` declares its own C in a module carrying no `@ntsHeader` at all;
+there the `extern` is a self-sufficient declaration rather than a claim about
+somebody else's header, and there is nothing for a probe to look in. Probing
+those would fail every one of them for having no header, which is not a
+disagreement about anything. `Function::declared_at` is the same provenance the
+record assertions already filter on — the machinery item (d) added for
+reachability, answering a second question.
+
+**And it immediately found one in the tree.** `native-epoll` declared
+
+    export function close(fd: c_int): c_int;
+
+inside a module whose only `@ntsHeader` was `sys/epoll.h`. `close` is declared
+by `<unistd.h>`. The prototype was emitted, compiled, and checked against
+nothing — and happened to be right. The module names both headers now, which it
+always needed to. Swept across all sixteen interop examples: one real
+misattribution, and three apparent failures that were the sweep's own missing
+`-I`, confirmed by running the **old** binary against the same command and
+getting the identical output.
+
 **Safe on this population, checked rather than assumed.** All 29 libc entry
 points these bindings reach compile clean under `-Wall -Wextra -Werror`,
 including `ceil`, `floor`, `fabs`, `fabsf`, `copysign` and `ldexp` — the ones a

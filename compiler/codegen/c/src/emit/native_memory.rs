@@ -442,17 +442,21 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         }
         wrote = true;
     }
-    let mut declared: std::collections::BTreeMap<&str, String> = std::collections::BTreeMap::new();
+    let mut declared: std::collections::BTreeMap<&str, (bool, String)> =
+        std::collections::BTreeMap::new();
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
             let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
             if !target.parameters.iter().chain(std::iter::once(&target.result)).all(names_only_foreign) { continue; }
-            declared
-                .entry(target.name.as_str())
-                .or_insert_with(|| native_prototype(&target.name, target, Spelling::Expanded));
+            declared.entry(target.name.as_str()).or_insert_with(|| {
+                (
+                    target.declared_at.is_some(),
+                    native_prototype(&target.name, target, Spelling::Expanded),
+                )
+            });
         }
     }
-    for (name, prototype) in &declared {
+    for (name, (names_a_header, prototype)) in &declared {
         // **The probe goes above the declaration, and that is the whole of
         // it.** Re-declaring a prototype checks it against the header's own --
         // `fsync(void)` against `fsync(int)` is `conflicting types for 'fsync'`
@@ -476,8 +480,19 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         // entry points these bindings reach -- including `ceil`, `fabs`,
         // `copysign` and `ldexp`, which headers routinely define as macros --
         // compile clean under `-Wall -Wextra -Werror`.
-        writer.line(origin, format!(
-            "_Static_assert(sizeof(&{name}) > 0, \"a named header declares {name}\");"));
+        //
+        // Only where a header was named. An example's own C -- `c:counter` in
+        // `c-from-ts`, whose module carries no `@ntsHeader` at all -- has
+        // nothing for the prototype to be checked against, and there the
+        // `extern` is a self-sufficient declaration rather than a claim about
+        // somebody else's header. Probing those would fail every one of them
+        // for having no header to look in, which is not a disagreement about
+        // anything. `declared_at` is the same provenance the record assertions
+        // filter on.
+        if *names_a_header {
+            writer.line(origin, format!(
+                "_Static_assert(sizeof(&{name}) > 0, \"a named header declares {name}\");"));
+        }
         writer.line(origin, format!("extern {prototype}"));
         wrote = true;
     }
