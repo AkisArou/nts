@@ -1,0 +1,20 @@
+{
+  "//": "A composite project, so apps can reference it and tsc can build the graph incrementally.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./.types",
+    "rootDir": "./src",
+    "types": [
+      "@nts/platform-android-29",
+      "@nts/platform-ios-17",
+      "@nts/platform-macos-14",
+      "@nts/platform-linux-gnu",
+      "@nts/platform-windows"
+    ]
+  },
+  "include": [
+    "src"
+  ]
+}

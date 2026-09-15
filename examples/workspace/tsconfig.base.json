@@ -1,0 +1,20 @@
+{
+  "//": "Shared settings. Named tsconfig.base.json and NOT tsconfig.json on purpose: the gate globs examples/*/tsconfig.json at depth one, and a file here would enrol this fixture in the 205 examples it is not.",
+  "//noEmit": "Absent deliberately. Project references need composite projects, and a composite project must emit declarations -- so packages set emitDeclarationOnly instead. `nts` does the real emitting; tsc here only typechecks and publishes .d.ts for the graph.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "declaration": true,
+    "declarationMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@workspace/notifications": ["packages/notifications/src/index.ts"],
+      "@workspace/biometrics": ["packages/biometrics/src/index.ts"],
+      "@workspace/crypto-core": ["packages/crypto-core/src/index.ts"],
+      "@workspace/storage": ["packages/storage/src/index.ts"],
+      "@workspace/telemetry": ["packages/telemetry/src/index.ts"]
+    }
+  }
+}

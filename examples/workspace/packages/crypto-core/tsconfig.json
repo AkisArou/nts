@@ -1,0 +1,13 @@
+{
+  "//": "A composite project, so apps can reference it and tsc can build the graph incrementally.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./.types",
+    "rootDir": "./src"
+  },
+  "include": [
+    "src"
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "//": "The solution file: references every project so `tsc -b` builds the graph in dependency order. Packages first because apps reference them.",
+  "//name": "Named tsconfig.solution.json, NOT tsconfig.json, and that is a constraint of this repository rather than a preference: the gate globs examples/*/tsconfig.json at depth one, so a solution file with the idiomatic name would enrol this fixture in the 205 examples. Worth knowing before anyone 'fixes' the name.",
+  "files": [],
+  "references": [
+    {
+      "path": "packages/crypto-core"
+    },
+    {
+      "path": "packages/storage"
+    },
+    {
+      "path": "packages/telemetry"
+    },
+    {
+      "path": "packages/biometrics"
+    },
+    {
+      "path": "packages/notifications"
+    },
+    {
+      "path": "apps/android"
+    },
+    {
+      "path": "apps/ios"
+    },
+    {
+      "path": "apps/macos"
+    },
+    {
+      "path": "apps/linux"
+    },
+    {
+      "path": "apps/windows"
+    },
+    {
+      "path": "apps/node"
+    },
+    {
+      "path": "apps/native"
+    },
+    {
+      "path": "apps/react"
+    }
+  ]
+}

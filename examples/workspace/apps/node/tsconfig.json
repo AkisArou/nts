@@ -1,0 +1,18 @@
+{
+  "//": "References are the dependency graph, and they live here rather than in nts.config.ts because tsconfig is the source of truth. The nts config says what to build; this says what the program is made of.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../packages/crypto-core"
+    },
+    {
+      "path": "../../packages/storage"
+    }
+  ]
+}

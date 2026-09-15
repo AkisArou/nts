@@ -1,0 +1,20 @@
+{
+  "//": "There is deliberately NO nts.config.ts beside this file: no native sources, so no build step. If this package ever needs one, the rule in docs/nts-config.md has broken.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./.types",
+    "rootDir": "./src",
+    "types": [
+      "@nts/platform-android-29",
+      "@nts/platform-ios-17",
+      "@nts/platform-macos-14",
+      "@nts/platform-linux-gnu",
+      "@nts/platform-windows"
+    ]
+  },
+  "include": [
+    "src"
+  ]
+}
