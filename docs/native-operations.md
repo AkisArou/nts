@@ -892,6 +892,22 @@ no tag -- a third shape, and the one this survey had never produced. **A cause
 recorded from a walk that stops is the cause of the stop, not of the refusal**,
 and both entries read as naming problems for as long as nothing looked past the
 first one.
+`sigaction`'s refusal said *these headers define no complete `__sigset_t`* --
+which is what the code could tell, and not what is true. `__sigset_t` is
+`typedef struct { unsigned long __val[16]; } __sigset_t;`, and clang gives an
+unnamed record a **typedef name for linkage**, so the member's type reports as
+`struct __sigset_t` while no tag of that name exists in the parse. The two are
+told apart by the id on the typedef's `RecordType`, which names a `RecordDecl`
+that is complete and unnamed -- matched by id rather than by position, because
+the parse is walked depth-first and a record's own fields sit between it and the
+typedef that follows it. The message now says which of the two it is.
+
+Describing one is a separate question and deliberately not answered. C *does*
+give this type a spelling, unlike the untagged member type above, so `sizeof`,
+`_Generic` and a declaration would all work -- the only obstacle is that the
+surface names a record by its tag and this type has none. That wants a way to
+say "spelled without `struct`": new surface vocabulary, for one record in
+twenty-six. Refused by name, with the reason, until something asks.
 
 **A generated binding is re-derived by the build that uses it.** Each
 `build.sh` runs its example's `bind.sh` into a scratch file and compares. A
