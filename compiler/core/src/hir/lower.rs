@@ -2817,12 +2817,17 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
 fn qualified_name(
     snapshot: &SemanticSnapshot,
     id: NodeId,
-    declared: &str,
+    declared: Option<&str>,
 ) -> Option<String> {
     let probe = FuncBuilder::probe(snapshot);
     let member = match snapshot.nodes.get(id.0 as usize)?.kind {
+        // **Not `declared` for this one, and that is the whole point.**
+        // `declared_name` returns the text of the first `IDENTIFIER` child, and
+        // a constructor has none -- `constructor` is a keyword. So it answers
+        // `None` here, and this arm was unreachable from `note_uncompiled`
+        // until that function stopped requiring a declared name first.
         NodeKind::Syntax(syntax::CONSTRUCTOR) => "constructor",
-        NodeKind::Syntax(syntax::METHOD_DECLARATION) => declared,
+        NodeKind::Syntax(syntax::METHOD_DECLARATION) => declared?,
         _ => return None,
     };
     let mut at = snapshot.nodes.get(id.0 as usize)?.parent;
@@ -2842,32 +2847,47 @@ fn note_uncompiled(
     id: NodeId,
     diagnostic: &Diagnostic,
 ) {
-    let Some(name) = FuncBuilder::probe(snapshot).declared_name(id) else {
-        return;
+    // **The qualified name first, and independently of the simple one.**
+    // `uncompiled` is keyed by `declared_name`, which is syntax: `parse`,
+    // `constructor`. Every reader asks in the lowering's vocabulary --
+    // `Catalog#parse`, `Readable#constructor` -- so a refused class member was
+    // recorded and never found again.
+    //
+    // Two separate faults sat in the order this used to be written in, and the
+    // second hid behind the first:
+    //
+    // **A constructor has no declared name at all.** `declared_name` returns
+    // the text of the first `IDENTIFIER` child and `constructor` is a keyword,
+    // so this function returned at its first line and recorded *nothing* --
+    // not the qualified name, not the simple one. The `CONSTRUCTOR` arm in
+    // `qualified_name` was therefore dead code from the day it was written.
+    // Measured 2026-09-15 on `stream`: `uncompiled` was **empty** for a fixture
+    // whose constructor refuses with a named cause, and seven declines in that
+    // module said only "is a class whose constructor was not compiled" --
+    // including `Readable`, whose export is the single most-named thing in the
+    // module's failing tests.
+    //
+    // **And the simple name short-circuited the qualified one.** Returning
+    // early when the *bare* name was already present meant the second class to
+    // refuse a member called `parse` never got its `B#parse` entry, because
+    // `parse` was taken. `stream` refuses four constructors; on the old order
+    // at most one could ever have been recorded.
+    //
+    // So each name is recorded on its own, deduplicated on itself. Both are
+    // kept rather than the bare one dropped: a top-level function is asked for
+    // by its bare name, and the two vocabularies agree only there.
+    let declared = FuncBuilder::probe(snapshot).declared_name(id);
+    let mut record = |at: String| {
+        if !program.uncompiled.iter().any(|(had, _)| *had == at) {
+            program.uncompiled.push((at, diagnostic.message.clone()));
+        }
     };
-    if program.uncompiled.iter().any(|(at, _)| *at == name) {
-        return;
+    if let Some(qualified) = qualified_name(snapshot, id, declared.as_deref()) {
+        record(qualified);
     }
-    // **Also under the name the lowering would give it.** `uncompiled` is
-    // keyed by `declared_name`, which is syntax: `parse`, `constructor`. Every
-    // reader asks in the lowering's vocabulary -- `Catalog#parse`,
-    // `Readable#constructor` -- so a refused class member was recorded and
-    // never found again.
-    //
-    // Measured 2026-09-15 on `stream`: 51 entries recorded under a
-    // Readable/Stream name and **not one containing `#`**, while the napi
-    // wrapper declined `Readable`, `Stream` and `Duplex` with "is a class whose
-    // constructor was not compiled" -- the effect, because `why_uncompiled`
-    // looked up `Readable#constructor` and there was nothing to find.
-    //
-    // Both are pushed rather than the bare one replaced: a top-level function
-    // is asked for by its bare name, and the two vocabularies agree only there.
-    if let Some(qualified) = qualified_name(snapshot, id, &name)
-        && !program.uncompiled.iter().any(|(at, _)| *at == qualified)
-    {
-        program.uncompiled.push((qualified, diagnostic.message.clone()));
+    if let Some(name) = declared {
+        record(name);
     }
-    program.uncompiled.push((name, diagnostic.message.clone()));
 }
 
 /// The copies of a function to lower.
@@ -3023,7 +3043,27 @@ fn lower_class(
             }
             match builder.lower_method_of(class, member, instance) {
                 Ok(func) => lowered.program.funcs.push(func),
-                Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+                // **Recorded, not only reported** -- the same omission the two
+                // sites in `super::mod` carry a note about, one layer up. A
+                // class member is lowered *here* and never through the
+                // `lower_function` arm that files a refusal under a name, so
+                // every refused method and every refused constructor in the
+                // program was reported to a person and left out of the list the
+                // next pass reads.
+                //
+                // The napi wrapper asks `program.uncompiled` for
+                // `Readable#constructor` and printed `is a class whose
+                // constructor was not compiled` -- the effect, cause unsaid --
+                // when it found nothing. It never could: on 2026-09-15
+                // `uncompiled` was **empty** for a two-class fixture whose
+                // constructor refuses with a named cause. Seven declines in
+                // `stream` said that sentence, four of them classes that do
+                // declare a constructor, and `Readable` is the single
+                // most-named export in that module's failing tests.
+                Err(diagnostic) => {
+                    note_uncompiled(snapshot, &mut lowered.program, member, &diagnostic);
+                    lowered.diagnostics.push(diagnostic);
+                }
             }
             wanted.extend(builder.used_closures.iter().copied());
             collect_layouts(&mut lowered.program, builder.layouts);

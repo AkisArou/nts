@@ -2591,6 +2591,80 @@ A caution earned three times in one sitting: `Stream#constructor` matched
 appeared to, because substring search has no notion of a name boundary. Every
 count above uses one.
 
+#### Closed 2026-09-15: the third state was a pass that reported and did not record
+
+The constructor that is "neither compiled nor refused" was neither, and the
+reason is one line. **A class member is never lowered through the arm that
+records a refusal.** `lower` routes a `CLASS_DECLARATION` to `lower_class` and
+continues; `lower_class` ends its member loop with
+
+    Err(diagnostic) => lowered.diagnostics.push(diagnostic)
+
+so every refused method and every refused constructor in the program was
+reported to a person and left out of the list the next pass reads. The two
+sites in `hir/mod.rs` that already carry a **"Recorded, not only reported"**
+note are the same omission one layer up; this is the third, and the one that
+holds all the classes.
+
+Two further faults sat in `note_uncompiled` and would each have been enough on
+their own, which is why fixing either alone showed nothing:
+
+- **A constructor has no declared name.** `declared_name` returns the text of
+  the first `IDENTIFIER` child, and `constructor` is a keyword — so the
+  function returned at its first line and recorded nothing at all. The
+  `CONSTRUCTOR` arm added to `qualified_name` on 2026-09-15 was dead code from
+  the hour it was written.
+- **The simple name short-circuited the qualified one.** Returning early when
+  the bare name was already present meant the second class to refuse a member
+  called `parse` never got its `B#parse` entry. `stream` refuses four
+  constructors; on that order at most one could ever have been recorded.
+
+**Measured across all 26 modules, both binaries, same tree.** Effect-only
+declines — the ones whose whole reason is `was not compiled` or `is not a
+function this backend can name` — go **117 → 91**. Total declines are **500
+either side**, which is the check that matters for a change that adds text: no
+decline was hidden, 26 gained a cause.
+
+In `stream`, causeless class declines go 7 → 3, and the four that fall are the
+four classes that declare a constructor:
+
+| class | the cause it now gives |
+|---|---|
+| `Readable` | `` `_read` ``, declared by `Readable` with a type that has no representation (a function type) |
+| `Duplex` | a `DuplexOptions` where a `ReadableOptions` is wanted — a pointer cast between two structs that do not agree |
+| `Transform` | a `TransformOptions` where a `DuplexOptions` is wanted |
+| `Writable` | a `Writable` where a `WritableImplementation` is wanted |
+
+**Three of those four are the top root of the census table** (44 distinct things
+over 62 sites), so this is where the two halves of §15 actually join: the
+largest module-level decline and the largest root message are the same defect,
+and nothing said so until the decline could name a cause. `Readable` is also
+what `prize.mjs` ranks first in `stream` — 80 of 251 test files name it.
+
+The three that remain are `Stream` twice and `iter.Stream`, and they are a
+different thing: **those classes declare no constructor at all.** Checked
+rather than assumed — a class with no explicit constructor and a live `new`
+emits **zero** `Owner#constructor` functions, because the allocation and the
+field initialisers are inlined at the `new` site. So there is nothing to
+refuse and nothing that was dropped; the wrapper needs a function that this
+lowering has no reason to emit. That is a feature gap, correctly named, and it
+is what the largest remaining bucket is made of: **63** declines now read `is
+exported and is not a function this backend can name`, against 20 namespace
+members and 7 classes.
+
+`compiler/core/tests/constructor_refusal.rs` is the regression, and it has two
+controls that can fail: the fixture must actually refuse `_read` with a named
+cause, and the class that does compile must keep its constructor — without
+both, the assertion would pass on a program that compiled cleanly. It carries
+two classes rather than one, because one cannot catch the dedup fault.
+
+Two instrument errors, both paid for here. The first count of "causeless" was
+`no wrapper for X: <reason with no colon>`, which sweeps in `returns an object`
+and `takes an object` — reasons that are complete in themselves. The number
+above counts the effect phrases by name instead. And one reason *contains* a
+colon, so `[^:]*` split it in the wrong place and reported it as effect-only
+when it names a cause.
+
 ### What a fix would publish, measured
 
     instrument   tooling/conformance/prize.mjs --all
