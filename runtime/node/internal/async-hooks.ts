@@ -104,7 +104,24 @@ export interface RegisteredHook extends HookCallbacks {
 
 // -- identity ---------------------------------------------------------------
 
-let asyncIdCounter = 0;
+// **Starts at 1 so the first allocated id is 2, because 1 is the root's.**
+//
+// `currentExecutionAsyncId` starts at 1 -- the bootstrap context every program begins in, which
+// node also numbers 1. With the counter at 0 the first `newAsyncId()` answered **1 as well**, so
+// the first `AsyncResource` a program creates shared an id with the context that created it. Two
+// different contexts with one id is a uniqueness violation, and everything keyed by async id --
+// a hook's `init`/`destroy` pairing, `AsyncLocalStorage`'s bookkeeping -- is keyed by something
+// that was briefly not unique.
+//
+// node's first resource is 2, measured:
+//
+//     node   before=1 inside=2 own=2      ours before   before=1 inside=1 own=1
+//
+// Found by a differential spec that compared whether entering a resource's scope *changes* the
+// current id rather than what the id is. The values differ between processes by design and are
+// not comparable; the relationship is, and it was false exactly once per process -- for the first
+// resource, which is the one every program creates.
+let asyncIdCounter = 1;
 /** The id of the resource whose callback is currently running. 1 is the root. */
 let currentExecutionAsyncId = 1;
 /** The id of whatever caused it. */

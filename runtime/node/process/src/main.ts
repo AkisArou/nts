@@ -75,6 +75,7 @@ import { setProcessWarningHandler } from "../../internal/process-warning.ts";
 import { format } from "../../util/src/format.ts";
 import type { Architecture, Platform } from "../../os/src/main.ts";
 import { channel } from "../../diagnostics_channel/src/main.ts";
+import { emitAfter, emitBefore, getOrSetAsyncId } from "../../internal/async-hooks.ts";
 
 const execveChannel = channel("process.execve");
 
@@ -179,6 +180,18 @@ declare function nts_process_on_exit(callback: (code: number) => void): void;
  * `experimental-vm-modules` and `--experimental_vm_modules` are the same flag
  * to the option parser, so they are the same flag here.
  */
+/**
+ * **Symbol-keyed, because `test/export-surface-static.js` says that list is not a place to put
+ * things.** A string-named `_emitUnhandledRejection` is a name node does not publish, and that
+ * fixture's `EXTRA` list exists for the four declared fields the object model forces and is pinned
+ * "so it stays that". Its own history is the precedent: `_captureRejections` and
+ * `_preserveEventShape` were on it and were moved to symbol keys rather than added to.
+ *
+ * Registered rather than private, as `util.promisify.custom` is, because the stand-in has to find
+ * it from outside the module.
+ */
+const kEmitUnhandledRejection: symbol = Symbol.for("nts.process.emitUnhandledRejection");
+
 class NodeEnvironmentFlagsSet extends Set<string> {
   readonly #bare: Set<string>;
 
@@ -537,6 +550,25 @@ class Process extends EventEmitter {
   _fatalException = fatalException;
 
   /**
+   * **`unhandledRejection` is emitted inside the rejected promise's async scope.**
+   *
+   * node runs the handler with `executionAsyncId()` equal to the promise's id --
+   * `async-hooks/test-unhandled-rejection-context` asserts exactly that and nothing about the id's
+   * value. This profile emitted it in the root context, and the test passed anyway **because the
+   * first async id this profile allocated collided with the root's**: both were 1, so
+   * `executionAsyncId() === promiseAsyncIds[0]` held by coincidence rather than by behaviour.
+   *
+   * Reserving 1 for the root in `internal/async-hooks.ts` made the collision go away and turned
+   * that coincidence into a failure -- `actual: 1, expected: 2` -- which is the second defect the
+   * first one had been hiding. Both are fixed together, because fixing either alone either leaves
+   * the uniqueness violation in place or leaves a test red.
+   *
+   * The stand-in calls this instead of `emit` so the scope is entered on the TypeScript side,
+   * where the async-hooks bookkeeping lives.
+   */
+  [kEmitUnhandledRejection] = emitUnhandledRejection;
+
+  /**
    * Replace this process image with another program.
    *
    * Not a spawn: nothing comes back, the pid stays the same, and everything
@@ -628,6 +660,24 @@ function setUncaughtExceptionCaptureCallback(fn: ((error: unknown) => void) | nu
 
 function hasUncaughtExceptionCaptureCallback(): boolean {
   return captureCallback !== null;
+}
+
+
+/**
+ * Emit `unhandledRejection` with the rejected promise as the current async resource.
+ *
+ * `getOrSetAsyncId` returns the id the promise was already tracked under, so a hook that saw the
+ * promise's `init` sees the same id here. The scope is left in a `finally`: a listener that throws
+ * must not leave the context stack holding a frame that belongs to the promise.
+ */
+function emitUnhandledRejection(reason: unknown, promise: object): boolean {
+  const asyncId = getOrSetAsyncId(promise);
+  emitBefore(asyncId, asyncId, promise, true);
+  try {
+    return process.emit("unhandledRejection", reason, promise);
+  } finally {
+    emitAfter(asyncId, true);
+  }
 }
 
 function fatalException(error: unknown, fromPromise = false): boolean {

@@ -314,8 +314,15 @@ host.on("uncaughtException", (error, origin) => {
 host.on("unhandledRejection", (reason, promise) => {
   const target = installedProcess();
   if (target === null) throw reason;
-  if (!target.emit("unhandledRejection", reason, promise) &&
-      !target._fatalException(reason, true)) {
+  // `_emitUnhandledRejection` rather than `emit`, so the handler runs inside the rejected
+  // promise's async scope as node's does. The fallback is for a process object that predates it.
+  // Symbol-keyed so it does not appear on `process` as a name node does not publish; see the
+  // comment at `kEmitUnhandledRejection`. Registered, so both sides agree on it.
+  const hook = target[Symbol.for("nts.process.emitUnhandledRejection")];
+  const deliver = typeof hook === "function"
+    ? () => hook.call(target, reason, promise)
+    : () => target.emit("unhandledRejection", reason, promise);
+  if (!deliver() && !target._fatalException(reason, true)) {
     throw reason;
   }
 });
