@@ -2802,7 +2802,65 @@ lever" is the wrong frame for three quarters of this set.
 Two limits the instrument states in its own header rather than leaving to a
 reader: a cycle among the edges is cut at the first repeat and reported as the
 root, which is a choice and not a fact; and an export declining for its own
-reason ranks as one export however expensive it is. The trade it described — narrowing
+reason ranks as one export however expensive it is.
+
+#### The top root, run down: a real gap, and a measured zero
+
+`hir::generics::unify` had two structural arms — bind a type parameter, and
+descend through `Array`. **No function-type arm.** So a type parameter named
+only by a callback was never pinned, the call was skipped, and the declaration
+was refused as "a generic function no call pins down". Nine probe arms fixed
+the rule, and the pair that states it is:
+
+    call<T>(f: (a: T) => T): T        compiled -- because the RETURN is `T`
+    g<T>(f: (a: T) => void): void     did not  -- `T` is only in the callback
+
+Both pin `T` to any reader. The second is `asRequest<Arguments>`. A function-type
+arm is added, arity-matched, depth-bounded at 8 because a type's structure is a
+graph and not a tree.
+
+**What it moved: two shapes of fifteen.** `cbParamOnly` and `cbReturnOnly` clear
+outright. Six advance one link to a *different* refusal — four to ``T`,
+captured above its own declaration`, two to `an object type with no layout` —
+and seven were already clean. No arm regressed.
+
+**What it did not move: anything the project counts.**
+
+| population | before | after |
+|---|---:|---:|
+| declined exports, 26 modules | 505 | **505** |
+| definitions emitted, 26 modules | 35,567 | **35,567** |
+| single-file corpus, lowered completely | 53 | **53** |
+
+Not one export, not one definition. The node lane ran the worktree test on
+`asRequest` independently and got the same answer from the other side:
+specialising it for two `fs` functions left the declined set identical name for
+name, and the reason changed from ``it calls `asRequest`, which was refused
+above`` to **`takes an object`**. A callback is an object and an object does not
+cross N-API, so that axis is bounded by the boundary rather than by any
+lowering. Removing a root advances the chain; it does not clear it.
+
+`examples/a-generic-pinned-only-through-a-callback` is the fixture — **58 cases
+across 2 functions, agreed with node on every one**, and refused by the
+pre-change binary, which is what stops it from being a test that measures
+nothing. The shape that returns a function type is deliberately absent: it is
+`asRequest`'s exact shape and it does *not* compile, so a fixture carrying it
+would assert a pass this change does not deliver.
+
+**Two for two, and that is the finding rather than either zero.** Both
+candidates promoted by a ranking collapsed when tested. The reason is the same
+both times and it applies to `gates.mjs` as much as to the census it improves
+on: *the compiler stops at the first blocker, so anything it prints describes
+the front of a chain, and being in front is uncorrelated with being
+load-bearing.* A better question, asked of the same output, inherits the defect
+one level down.
+
+**And an instrument error of my own, in the same hour I was recording
+everyone's.** The probe sweep that produced "four arms now compile clean"
+grepped `NTS1001` and printed `compiles clean` for anything else. Two of those
+four were failing with `NTS2006`. The corrected number is two. A filter named
+after one diagnostic answers about that diagnostic, never about whether the
+program compiled — count *all* diagnostics, or count what was emitted. The trade it described — narrowing
 `dictionary` costs an interpreted-lane API that no longer accepts what node
 accepts — was real and correctly flagged by the node lane before either of us
 acted on it. It simply never had to be made, because the gain was zero.

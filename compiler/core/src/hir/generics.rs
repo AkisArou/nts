@@ -273,6 +273,7 @@ pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions 
                 argument.ty,
                 &mut substitution,
                 &mut sources,
+                0,
             );
         }
         unify(
@@ -281,6 +282,7 @@ pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions 
             actual.return_type,
             &mut substitution,
             &mut sources,
+            0,
         );
 
         // Every type parameter has to have been pinned down, and to something
@@ -370,7 +372,16 @@ fn unify(
     actual: TypeId,
     into: &mut Substitution,
     sources: &mut Sources,
+    depth: u32,
 ) {
+    // A type's structure is a graph, not a tree -- a signature can mention a
+    // type that mentions the signature -- so the descent is bounded rather than
+    // trusted. Eight is past anything a declaration in this corpus nests; the
+    // cost of being wrong about that is a type parameter left unpinned, which
+    // is the behaviour that already existed.
+    if depth > 8 {
+        return;
+    }
     if is_parameter(snapshot, generic) {
         let actual = concrete(snapshot, actual);
         if let Some(ty) = representation(snapshot, actual)
@@ -396,7 +407,49 @@ fn unify(
         return;
     };
     if let (TypeKind::Array(inner), TypeKind::Array(against)) = (&generic.kind, &actual.kind) {
-        unify(snapshot, *inner, *against, into, sources);
+        unify(snapshot, *inner, *against, into, sources, depth + 1);
+    }
+    // **Through a function type, which is where the corpus's largest root
+    // lives.** Until 2026-09-15 this function bound a type parameter only from
+    // a position that names it *directly* -- a parameter `v: T`, or the return
+    // type. A parameter appearing only inside a callback was never pinned, so
+    // the call was skipped and the declaration refused as "a generic function
+    // no call pins down".
+    //
+    // Nine probe arms located it, and the rule they establish is exactly that:
+    // `call<T>(f: (a: T) => T): T` compiled because the *return* is `T`, and
+    // `g<T>(f: (a: T) => void): void` did not, though the callback pins `T`
+    // just as well to a reader.
+    //
+    // What it costs: `asRequest<Arguments extends unknown[]>` in `fs`, whose
+    // parameter is a callback and nothing else, with **22 exported fs
+    // functions** declining behind it -- `access`, `chmod`, `chown`,
+    // `copyFile`, `fsync` and the rest -- each saying only "it calls
+    // `asRequest`, which was refused above". It is the top root of all 26
+    // modules by `tooling/conformance/gates.mjs`.
+    //
+    // Arity has to match. A callback passed where fewer parameters are declared
+    // is ordinary TypeScript, and pairing them off positionally past the short
+    // one would unify a parameter against whatever happened to follow.
+    if let (TypeKind::Function(generic_signature), TypeKind::Function(actual_signature)) =
+        (&generic.kind, &actual.kind)
+        && let (Some(declared), Some(resolved)) = (
+            snapshot.signatures.get(generic_signature.0 as usize),
+            snapshot.signatures.get(actual_signature.0 as usize),
+        )
+        && declared.parameters.len() == resolved.parameters.len()
+    {
+        for (declared, resolved) in declared.parameters.iter().zip(&resolved.parameters) {
+            unify(snapshot, declared.ty, resolved.ty, into, sources, depth + 1);
+        }
+        unify(
+            snapshot,
+            declared.return_type,
+            resolved.return_type,
+            into,
+            sources,
+            depth + 1,
+        );
     }
 }
 
