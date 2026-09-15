@@ -1,4 +1,4 @@
-import { uname, type UtsName } from "c:utsname";
+import { uname, type UtsName } from "c:sys/utsname";
 import { local } from "c:memory";
 
 // `uname` fills storage TypeScript owns. Each member is a fixed array stored

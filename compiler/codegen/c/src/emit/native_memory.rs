@@ -26,7 +26,7 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
         // An anonymous record has no tag to declare. Its name here is one this
         // compiler invented for the TypeScript side and for diagnostics, and
         // emitting it would declare a second, unrelated type.
-        if layouts.structs.get(name).is_some_and(|record| record.anonymous()) {
+        if layouts.structs.get(name).is_some_and(|record| record.untagged()) {
             continue;
         }
         writer.line(origin, format!("{} {name};", kind.keyword()));
@@ -66,7 +66,7 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
         // Anonymous records are placed and never emitted: the header defines
         // them and nothing here can name them. They are still *placed* so that
         // a record holding one is orderable.
-        if layout.from_header() || layout.anonymous() {
+        if layout.from_header() || layout.untagged() {
             placed.insert(layout.name.as_str());
             ordered.push(layout);
         }
@@ -99,7 +99,7 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
         // For one of ours both sides come from a single field list and this
         // only checks the arithmetic; for a header's, the C compiler answers
         // about the real type, which makes it the strongest check emitted.
-        if layout.anonymous() {
+        if layout.untagged() {
             // Nothing can be asserted about it either: `sizeof` and `offsetof`
             // both need a type name. What is checkable is the *enclosing*
             // record, whose size and whose members' offsets are asserted, and
@@ -111,7 +111,7 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
             continue;
         }
         if let Some(field) = layout.fields.iter().find(|field| {
-            matches!(&field.ty, Pointee::Record(inner) if inner.anonymous())
+            matches!(&field.ty, Pointee::Record(inner) if inner.untagged())
         }) {
             return Err(Diagnostic::error(
                 "NTS2006",
@@ -217,7 +217,7 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
                 // to reach through: a packed member (whose address may not be
                 // taken as its own type) or an anonymous record (which has no
                 // type at all). Same expression, two reasons.
-                _ if layout.packed || through_packing || layout.anonymous() => {
+                _ if layout.packed || through_packing || layout.untagged() => {
                     let shape = nts_core::hir::layout::native_place(layout).ok_or_else(|| {
                         Diagnostic::error("NTS2006", "native struct has no C layout", origin.location)
                     })?;
@@ -254,7 +254,7 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
                 // A member whose *type* is anonymous: the member has a name,
                 // so `&p->member` is written as C writes it, and the result is
                 // held as `char *` because nothing can name what it points at.
-                Pointee::Record(inner) if inner.anonymous() => {
+                Pointee::Record(inner) if inner.untagged() => {
                     format!("{name} = (char *)&{}->{};", value_name(pointer), field.name)
                 }
                 _ => format!("{name} = &{}->{};", value_name(pointer), field.name),
@@ -321,7 +321,7 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         // An anonymous record cannot be asked about: `sizeof` and `offsetof`
         // both want a type name and it has none. Its members' *positions* are
         // still checked, through the enclosing record's own offsets.
-        if !layout.foreign() || layout.anonymous() { continue; }
+        if !layout.foreign() || layout.untagged() { continue; }
         let placed = nts_core::hir::layout::native_place(layout)
             .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
         let tag = format!("{} {}", layout.kind.keyword(), layout.name);
@@ -339,7 +339,7 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             // name. The offset assert above still stands -- the *member* has a
             // name even where its type does not -- so its position is checked
             // and only its identity is not.
-            if matches!(&field.ty, Pointee::Record(inner) if inner.anonymous()) {
+            if matches!(&field.ty, Pointee::Record(inner) if inner.untagged()) {
                 continue;
             }
             let address = match &field.ty {

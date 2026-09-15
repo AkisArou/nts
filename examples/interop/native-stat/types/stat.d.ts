@@ -7,7 +7,7 @@
  * @ntsHeader sys/stat.h
  * @ntsDefine _GNU_SOURCE
  */
-declare module "c:stat" {
+declare module "c:sys/stat" {
   import type { CArray, ConstPtr, Ptr, Struct, c_char, c_int, c_long, c_uint, c_ulong } from "c:types";
   export type Stat = Struct<{
     st_dev: c_ulong;

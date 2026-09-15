@@ -314,6 +314,30 @@ reached for `<stdio.h>` has already fixed what `struct utsname` is, so a
 `#define` there would work in the easy case and silently produce a different
 struct in the other. `program.h` stops the build with a message naming the flag.
 
+**A module is named for the header it describes**, path and all:
+`c:sys/utsname`, `c:arpa/inet`, `c:sys/epoll`. Dropping the directory reads
+better and cannot be spelled: `time.h` and `sys/time.h` are both real and
+different headers, and both would be `c:time`. The modules that describe no
+header keep flat names, because they are not headers -- `c:types` is the brand
+vocabulary and `c:memory` is the compiler's own storage operations.
+
+**A header tag names what a module describes, not what it sounds like.**
+`c:memory` carried `@ntsHeader string.h` for a while on the strength of its
+name, and it declares not one C function -- every export is an intrinsic. The
+tag added `#include <string.h>` to every program that named any header-backed
+struct and gave the witness nothing to check. Same for `c:stdint`, `c:stddef`
+and `c:stdbool`, which publish type aliases and no functions. `c:stdlib` and
+`c:math` keep theirs: they declare real prototypes the witness re-declares.
+
+**What remains is a flat union, and it shows.** Every *declared* module's
+headers are included, not every *used* one, so a program touching one native
+struct still gets `<math.h>` and `<stdlib.h>` from `libc.d.ts`. That is noise
+rather than a hazard -- `symbols::RESERVED` already renames a program's own
+`round` to `round_`, which is why the collision this was expected to cause does
+not happen, checked rather than assumed. Scoping it needs per-module provenance
+on each record and function, which is the "which header, not whether" question
+deliberately deferred.
+
 The includes are emitted only where a layout needs them. An include is not free
 in this file -- `<stdlib.h>` declares `div`, a name a TypeScript program is
 entitled to export -- so a program naming no header-backed struct gets none.
@@ -687,7 +711,7 @@ about one. A tag invented here would be a second type beside the header's, and
 `program.h` includes the header -- verified by inventing one, which gives 11
 errors in `program.c` and 10 in the witness.
 
-`Anonymous<T>` marks it, and every consumer reaches its members by byte offset
+`Untagged<T>` marks it, and every consumer reaches its members by byte offset
 from the enclosing record:
 
     v1 = (char *)&v0->__in6_u;          /* the member has a name */

@@ -1,4 +1,4 @@
-import { stat, type Stat } from "c:stat";
+import { stat, type Stat } from "c:sys/stat";
 import { local } from "c:memory";
 import type { ConstPtr, c_char } from "c:types";
 

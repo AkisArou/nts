@@ -12,7 +12,7 @@
  *
  * @ntsHeader sys/epoll.h
  */
-declare module "c:epoll" {
+declare module "c:sys/epoll" {
   import type { Packed, Ptr, Struct, Union, c_int, c_uint32, c_uint64 } from "c:types";
 
   /** `EPOLLIN`. Spelled here rather than imported: a macro is not a

@@ -1,4 +1,4 @@
-import { inet_pton, type In6Addr } from "c:inet";
+import { inet_pton, type In6Addr } from "c:arpa/inet";
 import { local } from "c:memory";
 import type { ConstPtr, c_char, c_int } from "c:types";
 

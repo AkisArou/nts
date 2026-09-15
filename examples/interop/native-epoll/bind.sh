@@ -12,7 +12,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 out=${1:-"$root/examples/interop/native-epoll/src/constants.ts"}
 "${NTS_BIN:-$root/target/release/nts}" bind-c \
-  --module c:epoll --header sys/epoll.h \
+  --module c:sys/epoll --header sys/epoll.h \
   --const EPOLLIN:c_uint32 --alias EPOLLIN=READABLE \
   --const EPOLL_CTL_ADD \
   --constants-out "$out"

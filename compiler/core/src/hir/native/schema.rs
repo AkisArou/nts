@@ -117,11 +117,26 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         return Some(qualify(Pointee::Void));
     }
     if let Some(scalar) = scalar(snapshot, element) { return Some(qualify(Pointee::Scalar(scalar))); }
-    if let Some(layout) = structure(snapshot, element, visiting) { return Some(qualify(Pointee::Record(layout.into()))); }
+    if let Some(layout) = structure(snapshot, element, visiting, false) { return Some(qualify(Pointee::Record(layout.into()))); }
     pointer_within(snapshot, element, visiting).map(|p| qualify(Pointee::Pointer(Box::new(p))))
 }
 
-fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>) -> Option<Record> {
+/// `within_header` is whether the record *holding* this one is defined by a
+/// header, which is what makes an untagged member type inferable rather than
+/// something a binding has to mark.
+///
+/// A header-defined record's members are the header's, so a member whose type
+/// carries no tag cannot be a layout this program invented -- the header
+/// defines the struct, and therefore its members' types. It must be the
+/// header's own untagged one. That inference is why the surface has no marker
+/// for it: the author would have been restating what the enclosing tag already
+/// says.
+fn structure(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+    visiting: &mut Vec<TypeId>,
+    within_header: bool,
+) -> Option<Record> {
     // `Struct<F, Tag>` and `Union<F, Tag>` differ in one marker and nothing
     // else: the same member list, read the same way, laid out differently.
     let (shape, kind) = match marker(snapshot, ty, "___c_struct") {
@@ -130,15 +145,25 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
     };
     // `Packed<T>` intersects a marker in, so this reads through to the `T`.
     let packed = marker(snapshot, ty, "___c_packed").is_some();
-    // `Anonymous<T>` the same way. A record with no tag of its own that the
-    // enclosing header declares -- nothing may name it, so nothing tries.
-    let anonymous = marker(snapshot, ty, "___c_anonymous").is_some();
     let tag = text(snapshot, marker(snapshot, ty, "___c_tag")?)?;
     let TypeKind::Object { properties } = &snapshot.types.get(shape.0 as usize)?.kind else { return None; };
     if properties.is_empty() { return None; }
     let declarations = properties.iter().map(|p| p.declaration).collect::<Option<Vec<_>>>()?;
     let parent = snapshot.nodes[declarations[0].0 as usize].parent?;
     if declarations.iter().any(|id| snapshot.nodes[id.0 as usize].parent != Some(parent)) { return None; }
+    // Decided before the members are read, because a member's own answer
+    // depends on it: a record this header defines makes its untagged members
+    // the header's too, however deep.
+    let foreign = !tag.is_empty();
+    let from_header = foreign && declares_a_header(snapshot, parent);
+    let naming = if foreign {
+        super::Naming::Tagged { from_header }
+    } else if within_header {
+        super::Naming::Untagged
+    } else {
+        super::Naming::Invented
+    };
+    let members_are_the_header_s = from_header || within_header;
     let mut ordered: Vec<_> = properties.iter().collect();
     ordered.sort_by_key(|p| snapshot.nodes[p.declaration.map_or(0, |id| id.0) as usize].origin.location.span.start);
     let mut fields = Vec::new();
@@ -169,7 +194,7 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
         } else if !visiting.contains(&property.ty)
             && let Some(inner) = {
                 visiting.push(property.ty);
-                let inner = structure(snapshot, property.ty, visiting);
+                let inner = structure(snapshot, property.ty, visiting, members_are_the_header_s);
                 visiting.pop();
                 inner
             }
@@ -189,7 +214,6 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
         let name = property.name.strip_prefix("___").map_or_else(|| property.name.clone(), |rest| format!("__{rest}"));
         fields.push(Field { name, ty });
     }
-    let foreign = !tag.is_empty();
     let name = if foreign { tag.to_owned() } else { format!("NtsNative_Type{}", shape.0) };
     // An anonymous record is the header's, so nothing about it is this
     // program's to define -- but it has no tag either, so `foreign` cannot
@@ -198,13 +222,7 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
         name,
         fields,
         kind,
-        naming: if anonymous {
-            super::Naming::Anonymous
-        } else if foreign {
-            super::Naming::Tagged { from_header: declares_a_header(snapshot, parent) }
-        } else {
-            super::Naming::Invented
-        },
+        naming,
         packed,
     })
 }
@@ -235,6 +253,6 @@ fn declares_a_header(snapshot: &SemanticSnapshot, from: nts_semantic_schema::Nod
 #[must_use]
 pub fn storage(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     if let Some(scalar) = scalar(snapshot, ty) { return Some(Pointee::Scalar(scalar)); }
-    if let Some(layout) = structure(snapshot, ty, &mut Vec::new()) { return Some(Pointee::Record(layout.into())); }
+    if let Some(layout) = structure(snapshot, ty, &mut Vec::new(), false) { return Some(Pointee::Record(layout.into())); }
     pointer(snapshot, ty).map(|p| Pointee::Pointer(Box::new(p)))
 }

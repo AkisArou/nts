@@ -41,22 +41,25 @@ declare module "c:types" {
   // `Packed<Struct<{...}, "epoll_event">>` and everything that reads a struct
   // keeps reading one.
   export type Packed<T> = T & { readonly __c_packed: true };
-  // A record the header declares **without a tag**:
+  // A record the header declares **without a tag** needs no marker:
   //
   //     struct in6_addr { union { uint8_t a[16]; uint32_t b[4]; } __in6_u; };
+  //     export type In6Addr = Struct<{ __in6_u: Union<{ ... }> }, "in6_addr">;
   //
-  // The member has a name and its type does not, which is not a detail: C has
-  // no spelling for that type, so no variable can be declared to hold a
-  // pointer to it and `_Generic` cannot ask about it. Marking it says *do not
-  // try to name this* -- the compiler reaches its members by byte offset from
-  // the enclosing record, which is what a C programmer does when they cannot
-  // name a type either.
+  // It is *inferred*. A record with a C tag is one some header defines, so its
+  // members are the header's too -- a member whose type carries no tag cannot
+  // be a layout this program invented, because the header defines the struct
+  // and therefore the type of every member in it. A marker would have restated
+  // what the enclosing tag already says.
   //
-  // Without the marker a binding would have to give it a tag, and a tag it
-  // invented would be a second type beside the header's: `program.h` includes
-  // the header, so the member is the header's anonymous union and an invented
-  // `union NtsNative_Type12 *` is not assignable from it.
-  export type Anonymous<T> = T & { readonly __c_anonymous: true };
+  // What follows from it: C has no spelling for such a type, so nothing may be
+  // declared to point at one and `_Generic` cannot ask about it. The compiler
+  // reaches its members by byte offset from the enclosing record, which is what
+  // a C programmer does when they cannot name a type either.
+  //
+  // `Untagged` and not `Anonymous`, had it needed a name: C11 6.7.2.1p13
+  // reserves "anonymous structure or union" for a member with **no declarator**,
+  // whose fields are reached as the enclosing record's. A different rule.
   // A slot reads as the plain value it holds and remembers what it is a slot
   // *of*. The phantom is optional, which is the whole trick: a plain `number`
   // satisfies it, so `p[i] = n`, `p[i] += 1` and `p.count += 2` stay ordinary
@@ -174,10 +177,14 @@ declare module "c:types" {
 }
 
 /**
- * The block functions. `memcpy` and friends are declared in <string.h>, not
- * in <memory.h>, which is a non-standard alias glibc keeps for compatibility.
+ * The compiler's own storage operations -- `local`, `sizeof`, `addrOf`, `copy`.
  *
- * @ntsHeader string.h
+ * **No `@ntsHeader`, and that was wrong for a while.** This module was tagged
+ * `string.h` on the strength of its name, and it declares not one C function:
+ * every export here is an intrinsic the compiler lowers itself. The tag put
+ * `#include <string.h>` into every program that named any header-backed
+ * struct, for a header nothing in it used, and gave the witness nothing to
+ * check. A header names what a module *describes*, not what it sounds like.
  */
 declare module "c:memory" {
   // Zero-initialized function-local storage; count is a positive compile-time
@@ -219,12 +226,11 @@ declare module "c:memory" {
   export function copy<T>(destination: Ptr<T>, source: ConstPtr<T>): void;
 }
 
-/**
- * The fixed-width integers. This header is what makes `uint8_t` a name at all,
- * so a witness spelling one without it does not compile.
- *
- * @ntsHeader stdint.h
- */
+// Type aliases only: every export here renames a brand `c:types` already
+// publishes. **No `@ntsHeader`** -- there is no function to re-declare and no
+// record to lay out, so a header would add an include and give the witness
+// nothing to compare. `c:stdlib` and `c:math` keep theirs, because they
+// declare real C functions whose prototypes the witness checks.
 declare module "c:stdint" {
   // Hand-written fixed-width C integer aliases. JavaScript number precision applies.
   export type {
@@ -239,22 +245,21 @@ declare module "c:stdint" {
   } from "c:types";
 }
 
-/**
- * `size_t` and `ptrdiff_t`.
- *
- * @ntsHeader stddef.h
- */
+// Type aliases only: every export here renames a brand `c:types` already
+// publishes. **No `@ntsHeader`** -- there is no function to re-declare and no
+// record to lay out, so a header would add an include and give the witness
+// nothing to compare. `c:stdlib` and `c:math` keep theirs, because they
+// declare real C functions whose prototypes the witness checks.
 declare module "c:stddef" {
   // Hand-written aliases for the supported LP64 C data model.
   export type { c_size_t as size_t, c_ptrdiff_t as ptrdiff_t } from "c:types";
 }
 
-/**
- * `bool`. Since C23 it is a keyword and the header is empty, which is fine:
- * including it is still correct and still says where the name came from.
- *
- * @ntsHeader stdbool.h
- */
+// Type aliases only: every export here renames a brand `c:types` already
+// publishes. **No `@ntsHeader`** -- there is no function to re-declare and no
+// record to lay out, so a header would add an include and give the witness
+// nothing to compare. `c:stdlib` and `c:math` keep theirs, because they
+// declare real C functions whose prototypes the witness checks.
 declare module "c:stdbool" {
   // Hand-written: C bool has the same value domain as TypeScript boolean.
   export type bool = boolean;

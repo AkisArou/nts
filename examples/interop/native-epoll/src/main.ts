@@ -5,7 +5,7 @@ import {
   epoll_wait,
   type EpollEvent,
   type Events,
-} from "c:epoll";
+} from "c:sys/epoll";
 import { local } from "c:memory";
 import { EPOLL_CTL_ADD, READABLE } from "./constants";
 import type { c_int, c_uint64 } from "c:types";

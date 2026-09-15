@@ -14,7 +14,7 @@
  * @ntsHeader sys/utsname.h
  * @ntsDefine _GNU_SOURCE
  */
-declare module "c:utsname" {
+declare module "c:sys/utsname" {
   import type { CArray, Ptr, Struct, c_char, c_int } from "c:types";
   // Six fixed arrays stored inline. The length is part of the type because it
   // is part of the layout -- this struct is 390 bytes and is nothing without

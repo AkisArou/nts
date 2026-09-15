@@ -90,7 +90,7 @@ enum Shape {
     /// A struct or union this binding also describes.
     Record(String),
     /// The same, for a record the header declares **without a tag**. Spelled
-    /// through `Anonymous<T>`, which tells the compiler not to try to name it.
+    /// through `Untagged<T>`, which tells the compiler not to try to name it.
     AnonymousRecord(String),
     /// `int (*)(int)` -- a C function pointer, which the surface spells as an
     /// ordinary TypeScript function type because at this boundary that can
@@ -991,7 +991,7 @@ impl Shape {
             Self::Pointer(inner, false) => format!("Ptr<{}>", inner.spell(aliases)),
             Self::Array(element, count) => format!("CArray<{}, {count}>", element.spell(aliases)),
             // Both are an alias this file declares. An anonymous one differs
-            // only in what its own declaration says -- `Anonymous<Union<...>>`
+            // only in what its own declaration says -- `Untagged<Union<...>>`
             // rather than a tag -- which `render` writes, not this.
             Self::Record(tag) | Self::AnonymousRecord(tag) => alias_for(tag, aliases),
             Self::FnPointer(parameters, result) => format!(
@@ -1083,9 +1083,7 @@ impl Binding {
             if record.packed {
                 needed.insert("Packed");
             }
-            if record.anonymous {
-                needed.insert("Anonymous");
-            }
+
             for member in &record.members {
                 member.ty.imports(&mut needed);
             }
@@ -1128,11 +1126,13 @@ impl Binding {
                 .map(|m| format!("    {}: {};", m.name, m.ty.spell(&request.aliases)))
                 .collect::<Vec<_>>()
                 .join("\n");
-            // An anonymous record gets no tag: the header gave it none, and a
-            // tag invented here would be a second type beside the header's.
-            // `Anonymous<T>` is what tells the compiler not to try to name it.
+            // A record the header left untagged is emitted with **no tag**, and
+            // that is the whole of it: the compiler infers the rest from the
+            // enclosing record's tag, since a header-defined struct's members
+            // have the header's types. A tag invented here would be a second
+            // type beside the header's and would not compile.
             let body = if record.anonymous {
-                format!("Anonymous<{keyword}<{{\n{members}\n  }}>>")
+                format!("{keyword}<{{\n{members}\n  }}>")
             } else {
                 format!("{keyword}<{{\n{members}\n  }}, \"{}\">", record.tag)
             };

@@ -330,13 +330,23 @@ pub enum Naming {
     Tagged { from_header: bool },
     /// Declared by a header **without a tag**, so nothing can name it.
     ///
+    /// Inferred rather than marked: a header-defined record's members are the
+    /// header's, so a member whose type carries no tag cannot be a layout this
+    /// program invented. The surface says nothing about it, which is the point
+    /// -- the author would have been restating what the enclosing tag says.
+    ///
+    /// Not called `Anonymous`, because C reserves that word for the other case:
+    /// C11 6.7.2.1p13's "anonymous structure or union" is a member with **no
+    /// declarator**, whose fields are reached as the enclosing record's. That
+    /// is a different rule, and one word for both is how they get confused.
+    ///
     /// C gives an anonymous record no spelling: no variable may be declared to
     /// point at one and `_Generic` cannot ask about one. Every consumer here
     /// reaches its members by byte offset from the enclosing record, and no
     /// definition, forward declaration or type assertion is emitted for it.
     /// `name` is still filled in, because the TypeScript side needs something
     /// to call it and a diagnostic needs something to say.
-    Anonymous,
+    Untagged,
 }
 
 impl Record {
@@ -353,10 +363,10 @@ impl Record {
         matches!(self.naming, Naming::Tagged { from_header: true })
     }
 
-    /// Whether the header declares it without a tag. See [`Naming::Anonymous`].
+    /// Whether the header declares it without a tag. See [`Naming::Untagged`].
     #[must_use]
-    pub const fn anonymous(&self) -> bool {
-        matches!(self.naming, Naming::Anonymous)
+    pub const fn untagged(&self) -> bool {
+        matches!(self.naming, Naming::Untagged)
     }
 }
 
@@ -398,7 +408,7 @@ impl Pointee {
             // is what a C programmer writes when they cannot name a type
             // either. A member *declaration* of one would be wrong, and
             // `types` refuses to emit a record that holds one.
-            Self::Record(layout) if layout.anonymous() => "char".to_owned(),
+            Self::Record(layout) if layout.untagged() => "char".to_owned(),
             Self::Record(layout) => format!("{} {}", layout.kind.keyword(), layout.name),
             Self::Pointer(pointee) => pointee.pointer_type(),
             Self::Void => "void".to_owned(),

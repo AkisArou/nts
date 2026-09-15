@@ -23,7 +23,7 @@ includes `<sys/utsname.h>` because **the binding names it**:
      * @ntsHeader sys/utsname.h
      * @ntsDefine _GNU_SOURCE
      */
-    declare module "c:utsname" {
+    declare module "c:sys/utsname" {
 
 Both lines are load-bearing, and the second is the one worth keeping. glibc
 calls the sixth member `domainname` under `__USE_GNU` and `__domainname`

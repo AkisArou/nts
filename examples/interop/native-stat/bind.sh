@@ -14,7 +14,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 out=${1:-"$root/examples/interop/native-stat/types/stat.d.ts"}
 "${NTS_BIN:-$root/target/release/nts}" bind-c \
-  --module c:stat --header sys/stat.h --define _GNU_SOURCE \
+  --module c:sys/stat --header sys/stat.h --define _GNU_SOURCE \
   --record stat --alias stat=Stat --alias timespec=TimeSpec \
   --fn stat --no-escape stat:file --no-escape stat:buf \
   --out "$out"
