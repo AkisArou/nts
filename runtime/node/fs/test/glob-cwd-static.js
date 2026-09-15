@@ -41,7 +41,18 @@ assert.deepStrictEqual(fs.globSync("*.mjs", { cwd: null }), fs.globSync("*.mjs",
 
 // A directory that does not exist is not an error either.
 assert.deepStrictEqual(fs.globSync("*.mjs", { cwd: path.join(base, "nope") }), []);
-assert.deepStrictEqual(fs.globSync("*.mjs", { cwd: "" }), []);
+
+// **`""` means the current directory, not "nothing", and asserting `[]` here was a fixture bug.**
+// `?? '.'` only replaces `null` and `undefined`; an empty string survives it and globs relative to
+// wherever the process is. This first asserted `[]`, which held when run from the repository root
+// and failed inside the suite — a fixture whose answer depended on the harness's working directory
+// rather than on the code under test. Comparing the two spellings of "here" is the property that
+// is actually true.
+assert.deepStrictEqual(
+  fs.globSync("*.mjs", { cwd: "" }).sort(),
+  fs.globSync("*.mjs", { cwd: "." }).sort(),
+  "an empty cwd must mean the current directory, as `?? '.'` leaves it alone",
+);
 
 // A file URL is converted, and answers the same as the path it names.
 assert.deepStrictEqual(

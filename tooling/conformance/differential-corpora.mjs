@@ -787,6 +787,71 @@ export const CORPORA = {
         }
       };
       return [
+        {
+          // **The rest of `assert`'s published surface**, which was 29 of 43. What was uncalled:
+          // `notDeepEqual`, the two async assertions, the `strict` namespace, `CallTracker` in
+          // full, `AssertionError#toString`, and the `Assert` class. All of it is a value or a
+          // thrown code, and the async pair was out of reach only because the harness could not
+          // await.
+          //
+          // `CallTracker` is deprecated upstream and still published: `calls` wraps a function and
+          // `report`/`verify` answer about what was actually invoked. Its state is per-tracker and
+          // a fresh one is built per input, so unlike `console.count` nothing leaks between them.
+          label: "surface-remainder",
+          call: async (m, s) => {
+            const structure = build(s, false);
+            const tweaked = build(s, true);
+            const attempt = (make) => {
+              try {
+                const v = make();
+                return v === undefined ? "ok" : String(v);
+              } catch (error) {
+                return `${error?.code ?? error?.name ?? "?"}`;
+              }
+            };
+            const settle = async (make) => {
+              try { await make(); return "ok"; } catch (error) { return `${error?.code ?? error?.name ?? "?"}`; }
+            };
+            return [
+              // `notDeepEqual` is the negation and has its own answer on the tweaked pair.
+              attempt(() => m.notDeepEqual(structure, tweaked)),
+              attempt(() => m.notDeepEqual(structure, structure)),
+              // The `strict` namespace is the same relations with `deepStrictEqual` semantics.
+              attempt(() => (m.strict === undefined ? "absent" : m.strict.deepEqual(structure, structure))),
+              attempt(() => (m.strict === undefined ? "absent" : m.strict.notDeepEqual(structure, tweaked))),
+              // The async pair: a promise that rejects, and one that does not.
+              await settle(() => m.rejects(Promise.reject(new TypeError(String(s))), TypeError)),
+              await settle(() => m.rejects(Promise.resolve("no"), TypeError)),
+              await settle(() => m.doesNotReject(Promise.resolve("fine"))),
+              await settle(() => m.doesNotReject(Promise.reject(new Error("boom")))),
+              // `AssertionError`'s own rendering, which a caller sees in a log.
+              attempt(() => {
+                const error = new m.AssertionError({ message: `m:${s}`, actual: 1, expected: 2, operator: "==" });
+                return `${error.toString()}|${error.code}|${error.operator}`;
+              }),
+              // `CallTracker`: a wrapped function called the wrong number of times must be
+              // reported, and `verify` must throw about it.
+              attempt(() => {
+                if (m.CallTracker === undefined) return "absent";
+                const tracker = new m.CallTracker();
+                const once = tracker.calls(() => "called", 1);
+                const twice = tracker.calls(() => "called", 2);
+                once();
+                twice();
+                const report = tracker.report();
+                const shape = report.map((r) => `${r.actual}/${r.expected}`).sort().join(",");
+                const calls = typeof tracker.getCalls === "function"
+                  ? tracker.getCalls(twice).length
+                  : "no-getCalls";
+                const verified = (() => {
+                  try { tracker.verify(); return "verified"; } catch (error) { return error.code ?? error.name; }
+                })();
+                tracker.reset();
+                return `${shape}|${calls}|${verified}|after-reset:${tracker.report().length}`;
+              }),
+            ].join("|");
+          },
+        },
         // Error paths. See `REJECTED` above.
         { label: "strictEqual!", throws: true, call: (m, s) => m.strictEqual(s, rejected(s)) },
         { label: "deepStrictEqual!", throws: true, call: (m, s) => m.deepStrictEqual({ a: s }, { a: rejected(s) }) },
@@ -3267,6 +3332,88 @@ export const CORPORA = {
       return out;
     },
     calls: [
+      {
+        // **The rest of `async_hooks`**, which was 5 of 18. `createHook`, `executionAsyncId`,
+        // `triggerAsyncId`, `executionAsyncResource`, `AsyncResource` in full and the
+        // `AsyncLocalStorage` statics were all uncalled.
+        //
+        // **Not one async id is compared, and that is the whole design of this spec.** Ids are
+        // counters over a process's whole history: the host has run a preflight and thousands of
+        // prior inputs, the child has not, so every id differs for reasons that are not defects.
+        // What is compared is the *relationships* between them -- that an id is a positive
+        // integer, that entering a resource's scope changes the current one and leaving restores
+        // it, that a hook observes the kinds of events in the right order -- each of which is a
+        // function of the input and not of when it ran.
+        label: "ids-and-resources",
+        call: (m, s) => {
+          const attempt = (make) => {
+            try { return String(make()); } catch (error) { return `${error?.code ?? error?.name ?? "?"}`; }
+          };
+          const label = `R${String(s).length}`;
+          return [
+            // An id is a positive integer, and the trigger is one too. The values differ between
+            // processes; being positive integers does not.
+            attempt(() => Number.isInteger(m.executionAsyncId()) && m.executionAsyncId() >= 0),
+            attempt(() => Number.isInteger(m.triggerAsyncId()) && m.triggerAsyncId() >= 0),
+            attempt(() => typeof m.executionAsyncResource()),
+            // `runInAsyncScope` must change the current id and restore it afterwards.
+            attempt(() => {
+              const resource = new m.AsyncResource(label);
+              const before = m.executionAsyncId();
+              const inside = resource.runInAsyncScope(() => m.executionAsyncId());
+              const after = m.executionAsyncId();
+              return `changed:${inside !== before}|restored:${after === before}|own:${inside === resource.asyncId()}`;
+            }),
+            // A resource's own ids, again as relationships.
+            attempt(() => {
+              const resource = new m.AsyncResource(label);
+              return `id:${resource.asyncId() > 0}|trigger:${resource.triggerAsyncId() >= 0}`;
+            }),
+            // `bind` carries the scope to a later call, so the bound function sees the resource's
+            // id even though it runs outside `runInAsyncScope`.
+            attempt(() => {
+              const resource = new m.AsyncResource(label);
+              const bound = resource.bind(() => m.executionAsyncId());
+              return `bound:${bound() === resource.asyncId()}`;
+            }),
+            attempt(() => {
+              const resource = new m.AsyncResource(label);
+              resource.emitDestroy();
+              return "destroyed";
+            }),
+            // A hook sees the kinds of event, in order. The ids it is handed are not compared;
+            // that `init` precedes `destroy` for the same resource is.
+            attempt(() => {
+              const seen = [];
+              const tracked = new Set();
+              const hook = m.createHook({
+                init(id, type) { if (type === label) { tracked.add(id); seen.push("init"); } },
+                destroy(id) { if (tracked.has(id)) seen.push("destroy"); },
+              });
+              hook.enable();
+              const resource = new m.AsyncResource(label);
+              resource.emitDestroy();
+              hook.disable();
+              return `hook:${seen.join(">")}`;
+            }),
+            // The `AsyncLocalStorage` statics: `snapshot` captures the current context and
+            // `bind` attaches it to a function.
+            attempt(() => {
+              const store = new m.AsyncLocalStorage();
+              const inside = store.run(label, () => {
+                const snapshot = m.AsyncLocalStorage.snapshot();
+                return snapshot(() => store.getStore());
+              });
+              return `snapshot:${inside === label}|outside:${store.getStore() === undefined}`;
+            }),
+            attempt(() => {
+              const store = new m.AsyncLocalStorage();
+              const bound = store.run(label, () => m.AsyncLocalStorage.bind(() => store.getStore()));
+              return `bind:${bound() === label}`;
+            }),
+          ].join("|");
+        },
+      },
       {
         label: "als-program",
         call: (m, program) => {
