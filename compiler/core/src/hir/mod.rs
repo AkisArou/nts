@@ -2923,6 +2923,13 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
             ),
             origin.location,
         ));
+        lowered.program.uncompiled.push((
+            name.clone(),
+            format!(
+                "it reads `{}`, whose initializer was not compiled",
+                global.name
+            ),
+        ));
         lowered.program.funcs.retain(|func| func.name != name);
     }
     // A function dropped here may have been the only caller of another, which
@@ -3300,7 +3307,21 @@ fn settle(lowered: &mut lower::Lowered) {
     let mut refused = rustc_hash::FxHashSet::default();
     for (at, value, why) in problems {
         let func = &lowered.program.funcs[at];
-        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error("NTS2006", why, func.value(value).origin.location));
+        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+            "NTS2006",
+            why,
+            func.value(value).origin.location,
+        ));
+        // **Recorded, not only reported.** A wrapper asked later why a function
+        // is missing reads `program.uncompiled`, and a name absent from it gets
+        // the generic "was not compiled" -- the effect, with the cause left
+        // unsaid. 54 declined exports said exactly that on 2026-09-15, and this
+        // and the global reader below were the two places that dropped a
+        // function without saying why.
+        lowered
+            .program
+            .uncompiled
+            .push((func.name.clone(), (*why).to_owned()));
         refused.insert(func.name.clone());
     }
     lowered.program.funcs.retain(|f| !refused.contains(&f.name));
