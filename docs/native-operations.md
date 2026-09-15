@@ -616,6 +616,42 @@ thread reaches the bridge undetected -- the runtime has no way of its own to
 know which thread owns it, and inventing one would be a second answer to a
 question the host already owns.
 
+**And a fifth, answered by refusing.** A bridge is a C function pointer: the
+caller expects the value back, and the frame below it belongs to `qsort` or
+`epoll_wait`. A body that suspends cannot honour that. `hir/native_callback.rs`
+refuses one by name, before `suspend::transform` splits it, and the cascade
+drops whatever created the bridge.
+
+What the refusal buys is visible with it removed. The compiler emits, happily:
+
+```c
+static void NtsBridge_Closure3__call_NtsFn_void_struct_slot_p_int(struct slot *a0, int a1)
+static NtsPromise *later(struct slot *v0, double v1)
+```
+
+A bridge declared `void` wrapping a body that returns `NtsPromise *`. The
+promise is dropped, nothing crashes, nothing is reported, and the callback
+never completes. That is the worst of the available outcomes, which is why the
+refusal exists before the feature does.
+
+The rule is about the **bridged body**, not its caller: an `async` function
+handing C a synchronous callback is ordinary and stays accepted. All three arms
+are in `an_async_callback_is_refused_and_an_async_caller_is_not`, and each was
+shown to fail when its expectation is flipped.
+
+**What is deferred, and what would settle it.** The question underneath is not
+`await` but the microtask it queues while a foreign library's frames are live.
+Two answers, both defensible:
+
+| | who drains the queue | cost |
+|---|---|---|
+| bridge drives it | `nts_checkpoint()` before returning to C | microtasks run with the foreign caller's frames below them, and anything reentering that library is undefined the same way `longjmp` past it is |
+| host drives it | an embedder's loop, after the bridge returns | a standalone consumer that never calls back in sees its promises never settle, so the program must call `nts_checkpoint` itself |
+
+Neither is chosen here, because no consumer is asking. `nts_checkpoint` is the
+C-embedding API and out of scope besides. When a consumer arrives it will say
+which of the two rows it needs, and the refusal names the exact site to change.
+
 ## A callback in a struct
 
 `struct sigaction`, every `_ops` table in the kernel headers, and most C

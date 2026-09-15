@@ -46,7 +46,13 @@ fn live(func: &Func) -> impl Iterator<Item = ValueId> + '_ {
     func.blocks.iter().flat_map(|b| b.ops.iter().copied())
 }
 
-fn suspends(func: &Func) -> bool {
+/// Whether a body can give up control before it returns.
+///
+/// Asked before `suspend::transform`, so an `async` function is still one
+/// function holding a frame rather than the two it becomes. Shared with
+/// [`super::native_callback`], which asks the same question about a bridged
+/// body for an unrelated reason.
+pub(super) fn suspends(func: &Func) -> bool {
     func.async_result.is_some() || func.frame.is_some() || live(func).any(|v| matches!(func.value(v).kind,
         OpKind::Await { .. } | OpKind::Yield { .. } | OpKind::Suspend { .. }))
 }

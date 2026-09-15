@@ -51,6 +51,7 @@ pub mod lower;
 pub mod monomorphize;
 pub mod narrow;
 pub mod native;
+mod native_callback;
 mod native_storage;
 /// Who owns what, and for how long: one answer per value, which the counting
 /// pass reads and does no reasoning of its own about.
@@ -3275,7 +3276,11 @@ fn settle(lowered: &mut lower::Lowered) {
     // First of all: everything below reads the block graph, and a block nothing
     // can reach is not part of it. See `dce::prune_unreachable`.
     dce::prune_unreachable_blocks(&mut lowered.program);
-    let problems = native_storage::check(&lowered.program);
+    // Two rules with the same shape and nothing else in common: what may be
+    // stored on the stack, and what may be called from a foreign frame.
+    let problems = native_storage::check(&lowered.program)
+        .into_iter()
+        .chain(native_callback::check(&lowered.program));
     let mut refused = rustc_hash::FxHashSet::default();
     for (at, value, why) in problems {
         let func = &lowered.program.funcs[at];

@@ -924,3 +924,74 @@ fn a_retained_callback_refuses_a_local_context_and_accepts_a_heap_one() {
         );
     }
 }
+
+/// A bridge is a C function pointer, and C calls it expecting the value back.
+///
+/// With this refusal removed the compiler emits exactly the hazard: a bridge
+/// declared `void (struct slot *, int)` wrapping `static NtsPromise *later`, so
+/// the promise is returned into a `void` and dropped. Nothing crashes and
+/// nothing is reported -- the callback simply never completes.
+///
+/// The third arm is what makes this a test rather than a coincidence: the rule
+/// is about the *bridged body*, so an `async` function handing C a synchronous
+/// callback is fine and must stay fine.
+#[test]
+fn an_async_callback_is_refused_and_an_async_caller_is_not() {
+    let header = "import type { Ptr, Struct } from \"c:types\";\n\
+         import { malloc, free } from \"c:stdlib\";\n\
+         import { sizeof } from \"c:memory\";\n\
+         type Slot = Struct<{ n: c_int }, \"slot\">;\n\
+         function now(ctx: Ptr<Slot>, n: c_int): void { ctx.n = (ctx.n + n) as c_int; }\n\
+         async function later(ctx: Ptr<Slot>, n: c_int): Promise<void> { ctx.n = (ctx.n + n) as c_int; }\n\
+         declare function subscribe(cb: (c: Ptr<Slot>, n: c_int) => void, ctx: Ptr<Slot>): c_int;\n";
+    for (name, body, refused) in [
+        (
+            "sync",
+            "export function go(): number {\n\
+             const ctx = malloc<Slot>(sizeof<Slot>());\n\
+             if (ctx === null) return -1;\n\
+             const r = subscribe(now, ctx); free(ctx); return r;\n\
+             }",
+            false,
+        ),
+        (
+            "async-callback",
+            "export function go(): number {\n\
+             const ctx = malloc<Slot>(sizeof<Slot>());\n\
+             if (ctx === null) return -1;\n\
+             const r = subscribe(later, ctx); free(ctx); return r;\n\
+             }",
+            true,
+        ),
+        // Suspending is the callback's problem, not its caller's.
+        (
+            "async-caller",
+            "export async function go(): Promise<number> {\n\
+             const ctx = malloc<Slot>(sizeof<Slot>());\n\
+             if (ctx === null) return -1;\n\
+             const r = subscribe(now, ctx); free(ctx); return r;\n\
+             }",
+            false,
+        ),
+    ] {
+        let Some(snapshot) = snapshot(&format!("bridge-{name}"), &format!("{header}{body}")) else {
+            return;
+        };
+        let prepared = hir::prepare(&snapshot).unwrap();
+        let said: Vec<&str> = prepared
+            .diagnostics
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect();
+        assert_eq!(!said.is_empty(), refused, "{name}: {said:?}");
+        // The words, not only the count: a refusal for some unrelated reason
+        // would satisfy the line above and teach the reader the wrong rule.
+        if refused {
+            assert!(
+                said.iter()
+                    .any(|m| m.contains("`async` callback") && m.contains("runs to completion")),
+                "{name}: {said:?}"
+            );
+        }
+    }
+}
