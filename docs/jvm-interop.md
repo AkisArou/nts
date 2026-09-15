@@ -1106,7 +1106,7 @@ discovered during implementation. Grouped by whether they **block**, whether
 they are a **decision**, or whether they are **deferrable** — because the first
 group changes what gets built and the others only change what it looks like.
 
-## Blocking: HIR cannot represent a foreign object
+## Was blocking: HIR cannot represent a foreign object
 
 **The largest gap in this plan and it was not in it until now.**
 
@@ -1932,7 +1932,7 @@ points the other way: at our own objects, once Java can reach them.** This
 section is ordered by that, because only the first item can *lose* something we
 already have; the rest are advantages we merely fail to gain.
 
-## 1. Interop must not falsify `fields.rs`, and today it would
+## 1. Interop must not falsify `fields.rs` — and no longer would
 
 `hir/fields.rs` is what stops every `this.count` coming back as `TOP`. Its own
 header says why that is worth having -- without it "`this.count + 1` is floating
@@ -1940,16 +1940,37 @@ point, `x | 0` after it is a library call, and a loop that touches an object
 pays a double round trip per iteration for arithmetic that fits in a register",
 which is "every program that uses objects".
 
-Its soundness rests on one sentence:
+Its soundness rested on one sentence, quoted here as it read when this section
+was written:
 
 > A field holds what was stored into it, and nothing else can store into it:
 > **there is no FFI that writes through a pointer here**, and a program's own
 > stores are all in the HIR.
 
-**That sentence is true today and interop is exactly what falsifies it.** It is
-not wrong, and nobody will edit it when it goes false -- the change happens
-somewhere else entirely, which is the failure mode where a precondition expires
-in silence.
+**That sentence no longer exists**, checked 2026-09-15: zero occurrences of "there
+is no FFI that writes through a pointer here" in `fields.rs`. It was not deleted
+but reworded, and the rewording is the resolution:
+
+> a field holds what was stored into it, nothing else can store into it, and
+> **every store in the program is a `FieldSet` in this HIR**
+
+The FFI clause is gone because the hazard it named cannot arise the way this
+section feared. A foreign member access is not a `FieldSet` -- it resolves
+through the binding table exactly as a method call does -- so `fields.rs` never
+sees it and never reasons about a layout it does not own.
+
+**And the door this section says is already open is closed.** It shows a
+generated class with `public int count;`. Fields are package-private now:
+`ts-from-java`'s captured API reads `double $hits;`, `field_visibility.rs`
+asserts the access flag from the class bytes rather than from `javap`, and
+`expected/Api.javap` exists so that "the day a generated field goes back to
+`public`, this diff says so out loud". Java in another package cannot reach one.
+
+So the precondition did not expire in silence, which is what this section was
+written to prevent -- and the section is still the reason it did not. What is
+worth keeping is the shape of the warning rather than its content: the change
+happened somewhere else entirely, in a file this lane does not own, and the way
+it was noticed was grepping for the sentence rather than re-reading the section.
 
 And the door is already open. Emitting a two-field class and reading it back:
 
