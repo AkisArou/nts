@@ -7935,11 +7935,19 @@ export const CORPORA = {
     // label and not the others. No single call reaches any of that -- only an
     // order of calls does.
     //
-    // **Deterministic operations only.** `time`/`timeEnd` write an elapsed
-    // duration and `trace` writes a stack, so both would diverge on every run
-    // for reasons that are not defects. They are excluded rather than
-    // normalised: normalising them would mean inventing the answer, and a
-    // comparison against an answer this file made up is not a comparison.
+    // **Deterministic operations only in the state machine below.** `time`/`timeEnd`
+    // write an elapsed duration and `trace` writes a stack, so neither belongs in a
+    // fuzz whose whole output is compared verbatim.
+    //
+    // This comment used to say they were excluded outright, on the argument that
+    // normalising them would mean inventing the answer. **That argument is right about
+    // the duration and wrong about everything around it**, and it left seven published
+    // functions uncalled -- `time`, `timeEnd`, `timeLog`, `trace` and three `Console#`
+    // siblings. The label, the separator, the three decimal places, the `ms` suffix,
+    // the arguments `timeLog` appends, which stream each lands on, and the fact that
+    // an unknown label writes *nothing* are all deterministic. Masking one field is
+    // not inventing an answer; it is declining to compare the one thing that cannot
+    // be equal. See `timers-and-trace` below, which does exactly that.
     //
     // `countReset` is excluded for a different reason and it is worth the line.
     // Resetting a label that was never counted emits a **process** warning --
@@ -7967,6 +7975,82 @@ export const CORPORA = {
       return out;
     },
     calls: [
+      {
+        // **`time`, `timeEnd`, `timeLog` and `trace`**, the seven names
+        // `corpus-reach.mjs` had this module never calling.
+        //
+        // The elapsed duration is masked and nothing else is. What remains is the
+        // observable shape: `label: <d>ms`, the arguments `timeLog` appends after the
+        // duration, that both go to **stdout** while `trace` goes to stderr, and that
+        // `timeEnd` on a label that was never started writes nothing at all -- node
+        // raises a process warning instead, which is a different channel.
+        //
+        // **The decimal count is not compared, and cannot be.** The first version of
+        // this row masked `\d+\.\d+ms` and reported 177 divergences where ours wrote
+        // `0ms` and node wrote `0.003ms` -- which looked exactly like a missing
+        // `toFixed(3)`. It is not: node's line is
+        // `${Number(NumberPrototypeToFixed(ms, 3))}ms`, the `Number` drops trailing
+        // zeros, and ours is character-for-character the same. The two differed
+        // because *our elapsed was exactly zero and node's was not*, so node itself
+        // prints `0ms` for a fast enough interval. The mask has to admit an integer
+        // for that reason, which means the digits carry no signal at all here.
+        //
+        // `trace` is compared by its **first line only**. The frames below it are
+        // absolute paths through this harness and are not a property of the module;
+        // the first line is `Trace: ` followed by the arguments formatted exactly as
+        // `log` would format them, which is the part `console` decides.
+        //
+        // **Not covered, and said rather than implied:** node switches unit above
+        // 1,000ms -- to `s`, then `min` -- and reaching that costs a second of real
+        // waiting per input. Every duration here is sub-millisecond, so the `ms` arm
+        // is the only one this row exercises.
+        label: "timers-and-trace",
+        call: (m, program) => {
+          const label = `L${String(program).replace(/[^a-zA-Z]/g, "").slice(0, 5) || "x"}`;
+          const out = [];
+          const err = [];
+          const sink = (into) => new Writable({
+            write(chunk, _enc, cb) { into.push(String(chunk)); cb(); },
+          });
+          const console_ = new m.Console({ stdout: sink(out), stderr: sink(err) });
+          const show = (f) => {
+            try {
+              f();
+              return "ok";
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+
+          const calls = [
+            show(() => console_.time(label)),
+            show(() => console_.timeLog(label, "mid", String(program).length)),
+            show(() => console_.timeEnd(label)),
+            // Ended already: writes nothing, warns on another channel.
+            show(() => console_.timeEnd(label)),
+            show(() => console_.timeLog(label)),
+            // Never started at all.
+            show(() => console_.timeEnd(`${label}-absent`)),
+            show(() => console_.trace("traced", String(program).length, { k: label })),
+            show(() => console_.trace()),
+          ];
+
+          // `\d+(\.\d+)?ms`, not `\d+\.\d+ms`: an exactly-zero elapsed prints `0ms` on
+          // either side, because node drops the trailing zeros too.
+          const mask = (text) => text.replace(/\d+(?:\.\d+)?ms/g, "<d>ms");
+          const firstTraceLine = (text) =>
+            text.split("\n").filter((line) => line.startsWith("Trace:")).join("~");
+
+          return [
+            `calls=${calls.join(",")}`,
+            `stdout=${JSON.stringify(mask(out.join("")))}`,
+            `stderrTrace=${JSON.stringify(firstTraceLine(err.join("")))}`,
+            // The module-level functions exist and are the same shape as the methods.
+            `module=${typeof m.time}:${typeof m.timeEnd}:${typeof m.timeLog}:${typeof m.trace}`,
+            `arity=${m.time?.length}:${m.timeEnd?.length}:${m.timeLog?.length}:${m.trace?.length}`,
+          ].join("|");
+        },
+      },
       {
         // **The module-level functions, which write to `process.stdout` and so were unreachable.**
         //
