@@ -410,8 +410,27 @@ fn nullable(annotations: &[String]) -> bool {
     annotations.iter().any(|it| it.ends_with("/Nullable"))
 }
 
+/// **`NotNull` as well as `NonNull`, because Kotlin writes the other one.**
+///
+/// Matching by suffix already accepts `androidx`, `javax` and `JSpecify`, so the
+/// package was never the question -- the *spelling* was. `kotlinc` emits
+/// `org.jetbrains.annotations.NotNull` on every non-null return, and this
+/// predicate did not know the word, so those returns read as unannotated.
+///
+/// That is not a small loss, because an unannotated reference return becomes
+/// `T | null` by design. Measured on `kotlinc-jvm 2.4.20`, a class with both:
+///
+/// ```text
+/// fun greet(): String   ->  greet(): string | null      <- wrong
+/// fun maybe(): String?  ->  maybe(): string | null
+/// ```
+///
+/// The two are **indistinguishable in the output** while being the entire
+/// distinction Kotlin exists to make. Parameters were unaffected: the default
+/// there is non-null, which is the asymmetry `nullability_is_asymmetric_between
+/// _returns_and_arguments` covers, so only returns lost the guarantee.
 fn nonnull(annotations: &[String]) -> bool {
-    annotations.iter().any(|it| it.ends_with("/NonNull"))
+    annotations.iter().any(|it| it.ends_with("/NonNull") || it.ends_with("/NotNull"))
 }
 
 /// Is this type one a `null` can inhabit?

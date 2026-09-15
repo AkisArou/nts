@@ -104,6 +104,88 @@ fn ours(classes: &Path, class: &str) -> read::ClassFile {
     read::class_file(&bytes).expect("the class file should parse")
 }
 
+/// Kotlin spells it `NotNull`, and a non-null return is the whole point.
+///
+/// `kotlinc` emits `org.jetbrains.annotations.NotNull` on every non-null
+/// reference return. The predicate matched `/NonNull` only, so those returns
+/// read as *unannotated* -- and an unannotated reference return becomes
+/// `T | null` by design, which is the sound default when the class file does
+/// not say. Here it does say, in a word the reader did not know.
+///
+/// Measured on `kotlinc-jvm 2.4.20` before the fix, from one Kotlin class:
+///
+///     fun greet(): String   ->  greet(): string | null
+///     fun maybe(): String?  ->  maybe(): string | null
+///
+/// Indistinguishable output for the one distinction Kotlin exists to make.
+/// Parameters were already right: their default is non-null, which is the
+/// asymmetry `nullability_is_asymmetric_between_returns_and_arguments` covers.
+///
+/// Compiled here rather than run through `kotlinc`, because the spelling is
+/// what is under test and this needs only the `javac` every other test needs.
+/// The annotation is declared at its real package so the fixture is the actual
+/// string Kotlin emits rather than a stand-in for it.
+#[test]
+fn the_kotlin_spelling_of_non_null_is_accepted() {
+    let Some(javac) = tool("javac") else {
+        eprintln!("SKIP reads/kotlin-spelling: no javac");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-notnull-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let src = out.join("src/org/jetbrains/annotations");
+    std::fs::create_dir_all(&src).expect("a temp dir");
+    std::fs::create_dir_all(out.join("src/com/example")).expect("a temp dir");
+
+    // CLASS retention, which is what Kotlin emits and what the reader sees.
+    std::fs::write(
+        src.join("NotNull.java"),
+        "package org.jetbrains.annotations;\n\
+         import java.lang.annotation.*;\n\
+         @Retention(RetentionPolicy.CLASS)\n\
+         @Target({ElementType.METHOD, ElementType.PARAMETER})\n\
+         public @interface NotNull {}\n",
+    )
+    .expect("writes");
+    std::fs::write(
+        out.join("src/com/example/Kt.java"),
+        "package com.example;\n\
+         import org.jetbrains.annotations.NotNull;\n\
+         public class Kt {\n\
+         @NotNull public String greet() { return \"x\"; }\n\
+         public String maybe() { return null; }\n\
+         }\n",
+    )
+    .expect("writes");
+
+    let built = Command::new(&javac)
+        .args(["--release", "8", "-nowarn", "-d"])
+        .arg(out.join("classes"))
+        .arg(out.join("src/org/jetbrains/annotations/NotNull.java"))
+        .arg(out.join("src/com/example/Kt.java"))
+        .output()
+        .expect("javac runs");
+    assert!(built.status.success(), "javac: {}", String::from_utf8_lossy(&built.stderr));
+
+    nts_jvm_emitter::bind::set_nonnull(std::collections::BTreeSet::new());
+    let rendered =
+        nts_jvm_emitter::bind::declarations(&ours(&out.join("classes"), "com.example.Kt"))
+            .expect("renders")
+            .0;
+
+    assert!(
+        rendered.contains("greet(): string;"),
+        "`@NotNull` must survive as a non-null return:\n{rendered}"
+    );
+    // The control: the unannotated sibling still defaults to nullable, so this
+    // asserts a *distinction* rather than that everything became non-null.
+    assert!(
+        rendered.contains("maybe(): string | null;"),
+        "an unannotated return stays nullable:\n{rendered}"
+    );
+    let _ = std::fs::remove_dir_all(&out);
+}
+
 #[test]
 fn every_descriptor_agrees_with_javap() {
     let (Some(classes), Some(javap)) = (fixture(), tool("javap")) else {
