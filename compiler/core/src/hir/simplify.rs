@@ -252,12 +252,18 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
             *value = of(*value);
         }
         OpKind::NativeMalloc { bytes } => *bytes = of(*bytes),
-        OpKind::NativeFieldAddress { pointer, .. } | OpKind::NativeFree { pointer } => *pointer = of(*pointer),
+        OpKind::NativeFieldAddress { pointer, .. }
+        | OpKind::NativeBitLoad { pointer, .. }
+        | OpKind::NativeFree { pointer } => *pointer = of(*pointer),
         OpKind::NativeIndexAddress { pointer: array, index }
         | OpKind::NativeLoad { pointer: array, index }
         | OpKind::ArrayGet { array, index, .. } => {
             *array = of(*array);
             *index = of(*index);
+        }
+        OpKind::NativeBitStore { pointer, value, .. } => {
+            *pointer = of(*pointer);
+            *value = of(*value);
         }
         OpKind::NativeStore { pointer: array, index, value }
         | OpKind::ArraySet {

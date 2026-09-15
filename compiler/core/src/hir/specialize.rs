@@ -619,7 +619,7 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
             let kind = func.values[value.0 as usize].kind.clone();
             let produced = func.values[value.0 as usize].ty.clone();
             let updated = match kind {
-                kind @ (OpKind::NativeMalloc { .. } | OpKind::NativeLoad { .. } | OpKind::NativeStore { .. } | OpKind::NativeIndexAddress { .. } | OpKind::ArraySet { .. }) =>
+                kind @ (OpKind::NativeMalloc { .. } | OpKind::NativeLoad { .. } | OpKind::NativeStore { .. } | OpKind::NativeBitStore { .. } | OpKind::NativeIndexAddress { .. } | OpKind::ArraySet { .. }) =>
                     memory_operands(func, &mut rewritten, &mut count, &kind),
                 // Both operands of an operator at one type, which C picks for
                 // itself with its usual arithmetic conversions and never
@@ -728,6 +728,26 @@ fn memory_operands(
             let index = convert(func, rewritten, count, index, &native_index);
             Some(if matches!(kind, OpKind::NativeLoad { .. }) { OpKind::NativeLoad { pointer, index } }
                 else { OpKind::NativeIndexAddress { pointer, index } })
+        }
+        // The same narrowing a `NativeStore` gets, for the op that has no
+        // address. Without it the value arrives as an `f64` and the assignment
+        // `p->ihl = v` is C converting a double to a four-bit field silently --
+        // undefined where it does not fit, and invisible in a C-only test for
+        // exactly the reason the `ArraySet` comment below records.
+        OpKind::NativeBitStore { pointer, field, value: stored } => {
+            let HirType::NativePointer(pointee) = &func.value(pointer).ty else {
+                return None;
+            };
+            let super::native::Pointee::Record(layout) = pointee.viewed() else {
+                return None;
+            };
+            let super::native::Pointee::Bits { unit, .. } =
+                layout.fields.get(field as usize)?.ty
+            else {
+                return None;
+            };
+            let stored = convert(func, rewritten, count, stored, &unit.representation());
+            Some(OpKind::NativeBitStore { pointer, field, value: stored })
         }
         OpKind::NativeStore { pointer, index, value: stored } => {
             match &func.value(pointer).ty {

@@ -18897,6 +18897,12 @@ impl<'a> FuncBuilder<'a> {
     fn read_place(&mut self, id: NodeId, place: &Place) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         Ok(match *place {
+                Place::NativeBits { pointer, field } => {
+                    let ty = self.native_bit_unit(id, pointer, field)?;
+                    let origin = self.origin(id);
+                    let read = self.push(OpKind::NativeBitLoad { pointer, field }, ty, origin);
+                    self.coerce(read, &HirType::NUMBER, id)?
+                }
             Place::NativeElement { pointer, index } => self.native_load(id, pointer, index)?,
             Place::Field { object, field } => {
                 let layout = match self.values[object.0 as usize].ty.clone() {
@@ -19593,6 +19599,10 @@ impl<'a> FuncBuilder<'a> {
         // "an opaque C pointer converted to a different type", which is true
         // and unhelpful.
         let value = match *place {
+                // A bit-field holds an integer and nothing else: a function
+                // pointer has an address and a width no bit-field can have, so
+                // there is never a closure here to bridge.
+                Place::NativeBits { .. } => value,
             Place::NativeElement { pointer, .. } => {
                 match self.native_element_type(id, pointer)? {
                     HirType::NativePointer(super::native::Pointee::FnPointer(signature)) => {
@@ -19604,6 +19614,9 @@ impl<'a> FuncBuilder<'a> {
             _ => value,
         };
         let want = match *place {
+                Place::NativeBits { pointer, field } => {
+                    Some(self.native_bit_unit(id, pointer, field)?)
+                }
             Place::NativeElement { pointer, .. } => Some(self.native_element_type(id, pointer)?),
             Place::Element { array, .. } => return Ok(self.coerce_element(id, array, value)),
             // The runtime takes the new length as a `double`, like every other
@@ -19764,6 +19777,16 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let value = self.coerce_to_slot(id, place, value)?;
         match *place {
+                Place::NativeBits { pointer, field } => {
+                    let ty = self.native_bit_unit(id, pointer, field)?;
+                    let value = self.coerce(value, &ty, id)?;
+                    let origin = self.origin(id);
+                    self.push(
+                        OpKind::NativeBitStore { pointer, field, value },
+                        HirType::Void,
+                        origin,
+                    );
+                }
             Place::NativeElement { pointer, index } => {
                 // A `const T *` may be read through and not written through.
                 // TypeScript refuses this first -- `TS2542`, "only permits
@@ -33232,6 +33255,14 @@ enum Omitted {
 #[derive(Debug, Clone)]
 enum Place {
     NativeElement { pointer: ValueId, index: ValueId },
+    /// A bit-field member: a place with no address.
+    ///
+    /// Every other native place is a pointer and an index, because every other
+    /// member has an address a load or store goes through. A bit-field does
+    /// not -- `&p->ihl` is not an expression C has -- so this carries the
+    /// record's pointer and the member's index, and its read and write are
+    /// their own ops rather than an address followed by one.
+    NativeBits { pointer: ValueId, field: u32 },
     Field {
         object: ValueId,
         field: u32,

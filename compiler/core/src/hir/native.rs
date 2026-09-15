@@ -215,6 +215,25 @@ impl Type {
 pub enum Pointee {
     Opaque(String),
     Scalar(Scalar),
+    /// `T name : width` -- a member occupying `width` bits of a `T`-sized
+    /// storage unit, packed with the bit-fields beside it.
+    ///
+    /// **No offset of its own**, and that is the whole difficulty: a `Field`
+    /// carries a name and a type, and where it sits comes from the order the
+    /// fields are written. That works because every other member starts on a
+    /// byte. `layout` allocates bits for these instead, following the rule the
+    /// platform ABI states, and the generator's existing self-check -- the
+    /// recomputed layout against clang's own dump -- is what says the rule was
+    /// applied correctly, on real headers rather than on an argument.
+    ///
+    /// `offsetof` and `&` are both illegal on one in C, so unlike every other
+    /// member this cannot be checked by the witness at compile time. What the
+    /// witness can still assert is the enclosing record's `sizeof`, which a
+    /// misallocated run of bit-fields changes.
+    Bits {
+        unit: Scalar,
+        width: u32,
+    },
     Record(std::sync::Arc<Record>),
     Pointer(Box<Pointee>),
     /// C's `void`, as the pointee of a `void *`. Storage of unstated element
@@ -401,6 +420,10 @@ impl Pointee {
         match self {
             Self::Opaque(name) => format!("struct {name}"),
             Self::Scalar(scalar) => scalar.c_type().to_owned(),
+            // The width belongs to the *declarator*, not the type: C writes
+            // `unsigned int ihl : 4`, so `c_type` is the storage unit and
+            // whoever emits the member appends the `: width`.
+            Self::Bits { unit, .. } => unit.c_type().to_owned(),
             // `char` for an anonymous one, which is not a description of it: C
             // has no spelling for a record the header left untagged, and
             // `char *` is the type any address may be held as. Every access
@@ -509,6 +532,10 @@ impl Pointee {
     pub fn element_type(&self) -> Option<HirType> {
         match self {
             Self::Scalar(scalar) => Some(scalar.representation()),
+            // Loadable as a value and only as a value. A bit-field has no
+            // address, so nothing may point at one -- which is why the surface
+            // projects it without the phantom `addrOf` reads.
+            Self::Bits { unit, .. } => Some(unit.representation()),
             Self::Pointer(pointee) => Some(HirType::NativePointer((**pointee).clone())),
             // A view loads exactly what the type underneath it does, which is
             // what C allows through both of these. What they restrict is
@@ -542,6 +569,7 @@ impl std::fmt::Display for Pointee {
         match self {
             Self::Opaque(name) => write!(f, "{name}"),
             Self::Scalar(scalar) => write!(f, "{}", scalar.c_type()),
+            Self::Bits { unit, width } => write!(f, "{}:{width}", unit.c_type()),
             Self::Record(layout) => write!(f, "{}", layout.name),
             Self::Pointer(pointee) => write!(f, "{pointee}*"),
             Self::Void => write!(f, "void"),

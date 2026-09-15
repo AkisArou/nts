@@ -23,7 +23,14 @@ impl Layouts {
             // A function pointer names no record to define. Whatever *its*
             // signature names is reached where the signature is emitted, not
             // here: this walk is about struct definitions.
-            Pointee::Scalar(_) | Pointee::Void | Pointee::FnPointer(_) => {}
+            // A bit-field joins them: its storage unit is a scalar, so it
+            // names no tag either. Its *width* matters to whoever emits the
+            // member, not to this walk, which is about which structs need a
+            // definition.
+            Pointee::Scalar(_)
+            | Pointee::Bits { .. }
+            | Pointee::Void
+            | Pointee::FnPointer(_) => {}
 
             // Each names whatever it is a view of, so the record any of them
             // reaches still needs its definition emitted. One arm rather than

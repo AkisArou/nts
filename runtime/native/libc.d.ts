@@ -90,6 +90,22 @@ declare module "c:types" {
     readonly __c_array: T;
     readonly __c_length: N;
   };
+  // `T name : N` -- a bit-field. N bits of a T-sized storage unit, packed with
+  // the bit-fields beside it rather than given a byte of its own.
+  //
+  // It projects as a plain `number`, deliberately **without** the `__c_of`
+  // phantom every other member carries. That phantom is the only thing
+  // `addrOf` can read, so `addrOf(header.ihl)` is a type error here -- which is
+  // what C says too: a bit-field has no address, and `&p->ihl` does not compile
+  // there either. The surface cannot express what C forbids, rather than
+  // expressing it and refusing it afterwards.
+  //
+  // The width is part of the type for the reason `CArray`'s length is: it is
+  // part of the layout, and a struct holding one has no size without it.
+  export type Bits<T extends number, N extends number> = {
+    readonly __c_bits: T;
+    readonly __c_width: N;
+  };
   export type Ptr<T> = { readonly __c_pointer: T; readonly __c_writable: true } & (T extends
     | Struct<infer Fields, string>
     | Union<infer Fields, string>
@@ -104,7 +120,9 @@ declare module "c:types" {
           ? Ptr<Fields[K]>
           : Fields[K] extends CArray<infer E, number>
             ? Ptr<E>
-            : Slot<Fields[K]> }
+            : Fields[K] extends Bits<number, number>
+              ? number
+              : Slot<Fields[K]> }
       & { [index: number]: Ptr<T> }
     : { [index: number]: Slot<T> });
   // A view that may be read and not written. `const` restricts this holder; it
@@ -129,7 +147,9 @@ declare module "c:types" {
           ? ConstPtr<Fields[K]>
           : Fields[K] extends CArray<infer E, number>
             ? ConstPtr<E>
-            : Slot<Fields[K]> }
+            : Fields[K] extends Bits<number, number>
+              ? number
+              : Slot<Fields[K]> }
       & { readonly [index: number]: ConstPtr<T> }
     : { readonly [index: number]: Slot<T> });
   // Hand-written native ABI scalar declarations, maintained with hir/native.rs.

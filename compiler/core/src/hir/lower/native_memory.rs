@@ -125,11 +125,53 @@ impl FuncBuilder<'_> {
         self.native_field_place(id, pointer, &name)
     }
 
+    /// The storage unit a bit-field is read and written as.
+    ///
+    /// `unsigned int ihl : 4` loads as an `unsigned int`, not as a four-bit
+    /// thing: C promotes the member to its declared type on the way out, and
+    /// the width lives in the layout rather than in the value.
+    pub(super) fn native_bit_unit(
+        &mut self,
+        id: NodeId,
+        pointer: ValueId,
+        field: u32,
+    ) -> Result<HirType, Diagnostic> {
+        let HirType::NativePointer(view) = &self.values[pointer.0 as usize].ty else {
+            return Err(self.unsupported(id, "a bit-field without a native struct layout"));
+        };
+        let Pointee::Record(layout) = view.viewed() else {
+            return Err(self.unsupported(id, "a bit-field without a native struct layout"));
+        };
+        let Some(Pointee::Bits { unit, .. }) =
+            layout.fields.get(field as usize).map(|member| &member.ty)
+        else {
+            return Err(self.unsupported(id, "a bit-field index naming something else"));
+        };
+        Ok(unit.representation())
+    }
+
     pub(super) fn native_field_place(&mut self, id: NodeId, pointer: ValueId, name: &str) -> Result<Place, Diagnostic> {
+        // A bit-field is a place with no address, so it does not go through
+        // `native_field_address` at all: that function's whole product is an
+        // address, and there is none to give. Decided here, where the member's
+        // declared type is still in hand.
+        if let HirType::NativePointer(view) = &self.values[pointer.0 as usize].ty
+            && let Pointee::Record(layout) = view.viewed()
+            && let Some((field, _)) = layout
+                .fields
+                .iter()
+                .enumerate()
+                .find(|(_, f)| f.name == name && matches!(f.ty, Pointee::Bits { .. }))
+        {
+            let field = u32::try_from(field)
+                .map_err(|_| self.unsupported(id, "too many native fields"))?;
+            return Ok(Place::NativeBits { pointer, field });
+        }
         let pointer = self.native_field_address(id, pointer, name)?;
         let index = self.push(OpKind::ConstInt(0), HirType::Int { bits: 64, signed: true }, self.origin(id));
         Ok(Place::NativeElement { pointer, index })
     }
+
 
     /// `addrOf(p.fd)` and `addrOf(p[i])`, which are `&p->fd` and `&p[i]`.
     ///

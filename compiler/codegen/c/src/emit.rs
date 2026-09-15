@@ -4125,6 +4125,8 @@ fn memory_op(
         OpKind::NativeLocal { .. } | OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. }
         | OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
         | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. }
+        | OpKind::NativeBitLoad { .. }
+        | OpKind::NativeBitStore { .. }
         | OpKind::NativeCopy { .. } => native_memory::operation(func, &op.kind, &op.ty, &name, &op.origin)?,
         // One predictable branch. The string is compile-time text and is only
         // touched on the path that ends the program.
@@ -4383,6 +4385,8 @@ fn emit_op(
         OpKind::NativeLocal { .. } | OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. }
         | OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
         | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. }
+        | OpKind::NativeBitLoad { .. }
+        | OpKind::NativeBitStore { .. }
         | OpKind::NativeCopy { .. }
         | OpKind::ObjectNew { .. }
         | OpKind::ClosureStatic

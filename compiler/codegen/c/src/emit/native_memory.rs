@@ -157,6 +157,10 @@ fn layout_asserts(
     writer.line(origin, format!("_Static_assert(sizeof({tag}) == {}u, \"native struct size\");", shape.size));
     writer.line(origin, format!("_Static_assert(_Alignof({tag}) == {}u, \"native struct alignment\");", shape.align));
     for (field, offset) in layout.fields.iter().zip(&shape.offsets) {
+        // Illegal on a bit-field, as in the witness. See `witness`.
+        if matches!(field.ty, nts_core::hir::native::Pointee::Bits { .. }) {
+            continue;
+        }
         writer.line(origin, format!("_Static_assert(offsetof({tag}, {}) == {offset}u, \"native field offset\");", field.name));
     }
 }
@@ -184,6 +188,22 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
         OpKind::NativeLoad { pointer, index } => format!("{name} = {}[{}];", value_name(pointer), value_name(index)),
         OpKind::NativeStore { pointer, index, value } => format!("{}[{}] = {};", value_name(pointer), value_name(index), value_name(value)),
         OpKind::NativeIndexAddress { pointer, index } => format!("{name} = {} + {};", value_name(pointer), value_name(index)),
+        // `p->ihl`, and nothing else. C already knows where the bits are --
+        // the record comes from the header this program includes -- so the
+        // mask and shift are the C compiler's to write, not this emitter's.
+        // Reading it as a *value* is the only form available: `&p->ihl` is not
+        // an expression, which is why this is its own op rather than an address
+        // followed by a load.
+        // `p->ihl = v`. The C compiler masks and shifts, as it does for the
+        // read: the record is the header's and the bits are where it put them.
+        OpKind::NativeBitStore { pointer, field, value } => {
+            let member = bit_member(func, pointer, field, origin)?;
+            format!("{}->{member} = {};", value_name(pointer), value_name(value))
+        }
+        OpKind::NativeBitLoad { pointer, field } => {
+            let member = bit_member(func, pointer, field, origin)?;
+            format!("{name} = {}->{member};", value_name(pointer))
+        }
         OpKind::NativeFieldAddress { pointer, field } => {
             // Through a view as well: a record reached behind a packed member
             // is still a record, and its members still need addresses.
@@ -328,6 +348,18 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         writer.line(origin, format!("_Static_assert(sizeof({tag}) == {}u, \"{} size\");", placed.size, layout.name));
         writer.line(origin, format!("_Static_assert(_Alignof({tag}) == {}u, \"{} alignment\");", placed.align, layout.name));
         for (field, offset) in layout.fields.iter().zip(placed.offsets) {
+            // A bit-field can be asked **neither** question. `offsetof` on one
+            // is "cannot compute offset of bit-field" and `&` on one does not
+            // exist, so both lines below would be errors in a file whose whole
+            // job is to compile. What still covers it is the `sizeof` and
+            // `_Alignof` above: a run of bit-fields allocated at the wrong
+            // positions changes the size of the record holding them, which is
+            // what the three probe structs in `tests/native_bitfields.rs` were
+            // written to pin. Its *position* is checked by running -- see the
+            // bit-field section of docs/native-operations.md.
+            if matches!(field.ty, Pointee::Bits { .. }) {
+                continue;
+            }
             writer.line(origin, format!(
                 "_Static_assert(offsetof({tag}, {}) == {offset}u, \"{}.{} offset\");",
                 field.name, layout.name, field.name));
@@ -404,7 +436,13 @@ fn pointee_is_foreign(pointee: &Pointee) -> bool {
         // None of these names a struct this program invented: a scalar and
         // `void` name no struct at all, and an opaque tag names one the
         // declaration authored -- a header defines it or the witness will say so.
-        Pointee::Scalar(_) | Pointee::Opaque(_) | Pointee::Void => true,
+        //
+        // A bit-field joins them because its storage unit is a scalar. What the
+        // witness cannot do *about* one is a separate matter: `offsetof` and
+        // `&` are both illegal on a bit-field, so its position is checked by
+        // running rather than by asserting -- see the bit-field section of
+        // docs/native-operations.md.
+        Pointee::Scalar(_) | Pointee::Opaque(_) | Pointee::Void | Pointee::Bits { .. } => true,
         // Witnessable exactly when every part of its signature is, which is
         // the same rule `Type::FnPointer` follows one level up.
         Pointee::FnPointer(signature) => signature
@@ -564,4 +602,32 @@ pub(super) fn function_pointer_types(writer: &mut CodeWriter, origin: &Origin, p
     for typedef in seen.values() {
         writer.line(origin, typedef.clone());
     }
+}
+
+/// The member name a bit-field op names, from the record its pointer points at.
+fn bit_member(
+    func: &Func,
+    pointer: nts_core::hir::ValueId,
+    field: u32,
+    origin: &Origin,
+) -> Result<String, Diagnostic> {
+    let HirType::NativePointer(view) = &func.value(pointer).ty else {
+        return Err(Diagnostic::error(
+            "NTS2006",
+            "a bit-field through something that is not a native pointer",
+            origin.location,
+        ));
+    };
+    let Pointee::Record(layout) = view.viewed() else {
+        return Err(Diagnostic::error(
+            "NTS2006",
+            "a bit-field through a pointer to something that is not a record",
+            origin.location,
+        ));
+    };
+    layout
+        .fields
+        .get(field as usize)
+        .map(|member| member.name.clone())
+        .ok_or_else(|| Diagnostic::error("NTS2006", "invalid native field index", origin.location))
 }

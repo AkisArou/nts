@@ -140,6 +140,7 @@ fn has_effects(kind: &OpKind) -> bool {
         OpKind::CellReady { .. }
         | OpKind::Call { .. }
         | OpKind::NativeStore { .. }
+        | OpKind::NativeBitStore { .. }
         | OpKind::ArraySet { .. }
         | OpKind::FieldSet { .. }
         | OpKind::GlobalSet { .. }
@@ -173,6 +174,7 @@ fn has_effects(kind: &OpKind) -> bool {
         | OpKind::NativeLoad { .. }
         | OpKind::NativeIndexAddress { .. }
         | OpKind::NativeFieldAddress { .. }
+        | OpKind::NativeBitLoad { .. }
         | OpKind::ArrayGet { .. }
         | OpKind::StringUnitAt { .. } => false,
     }

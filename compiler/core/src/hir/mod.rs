@@ -738,6 +738,22 @@ pub enum OpKind {
     /// Form an address, without reading storage or changing its lifetime.
     NativeIndexAddress { pointer: ValueId, index: ValueId },
     NativeFieldAddress { pointer: ValueId, field: u32 },
+    /// Read a bit-field member as a value.
+    ///
+    /// Separate from `NativeFieldAddress` + `NativeLoad` because a bit-field
+    /// **has no address**: `&p->ihl` is not an expression C has, so an HIR that
+    /// produced one could only be emitted by a backend that fused the pair back
+    /// together and hoped nothing had come between them. The model says the
+    /// true thing instead -- there is no address here, so no op produces one.
+    ///
+    /// `field` indexes the record's declared members, as
+    /// [`Self::NativeFieldAddress`] does, and the width and position come from
+    /// the layout rather than from the op: two ops carrying the same fact is
+    /// how they come to disagree.
+    NativeBitLoad { pointer: ValueId, field: u32 },
+    /// Write a bit-field member. The counterpart of [`Self::NativeBitLoad`],
+    /// and separate for the same reason: there is no address to store through.
+    NativeBitStore { pointer: ValueId, field: u32, value: ValueId },
     /// `*destination = *source` -- one whole element, copied.
     ///
     /// A distinct operation and not a load followed by a store, because there

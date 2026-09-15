@@ -56,6 +56,47 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
     if let Some(tag) = marker(snapshot, ty, "___c_opaque") {
         return Some(Pointee::Opaque(text(snapshot, tag)?.to_owned()));
     }
+    // `Bits<T, N>` -- N bits of a T-sized unit. Read before the pointer cases
+    // for the reason `CArray` is: it is not a pointer, and not a thing anything
+    // may point at.
+    //
+    // The marker is spelled with **three** leading underscores here and two in
+    // `libc.d.ts`. That is not a typo on either side: TypeScript escapes a
+    // property name beginning with `__` by prefixing another one, so `__c_bits`
+    // is `___c_bits` by the time it reaches a snapshot. Every native marker in
+    // this file has the same shape, and getting it wrong is silent -- the
+    // lookup simply never matches and the type falls through to "not native".
+    if let Some(unit) = marker(snapshot, ty, "___c_bits")
+        && let Some(width) = marker(snapshot, ty, "___c_width")
+    {
+        let TypeKind::Literal(LiteralValue::Number(width)) =
+            &snapshot.types.get(width.0 as usize)?.kind
+        else {
+            return None;
+        };
+        let unit = scalar(snapshot, unit)?;
+        // A width, so the same rule the length follows: a fractional or
+        // out-of-range literal is not a small width, it is not a width. And a
+        // bit-field may not be wider than its unit -- C says so, and a wider
+        // one would make the recomputed layout disagree with the header's in a
+        // way that reads as a packing bug rather than as a bad declaration.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::float_cmp)]
+        let width = {
+            let written = *width;
+            if !(1.0..=64.0).contains(&written) {
+                return None;
+            }
+            let narrowed = written as u32;
+            let unit_bits = crate::hir::layout::shape_of(&unit.representation())?
+                .size
+                .checked_mul(8)?;
+            if f64::from(narrowed) != written || narrowed > unit_bits {
+                return None;
+            }
+            narrowed
+        };
+        return Some(super::Pointee::Bits { unit, width });
+    }
     // `CArray<T, N>` -- storage of N elements inline. Read before the pointer
     // cases because it is not a pointer: it is the thing a pointer to it would
     // point at, and the length is part of the layout rather than of a value.
@@ -187,10 +228,17 @@ fn structure(
         // the same reason the struct case is.
         let ty = if let Some(scalar) = scalar(snapshot, property.ty) {
             Pointee::Scalar(scalar)
-        } else if let Some(array @ Pointee::Array { .. }) =
+        } else if let Some(inline @ (Pointee::Array { .. } | Pointee::Bits { .. })) =
             pointer_body(snapshot, property.ty, visiting)
         {
-            array
+            // Two member types that are neither a scalar nor a pointer, and
+            // both resolved by the helper that reads the surface's markers. A
+            // bit-field is here rather than beside `scalar` above because
+            // `Bits<c_uint, 4>` is an object type carrying markers, not a
+            // branded number -- `scalar` would not recognise it and the
+            // pointer path below would have made it an address, which is the
+            // one thing a bit-field does not have.
+            inline
         } else if !visiting.contains(&property.ty)
             && let Some(inner) = {
                 visiting.push(property.ty);

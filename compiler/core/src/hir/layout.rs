@@ -149,8 +149,28 @@ pub struct Placement {
     /// One offset per field, in declaration order, measured from the object's
     /// address — so the header is already accounted for.
     pub offsets: Vec<u32>,
+    /// Where a bit-field sits inside the byte at its offset, and how wide it
+    /// is. `None` for every member that begins on a byte, which is all of them
+    /// unless the record declares a `Bits<T, N>`.
+    ///
+    /// Empty when nothing in the record is a bit-field, so the common case
+    /// allocates no vector and every existing reader that ignores this sees
+    /// exactly what it saw before.
+    pub bits: Vec<Option<BitPlace>>,
     pub size: u32,
     pub align: u32,
+}
+
+/// A bit-field's position, as clang's `-fdump-record-layouts` reports one.
+///
+/// `lo` is counted from the least significant bit of the byte at the field's
+/// offset, so it is always under 8; the field itself may run past that byte and
+/// clang prints the end that way -- `0:3-9` is a 7-bit field three bits into
+/// byte zero. Little-endian only, which this compiler is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BitPlace {
+    pub lo: u32,
+    pub width: u32,
 }
 
 /// Lay out an object's fields after its header.
@@ -171,7 +191,7 @@ pub fn place(fields: &[Field]) -> Option<Placement> {
 /// are a running sum. Only the ordinary struct is `place_shapes`.
 #[must_use]
 pub fn native_place(layout: &crate::hir::native::Record) -> Option<Placement> {
-    use crate::hir::native::RecordKind;
+    use crate::hir::native::{Pointee, RecordKind};
     let shapes = layout
         .fields
         .iter()
@@ -184,9 +204,20 @@ pub fn native_place(layout: &crate::hir::native::Record) -> Option<Placement> {
         let largest = shapes.iter().map(|s| s.size).max()?;
         return Some(Placement {
             offsets: vec![0; shapes.len()],
+            bits: Vec::new(),
             size: round_up(largest, align)?,
             align,
         });
+    }
+    // `__attribute__((packed))` changes the bit-field rule as well as the byte
+    // one -- a packed bit-field is not bumped to the next storage unit -- and
+    // no consumer has asked for the combination. Refused rather than laid out
+    // by the unpacked rule, which would agree with the header only by accident.
+    if layout.packed && layout.fields.iter().any(|f| matches!(f.ty, Pointee::Bits { .. })) {
+        return None;
+    }
+    if layout.fields.iter().any(|f| matches!(f.ty, Pointee::Bits { .. })) {
+        return place_bit_fields(layout, &shapes);
     }
     if layout.packed {
         let mut at = 0u32;
@@ -198,7 +229,7 @@ pub fn native_place(layout: &crate::hir::native::Record) -> Option<Placement> {
         // Alignment 1 and *no* final rounding: that pair is what makes
         // `struct epoll_event` 12 bytes rather than 16, and an array of them
         // contiguous rather than padded.
-        return Some(Placement { offsets, size: at, align: 1 });
+        return Some(Placement { offsets, bits: Vec::new(), size: at, align: 1 });
     }
     place_shapes(shapes.into_iter().map(Some), Shape { size: 0, align: 1 })
 }
@@ -231,6 +262,66 @@ pub fn native_shape(pointee: &crate::hir::native::Pointee) -> Option<Shape> {
     }
 }
 
+/// A struct holding at least one bit-field, allocated in bits rather than bytes.
+///
+/// The rule is not read from the ABI document but from clang, on three probe
+/// structs written to separate the cases:
+///
+/// ```text
+/// unsigned int a : 3;  unsigned int b : 7;     0:0-2   0:3-9
+/// unsigned int a : 30; unsigned int b : 5;     0:0-29  4:0-4
+/// unsigned char p : 6; unsigned int  q : 30;   0:0-5   4:0-29
+/// ```
+///
+/// The first says a bit-field simply continues where the last one ended, across
+/// a byte boundary. The second and third say **when it does not**: a field is
+/// bumped to the next multiple of its own unit's width whenever staying put
+/// would straddle one. The third is the discriminating case, because the unit
+/// that decides the bump is the *new* field's, not the previous field's.
+///
+/// An ordinary member still begins on a byte, at its own alignment, after
+/// whatever bits precede it.
+fn place_bit_fields(
+    layout: &crate::hir::native::Record,
+    shapes: &[Shape],
+) -> Option<Placement> {
+    use crate::hir::native::Pointee;
+    let mut at = 0u64; // bits from the start of the record
+    let mut align = 1u32;
+    let mut offsets = Vec::with_capacity(shapes.len());
+    let mut bits = Vec::with_capacity(shapes.len());
+    for (field, shape) in layout.fields.iter().zip(shapes) {
+        align = align.max(shape.align);
+        if let Pointee::Bits { width, .. } = field.ty {
+            let unit = u64::from(shape.size).checked_mul(8)?;
+            if unit == 0 {
+                return None;
+            }
+            if at % unit + u64::from(width) > unit {
+                at = at.checked_add(unit - at % unit)?;
+            }
+            let byte = at / 8;
+            offsets.push(u32::try_from(byte).ok()?);
+            bits.push(Some(BitPlace {
+                lo: u32::try_from(at - byte * 8).ok()?,
+                width,
+            }));
+            at = at.checked_add(u64::from(width))?;
+            continue;
+        }
+        let byte = round_up(u32::try_from(at.div_ceil(8)).ok()?, shape.align)?;
+        offsets.push(byte);
+        bits.push(None);
+        at = u64::from(byte.checked_add(shape.size)?).checked_mul(8)?;
+    }
+    Some(Placement {
+        offsets,
+        bits,
+        size: round_up(u32::try_from(at.div_ceil(8)).ok()?, align)?,
+        align,
+    })
+}
+
 fn place_shapes(shapes: impl IntoIterator<Item = Option<Shape>>, prefix: Shape) -> Option<Placement> {
     let mut at = prefix.size;
     let mut align = prefix.align;
@@ -244,6 +335,7 @@ fn place_shapes(shapes: impl IntoIterator<Item = Option<Shape>>, prefix: Shape) 
     }
     Some(Placement {
         offsets,
+        bits: Vec::new(),
         size: round_up(at, align)?,
         align,
     })

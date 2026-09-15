@@ -500,6 +500,13 @@ fn spell(ty: &super::HirType) -> String {
         HirType::Never => "never".to_owned(),
         HirType::NativePointer(super::native::Pointee::Opaque(name)) => format!("native{}_{}", name.len(), name),
         HirType::NativePointer(super::native::Pointee::Scalar(scalar)) => format!("native_scalar_{scalar:?}"),
+        // No pointer to a bit-field exists in C, so this spelling names a
+        // specialization that cannot be reached. Spelled anyway rather than
+        // unreachable!(): a name that is wrong is a link error, and a panic in
+        // a monomorphizer is a crash with no program to look at.
+        HirType::NativePointer(super::native::Pointee::Bits { unit, width }) => {
+            format!("nativebits{}x{width}", unit.c_type().replace(' ', "_"))
+        }
         HirType::NativePointer(super::native::Pointee::Record(layout)) => format!("native_struct_{}_{}", layout.name.len(), layout.name),
         HirType::NativePointer(super::native::Pointee::Pointer(pointee)) => format!("ptr_{}", spell(&HirType::NativePointer((**pointee).clone()))),
         HirType::NativePointer(super::native::Pointee::Void) => "native_void".to_owned(),
