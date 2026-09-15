@@ -62,6 +62,16 @@ interface Context {
    * step by hand.
    */
   loose: boolean;
+  /**
+   * Whether two objects must agree on their constructor, which is node's
+   * `kStrict` and not its `kStrictWithoutPrototypes`.
+   *
+   * `assert.deepStrictEqual`'s `skipPrototype: true` clears it, and the loose
+   * and partial relations never set it -- node's check is guarded by
+   * `mode === kStrict` alone, so `deepEqual` and `partialDeepStrictEqual`
+   * compare two classes with the same fields as equal and this must too.
+   */
+  prototypes: boolean;
 }
 
 /**
@@ -299,11 +309,74 @@ function supportedObjectKindsMatch(a: IndexableObject, b: IndexableObject): bool
   return true;
 }
 
-export function isDeepStrictEqual(a: unknown, b: unknown, _skipPrototype = false): boolean {
-  // NTS objects have one static layout and no prototype pointer. Keep the
-  // Node option in the public signature, but there is no runtime prototype
-  // comparison for it to disable in the compiled representation.
-  return equal(a, b, { pairs: objectPairs(), loose: false });
+/**
+ * The constructors node treats as shared rather than as a nominal identity.
+ *
+ * This set only decides objects carrying an **own** `constructor` key: for an
+ * ordinary instance the constructor lives on the prototype, so the second arm of
+ * the test below already applies and the set is never consulted. `{ constructor:
+ * Object }` is what it is for -- node compares such an object by its constructor
+ * rather than by its prototype.
+ *
+ * `Buffer` and `Float16Array` are in node's set and not in this one. `Buffer`
+ * because this module cannot import it without a cycle, and a `Buffer` reaches
+ * the second arm anyway since it does not carry an own `constructor`; the set
+ * would decide it only for the contrived `{ constructor: Buffer }`.
+ */
+const wellKnownConstructors: ReadonlySet<unknown> = new Set<unknown>([
+  Array, ArrayBuffer, BigInt, BigInt64Array, BigUint64Array, Boolean, DataView,
+  Date, Error, Float32Array, Float64Array, Function, Int8Array, Int16Array,
+  Int32Array, Map, Number, Object, Promise, RegExp, Set, String, Symbol,
+  Uint8Array, Uint8ClampedArray, Uint16Array, Uint32Array, WeakMap, WeakSet,
+]);
+
+/**
+ * Node's `kStrict` nominal identity test, which this walk did not have.
+ *
+ * Two objects with the same fields are **not** deep-strict-equal unless they
+ * were built by the same constructor. Without this, `isDeepStrictEqual` answered
+ * `true` for `Object.create(null)` against `{}`, for instances of two different
+ * classes, and for a class instance against a plain object -- three cases where
+ * node answers `false`. `assert.deepStrictEqual` shares this walk, so it passed
+ * on all three too, which is a silent wrong answer rather than a missing
+ * feature: a test asserting that two shapes differ succeeded by not comparing
+ * the thing that differs.
+ *
+ * The rule is a **constructor** comparison with a prototype fallback, in that
+ * order, which is node's. An object whose `constructor` is undefined and not its
+ * own -- which is what `Object.create(null)` is -- reaches the fallback and is
+ * compared by prototype identity; everything else is compared by constructor, so
+ * a subclass and its base differ while two instances of one class agree.
+ *
+ * The corpus never asked. `assert`'s differential ran 36,207 comparisons without
+ * a divergence because every pair it built shared a prototype. The gap surfaced
+ * only once `corpus-reach.mjs` reported `isDeepStrictEqual` as never called and a
+ * spec was written whose pairs differ in their prototype and in nothing else.
+ */
+function constructorsMatch(a: IndexableObject, b: IndexableObject): boolean {
+  const ctor = a.constructor;
+  if (
+    wellKnownConstructors.has(ctor) ||
+    (ctor !== undefined && !Object.prototype.hasOwnProperty.call(a, "constructor"))
+  ) {
+    return ctor === b.constructor;
+  }
+  return Object.getPrototypeOf(a) === Object.getPrototypeOf(b);
+}
+
+export function isDeepStrictEqual(a: unknown, b: unknown, skipPrototype = false): boolean {
+  // The third argument is `assert.deepStrictEqual`'s `skipPrototype`, and it now
+  // has something to disable. It previously did not: this walk compared fields
+  // and never the constructor, so the option was accepted and ignored, and the
+  // comparison it exists to relax was the comparison that was absent.
+  //
+  // The compiled lane does not reach any of this. `isDeepStrictEqual` is already
+  // declined there -- "is exported and was not compiled: it calls `objectPairs`,
+  // which was refused above" -- as are `deepStrictEqual`, `notDeepStrictEqual`
+  // and `partialDeepStrictEqual`. So `Object.getPrototypeOf`, which that backend
+  // refuses, sits inside a function it cannot call. The cost is measured rather
+  // than assumed: `own-refusals.sh` before and after, and no export lost.
+  return equal(a, b, { pairs: objectPairs(), loose: false, prototypes: !skipPrototype });
 }
 
 function equal(a: unknown, b: unknown, ctx: Context): boolean {
@@ -316,6 +389,12 @@ function equal(a: unknown, b: unknown, ctx: Context): boolean {
     return false;
   }
   if (!supportedObjectKindsMatch(a, b)) {
+    return false;
+  }
+  // Node's position for this is `objectComparisonStart`, ahead of the array, map
+  // and set branches, so it applies to every object kind and not only to plain
+  // ones.
+  if (ctx.prototypes && !constructorsMatch(a, b)) {
     return false;
   }
 
@@ -1052,7 +1131,7 @@ function looseArrayElementsEqual(a: unknown[], b: unknown[], ctx: Context): bool
  * prototype check.
  */
 export function isDeepEqual(a: unknown, b: unknown): boolean {
-  return looseEqual(a, b, { pairs: objectPairs(), loose: true });
+  return looseEqual(a, b, { pairs: objectPairs(), loose: true, prototypes: false });
 }
 
 function partialErrorsEqual(actual: Error, expected: Error, pairs: ObjectPairs): boolean {

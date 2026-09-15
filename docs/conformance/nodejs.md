@@ -1943,13 +1943,25 @@ value is what they need, and that inspecting an object's shape instead would
 accept user objects incorrectly. Those are honest stubs rather than gaps, and
 they close together or not at all.
 
-**One row is deliberately left open, which is worth saying out loud.** The
-null-prototype marker needs `Object.getPrototypeOf`, and the only `Object`
-statics this profile lowers are `keys` and `hasOwn`; everything else is a
-refusal. Writing it would buy `[Object: null prototype] {}` on the
-TypeScript-on-node axis at the cost of another `NTS1001` on a shared gate whose
-ceiling this corpus has already moved twice today. A cosmetic row is not worth
-that, and the trade is recorded rather than the row being silently skipped.
+**One row is left open, and the reason first given for it was wrong.** The
+null-prototype marker needs `Object.getPrototypeOf`, and the only `Object` statics
+this profile lowers are `keys` and `hasOwn`; everything else is a refusal. The
+trade was recorded as buying `[Object: null prototype] {}` on the
+TypeScript-on-node axis "at the cost of another `NTS1001` on a shared gate", and a
+cosmetic row was judged not worth it.
+
+That priced a cost that does not exist. `inspect` is **already declined** on the
+compiled lane — *"is exported and was not compiled: an erased value where a
+concrete representation is wanted"* — so an `NTS1001` inside it cannot lose a
+published name, for the same reason spelled out under `deepStrictEqual` below,
+where the identical argument was made and refuted by measurement. The refusal
+count on the gate rises by one and nothing else moves.
+
+The row stays open because it is cosmetic and nothing asks for it, which is a
+different and honest reason. What is recorded here is that the *first* reason was a
+cost that was never measured — and that the ledger has no column separating a
+refusal that declines an export from one inside a function already declined, which
+is what made the same mistake available twice.
 
 The `Promise` row is the compiler lane's on both sides, and cheaply so: a
 promise here is `NtsPromise`, a struct that runtime allocates, and its state is
@@ -7175,40 +7187,62 @@ and not a stale build artifact (`os/node_modules/.tsbuild` holds no JavaScript).
 implied a module-resolution bug. The probe that settled it was four lines and I
 wrote it after publishing rather than before.
 
-## `deepStrictEqual` cannot see a prototype, and that weakens the suite
+## `deepStrictEqual` could see a prototype all along
 
-The most consequential §13 consequence found so far, and it is not in a module —
-it is in the assertion library every other test uses.
+This section used to say the opposite, and the correction is the useful part: the
+refusal was recorded, believed for months, cited by a fixture that asserted it,
+and wrong.
 
-Node's `deepStrictEqual` compares prototypes. This one cannot:
+Node's `deepStrictEqual` compares prototypes, and three rows disagreed:
 
     Buffer.from([1])          vs  new Uint8Array([1])     node: differ   here: equal
     Object.create(null)       vs  {}                      node: differ   here: equal
     new (class { x = 1 })()   vs  { x: 1 }                node: differ   here: equal
 
-§13 lists `getPrototypeOf`, `setPrototypeOf` and `__proto__` together — *"there
-is no chain to read or rewrite"*. A comparator with no access to a prototype
-cannot distinguish two objects that differ only by one. This is the decision
-applied, not a gap in the port.
+The reasoning was that §13 lists `getPrototypeOf`, `setPrototypeOf` and
+`__proto__` together — *"there is no chain to read or rewrite"* — so a comparator
+with no access to a prototype cannot separate two objects that differ only by one.
 
-**But it weakens every test in this profile that uses `deepStrictEqual`**, which
-is most of them. An assertion that a call returns a `Stats` rather than an object
-literal with the same fields does not actually check that. A test that means "the
-right class came back" silently means "the right fields came back".
+Every clause of that is true. The conclusion does not follow, because §13 is a
+statement about the **compiled** backend and the compiled backend never runs this
+comparator. `isDeepStrictEqual` was already declined there — *"is exported and was
+not compiled: it calls `objectPairs`, which was refused above"* — together with
+`deepStrictEqual`, `notDeepStrictEqual` and `partialDeepStrictEqual`. The refusal
+said to force `equal` governs a lane on which none of these functions exist. On
+the lane that does run them, the values are ordinary JavaScript objects with
+ordinary prototypes, and `Object.getPrototypeOf` is available because node is
+underneath.
 
-That is worth knowing *before* it is relied on. It does not invalidate the
-suite — field values are still compared exactly, and most assertions are about
-values — but any test whose point is the *identity* of a returned object needs
-`instanceof`, which does work, rather than `deepStrictEqual`.
+So the cost was measured instead of argued. Adding node's check moved `util`'s own
+`NTS1001` count from 76 to 78 and `assert`'s cone from 965 to 967, and left the
+declined-export counts unchanged at 36 and 24: two more refusals inside a function
+that was already refused, and not one published name lost. **A refusal inside an
+already-refused function is free**, and nothing in the ledger distinguished those
+from refusals that cost an export.
 
-The other twenty-four rows match node exactly, including the ones people get
-wrong from memory: `NaN` **equals** `NaN`; `0` and `-0` **differ**, nested as
-well as at top level; an array hole differs from an explicit `undefined`; `Map`
-and `Set` ignore insertion order; a `Map` key of `NaN` matches; two `Uint8Array`s
-of the same bytes are equal while a `Uint8Array` and an `Int8Array` are not; a
-boxed `new Number(1)` differs from `1` and matches another boxed one; two
-mutually circular objects are equal; and a non-enumerable own property is
-ignored.
+What node compares is the **constructor**, not the prototype, with a prototype
+fallback when the constructor is `undefined` and not an own property — which is
+exactly what `Object.create(null)` is. Implementing it the obvious way, by
+comparing prototypes first, gets `{ constructor: Object }` wrong.
+
+**The generalisable part is how the gap stayed invisible.** `assert`'s differential
+ran 36,207 comparisons against node with zero divergences while all three rows
+were wrong, because every pair the corpus built shared a prototype — a large
+comparison count says how hard a corpus worked, not what it covered. What found it
+was `corpus-reach.mjs` reporting `isDeepStrictEqual` as a published function
+nothing called, and then a spec whose pairs differ in their prototype and in
+nothing else. The absence was in the corpus, and the count could not show it.
+
+While those rows read `equal`, **every** `deepStrictEqual` in this profile was
+weaker than it looked: an assertion that a call returns a `Stats` rather than an
+object literal with the same fields was not checking that, so a test meaning "the
+right class came back" silently meant "the right fields came back". That is now
+checked, and `runtime/node/assert/test/deep-equal-decisions-static.js` asserts all
+twenty-eight rows against node rather than twenty-four plus three exceptions.
+
+`assert.deepStrictEqual`'s `skipPrototype: true` option also becomes meaningful.
+It was accepted and ignored, because the comparison it exists to relax was the
+comparison that was missing.
 
 ## The harness bug that reported a pass
 

@@ -6,7 +6,7 @@
 // itself and `0` differing from `-0` are two lines of the same function. Here it
 // is a reimplementation, and each row is a separate opportunity.
 //
-// Twenty-four rows match node, including the ones that surprise people: `NaN`
+// All twenty-eight rows match node, including the ones that surprise people: `NaN`
 // **equals** `NaN`; `0` and `-0` **differ**, nested as well as top level; an
 // array hole differs from an explicit `undefined`; `Map` and `Set` ignore
 // insertion order; a `Map` key of `NaN` matches; two `Uint8Array`s of the same
@@ -15,28 +15,47 @@
 // circular objects are equal; two `Error`s with the same message are equal and
 // with different messages are not; and a non-enumerable own property is ignored.
 //
-// **Three rows are §13, and they are the most consequential §13 rows in this
-// profile.** Node's comparator checks the prototype:
+// **The three rows that used to be §13 now match node**, and the story is worth
+// keeping because the refusal was recorded here, believed, and wrong.
 //
-//     Buffer.from([1])   vs  new Uint8Array([1])        node: differ
-//     Object.create(null) vs {}                          node: differ
-//     new (class { x = 1 })() vs { x: 1 }                node: differ
+//     Buffer.from([1])        vs  new Uint8Array([1])     node: differ
+//     Object.create(null)     vs  {}                      node: differ
+//     new (class { x = 1 })() vs  { x: 1 }                node: differ
 //
-// All three are `equal` here, and they cannot be anything else:
-// `docs/conformance/typescript.md` §13 lists `getPrototypeOf`, `setPrototypeOf`
-// and `__proto__` together — *"there is no chain to read or rewrite"*. A
-// comparator with no access to a prototype cannot distinguish two objects that
-// differ only by one.
+// This file used to assert `equal` for all three and explain that they could not
+// be anything else, citing `docs/conformance/typescript.md` §13: `getPrototypeOf`,
+// `setPrototypeOf` and `__proto__` are listed together as *"there is no chain to
+// read or rewrite"*, so a comparator with no prototype access cannot separate two
+// objects that differ only by one.
 //
-// **This weakens every test in the profile that uses `deepStrictEqual`**, which
-// is a great many of them: a class instance and a plain object with the same
-// fields compare equal, so an assertion that a function returns a `Stats` rather
-// than an object literal does not actually check that. Recorded here and in
-// `docs/conformance/nodejs.md` because it is the kind of limit that should be
-// known before it is relied on, not discovered afterwards.
+// Every sentence of that was true and the conclusion did not follow. §13 is a
+// statement about the **compiled** backend, and the compiled backend does not run
+// this comparator at all: `isDeepStrictEqual` is already declined there -- "is
+// exported and was not compiled: it calls `objectPairs`, which was refused above"
+// -- along with `deepStrictEqual`, `notDeepStrictEqual` and
+// `partialDeepStrictEqual`. The refusal that was said to force `equal` applies to
+// a lane on which none of these functions exist. On the lane that does run them,
+// objects are ordinary JavaScript objects with ordinary prototypes.
 //
-// Asserted rather than omitted, on the §13 rule: if the chain ever becomes
-// readable, these three fail and say so.
+// So the cost was measured rather than argued: adding node's check moved `util`'s
+// own refusals from 76 to 78 and `assert`'s cone from 965 to 967, and left the
+// declined-export count unchanged at 36 and 24. Two more refusals inside a
+// function that was already refused, and no published name lost.
+//
+// What node actually compares is the **constructor**, with a prototype fallback
+// when the constructor is undefined and not an own property -- which is what
+// `Object.create(null)` is. Comparing prototypes first would be a different
+// relation: `{ constructor: Object }` is decided by its constructor upstream.
+//
+// The three rows mattered more than their number suggests, and the old header
+// said so: while they read `equal`, **every** `deepStrictEqual` in the profile was
+// weaker than it looked, because a class instance and a plain object with the
+// same fields compared equal. An assertion that a function returns a `Stats`
+// rather than an object literal was not checking that. That is now checked.
+//
+// Kept as a table rather than collapsed, on the §13 rule that made it useful: an
+// asserted row that goes wrong says which decision changed. This file failing on
+// `buffer-vs-uint8` is how the fix was confirmed to reach all three.
 
 const assert = require("node:assert");
 
@@ -56,13 +75,13 @@ const EXPECTED = [
   ["map-nan-key", "equal"],
   ["typed-array-kind", "differ"],
   ["typed-array-same", "equal"],
-  ["buffer-vs-uint8", "equal"],  // §13: no prototype chain — node says "differ"
+  ["buffer-vs-uint8", "differ"],
   ["arraybuffer", "equal"],
   ["boxed-vs-primitive", "differ"],
   ["boxed-same", "equal"],
   ["symbol-key", "equal"],
-  ["proto-differs", "equal"],  // §13: no prototype chain — node says "differ"
-  ["class-instance", "equal"],  // §13: no prototype chain — node says "differ"
+  ["proto-differs", "differ"],
+  ["class-instance", "differ"],
   ["circular", "equal"],
   ["error-same", "equal"],
   ["error-message", "differ"],
