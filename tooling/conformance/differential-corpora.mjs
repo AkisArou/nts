@@ -2567,6 +2567,59 @@ export const CORPORA = {
         },
       },
       {
+        // **`captureRejections`, and the falsy values that are not `undefined`.**
+        //
+        // Node's `init` asks `if (opts?.captureRejections)` -- truthiness -- so a
+        // falsy value is *not asked for* and never reaches `validateBoolean`. An
+        // `!== undefined` test looks equivalent and is not: it validates `0` and
+        // throws, where node takes the default and carries on. It also reverses the
+        // explicit `false` once the process-wide default is on, since `false` never
+        // reaches the assignment.
+        //
+        // The process-wide half is compared here too, which means this row *sets*
+        // `EventEmitter.captureRejections` and must put it back -- it is the one
+        // global in this corpus, and leaving it on would change how every later
+        // input behaves on one side only.
+        label: "capture-rejections",
+        call: (m, program) => {
+          const kCapture = (emitter) =>
+            Object.getOwnPropertySymbols(emitter)
+              .filter((symbol) => String(symbol) === "Symbol(kCapture)")
+              .map((symbol) => String(emitter[symbol]))
+              .join("") || "no-symbol";
+          const show = (options) => {
+            try {
+              return kCapture(new m.EventEmitter(options));
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          const odd = String(program).length % 2 === 0;
+          const out = [];
+          const previous = m.EventEmitter.captureRejections;
+          try {
+            for (const on of [false, true]) {
+              m.EventEmitter.captureRejections = on;
+              out.push([
+                `default=${on}`,
+                show(undefined),
+                show({}),
+                show({ captureRejections: true }),
+                show({ captureRejections: false }),
+                show({ captureRejections: 0 }),
+                show({ captureRejections: 1 }),
+                show({ captureRejections: "" }),
+                show({ captureRejections: odd ? "yes" : null }),
+                show({ captureRejections: undefined }),
+              ].join(","));
+            }
+          } finally {
+            m.EventEmitter.captureRejections = previous;
+          }
+          return out.join("|");
+        },
+      },
+      {
         // **`EventEmitterAsyncResource`** -- `emit`, `emitDestroy`, and the three
         // accessors -- plus the two self-references node publishes and nothing called:
         // `events.EventEmitter.EventEmitter` and `events.init`.
