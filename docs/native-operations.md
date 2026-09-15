@@ -750,19 +750,27 @@ formality.
 
 ### What blocks real headers, counted
 
-Twenty-six POSIX records, asked for one at a time. **Nineteen work.** The seven
-that do not are three causes, and their frequencies are not the order this
-document's own gap list is written in:
+Twenty-six POSIX records, asked for one at a time. **Twenty-one work** --
+nineteen when the survey was first run, and the two that changed are the reason
+the rest of this section exists.
 
-| cause | records |
-|---|---|
-| an **anonymous** union or struct, as a *named member's type* | `sockaddr_in6`, `in6_addr` -- **described now** |
-| an **unnamed member** of anonymous type | `rusage`, `tcphdr` |
-| a flexible array member (`unsigned char[]`, no length) | `cmsghdr` |
-| a bit-field | `iphdr` |
+| cause | records | |
+|---|---|---|
+| an **anonymous** record as a *named member's type* | `sockaddr_in6`, `in6_addr` | described now |
+| an **unnamed member** of anonymous type | `rusage`, `tcphdr`, `sigaction` | refuses |
+| a flexible array member (`unsigned char[]`, no length) | `cmsghdr` | refuses |
+| a bit-field | `iphdr` | refuses |
 
-Anonymous records blocked **four times** what bit-fields do, and every one of
-the four is a header a network program reaches for immediately. That count is
+The set counted is `stat`, `tm`, `timeval`, `itimerval`, `sockaddr_in`,
+`sockaddr_in6`, `in6_addr`, `msghdr`, `cmsghdr`, `dirent`, `rlimit`, `rusage`,
+`statvfs`, `iovec`, `addrinfo`, `hostent`, `epoll_event`, `passwd`, `group`,
+`utsname`, `pollfd`, `tcphdr`, `iphdr`, `sched_param`, `sockaddr_un`,
+`sigaction` -- written out because the first run of this survey and the second
+used slightly different sets, and a count whose population is not stated is a
+number two people will read differently.
+
+Anonymous records blocked **five times** what bit-fields do, and each is a
+header a network program reaches for immediately. That count is
 why they came first: a gap list written from the C standard's table of contents
 ranks by what C *has*, and this ranks by what these headers *use*.
 
