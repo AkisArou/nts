@@ -2669,6 +2669,32 @@ the line where a computed fact is discarded and not discarding it. The version
 that *derived* the same set — guessing which modules a program reaches from node
 kinds — passed sixteen examples and every test while emptying a witness.
 
+### A search for the stated kind, and its first result
+
+The header-provenance entry above has a shape that can be looked for rather than
+stumbled on: **a function that locates something and returns a `bool`**, throwing
+away the identity it just found. `declares_a_header` walked a declaration's
+parents to find the module carrying `@ntsHeader` and answered yes or no.
+
+    fn <name>(..) -> bool          with `.find(`, `.find_map(`, `.position(`
+                                   or `while let Some` in its body
+
+26 functions in `hir/` match, on 2026-09-15. **Sampled, not exhausted, and the
+sample is a zero so far**: `counted_from` locates a defining op the caller
+already holds, and most of the rest are genuine predicates — a question whose
+honest answer *is* yes or no. The identity only matters where something
+downstream would use it, which is the same test §16 applies to every fact here.
+
+Two cautions, both paid for. The first pass matched `-> bool` anywhere in the
+signature and reported `enclosing` — whose return type is `Result<usize, _>` and
+whose *closure parameter* is `-> bool`. And the list is a floor: a function that
+locates something through a helper rather than a `.find(` in its own body does
+not match.
+
+So this is recorded as an instrument with a null result rather than as a
+finding. It cost one search to build and it found the shape that was already
+known; what it is for is the next one.
+
 ### What is still on the table
 
 Each row is a fact TypeScript states today and HIR does not carry. None of them
