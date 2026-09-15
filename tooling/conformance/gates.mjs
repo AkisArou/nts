@@ -75,6 +75,31 @@ function modules(requested) {
   return requested;
 }
 
+/**
+ * Every refusal in one module, keyed by the name a later pass asks with.
+ *
+ * `nts refusals` prints `Program::uncompiled`, which is the only place a
+ * refusal is keyed by a name rather than a span. Without it this instrument
+ * could name a root and not say why *it* was refused, and establishing that
+ * `asRequest` is refused for one particular reason meant grepping a module's
+ * whole diagnostic stream by hand and matching on a line number.
+ */
+function refusals(module) {
+  const run = spawnSync(
+    NTS,
+    ["refusals", join(ROOT, "runtime/node", module, "tsconfig.json")],
+    { encoding: "utf8", maxBuffer: 1 << 30 },
+  );
+  const reasons = new Map();
+  for (const line of (run.stdout ?? "").split("\n")) {
+    const tab = line.indexOf("\t");
+    if (tab < 0) continue;
+    const name = line.slice(0, tab);
+    if (!reasons.has(name)) reasons.set(name, line.slice(tab + 1));
+  }
+  return reasons;
+}
+
 /** Emit one module with the napi wrapper and hand back its whole log. */
 function emit(module) {
   const out = mkdtempSync(join(tmpdir(), `gates-${module}-`));
@@ -156,6 +181,7 @@ for (const module of names) {
     skipped.push(module);
     continue;
   }
+  const reasons = refusals(module);
   const edges = new Map();
   for (const line of text.split("\n")) {
     const edge = CASCADE.exec(line);
@@ -186,7 +212,9 @@ for (const module of names) {
       exports: new Set(),
       modules: new Set(),
       cyclic: false,
+      why: null,
     };
+    entry.why ??= reasons.get(root) ?? reasons.get(declaration) ?? null;
     entry.exports.add(`${module}:${name}`);
     entry.modules.add(module);
     entry.cyclic ||= cyclic;
@@ -213,6 +241,12 @@ for (const [root, entry] of ranked.slice(0, 25)) {
   const mark = entry.cyclic ? " (cycle cut here)" : "";
   console.log(
     `  ${String(entry.exports.size).padStart(7)}  ${String(entry.modules.size).padStart(7)}  ${root}${mark}`,
+  );
+  // The root's *own* refusal, which is the thing a reader has to know before
+  // deciding anything. A root with none is one the cascade names and the
+  // lowering never filed -- worth seeing rather than silently blank.
+  console.log(
+    `  ${" ".repeat(18)}${entry.why ?? "(no recorded reason -- named by a cascade, filed by nothing)"}`,
   );
 }
 if (ranked.length > 25) {

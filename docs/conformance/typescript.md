@@ -2361,6 +2361,42 @@ subject to the same caution as everything else in §15 — clearing a refusal
 advances a chain and is not the same as publishing anything. Nobody should start
 it on the strength of 578.
 
+### The queue, with each root's own reason — 2026-09-15
+
+`gates.mjs` could name a root and not say why *that root* was refused, so
+establishing `asRequest`'s cause meant grepping a module's whole diagnostic
+stream by hand and matching on a line number. The mapping existed the whole
+time — `Program::uncompiled` is the only place a refusal is keyed by a **name**
+rather than a span, which is how the napi wrapper answers at all — and **no
+output mode printed it.** `nts refusals` does now, `name<TAB>reason`, off the
+*prepared* program so that cascade entries are included.
+
+| exports | root | its own refusal |
+|---:|---|---|
+| **22** | `asRequest` | `` `Arguments` ``, captured above its own declaration, where it has no value yet |
+| 12 | `displayBytePath` | `this` outside a method |
+| 9 | `uvException` | a `UVExceptionError` where a `UVError` is wanted — a pointer cast between two structs that do not agree |
+| 5 | `validateOptions` | a `new` with arguments and no constructor |
+| 4 | `objectToBuffer` | an erased value where a concrete representation is wanted |
+| 4 | `channel` | a property `#map` of unrepresentable type (`Map<string \| symbol, WeakRef>`) |
+| 4 | `toUnixTimestamp` | **`Date.now`, a global member with no definition here** |
+| 4 | `validateBufferArray` | a `for...of` over an array of `any` |
+
+**And the first thing it showed was about a change made two hours earlier.**
+`asRequest` reads ``Arguments`, captured above its own declaration` — not "a
+generic function no call pins down", which is what it said this morning. The
+function-type arm added to `unify` moved the corpus's top root one link, exactly
+as eight probe arms predicted. That movement is **invisible** in every number
+recorded against that change — declines 505 either side, definitions 35,567
+either side — and visible here. A fix that publishes nothing can still be the
+difference between a blocker and the next one, and only an instrument keyed by
+name can show it.
+
+Read the rank with the standing caution attached — it is an upper bound, and
+today is two for two on candidates collapsing to zero when actually tested. But
+the *reasons* are new information and some are very small: `Date.now` having no
+definition is a missing builtin standing in front of four exports.
+
 ### Deferred rather than rejected
 
 Wanted, and not soon: `Atomics` and `SharedArrayBuffer` need an agent model and

@@ -402,6 +402,11 @@ fn main() -> Result<()> {
             let tsconfig = project(&rest)?;
             dump_facts(&tsconfig, rest.iter().any(|arg| arg == "--prepared"))
         }
+        Some("refusals") => {
+            let rest: Vec<String> = args.collect();
+            let tsconfig = project(&rest)?;
+            dump_refusals(&tsconfig)
+        }
         // Every layout, with its fields in order, its base, and the type ids
         // that share it.
         //
@@ -990,6 +995,39 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
 /// at the moment a decision was made. That is the right question for "could
 /// this have been narrowed" and the wrong one for "why was it not", and the
 /// difference matters where a pass consumes an analysis it then invalidates.
+/// Every function this program refused, by the name a later pass asks with.
+///
+/// `Program::uncompiled` is the only place a refusal is keyed by a **name**
+/// rather than by a span. The napi wrapper reads it to say why an export is
+/// missing; nothing else could, because no output mode printed it. That gap
+/// was load-bearing: `tooling/conformance/gates.mjs` ranks the roots that
+/// declined exports stand behind and could name the root and not its reason, so
+/// establishing that `asRequest` is refused as "a generic function no call pins
+/// down" meant grepping a module's whole diagnostic stream by hand and matching
+/// on a line number.
+///
+/// The **prepared** program, not the freshly lowered one, for the same reason
+/// `emit-c` uses it: a cascade entry — `it calls X, which was refused above` —
+/// is written by a pass that runs after lowering, and those are most of the
+/// interesting ones. Unverified, because a program that does not verify still
+/// has refusals worth reading, and this is a question about the refusals.
+///
+/// One line per entry, `name<TAB>reason`, because a reason contains commas,
+/// backticks and parentheses and a reader is usually a script.
+fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
+    let tsgo_binary = frontend_binary();
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let snapshot = source.snapshot(tsconfig)?;
+    if snapshot.has_errors() {
+        bail!("the program does not typecheck");
+    }
+    let prepared = hir::prepare_unverified(&snapshot, &hir::Options::default());
+    for (name, why) in &prepared.program.uncompiled {
+        println!("{name}\t{why}");
+    }
+    Ok(())
+}
+
 fn dump_facts(tsconfig: &Utf8Path, prepared: bool) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
