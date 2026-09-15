@@ -3075,8 +3075,27 @@ export const CORPORA = {
           for (const n of [1, 1 + (seed % 4), 0, 20]) {
             try {
               const got = m.getCallSites(n);
+              // **The five keys this profile provides, and `scriptId` recorded as
+              // absent rather than compared.** Node reads the stack through a native
+              // binding and gets V8's script id with it; from JavaScript there is no
+              // route to that number -- `Error.prepareStackTrace` hands back
+              // `CallSite` objects with fifteen getters and no `getScriptId`. So the
+              // key is omitted here rather than invented, on the same reasoning that
+              // made `corpus-reach.mjs`'s `name: "value"` worse than no name: a
+              // plausible wrong value survives review.
+              //
+              // Comparing the raw key set would report one known decision on every
+              // input. Comparing the five says whether the frames themselves agree.
+              const KEYS = ["column", "columnNumber", "functionName", "lineNumber"];
               frames.push(`${n}|${Array.isArray(got)}|${got.length <= Math.max(n, 0)}` +
-                `|${got.length > 0 ? Object.keys(got[0]).sort().join(",") : "none"}`);
+                `|${got.length > 0 ? KEYS.filter((k) => k in got[0]).join(",") : "none"}` +
+                `|scriptName:${got.length > 0 ? typeof got[0].scriptName : "none"}`);
+              // `scriptId` is **not** in that string, and the first version of this arm
+              // put it there to make the decision visible. That was the wrong place for
+              // it: a row that diverges on every input forever does not record a
+              // decision, it spends the signal. 4,024 permanent divergences are 4,024
+              // places a *new* one cannot be seen. The decision belongs in the comment
+              // above, which is where this file keeps its others.
             } catch (error) {
               frames.push(`${n}|threw:${error.code || error.name}`);
             }
@@ -3089,21 +3108,20 @@ export const CORPORA = {
               frames.push(`bad:${JSON.stringify(bad)}|${error.code || error.name}`);
             }
           }
-          // `setTraceSigInt` toggles a flag with no readable answer, so what is
-          // compared is that it accepts a boolean and rejects a non-boolean --
-          // the only part of it that is observable from outside.
-          const trace = [];
-          for (const arg of [seed % 2 === 0, !(seed % 2), undefined, 1, "x", null]) {
-            try {
-              trace.push(`${typeof arg}:${m.setTraceSigInt(arg) === undefined}`);
-            } catch (error) {
-              trace.push(`${typeof arg}:${error.code || error.name}`);
-            }
-          }
-          // Leave it off regardless of which arm ran last, so this spec does not
-          // change how the process answers a later signal.
-          try { m.setTraceSigInt(false); } catch { /* recorded above */ }
-          return `${answers}\n${frames.join("\n")}\n${trace.join("|")}`;
+
+          // **`setTraceSigInt` is not called, and this is where that is recorded.**
+          //
+          // It starts or stops a SIGINT watchdog that prints a stack trace, and the
+          // only thing a value differential can see about it is that it answers
+          // `undefined` and validates nothing -- node accepts any argument, so every
+          // call compares the same constant. A version written to satisfy that would
+          // be a function that toggles nothing and agrees, which is worse than an
+          // absence a caller can test for.
+          //
+          // Implementing it honestly means changing how the process answers a signal,
+          // inside a harness that uses signals to bound its children. So it stays
+          // absent here and in `runtime/node/util`, and this comment is the record.
+          return `${answers}\n${frames.join("\n")}`;
         },
       },
     ],

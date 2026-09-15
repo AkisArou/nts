@@ -110,7 +110,6 @@ const ours = new Set(Object.keys(mod));
 //                that upstream. A surface list could say the symbol was missing; it could not
 //                say the branch was.
 const ABSENT = [
-  "getCallSites",
   "setTraceSigInt",
 ];
 

@@ -25,6 +25,7 @@ import { deprecate } from "../../internal/deprecate.ts";
 import type { AbortSignalLike } from "../../internal/abort.ts";
 import { EventTarget as WebEventTarget, addWeaklyHeldEventListener } from "../../../web-platform/src/core/events.ts";
 import {
+  validateInteger,
   validateBoolean, validateFunction, validateNumber, validateObject, validateOneOf, validateString,
   validateStringArray,
 } from "../../internal/validators.ts";
@@ -239,6 +240,113 @@ const ansiPattern = new RegExp(
  * is observable only under a collection, and is recorded in the conformance
  * ledger rather than papered over.
  */
+/** One frame of a captured stack, which is V8's `CallSite` under its getters. */
+interface CallSiteLike {
+  getFunctionName(): string | null;
+  getFileName(): string | null;
+  getScriptNameOrSourceURL(): string | null;
+  getLineNumber(): number | null;
+  getColumnNumber(): number | null;
+}
+
+/**
+ * `Error`'s stack-capture surface, reached through a cast rather than a `declare`.
+ *
+ * A local `declare const Error` would **shadow the global for the whole file**, and
+ * this module also has `class ErrnoException extends Error` -- which then fails to
+ * find `name` and `message`. An alias names the three members without displacing
+ * the type everything else depends on.
+ */
+const ErrorStack = Error as unknown as {
+  prepareStackTrace?: ((error: unknown, frames: CallSiteLike[]) => unknown) | undefined;
+  captureStackTrace(target: object, constructorOpt?: unknown): void;
+  stackTraceLimit: number;
+};
+
+/** What `getCallSites` answers per frame. See the note there about `scriptId`. */
+export interface CallSite {
+  functionName: string;
+  scriptName: string;
+  lineNumber: number;
+  column: number;
+  columnNumber: number;
+}
+
+/**
+ * `util.getCallSites([frameCount][, options])`, the call stack as data.
+ *
+ * **Five of node's six keys, and `scriptId` is deliberately absent.**
+ *
+ * Node reads the stack through a native binding and gets V8's script id with it.
+ * From JavaScript there is no way to that number: `Error.prepareStackTrace` hands
+ * back `CallSite` objects with `getFunctionName`, `getFileName`,
+ * `getScriptNameOrSourceURL`, `getLineNumber`, `getColumnNumber` and a dozen more,
+ * and **no `getScriptId`**. Measured, not assumed.
+ *
+ * So the choice was to omit the key or to invent a number for it, and omitting is
+ * the safer of the two for the same reason `corpus-reach.mjs`'s wrapper reporting
+ * `name: "value"` was worse than reporting no name: a plausible wrong value survives
+ * review, a missing one does not. `scriptId` exists to correlate a frame with the
+ * inspector's `Debugger.scriptParsed`, and a locally invented id would answer that
+ * question confidently and wrongly. A caller can test `"scriptId" in frame`.
+ *
+ * Everything a caller wants for logging -- which file, which line, which column,
+ * which function -- is exact.
+ *
+ * `Error.prepareStackTrace` is swapped in and restored in a `finally`, because it is
+ * process-wide: leaving it installed would change how every later `error.stack` in
+ * the program renders.
+ */
+export function getCallSites(
+  ...args: [frameCount?: number | object, options?: object]
+): CallSite[] {
+  let frameCount = args[0];
+  let options = args[1];
+  // Node accepts the options object in the first position and shifts.
+  if (options === undefined) {
+    if (typeof frameCount === "object" && frameCount !== null) {
+      options = frameCount;
+      frameCount = 10;
+    } else {
+      options = {};
+    }
+  }
+  validateObject(options, "options");
+  const sourceMap = (options as { sourceMap?: unknown }).sourceMap;
+  if (sourceMap !== undefined) validateBoolean(sourceMap, "options.sourceMap");
+  if (frameCount === undefined) frameCount = 10;
+  validateInteger(frameCount, "frameCount", 1, 200);
+
+  const previous = ErrorStack.prepareStackTrace;
+  const previousLimit = ErrorStack.stackTraceLimit;
+  try {
+    ErrorStack.prepareStackTrace = (_error: unknown, frames: CallSiteLike[]): unknown => frames;
+    // One more than asked for, because the frame this function occupies is dropped
+    // below -- node's binding reads the stack from its caller and so must this.
+    ErrorStack.stackTraceLimit = (frameCount as number) + 1;
+    const carrier: { stack?: unknown } = new Error();
+    ErrorStack.captureStackTrace(carrier as unknown as object, getCallSites);
+    const frames = carrier.stack as CallSiteLike[];
+    if (!Array.isArray(frames)) return [];
+    const out: CallSite[] = [];
+    for (let index = 0; index < frames.length && out.length < (frameCount as number); index++) {
+      const frame = frames[index] as CallSiteLike;
+      out.push({
+        // Node answers `""` for an anonymous frame where `CallSite` answers `null`.
+        functionName: frame.getFunctionName() ?? "",
+        scriptName: frame.getFileName() ?? frame.getScriptNameOrSourceURL() ?? "",
+        lineNumber: frame.getLineNumber() ?? 0,
+        column: frame.getColumnNumber() ?? 0,
+        columnNumber: frame.getColumnNumber() ?? 0,
+      });
+    }
+    return out;
+  } finally {
+    ErrorStack.prepareStackTrace = previous;
+    ErrorStack.stackTraceLimit = previousLimit;
+  }
+}
+
 /**
  * Declared locally, as `stream/src/operators.ts` and two others do: this profile's
  * TypeScript environment has no `AbortController` and no `AbortSignal`, only the
