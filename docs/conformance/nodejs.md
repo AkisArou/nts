@@ -7257,6 +7257,51 @@ twenty-eight rows against node rather than twenty-four plus three exceptions.
 It was accepted and ignored, because the comparison it exists to relax was the
 comparison that was missing.
 
+## `fs.writeFileSync(-0, "x")` aborts node, and this profile aborts with it
+
+Found while extending the differential over `fs`'s mutating two thirds. Not a
+divergence -- both sides die the same way, which is why a comparison cannot see
+it:
+
+    $ node -e 'require("fs").writeFileSync(-0, "x")'
+    # node::fs::WriteFileUtf8(...) at ../src/node_file.cc:2751
+    # Assertion failed: (*path) != nullptr
+    Aborted (core dumped)          exit 134
+
+Every other rejected first argument answers `ERR_INVALID_ARG_TYPE`: `null`,
+`undefined`, `true`, `{}`, `[]`, `1.5`. `-0` is the one value that gets through,
+because `writeFile` accepts a **file descriptor** where a path goes, `-0 === 0` is
+true, so it passes validation as descriptor 0 -- and then the path branch inside
+the binding finds no path and fails a C++ `CHECK`. A JavaScript argument reaching
+an assertion in node's C++ is node's bug, on v24.20.0.
+
+This profile aborts identically, because the `fs` stand-in reaches the same
+binding. So the interpreted lane inherits it and the comparison stays silent:
+neither process survives to report anything. The compiled lane has its own C and
+would not necessarily follow, which is untestable from here and worth knowing when
+that path is exercised.
+
+Excluded from the corpus rather than compared, because a spec that aborts the
+process measures nothing -- and the exclusion is the narrow one: `-0` is dropped,
+not the negative-number arm, and not `writeFileSync`.
+
+**Two lessons about the invariant that was supposed to prevent this.** The spec's
+own header says "every file descriptor is `2147483647` or `-1`; never 0, 1 or 2,
+because `writeSync(1, ...)` would put bytes on the probe's own stdout". Both
+things it warns about happened anyway, through the **path** argument rather than
+the fd argument:
+
+- `writeFileSync(1, "x")` wrote `x` to the probe's stdout, which is where the
+  parent reads its results from. The invariant was written about fd parameters and
+  these functions take an fd *or* a path in the same position.
+- `writeFileSync(-0, "x")` aborted the run.
+
+The fix was already in the file and already named for this: `REJECTED_NON_NUMERIC`
+exists beside `REJECTED` and holds no numbers, and the two specs above the new
+ones use it. A helper whose name records a lesson is only useful to somebody who
+reads the name as a warning rather than as a description, and "non-numeric" reads
+as a description.
+
 ## Five `util` names this profile does not publish, and why each is still absent
 
 Extending the differential corpus over `util`'s uncalled names took its reach from

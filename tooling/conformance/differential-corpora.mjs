@@ -729,6 +729,432 @@ export const CORPORA = {
           call: (m, s) => attempt(() => m.realpathSync(BASE + s).split("/").slice(-2).join("/")),
         },
         { label: "accessSync", call: (m, s) => attempt(() => m.accessSync(BASE + s) ?? "void") },
+
+        // **The other 125 published `fs` functions**, compared without writing a
+        // byte.
+        //
+        // The section header's rule -- nothing here creates, moves or removes a
+        // file, because a differential that mutates shared state ran against two
+        // filesystems -- is what kept the mutating two thirds of this module
+        // uncompared. It does not have to. Every one of these functions decides
+        // *whether it may act* before it acts, and that decision is a pure
+        // function of its arguments.
+        //
+        // Three invariants make it safe, and each is a property of the arguments
+        // rather than a hope about the outcome:
+        //
+        //   1. Every path lies **two levels** under a directory that does not
+        //      exist. `GONE` below is `<base>/no-such-dir-nts/`, so `mkdir`,
+        //      `writeFile`, `symlink`, `rename` and the rest reach the syscall and
+        //      get `ENOENT` from the missing parent. One level would not do:
+        //      `mkdirSync(GONE)` would succeed and create it.
+        //   2. Every file descriptor is `2147483647` or `-1`. Never 0, 1 or 2 --
+        //      `writeSync(1, ...)` would put bytes on the probe's own stdout and
+        //      corrupt the protocol the parent reads its results from, which is a
+        //      failure that would look like a divergence.
+        //   3. `watchFile` is paired with `unwatchFile` inside the same arm. A
+        //      poller holds the loop open, so an unpaired one leaves the child
+        //      alive and the parent's `spawnSync` waiting on it forever.
+        //
+        // The error codes are the comparison and they are worth comparing: this is
+        // the layer where `globSync`'s `cwd` validation was found wrong earlier
+        // today, by the same method one function over.
+        {
+          label: "fs-refused-sync",
+          call: (m, s) => {
+            const GONE = `${BASE}no-such-dir-nts/`;
+            const missing = `${GONE}child${s.length % 7}`;
+            const second = `${GONE}other${s.length % 5}`;
+            // The wrong-type and NUL arms reach the validator; `missing` reaches
+            // the syscall. Which of the three a given call gets is chosen by the
+            // input, so all three are exercised across the corpus.
+            const nul = BASE + s + String.fromCharCode(0);
+            // **`REJECTED_NON_NUMERIC`, not `REJECTED`, and both reasons are the
+            // kind that only a run finds.**
+            //
+            // `writeFile` and `appendFile` accept a **file descriptor** where a
+            // path goes. `REJECTED` contains `1`, so `writeFileSync(1, "x")` wrote
+            // `x` to the probe's own stdout -- the exact hazard invariant 2 above
+            // was written for, arriving through the path argument rather than
+            // through an fd argument, which is the route that comment did not
+            // consider.
+            //
+            // And `REJECTED` contains `-0`, which **aborts node**:
+            // `fs.writeFileSync(-0, "x")` fails a C++ assertion,
+            // `(*path) != nullptr` at `node_file.cc:2751`, and the process dies
+            // with SIGABRT and a core dump. `-0 === 0` is true, so it passes the fd
+            // validation as descriptor 0, and then the path branch finds no path.
+            // Every other value in either list answers `ERR_INVALID_ARG_TYPE`.
+            //
+            // That is node's bug and not a divergence -- this profile's stand-in
+            // reaches the same binding and dies identically, which the comparison
+            // cannot show because neither side survives to report. It is recorded
+            // in `docs/conformance/nodejs.md` and excluded here, because a spec
+            // that aborts the process measures nothing.
+            //
+            // `REJECTED_NON_NUMERIC` holds no numbers at all, and it exists in this
+            // file already: `readFileSync!` and `openSync!` above use it, for this
+            // same reason, and its name is the record of the first time somebody
+            // learned it.
+            const bad = REJECTED_NON_NUMERIC[s.length % REJECTED_NON_NUMERIC.length];
+            const forms = [missing, nul, bad];
+            const pick = (n) => forms[(s.length + n) % forms.length];
+            const out = [];
+            const ONE_PATH = [
+              ["mkdirSync", (p) => m.mkdirSync(p)],
+              ["rmdirSync", (p) => m.rmdirSync(p)],
+              ["rmSync", (p) => m.rmSync(p)],
+              ["unlinkSync", (p) => m.unlinkSync(p)],
+              ["truncateSync", (p) => m.truncateSync(p, 0)],
+              ["chmodSync", (p) => m.chmodSync(p, 0o644)],
+              ["chownSync", (p) => m.chownSync(p, 0, 0)],
+              ["lchownSync", (p) => m.lchownSync(p, 0, 0)],
+              ["utimesSync", (p) => m.utimesSync(p, 0, 0)],
+              ["lutimesSync", (p) => m.lutimesSync(p, 0, 0)],
+              ["statfsSync", (p) => m.statfsSync(p)],
+              ["readlinkSync", (p) => m.readlinkSync(p)],
+              ["writeFileSync", (p) => m.writeFileSync(p, "x")],
+              ["appendFileSync", (p) => m.appendFileSync(p, "x")],
+              ["mkdtempSync", (p) => m.mkdtempSync(p)],
+              ["opendirSync", (p) => m.opendirSync(p)],
+            ];
+            for (let i = 0; i < ONE_PATH.length; i++) {
+              const [name, run] = ONE_PATH[i];
+              out.push(`${name}:${attempt(() => run(pick(i)) ?? "void")}`);
+            }
+            const TWO_PATH = [
+              ["renameSync", (a, b) => m.renameSync(a, b)],
+              ["copyFileSync", (a, b) => m.copyFileSync(a, b)],
+              ["cpSync", (a, b) => m.cpSync(a, b)],
+              ["linkSync", (a, b) => m.linkSync(a, b)],
+              ["symlinkSync", (a, b) => m.symlinkSync(a, b)],
+            ];
+            for (let i = 0; i < TWO_PATH.length; i++) {
+              const [name, run] = TWO_PATH[i];
+              out.push(`${name}:${attempt(() => run(pick(i), second) ?? "void")}`);
+            }
+            // `mkdtempDisposableSync` answers an object carrying a `remove`, so its
+            // success shape differs from a plain path -- but every input here fails,
+            // and the code is what is compared.
+            out.push(`mkdtempDisposableSync:${attempt(() => m.mkdtempDisposableSync(pick(1)) ?? "void")}`);
+            // `_toUnixTimestamp` is the time coercion every `utimes` shares, and it
+            // is published. Fed the input's own length so the answer moves.
+            //
+            // **A negative argument means "now"**, so its answer is the wall clock
+            // and not a function of the input. That was the only divergence this
+            // whole spec produced on its first run -- `1789437203.7` against
+            // `1789437211.058`, seven seconds apart, which is the two processes
+            // being started one after the other. What is compared for that arm is
+            // the branch it takes: a number, above zero, and not the input.
+            //
+            // Labelled with `String`, not `JSON.stringify`: the latter renders both
+            // `NaN` and `Infinity` as `null`, so two arms printed the same label as
+            // the genuine `null` arm and three rows were indistinguishable.
+            for (const when of [0, s.length, "1970-01-01", `${s.length}`, NaN, Infinity, -Infinity]) {
+              out.push(`_toUnixTimestamp(${String(when)}):${attempt(() => m._toUnixTimestamp(when))}`);
+            }
+            for (const when of [-1, -s.length - 1]) {
+              const answer = attempt(() => {
+                const got = m._toUnixTimestamp(when);
+                return `${typeof got}|positive:${got > 0}|isInput:${got === when}`;
+              });
+              out.push(`_toUnixTimestamp(${String(when)}):now:${answer}`);
+            }
+            return out.join("\n");
+          },
+        },
+        {
+          // The same family through its callback form, awaited. A callback error and
+          // a synchronous throw are different code paths in every one of these, and
+          // node picks between them by *argument validity*: a bad type throws where
+          // a missing file calls back.
+          label: "fs-refused-async",
+          call: async (m, s) => {
+            const GONE = `${BASE}no-such-dir-nts/`;
+            const missing = `${GONE}child${s.length % 7}`;
+            const second = `${GONE}other${s.length % 5}`;
+            const settle = (run) => new Promise((resolve) => {
+              try {
+                run((error, value) => resolve(error ? `cb:${error.code ?? error.name}` : `ok:${value}`));
+              } catch (error) {
+                resolve(`threw:${error.code ?? error.name}`);
+              }
+            });
+            const out = [];
+            const ONE_PATH = [
+              ["mkdir", (p, cb) => m.mkdir(p, cb)],
+              ["rmdir", (p, cb) => m.rmdir(p, cb)],
+              ["rm", (p, cb) => m.rm(p, cb)],
+              ["unlink", (p, cb) => m.unlink(p, cb)],
+              ["truncate", (p, cb) => m.truncate(p, 0, cb)],
+              ["chmod", (p, cb) => m.chmod(p, 0o644, cb)],
+              ["chown", (p, cb) => m.chown(p, 0, 0, cb)],
+              ["lchown", (p, cb) => m.lchown(p, 0, 0, cb)],
+              ["utimes", (p, cb) => m.utimes(p, 0, 0, cb)],
+              ["lutimes", (p, cb) => m.lutimes(p, 0, 0, cb)],
+              ["statfs", (p, cb) => m.statfs(p, cb)],
+              ["writeFile", (p, cb) => m.writeFile(p, "x", cb)],
+              ["appendFile", (p, cb) => m.appendFile(p, "x", cb)],
+              ["mkdtemp", (p, cb) => m.mkdtemp(p, cb)],
+              ["opendir", (p, cb) => m.opendir(p, cb)],
+              ["exists", (p, cb) => m.exists(p, (answer) => cb(null, answer))],
+            ];
+            for (const [name, run] of ONE_PATH) {
+              out.push(`${name}:${await settle((cb) => run(missing, cb))}`);
+            }
+            for (const [name, run] of [
+              ["rename", (a, b, cb) => m.rename(a, b, cb)],
+              ["copyFile", (a, b, cb) => m.copyFile(a, b, cb)],
+              ["cp", (a, b, cb) => m.cp(a, b, cb)],
+              ["link", (a, b, cb) => m.link(a, b, cb)],
+              ["symlink", (a, b, cb) => m.symlink(a, b, cb)],
+            ]) {
+              out.push(`${name}:${await settle((cb) => run(missing, second, cb))}`);
+            }
+            // `glob` over a pattern under a directory that is not there. Read-only
+            // whatever the pattern.
+            out.push(`glob:${await settle((cb) => m.glob(`${GONE}*.none`, (error, found) => cb(error, JSON.stringify(found))))}`);
+            // Wrapped in `Promise.resolve().then`, because `openAsBlob` **throws
+            // synchronously** for this path rather than returning a rejected
+            // promise -- `ERR_INVALID_ARG_VALUE: Unable to open file as blob`. A
+            // bare `.then` on the call never runs, and the throw escaped the spec
+            // and failed the whole arm. Which of the two it does is itself worth
+            // comparing, so the wrapper records both as `rej:`.
+            out.push(`openAsBlob:${await Promise.resolve()
+              .then(() => m.openAsBlob(missing))
+              .then(() => "ok", (e) => `rej:${e.code ?? e.name}`)}`);
+            return out.join("\n");
+          },
+        },
+        {
+          // `fs.promises`, which was 25 uncalled names on its own.
+          label: "fs-refused-promises",
+          call: async (m, s) => {
+            const GONE = `${BASE}no-such-dir-nts/`;
+            const missing = `${GONE}child${s.length % 7}`;
+            const second = `${GONE}other${s.length % 5}`;
+            const p = m.promises;
+            const settle = (promise) =>
+              promise.then((value) => `ok:${value}`, (error) => `rej:${error.code ?? error.name}`);
+            const out = [];
+            for (const [name, run] of [
+              ["mkdir", () => p.mkdir(missing)],
+              ["rmdir", () => p.rmdir(missing)],
+              ["rm", () => p.rm(missing)],
+              ["unlink", () => p.unlink(missing)],
+              ["truncate", () => p.truncate(missing, 0)],
+              ["chmod", () => p.chmod(missing, 0o644)],
+              ["lchmod", () => p.lchmod(missing, 0o644)],
+              ["chown", () => p.chown(missing, 0, 0)],
+              ["lchown", () => p.lchown(missing, 0, 0)],
+              ["utimes", () => p.utimes(missing, 0, 0)],
+              ["lutimes", () => p.lutimes(missing, 0, 0)],
+              ["statfs", () => p.statfs(missing)],
+              ["writeFile", () => p.writeFile(missing, "x")],
+              ["appendFile", () => p.appendFile(missing, "x")],
+              ["mkdtemp", () => p.mkdtemp(missing)],
+              ["mkdtempDisposable", () => p.mkdtempDisposable(missing)],
+              ["opendir", () => p.opendir(missing)],
+              ["rename", () => p.rename(missing, second)],
+              ["copyFile", () => p.copyFile(missing, second)],
+              ["cp", () => p.cp(missing, second)],
+              ["link", () => p.link(missing, second)],
+              ["symlink", () => p.symlink(missing, second)],
+            ]) {
+              out.push(`${name}:${await settle(Promise.resolve().then(run))}`);
+            }
+            // `promises.glob` is an async iterable, so it is drained rather than
+            // awaited once.
+            try {
+              const found = [];
+              for await (const entry of p.glob(`${GONE}*.none`)) found.push(String(entry));
+              out.push(`glob:${JSON.stringify(found)}`);
+            } catch (error) {
+              out.push(`glob:rej:${error.code ?? error.name}`);
+            }
+            // `promises.watch` is an async iterable over a path that is not there,
+            // so it rejects at once rather than waiting for an event that a poller
+            // would have to stay alive for.
+            try {
+              for await (const event of p.watch(missing)) {
+                out.push(`watchEvent:${event && event.eventType}`);
+                break;
+              }
+              out.push("watch:ok");
+            } catch (error) {
+              out.push(`watch:rej:${error.code ?? error.name}`);
+            }
+            return out.join("\n");
+          },
+        },
+        {
+          // The descriptor family, against a descriptor that cannot be open.
+          //
+          // `2147483647` and `-1` are the two shapes: the first is a valid `int`
+          // that no process has open, so it reaches the syscall and gets `EBADF`;
+          // the second fails validation, because node rejects a negative fd before
+          // asking the kernel. Which one an arm gets is chosen by the input.
+          //
+          // Never 0, 1 or 2. `writeSync(1, ...)` would write to the probe's own
+          // stdout, and the parent reads its results from there.
+          label: "fs-invalid-fd",
+          call: (m, s) => {
+            const FDS = [2147483647, -1, 2147483646, -2];
+            const fd = FDS[s.length % FDS.length];
+            const buffer = Buffer.alloc(8);
+            const out = [`fd:${fd}`];
+            const CALLS = [
+              ["fstatSync", () => m.fstatSync(fd)],
+              ["fsyncSync", () => m.fsyncSync(fd)],
+              ["fdatasyncSync", () => m.fdatasyncSync(fd)],
+              ["ftruncateSync", () => m.ftruncateSync(fd, 0)],
+              ["fchmodSync", () => m.fchmodSync(fd, 0o644)],
+              ["fchownSync", () => m.fchownSync(fd, 0, 0)],
+              ["futimesSync", () => m.futimesSync(fd, 0, 0)],
+              ["readSync", () => m.readSync(fd, buffer, 0, 4, 0)],
+              ["writeSync", () => m.writeSync(fd, buffer, 0, 4, 0)],
+              ["writevSync", () => m.writevSync(fd, [buffer], 0)],
+              ["readvSync", () => m.readvSync(fd, [buffer], 0)],
+              ["closeSync", () => m.closeSync(fd)],
+              ["fstatSyncBigInt", () => m.fstatSync(fd, { bigint: true })],
+            ];
+            for (const [name, run] of CALLS) {
+              out.push(`${name}:${attempt(() => run() ?? "void")}`);
+            }
+            return out.join("\n");
+          },
+        },
+        {
+          // The descriptor family's callback and promise halves, same descriptors.
+          label: "fs-invalid-fd-async",
+          call: async (m, s) => {
+            const FDS = [2147483647, -1, 2147483646, -2];
+            const fd = FDS[s.length % FDS.length];
+            const buffer = Buffer.alloc(8);
+            const settle = (run) => new Promise((resolve) => {
+              try {
+                run((error, value) => resolve(error ? `cb:${error.code ?? error.name}` : `ok:${value}`));
+              } catch (error) {
+                resolve(`threw:${error.code ?? error.name}`);
+              }
+            });
+            const out = [`fd:${fd}`];
+            for (const [name, run] of [
+              ["fstat", (cb) => m.fstat(fd, cb)],
+              ["fsync", (cb) => m.fsync(fd, cb)],
+              ["fdatasync", (cb) => m.fdatasync(fd, cb)],
+              ["ftruncate", (cb) => m.ftruncate(fd, 0, cb)],
+              ["fchmod", (cb) => m.fchmod(fd, 0o644, cb)],
+              ["fchown", (cb) => m.fchown(fd, 0, 0, cb)],
+              ["futimes", (cb) => m.futimes(fd, 0, 0, cb)],
+              ["read", (cb) => m.read(fd, buffer, 0, 4, 0, cb)],
+              ["write", (cb) => m.write(fd, buffer, 0, 4, 0, cb)],
+              ["writev", (cb) => m.writev(fd, [buffer], 0, cb)],
+              ["readv", (cb) => m.readv(fd, [buffer], 0, cb)],
+            ]) {
+              out.push(`${name}:${await settle(run)}`);
+            }
+            return out.join("\n");
+          },
+        },
+        {
+          // `Dirent`'s predicates and `Dir`'s iteration, both read-only against the
+          // base directory the rest of this section already reads.
+          //
+          // The predicates are the point: a `Dirent` answers seven of them and
+          // exactly one is true, so an implementation that answers `false`
+          // everywhere -- or `true` from the wrong one -- is only visible if all
+          // seven are asked. The corpus asked none.
+          label: "fs-dirent-and-dir",
+          call: async (m, s) => {
+            const out = [];
+            try {
+              const entries = m.readdirSync(BASE, { withFileTypes: true })
+                .sort((a, b) => (a.name < b.name ? -1 : 1));
+              const entry = entries[s.length % Math.max(1, entries.length)];
+              if (entry !== undefined) {
+                out.push(
+                  `dirent:${entry.name}|dir:${entry.isDirectory()}|file:${entry.isFile()}` +
+                  `|block:${entry.isBlockDevice()}|char:${entry.isCharacterDevice()}` +
+                  `|link:${entry.isSymbolicLink()}|fifo:${entry.isFIFO()}` +
+                  `|socket:${entry.isSocket()}`,
+                );
+                // Exactly one must hold, which no single predicate can show.
+                const flags = [entry.isDirectory(), entry.isFile(), entry.isBlockDevice(),
+                  entry.isCharacterDevice(), entry.isSymbolicLink(), entry.isFIFO(),
+                  entry.isSocket()];
+                out.push(`direntTrueCount:${flags.filter(Boolean).length}`);
+              }
+            } catch (error) {
+              out.push(`dirent:${error.code ?? error.name}`);
+            }
+
+            // `Dir`: opened, read to exhaustion, closed. Read-only, and it ends, so
+            // nothing is left holding the loop.
+            try {
+              const dir = m.opendirSync(BASE);
+              const names = [];
+              for (;;) {
+                const entry = dir.readSync();
+                if (entry === null) break;
+                names.push(entry.name);
+              }
+              out.push(`dirSync:${JSON.stringify(names.sort())}|path:${dir.path === BASE}`);
+              dir.closeSync();
+            } catch (error) {
+              out.push(`dirSync:${error.code ?? error.name}`);
+            }
+            try {
+              const dir = await m.promises.opendir(BASE);
+              const names = [];
+              for await (const entry of dir) names.push(entry.name);
+              out.push(`dirIter:${JSON.stringify(names.sort())}`);
+            } catch (error) {
+              out.push(`dirIter:${error.code ?? error.name}`);
+            }
+            try {
+              const dir = m.opendirSync(BASE);
+              const first = await dir.read();
+              out.push(`dirRead:${first === null ? "null" : typeof first.name}`);
+              await dir.close();
+              out.push(`dirClosed:${attempt(() => dir.readSync() ?? "void")}`);
+            } catch (error) {
+              out.push(`dirRead:${error.code ?? error.name}`);
+            }
+            return out.join("\n");
+          },
+        },
+        {
+          // The watchers, each released in the arm that starts it.
+          //
+          // `watch` on a path that is not there throws at once, so it starts
+          // nothing. `watchFile` does **not** -- it polls a path whether or not it
+          // exists, and a poller holds the loop open, so the `unwatchFile` below is
+          // not tidiness. Without it the probe's child stays alive and the parent's
+          // `spawnSync` waits on it until the harness timeout, and the tell is a
+          // cost that does not grow with the work.
+          label: "fs-watchers",
+          call: (m, s) => {
+            const GONE = `${BASE}no-such-dir-nts/`;
+            const missing = `${GONE}child${s.length % 7}`;
+            const out = [];
+            out.push(`watchMissing:${attempt(() => m.watch(missing) ?? "void")}`);
+            try {
+              const watcher = m.watchFile(missing, { interval: 5000 }, () => {});
+              out.push(`watchFile:${typeof watcher === "object" && watcher !== null}`);
+              out.push(`unref:${typeof watcher.unref === "function"}`);
+              m.unwatchFile(missing);
+              out.push("unwatched:true");
+            } catch (error) {
+              out.push(`watchFile:${error.code ?? error.name}`);
+            }
+            // `unwatchFile` on a path nothing watches is a no-op rather than an
+            // error, which is the arm that says the pairing above is what stopped
+            // the poller and not this call failing.
+            out.push(`unwatchUnknown:${attempt(() => m.unwatchFile(`${GONE}never`) ?? "void")}`);
+            return out.join("\n");
+          },
+        },
       ];
     })(),
   },
