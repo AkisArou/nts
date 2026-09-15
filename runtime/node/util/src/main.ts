@@ -70,6 +70,7 @@ export { parseArgs };
 // order would mean `shape.mjs` naming its keys explicitly, which is exactly
 // what `punycode/shape.mjs` does and says it does.
 export { TextDecoder, TextEncoder } from "../../../web-platform/src/core/encoding.ts";
+export { MIMEParams, MIMEType } from "./mime.ts";
 export type {
   ParseArgsConfig,
   ParseArgsOptionDescriptor,
@@ -100,32 +101,66 @@ export function debuglog(
   section: string,
   callback?: (log: (...args: unknown[]) => void) => void,
 ): (...args: unknown[]) => void {
-  const enabled = enabledSections.includes(section.toUpperCase());
-  const log = enabled
-    ? (...args: unknown[]): void => {
-        // Node prefixes with the section and the pid, which is what makes
-        // interleaved output from several processes readable.
-        nts_debug_write(`${section.toUpperCase()} ${nts_process_pid()}: ${format(...args)}\n`);
-      }
-    : (): void => {};
+  // **Lazy, and coercing.** Node's `init()` does
+  // `set = StringPrototypeToUpperCase(set)`, which is `toUpperCase` *called on*
+  // whatever was passed -- so a number, an object or an empty string all coerce
+  // rather than being rejected, and none of it happens until the logger is used.
+  //
+  // This resolved eagerly and called `section.toUpperCase()` directly, so
+  // `debuglog(1)` threw `TypeError` where node answers a logger. Three of the eight
+  // argument shapes a corpus generates hit that.
+  let enabled: boolean | undefined;
+  let announced = false;
+  const resolveEnabled = (): boolean => {
+    if (enabled === undefined) {
+      // `toUpperCase.call(section)`, not `String(section).toUpperCase()`. Node's is
+      // the primordial called *on* the value, so coercion goes through `this`: a
+      // number and an object become strings, and `null` or `undefined` raise
+      // `TypeError` rather than becoming "null" and "undefined". `String()` would
+      // have accepted both, which is the mirror of the bug being fixed -- the first
+      // attempt at this swapped one over-strict answer for one over-permissive one.
+      enabled = enabledSections.includes(
+        String.prototype.toUpperCase.call(section as unknown as string),
+      );
+    }
+    return enabled;
+  };
+
+  const log = (...args: unknown[]): void => {
+    if (!resolveEnabled()) return;
+    // **The callback runs here, not at `debuglog(...)`.** Node invokes it from
+    // inside the first real log call and only when it is a function, so a *disabled*
+    // section never calls it at all -- `logger` returns early on `enabled === false`
+    // and the callback is unreachable. Calling it eagerly, as this did, runs a
+    // caller's side effect that upstream never runs.
+    if (!announced) {
+      announced = true;
+      if (typeof callback === "function") callback(log);
+    }
+    // Node prefixes with the section and the pid, which is what makes interleaved
+    // output from several processes readable.
+    nts_debug_write(
+      `${String.prototype.toUpperCase.call(section as unknown as string)} ${nts_process_pid()}: ${format(...args)}\n`,
+    );
+  };
+
   // `enabled`, which node publishes on the returned logger as an enumerable
   // configurable getter. It was absent here, so `debuglog("x").enabled` answered
-  // `undefined` where node answers `false` -- and code that branches on it, which
-  // is the reason node exposes it, took the wrong branch for a truthiness test
-  // only by luck: `undefined` is falsy, so a disabled section behaved correctly
-  // and an enabled one would not have.
+  // `undefined` where node answers `false` -- and code that branches on it, which is
+  // the reason node exposes it, took the wrong branch for a truthiness test only by
+  // luck: `undefined` is falsy, so a disabled section behaved correctly and an
+  // enabled one would not have.
   //
-  // A getter rather than a value because node's is one. The value cannot change
-  // after this point here -- `NODE_DEBUG` is read once at module load -- so the
-  // getter is about the shape a caller sees, including its descriptor.
+  // A getter rather than a value because node's is one, and because the resolution
+  // behind it is deferred: reading `enabled` is what forces the coercion above, and
+  // is where a `Symbol` section raises the `TypeError` node raises there too.
   Object.defineProperty(log, "enabled", {
     get(): boolean {
-      return enabled;
+      return resolveEnabled();
     },
     configurable: true,
     enumerable: true,
   });
-  callback?.(log);
   return log;
 }
 

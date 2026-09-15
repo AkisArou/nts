@@ -719,6 +719,26 @@ export class ERR_INVALID_ARG_VALUE extends NodeTypeError {
   }
 }
 
+/**
+ * `The MIME syntax for a type in "no-slash" is invalid`, with the offending index
+ * appended when there is one.
+ *
+ * The index is omitted for `-1`, which is how node distinguishes "this production
+ * is empty or absent" from "this production has a character that cannot appear in
+ * it". `"/x"` has no type at all and reports no index; `"a b/c"` has one at 1.
+ */
+export class ERR_INVALID_MIME_SYNTAX extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_INVALID_MIME_SYNTAX";
+
+  constructor(production: string, str: string, invalidIndex: number) {
+    const at = invalidIndex !== -1 ? ` at ${invalidIndex}` : "";
+    super(`The MIME syntax for a ${production} in "${str}" is invalid${at}`);
+  }
+}
+
 /** `The "listener" argument must be of type function. Received …`. */
 export class ERR_INVALID_ARG_TYPE_FUNCTION extends ERR_INVALID_ARG_TYPE {
   override get ["constructor"](): unknown {
