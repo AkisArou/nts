@@ -964,11 +964,30 @@ one and the mask by one bit each fail it.
   laying one out by the unpacked rule would agree with a header only by
   accident. Refused as a record rather than mislaid, with a control asserting
   the same record unpacked *does* have a layout.
-- **`nts bind-c` still refuses one.** The AST carries `isBitfield` and not the
-  width; the width is in the layout dump, as `hi - lo + 1`, which is the right
-  source and a different pass from the one that describes members. So `iphdr`
-  is hand-written for now, and `tcphdr` -- eleven bit-fields behind two
-  anonymous records -- stays refused by name.
+- Nothing else. **`nts bind-c` derives one**, which the sentence here used to
+  say it could not: I had read `isBitfield` off the `FieldDecl` and concluded
+  the width was only in the layout dump. It is in the AST too -- a
+  `ConstantExpr` in the field's own `inner` -- so the pass that describes
+  members has it and no second source has to agree with the first.
+
+  `check_bit_widths` then compares each width against `hi - lo + 1` from the
+  layout dump, which *is* an independent path to the same number and the one
+  thing this tool can get wrong by itself. Widening `ihl` by a bit gives
+  *`iphdr.ihl` is described as 5 bits and clang says 4*.
+
+  **The dump is read by name, not by position.** It nests: a record with an
+  anonymous member lists that member at depth 3 and its fields below it, so a
+  positional list has one entry where the binding has one *or many*. That lined
+  up for `struct rusage` by luck -- each of its fourteen anonymous unions
+  contributes exactly one lifted member, at the union's own offset -- and did
+  not for `struct tcphdr`, whose anonymous union contributes ten.
+
+  **And a union contributes its first *alternative*, not its first member.**
+  The two are the same only when the alternatives are scalars. `struct tcphdr`
+  is an anonymous union of two anonymous structs -- the `th_*` spelling and the
+  modern one -- and taking the first member kept one field and dropped nine.
+  The layout self-check caught it as `size 2 align 2` against clang's 20, which
+  is the check doing its job and the message naming the symptom.
 
 ### The hand-written ABI is deleted for the chosen example
 
@@ -996,27 +1015,23 @@ formality.
 
 Twenty-six POSIX records, asked for one at a time, **through `nts bind-c`** --
 so this counts what can be *derived from a header*, not what the compiler can
-describe. **Twenty-two work**, nineteen when the survey was first run, and each
-one that changed is the reason a part of this section exists.
-
-The two are no longer the same question. A hand-written binding of `struct
-iphdr` compiles and runs on both backends; the row below says only that the
-generator cannot write one yet, because the width it needs is in the layout
-dump rather than in the AST it describes members from.
+describe. **Twenty-four work**, nineteen when the survey was first run, and
+each one that changed is the reason a part of this section exists.
 
 | cause | records | |
 |---|---|---|
 | an **anonymous** record as a *named member's type* | `sockaddr_in6`, `in6_addr` | described |
 | an **unnamed member**, whose fields C reaches as the enclosing record's | `rusage` | described |
-| a bit-field | `iphdr`, `tcphdr` | the **compiler** describes one; `bind-c` still refuses |
+| a bit-field | `iphdr`, `tcphdr` | described |
 | a flexible array member (`unsigned char[]`, no length) | `cmsghdr` | refuses |
 | a typedef naming an **unnamed struct** (`__sigset_t`) | `sigaction` | refuses |
 
 `tcphdr` and `sigaction` both moved rows without anything being done to them,
 which is the part worth reading. Each had been filed under the first thing that
 stopped the walk. `tcphdr` reported an unnamed member and nothing past it;
-reaching through finds eleven bit-fields -- which the compiler now describes and
-the generator still cannot derive, so it moved rows twice. `sigaction` reported an anonymous
+reaching through finds eleven bit-fields, and it describes now that both are
+handled -- so its recorded cause was wrong twice over, and neither time was the
+record actually harder than the ones beside it. `sigaction` reported an anonymous
 union; resolving that reaches `__sigset_t`, which is a typedef of a struct with
 no tag -- a third shape, and the one this survey had never produced. **A cause
 recorded from a walk that stops is the cause of the stop, not of the refusal**,

@@ -94,6 +94,12 @@ enum Shape {
     VoidPointer(bool),
     /// `T[N]` stored inline.
     Array(Box<Shape>, u64),
+    /// `T name : width` -- a bit-field. The unit and how many of its bits.
+    ///
+    /// The width comes from the AST, not from the layout dump: clang puts a
+    /// `ConstantExpr` in the `FieldDecl`'s `inner`, so the pass that describes
+    /// members already has it and no second source has to agree with the first.
+    Bits(&'static str, u32),
     /// A struct or union this binding also describes.
     Record(String),
     /// The same, for a record the header declares **without a tag**. Spelled
@@ -129,6 +135,32 @@ struct Observed {
     size: u64,
     align: u64,
     offsets: Vec<u64>,
+    /// Every member clang named, at any depth, as name to
+    /// `(offset, Some((lo, width)) if it is a bit-field)`.
+    ///
+    /// By name rather than by position because the dump **nests**: a record
+    /// with an anonymous member lists that member at depth 3 and its fields
+    /// below it, so a positional list has one entry where the binding has one
+    /// or many. That happened to line up for `struct rusage` -- each of its
+    /// fourteen anonymous unions contributes exactly one lifted member, at the
+    /// union's own offset -- and did not for `struct tcphdr`, whose anonymous
+    /// union contributes ten. A name is the same on both sides whatever the
+    /// nesting.
+    members: BTreeMap<String, (u64, Option<(u32, u32)>)>,
+}
+
+impl Observed {
+    /// Whether this layout is the one `other` records.
+    ///
+    /// Only size, alignment and offsets. `members` is **observed-only** -- it
+    /// is read from clang's dump and never computed -- so a derived `PartialEq`
+    /// compares a recomputed layout that has none against a parsed one that
+    /// does, and answers "different" about two records with identical size,
+    /// alignment and offsets. It did exactly that, and the message printed the
+    /// two as equal.
+    fn reproduces(&self, other: &Self) -> bool {
+        self.size == other.size && self.align == other.align && self.offsets == other.offsets
+    }
 }
 
 /// The constants, as a TypeScript module.
@@ -429,6 +461,49 @@ impl Binding {
     /// twelve bullets -- `struct tcphdr` has two nested anonymous records and
     /// ten bit-fields between them. The count and the list have to come from
     /// the same place or they disagree.
+    /// A bit-field member, or the reason it is not one this surface has.
+    ///
+    /// The width comes from the `ConstantExpr` clang puts in the field's own
+    /// `inner`, so the pass that describes members already has it and no second
+    /// source has to agree with the first. `check_bit_widths` then compares it
+    /// against the width the *layout dump* reports, which is an independent
+    /// path to the same number and the one thing about a bit-field this tool
+    /// can get wrong on its own.
+    fn bit_field(
+        field: &serde_json::Value,
+        typedefs: &BTreeMap<String, String>,
+    ) -> std::result::Result<Member, String> {
+        let member = field
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("<unnamed>");
+        // An unnamed zero-width bit-field -- `int : 0`, which only forces the
+        // next member to a unit boundary -- has no name to reach it by and is
+        // not a member this surface has.
+        let width = children(field)
+            .iter()
+            .find(|node| {
+                node.get("kind").and_then(serde_json::Value::as_str) == Some("ConstantExpr")
+            })
+            .and_then(|node| node.get("value")?.as_str()?.parse::<u32>().ok());
+        let (written, desugared) = qual_type(field).unwrap_or_default();
+        match (width, shape_of(written, desugared, typedefs)) {
+            (Some(width), Ok(Shape::Scalar(unit))) if width >= 1 => Ok(Member {
+                name: member.to_owned(),
+                ty: Shape::Bits(unit, width),
+                aliases: Vec::new(),
+            }),
+            (Some(_), Ok(_)) => Err(format!(
+                "`{member}` is a bit-field of `{written}`, which is not an integer type a \
+                 bit-field can have"
+            )),
+            (Some(_), Err(why)) => Err(format!("`{member}`: {why}")),
+            (None, _) => Err(format!(
+                "`{member}` is a bit-field whose width this parse could not read"
+            )),
+        }
+    }
+
     fn describe(
         node: &serde_json::Value,
         tag: &str,
@@ -472,11 +547,11 @@ impl Binding {
             // layout whose members have no byte offsets -- but it does so by
             // reporting two sizes, which names the symptom. Named here instead.
             if field.get("isBitfield") == Some(&serde_json::Value::Bool(true)) {
-                let member =
-                    field.get("name").and_then(serde_json::Value::as_str).unwrap_or("<unnamed>");
-                problems.push(format!(
-                    "`{member}` is a bit-field: it has no address and no byte offset"
-                ));
+                match Self::bit_field(field, typedefs) {
+                    Ok(member) => members.push(member),
+                    Err(why) => problems.push(why),
+                }
+                pending = None;
                 continue;
             }
             let (written, desugared) = qual_type(field).unwrap_or_default();
@@ -551,6 +626,38 @@ impl Binding {
         ))
     }
 
+    fn is_union(node: &serde_json::Value) -> bool {
+        node.get("tagUsed").and_then(serde_json::Value::as_str) == Some("union")
+    }
+
+    /// The same declaration holding only its first alternative.
+    ///
+    /// An alternative is everything up to and including the first `FieldDecl`:
+    /// clang emits a member's own anonymous type as a `RecordDecl` immediately
+    /// before the `FieldDecl` that uses it, so the two travel together.
+    ///
+    /// Spelled as a `struct`, because that is what one alternative of a union
+    /// is -- its members follow one another rather than sharing an address.
+    fn first_alternative(node: &serde_json::Value) -> serde_json::Value {
+        let mut kept = Vec::new();
+        for child in children(node) {
+            let kind = child.get("kind").and_then(serde_json::Value::as_str);
+            kept.push(child.clone());
+            if kind == Some("FieldDecl") {
+                break;
+            }
+        }
+        let mut cut = node.clone();
+        if let Some(object) = cut.as_object_mut() {
+            object.insert("inner".to_owned(), serde_json::Value::Array(kept));
+            object.insert(
+                "tagUsed".to_owned(),
+                serde_json::Value::String("struct".to_owned()),
+            );
+        }
+        cut
+    }
+
     /// The members a C11 anonymous member contributes to its enclosing record.
     ///
     /// C reaches through one as though its fields were the enclosing record's,
@@ -580,18 +687,46 @@ impl Binding {
         // Recursion, so an anonymous member of an anonymous member is reached
         // the same way -- which is what `struct tcphdr` is made of. Its reasons
         // are this record's reasons, merged rather than nested.
-        let (inner, deeper) =
-            Self::describe(declaration, &format!("{tag}__anonymous"), typedefs)?;
-        let mut members = inner.members;
-        if inner.union && members.len() > 1 {
-            let aliases: Vec<String> = members.split_off(1).into_iter().map(|m| m.name).collect();
-            // `members` is non-empty: `record_from` refuses a record with no
-            // members, so a length above one leaves at least one behind.
-            if let Some(first) = members.first_mut() {
-                first.aliases = aliases;
+        // A union contributes its **first alternative**, not its first member.
+        // The two are the same thing only when the alternatives are scalars, as
+        // `struct rusage`'s are. `struct tcphdr` is an anonymous union of two
+        // anonymous *structs* -- the `th_*` spelling and the modern one -- and
+        // taking the first member kept one field of the first struct and
+        // dropped the rest, which the layout self-check caught as "size 2
+        // align 2" against clang's 20.
+        //
+        // Done by describing a declaration cut down to that alternative rather
+        // than by teaching `describe` to report boundaries: the cut is a filter
+        // on the children clang already emits, and the walk stays one walk.
+        if Self::is_union(declaration) {
+            let (inner, deeper) = Self::describe(
+                &Self::first_alternative(declaration),
+                &format!("{tag}__anonymous"),
+                typedefs,
+            )?;
+            let mut members = inner.members;
+            // The names the other alternatives give these same bytes, for the
+            // comment on the member that stands in for them. Best-effort and
+            // deliberately so: an alternative this tool cannot describe is not
+            // a reason to refuse a record whose *first* one it can, and the
+            // consequence of failing here is a missing comment.
+            if let Ok((whole, _)) =
+                Self::describe(declaration, &format!("{tag}__anonymous"), typedefs)
+            {
+                let aliases: Vec<String> = whole
+                    .members
+                    .into_iter()
+                    .map(|other| other.name)
+                    .filter(|name| !members.iter().any(|kept| kept.name == *name))
+                    .collect();
+                if let Some(first) = members.first_mut() {
+                    first.aliases = aliases;
+                }
             }
+            return Ok((members, deeper));
         }
-        Ok((members, deeper))
+        let (inner, deeper) = Self::describe(declaration, &format!("{tag}__anonymous"), typedefs)?;
+        Ok((inner.members, deeper))
     }
 
     fn collect(&mut self, json: &serde_json::Value, request: &Request) -> Result<()> {
@@ -980,6 +1115,7 @@ fn parse_layouts(text: &str) -> BTreeMap<String, Observed> {
     let mut found = BTreeMap::new();
     let mut tag: Option<String> = None;
     let mut offsets: Vec<u64> = Vec::new();
+    let mut named: BTreeMap<String, (u64, Option<(u32, u32)>)> = BTreeMap::new();
     for line in text.lines() {
         let Some((left, right)) = line.split_once('|') else { continue };
         // Depth is the run of spaces after the pipe: one for the record's own
@@ -995,12 +1131,30 @@ fn parse_layouts(text: &str) -> BTreeMap<String, Observed> {
             if let (Some(name), Ok(size), Ok(align)) =
                 (tag.take(), size.trim().parse(), align.trim().parse())
             {
-                found.insert(name, Observed { size, align, offsets: std::mem::take(&mut offsets) });
+                found.insert(name, Observed { size, align, members: std::mem::take(&mut named), offsets: std::mem::take(&mut offsets) });
             }
             offsets.clear();
+            named.clear();
             continue;
         }
-        let Ok(offset) = left.trim().parse::<u64>() else { continue };
+        // A member line is either `4` or `0:3-9`, the second being a bit-field:
+        // the byte holding its first bit, then the bit range counted from that
+        // byte's least significant bit. The end may exceed 7, which is how
+        // clang prints a field that runs past its own byte.
+        let (offset, place) = match left.trim().split_once(':') {
+            None => {
+                let Ok(offset) = left.trim().parse::<u64>() else { continue };
+                (offset, None)
+            }
+            Some((byte, range)) => {
+                let Ok(byte) = byte.trim().parse::<u64>() else { continue };
+                let Some((lo, hi)) = range.split_once('-') else { continue };
+                let (Ok(lo), Ok(hi)) = (lo.trim().parse::<u32>(), hi.trim().parse::<u32>()) else {
+                    continue;
+                };
+                (byte, Some((lo, hi.checked_sub(lo).map_or(0, |span| span + 1))))
+            }
+        };
         if depth == 1 {
             // The record's own line. A tag it is: `struct epoll_event`, or an
             // anonymous one clang spells with a source location, which is not
@@ -1011,8 +1165,21 @@ fn parse_layouts(text: &str) -> BTreeMap<String, Observed> {
                 .filter(|rest| !rest.contains(' '))
                 .map(str::to_owned);
             offsets.clear();
-        } else if depth == 3 && tag.is_some() {
-            offsets.push(offset);
+            named.clear();
+        } else if tag.is_some() {
+            if depth == 3 {
+                offsets.push(offset);
+            }
+            // At **any** depth, and only where clang printed a name: an
+            // anonymous record's own line is `union x::(anonymous at ...)`,
+            // which names no member and whose last word is a location.
+            if let Some(name) = body.rsplit(' ').next()
+                && !name.is_empty()
+                && !body.contains("(anonymous")
+                && name.chars().all(|c| c.is_alphanumeric() || c == '_')
+            {
+                named.entry(name.to_owned()).or_insert((offset, place));
+            }
         }
     }
     found
@@ -1041,8 +1208,14 @@ impl Binding {
                     record.tag
                 );
             };
+            // A record holding a bit-field is checked differently, not less.
+            // See `check_bit_widths`.
+            if record.members.iter().any(|m| matches!(m.ty, Shape::Bits(..))) {
+                Self::check_bit_widths(record, seen)?;
+                continue;
+            }
             let computed = self.place(record)?;
-            if computed != *seen {
+            if !computed.reproduces(seen) {
                 bail!(
                     "the binding for `{}` does not reproduce the layout clang computed:\n  \
                      binding: size {} align {} offsets {:?}\n  clang:   size {} align {} offsets {:?}",
@@ -1054,6 +1227,49 @@ impl Binding {
         }
         Ok(())
     }
+
+    /// A bit-field record, checked on the number this parse could get wrong.
+    ///
+    /// Its offsets are deliberately not recomputed here: the allocation rule
+    /// lives in `hir::layout` and is tested against clang there, and writing it
+    /// a second time would be the two-derivations problem this self-check
+    /// exists to catch. What *is* this tool's own reading is each width, taken
+    /// from the `ConstantExpr` in the field's AST node — so it is compared
+    /// against the width clang's layout dump reports, which is an independent
+    /// path to the same number. Size and alignment are compared as for any
+    /// other record, and a misallocated run changes them.
+    fn check_bit_widths(record: &Record, seen: &Observed) -> Result<()> {
+        for member in &record.members {
+            let Some((_, place)) = seen.members.get(&member.name) else {
+                bail!(
+                    "clang laid out no `{}.{}`, so nothing checks it",
+                    record.tag,
+                    member.name
+                );
+            };
+            match (&member.ty, place) {
+                (Shape::Bits(_, width), Some((_, seen_width))) if width == seen_width => {}
+                (Shape::Bits(_, width), Some((_, seen_width))) => bail!(
+                    "`{}.{}` is described as {width} bits and clang says {seen_width}",
+                    record.tag,
+                    member.name
+                ),
+                (Shape::Bits(_, _), None) => bail!(
+                    "`{}.{}` is described as a bit-field and clang laid it out on a byte",
+                    record.tag,
+                    member.name
+                ),
+                (_, Some(_)) => bail!(
+                    "`{}.{}` is a bit-field in the header and this binding does not say so",
+                    record.tag,
+                    member.name
+                ),
+                (_, None) => {}
+            }
+        }
+        Ok(())
+    }
+
 
     /// The layout this binding describes, by the same rules `hir::layout` uses.
     fn place(&self, record: &Record) -> Result<Observed> {
@@ -1069,9 +1285,24 @@ impl Binding {
             return Ok(Observed {
                 size: largest.div_ceil(align) * align,
                 align,
+                members: BTreeMap::new(),
                 offsets: vec![0; shapes.len()],
             });
         }
+        // A record holding a bit-field is **not** recomputed here.
+        //
+        // Reproducing one needs the allocation rule -- a field continues where
+        // the last ended, and is bumped to the next multiple of its own unit
+        // only when staying put would straddle one -- and that rule already
+        // lives in `hir::layout`, tested against clang on three probe structs.
+        // Writing it a second time here would be two derivations of one fact,
+        // which is the thing this self-check exists to catch, so it would be an
+        // odd way to build it.
+        //
+        // What is checked instead is in `check_bit_widths`: every width this
+        // parse read against the width clang's own dump reports, which is the
+        // number the generator could get wrong. The record's size and alignment
+        // are still compared, and a misallocated run changes them.
         let (mut at, mut align, mut offsets) = (0u64, 1u64, Vec::new());
         for (size, member_align) in shapes {
             if !record.packed {
@@ -1081,7 +1312,7 @@ impl Binding {
             offsets.push(at);
             at += size;
         }
-        Ok(Observed { size: if record.packed { at } else { at.div_ceil(align) * align }, align, offsets })
+        Ok(Observed { members: BTreeMap::new(), size: if record.packed { at } else { at.div_ceil(align) * align }, align, offsets })
     }
 
     fn size_align(&self, shape: &Shape) -> Result<(u64, u64)> {
@@ -1091,6 +1322,10 @@ impl Binding {
                 let (size, align) = self.size_align(element)?;
                 (size * count, align)
             }
+            // Its unit's, which is what decides the *record's* alignment. How
+            // much of the unit it occupies is a different question, and one
+            // this recompute deliberately does not answer -- see `recompute`.
+            Shape::Bits(unit, _) => self.size_align(&Shape::Scalar(unit))?,
             Shape::Record(tag) | Shape::AnonymousRecord(tag) => {
                 let nested = self.records.get(tag).ok_or_else(|| {
                     anyhow::anyhow!(
@@ -1131,6 +1366,7 @@ impl Shape {
             Self::Pointer(inner, true) => format!("ConstPtr<{}>", inner.spell(aliases)),
             Self::Pointer(inner, false) => format!("Ptr<{}>", inner.spell(aliases)),
             Self::Array(element, count) => format!("CArray<{}, {count}>", element.spell(aliases)),
+            Self::Bits(unit, width) => format!("Bits<{unit}, {width}>"),
             // Both are an alias this file declares. An anonymous one differs
             // only in what its own declaration says -- `Untagged<Union<...>>`
             // rather than a tag -- which `render` writes, not this.
@@ -1156,6 +1392,10 @@ impl Shape {
                 if *brand != "boolean" {
                     into.insert(brand);
                 }
+            }
+            Self::Bits(unit, _) => {
+                into.insert("Bits");
+                into.insert(unit);
             }
             Self::VoidPointer(constant) => {
                 into.insert(if *constant { "ConstPtr" } else { "Ptr" });
@@ -1579,7 +1819,7 @@ mod tests {
         clang.insert("epoll_event".to_owned(), observed["epoll_event"].clone());
         clang.insert(
             "epoll_data".to_owned(),
-            Observed { size: 8, align: 8, offsets: vec![0, 0, 0] },
+            Observed { size: 8, align: 8, offsets: vec![0, 0, 0], members: BTreeMap::new() },
         );
         binding.check(&clang).expect("the packed struct and the union must agree");
 
@@ -1632,6 +1872,11 @@ mod tests {
         // The same record, with the union's first member made a bit-field --
         // which is the shape `struct tcphdr` refuses for.
         let mut node: serde_json::Value = serde_json::from_str(ANONYMOUS).unwrap();
+        // An anonymous **struct**, not the union `ANONYMOUS` declares. A union
+        // contributes only its first alternative, so its second member is not
+        // described and cannot produce a reason -- which is right, and would
+        // make this a one-reason test measuring nothing about counting.
+        node["inner"][1]["tagUsed"] = serde_json::Value::String("struct".to_owned());
         node["inner"][1]["inner"][0]["isBitfield"] = serde_json::Value::Bool(true);
         node["inner"][1]["inner"][1]["isBitfield"] = serde_json::Value::Bool(true);
         let problems = Binding::describe(&node, "r", &BTreeMap::new())
