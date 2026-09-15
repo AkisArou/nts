@@ -15,7 +15,7 @@ export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
     sdk: library({
-      entry: "./src/sdk.ts",
+      entry: "./nts/sdk.ts",
       kind: "shared",
       target: target.windows({ backend: "llvm" }),
       runtime: { family: "native", memory: { provider: "rcCycle" } },

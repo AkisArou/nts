@@ -16,7 +16,7 @@ export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
     addon: library({
-      entry: "./src/sdk.ts",
+      entry: "./nts/sdk.ts",
       kind: "node-addon",
       target: target.node({ backend: "c" }),
       runtime: { family: "native", memory: { provider: "rc" } },

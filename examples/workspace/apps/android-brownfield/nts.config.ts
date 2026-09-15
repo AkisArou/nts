@@ -22,7 +22,7 @@ export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
     sdk: library({
-      entry: "./src/sdk.ts",
+      entry: "./nts/sdk.ts",
       kind: "aar",
       target: target.android({ backend: "jvm", minSdk: 29 }),
       runtime: { family: "jvm", memory: { provider: "hostGC" } },

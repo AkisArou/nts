@@ -1,7 +1,5 @@
-// **Their file, not ours.** This is the existing app's Gradle build, shown as it
-// would already look before we appear in it -- the only new line is the
-// dependency. That is the whole claim of a brownfield story: adoption is one
-// line in a file somebody else owns.
+// **Their file.** An existing single-module Android app, shown as it would
+// already look -- the only line we caused is the dependency at the bottom.
 plugins {
     id("com.android.application")
     kotlin("android")
@@ -14,6 +12,17 @@ android {
         applicationId = "com.acme.app"
         minSdk = 29
     }
+
+    // **Android is the one host with somewhere for us to live inside its own
+    // conventions.** `sourceSets` takes extra source directories, so our
+    // TypeScript could be `src/main/ts` rather than `nts/` at the root --
+    // `runtime/jvm/web-platform/android/build.gradle.kts` already does exactly
+    // this for `src/android/java`. Left at `nts/` for uniformity with the other
+    // six, whose build systems have no equivalent notion, and noted here because
+    // the asymmetry is real: Android could absorb us and CMake cannot.
+    //
+    // sourceSets["main"].java.srcDirs("src/main/java", "src/main/ts")
+
     buildTypes {
         release {
             isMinifyEnabled = true

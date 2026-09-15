@@ -94,6 +94,48 @@ something **their** resolver understands.
 | `node-brownfield` | npm | `.node` per platform | five binaries, and Node-API version pinning |
 | `java-desktop-brownfield` | Maven | jar | the easiest to ship to, and `nts.gen` makes it unacceptable today |
 
+### The host owns `src/`, and we are the guest
+
+The first version of these seven put our TypeScript in `src/` -- and every one
+of the host ecosystems already owns that directory. `src/main.cpp` beside
+`src/sdk.ts` in the CMake and MSBuild apps; `src/server.mjs` beside it in the
+npm one; and in the Maven app our file sat *inside* `src/`, which Maven treats as
+its own tree.
+
+So the rule, and it only appears in brownfield:
+
+> **A greenfield app owns its layout and keeps `src/`. A brownfield app yields
+> it, and our sources live in `nts/`.**
+
+`apps/android/src/main.ts` and `apps/android-brownfield/nts/sdk.ts` are the pair
+that shows it. There is no host in the first case to yield to.
+
+**Android is the one host with room for us inside its own conventions.** Gradle
+`sourceSets` takes extra source directories, so `src/main/ts` would be idiomatic
+there -- `runtime/jvm/web-platform/android/build.gradle.kts` already does this
+for `src/android/java`. It is noted in that app's build file and not taken,
+because the other six have no equivalent notion and the asymmetry is worth
+seeing rather than smoothing over: Android can absorb us, CMake cannot.
+
+### And each host project has to be valid by its own rules
+
+A second error, distinct from the first and found the same way:
+
+- `android-brownfield` had `app/build.gradle.kts` and **no `settings.gradle.kts`**
+  -- a Gradle module in no Gradle project, which is not a shape that exists. Now
+  a single-module project, which is the smaller of the two normal answers; the
+  other is a root plus `app/` plus our module beside it, and
+  `runtime/jvm/web-platform/android/` is an instance of that one.
+- `ios-brownfield`'s `Package.swift` declared `.target(name: "AcmeApp")` while
+  the sources sat in `App/`. SwiftPM looks in `Sources/AcmeApp/`, so the manifest
+  described a target that did not exist.
+- `macos-brownfield` has a `Podfile` and no `.xcodeproj`, which is not a project
+  CocoaPods can integrate into. That one is *not* fixed -- see its README -- and
+  is named rather than papered over.
+
+A fixture that is wrong about the host's own conventions cannot be used to argue
+about the host, which is the only thing it is for.
+
 ### What the set is for
 
 Each one is chosen because it forces something the others do not, and reading

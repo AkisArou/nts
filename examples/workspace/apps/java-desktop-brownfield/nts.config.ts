@@ -20,7 +20,7 @@ export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
     sdk: library({
-      entry: "./src/sdk.ts",
+      entry: "./nts/sdk.ts",
       kind: "jar",
       target: target.jvm({ backend: "jvm", release: 8 }),
       runtime: { family: "jvm", memory: { provider: "hostGC" } },

@@ -16,7 +16,7 @@ export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
     sdk: library({
-      entry: "./src/sdk.ts",
+      entry: "./nts/sdk.ts",
       kind: "xcframework",
       target: target.macos({ backend: "llvm", minimumVersion: "14.0" }),
       runtime: { family: "native", memory: { provider: "rcCycle" } },

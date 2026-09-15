@@ -1,2 +1,18 @@
-{ "extends": "../../tsconfig.base.json", "compilerOptions": { "noEmit": true }, "include": ["src"],
-  "references": [{ "path": "../../packages/crypto-core" }, { "path": "../../packages/storage" }] }
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "nts"
+  ],
+  "references": [
+    {
+      "path": "../../packages/crypto-core"
+    },
+    {
+      "path": "../../packages/storage"
+    }
+  ],
+  "//": "Our sources live in nts/, not src/. In a brownfield project the host owns the conventional layout -- src/main/java is Android's and Maven's, src/ is CMake's and npm's -- and we are the guest."
+}

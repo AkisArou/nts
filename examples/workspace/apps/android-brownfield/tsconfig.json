@@ -1,10 +1,18 @@
 {
-  "//": "The library we publish. It references the same packages the greenfield app does -- a brownfield consumer changes who builds the app, not what the library is made of.",
+  "//": "Our sources live in nts/, not src/. In a brownfield project the host owns the conventional layout -- src/main/java is Android's and Maven's, src/ is CMake's and npm's -- and we are the guest.",
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "noEmit": true },
-  "include": ["src"],
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "nts"
+  ],
   "references": [
-    { "path": "../../packages/notifications" },
-    { "path": "../../packages/storage" }
+    {
+      "path": "../../packages/notifications"
+    },
+    {
+      "path": "../../packages/storage"
+    }
   ]
 }
