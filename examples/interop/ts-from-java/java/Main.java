@@ -83,6 +83,13 @@ public final class Main {
         boolean exceedsLong = nts.rt.NtsBigInt.toBigInteger(big)
             .compareTo(java.math.BigInteger.valueOf(Long.MAX_VALUE)) > 0;
 
+        // **A Java lambda, where TypeScript declares a closure.**
+        // `eachUpTo` publishes twice: once taking the closure base, once taking
+        // the `NtsNumberCallback` this lambda becomes. Only a lambda reaches the
+        // second -- `javac` gives a real closure the more specific overload.
+        final int[] fromLambda = { 0 };
+        nts.gen.Program.eachUpTo(4, x -> fromLambda[0] += (int) x);
+
         // s.$hits is NOT reachable from here: the field is package-private and
         // this class is not in `nts.gen`. Uncommenting the next line is a
         // compile error, and that error is item 0 working.
@@ -93,6 +100,7 @@ public final class Main {
             + " | " + kind + " " + size + " [" + order.toString().trim() + "]"
             + " live=" + live + " svz=" + byNegativeZero
             + " labels=" + labels + " n=" + ordered.size() + " notAMap=" + isNotAMap
+            + " lambda=" + fromLambda[0] + " triangle=" + (int) nts.gen.Program.triangle(4)
             + " joined=" + joined + " big=" + scaled + " exceedsLong=" + exceedsLong);
     }
 }

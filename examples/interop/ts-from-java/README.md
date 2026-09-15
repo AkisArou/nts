@@ -136,7 +136,22 @@ Both directions cheap is a real design question, not an oversight to patch.
 
 ## What is not here yet
 
-Closures as Java lambdas.
+~~Closures as Java lambdas.~~ **Done 2026-09-15.** `Main.java` passes
+`x -> fromLambda[0] += (int) x` to `eachUpTo`, which TypeScript declares as
+`(x: number) => void`.
+
+A closure's own type is an `abstract class`, not an interface, and that is
+deliberate: a closure call is `invokevirtual` on it, and making it an interface
+would turn every closure call in every program into `invokeinterface` to serve
+the ones Java reaches. Java has no syntax for an abstract class, so `eachUpTo`
+publishes **twice** -- once taking the closure base, once taking the matching
+`NtsNumberCallback`, which Java can lambda and which the base already
+implements.
+
+**One allocation, and only on the lambda path.** A TypeScript caller passes its
+own closure and `javac` gives it the more specific overload, so the wrapper is
+reached only by something that is not a closure. The cost lands on the crossing
+that could not happen at all before, rather than on the common one.
 
 ~~and generics across the boundary -- `tags()` publishes a **raw** `NtsMap`,
 which is why `Main.java` casts every value it reads out.~~ **Done 2026-09-15.**

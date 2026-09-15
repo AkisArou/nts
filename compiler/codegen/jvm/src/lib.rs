@@ -279,6 +279,13 @@ pub fn emit(program: &Program) -> Emitted {
         }
     }
 
+    // **Lambda overloads, last**, because they add methods to the program class
+    // and read every exported signature to decide which. Doing it inside the
+    // loop above would ask the same question once per function.
+    let (adapters, complaints) = lambda_overloads(program, &mut builder, &mut pool, &program_origin(program));
+    classes.extend(adapters);
+    diagnostics.extend(complaints);
+
     match builder.build(pool) {
         Ok(class) => {
             classes.push(class);
@@ -1220,6 +1227,247 @@ fn deliverable_bridges(
         }
     }
     Ok(())
+}
+
+/// Overloads that let a Java caller pass a lambda, and the adapters they need.
+///
+/// `eachUpTo(double, Fn3__5)` gains `eachUpTo(double, NtsNumberCallback)`, whose
+/// body wraps the interface in an adapter and calls the real one. Overloading
+/// rather than replacing: a TypeScript caller still passes its own closure to
+/// the `Fn` form, `javac` picks the most specific for a real closure, and only a
+/// lambda -- which is not an `Fn` -- reaches the wrapper.
+fn lambda_overloads(
+    program: &Program,
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+) -> (Vec<nts_jvm_emitter::Class>, Vec<Diagnostic>) {
+    let (mut classes, mut diagnostics) = (Vec::new(), Vec::new());
+    let mut adapters: std::collections::BTreeMap<String, (&'static str, String)> =
+        std::collections::BTreeMap::new();
+
+    for func in &program.funcs {
+        if !func.exported || method_of(program, func).is_some() {
+            continue;
+        }
+        let Some(descriptor) = body::signature(program, func) else { continue };
+        let Some(parameters) = nts_jvm_emitter::descriptor::parameters(&descriptor) else {
+            continue;
+        };
+        let swaps: Vec<(usize, String, &'static str, String)> = func
+            .params
+            .iter()
+            .enumerate()
+            .filter_map(|(at, param)| {
+                lambda_interface(program, &param.ty).map(|(base, i, call)| (at, base, i, call))
+            })
+            .collect();
+        if swaps.is_empty() {
+            continue;
+        }
+        for (_, base, interface, call) in &swaps {
+            adapters.insert(base.clone(), (interface, call.clone()));
+        }
+        match lambda_forward(func, &descriptor, &parameters, &swaps, pool, origin) {
+            Ok((want, body)) => builder.method(
+                access::PUBLIC | access::STATIC,
+                body::method_name(&func.name),
+                want,
+                Some(body),
+            ),
+            Err(diagnostic) => diagnostics.push(diagnostic),
+        }
+    }
+
+    for (base, (interface, call)) in adapters {
+        match lambda_adapter(program, &base, interface, &call, origin) {
+            Ok(class) => classes.push(class),
+            Err(diagnostic) => diagnostics.push(diagnostic),
+        }
+    }
+    (classes, diagnostics)
+}
+
+/// The lambda-accepting overload's descriptor and body.
+///
+/// Split from [`lambda_overloads`], which decides *which* functions get one:
+/// this decides what the one it gets looks like. The seam is where the loop
+/// ends and the single function begins, and it is also where the line count
+/// stopped being about one thing.
+fn lambda_forward(
+    func: &nts_core::hir::Func,
+    descriptor: &str,
+    parameters: &[&str],
+    swaps: &[(usize, String, &'static str, String)],
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(String, nts_jvm_emitter::Body), Diagnostic> {
+    let swapped = |at: usize| swaps.iter().find(|(which, _, _, _)| *which == at);
+
+    let mut want = String::from("(");
+    let mut locals: Vec<VType> = Vec::new();
+    for (at, spelled) in parameters.iter().enumerate() {
+        if let Some((_, _, interface, _)) = swapped(at) {
+            want.push('L');
+            want.push_str(interface);
+            want.push(';');
+            locals.push(VType::Object((*interface).to_owned()));
+        } else {
+            want.push_str(spelled);
+            locals.push(match *spelled {
+                "I" | "S" | "B" | "C" | "Z" => VType::Integer,
+                "J" => VType::Long,
+                "F" => VType::Float,
+                "D" => VType::Double,
+                other => VType::Object(other.trim_matches(|c| c == 'L' || c == ';').to_owned()),
+            });
+        }
+    }
+    let returns = descriptor.rsplit(')').next().unwrap_or("V");
+    want.push(')');
+    want.push_str(returns);
+
+    let slots: u16 = locals.iter().map(VType::slots).sum();
+    let mut code = Code::new(locals.clone(), slots);
+    code.initialize_locals(origin, slots);
+    let mut at: u16 = 0;
+    for (which, local) in locals.iter().enumerate() {
+        if let Some((_, base, interface, _)) = swapped(which) {
+            let adapter = format!("{base}$Lambda");
+            code.new_object(origin, pool, &adapter);
+            code.dup(origin);
+            code.load(origin, Kind::Ref, at);
+            code.invoke_special(origin, pool, &adapter, "<init>", &format!("(L{interface};)V"));
+        } else {
+            let kind = match local {
+                VType::Double => Kind::Double,
+                VType::Long => Kind::Long,
+                VType::Float => Kind::Float,
+                VType::Integer => Kind::Int,
+                _ => Kind::Ref,
+            };
+            code.load(origin, kind, at);
+        }
+        at += local.slots();
+    }
+    code.invoke_static(origin, pool, PROGRAM, &body::method_name(&func.name), descriptor);
+    code.ret(origin, if returns == "V" { None } else { types::kind(&func.return_type) });
+    let body = code.finish(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4003",
+            format!("the lambda overload for `{}`: {error}", func.name),
+            origin.location,
+        )
+    })?;
+    Ok((want, body))
+}
+
+/// The closure base a parameter names, when Java could pass a lambda for it.
+///
+/// A closure's base is an `abstract class`, not an interface, and that is
+/// deliberate: a closure call is `invokevirtual` on it, and making it an
+/// interface would turn every closure call in every program into
+/// `invokeinterface` to serve the ones Java reaches. So a lambda cannot be
+/// passed directly -- Java has no syntax for an abstract class -- and the base
+/// already implements the matching `Nts*Callback`, which Java *can* lambda.
+fn lambda_interface(
+    program: &Program,
+    ty: &nts_core::hir::HirType,
+) -> Option<(String, &'static str, String)> {
+    let descriptor = types::descriptor(types::Shape::of(program), ty)?;
+    let class = descriptor.strip_prefix('L')?.strip_suffix(';')?.to_owned();
+    let layout = program.layouts.iter().find(|it| types::class_name(it) == class)?;
+    let call = layout.methods.iter().flatten().find(|name| hierarchy::member_name(name) == "call")?;
+    let func = program.funcs.iter().find(|it| &it.name == call)?;
+    let shape = instance_descriptor(program, func)?;
+    // **`instance_descriptor` already excludes the receiver**, which cost a
+    // debug session: stripping one off `(D)V` looked for a `;` that is not
+    // there and answered `None` for every closure, silently.
+    types::callback_interface(&shape).map(|interface| (class, interface, shape))
+}
+
+/// The class that lets a Java lambda stand in for a closure.
+///
+/// `final class Fn3__5$Lambda extends Fn3__5 { NtsNumberCallback it; call(d) { it.call(d); } }`
+///
+/// **One allocation, and only where Java passes a lambda.** A TypeScript caller
+/// passes its own closure and never reaches this; the cost lands on the crossing
+/// that could not happen at all before, which is the shape this lane prefers to
+/// a wrapper on the common path.
+fn lambda_adapter(
+    program: &Program,
+    base: &str,
+    interface: &'static str,
+    call: &str,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<nts_jvm_emitter::Class, Diagnostic> {
+    let _ = program;
+    let name = format!("{base}$Lambda");
+    let held = format!("L{interface};");
+    let mut pool = Pool::new();
+    let mut builder = ClassBuilder::new(name.clone(), base.to_owned());
+    // `final` because nothing may extend an adapter, and `SourceFile` because
+    // every other generated class carries one -- a frame in a stack trace with
+    // no source name is the one that stops a reader.
+    builder.access |= access::FINAL;
+    builder.source_file = Some("nts".to_owned());
+    builder.field(access::PACKAGE, "it", held.clone());
+
+    // `<init>(I)V`: super(), then store the interface.
+    let mut code = Code::new(
+        vec![VType::Object(name.clone()), VType::Object(interface.to_owned())],
+        2,
+    );
+    code.initialize_locals(origin, 2);
+    code.load(origin, Kind::Ref, 0);
+    code.invoke_special(origin, &mut pool, base, "<init>", "()V");
+    code.load(origin, Kind::Ref, 0);
+    code.load(origin, Kind::Ref, 1);
+    code.put_field(origin, &mut pool, &name, "it", &held);
+    code.ret(origin, None);
+    let body = code.finish(&pool).map_err(|error| {
+        Diagnostic::error("NTS4003", format!("the lambda adapter's constructor: {error}"), origin.location)
+    })?;
+    builder.method(access::PUBLIC, "<init>", format!("({held})V"), Some(body));
+
+    // `call(...)`: forward to the interface, whose method is also `call`.
+    let mut locals = vec![VType::Object(name.clone())];
+    for spelled in nts_jvm_emitter::descriptor::parameters(call).unwrap_or_default() {
+        locals.push(match spelled {
+            "I" | "S" | "B" | "C" | "Z" => VType::Integer,
+            "J" => VType::Long,
+            "F" => VType::Float,
+            "D" => VType::Double,
+            other => VType::Object(other.trim_matches(|c| c == 'L' || c == ';').to_owned()),
+        });
+    }
+    let slots: u16 = locals.iter().map(VType::slots).sum();
+    let mut code = Code::new(locals.clone(), slots);
+    code.initialize_locals(origin, slots);
+    code.load(origin, Kind::Ref, 0);
+    code.get_field(origin, &mut pool, &name, "it", &held);
+    let mut at: u16 = 1;
+    for local in locals.iter().skip(1) {
+        let kind = match local {
+            VType::Double => Kind::Double,
+            VType::Long => Kind::Long,
+            VType::Float => Kind::Float,
+            VType::Integer => Kind::Int,
+            _ => Kind::Ref,
+        };
+        code.load(origin, kind, at);
+        at += local.slots();
+    }
+    code.invoke_interface(origin, &mut pool, interface, "call", call);
+    code.ret(origin, None);
+    let body = code.finish(&pool).map_err(|error| {
+        Diagnostic::error("NTS4003", format!("the lambda adapter's call: {error}"), origin.location)
+    })?;
+    builder.method(access::PUBLIC, "call", call.to_owned(), Some(body));
+
+    builder.build(pool).map_err(|error| {
+        Diagnostic::error("NTS4003", format!("the lambda adapter `{name}`: {error}"), origin.location)
+    })
 }
 
 /// Add a function to the program class, with its generic signature if it has one.

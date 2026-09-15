@@ -111,3 +111,34 @@ export function labels(): Set<string> {
   s.add("beta");
   return s;
 }
+
+/// A TypeScript function taking a callback, which Java may satisfy with a
+/// **lambda**.
+///
+/// The parameter's own type is a closure base -- an `abstract class`, not an
+/// interface, because a closure call is `invokevirtual` on it and making it an
+/// interface would turn every closure call in every program into
+/// `invokeinterface` to serve the ones Java reaches. Java has no syntax for an
+/// abstract class, so the emitter publishes a second overload taking the
+/// matching `Nts*Callback`, which Java can lambda, and wraps it.
+///
+/// **One allocation, and only on this path.** A TypeScript caller passes its
+/// own closure to the closure form and never touches the wrapper; `javac` picks
+/// the most specific overload, so only a lambda -- which is not a closure --
+/// reaches it.
+export function eachUpTo(n: number, f: (x: number) => void): void {
+  for (let i = 0; i < n; i++) {
+    f(i);
+  }
+}
+
+/// A closure of our own, so the lowering has one: a program with no closures at
+/// all refuses to call a function value, which is a `NTS1001` from lowering
+/// rather than from this backend.
+export function triangle(n: number): number {
+  let total = 0;
+  eachUpTo(n, (x: number): void => {
+    total = total + x;
+  });
+  return total;
+}

@@ -3,6 +3,28 @@
 // Regenerate with NTS_REGENERATE=1 ./build.sh
 
 Compiled from "nts"
+public final class nts.gen.Cell0 {
+  double value;
+  public nts.gen.Cell0();
+}
+Compiled from "nts"
+public final class nts.gen.Closure0 extends nts.gen.Fn3__41 implements nts.rt.NtsNumberCallback {
+  nts.gen.Cell0 total;
+  public void call(double);
+  public nts.gen.Closure0();
+}
+Compiled from "nts"
+public final class nts.gen.Fn3__41$Lambda extends nts.gen.Fn3__41 {
+  nts.rt.NtsNumberCallback it;
+  public nts.gen.Fn3__41$Lambda(nts.rt.NtsNumberCallback);
+  public void call(double);
+}
+Compiled from "nts"
+public abstract class nts.gen.Fn3__41 implements nts.rt.NtsNumberCallback {
+  public abstract void call(double);
+  public nts.gen.Fn3__41();
+}
+Compiled from "nts"
 public final class nts.gen.Program {
   public nts.gen.Program();
   public static double Session$bump(nts.gen.Session);
@@ -14,6 +36,12 @@ public final class nts.gen.Program {
   public static nts.rt.NtsBigInt scaled(nts.rt.NtsBigInt);
   public static java.lang.String joined(java.lang.String[], java.lang.String);
   public static nts.rt.NtsSet<java.lang.String> labels();
+  public static void eachUpTo(double, nts.gen.Fn3__41);
+  public static double triangle(double);
+  public static void Closure0$call(nts.gen.Closure0, double);
+  public static void eachUpTo$Closure0(double, nts.gen.Closure0);
+  public static void eachUpTo$whole(int, nts.gen.Fn3__41);
+  public static void eachUpTo(double, nts.rt.NtsNumberCallback);
 }
 Compiled from "nts"
 public final class nts.gen.Session {

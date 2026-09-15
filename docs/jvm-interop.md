@@ -2111,7 +2111,7 @@ Rows corrected in place carry an inline comment with what the artefact said.
 | TS extends a Java class | | | ● |
 | Callback returning a value, same thread | | | ● |
 | Callback void, foreign thread -- **refused**, by name | | | ● |  <!-- 2026-09-15: it ran, on the foreign thread, mutating a lane's heap from outside it with no happens-before edge. `NtsEnv.current` has always refused a second lane by name and the bridge never called it, so the check existed off the path that needed it. The bridge asks now, and android-shape asserts `loader:NtsRefusal` as part of its output. Working delivery needs the post path, which is sized above and not built. -->
-| Closure as a functional interface | | | ● |  <!-- corrected 2026-09-15: not exercised in ts-from-java: neither file contains a lambda, a method reference or a functional interface. Its README already listed closures under "what is not here yet". -->
+| Closure as a functional interface | | ● | ● |  <!-- ts-from-java as of 2026-09-15: `eachUpTo` publishes twice, once taking the closure base and once taking the `NtsNumberCallback` it implements, so Java may pass a lambda. The base stays an abstract class because a closure call is `invokevirtual` on it; making it an interface would cost `invokeinterface` on every closure call in every program to serve the ones Java reaches. One allocation, on the lambda path only. -->
 
 ## 1. `java-from-ts` — TypeScript consumes Java
 
