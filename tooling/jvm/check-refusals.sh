@@ -54,6 +54,13 @@ claims=$(awk '
 
 [ -n "$claims" ] || { echo "check-refusals: $project documents no refusals"; exit 0; }
 
+# Scratch output for `emit-jvm`, which this never reads: the diagnostics are on
+# stdout and the class files are a side effect of the only command that reports
+# a lowering refusal.
+out="${TMPDIR:-/tmp}/nts-check-refusals.$$"
+mkdir -p "$out"
+trap 'rm -rf "$out"' EXIT
+
 checked=0
 printf '%s\n' "$claims" | while IFS="$(printf '\t')" read -r code text line; do
   [ -n "$code" ] || continue
@@ -64,7 +71,23 @@ printf '%s\n' "$claims" | while IFS="$(printf '\t')" read -r code text line; do
     { print }
   ' "$file" > "$file.probing"
   mv -f "$file.probing" "$file"
-  answer=$("$nts" check "$project/tsconfig.json" 2>&1 || true)
+  # **`emit-jvm`, not `check`, and this cost a wrong conclusion to find.**
+  #
+  # `check` stops after the frontend and reports what the *checker* refuses. A
+  # lowering refusal -- every `NTS` code -- is produced further down, so a claim
+  # about one could never be verified here: the probe ran, the refusal fired
+  # somewhere `check` does not look, and the arm read as "not produced".
+  #
+  # Diagnosed three times before being measured, and one of the wrong answers
+  # was written down and committed: that `refused` is exported and uncalled, so
+  # lowering never reaches it. Calling it changed nothing. Nor did constructing
+  # the receiver locally, nor the statement's shape. Running `emit-jvm` on the
+  # same file fires the refusal first try, and the difference between the two
+  # commands was the whole of it.
+  #
+  # `emit-jvm` reports the checker's errors too -- a `TS2365` arm produces
+  # identically under both -- so this is strictly wider and nothing is lost.
+  answer=$("$nts" emit-jvm "$project/tsconfig.json" --out "$out" 2>&1 || true)
   ( cd "$here" && git checkout -- "$file" )
   case $answer in
     *"$code"*) ;;

@@ -17,35 +17,31 @@ export function refused(catalog: Catalog): void {
   // Refused by the checker
   // ---------------------------------------------------------------------
 
-  // ---------------------------------------------------------------------
-  // One refusal that is real and that this file cannot carry
-  // ---------------------------------------------------------------------
+  // NTS1001: a call inside a `try`, whose `throw` would not reach this handler
   //
-  // A Java method can throw and a TypeScript `try` cannot catch it, so
+  // A Java method can throw and a TypeScript `try` cannot catch it: a `throw`
+  // lowers to a jump to the handler *block*, a branch inside one function, and
+  // a callee has no edge back to its caller's handler. Refused rather than
+  // compiled, because the alternative is a `catch` that never runs.
   //
-  //     try { catalog.parse("abc"); } catch (e) { }
+  // **This was a silent wrong answer until 2026-09-15.** The guard had always
+  // been here and had always fired for a TypeScript call; it could not see a
+  // bound one. `calls_compiled_code` tests membership of a set built by
+  // scanning function *bodies* for a `throw`, and a declaration-only foreign
+  // method has none -- so a bound call was structurally excluded rather than
+  // overlooked. The `try` compiled, emitted no exception table, and aborted
+  // where node prints the caught value.
   //
-  // is refused: `NTS1001 a call inside a `try`, whose `throw` would not reach
-  // this handler`. Verified by running it -- in a `main` that this project's
-  // entry point reaches.
+  // A native C call inside a `try` is still allowed, and that is not an
+  // oversight: C cannot unwind into TypeScript, so there is nothing to catch.
   //
-  // **It has no entry below, and the reason is a property of this file.** Every
-  // claim below is a `TS` code: a *checker* error, which fires whether or not
-  // the function is ever lowered. This one is an `NTS` code from lowering, and
-  // lowering only reaches a function something calls. `refused` is exported and
-  // nothing calls it, so the probe uncomments a line in a function that is
-  // never lowered and the refusal never fires -- while 49 unrelated `NTS1001`s
-  // from `main.ts` sit in the output either way, which is what a code-only
-  // check would have matched.
+  // **This is the first `NTS` claim in this file**, and adding it is what
+  // showed that `check-refusals.sh` was running `nts check` -- which stops
+  // after the frontend and never sees a lowering refusal. Every claim above is
+  // a `TS` code and was verified either way. This one is why the script runs
+  // `emit-jvm` now.
   //
-  // Recorded rather than forced. Making it producible means `main.ts` calling
-  // `refused`, which would lower every commented line's neighbourhood and
-  // change what the other seven claims mean. The refusal itself, its mechanism
-  // and the constraint on its fix are in `docs/jvm-interop.md`.
-  //
-  // It is also the reason `check-refusals.sh` asserts the diagnostic's *words*
-  // and not just its code: this claim's code is in the output 49 times over,
-  // and none of them is this claim.
+  //   try { catalog.parse("abc"); } catch (e) { }
 
   // TS2365: Operator '+' cannot be applied to types 'bigint' and '1'.
   //
