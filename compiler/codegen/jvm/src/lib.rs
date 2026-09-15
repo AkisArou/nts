@@ -238,12 +238,8 @@ pub fn emit(program: &Program) -> Emitted {
                 } else {
                     0
                 };
-                builder.method(
-                    access::PUBLIC | access::STATIC | synthetic,
-                    name,
-                    signature,
-                    Some(rendered),
-                );
+                let access = access::PUBLIC | access::STATIC | synthetic;
+                publish(&mut builder, program, func, access, &name, &signature, rendered);
             }
             Err(diagnostic) => diagnostics.push(diagnostic),
         }
@@ -1224,6 +1220,85 @@ fn deliverable_bridges(
         }
     }
     Ok(())
+}
+
+/// Add a function to the program class, with its generic signature if it has one.
+///
+/// **The whole of why this is a function and not two lines inline.** A generic
+/// signature is the exception -- most methods have none -- so the decision is a
+/// branch at every publish, and a branch repeated is a branch that drifts. The
+/// alternative was a `match` at the one call site, which pushed `emit` over the
+/// line limit and buried a one-sentence decision in the middle of a loop about
+/// something else.
+fn publish(
+    builder: &mut ClassBuilder,
+    program: &Program,
+    func: &nts_core::hir::Func,
+    access: u16,
+    name: &str,
+    descriptor: &str,
+    body: nts_jvm_emitter::Body,
+) {
+    match generic_signature(program, func, descriptor) {
+        Some(generic) => {
+            builder.method_generic(access, name, descriptor, generic, Some(body));
+        }
+        None => builder.method(access, name, descriptor, Some(body)),
+    }
+}
+
+/// A method's generic signature, or `None` when the descriptor already says
+/// everything.
+///
+/// Built beside the descriptor rather than instead of it: the two must agree
+/// after erasure, and the cheapest way to keep them agreeing is to derive both
+/// from the same types in the same order. Returns `None` when nothing in the
+/// signature is parameterised, so the attribute appears only where it says
+/// something -- an attribute on every method would be bytes that mean nothing
+/// and one more thing to keep true.
+fn generic_signature(program: &Program, func: &nts_core::hir::Func, descriptor: &str) -> Option<String> {
+    let shape = types::Shape::of(program);
+    let mut rendered = String::from("(");
+    let mut interesting = false;
+    for param in &func.params {
+        let plain = types::descriptor(shape, &param.ty)?;
+        match types::parameterised(shape, &param.ty) {
+            Some(generic) => {
+                interesting = true;
+                rendered.push_str(&generic);
+            }
+            None => rendered.push_str(&plain),
+        }
+    }
+    rendered.push(')');
+    match types::parameterised(shape, &func.return_type) {
+        Some(generic) => {
+            interesting = true;
+            rendered.push_str(&generic);
+        }
+        None => rendered.push_str(types::descriptor(shape, &func.return_type).as_deref().unwrap_or("V")),
+    }
+    // The erasure has to be the descriptor. If it is not, this lane has built a
+    // signature for a shape it does not really emit, and an attribute nobody can
+    // act on is worse than none: `javac` reads it in preference to the
+    // descriptor.
+    (interesting && erases_to(&rendered, descriptor)).then_some(rendered)
+}
+
+/// Whether a generic signature erases to a descriptor, by stripping every
+/// `<...>` and comparing.
+fn erases_to(signature: &str, descriptor: &str) -> bool {
+    let mut erased = String::with_capacity(signature.len());
+    let mut depth = 0usize;
+    for ch in signature.chars() {
+        match ch {
+            '<' => depth += 1,
+            '>' => depth = depth.saturating_sub(1),
+            other if depth == 0 => erased.push(other),
+            _ => {}
+        }
+    }
+    erased == descriptor
 }
 
 fn foreign_bridges(

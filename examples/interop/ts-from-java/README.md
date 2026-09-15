@@ -136,5 +136,20 @@ Both directions cheap is a real design question, not an oversight to patch.
 
 ## What is not here yet
 
-Closures as Java lambdas, and generics across the boundary -- `tags()` publishes
-a **raw** `NtsMap`, which is why `Main.java` casts every value it reads out.
+Closures as Java lambdas.
+
+~~and generics across the boundary -- `tags()` publishes a **raw** `NtsMap`,
+which is why `Main.java` casts every value it reads out.~~ **Done 2026-09-15.**
+`tags()` publishes `NtsMap<String, String>` and `Main.java` casts nothing.
+
+The JVM erases generics, so this is the `Signature` attribute -- the same
+mechanism that makes a Kotlin or Scala jar's generics visible from Java, and the
+reason the emitter grew the ability to write one. **A signature must erase to
+its descriptor**, which is why `NtsMap` and `NtsSet` carry type parameters of
+their own: writing `Ljava/util/Map<...>;` over a descriptor that says
+`Lnts/rt/NtsMap;` would be a malformed attribute rather than a convenient lie,
+and `javac` reads the attribute in preference to the descriptor.
+
+A type argument cannot be a primitive, so a TypeScript `number` key is
+`java.lang.Double` -- which is also what the table really stores, measured by
+reading `getClass()` on the Java side rather than inferred.

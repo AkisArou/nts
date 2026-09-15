@@ -18,7 +18,7 @@ package nts.rt;
  * rather than a bit, which is a compile error at every site that ignores it
  * instead of a silent wrong answer.
  */
-public final class NtsMap extends NtsTable implements java.util.Map<Object, Object> {
+public final class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
 
     public static NtsMap newMap(double kind) { return new NtsMap(); }
 
@@ -58,27 +58,30 @@ public final class NtsMap extends NtsTable implements java.util.Map<Object, Obje
     @Override public int size() { return count; }
     @Override public boolean isEmpty() { return count == 0; }
     @Override public boolean containsKey(Object key) { return has(this, fromJava(key)); }
-    @Override public Object get(Object key) { return toJava(get(this, fromJava(key))); }
+    @Override @SuppressWarnings("unchecked")
+    public V get(Object key) { return (V) toJava(get(this, fromJava(key))); }
 
     @Override
-    public Object put(Object key, Object value) {
+    @SuppressWarnings("unchecked")
+    public V put(K key, V value) {
         NtsValue k = fromJava(key);
-        Object previous = toJava(get(this, k));
+        V previous = (V) toJava(get(this, k));
         set(this, k, fromJava(value));
         return previous;
     }
 
     @Override
-    public Object remove(Object key) {
+    @SuppressWarnings("unchecked")
+    public V remove(Object key) {
         NtsValue k = fromJava(key);
-        Object previous = toJava(get(this, k));
+        V previous = (V) toJava(get(this, k));
         delete(this, k);
         return previous;
     }
 
     @Override
-    public void putAll(java.util.Map<?, ?> from) {
-        for (java.util.Map.Entry<?, ?> entry : from.entrySet()) {
+    public void putAll(java.util.Map<? extends K, ? extends V> from) {
+        for (java.util.Map.Entry<? extends K, ? extends V> entry : from.entrySet()) {
             put(entry.getKey(), entry.getValue());
         }
     }
@@ -95,43 +98,47 @@ public final class NtsMap extends NtsTable implements java.util.Map<Object, Obje
     }
 
     @Override
-    public java.util.Set<Object> keySet() {
-        return new java.util.AbstractSet<Object>() {
+    public java.util.Set<K> keySet() {
+        return new java.util.AbstractSet<K>() {
             @Override public int size() { return count; }
             @Override public boolean contains(Object key) { return containsKey(key); }
             @Override
-            public java.util.Iterator<Object> iterator() {
-                return new Cursor<Object>() {
-                    @Override Object of(int absolute) { return toJava(keyAtI(NtsMap.this, absolute)); }
+            public java.util.Iterator<K> iterator() {
+                return new Cursor<K>() {
+                    @Override @SuppressWarnings("unchecked")
+                    K of(int absolute) { return (K) toJava(keyAtI(NtsMap.this, absolute)); }
                 };
             }
         };
     }
 
     @Override
-    public java.util.Collection<Object> values() {
-        return new java.util.AbstractCollection<Object>() {
+    public java.util.Collection<V> values() {
+        return new java.util.AbstractCollection<V>() {
             @Override public int size() { return count; }
             @Override
-            public java.util.Iterator<Object> iterator() {
-                return new Cursor<Object>() {
-                    @Override Object of(int absolute) { return toJava(valueAt(NtsMap.this, absolute)); }
+            public java.util.Iterator<V> iterator() {
+                return new Cursor<V>() {
+                    @Override @SuppressWarnings("unchecked")
+                    V of(int absolute) { return (V) toJava(valueAt(NtsMap.this, absolute)); }
                 };
             }
         };
     }
 
     @Override
-    public java.util.Set<java.util.Map.Entry<Object, Object>> entrySet() {
-        return new java.util.AbstractSet<java.util.Map.Entry<Object, Object>>() {
+    public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
+        return new java.util.AbstractSet<java.util.Map.Entry<K, V>>() {
             @Override public int size() { return count; }
             @Override
-            public java.util.Iterator<java.util.Map.Entry<Object, Object>> iterator() {
-                return new Cursor<java.util.Map.Entry<Object, Object>>() {
+            public java.util.Iterator<java.util.Map.Entry<K, V>> iterator() {
+                return new Cursor<java.util.Map.Entry<K, V>>() {
                     @Override
-                    java.util.Map.Entry<Object, Object> of(int absolute) {
-                        return new java.util.AbstractMap.SimpleImmutableEntry<Object, Object>(
-                            toJava(keyAtI(NtsMap.this, absolute)), toJava(valueAt(NtsMap.this, absolute)));
+                    @SuppressWarnings("unchecked")
+                    java.util.Map.Entry<K, V> of(int absolute) {
+                        return new java.util.AbstractMap.SimpleImmutableEntry<K, V>(
+                            (K) toJava(keyAtI(NtsMap.this, absolute)),
+                            (V) toJava(valueAt(NtsMap.this, absolute)));
                     }
                 };
             }

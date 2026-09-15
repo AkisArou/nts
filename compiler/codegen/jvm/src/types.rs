@@ -100,6 +100,46 @@ pub const LANE_BOUND: &str = "nts/rt/NtsLaneBound";
 /// The boundary helpers a callback from a foreign thread goes through.
 pub const FOREIGN: &str = "nts/rt/NtsForeign";
 
+/// The parameterised form of a type, when the descriptor cannot carry it.
+///
+/// **The JVM erases generics, so this is the only way a Java caller sees them.**
+/// `Map<String, String>` and a raw `Map` have the same descriptor and the same
+/// bytes at every call; `javac` reads the `Signature` attribute instead when it
+/// type-checks against a class file, which is how a Kotlin or Scala jar's
+/// generics are visible from Java at all.
+///
+/// **A signature must erase to its descriptor**, which is why `NtsMap` and
+/// `NtsSet` carry type parameters of their own. Writing
+/// `Ljava/util/Map<...>;` here instead would erase to `java/util/Map` where the
+/// descriptor says `nts/rt/NtsMap`, and that is a malformed attribute rather
+/// than a convenient lie.
+///
+/// The arguments are the classes the table *actually stores*, measured by
+/// reading `getClass()` on the Java side rather than inferred: `String` for a
+/// string, **`Double`** for a number, `Boolean` for a boolean. A type argument
+/// cannot be a primitive, so a `number` key is `java.lang.Double` and not `D`.
+#[must_use]
+pub fn parameterised(shape: Shape<'_>, ty: &HirType) -> Option<String> {
+    let boxed = |inner: &HirType| -> Option<String> {
+        Some(match inner {
+            HirType::Managed(ManagedType::String) => "Ljava/lang/String;".to_owned(),
+            HirType::Bool => "Ljava/lang/Boolean;".to_owned(),
+            HirType::Int { .. } | HirType::Float { .. } => "Ljava/lang/Double;".to_owned(),
+            HirType::Erased => "Ljava/lang/Object;".to_owned(),
+            other => descriptor(shape, other)?,
+        })
+    };
+    match ty {
+        HirType::Managed(ManagedType::Map(key, value)) => {
+            Some(format!("L{MAP}<{}{}>;", boxed(key)?, boxed(value)?))
+        }
+        HirType::Managed(ManagedType::Set(element)) => {
+            Some(format!("L{SET}<{}>;", boxed(element)?))
+        }
+        _ => None,
+    }
+}
+
 /// How a `void` interface member is delivered through the inbox.
 ///
 /// The runtime carries a holder for each of these shapes already, so a closure

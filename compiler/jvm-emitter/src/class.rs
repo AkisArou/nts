@@ -104,6 +104,15 @@ pub struct Method {
     pub descriptor: String,
     /// Absent for an abstract method, which is the only kind that has none.
     pub body: Option<Body>,
+    /// The generic signature, when the descriptor cannot carry it.
+    ///
+    /// **This is the whole of how generics reach a Java caller.** The JVM erases
+    /// them, so `Map<String, String>` and a raw `Map` have the same descriptor
+    /// and the same bytes at every call -- and `javac` reads this attribute
+    /// rather than the descriptor when it type-checks against a class file,
+    /// which is why a Kotlin or Scala jar's generics are visible from Java at
+    /// all. Without it a caller writes `Map<Object, Object>` and casts.
+    pub signature: Option<String>,
 }
 
 /// Which origin each synthetic line of one method stands for.
@@ -190,6 +199,30 @@ impl ClassBuilder {
             name: name.into(),
             descriptor: descriptor.into(),
             body,
+            signature: None,
+        });
+    }
+
+    /// A method whose generic signature the descriptor cannot carry.
+    ///
+    /// Separate from [`Self::method`] rather than a fifth parameter on it,
+    /// because a generic signature is the exception: most methods have none, and
+    /// every existing call site passing `None` would say nothing except that the
+    /// author read this doc comment.
+    pub fn method_generic(
+        &mut self,
+        access: u16,
+        name: impl Into<String>,
+        descriptor: impl Into<String>,
+        signature: impl Into<String>,
+        body: Option<Body>,
+    ) {
+        self.methods.push(Method {
+            access,
+            name: name.into(),
+            descriptor: descriptor.into(),
+            body,
+            signature: Some(signature.into()),
         });
     }
 
@@ -327,8 +360,12 @@ impl ClassBuilder {
             tail.extend_from_slice(&method.access.to_be_bytes());
             tail.extend_from_slice(&name.to_be_bytes());
             tail.extend_from_slice(&descriptor.to_be_bytes());
+            // `Code` and `Signature`, each present or not, counted before
+            // either is written -- the count is a `u2` ahead of the bytes and
+            // cannot be patched afterwards.
+            let signature = method.signature.as_ref().map(|it| (pool.utf8("Signature"), pool.utf8(it)));
+            write_count(&mut tail, usize::from(method.body.is_some()) + usize::from(signature.is_some()));
             if let Some(body) = method.body {
-                write_count(&mut tail, 1);
                 let (attribute, origins) = code_attribute(&mut pool, &body);
                 tail.extend_from_slice(&attribute);
                 lines.push(MethodLines {
@@ -336,8 +373,11 @@ impl ClassBuilder {
                     descriptor: method.descriptor,
                     origins,
                 });
-            } else {
-                write_count(&mut tail, 0);
+            }
+            if let Some((name, value)) = signature {
+                tail.extend_from_slice(&name.to_be_bytes());
+                tail.extend_from_slice(&2u32.to_be_bytes());
+                tail.extend_from_slice(&value.to_be_bytes());
             }
         }
 

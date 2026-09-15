@@ -27,14 +27,21 @@ public final class Main {
         // **A JavaScript Map, held as a java.util.Map.** No copy and no
         // wrapper: `NtsMap implements java.util.Map`, so this reference IS the
         // table the TypeScript wrote, backed by the same arrays.
-        java.util.Map<Object, Object> tags = nts.gen.Program.tags();
-        String kind = (String) tags.get("kind");
+        // **`Map<String, String>`, not `Map<Object, Object>`, and no cast.**
+        // The JVM erases generics, so this comes from the `Signature`
+        // attribute on `tags()` -- the same mechanism that makes a Kotlin or
+        // Scala jar's generics visible from Java, and the reason `NtsMap`
+        // carries type parameters: a signature must erase to its descriptor,
+        // so `Ljava/util/Map<...>;` over an `Lnts/rt/NtsMap;` descriptor would
+        // be malformed rather than convenient.
+        java.util.Map<String, String> tags = nts.gen.Program.tags();
+        String kind = tags.get("kind");
         int size = tags.size();
 
         // Insertion order survives, which a HashMap would not give.
         StringBuilder order = new StringBuilder();
-        for (Object key : tags.keySet()) {
-            order.append((String) key).append(' ');
+        for (String key : tags.keySet()) {
+            order.append(key).append(' ');
         }
 
         // Writing through the Java interface is visible to the TypeScript side,
@@ -42,13 +49,15 @@ public final class Main {
         // above and fail this one.
         tags.put("added", "by java");
         boolean live = nts.rt.NtsMap.has(
-            (nts.rt.NtsMap) tags, nts.rt.NtsValue.ofString("added"));
+            (nts.rt.NtsMap<String, String>) tags, nts.rt.NtsValue.ofString("added"));
 
         // **SameValueZero.** The TypeScript stored the key `0`; Java looks it
         // up as `-0.0` and finds it, because the table normalises `-0` to `+0`
         // at insert and that makes JS's rule coincide with `Double.equals`.
-        java.util.Map<Object, Object> zeroes = nts.gen.Program.zeroKeyed();
-        String byNegativeZero = (String) zeroes.get(Double.valueOf(-0.0));
+        // A TypeScript `number` key is a `java.lang.Double`: a type argument
+        // cannot be a primitive, and `Double` is what the table really stores.
+        java.util.Map<Double, String> zeroes = nts.gen.Program.zeroKeyed();
+        String byNegativeZero = zeroes.get(Double.valueOf(-0.0));
 
         // A TypeScript `string[]` is a Java `String[]`, on the same
         // no-copy rule as the `double[]` above.
@@ -58,8 +67,8 @@ public final class Main {
         // **A TypeScript `Set`, held as a java.util.Set.** Not a `Map`, not a
         // view, not a copy: this reference IS the table, and every `Set` API
         // works on it because it implements the interface.
-        java.util.Set<Object> labels = nts.gen.Program.labels();
-        java.util.List<Object> ordered = new java.util.ArrayList<Object>(labels);
+        java.util.Set<String> labels = nts.gen.Program.labels();
+        java.util.List<String> ordered = new java.util.ArrayList<String>(labels);
         boolean isNotAMap = !(((Object) labels) instanceof java.util.Map);
 
         // **A TypeScript `bigint` is `nts.rt.NtsBigInt`, not a `long`.**

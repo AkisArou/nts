@@ -15,7 +15,7 @@ package nts.rt;
  * The contract below is written out rather than inherited, which is the price
  * of the storage being shared by inheritance rather than by a field.
  */
-public final class NtsSet extends NtsTable implements java.util.Set<Object> {
+public final class NtsSet<E> extends NtsTable implements java.util.Set<E> {
 
     public static NtsSet newSet(double kind) { return new NtsSet(); }
 
@@ -46,7 +46,7 @@ public final class NtsSet extends NtsTable implements java.util.Set<Object> {
     @Override public void clear() { clear(this); }
 
     @Override
-    public boolean add(Object value) {
+    public boolean add(E value) {
         NtsValue v = fromJava(value);
         if (has(this, v)) {
             return false;
@@ -66,9 +66,10 @@ public final class NtsSet extends NtsTable implements java.util.Set<Object> {
     }
 
     @Override
-    public java.util.Iterator<Object> iterator() {
-        return new Cursor<Object>() {
-            @Override Object of(int absolute) { return toJava(keyAtI(NtsSet.this, absolute)); }
+    public java.util.Iterator<E> iterator() {
+        return new Cursor<E>() {
+            @Override @SuppressWarnings("unchecked")
+            E of(int absolute) { return (E) toJava(keyAtI(NtsSet.this, absolute)); }
         };
     }
 
@@ -109,9 +110,9 @@ public final class NtsSet extends NtsTable implements java.util.Set<Object> {
     }
 
     @Override
-    public boolean addAll(java.util.Collection<?> them) {
+    public boolean addAll(java.util.Collection<? extends E> them) {
         boolean changed = false;
-        for (Object value : them) {
+        for (E value : them) {
             changed |= add(value);
         }
         return changed;

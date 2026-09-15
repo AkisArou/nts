@@ -9,11 +9,11 @@ public final class nts.gen.Program {
   public static double Session$hits(nts.gen.Session);
   public static java.lang.String greet(java.lang.String);
   public static double total(double[]);
-  public static nts.rt.NtsMap tags();
-  public static nts.rt.NtsMap zeroKeyed();
+  public static nts.rt.NtsMap<java.lang.String, java.lang.String> tags();
+  public static nts.rt.NtsMap<java.lang.Double, java.lang.String> zeroKeyed();
   public static nts.rt.NtsBigInt scaled(nts.rt.NtsBigInt);
   public static java.lang.String joined(java.lang.String[], java.lang.String);
-  public static nts.rt.NtsSet labels();
+  public static nts.rt.NtsSet<java.lang.String> labels();
 }
 Compiled from "nts"
 public final class nts.gen.Session {
