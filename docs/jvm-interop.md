@@ -95,7 +95,53 @@ finding the plain call and not the bound one.
 
 Reported rather than worked around, because a backend-side approximation of
 "was this inside a `try`" would be a second derivation of something the lowering
-knows and dropped, and this document has a section on what that costs.
+knows and dropped, and this document has a section on what that costs. The
+`catch` is not merely unhandled at the JVM level -- it is **absent from the class
+file**: `javap -c` finds its value zero times, because the lowering dropped the
+block as unreachable before codegen ever saw it.
+
+### The mechanism, and the constraint on fixing it
+
+`calls_compiled_code` ends `!record.declarations.is_empty() &&
+self.throwing.contains(&symbol.0)`. A bound method passes the first half -- the
+`.d.ts` declares it -- and fails the second: `throwing_symbols` scans what each
+symbol's declarations *write*, looking for a `throw` in a body, and a
+declaration-only foreign method has no body. It is not a lookup that misses; it
+is a set the method is structurally excluded from. So `call_within` does find
+the bound call, and `calls_compiled_code` then answers "cannot raise" about it.
+
+**A lane-blind fix would be wrong.** The premise three lines above -- "only
+compiled code can [throw]: a runtime helper aborts rather than throwing" -- is
+still true for the native lane, because a C function cannot unwind into
+TypeScript. `native-poll`, `native-fd`, `native-open` and `native-stat` all
+contain a `try` around a native call today and are correctly not refused.
+
+So the predicate splits by what the foreign call *is*:
+
+| callee | can raise |
+| --- | --- |
+| `Callee::Direct` in `throwing` | yes, unchanged |
+| `Callee::External(name)` with `program.foreign.get(name).is_some()` | **yes** -- a bound Java method |
+| `Callee::External(name)` not in `program.foreign` | no -- a runtime helper, which aborts |
+| `Callee::Native(_)` | no -- C cannot unwind into TypeScript |
+
+`program.foreign` is the discriminator rather than a new set because it *is* the
+JVM binding table and nothing else fills it: its `ForeignKind` values are JVM
+member kinds, so a C-only program has it empty and the native lane is excluded
+by construction. `ops.rs` already performs that exact lookup to tell a bound
+method from a helper, so the two lanes ask one question.
+
+**Not restricted to methods declaring `throws`**, which is the tempting version
+and is wrong: Java's unchecked exceptions mean any method can raise, and a
+`NullPointerException` out of a getter is in no `throws` clause. That version
+would be correct about the declared half and silently permissive about the rest.
+
+**The premise was true when it was written.** This lane falsified it by adding
+foreign calls that can raise -- without touching the file, without a test
+changing, and with nothing to diff. A guard whose reasoning is written out and
+correct is the last place anyone re-reads, which is why the thing that finds
+this class of defect is grepping the *invariant's words* -- "only compiled code
+can", "cannot throw" -- rather than the code.
 
 ## Where "done" stands, measured 2026-09-15
 
