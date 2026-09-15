@@ -70,7 +70,14 @@ pub(crate) struct Request {
 struct Member {
     name: String,
     ty: Shape,
+    /// Other C names for these same bytes, when this member was lifted out of
+    /// an anonymous union. Rendered as a comment: they are unreachable from
+    /// this surface, and saying so is better than losing them silently.
+    aliases: Vec<String>,
 }
+
+/// How a reason found inside a C11 anonymous member is marked, once.
+const THROUGH: &str = "through an unnamed member: ";
 
 /// The part of C's type grammar this understands.
 ///
@@ -370,6 +377,30 @@ impl Binding {
         tag: &str,
         typedefs: &BTreeMap<String, String>,
     ) -> Result<(Record, Vec<Record>)> {
+        Self::describe(node, tag, typedefs).map_err(|problems| {
+            anyhow::anyhow!(
+                "`{tag}` cannot be described, for {} reason{}:\n  - {}",
+                problems.len(),
+                if problems.len() == 1 { "" } else { "s" },
+                problems.join("\n  - ")
+            )
+        })
+    }
+
+    /// The body of [`Self::record_from`], reporting every reason as a list
+    /// rather than as formatted prose.
+    ///
+    /// The distinction is not cosmetic. A record reached through an anonymous
+    /// member is described by a recursive call, and folding that call's reasons
+    /// into one string made the enclosing record report "for 1 reason" above
+    /// twelve bullets -- `struct tcphdr` has two nested anonymous records and
+    /// ten bit-fields between them. The count and the list have to come from
+    /// the same place or they disagree.
+    fn describe(
+        node: &serde_json::Value,
+        tag: &str,
+        typedefs: &BTreeMap<String, String>,
+    ) -> std::result::Result<(Record, Vec<Record>), Vec<String>> {
         let union = node.get("tagUsed").and_then(serde_json::Value::as_str) == Some("union");
         let packed = children(node)
             .iter()
@@ -417,11 +448,32 @@ impl Binding {
             }
             let (written, desugared) = qual_type(field).unwrap_or_default();
             let Some(member) = field.get("name").and_then(serde_json::Value::as_str) else {
-                problems.push(format!(
-                    "an unnamed member of type `{written}`: C reaches through one as though its \
-                     fields belonged to the enclosing record, and this surface names types"
-                ));
-                pending = None;
+                // A C11 anonymous member. C reaches through one -- `usage.ru_maxrss`
+                // names a member of the anonymous union inside `struct rusage`, and
+                // `offsetof(struct rusage, ru_maxrss)` is legal and correct -- so
+                // this surface does the same and splices the members in here.
+                match pending.take() {
+                    Some(declaration) => match Self::lift(declaration, tag, typedefs) {
+                        Ok((lifted, deeper)) => {
+                            members.extend(lifted);
+                            nested.extend(deeper);
+                        }
+                        // Said once however deep the nesting goes: `struct
+                        // tcphdr` is an anonymous union of anonymous structs,
+                        // and a prefix per level said it three times.
+                        Err(why) => problems.extend(why.into_iter().map(|one| {
+                            if one.starts_with(THROUGH) {
+                                one
+                            } else {
+                                format!("{THROUGH}{one}")
+                            }
+                        })),
+                    },
+                    None => problems.push(format!(
+                        "an unnamed member of type `{written}` with no declaration beside it, \
+                         which is a parse this tool does not know how to read"
+                    )),
+                }
                 continue;
             };
             // A member whose *type* is anonymous gets a name from the record
@@ -429,13 +481,13 @@ impl Binding {
             // never spells it, because C cannot.
             let ty = if written.contains("(unnamed at") {
                 let Some(declaration) = pending.take() else {
-                    bail!(
+                    return Err(vec![format!(
                         "`{tag}.{member}` has an anonymous type with no declaration beside it, \
                          which is a parse this tool does not know how to read"
-                    );
+                    )]);
                 };
                 let invented = format!("{tag}_{member}");
-                let (mut inner, deeper) = Self::record_from(declaration, &invented, typedefs)?;
+                let (mut inner, deeper) = Self::describe(declaration, &invented, typedefs)?;
                 inner.anonymous = true;
                 nested.push(inner);
                 nested.extend(deeper);
@@ -450,23 +502,63 @@ impl Binding {
                     }
                 }
             };
-            members.push(Member { name: member.to_owned(), ty });
+            members.push(Member { name: member.to_owned(), ty, aliases: Vec::new() });
         }
         if !problems.is_empty() {
-            bail!(
-                "`{tag}` cannot be described, for {} reason{}:\n  - {}",
-                problems.len(),
-                if problems.len() == 1 { "" } else { "s" },
-                problems.join("\n  - ")
-            );
+            return Err(problems);
         }
         if members.is_empty() {
-            bail!("`{tag}` has no members, which is not a layout a binding can describe");
+            return Err(vec![format!(
+                "`{tag}` has no members, which is not a layout a binding can describe"
+            )]);
         }
         Ok((
             Record { tag: tag.to_owned(), anonymous: false, union, packed, members },
             nested,
         ))
+    }
+
+    /// The members a C11 anonymous member contributes to its enclosing record.
+    ///
+    /// C reaches through one as though its fields were the enclosing record's,
+    /// and that transparency is not a convenience this tool has to reproduce --
+    /// it is a property of the language that every check already generated for
+    /// an ordinary member keeps working unchanged. `offsetof(struct rusage,
+    /// ru_maxrss)`, `_Generic(&p->ru_maxrss, long *: 1)` and `p->ru_maxrss` are
+    /// all legal C for a member of an anonymous union. So the members are
+    /// spliced in, and the witness proves the result against the real header
+    /// rather than this file asserting it.
+    ///
+    /// A **union** contributes only its first member. A `Member` carries no
+    /// offset of its own -- offsets come from the order fields are written --
+    /// so two members cannot share one, and the alternative to dropping the
+    /// aliases would be a surface that names bytes twice. The names are
+    /// returned on the member that stands in for them rather than discarded.
+    /// glibc writes the API name first in every case this has met, and where a
+    /// header does not, the member kept is the wrong one but never the wrong
+    /// *bytes*: if it does not reproduce the union's size the recomputed layout
+    /// disagrees with clang's and the record is refused. Pessimistic about what
+    /// can be named, never wrong about what is there.
+    fn lift(
+        declaration: &serde_json::Value,
+        tag: &str,
+        typedefs: &BTreeMap<String, String>,
+    ) -> std::result::Result<(Vec<Member>, Vec<Record>), Vec<String>> {
+        // Recursion, so an anonymous member of an anonymous member is reached
+        // the same way -- which is what `struct tcphdr` is made of. Its reasons
+        // are this record's reasons, merged rather than nested.
+        let (inner, deeper) =
+            Self::describe(declaration, &format!("{tag}__anonymous"), typedefs)?;
+        let mut members = inner.members;
+        if inner.union && members.len() > 1 {
+            let aliases: Vec<String> = members.split_off(1).into_iter().map(|m| m.name).collect();
+            // `members` is non-empty: `record_from` refuses a record with no
+            // members, so a length above one leaves at least one behind.
+            if let Some(first) = members.first_mut() {
+                first.aliases = aliases;
+            }
+        }
+        Ok((members, deeper))
     }
 
     fn collect(&mut self, json: &serde_json::Value, request: &Request) -> Result<()> {
@@ -1123,7 +1215,14 @@ impl Binding {
             let members = record
                 .members
                 .iter()
-                .map(|m| format!("    {}: {};", m.name, m.ty.spell(&request.aliases)))
+                .map(|m| {
+                    let note = if m.aliases.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" // the same bytes as {}", m.aliases.join(", "))
+                    };
+                    format!("    {}: {};{note}", m.name, m.ty.spell(&request.aliases))
+                })
                 .collect::<Vec<_>>()
                 .join("\n");
             // A record the header left untagged is emitted with **no tag**, and
@@ -1295,7 +1394,7 @@ mod tests {
             packed,
             members: members
                 .iter()
-                .map(|(name, ty)| Member { name: (*name).to_owned(), ty: ty.clone() })
+                .map(|(name, ty)| Member { name: (*name).to_owned(), aliases: Vec::new(), ty: ty.clone() })
                 .collect(),
         }
     }
@@ -1444,5 +1543,59 @@ mod tests {
         let refused = wrong.check(&clang).unwrap_err().to_string();
         assert!(refused.contains("does not reproduce"), "{refused}");
         assert!(refused.contains("size 16"), "{refused}");
+    }
+
+    /// clang emits an anonymous member as two nodes: the `RecordDecl` for its
+    /// type, then a `FieldDecl` with no name. Written in that order here for
+    /// the same reason the parser depends on it.
+    const ANONYMOUS: &str = r#"{
+      "kind": "RecordDecl", "tagUsed": "struct", "name": "r", "completeDefinition": true,
+      "inner": [
+        {"kind": "FieldDecl", "name": "a", "type": {"qualType": "long"}},
+        {"kind": "RecordDecl", "tagUsed": "union", "completeDefinition": true, "inner": [
+          {"kind": "FieldDecl", "name": "b", "type": {"qualType": "long"}},
+          {"kind": "FieldDecl", "name": "b_word", "type": {"qualType": "long"}}
+        ]},
+        {"kind": "FieldDecl", "type": {"qualType": "union r::(anonymous at h.h:1:1)"}}
+      ]
+    }"#;
+
+    #[test]
+    fn an_anonymous_member_is_spliced_in_and_its_aliases_are_kept() {
+        let node: serde_json::Value = serde_json::from_str(ANONYMOUS).unwrap();
+        let (record, nested) = Binding::describe(&node, "r", &BTreeMap::new())
+            .expect("an anonymous member is described, not refused");
+
+        // Flat, in C's order, and reachable by the names C uses. `struct rusage`
+        // is fourteen of these in a row and this is why it describes at all.
+        let names: Vec<&str> = record.members.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, ["a", "b"], "{record:?}");
+        assert!(nested.is_empty(), "nothing is named that C does not name: {nested:?}");
+
+        // The second name for the same bytes. A `Member` carries no offset, so
+        // it cannot be a member of its own -- but losing it silently would let
+        // a reader think the header has one name where it has two.
+        assert_eq!(record.members[1].aliases, ["b_word"], "{record:?}");
+    }
+
+    #[test]
+    fn a_reason_found_through_an_anonymous_member_is_counted_and_marked_once() {
+        // The same record, with the union's first member made a bit-field --
+        // which is the shape `struct tcphdr` refuses for.
+        let mut node: serde_json::Value = serde_json::from_str(ANONYMOUS).unwrap();
+        node["inner"][1]["inner"][0]["isBitfield"] = serde_json::Value::Bool(true);
+        node["inner"][1]["inner"][1]["isBitfield"] = serde_json::Value::Bool(true);
+        let problems = Binding::describe(&node, "r", &BTreeMap::new())
+            .expect_err("a bit-field behind an anonymous member is still a bit-field");
+
+        // One reason per bit-field, each marked once however deep it was found.
+        // Nesting the inner error inside a formatted string is what made
+        // `struct tcphdr` report "for 1 reason" above twelve bullets.
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        for problem in &problems {
+            assert!(problem.starts_with(THROUGH), "{problem}");
+            assert_eq!(problem.matches(THROUGH).count(), 1, "{problem}");
+            assert!(problem.contains("bit-field"), "{problem}");
+        }
     }
 }

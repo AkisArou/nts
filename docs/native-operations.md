@@ -747,8 +747,11 @@ about one. A tag invented here would be a second type beside the header's, and
 `program.h` includes the header -- verified by inventing one, which gives 11
 errors in `program.c` and 10 in the witness.
 
-`Untagged<T>` marks it, and every consumer reaches its members by byte offset
-from the enclosing record:
+Nothing marks it. `Naming::Untagged` is inferred -- a record without a tag
+written inside a `declare module` that names headers has the header's members,
+and the enclosing tag already says so, which is what a marker would have
+restated. Every consumer reaches its members by byte offset from the enclosing
+record:
 
     v1 = (char *)&v0->__in6_u;          /* the member has a name */
     v4 = (uint8_t *)((char *)v3 + 0);   /* its type does not */
@@ -766,6 +769,64 @@ not, and what would go wrong shows up in the enclosing record's size.
 bools" was right for the reason it usually is not: these were a state, not
 independent facts. `packed` stays a bool beside it because it genuinely is
 independent.
+
+## Anonymous members
+
+The complementary case, and the opposite answer. C11 6.7.2.1p13 reserves
+"anonymous structure or union" for a member with **no declarator** -- the
+section above is about a named member whose *type* has no tag, which is a
+different rule and was deliberately not given this name.
+
+    struct rusage {
+      struct timeval ru_utime;
+      __extension__ union { long int ru_maxrss; __syscall_slong_t __ru_maxrss_word; };
+      ...
+
+Fourteen of these in a row. The decisive fact is that **C reaches through one**:
+its fields are the enclosing record's, so `theirs.ru_maxrss`,
+`offsetof(struct rusage, ru_maxrss)` and `_Generic(&p->ru_maxrss, long *: 1)`
+are all legal for a member of an anonymous union. Where an untagged *type* has
+no spelling in C and forces byte arithmetic, an unnamed *member* has no spelling
+in C **and needs none** -- the language already resolves it.
+
+So this needed no compiler work at all. `nts bind-c` splices the members into
+the enclosing record and the description is flat:
+
+    ru_maxrss: c_long; // the same bytes as __ru_maxrss_word
+
+Nothing appears on the surface: no marker, no nesting, no name for a thing the
+header did not name. Every check generated for an ordinary member -- the offset
+assert, the `_Generic` on the field's address, the field access itself -- is C
+that compiles unchanged, and `native_witness.c` proves the flat description
+against the real header rather than this file asserting it.
+
+**A union contributes only its first member.** A `Member` carries no offset of
+its own -- offsets come from the order fields are written -- so two members
+cannot share one, and the alternative to dropping the aliases is a surface that
+names the same bytes twice. The dropped names are attached to the member that
+stands in for them and rendered as a comment. glibc writes the API name first in
+every case this has met; where a header does not, the member kept is the wrong
+one but never the wrong *bytes*, because a first member that does not reproduce
+the union's size makes the generator's recomputed layout disagree with clang's
+and the record is refused. Pessimistic about what can be named, never wrong
+about what is there.
+
+`examples/interop/native-rusage` is the consumer: `caller.c` lends its own
+`struct rusage` to the compiled TypeScript, so both readers see the same bytes.
+Its four arms are chosen so that one of them passes even when every anonymous
+union is mishandled, and one reads the **last** member of the fourteen, where a
+single union described at the wrong size is the only thing that shows.
+
+**A nested reason is merged, not nested.** `record_from` was split into a
+`describe` that returns its reasons as a list and a formatter over it. Folding a
+recursive call's reasons into one string made `struct tcphdr` report
+
+    `tcphdr` cannot be described, for 1 reason:
+      - an unnamed member of type `union ...`: `tcphdr` cannot be described, for 11 reasons:
+
+-- a count of one above twelve bullets, because the count and the list came from
+different places. It now reports 11, each marked `through an unnamed member:`
+once however deep it was found.
 
 ## Bit-fields: refused in both directions, not described
 
@@ -864,21 +925,40 @@ Neither is described wrongly. Each refusal names the member and the reason.
 
 ### What it refuses, surveyed against real headers
 
-Twelve POSIX records, asked for one at a time. The survey is the instrument:
-each refusal is either a gap or a missing mapping, and guessing which headers
-to try would have found neither of the two it did.
+Fifteen POSIX records, asked for one at a time, all under `_GNU_SOURCE`. The
+survey is the instrument: each refusal is either a gap or a missing mapping, and
+guessing which headers to try would have found neither of the two it did.
+`rusage`, `tcphdr` and `iphdr` were added to the original twelve because the
+goal names anonymous members and bit-fields, and a population that excludes the
+records those appear in cannot measure either.
 
-| | before | after |
+| | before | now |
 |---|---|---|
-| `stat`, `tm`, `timeval`, `sockaddr`, `msghdr`, `dirent`, `rlimit`, `statvfs`, `iovec`, `addrinfo`, `epoll_event`, `sockaddr_in` | 8 ok | **12 ok** |
-| `sigaction` | `void (*)(void)` unknown | *an anonymous union*, which has no tag to name |
-| `termios` | `cc_t` unknown | an unnamed member, also an anonymous union |
+| `stat`, `tm`, `timeval`, `sockaddr`, `msghdr`, `dirent`, `rlimit`, `statvfs`, `iovec`, `addrinfo` | described | described |
+| `termios` | an unnamed member, also an anonymous union | **described** |
+| `rusage` | an unnamed member, fourteen times over | **described** |
+| `sigaction` | *an anonymous union*, which has no tag to name | no complete `__sigset_t` |
+| `tcphdr` | an unnamed member -- and nothing past it | 11 bit-fields, which is its real blocker |
+| `iphdr` | 2 bit-fields | 2 bit-fields |
 
-Both remaining refusals are now the same fact, and it is the surface's limit
-rather than the tool's: clang spells an anonymous record by where it was
-written -- `(unnamed at /usr/include/bits/sigaction.h:31:5)` -- which is a
-location and not a tag. A binding has no way to name a type the header did not
-name.
+**12 of 15 described, and the three remaining are two causes, neither of them
+anonymous members.** Bit-fields block `tcphdr` and `iphdr`, and are refused by
+name in both directions rather than described.
+
+`sigaction`'s blocker moved to a shape this survey had not produced before: a
+**typedef naming an unnamed struct**. `__sigset_t` is
+`typedef struct { unsigned long __val[16]; } __sigset_t;` -- there is no
+`RecordDecl` of that name to find, only a `TypedefDecl` whose underlying type is
+anonymous. That is a third case beside the two above, and it is recorded rather
+than guessed at: the earlier entry said "an anonymous union, which has no tag to
+name", which was true of the record it stopped at and not the reason it refuses
+today.
+
+`tcphdr` is the one that shows the survey working as an instrument. It reported
+one unnamed member and nothing else, because the walk stopped there. Reaching
+through it finds an anonymous union of anonymous structs and, inside those, eleven
+bit-fields -- so the entry that read like a naming problem was a bit-field
+problem all along, and no work on naming would have moved it.
 
 The function-pointer member that refused first is described now, because the
 compiler describes one: `int (*)(int)` is read as `(arg0: c_int) => c_int`, and
