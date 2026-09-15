@@ -154,13 +154,13 @@ question.
 
 | outcome | files |
 | --- | ---: |
-| lowered completely | **56** |
-| refused a construct | 41 |
+| lowered completely | **53** |
+| refused a construct | 44 |
 | rejected by the typechecker | 86 |
 | **the frontend fell over** | **1** |
 | **invalid HIR or a panic** | **0** |
 
-Of the 97 that typecheck, **57%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
+Of the 97 that typecheck, **54%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
 
 The last two rows are the ones that must stay at zero: a panic or a rejected SSA form on arbitrary input is a bug however well the hand-written tests do, and so is a query this compiler makes that the typechecker cannot answer.
 
@@ -173,17 +173,17 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | refused | files |
 | --- | ---: |
 | `console.log`, a global member with no definition here | 7 |
-| a module declaration, which has code in it | 6 |
-| a module-scope variable with no initializer, whose type has no representation for the `undefined` it starts as | 4 |
-| a tagged template expression | 4 |
+| a module declaration, which has code in it | 5 |
+| a tagged template whose tag takes a rest parameter, which wants the substitutions as one array | 4 |
 | `x`, a name from an enclosing scope | 3 |
 | a `for...in` statement, which has code in it | 3 |
 | a method on an object literal | 3 |
 | a parameter of unrepresentable type (any) | 3 |
+| an exported generic function this program never instantiates, so there is no copy for the export to name | 3 |
+| foreign function `f` parameter `opts` without a native ABI type; use a c_int/c_double brand or boolean | 3 |
 | `a`, which `an anonymous type` does not declare | 2 |
 | a `method declaration` in an object literal | 2 |
 | a parameter of unrepresentable type (a union of `RegExp` | null | number | undefined) | 2 |
-| a parameter of unrepresentable type (a union of `RegExp` | null | number) | 2 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->
