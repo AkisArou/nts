@@ -555,10 +555,16 @@ than a defect, and the audit fails on any error that is not one of them.
   `linux-gnu` -- a libc type surface a program on the JVM does not have. The
   native constructors take `NativeBackend`.
 
-One exemption is named rather than skipped: the bare `library()` callable is
-called by no fixture, and every library kind has a constructor, so there is
-nothing left for it to express until a kind exists that has none. `app()` bare is
-used, by `apps/react`.
+**The bare `library()` callable is gone**, and the round it survived is the
+argument for the instrument. It was reported called by no fixture and exempted as
+an escape hatch -- which sounds right until the question is "needed for what".
+Multi-target is already the normal case: `library.native` takes Linux, macOS and
+Windows together, `library.xcframework` takes the Apple targets together, and
+every `ProductKind` has a constructor. So there was no shape it could express
+that a constructor did not express more narrowly, and a callable nobody calls is
+the same shape as the `ProductKind` union that named ten kinds and permitted
+three. `app()` bare stays, because `apps/react` genuinely needs it: one product,
+four targets, two backends, and no per-platform constructor says that.
 
 ### What the audit is really about
 

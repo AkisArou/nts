@@ -258,9 +258,25 @@ export const app = Object.assign(appBase, {
   },
 });
 
-const libraryBase = (spec: LibraryProduct): LibraryProduct => spec;
-
-export const library = Object.assign(libraryBase, {
+/**
+ * Library constructors, and **no bare callable**, which is where this differs
+ * from `app`.
+ *
+ * `app` is callable because `apps/react` needs it to be: one product, four
+ * targets, two backends, and no per-platform constructor can say that. The
+ * equivalent does not exist here. Multi-target is already the normal case --
+ * `library.native` takes Linux, macOS and Windows together and
+ * `library.xcframework` takes the Apple targets together -- so a bare
+ * `library({ kind, targets })` had nothing left to express, and every
+ * `ProductKind` has a constructor that produces it.
+ *
+ * It was kept for one round as an escape hatch and the audit reported it called
+ * by nothing, which is the same shape as the `ProductKind` union that named ten
+ * kinds and permitted three: a callable nobody calls reads as a capability. An
+ * escape hatch for a case that does not exist is not an escape hatch. It comes
+ * back with a kind that has no constructor.
+ */
+export const library = {
   /** An AAR, because a directory of class files is not a thing Gradle resolves. */
   android: (
     o: Omit<AarProduct, "kind" | "targets"> & {
@@ -329,4 +345,4 @@ export const library = Object.assign(libraryBase, {
       ...rest,
     };
   },
-});
+} as const;

@@ -95,23 +95,30 @@ for (const group of ["app", "library", "target"]) {
 }
 for (const p of configPaths) {
   const src = readFileSync(p, "utf8").replace(/^\s*\/\/.*$/gm, "");
-  for (const g of ["app", "library"]) if (new RegExp(`[^.\\w]${g}\\(`).test(src)) calls.add(g);
+  if (/[^.\w]app\(/.test(src)) calls.add("app");
 }
 const constructors = [
+  // `app` is callable and `library` is not; see the note in product.ts.
   "app", ...Object.keys(pkg.app).map((k) => `app.${k}`),
-  "library", ...Object.keys(pkg.library).map((k) => `library.${k}`),
+  ...Object.keys(pkg.library).map((k) => `library.${k}`),
   ...Object.keys(pkg.target).map((k) => `target.${k}`),
 ];
 
 /**
- * Callables kept for a case the fixture does not have yet. An escape hatch is
- * unused until something needs it, so it cannot be held to the coverage rule --
- * but it has to be named here rather than silently skipped, which is the
+ * Callables kept for a case the fixture does not have yet.
+ *
+ * **Empty, and that is the result rather than the starting point.** It held the
+ * bare `library()` callable for one round, on the argument that an escape hatch
+ * is unused until something needs it. That argument does not survive the
+ * question "needed for what": multi-target is already the normal case here, so
+ * every shape it could express, a constructor expresses more narrowly. It was
+ * removed rather than exempted. `app()` bare stays because `apps/react` calls
+ * it -- four targets, two backends, one product.
+ *
+ * An exemption has to be named here rather than silently skipped, which is the
  * difference between an exemption and an oversight.
  */
-const ESCAPE_HATCHES = {
-  library: "every library kind has a constructor, so the bare form has nothing left to express -- it is here for a kind that does not exist yet, and `app` is used bare by apps/react",
-};
+const ESCAPE_HATCHES = {};
 
 // --- evaluation ------------------------------------------------------------
 
