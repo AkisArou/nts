@@ -2620,6 +2620,42 @@ again in transit, so three specs had to return the container itself.
 An instrument's observational limit is a property of the instrument, not of the
 thing it measures, and it does not appear in its output.
 
+### And the two limits that are not about scope
+
+Recorded 2026-09-15 after both lanes hit each independently. Neither is an
+instrument measuring too little; they are different failures.
+
+**An instrument can participate in what it measures, and it looks like success
+in both directions.** The node lane added a `console.error` to observe a race
+and the write bought enough latency that the race stopped reproducing. On this
+side, `addon.c`'s published-export count was being taken by grepping for
+`napi_create_function`, and the fix — a comment telling readers to count exactly
+that — put the token **in the file** and moved the count from 2 to 3. One made a
+failure disappear; one made a number go up; both read as the fix working.
+
+What works is not a better probe but a different one: **make the artifact state
+its own number.** Every `addon.c` now ends with its totals, emitted by the
+compiler, and nobody greps a file that answers the question itself. That has its
+own precondition, learned by getting it wrong — the banner was first emitted
+*before* the pass that fills the declined list and announced `fs` declines 11
+against a true 123. A wrong number wearing the authority of having been printed
+by the compiler is worse than no number, because nobody re-derives a figure the
+artifact states about itself. Verified on four modules against their diagnostic
+streams before it was believed.
+
+**And an absence never fails — it is just not counted.** This is the one to
+carry furthest. A behaviour comparison cannot call a function that was never
+exported: the node lane found `Readable._fromList` already present and already
+correct, missing only its export, and no amount of comparing could have found
+it. On the same day this file learned that "209 of 209 agree with node" stands
+over **nine examples that compare nothing**. Both are absences, and every
+instrument in this tree measures *events* — a non-event is invisible to all of
+them, and invisible is indistinguishable from fine.
+
+`§15`'s declined-export work is the same shape one level up: 506 exports that
+are not there, which no test could fail on, and which had to be counted
+deliberately before anyone knew the number.
+
 Only the examples and the sweep check **correctness**, and they check it
 differently: an example covers what somebody thought to write down, a sweep
 covers what nobody did. Every correctness bug found here by hand has been one
