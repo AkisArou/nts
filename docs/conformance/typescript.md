@@ -2652,6 +2652,74 @@ is what the largest remaining bucket is made of: **63** declines now read `is
 exported and is not a function this backend can name`, against 20 namespace
 members and 7 classes.
 
+#### And then the bucket below it, same day: a cause recorded and never read
+
+**Closed too, and the chain hypothesis it suggested was wrong.** Classified
+against the source, all 63:
+
+| kind | count | what it is |
+|---|---:|---|
+| `export class` | **35** | an exported class the wrapper never treats as a class at all — it does not reach the `class_definition` path, so it gets the export pass's generic sentence rather than a constructor one |
+| `export const` | **22** | a function bound to a `const` rather than declared. `assert` is 18 of these on its own: `export const deepEqual = ...` |
+| neither found | 6 | `default` and re-exports, not run down |
+
+The 35 is the larger half and it is **not** the no-constructor gap above.
+What excludes them: **`class_names` is the owners of surviving `Owner#member`
+function names**, so a class whose every member died is not in the wrapper's
+set of classes, never reaches `class_definition`, and never gets asked the one
+question that would answer it. `ZlibBase` keeps a member and so is asked;
+its fifteen descendants keep none and get the generic sentence. That is the
+whole of the 15-vs-1 split in `zlib`, and it is mechanical rather than a
+property of the classes.
+
+And the cause was **recorded the entire time**. The cascade writes ``it calls
+`Base#constructor`, which was refused above`` into `uncompiled` under
+`Middle#constructor`; nothing read it. Asking `uncompiled` for
+`{name}#constructor` before falling back is self-limiting — nothing but a class
+puts that key in the list — so a non-class export falls through exactly as
+before.
+
+**The chain walk was wrong, and this is the entry that says so.** `Gzip`
+descends from `Zlib` from `ZlibBase` from `Transform`, `Transform#constructor`
+is named once in `zlib`'s output and the three zlib constructors zero times, and
+the obvious reading — that the four stream classes are the root of the fifteen —
+was never asserted here for exactly the reason it turned out to be false. What
+the fifteen actually say, once they can say anything:
+
+    a property `dictionary` of unrepresentable type
+    (a union of `ArrayBufferView` | `ArrayBuffer` | ...)
+
+An options-bag property with a union type. Not inheritance, not `Transform`,
+not the stream hierarchy at all. A plausible shared ancestor, verified to
+exist, and not the cause — §14's standing warning, paid for again and this time
+before it reached anybody's plan.
+
+**Measured over all 26 modules, both fixes, old binary against new, same
+tree.** Effect-only declines **118 → 65**; total declines **502 either side**.
+(The earlier run in this section read 500 against 117; the node lane committed
+to `runtime/node` between the two, so those two totals are not comparable and
+the 118 is this run's own before-column. A sweep cannot outlive a moving tree.)
+`zlib`'s generic sentence goes 15 → 1, `http` 11 → 4, `net` 7 → 3, `timers`
+18 → 15, `stream` 29 → 24.
+
+And what was behind them, ranked — which is the thing §15 asks for and could
+not previously be asked at all:
+
+| declines | the cause they name |
+|---:|---|
+| **15** | a property `dictionary` of unrepresentable type (a union of `ArrayBufferView` \| `ArrayBuffer` \| …) — every one of them `zlib` |
+| 7 | a method without a body |
+| 3 | `_writeVector`, declared by `Socket`, with a type that has no representation |
+| 2 | it calls `bigintColumn`, which was refused above |
+| 2 | `dispatchCapturedRejection`, a static field this compiler gave no storage |
+
+One cause is worth fifteen exports and it is a **declaration** in
+`runtime/node/zlib`, not a lowering. That is the node lane's to weigh, and it
+is not free: `dictionary`'s union is node's documented shape, so narrowing it
+trades a compiled-lane gain against an interpreted-lane API that no longer
+accepts what node accepts — and the interpreted lane is the one running node's
+suite. Recorded here so the trade is visible rather than implied by a rank.
+
 `compiler/core/tests/constructor_refusal.rs` is the regression, and it has two
 controls that can fail: the fixture must actually refuse `_read` with a named
 cause, and the class that does compile must keep its constructor — without

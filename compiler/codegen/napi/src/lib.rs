@@ -3381,6 +3381,30 @@ fn report_unrepresentable_exports(
                     "is exported as a value of type `{}`, which does not cross",
                     spell(&global.ty)
                 )
+            // **A class this backend never saw as a class.** `class_names`
+            // is the owners of surviving `Owner#member` function names, so a
+            // class whose every member died is not in it, never reaches
+            // `class_definition`, and never gets asked the one question that
+            // would answer it. The cause is *recorded and unused*: the cascade
+            // writes `it calls `Base#constructor`, which was refused above`
+            // into `uncompiled` under `Middle#constructor`, and nothing read
+            // it.
+            //
+            // Measured 2026-09-15: of the 63 declines wearing the sentence
+            // below, **35 are `export class`** -- against 22 functions bound
+            // to a `const` and 6 defaults. `zlib` is fifteen of them in one
+            // inheritance chain, every class below the one member that
+            // happened to survive.
+            //
+            // Asking for `{name}#constructor` is self-limiting: nothing but a
+            // class puts that key in the list, so a non-class export falls
+            // through to the sentence below exactly as before.
+            } else if let Some((_, why)) = program
+                .uncompiled
+                .iter()
+                .find(|(at, _)| *at == format!("{name}#constructor"))
+            {
+                format!("is a class whose constructor was not compiled: {why}")
             } else {
                 "is exported and is not a function this backend can name".to_owned()
             },
