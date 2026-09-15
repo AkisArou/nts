@@ -2431,6 +2431,63 @@ of them checkable. After `<obj6704>`, the brace scanner and `asRequest<[erased]x
 this is the fourth today: a name that carries anything unstable will be read as
 a change by any instrument that diffs names.
 
+### The ceiling, read off what each module already publishes
+
+The node lane proposed an instrument for the question the three zeros raise: an
+export whose own signature cannot cross will never publish however well anything
+lowers, so classifying every exported signature gives an upper bound with no
+compiler run and no chain-following. It is the right question. It also turns out
+to be answerable from numbers already on disk, without the instrument and
+without the root-selection bias that spoiled the three probes.
+
+**Published functions against declined exports, all 26 modules, 2026-09-15.**
+Published counted as `napi_create_function` in the emitted `addon.c` — exported
+*functions* only, so a class like `fs.Stats` and a namespace like `fs.constants`
+are registered separately and not in this column.
+
+| module | published | declined | rate |
+|---|---:|---:|---:|
+| `punycode` | 7 | 0 | **100%** |
+| `os` | 19 | 2 | 90% |
+| `path` | 34 | 7 | 83% |
+| `util` | 38 | 41 | 48% |
+| `async_hooks` | 17 | 12 | 59% |
+| `net` | 8 | 11 | 42% |
+| `http` | 3 | 21 | 13% |
+| `stream` | 5 | 74 | 6% |
+| `fs` | 2 | 123 | **1.6%** |
+| **total** | **162** | **506** | |
+
+**The rate tracks the shape of the API and not the quality of the lowering.**
+`punycode` and `path` are string-in, string-out, and publish nearly everything
+they declare. `fs` is callbacks, options bags and `Stats`, and publishes two
+functions out of a hundred and twenty-five. Nothing about `path` was lowered
+better; its signatures cross and `fs`'s do not.
+
+That is the ceiling argument with the whole corpus as its population rather than
+three roots chosen for being large, and it agrees with the three zeros without
+inheriting their bias. It does not give an exact bound — the unit here is a
+module, not a signature, and "shape of the API" is read off which module a
+function is in rather than measured per declaration. The lane's instrument would
+give the exact number and is still worth building if anyone wants it. **The
+direction is no longer in question.**
+
+**What it means for this queue.** Every root below is a lowering refusal, and
+the rate table says lowering refusals are not what bounds `fs` at 1.6%. Fixing
+them is worth doing on its own terms and it is not a publishing plan. If
+published exports are the goal, the work is making an object cross the N-API
+boundary, which is a feature nobody has started.
+
+**A method note, because the first version of this table was wrong.** The
+published count was first taken by matching quoted names in `addon.c`, which
+returned `atimeMs`, `birthtimeMs`, `blksize` — the **field descriptors of the
+`Stats` class**, not exports at all, and gave `fs` 15 published with none of
+them a function. The registration to count is `napi_create_function`. A regex
+aimed at a file's *shape* found something with that shape and answered
+confidently about the wrong thing, which is the day's fourth instrument error
+and the third caught only by looking at the names it returned rather than the
+count.
+
 ### The queue, with each root's own reason — 2026-09-15
 
 `gates.mjs` could name a root and not say why *that root* was refused, so
