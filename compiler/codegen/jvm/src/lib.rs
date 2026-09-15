@@ -862,6 +862,31 @@ fn bridge_body(
     }
     let slots: u16 = locals.iter().map(VType::slots).sum();
     let mut code = Code::new(locals, slots);
+
+    // **Ask which lane this is, before touching anything.**
+    //
+    // A Java framework may call a bound interface from a thread we do not own --
+    // `Loader.load` in `examples/interop/android-shape` is exactly that shape --
+    // and everything in this runtime except the inbox is confined to one lane.
+    // Running a TypeScript body on a framework thread mutates that lane's heap
+    // from outside it, with no happens-before edge. `NtsInbox`'s own header is
+    // blunt about the consequence: a reader "may observe stale bytes
+    // indefinitely with no race in the JavaScript sense. On x86 it will appear
+    // to work. Android is ARM."
+    //
+    // Until 2026-09-15 the bridge went straight to the body and the crossing was
+    // silent. It is not that the refusal had to be written -- `NtsEnv.current`
+    // has always thrown `the default environment belongs to another lane` for a
+    // second lane, by name, with the remedy in the message. **Nothing asked it.**
+    // The body reached the table directly and never called into `NtsEnv` at all,
+    // so the check that existed was never on the path that needed it.
+    //
+    // The result is discarded: this is a question, not a value. One `ThreadLocal`
+    // get per callback on the lane, which is the UI path's whole cost, against a
+    // corruption that only appears on the platform this lane is for.
+    code.invoke_static(origin, pool, types::ENV, "current", "()Lnts/rt/NtsEnv;");
+    code.pop(origin, 1);
+
     code.load(origin, Kind::Ref, 0);
     let mut at: u16 = 1;
     for (spelled, param) in parameters.iter().zip(ours.params.iter().skip(1)) {

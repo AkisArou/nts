@@ -70,20 +70,28 @@ export function main(): string {
   panel.onMeasure(100, 50);
   const consumed = panel.dispatchTouch(10, 10);
 
-  // --- foreign thread, returns nothing ------------------------------------
+  // --- foreign thread, returns nothing: REFUSED -----------------------------
   //
-  // **This runs on the loader's thread, not on ours.** The plan says a void
-  // callback from a foreign thread is posted to `NtsInbox` and drained on our
-  // lane; that is not what is emitted. `Closure1.onBytes` wraps the `byte[]`
-  // and calls straight into `Program.Closure1$call`, and **no emitted class in
-  // this project references `NtsInbox` at all** -- `javap -c` says zero, five
-  // classes out of five.
+  // **This does not run, and that is the fix.** `Loader.load` calls back on a
+  // thread it owns, and everything in this runtime except the inbox is confined
+  // to one lane, so the body would mutate that lane's heap from outside it with
+  // no happens-before edge. `NtsInbox`'s header is blunt about the consequence:
+  // a reader "may observe stale bytes indefinitely with no race in the
+  // JavaScript sense. On x86 it will appear to work. Android is ARM."
   //
-  // It is `void`, so nothing is lost on the way back. What is not established
-  // is the thing the inbox exists for: our runtime is a single lane, and this
-  // body touches it from a thread we do not own. It works here because the
-  // body only writes one number. Corrected 2026-09-15; the claim had no
-  // witness and ran for as long as nothing compiled this file.
+  // It used to run, and to appear to work. The bridge went straight to the body,
+  // so nothing asked which lane it was on -- and `NtsEnv.current` has always
+  // refused a second lane by name, with the remedy in the message. The check
+  // existed and was not on the path. Now the bridge asks, and `Run.java` records
+  // the refusal rather than letting it print and be ignored.
+  //
+  // The comment here used to say "Posted to NtsInbox and run on our lane",
+  // which described the design rather than the emitted code: no class this
+  // project emits references `NtsInbox` at all.
+  //
+  // What makes it work is the post path, which is sized in `docs/jvm-interop.md`
+  // and not built: the bridge needs the environment its closure was created on,
+  // and the arguments need to outlive the frame.
   Loader.load("payload", (data: Uint8Array): void => {
     const head = data.subarray(0, 4); // a view, not a copy
     fromLoader = head.length;

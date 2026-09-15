@@ -1351,14 +1351,21 @@ bridge implementing `NtsResumable` -- a class per bridge, not a helper call,
 because the closure body is generated and the runtime cannot reach it except
 through the very interface the bridge implements.
 
-**And it should be loud before it is complete.** A bridge entered from a thread
-with no environment is today a silent write into another lane's heap with no
-happens-before edge -- `NtsInbox`'s own header says such a reader "may observe
-stale bytes indefinitely with no race in the JavaScript sense. On x86 it will
-appear to work. Android is ARM." A named refusal there costs six instructions
-and converts an ARM-only corruption into a diagnostic. It is not landed because
-it would turn `android-shape` red, and the thing that makes it green again is
-the post path -- so the two go together.
+**It is loud now, and that came first.** A bridge entered from a thread with no
+claim on the lane was a silent write into another lane's heap with no
+happens-before edge. What it took was not writing a refusal: `NtsEnv.current`
+has always thrown `the default environment belongs to another lane -- enter one
+with enterEnv on this thread`, by name, with the remedy in the message. **The
+bridge never called it.** It loaded the receiver, converted the arguments and
+entered the body, which reaches the table directly and never touches `NtsEnv` at
+all -- so a correct, named, existing check sat off the one path that needed it.
+
+The bridge asks now, one `ThreadLocal` get per callback, and discards the
+answer: it is a question, not a value. The jvm floor is unchanged at 205 of 205,
+and `android-shape` asserts `loader:NtsRefusal` as part of its expected output --
+the project demonstrating the refusal rather than appearing to work on x86.
+
+What remains is delivery rather than safety: the post path, sized above.
 
 **And the inbox is not the only route, which matters for the callbacks that must
 return a value.** `NtsEnv.CURRENT` is a `ThreadLocal`, not a singleton pinned to
@@ -2014,7 +2021,7 @@ Rows corrected in place carry an inline comment with what the artefact said.
 | TS implements a Java interface | | | ● |
 | TS extends a Java class | | | ● |
 | Callback returning a value, same thread | | | ● |
-| Callback void, foreign thread -- **not** via inbox | | | ● |  <!-- corrected 2026-09-15: the callback does arrive from a foreign thread and does run, but `NtsInbox` is not involved: `Closure1.onBytes` wraps the `byte[]` and calls `Program.Closure1$call` on the loader's thread, and no emitted class in the project references `NtsInbox` -- zero, across five of five. The plan's handoff is unbuilt, and because it is `void` nothing visible breaks, which is why it survived. -->
+| Callback void, foreign thread -- **refused**, by name | | | ● |  <!-- 2026-09-15: it ran, on the foreign thread, mutating a lane's heap from outside it with no happens-before edge. `NtsEnv.current` has always refused a second lane by name and the bridge never called it, so the check existed off the path that needed it. The bridge asks now, and android-shape asserts `loader:NtsRefusal` as part of its output. Working delivery needs the post path, which is sized above and not built. -->
 | Closure as a functional interface | | | ● |  <!-- corrected 2026-09-15: not exercised in ts-from-java: neither file contains a lambda, a method reference or a functional interface. Its README already listed closures under "what is not here yet". -->
 
 ## 1. `java-from-ts` — TypeScript consumes Java
