@@ -7257,6 +7257,28 @@ twenty-eight rows against node rather than twenty-four plus three exceptions.
 It was accepted and ignored, because the comparison it exists to relax was the
 comparison that was missing.
 
+## Two ways to abort node from JavaScript, both found by the same corpus
+
+`fs.writeFileSync(-0, "x")` and `process._debugProcess(anythingNotANumber)` each
+kill the process with a C++ assertion rather than raising an error. Both are node
+v24.20.0's, both were found within an hour of each other by extending the
+differential over functions nothing had called, and both have the same shape: an
+argument reaching a `CHECK` with no JavaScript validation in between.
+
+    $ node -e 'process._debugProcess(null)'
+    # node::DebugProcess(...) at ../src/node_process_methods.cc:401
+    # Assertion failed: args[0]->IsNumber()
+    Aborted (core dumped)          exit 134
+
+`null`, `undefined`, `{}` and `"x"` all abort. `1.5` exits 1 with an error, and
+`NaN` exits 0 -- `NaN` is a number, so it passes `IsNumber` and then names no
+process. There is no safe half to compare: a number is a **pid** and the function
+sends it SIGUSR1, so the corpus excludes the function outright rather than one
+value of it. The first draft passed non-numbers on the reasoning that they were the
+safe half, and the run died.
+
+The `fs` one is below and is narrower -- one value of one argument.
+
 ## `fs.writeFileSync(-0, "x")` aborts node, and this profile aborts with it
 
 Found while extending the differential over `fs`'s mutating two thirds. Not a
