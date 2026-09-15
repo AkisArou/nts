@@ -1283,10 +1283,6 @@ impl<'a> Decomposer<'a> {
             parameters,
             return_type,
             type_parameters,
-            // `async` is a property of the declaration, not of the signature, so
-            // the checker does not report it here. Lowering reads it off the
-            // declaration's modifiers.
-            is_async: false,
             is_construct: signature.flags & signature_flags::CONSTRUCT != 0,
             type_predicate: predicate,
         });

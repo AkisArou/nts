@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 14;
+pub const SCHEMA_VERSION: u32 = 15;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -546,13 +546,30 @@ pub enum LiteralValue {
 impl Eq for LiteralValue {}
 
 /// A call signature.
+///
+/// # There is deliberately no `is_async`
+///
+/// There was one until 2026-09-15, and it was the constant `false`: the checker
+/// reports `async` on a *declaration*, never on a signature, so the single
+/// construction site had nothing to put there. Three readers treated it as real
+/// -- `signature_name`'s `A` marker, which therefore never appeared; a
+/// `foreign function ... generic, async, or constructor` refusal whose async
+/// disjunct could not fire; and a component of `signature_key` that was a
+/// constant.
+///
+/// Populating it would have been a *bug*, not a fix. `async function f():
+/// Promise<T>` and `function f(): Promise<T>` are **one type** to the checker,
+/// interchangeable in a `() => Promise<T>` slot, so marking one of them would
+/// split a single type across two layouts -- and for a function type the layout
+/// *name* is its identity, the hazard recorded on `name_is_identity`.
+///
+/// Lowering reads `async` off the declaration's modifiers, which is where the
+/// checker states it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignatureRecord {
     pub parameters: Vec<ParameterRecord>,
     pub return_type: TypeId,
     pub type_parameters: Vec<TypeId>,
-    /// `async` in source. Lowering allocates a managed `AsyncFrame` (RFC §12).
-    pub is_async: bool,
     /// A `new` signature rather than a call signature.
     pub is_construct: bool,
     /// What a call to this narrows, for a type-guard function.

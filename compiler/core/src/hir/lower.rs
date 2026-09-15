@@ -4745,19 +4745,20 @@ fn generated_name(name: &str) -> bool {
 /// So the name carries the signature: parameter type ids, then `__`, then the
 /// return's. The separator matters -- `Fn2_2__2` is `(a, b) => c` and `Fn2__2`
 /// is `(a) => b`, and joining with one underscore would make those the same
-/// string. `A` marks an async signature, whose return is a promise the caller
-/// sees differently.
+/// string.
+///
+/// There is deliberately no marker for `async`. There was one -- an `A` -- and
+/// it never appeared in a name, because the flag behind it was the constant
+/// `false`. It should not come back: `async function f(): Promise<T>` and
+/// `function f(): Promise<T>` are one type to the checker, so an `A` would give
+/// a single type two layout names, and for a function type the name *is* the
+/// identity. See `SignatureRecord`.
 fn signature_name(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
-    let Some((params, returns, asynchronous)) = signature_key(snapshot, ty) else {
+    let Some((params, returns)) = signature_key(snapshot, ty) else {
         return format!("Fn{}", ty.0);
     };
     let params: Vec<String> = params.iter().map(|param| param.0.to_string()).collect();
-    format!(
-        "Fn{}{}__{}",
-        if asynchronous { "A" } else { "" },
-        params.join("_"),
-        returns.0
-    )
+    format!("Fn{}__{}", params.join("_"), returns.0)
 }
 
 /// Whether a layout name was made by [`signature_name`].
@@ -5170,7 +5171,7 @@ fn unshared_layout_name(existing: &[Layout], mut layout: Layout) -> Layout {
 /// whole point: the checker interns the parameter and return types, so the
 /// inferred type of an arrow and the declared type of the variable it is
 /// assigned to are different ids over the same contents.
-fn signature_key(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Vec<TypeId>, TypeId, bool)> {
+fn signature_key(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Vec<TypeId>, TypeId)> {
     let record = snapshot.types.get(ty.0 as usize)?;
     let TypeKind::Function(signature) = record.kind else {
         return None;
@@ -5179,7 +5180,6 @@ fn signature_key(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Vec<TypeId>
     Some((
         signature.parameters.iter().map(|param| param.ty).collect(),
         signature.return_type,
-        signature.is_async,
     ))
 }
 

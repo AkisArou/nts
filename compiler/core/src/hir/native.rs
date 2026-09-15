@@ -839,9 +839,12 @@ impl Function {
                 "foreign function `{name}` with unknown @ntsAbi `{abi}`"
             ));
         }
-        if !signature.type_parameters.is_empty() || signature.is_async || signature.is_construct {
+        // Not `async`: a foreign function is an ambient declaration, and
+        // TypeScript rejects the modifier there outright (TS1040), so the case
+        // this once claimed to refuse cannot be written.
+        if !signature.type_parameters.is_empty() || signature.is_construct {
             return Err(format!(
-                "foreign function `{name}` with a generic, async, or constructor signature"
+                "foreign function `{name}` with a generic or constructor signature"
             ));
         }
         let mut parameters = Vec::with_capacity(signature.parameters.len());

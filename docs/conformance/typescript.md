@@ -2807,6 +2807,84 @@ So this is recorded as an instrument with a null result rather than as a
 finding. It cost one search to build and it found the shape that was already
 known; what it is for is the next one.
 
+### The traversal, 2026-09-15: asking every pass what it was told
+
+The entry above is one fact found by one instrument. This is the sweep the
+section is named for, and its first result is structural rather than a row.
+
+**No pass can drop a checker fact, because no pass sees one.** 36 of the 40
+files in `compiler/core/src/hir/` contain no reference to `snapshot` at all.
+The four that do are `lower.rs` (662 references), `generics.rs` (50),
+`native.rs` (23) and `mod.rs` (22), plus one in `presence.rs`. So "what did this
+pass discard" has exactly one address: whatever `lower.rs` does not write into
+HIR is gone, and `own`, `escape`, `rc`, `facts`, `loops`, `elements` and the
+rest cannot recover it however clever they get. That is the erasure boundary
+working as designed, and it means this section's question is always about one
+file.
+
+Then the fields, top down. **All 14 top-level snapshot fields have a reader** in
+core or codegen, so nothing is dropped at the entrance. The losses, if any, are
+inside the records.
+
+#### What was found: a fact that was never stated
+
+`SignatureRecord::is_async` was the constant `false`. One construction site
+(`decompose.rs`), and it wrote the literal, because the checker reports `async`
+on a *declaration* and never on a signature — which that site's own comment
+said. Three readers treated it as real:
+
+| reader | what it believed | what it got |
+|---|---|---|
+| `signature_name` | an `A` in the layout name marking an async signature — its doc says so | no `A` has ever been emitted. **0 `FnA` names** in the C of 40 examples, both before and after |
+| `native.rs` | a refusal: `foreign function ... with a generic, async, or constructor signature` | the async disjunct could not fire |
+| `signature_key` | a component of the identity key for a function type | a constant, contributing nothing |
+
+**Populating it would have been the bug.** `async function f(): Promise<T>` and
+`function f(): Promise<T>` are *one type* to the checker — both assign to a
+`() => Promise<T>` slot, checked — so an `A` would give a single type two layout
+names, and for a function type the name **is** its identity. That is the hazard
+recorded four lines below `signature_name` itself, where `Ctor_Error` and `Fn…`
+merged and emitted `normalizeString`'s function parameter with the type of the
+`Error` constructor.
+
+And the second reader's case cannot be written at all: a foreign function is an
+ambient declaration, and TypeScript rejects the modifier there — **TS1040,
+`'async' modifier cannot be used in an ambient context`**, verified with the
+same file minus the keyword, which typechecks. So the guard promised to refuse
+something the language forbids, using a flag that was always false.
+
+Removed rather than populated, `SCHEMA_VERSION` 14 → 15, and the absence is
+documented on `SignatureRecord` so it does not come back. **The artifact was
+diffed against the unchanged build, which is what this file requires of a change
+that makes something smaller: 40 of 40 examples emit byte-identical
+`program.c`.** The instrument is not vacuous — 93 `Fn…__…` names appear in that
+output, so `signature_name` is exercised; it simply never had an `A` to print.
+
+#### What was checked and was not a loss
+
+The zeros, kept because they are the point. Each cost a probe with a control arm.
+
+| looked like a discard | why it is not |
+|---|---|
+| `TypeKind::Conditional`, `IndexedAccess`, `TemplateLiteral` — **one** mention each in all of core, and that mention is the function that names a type in a refusal | the checker resolves them before the snapshot. `Id<string>` where `type Id<T> = T extends string ? number : boolean`, `Box["x"]`, and `` `a${"b"}` `` emit signatures **byte-identical** to `number`, `number` and `"ab"` written literally. Those variants are reached only when genuinely deferred, where refusing is right |
+| `TypeKind::Structured` — the schema's *own* documented discard: "a structured type the checker resolved but this snapshot has not decomposed into members yet" | **0 of 720 distinct named things** across `stream`, `fs`, `http` and `net`, 168 root messages, 2026-09-15. Historically it was 344 occurrences across 36 sites; the `NON_PRIMITIVE` handling closed it. The instrument was validated before the zero was believed: the same census surfaces `a union of` 25 times, `an array of` 27, `an intersection` 7 |
+| `decompose.rs` leaves a placeholder when a type's arguments mention a type parameter, on the stated ground that "only instantiations are ever lowered" | **the precondition was checked rather than trusted, and holds.** `g<T>(b: Box<T>): T` reading `b.v` compiles, and emits the same signature as the concrete `g(b: Box<number>)`. Six of the eight give-up sites in that file are defensive — they fire only when an RPC returns nothing — and the other two are policy with a reason |
+
+#### The opposite failure: a fact carried and never read
+
+`SignatureRecord::type_predicate` — what `x is T` narrows — has **zero** readers
+in core and codegen, and `type_predicate_of_signature` is an RPC to tsgo issued
+*unconditionally for every signature decomposed*. Its schema doc says what it is
+for: "that is what turns a virtual dispatch into a direct call".
+
+It is not a loss. Narrowing already arrives through `node_types`, which carries
+the checker's narrowed type at the access node: a user-defined guard and an
+inline discriminant check compile the same, with no diagnostic from either. So
+the predicate is redundant carriage rather than a dropped fact — **left in place
+and recorded here as a cost, not removed**, because unlike `is_async` the data
+is true and the question is only whether the round trip is worth it. What would
+settle it is a build with the call removed, timed; that has not been done.
+
 ### What is still on the table
 
 Each row is a fact TypeScript states today and HIR does not carry. None of them
