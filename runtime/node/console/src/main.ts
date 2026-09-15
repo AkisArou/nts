@@ -674,6 +674,51 @@ class GlobalConsole extends Console {
   profile = (..._args: unknown[]): void => {};
   profileEnd = (..._args: unknown[]): void => {};
   timeStamp = (..._args: unknown[]): void => {};
+
+  /**
+   * `console.context([name])`, a fresh console over the same streams.
+   *
+   * Node's comes from the inspector and answers a plain object carrying the whole
+   * console method set -- 22 of them -- and a *different* object on every call, which
+   * is the part that matters: two contexts must not share a `count` tally or a
+   * `group` depth. A `context()` that answered `this` would look right until two
+   * contexts were used at once.
+   *
+   * `name` is accepted and unused here, as it is on node without an inspector
+   * attached: it labels the context in a debugger and there is nothing else to do
+   * with it. Declared rather than dropped, because `console.context.length` is 1 and
+   * an omitted parameter would report 0.
+   */
+  context = (_name?: string): Console =>
+    new Console({ stdout: stdio.stdout, stderr: stdio.stderr });
+
+  /**
+   * `console.createTask(name)`, V8's handle for attributing later asynchronous work
+   * to a named task.
+   *
+   * `run(fn)` calls `fn` and answers its value, which is the whole of the
+   * behavioural contract and is what this does. What V8's version additionally does
+   * is link the call into the async stack trace a **debugger** shows, and that is
+   * absent here -- named rather than approximated, because there is nothing to
+   * approximate it with and the difference is invisible to the program either way.
+   *
+   * A rest parameter, because `console.createTask.length` is 0 on node: V8 declares
+   * it with no formal parameters and reads the argument anyway. The error for a bad
+   * one is a plain `Error` with node's wording and no code, which is V8's rather
+   * than node's and is what a caller catching it sees.
+   */
+  createTask = (...args: unknown[]): { run: (fn: () => unknown) => unknown } => {
+    const name = args[0];
+    if (typeof name !== "string" || name.length === 0) {
+      throw new Error("First argument must be a non-empty string.");
+    }
+    return {
+      // A rest parameter here too: `task.run.length` is 0 on node, and a declared
+      // `fn` would report 1. Measured, not assumed -- the first version declared it
+      // and the arity probe caught it while every behavioural row agreed.
+      run: (...runArgs: unknown[]): unknown => (runArgs[0] as () => unknown)(),
+    };
+  };
 }
 
 /**

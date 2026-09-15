@@ -6592,6 +6592,117 @@ export const CORPORA = {
           return [outText, errText];
         },
       },
+      {
+        // **The deterministic remainder of `console`**, which is eight of the fifteen
+        // names nothing called.
+        //
+        // The section header excludes `time`, `timeEnd`, `timeLog` and `trace` because
+        // the first three write an elapsed duration and the fourth writes a stack, and
+        // it argues that normalising them "would mean inventing the answer, and a
+        // comparison against an answer this file made up is not a comparison". That
+        // argument holds and the three timers stay out. What it does not cover:
+        //
+        //   - `clear`, `profile`, `profileEnd` and `timeStamp` involve no duration and
+        //     no stack at all. The last three are no-ops without an inspector attached,
+        //     and a no-op is a perfectly comparable answer.
+        //   - `context` and `createTask` answer objects, and their shape is fixed.
+        //   - `countReset` was excluded because resetting a label that was **never
+        //     counted** emits a process warning with no channel to compare it on. That
+        //     is true of the uncounted case and only of it: resetting a label that was
+        //     counted writes nothing and is visible in the next `count`, which is the
+        //     arm here.
+        //   - `trace`'s **first line** is `Trace: ` followed by the formatted arguments,
+        //     and that is a function of the input. Only the frames are not — and their
+        //     *count* differs between the two sides by construction, because the host
+        //     evaluates specs inside the harness and the probe inside a child, at
+        //     different stack depths. So the frames are dropped and the first line is
+        //     compared. Dropping a part that cannot agree is not the same as inventing
+        //     a value for it: nothing here is replaced by a made-up answer, and if the
+        //     first line diverges the row still says so.
+        label: "console-deterministic-rest",
+        call: async (m, s) => {
+          const { Writable } = await import("node:stream");
+          const captured = [];
+          const sink = () => new Writable({
+            write(chunk, _encoding, cb) { captured.push(String(chunk)); cb(); },
+          });
+          const stdout = sink();
+          const stderr = sink();
+          const instance = new m.Console({ stdout, stderr });
+          const out = [];
+          const attempt = (label, fn) => {
+            try {
+              const got = fn();
+              out.push(`${label}:ok:${got === undefined ? "void" : typeof got}`);
+            } catch (error) {
+              out.push(`${label}:${error.code ?? error.name}`);
+            }
+          };
+          const label = (s.replace(/[^a-zA-Z0-9]/g, "") || "k").slice(0, 6);
+
+          // `countReset` on a label that was counted, which is the deterministic half.
+          attempt("count1", () => instance.count(label));
+          attempt("count2", () => instance.count(label));
+          attempt("countOther", () => instance.count(`${label}-other`));
+          attempt("countReset", () => instance.countReset(label));
+          attempt("countAfterReset", () => instance.count(label));
+          attempt("countOtherAgain", () => instance.count(`${label}-other`));
+
+          attempt("clear", () => instance.clear());
+
+          // `trace`, first line only. The frames differ in *number* between the two
+          // sides because the stack depth does, so they are cut rather than matched.
+          attempt("trace", () => instance.trace(label, s.length % 5, { a: 1 }));
+          attempt("traceNoArgs", () => instance.trace());
+
+          const text = captured.join("");
+          const firstLines = text
+            .split("\n")
+            .filter((line) => !/^\s+at /.test(line))
+            .join("\n");
+          out.push(`written:${JSON.stringify(firstLines)}`);
+          out.push(`frameLinesPresent:${/\n\s+at /.test(text)}`);
+
+          // The three the global console has and an instance does not, which is itself
+          // worth a row: they belong to the inspector surface rather than to `Console`.
+          for (const name of ["profile", "profileEnd", "timeStamp"]) {
+            out.push(`onInstance:${name}:${typeof instance[name]}`);
+            out.push(`onModule:${name}:${typeof m[name]}`);
+            attempt(`module:${name}`, () =>
+              typeof m[name] === "function" ? m[name](label) : "ABSENT");
+          }
+          // Called a second time, because an unbalanced `profileEnd` is the case a
+          // counter-based implementation gets wrong.
+          attempt("profileEndAgain", () =>
+            typeof m.profileEnd === "function" ? m.profileEnd(label) : "ABSENT");
+          attempt("profileEndUnknown", () =>
+            typeof m.profileEnd === "function" ? m.profileEnd(`${label}-never`) : "ABSENT");
+
+          // `context` answers a fresh console and `createTask` a task object. Compared
+          // through shape and through whether the new console is the old one, because a
+          // `context()` that answered the same object would look right until two
+          // contexts shared a `count` tally.
+          attempt("context", () => {
+            const fresh = m.context();
+            return `${typeof fresh}|same:${fresh === m}|hasLog:${typeof fresh.log}` +
+              `|hasCount:${typeof fresh.count}`;
+          });
+          attempt("createTask", () => {
+            const task = m.createTask(`task-${label}`);
+            // `run.length` is part of it: node's is 0 and a declared parameter would
+            // report 1, which every behavioural row would still agree on.
+            return `${typeof task}|run:${typeof task.run}|arity:${task.run.length}` +
+              `|own:${Object.getOwnPropertyNames(task).sort().join(",")}` +
+              `|ran:${task.run(() => `v${label}`)}`;
+          });
+          attempt("createTaskArity", () => `${m.createTask.length}|${m.context.length}`);
+          for (const bad of [undefined, null, 1, {}]) {
+            attempt(`createTaskBad:${bad === null ? "null" : typeof bad}`, () =>
+              typeof m.createTask(bad));
+          }
+          return out.join("\n");
+        },
+      },
     ],
   },
 };
