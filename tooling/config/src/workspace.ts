@@ -16,7 +16,6 @@
 import type { Dependencies, Manifest, NativeSources } from "./native.ts";
 import type { Product } from "./product.ts";
 import type { TargetId } from "./target.ts";
-import type { DebugProfile } from "./product.ts";
 
 export interface Workspace {
   readonly root: string;
@@ -79,7 +78,6 @@ export interface Config {
   /** Build-system hooks to emit for a brownfield consumer. */
   readonly integrate?: readonly Integration[];
 
-  readonly defaults?: { readonly debug?: DebugProfile };
   readonly build?: {
     readonly cache?: { readonly local?: boolean; readonly directory?: string };
   };
@@ -102,18 +100,3 @@ export interface Config {
  * config-time dependency for a compiler that is otherwise Rust.
  */
 export const defineConfig = (config: Config): Config => config;
-
-/**
- * Debug profiles (RFC §6.9).
- *
- * A builder rather than a bare string so the options a profile takes travel with
- * it: `development` carries source maps and async stacks, `release-symbols` does
- * not and should not be able to.
- */
-export const debug = {
-  none: (): DebugProfile => "none",
-  lineTables: (): DebugProfile => "line-tables",
-  development: (_o: { readonly sourceMaps?: "full" | "line-tables"; readonly asyncStacks?: boolean } = {}): DebugProfile =>
-    "development",
-  releaseSymbols: (): DebugProfile => "release-symbols",
-} as const;

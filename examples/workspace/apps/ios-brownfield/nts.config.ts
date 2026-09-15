@@ -21,7 +21,7 @@ export default defineConfig({
     sdk: library.ios({
       entry: "./nts/sdk.ts",
       minimumVersion: "17.0",
-      runtime: { family: "native", memory: memory.rcCycle() },
+      runtime: { memory: memory.rcCycle() },
       exports: ["Sdk"],
       // The Swift module name a consumer writes `import AcmeSdk` for.
       moduleName: "AcmeSdk",

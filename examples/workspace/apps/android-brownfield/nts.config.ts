@@ -16,7 +16,7 @@
 // That last point is the reverse direction `docs/nts-config.md` §6c names as
 // unanswered: consuming a package manager's resolved output is one problem, and
 // *emitting something it resolves* is another. This app is the case for it.
-import { defineConfig, library, memory } from "@nts/config";
+import { defineConfig, library } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
@@ -24,7 +24,6 @@ export default defineConfig({
     sdk: library.android({
       entry: "./nts/sdk.ts",
       minSdk: 29,
-      runtime: { family: "jvm", memory: memory.hostGC() },
 
       // The contract. `examples/interop/ts-from-java` pins its published Java
       // surface in `expected/Api.javap` and diffs it on every build; a library

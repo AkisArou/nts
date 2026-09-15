@@ -1,93 +1,58 @@
 /**
  * Memory providers (RFC §6.4, §9).
  *
- * The provider is a build dimension, not a property of the runtime: MIR carries
- * abstract `managed.*` operations and the selected provider lowers them
- * (RFC §7.2). Choosing one here is what decides whether a field store becomes a
- * retain/release pair, a card-marking barrier, or an ordinary JVM `putfield`.
+ * The provider is a build dimension, not a property of the runtime: HIR carries
+ * abstract managed operations and the selected provider lowers them. Choosing
+ * one decides whether a field store becomes a barrier.
+ *
+ * **Two, because the compiler has two.** `hir::Provider` is `NoGc |
+ * ReferenceCounting` and nothing else. An earlier version of this file offered
+ * four -- adding `native-mmtk` and `host-jvm` -- and neither exists:
+ *
+ *   - **MMTk** is not implemented. `compiler/memory-lowering/src/lib.rs` says so
+ *     in its own header: "experimental, gated behind RFC §3.7. Not in this crate
+ *     yet." A builder taking a `plan`, a `minHeap` and a `maxHeap` for it was
+ *     four parameters of a collector that does not exist.
+ *   - **`host-jvm`** was not a provider either. The JVM lane emits no retains and
+ *     no releases at all -- the platform collector owns everything -- and it
+ *     reaches that by compiling under `NoGc`, which already means "no retains,
+ *     no releases, no barriers". There was never a third thing to select.
+ *
+ * So a JVM target takes **no memory option at all**, because there is no choice
+ * to make, and `app.android` does not accept one.
  */
 
-/** Names of the providers the compiler can lower to. */
-export type MemoryProviderName =
-  | "native-rc-cycle"
-  | "native-mmtk"
-  | "native-nogc"
-  | "host-jvm";
+/** The providers the compiler implements. */
+export type MemoryProviderName = "native-rc-cycle" | "native-nogc";
 
 export interface MemoryProvider {
   readonly provider: MemoryProviderName;
 }
 
 export interface RcCycleOptions {
-  /** How cycle collection is scheduled. */
-  readonly cycleCollection?: "incremental" | "stop-the-world";
+  /** How the cycle collector runs. Deferred collection reads as a leak in a
+   *  program too short to reach the threshold. */
+  readonly cycleCollection?: "deferred" | "incremental";
 }
 
 export interface RcCycleProvider extends MemoryProvider, RcCycleOptions {
   readonly provider: "native-rc-cycle";
 }
 
-/**
- * MMTk collection plans (RFC §3.6).
- *
- * Ordered as the integration sequence intends them to be adopted: prove
- * allocation and roots under NoGC, then scanning under MarkSweep, and only then
- * move objects deliberately to expose illegal raw pointers.
- */
-export type MmtkPlan =
-  | "NoGC"
-  | "MarkSweep"
-  | "Immix"
-  | "SemiSpace"
-  | "GenCopy"
-  | "GenImmix"
-  | "StickyImmix";
-
-export interface MmtkOptions {
-  /**
-   * Required. MMTk is an experimental provider (RFC §3.4) and may not become a
-   * default until the gates in RFC §3.7 pass, so opting in is explicit.
-   */
-  readonly experimental: true;
-  readonly plan: MmtkPlan;
-  readonly minHeap?: string;
-  readonly maxHeap?: string;
-}
-
-export interface MmtkProvider extends MemoryProvider, MmtkOptions {
-  readonly provider: "native-mmtk";
-}
-
 export interface NoGcProvider extends MemoryProvider {
   readonly provider: "native-nogc";
 }
 
-export interface HostGcProvider extends MemoryProvider {
-  readonly provider: "host-jvm";
-}
-
-/** Reference counting plus cycle collection — the first shipping provider. */
-export const rcCycle = (options: RcCycleOptions = {}): RcCycleProvider => ({
-  provider: "native-rc-cycle",
-  ...options,
-});
-
-/** MMTk, experimental. Restricted to compatible product/platform pairs. */
-export const mmtk = (options: MmtkOptions): MmtkProvider => ({
-  provider: "native-mmtk",
-  ...options,
-});
-
-/**
- * No collection at all.
- *
- * For compiler bring-up, allocation tests, and bounded-lifetime tools only.
- * RFC §9.1: never selected silently for a general application, which is why
- * there is no default that reaches it.
- */
-export const noGc = (): NoGcProvider => ({ provider: "native-nogc" });
-
-/** The platform's own collector. Used for JVM and Android products (RFC §13). */
-export const hostGC = (): HostGcProvider => ({ provider: "host-jvm" });
-
-export const memory = { rcCycle, mmtk, noGc, hostGC } as const;
+export const memory = {
+  /** The shipping provider for native targets. */
+  rcCycle: (options: RcCycleOptions = {}): RcCycleProvider => ({
+    provider: "native-rc-cycle",
+    ...options,
+  }),
+  /**
+   * Allocate and never free. For bring-up, allocation testing and
+   * bounded-lifetime tools -- "never a silent default for an application",
+   * which is `hir::Provider`'s own wording.
+   */
+  noGc: (): NoGcProvider => ({ provider: "native-nogc" }),
+} as const;

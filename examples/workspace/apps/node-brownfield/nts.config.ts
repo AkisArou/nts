@@ -17,7 +17,7 @@ export default defineConfig({
   products: {
     addon: library.node({
       entry: "./nts/sdk.ts",
-      runtime: { family: "native", memory: memory.rcCycle() },
+      runtime: { memory: memory.rcCycle() },
       exports: ["remember", "digest"],
       apiVersion: 8,
       platforms: ["darwin-arm64", "darwin-x64", "linux-x64", "win32-x64"],

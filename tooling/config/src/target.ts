@@ -15,9 +15,6 @@ export type Backend = "c" | "llvm" | "jvm";
 /** Architectures a native target can be built for. */
 export type Arch = "x86_64" | "aarch64" | "armv7" | "wasm32";
 
-/** Which runtime family a product executes under (RFC §6.3). */
-export type RuntimeFamily = "native" | "jvm";
-
 /**
  * The stable name of a target.
  *

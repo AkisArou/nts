@@ -18,7 +18,7 @@ export default defineConfig({
     sdk: library.macos({
       entry: "./nts/sdk.ts",
       minimumVersion: "14.0",
-      runtime: { family: "native", memory: memory.rcCycle() },
+      runtime: { memory: memory.rcCycle() },
       exports: ["Sdk"],
       moduleName: "AcmeSdk",
       // Not modelled, and named so it is not mistaken for handled.

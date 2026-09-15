@@ -11,7 +11,7 @@ export default defineConfig({
     cli: app.cli({
       entry: "./src/main.ts",
       backend: "c",
-      runtime: { family: "native", memory: memory.rcCycle() },
+      runtime: { memory: memory.rcCycle() },
       // No `host`: `app.cli` does not accept one.
     }),
   },

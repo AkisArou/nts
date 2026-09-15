@@ -17,7 +17,7 @@ export default defineConfig({
     hello: library.linux({
       entry: "./src/main.ts",
       runtimeLinkage: "bundled-private",
-      runtime: { family: "native", memory: memory.rcCycle() },
+      runtime: { memory: memory.rcCycle() },
       exports: ["add", "greeting"],
     }),
   },

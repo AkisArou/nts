@@ -18,7 +18,7 @@ export default defineConfig({
   products: {
     sdk: library.linux({
       entry: "./nts/sdk.ts",
-      runtime: { family: "native", memory: memory.rcCycle() },
+      runtime: { memory: memory.rcCycle() },
       exports: ["acme_remember", "acme_notify"],
       soname: "libacme.so.0",
       header: "acme.h",

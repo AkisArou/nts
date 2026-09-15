@@ -11,7 +11,7 @@ export default defineConfig({
     addon: library.node({
       entry: "./src/main.ts",
       apiVersion: 8,
-      runtime: { family: "native", memory: memory.rcCycle() },
+      runtime: { memory: memory.rcCycle() },
       exports: ["digest", "putRecord"],
     }),
   },
