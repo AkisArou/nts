@@ -453,6 +453,43 @@ export const CORPORA = {
           return out;
         },
       },
+        {
+          // `matchesGlob`, on the module and on both platform namespaces.
+          //
+          // A glob matcher is exactly the kind of thing a reimplementation gets almost
+          // right: `*` stops at a separator and `**` does not, a leading dot is not
+          // matched by `*` in some implementations and is in node's, a trailing
+          // separator matters, and a Windows path uses the other separator while the
+          // pattern uses this one. Each of those is a row here.
+          label: "matchesGlob",
+          call: (m, s) => {
+            const out = [];
+            const attempt = (label, fn) => {
+              try {
+                out.push(`${label}:${fn()}`);
+              } catch (error) {
+                out.push(`${label}:${error.code ?? error.name}`);
+              }
+            };
+            const PATTERNS = ["*", "**", "a/*", "a/**", "*.ts", "**/*.ts", "?", "[ab]",
+              "a/*/c", "{a,b}/*", ".*", "a\\*", String(s).slice(0, 6) || "*"];
+            const seed = String(s).length;
+            for (let index = 0; index < PATTERNS.length; index++) {
+              const pattern = PATTERNS[(seed + index) % PATTERNS.length];
+              attempt(`m(${JSON.stringify(pattern)})`, () => m.matchesGlob(String(s), pattern));
+              attempt(`p(${JSON.stringify(pattern)})`, () => m.posix.matchesGlob(String(s), pattern));
+              attempt(`w(${JSON.stringify(pattern)})`, () => m.win32.matchesGlob(String(s), pattern));
+            }
+            for (const [value, pattern] of [
+              [1, "*"], [null, "*"], [undefined, "*"], [{}, "*"], ["a", 1], ["a", null],
+              ["a", undefined], ["a", {}], ["", ""], ["a", ""],
+            ]) {
+              const shown = `${value === null ? "null" : typeof value}/${pattern === null ? "null" : typeof pattern}`;
+              attempt(`bad(${shown})`, () => m.matchesGlob(value, pattern));
+            }
+            return out.join("\n");
+          },
+        },
     ],
   },
 
@@ -2099,6 +2136,56 @@ export const CORPORA = {
             call: (m, s) => m.Buffer.byteLength(s, enc),
           },
         ]),
+      {
+        // `Blob#stream` and `Blob#textStream`, both drained to completion.
+        //
+        // A `ReadableStream` whose reader is not run to `done` leaves the lock held, so
+        // each is read out fully rather than sampled.
+        label: "blob-streams",
+        call: async (m, s) => {
+          const out = [];
+          const text = String(s).slice(0, 8) || "x";
+          const blob = new m.Blob([text, "|", text]);
+          out.push(`size:${blob.size}|type:${JSON.stringify(blob.type)}`);
+
+          try {
+            const stream = blob.stream();
+            out.push(`stream:${stream.constructor.name}|locked:${stream.locked}`);
+            const reader = stream.getReader();
+            const chunks = [];
+            for (;;) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              chunks.push(Buffer.from(value).toString("hex"));
+            }
+            reader.releaseLock();
+            out.push(`streamRead:${JSON.stringify(chunks)}`);
+          } catch (error) {
+            out.push(`stream:${error.code ?? error.name}`);
+          }
+
+          try {
+            if (typeof blob.textStream !== "function") {
+              out.push("textStream:absent");
+            } else {
+              const stream = blob.textStream();
+              out.push(`textStream:${stream.constructor.name}`);
+              const reader = stream.getReader();
+              const chunks = [];
+              for (;;) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                chunks.push(String(value));
+              }
+              reader.releaseLock();
+              out.push(`textStreamRead:${JSON.stringify(chunks)}`);
+            }
+          } catch (error) {
+            out.push(`textStream:${error.code ?? error.name}`);
+          }
+          return out.join("\n");
+        },
+      },
     ],
   },
 
@@ -3380,6 +3467,49 @@ export const CORPORA = {
         throws: true,
         call: (m, s) => new m.StringDecoder(`no-such-encoding-${String(s).length}`),
       },
+      {
+        // `StringDecoder#text`, the incremental decoder's own entry point.
+        //
+        // `write` is what a caller uses and `text` is what it calls underneath, with an
+        // explicit offset -- so this reaches the split-sequence logic directly rather
+        // than through the buffering that usually hides it. The inputs are a complete
+        // multi-byte character, a truncated one, and a lone continuation byte.
+        label: "decoder-text",
+        call: (m, s) => {
+          const out = [];
+          const attempt = (label, fn) => {
+            try {
+              out.push(`${label}:ok:${JSON.stringify(fn())}`);
+            } catch (error) {
+              out.push(`${label}:${error.code ?? error.name}`);
+            }
+          };
+          const seed = String(s).length;
+          const CASES = [
+            [0xe2, 0x82, 0xac],
+            [0xe2, 0x82],
+            [0x82],
+            [0xf0, 0x9f, 0x92, 0xa9],
+            [0xf0, 0x9f],
+            [0x41, 0xc3, 0xa9],
+            [],
+          ];
+          for (const encoding of ["utf8", "utf16le", "base64"]) {
+            const decoder = new m.StringDecoder(encoding);
+            for (let index = 0; index < CASES.length; index++) {
+              const bytes = CASES[(seed + index) % CASES.length];
+              const buffer = Buffer.from(bytes);
+              attempt(`${encoding}:text(${bytes.length}):0`, () => decoder.text(buffer, 0));
+              attempt(`${encoding}:text(${bytes.length}):1`, () =>
+                decoder.text(buffer, Math.min(1, buffer.length)));
+            }
+            // What the decoder still holds after all that, which is the state `text`
+            // leaves behind and the reason it is not a pure function.
+            attempt(`${encoding}:end`, () => decoder.end());
+          }
+          return out.join("\n");
+        },
+      },
     ]),
   },
 
@@ -4073,6 +4203,51 @@ export const CORPORA = {
           }
           m.clearTimeout(handle);
           return out;
+        },
+      },
+      {
+        // `timers/promises`, which this module publishes as `promises` and nothing
+        // called.
+        //
+        // Every delay is **zero**, so each settles on the next turn rather than after
+        // a wall-clock wait -- the answers compared are the resolved values and the
+        // rejection shapes, neither of which depends on how long a timer took. The
+        // interval is an async iterator that never ends on its own, so exactly one
+        // value is taken and the loop broken, which is what releases it.
+        label: "timers-promises",
+        call: async (m, s) => {
+          const out = [];
+          const seed = String(s).length;
+          const promises = m.promises;
+          out.push(`shape:${typeof promises?.setTimeout}|${typeof promises?.setImmediate}|${typeof promises?.setInterval}`);
+          if (promises === undefined) return out.join("\n");
+
+          out.push(`setTimeout:${JSON.stringify(await promises.setTimeout(0, `t${seed % 5}`))}`);
+          out.push(`setTimeoutVoid:${String(await promises.setTimeout(0))}`);
+          out.push(`setImmediate:${JSON.stringify(await promises.setImmediate(`i${seed % 5}`))}`);
+          out.push(`setImmediateVoid:${String(await promises.setImmediate())}`);
+
+          // One value, then break. An interval left iterating holds the loop open.
+          const seen = [];
+          for await (const value of promises.setInterval(0, `n${seed % 3}`)) {
+            seen.push(String(value));
+            break;
+          }
+          out.push(`setInterval:${JSON.stringify(seen)}`);
+
+          // An already-aborted signal rejects rather than waiting.
+          for (const [name, run] of [
+            ["timeout", () => promises.setTimeout(0, "v", { signal: AbortSignal.abort() })],
+            ["immediate", () => promises.setImmediate("v", { signal: AbortSignal.abort() })],
+          ]) {
+            out.push(`aborted:${name}:${await run().then(() => "resolved", (error) => error.code ?? error.name)}`);
+          }
+          for (const bad of [{ signal: 1 }, { signal: "x" }, { ref: 1 }]) {
+            out.push(`badOptions:${JSON.stringify(bad)}:${await promises
+              .setTimeout(0, "v", bad)
+              .then(() => "resolved", (error) => error.code ?? error.name)}`);
+          }
+          return out.join("\n");
         },
       },
     ],
@@ -6437,6 +6612,55 @@ export const CORPORA = {
           return log;
         },
       },
+      {
+        // `AsyncLocalStorage#withScope`, the only published name this module's corpus
+        // never called.
+        //
+        // Compared through the **relationship** between the stores rather than their
+        // identity, as the rest of this section is: what a scope sets, what an inner
+        // scope replaces, and what is restored on the way out.
+        label: "als-with-scope",
+        call: (m, s) => {
+          const out = [];
+          const attempt = (label, fn) => {
+            try {
+              out.push(`${label}:ok:${fn()}`);
+            } catch (error) {
+              out.push(`${label}:${error.code ?? error.name}`);
+            }
+          };
+          const store = new m.AsyncLocalStorage();
+          out.push(`withScope:${typeof store.withScope}`);
+          if (typeof store.withScope !== "function") return out.join("\n");
+
+          attempt("outside", () => String(store.getStore()));
+          attempt("inside", () =>
+            store.withScope({ tag: String(s).length }, () => JSON.stringify(store.getStore())));
+          attempt("restored", () => String(store.getStore()));
+          attempt("nested", () =>
+            store.withScope({ depth: 1 }, () =>
+              `${JSON.stringify(store.getStore())}|` +
+              store.withScope({ depth: 2 }, () => JSON.stringify(store.getStore())) +
+              `|${JSON.stringify(store.getStore())}`));
+          attempt("returnsValue", () => store.withScope({}, () => `v${String(s).length % 7}`));
+          attempt("throwsThrough", () => {
+            try {
+              store.withScope({}, () => { throw new Error("inner"); });
+              return "no-throw";
+            } catch (error) {
+              return `rethrown:${error.message}|storeAfter:${String(store.getStore())}`;
+            }
+          });
+          attempt("insideRun", () =>
+            store.run({ from: "run" }, () =>
+              store.withScope({ from: "scope" }, () => JSON.stringify(store.getStore()))));
+          for (const bad of [undefined, null, 1, "x", {}]) {
+            attempt(`badCallback:${bad === null ? "null" : typeof bad}`, () =>
+              String(store.withScope({}, bad)));
+          }
+          return out.join("\n");
+        },
+      },
     ],
   },
   readline: {
@@ -7047,6 +7271,58 @@ export const CORPORA = {
             }
           }
           return log;
+        },
+      },
+      {
+        // `bindStore`, `runStores` and `unbindStore`, the three that tie a channel to
+        // an `AsyncLocalStorage`.
+        //
+        // The transform is the part worth comparing: `bindStore(store, transform)`
+        // stores what the transform *returns*, not the message, so a subscriber inside
+        // `runStores` sees the transformed value. An implementation that stored the
+        // message directly would pass any test that used an identity transform.
+        label: "channel-stores",
+        call: async (m, s) => {
+          const { AsyncLocalStorage } = await import("node:async_hooks");
+          const out = [];
+          const attempt = (label, fn) => {
+            try {
+              const got = fn();
+              out.push(`${label}:ok:${got === undefined ? "void" : typeof got === "object" && got !== null ? JSON.stringify(got) : String(got)}`);
+            } catch (error) {
+              out.push(`${label}:${error.code ?? error.name}`);
+            }
+          };
+          const name = `nts-stores-${String(s).length % 5}`;
+          const channel = m.channel(name);
+          const store = new AsyncLocalStorage();
+
+          attempt("getStoreOutside", () => String(store.getStore()));
+          attempt("bindStore", () => channel.bindStore(store, (message) => ({ seen: message })));
+          attempt("runStores", () =>
+            channel.runStores({ tag: String(s).length }, () => JSON.stringify(store.getStore())));
+          // Nested, because the store must be the transformed message at each depth.
+          attempt("runStoresNested", () =>
+            channel.runStores({ depth: 1 }, () =>
+              channel.runStores({ depth: 2 }, () => JSON.stringify(store.getStore()))));
+          attempt("getStoreAfter", () => String(store.getStore()));
+          attempt("unbindStore", () => channel.unbindStore(store));
+          attempt("unbindTwice", () => channel.unbindStore(store));
+          attempt("runStoresUnbound", () =>
+            channel.runStores({ tag: 1 }, () => String(store.getStore())));
+
+          // A binding with no transform stores the message itself.
+          attempt("bindStorePlain", () => channel.bindStore(store));
+          attempt("runStoresPlain", () =>
+            channel.runStores({ plain: true }, () => JSON.stringify(store.getStore())));
+          attempt("unbindPlain", () => channel.unbindStore(store));
+
+          for (const bad of [undefined, null, 1, "x", {}]) {
+            attempt(`bindStoreBad:${bad === null ? "null" : typeof bad}`, () => channel.bindStore(bad));
+            attempt(`unbindStoreBad:${bad === null ? "null" : typeof bad}`, () => channel.unbindStore(bad));
+          }
+          attempt("runStoresNoFn", () => channel.runStores({}, "not a function"));
+          return out.join("\n");
         },
       },
     ],

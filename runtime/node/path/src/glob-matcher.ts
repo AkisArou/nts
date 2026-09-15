@@ -418,20 +418,41 @@ function expandBracesInto(pattern: string, output: string[]): void {
 }
 
 /** Node/minimatch collapses repeated separators before compiling components. */
+/**
+ * Split a **pattern** into components.
+ *
+ * A backslash is a separator here on **every** platform, not only Windows, and that
+ * is the difference from `splitValue` two functions down. Measured on node:
+ *
+ *     path.posix.matchesGlob("a/b",  "a\\b")   true    -- separator, so two components
+ *     path.posix.matchesGlob("a*b",  "a\\*b")  false   -- so NOT an escape for `*`
+ *     path.posix.matchesGlob("a\\b", "a\\b")  false   -- the value keeps its backslash
+ *
+ * The third line is the one that fixes the rule in place: a backslash in a *value*
+ * stays an ordinary character even on posix, so `a\b` is one component and cannot
+ * match a two-component pattern. Reading only the first line would suggest
+ * normalising both sides, and that answers the third wrongly.
+ *
+ * Gating it on `windows` made `C:\` match itself and `a\*` match nothing, both of
+ * which node refuses.
+ */
 function splitPattern(pattern: string, windows: boolean): string[] {
+  // `windows` is accepted for symmetry with `splitValue` and deliberately unused:
+  // the rule above does not depend on it.
+  void windows;
   const parts: string[] = [];
   let start = 0;
   for (let index = 0; index <= pattern.length; index++) {
     const character = pattern.charAt(index);
     const separator =
-      index === pattern.length || character === "/" || (windows && character === "\\");
+      index === pattern.length || character === "/" || character === "\\";
     if (!separator) continue;
     if (index !== start || start === 0 || index === pattern.length) {
       parts.push(pattern.slice(start, index));
     }
     while (
       index + 1 < pattern.length &&
-      (pattern.charAt(index + 1) === "/" || (windows && pattern.charAt(index + 1) === "\\"))
+      (pattern.charAt(index + 1) === "/" || pattern.charAt(index + 1) === "\\")
     )
       index++;
     start = index + 1;
@@ -567,9 +588,43 @@ function splitValue(path: string, windows: boolean): string[] {
   for (let index = 0; index < parts.length; index++) {
     const part = parts[index];
     if (part === undefined) throw new Error(`path is missing component ${index}`);
+    // **A `.` segment is dropped only when it is neither first nor last.**
+    //
+    // Measured, one case at a time, because every shorter rule gets one of them
+    // wrong:
+    //
+    //     "a/./b" ~ "a/b"    true    -- a middle dot is dropped
+    //     "./a"   ~ "a"      false   -- a leading one is not
+    //     "./a"   ~ "./a"    true
+    //     "a/."   ~ "a"      false   -- a trailing one is not either
+    //     "a/."   ~ "a/."    true
+    //     "a/."   ~ "a/*"    false   -- and `*` does not match it
+    //
+    // "normalise the path" would drop all three. "drop it unless it is first" was the
+    // first attempt here and left 283 divergences, all of them a trailing dot. `..`
+    // is different again and is resolved wherever it appears, on both sides:
+    // `"a/b/.." ~ "a"` and `"a/b/.." ~ "a/b/.."` are **both** true.
+    // Keyed on the **original index**, not on `optimized.length`. Those differ once
+    // `..` has popped everything before a dot: in `c.txt/../././x` the third component
+    // is not first, but by the time it is reached `optimized` is empty and a length
+    // test calls it first and keeps it. That left the value two components where node
+    // has one, so `*` did not match where node's does.
+    if (part === "." && index > 0 && index < parts.length - 1) continue;
     if (part === ".." && optimized.length > 0) {
       const previous = optimized[optimized.length - 1];
-      if (previous !== "" && previous !== "." && previous !== "..") {
+      // **A drive letter is a root on Windows, and  cannot pop it.** Measured:
+      //
+      //     win32  "C:/../d" ~ "d"   false      posix  "C:/../d" ~ "d"   true
+      //     win32  "C:/../d" ~ "*"   false      posix  "C:/../d" ~ "*"   true
+      //     win32  "a/../d"  ~ "*"   true
+      //
+      // Both components stay, so  is two and matches neither  nor .
+      // This popped a drive letter like any other component, which collapsed such a
+      // path to one component and matched things node does not.
+      const isDriveRoot = windows && previous !== undefined && /^[A-Za-z]:$/.test(previous);
+      if (isDriveRoot) {
+        optimized.push(part);
+      } else if (previous !== "" && previous !== "." && previous !== "..") {
         optimized.pop();
       } else {
         optimized.push(part);
