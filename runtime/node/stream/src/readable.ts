@@ -1012,6 +1012,21 @@ export class Readable extends Stream {
     return newReadableToWeb(stream, options);
   }
 
+  /**
+   * `Readable._fromList`, which node publishes as a static on the class.
+   *
+   * It is the buffer-draining helper `_read` already uses here, and node exposes the
+   * same function under this name -- `Readable._fromList === fromList` there. Nothing
+   * in the profile called it, so it was simply absent: `typeof Readable._fromList`
+   * answered `undefined` where node answers `function` with `length` 2. Found by
+   * comparing the module's published surface against node's for the first time.
+   *
+   * The underscore is node's marker for "internal but reachable", not a promise about
+   * the argument: `state` is a `ReadableState`, and a caller holding one is already
+   * inside the implementation.
+   */
+  static readonly _fromList = fromList;
+
   map(fn: MapFn, options?: OperatorOptions): Readable {
     return fromIterable(mapOperator(this, fn, options), undefined, Readable);
   }

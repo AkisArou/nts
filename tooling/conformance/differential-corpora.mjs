@@ -5746,6 +5746,98 @@ export const CORPORA = {
     },
     calls: [
       {
+        // **The six names `corpus-reach.mjs` had this module never calling**:
+        // `Readable._fromList`, `Duplex.fromWeb`, `Duplex.toWeb`, `Transform#_read`,
+        // `Stream#pipe` and `Stream.Stream`.
+        //
+        // Five agreed on their first run. `_fromList` did not exist here at all --
+        // `typeof` answered `undefined` where node answers `function` -- which is the
+        // shape a surface comparison finds and a behaviour comparison never reaches,
+        // because nothing can call what is not there.
+        //
+        // `_fromList` is compared by *behaviour* as well as by arity, against a real
+        // `_readableState` drained in three ways: everything, a partial byte count, and
+        // an empty buffer. It is the function `read()` is built on, so an off-by-one in
+        // the partial case is a wrong `read(n)` for every consumer.
+        //
+        // `Stream.prototype.pipe` is deliberately checked as *not* being
+        // `Readable.prototype.pipe`. They are two different functions in node -- the
+        // legacy base class keeps its own -- and a reimplementation that publishes one
+        // under both names passes every test that only calls `pipe`.
+        label: "stream-surface-gaps",
+        call: (m, program) => {
+          const show = (f) => {
+            try {
+              const v = f();
+              return typeof v === "object" && v !== null ? "[object]" : String(v);
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          const text = String(program).slice(0, 12) || "x";
+          const out = [
+            `selfref=${m.Stream.Stream === m.Stream}`,
+            `pipe=${typeof m.Stream.prototype.pipe}`,
+            `pipeDistinct=${m.Stream.prototype.pipe !== m.Readable.prototype.pipe}`,
+            `transformRead=${typeof m.Transform.prototype._read}`,
+            `fromList=${typeof m.Readable._fromList}:${m.Readable._fromList?.length}`,
+            `duplexFromWeb=${typeof m.Duplex.fromWeb}:${m.Duplex.fromWeb?.length}`,
+            `duplexToWeb=${typeof m.Duplex.toWeb}:${m.Duplex.toWeb?.length}`,
+          ];
+
+          // `_fromList` against a real buffered state.
+          const buffered = () => {
+            const r = new m.Readable({ read() {} });
+            r.push(Buffer.from(text, "utf8"));
+            r.push(Buffer.from("|tail", "utf8"));
+            return r;
+          };
+          out.push(`drainAll=${show(() => {
+            const r = buffered();
+            const got = m.Readable._fromList(0, r._readableState);
+            return got === null ? "null" : Buffer.from(got).toString("utf8");
+          })}`);
+          out.push(`drainPart=${show(() => {
+            const r = buffered();
+            const got = m.Readable._fromList(3, r._readableState);
+            return got === null ? "null" : Buffer.from(got).toString("utf8");
+          })}`);
+          out.push(`drainEmpty=${show(() => {
+            const r = new m.Readable({ read() {} });
+            return String(m.Readable._fromList(1, r._readableState));
+          })}`);
+          out.push(`drainObjectMode=${show(() => {
+            const r = new m.Readable({ read() {}, objectMode: true });
+            r.push({ v: text });
+            const got = m.Readable._fromList(0, r._readableState);
+            return got === null ? "null" : JSON.stringify(got);
+          })}`);
+
+          // `Duplex.toWeb` on a duplex that is already finished, which is the shape
+          // whose readable side is closed before anyone reads it.
+          out.push(`toWeb=${show(() => {
+            const d = new m.Duplex({ read() { this.push(null); }, write(_c, _e, cb) { cb(); } });
+            const w = m.Duplex.toWeb(d);
+            return [
+              Object.keys(w).sort().join(","),
+              w.readable?.constructor?.name,
+              w.writable?.constructor?.name,
+              w.readable?.locked,
+              w.writable?.locked,
+            ].join("/");
+          })}`);
+          out.push(`fromWebBad=${show(() => String(m.Duplex.fromWeb(text)))}`);
+          out.push(`fromWebShape=${show(() => {
+            const pair = m.Duplex.fromWeb({
+              readable: new ReadableStream({ start(c) { c.enqueue(text); c.close(); } }),
+              writable: new WritableStream({ write() {} }),
+            });
+            return `${pair?.constructor?.name}:${pair instanceof m.Duplex}`;
+          })}`);
+          return out.join("|");
+        },
+      },
+      {
         // **The deterministic part of the asynchronous half.** The note above excludes events
         // and `pipe` because comparing them means comparing *ordering*, which belongs to
         // `fuzz-timer-order.mjs`. That still holds. What it ruled out along with them, and did
