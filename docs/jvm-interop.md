@@ -30,11 +30,26 @@ prevented.
 
 **Java → TS is built as far as this lane can take it.** `compiler/jvm-emitter`
 reads as well as writes: [`read`] parses class files, [`bind`] renders
-declarations, [`escapes`] answers which parameters a method retains. There is
-still no `bind` **subcommand** -- it is `examples/bind.rs`, driven by the
-projects' `build.sh` -- because the CLI lives in `tooling/cli`, which this lane
-does not own. The CLI is `check`, `emit-c`, `emit-jvm`, `hir`, `layouts`,
-`version`.
+declarations, [`escapes`] answers which parameters a method retains.
+
+~~There is still no `bind` **subcommand** -- it is `examples/bind.rs`, driven by
+the projects' `build.sh` -- because the CLI lives in `tooling/cli`, which this
+lane does not own. The CLI is `check`, `emit-c`, `emit-jvm`, `hir`, `layouts`,
+`version`.~~ **Corrected 2026-09-15.** `nts bind` is a subcommand, with
+`--jar`/`--classes`, `--package`, `--out`, `--prelude`, `--keeps`,
+`--self-contained`, `--members` and `--overrides`; `examples/bind.rs` is gone;
+and the ownership sentence was the load-bearing error, because it is why nobody
+looked. The CLI has seventeen commands, not six:
+
+    bind  bind-c  check  deps  emit-c  emit-jvm  emit-llvm  erasure  facts
+    frontend  hir  layouts  modules  nonnull  nullable  types  version
+
+**Read that list as the finding rather than as a correction.** Eleven of those
+arrived while a paragraph two lines up said the file could not be touched. A
+sentence about who owns a file expires the same way a line number does, and it
+is worse than a stale line number: a coordinate that no longer resolves gets
+noticed the first time someone follows it, and a boundary that no longer holds
+stops anyone from trying.
 
 **A note on how code is cited here, which this document got wrong.** References
 into `compiler/core/src/hir/**` name a **function or a phrase**, never a line
