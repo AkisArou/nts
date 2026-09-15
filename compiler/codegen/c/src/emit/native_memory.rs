@@ -16,13 +16,19 @@ use nts_core::hir::native::{Pointee, Type};
 #[must_use]
 pub(super) fn needs_headers(program: &Program) -> bool {
     nts_codegen_common::native::layouts(program)
-        .is_ok_and(|layouts| layouts.structs.values().any(|layout| layout.from_header))
+        .is_ok_and(|layouts| layouts.structs.values().any(|layout| layout.from_header()))
 }
 
 pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<(), Diagnostic> {
     let layouts = nts_codegen_common::native::layouts(program)
         .map_err(|why| Diagnostic::error("NTS2006", why, origin.location))?;
     for (name, kind) in &layouts.tags {
+        // An anonymous record has no tag to declare. Its name here is one this
+        // compiler invented for the TypeScript side and for diagnostics, and
+        // emitting it would declare a second, unrelated type.
+        if layouts.structs.get(name).is_some_and(|record| record.anonymous()) {
+            continue;
+        }
         writer.line(origin, format!("{} {name};", kind.keyword()));
     }
     // One typedef per distinct element reached through a packed member. They
@@ -57,7 +63,10 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
     // anything: the include is above. It is placed first so that one of ours
     // containing it inline is orderable, and it is never defined below.
     for layout in layouts.structs.values() {
-        if layout.from_header {
+        // Anonymous records are placed and never emitted: the header defines
+        // them and nothing here can name them. They are still *placed* so that
+        // a record holding one is orderable.
+        if layout.from_header() || layout.anonymous() {
             placed.insert(layout.name.as_str());
             ordered.push(layout);
         }
@@ -90,9 +99,29 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
         // For one of ours both sides come from a single field list and this
         // only checks the arithmetic; for a header's, the C compiler answers
         // about the real type, which makes it the strongest check emitted.
-        if layout.from_header {
+        if layout.anonymous() {
+            // Nothing can be asserted about it either: `sizeof` and `offsetof`
+            // both need a type name. What is checkable is the *enclosing*
+            // record, whose size and whose members' offsets are asserted, and
+            // which is where a wrong layout for this one shows up.
+            continue;
+        }
+        if layout.from_header() {
             layout_asserts(writer, origin, layout, &shape);
             continue;
+        }
+        if let Some(field) = layout.fields.iter().find(|field| {
+            matches!(&field.ty, Pointee::Record(inner) if inner.anonymous())
+        }) {
+            return Err(Diagnostic::error(
+                "NTS2006",
+                format!(
+                    "`{}` is defined by this program and holds `{}`, a record no header names: \
+                     an anonymous record can only be a member of one a header defines",
+                    layout.name, field.name
+                ),
+                origin.location,
+            ));
         }
         writer.line(origin, format!("{} {} {{", layout.kind.keyword(), layout.name));
         for field in &layout.fields {
@@ -172,7 +201,11 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
             // pointer to its first element, and `&p->name` is a pointer to the
             // *array*, which is a different type C will not assign across.
             match &field.ty {
-                Pointee::Array { .. } => format!("{name} = {}->{};", value_name(pointer), field.name),
+                // An array member is already an address: `p->name` decays to a
+                // pointer to its first element, and `&p->name` is a pointer to
+                // the *array*, which is a different type C will not assign
+                // across. Below the arithmetic arm, which handles an array of
+                // its own when the enclosing record needs offsets.
                 // `&p->member` on a **packed** record is `taking address of
                 // packed member`, which clang reports because the result has
                 // the member's type and not its alignment. Reached by byte
@@ -180,18 +213,49 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
                 // asserts against the C compiler -- so no address of a packed
                 // member is ever taken, and the pointer's own type says what
                 // may be read through it.
-                _ if layout.packed || through_packing => {
+                // Byte arithmetic when the type at either end has no spelling
+                // to reach through: a packed member (whose address may not be
+                // taken as its own type) or an anonymous record (which has no
+                // type at all). Same expression, two reasons.
+                _ if layout.packed || through_packing || layout.anonymous() => {
                     let shape = nts_core::hir::layout::native_place(layout).ok_or_else(|| {
                         Diagnostic::error("NTS2006", "native struct has no C layout", origin.location)
                     })?;
                     let offset = shape.offsets.get(field_index as usize).ok_or_else(|| {
                         Diagnostic::error("NTS2006", "invalid native field index", origin.location)
                     })?;
+                    // An array member is at the same address and has a
+                    // different type: `p->name` decays to a pointer to its
+                    // first element, so that is what this points at. The
+                    // unaligned typedef is only for a packed member -- an
+                    // anonymous record's members sit wherever the record does,
+                    // which is wherever its enclosing member sits.
+                    let spelled = match (&field.ty, layout.packed || through_packing) {
+                        (Pointee::Array { element, .. }, _) => element.pointer_type(),
+                        (other, true) => {
+                            Pointee::Unaligned(Box::new(other.clone())).pointer_type()
+                        }
+                        (other, false) => other.pointer_type(),
+                    };
                     format!(
-                        "{name} = ({} *)((char *){} + {offset});",
-                        Pointee::Unaligned(Box::new(field.ty.clone())).c_type(),
+                        "{name} = ({spelled})((char *){} + {offset});",
                         value_name(pointer)
                     )
+                }
+                // An array member of an ordinary record is already an address:
+                // `p->name` decays to a pointer to its first element, while
+                // `&p->name` is a pointer to the *array* -- a different type C
+                // will not assign across. Below the arithmetic arm, which
+                // spells an array of its own when the enclosing record needs
+                // offsets rather than a member name.
+                Pointee::Array { .. } => {
+                    format!("{name} = {}->{};", value_name(pointer), field.name)
+                }
+                // A member whose *type* is anonymous: the member has a name,
+                // so `&p->member` is written as C writes it, and the result is
+                // held as `char *` because nothing can name what it points at.
+                Pointee::Record(inner) if inner.anonymous() => {
+                    format!("{name} = (char *)&{}->{};", value_name(pointer), field.name)
                 }
                 _ => format!("{name} = &{}->{};", value_name(pointer), field.name),
             }
@@ -254,7 +318,10 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         .map_err(|why| Diagnostic::error("NTS2006", why, origin.location))?;
     let mut wrote = false;
     for layout in layouts.structs.values() {
-        if !layout.foreign { continue; }
+        // An anonymous record cannot be asked about: `sizeof` and `offsetof`
+        // both want a type name and it has none. Its members' *positions* are
+        // still checked, through the enclosing record's own offsets.
+        if !layout.foreign() || layout.anonymous() { continue; }
         let placed = nts_core::hir::layout::native_place(layout)
             .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
         let tag = format!("{} {}", layout.kind.keyword(), layout.name);
@@ -268,6 +335,13 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             // `T (*)[N]` -- a pointer to the array, not to an element -- and
             // writing `T *` there would assert something true of a decayed
             // value and not of the member, which is what is being checked.
+            // `_Generic` on a member whose type is anonymous has nothing to
+            // name. The offset assert above still stands -- the *member* has a
+            // name even where its type does not -- so its position is checked
+            // and only its identity is not.
+            if matches!(&field.ty, Pointee::Record(inner) if inner.anonymous()) {
+                continue;
+            }
             let address = match &field.ty {
                 Pointee::Array { element, length } => {
                     format!("{} (*)[{length}]", element.c_type())
@@ -338,7 +412,7 @@ fn pointee_is_foreign(pointee: &Pointee) -> bool {
             .iter()
             .chain(std::iter::once(&*signature.result))
             .all(names_only_foreign),
-        Pointee::Record(layout) => layout.foreign,
+        Pointee::Record(layout) => layout.foreign(),
         Pointee::Pointer(inner)
         | Pointee::Const(inner)
         | Pointee::Unaligned(inner)

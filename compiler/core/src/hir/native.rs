@@ -294,6 +294,16 @@ pub struct Record {
     /// keyword and the offsets is common to them. Two types would have
     /// duplicated every match arm to say the same thing twice.
     pub kind: RecordKind,
+    /// How this program knows the type: invented here, an authored C tag, or a
+    /// record the header declares without one.
+    ///
+    /// **One field because two of the combinations were impossible.** These
+    /// were three bools -- `foreign`, `from_header`, `anonymous` -- and
+    /// `anonymous` implies `!foreign` (there is no tag) while `from_header`
+    /// was only ever set alongside `foreign`. Four reachable states in eight,
+    /// which is the shape that later reads as a bug. `packed` stays a bool
+    /// beside this because it genuinely is independent of all three.
+    pub naming: Naming,
     /// `__attribute__((packed))` -- no padding anywhere, and an alignment of 1.
     ///
     /// Declared rather than inferred, because it cannot be inferred: a packed
@@ -302,34 +312,52 @@ pub struct Record {
     /// 12 bytes packed where the natural layout is 16 -- and getting it wrong
     /// puts every member of an array at the wrong address.
     pub packed: bool,
-    /// Whether `name` is a C struct tag the declaration authored, rather than a
-    /// spelling invented for a layout that exists only in this program.
+}
+
+/// How this program came to know a record's type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Naming {
+    /// A layout this program invented, named `NtsNative_Type{id}`. Nothing
+    /// outside this program has the type, so no header can be asked about it
+    /// and this compiler emits its definition.
+    Invented,
+    /// A C tag the declaration authored, so some header defines it and a
+    /// translation unit holding that header can be asked whether this program
+    /// described it correctly.
     ///
-    /// The two are distinguishable from `name` alone -- an invented one is
-    /// `NtsNative_Type{id}` -- and deliberately not distinguished that way. A
-    /// question answered by a name prefix is answered again, differently, by
-    /// whoever writes the next prefix test. It is recorded once, where the
-    /// declaration is read, because only there is it known.
+    /// `from_header` is whether the *binding* named that header, which decides
+    /// whether `program.h` includes it or defines its own copy.
+    Tagged { from_header: bool },
+    /// Declared by a header **without a tag**, so nothing can name it.
     ///
-    /// What turns on it: a foreign tag names a type some header defines, so a
-    /// translation unit that includes that header can be asked whether we
-    /// described it correctly. An invented one names nothing outside this
-    /// program and has no such witness to offer.
-    pub foreign: bool,
-    /// Whether the scope that declared it named a header -- so the definition
-    /// is that header's and not ours.
-    ///
-    /// `program.h` includes what a binding names and defines only what nothing
-    /// else does. Without this it defined every foreign struct itself, and a C
-    /// consumer that included both `program.h` and the real header got
-    /// `redefinition of 'struct utsname'` -- the two cannot meet, which is an
-    /// odd thing for a header whose purpose is being included.
-    ///
-    /// *Whether*, not *which*: a module may name several headers, they are all
-    /// included together, and which of them carries a given tag is a fact the
-    /// preprocessor already holds. Deriving it a second time here would produce
-    /// something that can disagree with it.
-    pub from_header: bool,
+    /// C gives an anonymous record no spelling: no variable may be declared to
+    /// point at one and `_Generic` cannot ask about one. Every consumer here
+    /// reaches its members by byte offset from the enclosing record, and no
+    /// definition, forward declaration or type assertion is emitted for it.
+    /// `name` is still filled in, because the TypeScript side needs something
+    /// to call it and a diagnostic needs something to say.
+    Anonymous,
+}
+
+impl Record {
+    /// Whether `name` is a C tag some header defines.
+    #[must_use]
+    pub const fn foreign(&self) -> bool {
+        matches!(self.naming, Naming::Tagged { .. })
+    }
+
+    /// Whether the binding named the header that defines it, so `program.h`
+    /// includes that header rather than defining its own copy.
+    #[must_use]
+    pub const fn from_header(&self) -> bool {
+        matches!(self.naming, Naming::Tagged { from_header: true })
+    }
+
+    /// Whether the header declares it without a tag. See [`Naming::Anonymous`].
+    #[must_use]
+    pub const fn anonymous(&self) -> bool {
+        matches!(self.naming, Naming::Anonymous)
+    }
 }
 
 /// Whether a record's members follow one another or share an address.
@@ -363,6 +391,14 @@ impl Pointee {
         match self {
             Self::Opaque(name) => format!("struct {name}"),
             Self::Scalar(scalar) => scalar.c_type().to_owned(),
+            // `char` for an anonymous one, which is not a description of it: C
+            // has no spelling for a record the header left untagged, and
+            // `char *` is the type any address may be held as. Every access
+            // through it is byte arithmetic from the enclosing record, which
+            // is what a C programmer writes when they cannot name a type
+            // either. A member *declaration* of one would be wrong, and
+            // `types` refuses to emit a record that holds one.
+            Self::Record(layout) if layout.anonymous() => "char".to_owned(),
             Self::Record(layout) => format!("{} {}", layout.kind.keyword(), layout.name),
             Self::Pointer(pointee) => pointee.pointer_type(),
             Self::Void => "void".to_owned(),

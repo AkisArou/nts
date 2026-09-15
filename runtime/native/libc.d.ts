@@ -41,6 +41,22 @@ declare module "c:types" {
   // `Packed<Struct<{...}, "epoll_event">>` and everything that reads a struct
   // keeps reading one.
   export type Packed<T> = T & { readonly __c_packed: true };
+  // A record the header declares **without a tag**:
+  //
+  //     struct in6_addr { union { uint8_t a[16]; uint32_t b[4]; } __in6_u; };
+  //
+  // The member has a name and its type does not, which is not a detail: C has
+  // no spelling for that type, so no variable can be declared to hold a
+  // pointer to it and `_Generic` cannot ask about it. Marking it says *do not
+  // try to name this* -- the compiler reaches its members by byte offset from
+  // the enclosing record, which is what a C programmer does when they cannot
+  // name a type either.
+  //
+  // Without the marker a binding would have to give it a tag, and a tag it
+  // invented would be a second type beside the header's: `program.h` includes
+  // the header, so the member is the header's anonymous union and an invented
+  // `union NtsNative_Type12 *` is not assignable from it.
+  export type Anonymous<T> = T & { readonly __c_anonymous: true };
   // A slot reads as the plain value it holds and remembers what it is a slot
   // *of*. The phantom is optional, which is the whole trick: a plain `number`
   // satisfies it, so `p[i] = n`, `p[i] += 1` and `p.count += 2` stay ordinary

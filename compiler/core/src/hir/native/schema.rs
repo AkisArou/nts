@@ -130,6 +130,9 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
     };
     // `Packed<T>` intersects a marker in, so this reads through to the `T`.
     let packed = marker(snapshot, ty, "___c_packed").is_some();
+    // `Anonymous<T>` the same way. A record with no tag of its own that the
+    // enclosing header declares -- nothing may name it, so nothing tries.
+    let anonymous = marker(snapshot, ty, "___c_anonymous").is_some();
     let tag = text(snapshot, marker(snapshot, ty, "___c_tag")?)?;
     let TypeKind::Object { properties } = &snapshot.types.get(shape.0 as usize)?.kind else { return None; };
     if properties.is_empty() { return None; }
@@ -188,13 +191,21 @@ fn structure(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>
     }
     let foreign = !tag.is_empty();
     let name = if foreign { tag.to_owned() } else { format!("NtsNative_Type{}", shape.0) };
+    // An anonymous record is the header's, so nothing about it is this
+    // program's to define -- but it has no tag either, so `foreign` cannot
+    // carry that. The two facts are separate and both are recorded.
     Some(Record {
         name,
         fields,
         kind,
+        naming: if anonymous {
+            super::Naming::Anonymous
+        } else if foreign {
+            super::Naming::Tagged { from_header: declares_a_header(snapshot, parent) }
+        } else {
+            super::Naming::Invented
+        },
         packed,
-        foreign,
-        from_header: foreign && declares_a_header(snapshot, parent),
     })
 }
 

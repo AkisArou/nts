@@ -625,6 +625,39 @@ defensive, kept because a `Ptr` can still be built by a cast.
 and nothing had asked for one until `copy` needed to pass a `Ptr<Sample>` where
 a `ConstPtr<Sample>` was wanted.
 
+## Anonymous records
+
+The survey said these block four records where bit-fields block one, so they
+came first.
+
+    struct in6_addr { union { uint8_t a[16]; uint32_t b[4]; } __in6_u; };
+
+The member is named and its type is not. C has no spelling for an anonymous
+record: no variable may be declared to point at one and `_Generic` cannot ask
+about one. A tag invented here would be a second type beside the header's, and
+`program.h` includes the header -- verified by inventing one, which gives 11
+errors in `program.c` and 10 in the witness.
+
+`Anonymous<T>` marks it, and every consumer reaches its members by byte offset
+from the enclosing record:
+
+    v1 = (char *)&v0->__in6_u;          /* the member has a name */
+    v4 = (uint8_t *)((char *)v3 + 0);   /* its type does not */
+
+The same expression the packed path emits, for a different reason: there
+because an address may not be *taken* as its own type, here because there is no
+type. No definition, forward declaration or `_Generic` is emitted for one; the
+*offset* assert stays, because the member has a name even where its type does
+not, and what would go wrong shows up in the enclosing record's size.
+
+**`Record` carries one `Naming` rather than three bools.** `foreign`,
+`from_header` and `anonymous` had two impossible combinations between them --
+`anonymous` implies no tag, and `from_header` was only ever set alongside
+`foreign` -- which is four reachable states in eight. Clippy's "more than 3
+bools" was right for the reason it usually is not: these were a state, not
+independent facts. `packed` stays a bool beside it because it genuinely is
+independent.
+
 ## Bit-fields: refused in both directions, not described
 
 A bit-field has no address and no byte offset -- `&p->version` does not
