@@ -97,6 +97,37 @@ function entryNames(name) {
   return [`${name}#constructor`, name, `${bare}#constructor`, bare];
 }
 
+/**
+ * The declaration a name belongs to, with the instance stripped.
+ *
+ * Monomorphisation and closure capture spell one source function several ways:
+ * `getHighWaterMark@0obj8148_1obj7883` and `getHighWaterMark@0obj8252_1obj7880`
+ * are two copies of one declaration, `nextTick<obj1361x0>` is one instantiation
+ * of one function, and `asBytes@zlib_src_main` carries the module it came from.
+ *
+ * **Merging them is the point, not a convenience.** This instrument answers
+ * "what would fixing this publish", and the unit of a fix is the *declaration*
+ * — fixing `getHighWaterMark` fixes every copy of it at once. Ranking the
+ * copies separately splits one root's exports across several rows and buries
+ * it, which is the failure the node lane hit from the other side the same day:
+ * a set difference over text reported `addListener<obj6704>` becoming
+ * `<obj6705>` as a new line, when nothing had changed but a counter.
+ *
+ * **Strip the whole marker, not the spellings you have seen.** The first
+ * version matched `<obj[0-9]+>` and `<[0-9]+>`, which are the two forms that
+ * appeared in the rows it printed -- and left `asRequest<[erased]x2>` ranked
+ * separately from `asRequest`, five exports away from the row it belongs to,
+ * because that spelling was in the 33 roots the table does not show. An
+ * enumeration taken from the visible rows is an enumeration of the visible
+ * rows.
+ */
+function declarationOf(name) {
+  return name
+    .replace(/@[0-9]*obj[0-9]+(?:_[0-9]*obj[0-9]+)*/g, "")
+    .replace(/<[^<>]*>/g, "")
+    .replace(/@[A-Za-z0-9_]+_src_[A-Za-z0-9_]+/g, "");
+}
+
 /** Follow `it calls X` edges to a name with no outgoing edge. */
 function rootOf(start, edges) {
   const seen = new Set();
@@ -150,11 +181,16 @@ for (const module of names) {
       }
     }
     const { root, cyclic } = rootOf(start, edges);
-    const entry = gated.get(root) ?? { exports: new Set(), modules: new Set(), cyclic: false };
+    const declaration = declarationOf(root);
+    const entry = gated.get(declaration) ?? {
+      exports: new Set(),
+      modules: new Set(),
+      cyclic: false,
+    };
     entry.exports.add(`${module}:${name}`);
     entry.modules.add(module);
     entry.cyclic ||= cyclic;
-    gated.set(root, entry);
+    gated.set(declaration, entry);
   }
 }
 

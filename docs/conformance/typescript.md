@@ -2888,7 +2888,34 @@ everyone's.** The probe sweep that produced "four arms now compile clean"
 grepped `NTS1001` and printed `compiles clean` for anything else. Two of those
 four were failing with `NTS2006`. The corrected number is two. A filter named
 after one diagnostic answers about that diagnostic, never about whether the
-program compiled — count *all* diagnostics, or count what was emitted. The trade it described — narrowing
+program compiled — count *all* diagnostics, or count what was emitted.
+
+**And a second one, in `gates.mjs` itself, found from the node lane's side.**
+They reported that a set difference over diagnostic text had called
+`addListener<obj6704>` becoming `<obj6705>` a new line — a renumbering read as a
+change. The same instability was in my root names and doing the opposite
+damage: monomorphisation and closure capture spell one declaration several ways,
+so `asRequest` and `asRequest<[erased]x2>` ranked as **two roots five exports
+apart**, and `getHighWaterMark@0obj8148_1obj7883` sat beside
+`getHighWaterMark@0obj8252_1obj7880` at one export each. Splitting a root buries
+it; the unit of a fix is the *declaration*, because fixing `asRequest` fixes
+every copy at once.
+
+Measured on one tree, committed instrument against corrected: **`asRequest`
+16 → 22**, four spellings collapse into their declarations, total roots 60 → 57.
+Nothing else moved a rank.
+
+Two things that only the control showed. The first attempt stripped
+`<obj[0-9]+>` and `<[0-9]+>` — **the two spellings that appeared in the rows the
+table prints** — and left `asRequest<[erased]x2>` split off, because that one was
+among the 33 roots the table does not show. *An enumeration taken from the
+visible rows is an enumeration of the visible rows.* And the first comparison
+changed two variables at once: the instrument **and** the tree, since the node
+lane committed to `runtime/node` between the runs. `asRequest` reading 22 then
+16 was the tree, not the fix, and the only way to see that was to run the
+committed instrument again on today's tree — which needed copying it back into
+`tooling/conformance` first, because it derives its root from its own location
+and answers about `$HOME` from anywhere else. The trade it described — narrowing
 `dictionary` costs an interpreted-lane API that no longer accepts what node
 accepts — was real and correctly flagged by the node lane before either of us
 acted on it. It simply never had to be made, because the gain was zero.
