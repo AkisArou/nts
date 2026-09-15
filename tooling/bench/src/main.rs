@@ -232,6 +232,13 @@ fn publish(
         );
         return Ok(());
     }
+    if requested.is_empty()
+        && rows.len() == cases.len()
+        && let Some(drift) = refusal_drift(rows)
+    {
+        println!("\nREADME not updated: {drift}");
+        return Ok(());
+    }
     if requested.is_empty() && rows.len() == cases.len() {
         write_readme(root, rows)?;
         println!("\nREADME updated.");
@@ -616,10 +623,30 @@ fn legend(root: &Utf8Path) -> String {
             |out| String::from_utf8_lossy(&out.stdout).trim().to_owned(),
         );
     let legend = format!("{legend}{}", reading_a_ratio());
+    // **Which tree's binary wrote this, beside which commit it measured.**
+    //
+    // The sha answers "what was measured" and had been the whole of the
+    // provenance. The question a reader actually arrives with is different, and
+    // it is the one `repository_root` warns about: this destination comes from
+    // `CARGO_MANIFEST_DIR`, baked in at *compile* time, so a binary built in the
+    // main checkout rewrites the main checkout's README however it is invoked --
+    // from a sealed worktree included.
+    //
+    // On 2026-09-15 two sessions spent an exchange working out whose uncommitted
+    // README edit it was, and the answer was that a *program* had written it.
+    // `nts-suite` carries a doc comment recording the same thing happening
+    // before, and both of us had read one of the two copies. A comment lives
+    // with the code that writes; the person who needs it is looking at a diff in
+    // a file with no code in it, and the recognisable moment -- "this changed
+    // and I do not know who changed it" -- happens to the reader. So the answer
+    // goes in the artefact rather than beside the writer.
+    let manifest = env!("CARGO_MANIFEST_DIR");
     let legend = format!(
         "{legend}\nMeasured at `{commit}`, one case at a time, on cores pinned away from \
          the other sessions sharing this checkout, with the benchmark lock held so nothing \
-         else was running.\n"
+         else was running. Written by `nts-bench` built in `{manifest}`, which is also what \
+         decided *this* file: the destination is the binary's `CARGO_MANIFEST_DIR`, fixed \
+         when it was compiled rather than when it was run.\n"
     );
 
     legend
@@ -2541,6 +2568,67 @@ impl Basis {
 ///
 /// Entries are removed when a **cause** is found, not when a run comes back
 /// clean: a clean run is what this table exists to disbelieve.
+/// The cases this compiler is known to refuse, and why each one.
+///
+/// **A count rather than a condition, which is the negative arm for free.**
+/// "some cases refuse" passes on 61 of 61 and on 1 of 61 alike; "exactly these
+/// cases refuse" fails on both mistakes. `6047805a` is why: a refusal detector
+/// that fired on *every* case in the corpus passed six unit tests, clippy and a
+/// full `cargo test`, because every one of them asked whether it fires when it
+/// should and none asked whether it stays quiet when it should.
+///
+/// So a new entry here is a regression to explain, a missing one is a fix to
+/// celebrate and record, and either way the run says so rather than printing a
+/// table with four quiet `--`s in it.
+const REFUSES_TODAY: &[(&str, &str)] = &[(
+    "json-stringify-doc",
+    "`c9f3d3a0` refuses a structural-to-subclass pointer cast that used to be a \
+     SIGSEGV. `stringifyJsonValue(DOCUMENT, { gap: \"\" })` reads `options.replacer` \
+     off an anonymous type that does not declare it, so lowering drops `work`",
+)];
+
+/// Whether the cases that refused are the cases expected to refuse.
+///
+/// Returns the sentence to print, or `None` when the set matches. Separate from
+/// `publish` so it can be asserted rather than watched -- the same reason
+/// `lost_case_decline` is.
+fn refusal_drift(rows: &[Row]) -> Option<String> {
+    use std::fmt::Write as _;
+    let mut refused: Vec<&str> = rows
+        .iter()
+        .filter(|row| row.nts.is_none())
+        .map(|row| row.case.strip_suffix(" (rc)").unwrap_or(&row.case))
+        .collect();
+    refused.sort_unstable();
+    let mut expected: Vec<&str> = REFUSES_TODAY.iter().map(|(case, _)| *case).collect();
+    expected.sort_unstable();
+    if refused == expected {
+        return None;
+    }
+    let new: Vec<&str> = refused.iter().filter(|c| !expected.contains(c)).copied().collect();
+    let gone: Vec<&str> = expected.iter().filter(|c| !refused.contains(c)).copied().collect();
+    let mut said = String::new();
+    if !new.is_empty() {
+        let _ = write!(
+            said,
+            "{} case(s) this compiler did not refuse before now do: {}. \
+             A new refusal is a regression until something says otherwise. ",
+            new.len(),
+            new.join(", ")
+        );
+    }
+    if !gone.is_empty() {
+        let _ = write!(
+            said,
+            "{} case(s) listed as refused now compile: {}. \
+             Take them out of `REFUSES_TODAY` in the commit that fixed them.",
+            gone.len(),
+            gone.join(", ")
+        );
+    }
+    Some(said)
+}
+
 const KNOWN_BIMODAL: &[(&str, &str, f64, &str, Basis)] = &[
     // 5.74, 5.74 and 5.38 us on one sitting against 4.49, 4.44 and 4.48 on
     // another, out of one class file — and the *reference* is the bimodal half,
@@ -2625,7 +2713,7 @@ fn human(ns: f64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Row, driver_entries, lost_case_decline, missing_entry};
+    use super::{REFUSES_TODAY, Row, driver_entries, lost_case_decline, missing_entry, refusal_drift};
     use camino::Utf8PathBuf;
 
     fn row(case: &str) -> Row {
@@ -2642,6 +2730,52 @@ mod tests {
             bun: None,
             varied: Vec::new(),
         }
+    }
+
+    fn refused_row(case: &str) -> Row {
+        Row { nts: None, unspecialized: None, ..row(case) }
+    }
+
+    /// The set that matches is the only quiet answer.
+    #[test]
+    fn the_expected_refusals_are_not_drift() {
+        let rows: Vec<Row> = REFUSES_TODAY.iter().map(|(case, _)| refused_row(case)).collect();
+        assert_eq!(refusal_drift(&rows), None);
+    }
+
+    /// A case that starts refusing is a regression, and is named.
+    #[test]
+    fn a_new_refusal_is_named_as_a_regression() {
+        let mut rows: Vec<Row> =
+            REFUSES_TODAY.iter().map(|(case, _)| refused_row(case)).collect();
+        rows.push(refused_row("awfy-bounce"));
+        let said = refusal_drift(&rows).expect("a new refusal is drift");
+        assert!(said.contains("awfy-bounce"), "{said}");
+        assert!(said.contains("regression"), "{said}");
+    }
+
+    /// And one that stops refusing has to come off the list, so the list cannot
+    /// quietly become a description of the past.
+    #[test]
+    fn a_case_that_now_compiles_is_named_too() {
+        let said = refusal_drift(&[row("fib")]).expect("an empty refusal set is drift");
+        assert!(said.contains("json-stringify-doc"), "{said}");
+        assert!(said.contains("now compile"), "{said}");
+    }
+
+    /// **The count is the point.** A detector that fires on everything passes
+    /// "some cases refuse"; this is the assertion that catches it, and it is
+    /// the shape `6047805a` shipped without.
+    #[test]
+    fn every_case_refusing_is_drift_not_success() {
+        let rows: Vec<Row> =
+            ["absences", "accumulate", "array-from", "json-stringify-doc"]
+                .iter()
+                .map(|case| refused_row(case))
+                .collect();
+        let said = refusal_drift(&rows).expect("61 of 61 refusing is not a pass");
+        assert!(said.contains("absences"), "{said}");
+        assert!(said.contains("accumulate"), "{said}");
     }
 
     fn cases(names: &[&str]) -> Vec<Utf8PathBuf> {
