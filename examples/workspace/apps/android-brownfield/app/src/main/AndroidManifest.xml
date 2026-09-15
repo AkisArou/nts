@@ -1,0 +1,10 @@
+<!-- **Their manifest.** Note what is NOT here: POST_NOTIFICATIONS. That arrives
+     by merge from `packages/notifications/manifests/android.xml`, through our
+     AAR, because the permission is a fact about the library rather than about
+     this app. A consumer who had to know about it would be maintaining our
+     dependency's requirements by hand. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="Acme">
+        <activity android:name=".MainActivity" android:exported="true" />
+    </application>
+</manifest>

@@ -1,0 +1,12 @@
+# **Their file, and deliberately CocoaPods rather than SwiftPM.**
+#
+# The two coexist in the Apple world and resolve differently: SwiftPM wants a
+# checksummed `binaryTarget`, CocoaPods wants a `.podspec` describing
+# `vendored_frameworks`. A library that only ships one of them is unavailable to
+# half its potential consumers, which is a packaging requirement rather than a
+# preference -- and `apps/ios-brownfield/Package.swift` is the other half.
+platform :osx, '14.0'
+
+target 'AcmeApp' do
+  pod 'AcmeSdk', '~> 0.1.0'
+end

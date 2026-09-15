@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- **Their file.** An ordinary Maven application; we are one dependency.
+     No classifier, no per-platform artifact, no native anything -- which is why
+     the JVM is the easiest target to *ship to* even though it was the hardest to
+     build a backend for. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.acme</groupId>
+  <artifactId>acme-tool</artifactId>
+  <version>1.4.2</version>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.acme</groupId>
+      <artifactId>sdk</artifactId>
+      <version>0.1.0</version>
+    </dependency>
+  </dependencies>
+</project>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- **Copied, not merged.** UIBackgroundModes is required by the notifications
+     package and appears here because Apple has no manifest merger. On Android
+     the equivalent arrives through the AAR and this app never mentions it. That
+     asymmetry is real and is a cost of the platform, not of the design. -->
+<plist version="1.0">
+<dict>
+    <key>UIBackgroundModes</key>
+    <array><string>remote-notification</string></array>
+</dict>
+</plist>

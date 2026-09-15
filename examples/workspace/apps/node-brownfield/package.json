@@ -1,0 +1,10 @@
+{
+  "//": "Their file. An ordinary Node service that adds us as a dependency -- the only new line is the dependency, which is the brownfield claim in its cheapest form.",
+  "name": "acme-service",
+  "private": true,
+  "type": "module",
+  "main": "src/server.mjs",
+  "dependencies": {
+    "@acme/sdk": "0.1.0"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "//": "The library we publish. It references the same packages the greenfield app does -- a brownfield consumer changes who builds the app, not what the library is made of.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["src"],
+  "references": [
+    { "path": "../../packages/notifications" },
+    { "path": "../../packages/storage" }
+  ]
+}

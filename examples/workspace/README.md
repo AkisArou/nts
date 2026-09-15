@@ -73,6 +73,57 @@ Two consequences worth knowing before editing:
 `node` and `native` share a target family and differ in artifact kind, which is
 the pair that shows why those two axes cannot be merged.
 
+## apps/*-brownfield: an existing app consumes us
+
+Everything above is greenfield -- nts builds the app. **These seven invert it:**
+the app already exists, already ships, and is not being rewritten. We are a
+dependency it adds, ideally in one line of a file somebody else owns.
+
+That inversion changes what a product *is*. `products` becomes a `library`, not
+an `app`; `exports` stops being packaging and becomes the public API; our
+manifest fragments merge into *their* manifest; and the artifact has to be
+something **their** resolver understands.
+
+| app | their build | artifact we owe | what this one forces that no other does |
+| --- | --- | --- | --- |
+| `android-brownfield` | Gradle | **AAR** | consumer ProGuard rules, and manifest merging that actually works |
+| `ios-brownfield` | SwiftPM | **XCFramework** | a module map to `import`; **Info.plist cannot merge** |
+| `macos-brownfield` | CocoaPods | XCFramework / `.dylib` | signing, notarisation, hardened runtime -- constraints on *compiler output* |
+| `linux-brownfield` | CMake | `.so` + `.pc` | versioned soname, symbol visibility, no package manager at all |
+| `windows-brownfield` | MSBuild | `.dll` **and** `.lib` | the import library is a second artifact; NuGet against vcpkg |
+| `node-brownfield` | npm | `.node` per platform | five binaries, and Node-API version pinning |
+| `java-desktop-brownfield` | Maven | jar | the easiest to ship to, and `nts.gen` makes it unacceptable today |
+
+### What the set is for
+
+Each one is chosen because it forces something the others do not, and reading
+them together says more than any of them alone:
+
+- **Two ecosystems have two resolvers each**, and shipping for one leaves half
+  the consumers unable to adopt: SwiftPM against CocoaPods on Apple, NuGet
+  against vcpkg on Windows. That is a packaging requirement, not a preference.
+- **Only Android has a manifest merger.** `packages/notifications` ships an
+  `Info.plist` fragment that nothing merges, and `ios-brownfield/App/Info.plist`
+  is where a consumer copies it by hand. The asymmetry is the platform's, but
+  the design has to survive it.
+- **Windows splits the artifact in two.** A `.dll` without its import library is
+  unlinkable, and a library emitting one of the two fails in the consumer's
+  project rather than in ours.
+- **Node multiplies it by platform.** One `.node` is five binaries before musl,
+  and Node-API pinning is the only thing keeping that from being five *per Node
+  major*.
+- **Linux has no resolver**, so `pkg-config` and a versioned soname are the whole
+  distribution story, and a hard-coded path is how a library stops being
+  redistributable.
+- **The JVM is the easiest to ship to** and the hardest backend to have built --
+  which is worth noticing, because effort spent on a backend does not predict
+  effort spent on packaging its output.
+
+The common thread is the item `docs/nts-config.md` §6c names as unanswered:
+consuming a package manager's resolved output is one problem, and **emitting
+something it resolves** is a different one. All seven of these need the second,
+and `emit-jvm --out` writing a directory of class files is not it.
+
 ## packages/
 
 Chosen for the combinations they force, not for coverage.
