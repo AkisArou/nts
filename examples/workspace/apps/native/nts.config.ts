@@ -3,16 +3,16 @@
 // Here because every other app carries a `host`, and this one proves the field
 // is optional rather than merely defaulted. The narrowest real artifact this
 // compiler could produce today.
-import { defineConfig, app, target } from "@native-typescript/config";
+import { defineConfig, app, memory } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
-    cli: app({
+    cli: app.cli({
       entry: "./src/main.ts",
-      target: target.linux({ backend: "c" }),
-      runtime: { family: "native", memory: { provider: "rc" } },
-      // No `host`.
+      backend: "c",
+      runtime: { family: "native", memory: memory.rcCycle() },
+      // No `host`: `app.cli` does not accept one.
     }),
   },
 });

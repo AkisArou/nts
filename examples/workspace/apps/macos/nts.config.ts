@@ -1,15 +1,15 @@
 // macOS. The same backend and the same source as iOS; a different host, a
 // different minimum, and a different artifact kind at the end of it.
-import { defineConfig, app, target, host, memory } from "@native-typescript/config";
+import { defineConfig, app, host, memory } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
-    app: app({
+    app: app.macos({
       entry: "./src/main.ts",
-      target: target.macos({ backend: "llvm", minimumVersion: "14.0" }),
+      minimumVersion: "14.0",
       runtime: { family: "native", memory: memory.rcCycle() },
-      host: host.macos({ scheduler: "dispatch-main", ui: "appkit" }),
+      host: host.macos(),
     }),
   },
 });

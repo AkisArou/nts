@@ -12,7 +12,7 @@
 // enforces it.
 //
 // No React dependency is declared. This names a planned feature.
-import { defineConfig, app, target, memory } from "@native-typescript/config";
+import { defineConfig, app, target, memory } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
@@ -21,10 +21,10 @@ export default defineConfig({
       entry: "./src/main.tsx",
       id: "dev.example.workspace.react",
       targets: [
-        target.android({ backend: "jvm", minSdk: 29 }),
-        target.ios({ backend: "llvm", minimumVersion: "17.0" }),
-        target.macos({ backend: "llvm", minimumVersion: "14.0" }),
-        target.windows({ backend: "llvm" }),
+        target.android({ minSdk: 29 }),
+        target.ios({ minimumVersion: "17.0" }),
+        target.macos({ minimumVersion: "14.0" }),
+        target.windows(),
       ],
       runtime: { memory: memory.rcCycle() },
       // profiles: [react.native()] -- the planned feature, not declared here.

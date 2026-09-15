@@ -1,0 +1,38 @@
+{
+  "//": "Typechecks every nts.config.ts in this fixture against the real @nts/config. Separate from tsconfig.solution.json because these are config files rather than program sources -- and named tsconfig.configs.json rather than tsconfig.json for the same reason as the solution file: the gate globs examples/*/tsconfig.json at depth one.",
+  "//why": "Before this existed, nothing typechecked a single nts.config.ts anywhere in the repository -- not this fixture's nineteen, and not examples/library's one, whose project reference resolved to stale built declarations. The configs were prose that happened to be valid TypeScript.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@nts/config": [
+        "../../tooling/config/src/index.ts"
+      ]
+    }
+  },
+  "files": [
+    "apps/android-brownfield/nts.config.ts",
+    "apps/android/nts.config.ts",
+    "apps/ios-brownfield/nts.config.ts",
+    "apps/ios/nts.config.ts",
+    "apps/java-desktop-brownfield/nts.config.ts",
+    "apps/linux-brownfield/nts.config.ts",
+    "apps/linux/nts.config.ts",
+    "apps/macos-brownfield/nts.config.ts",
+    "apps/macos/nts.config.ts",
+    "apps/native/nts.config.ts",
+    "apps/node-brownfield/nts.config.ts",
+    "apps/node/nts.config.ts",
+    "apps/react/nts.config.ts",
+    "apps/windows-brownfield/nts.config.ts",
+    "apps/windows/nts.config.ts",
+    "nts.config.ts",
+    "packages/biometrics/nts.config.ts",
+    "packages/crypto-core/nts.config.ts",
+    "packages/notifications/nts.config.ts"
+  ]
+}

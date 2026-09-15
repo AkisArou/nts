@@ -9,20 +9,19 @@
 // managed and increasingly native consumers, and **vcpkg** for C++ -- which is
 // the same "ship for both resolvers or be unavailable to half your consumers"
 // problem as SwiftPM against CocoaPods on Apple.
-import { defineConfig, library, target } from "@native-typescript/config";
+import { defineConfig, library, memory } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
-    sdk: library({
+    sdk: library.windows({
       entry: "./nts/sdk.ts",
-      kind: "shared",
-      target: target.windows({ backend: "llvm" }),
-      runtime: { family: "native", memory: { provider: "rcCycle" } },
+      runtime: { family: "native", memory: memory.rcCycle() },
       exports: ["acme_remember", "acme_notify"],
-      // Both halves, named because forgetting the import library is a link
-      // error in the consumer's project rather than in ours.
-      windows: { importLibrary: true, moduleDefinition: "acme.def" },
+      // Both halves. `library.windows` already defaults `importLibrary` to
+      // true, because forgetting it is a link error in the consumer's project
+      // rather than in ours.
+      moduleDefinition: "acme.def",
     }),
   },
 });

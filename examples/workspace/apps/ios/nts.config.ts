@@ -2,17 +2,17 @@
 //
 // Same backend as macOS and a different host, which is the pair that shows host
 // is its own axis rather than a consequence of the target.
-import { defineConfig, app, target, host, memory } from "@native-typescript/config";
+import { defineConfig, app, host, memory } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
-    app: app({
+    app: app.ios({
       entry: "./src/main.ts",
       id: "dev.example.workspace",
-      target: target.ios({ backend: "llvm", minimumVersion: "17.0" }),
+      minimumVersion: "17.0",
       runtime: { family: "native", memory: memory.rcCycle({ cycleCollection: "incremental" }) },
-      host: host.ios({ scheduler: "dispatch-main", fetch: "url-session", ui: "uikit" }),
+      host: host.ios({ fetch: "url-session" }),
     }),
   },
 });

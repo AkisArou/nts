@@ -26,7 +26,7 @@
 // is real, and it is detectable at step 1 -- the honest answers are a two-phase
 // compile or a refusal that says which signature caused it. Neither is a field
 // the user should have to write.
-import { defineConfig, sources, manifest } from "@native-typescript/config";
+import { defineConfig, sources, manifest } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

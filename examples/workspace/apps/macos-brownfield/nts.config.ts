@@ -10,16 +10,15 @@
 //   - and hardened runtime restricts what the embedded code may do -- JIT,
 //     unsigned memory -- which is a constraint on a *compiler's output* that no
 //     other target here imposes.
-import { defineConfig, library, target } from "@native-typescript/config";
+import { defineConfig, library, memory } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
-    sdk: library({
+    sdk: library.macos({
       entry: "./nts/sdk.ts",
-      kind: "xcframework",
-      target: target.macos({ backend: "llvm", minimumVersion: "14.0" }),
-      runtime: { family: "native", memory: { provider: "rcCycle" } },
+      minimumVersion: "14.0",
+      runtime: { family: "native", memory: memory.rcCycle() },
       exports: ["Sdk"],
       moduleName: "AcmeSdk",
       // Not modelled, and named so it is not mistaken for handled.

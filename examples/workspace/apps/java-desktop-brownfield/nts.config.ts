@@ -14,19 +14,18 @@
 //     dependency. Shading duplicates it when two nts libraries meet in one
 //     application; declaring it makes the consumer resolve a second artifact.
 //     Neither is free and the choice is not made.
-import { defineConfig, library, target } from "@native-typescript/config";
+import { defineConfig, library, memory } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
-    sdk: library({
+    sdk: library.jvm({
       entry: "./nts/sdk.ts",
-      kind: "jar",
-      target: target.jvm({ backend: "jvm", release: 8 }),
-      runtime: { family: "jvm", memory: { provider: "hostGC" } },
+      release: 8,
+      runtime: { family: "jvm", memory: memory.hostGC() },
       exports: ["Sdk"],
       javaPackage: "com.acme.sdk",
-      runtimeLinkage: "declared",
+      runtimeLinkage: "host-provided",
     }),
   },
 });

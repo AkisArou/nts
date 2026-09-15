@@ -861,7 +861,7 @@ backend_examples() {
       *"the compiled program aborted"*)                   echo "no $n" ;;
       # **A workspace dependency that will not resolve is not a disagreement.**
       # `examples/library` is the only example with a `node_modules`; it is
-      # hidden by `.gitignore` and its `@native-typescript/config` is a symlink
+      # hidden by `.gitignore` and its `@nts/config` is a symlink
       # into `tooling/config`. So it cannot be built in a `git worktree` -- and
       # symlinking the ignored directory back does not rescue it, it turns
       # TS2307 into TS6059 because the resolved file is then outside `rootDir`.

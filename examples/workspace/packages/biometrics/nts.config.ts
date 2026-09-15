@@ -8,7 +8,7 @@
 // a Linux server. A desktop app depending on this must fail at **configuration**
 // time, naming this package and the target it cannot satisfy -- not at link time
 // with a missing symbol. That check does not exist.
-import { defineConfig, sources, manifest } from "@native-typescript/config";
+import { defineConfig, sources, manifest } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

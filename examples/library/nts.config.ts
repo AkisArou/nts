@@ -1,24 +1,22 @@
-import {
-  defineConfig,
-  library,
-  memory,
-} from "@native-typescript/config";
+import { defineConfig, library, memory } from "@nts/config";
 
 export default defineConfig({
-  workspace: {
-    root: ".",
-    tsconfig: "./tsconfig.json",
-  },
+  // `tsconfig` defaults to `./tsconfig.json` beside this file, so the line that
+  // used to say exactly that is gone.
+  workspace: { root: "." },
 
   products: {
     // The first vertical slice (RFC §40): a native shared library, no UI, no
     // platform toolchain. RC-cycle is the shipping provider; NoGC is available
     // for bring-up but never by default.
-    hello: library({
+    //
+    // `library.linux` rather than `library({ kind: "shared", target: {...} })`:
+    // the target, the backend and `pkgConfig` come from the constructor, and
+    // fields that mean nothing here -- `javaPackage`, `moduleName` -- are not
+    // expressible rather than merely unused.
+    hello: library.linux({
       entry: "./src/main.ts",
-      kind: "shared",
       runtimeLinkage: "bundled-private",
-      target: { os: "linux", arch: "x86_64", backend: "c" },
       runtime: { family: "native", memory: memory.rcCycle() },
       exports: ["add", "greeting"],
     }),

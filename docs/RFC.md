@@ -2550,7 +2550,7 @@ import {
   debug,
   react,
   modules,
-} from "@native-typescript/config";
+} from "@nts/config";
 
 export default defineConfig({
   workspace: {

@@ -10,18 +10,17 @@
 //     Node majors -- the whole reason to target N-API rather than V8 directly;
 //   - and either `optionalDependencies` per platform or a prebuild fetched at
 //     install, which are two different failure modes for a user offline.
-import { defineConfig, library, target } from "@native-typescript/config";
+import { defineConfig, library, memory } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
-    addon: library({
+    addon: library.node({
       entry: "./nts/sdk.ts",
-      kind: "node-addon",
-      target: target.node({ backend: "c" }),
-      runtime: { family: "native", memory: { provider: "rc" } },
+      runtime: { family: "native", memory: memory.rcCycle() },
       exports: ["remember", "digest"],
-      node: { apiVersion: 8, platforms: ["darwin-arm64", "darwin-x64", "linux-x64", "win32-x64"] },
+      apiVersion: 8,
+      platforms: ["darwin-arm64", "darwin-x64", "linux-x64", "win32-x64"],
     }),
   },
 });
