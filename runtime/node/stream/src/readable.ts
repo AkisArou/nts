@@ -786,7 +786,20 @@ export class Readable extends Stream {
   }
 
   override removeAllListeners(event?: string | symbol): this {
-    const result = super.removeAllListeners(event);
+    // The **argument count** is forwarded, not just the argument. Upstream is
+    // `Stream.prototype.removeAllListeners.apply(this, arguments)`, and that
+    // matters because `removeAllListeners` distinguishes no arguments from one
+    // `undefined`: the first removes every listener and the second removes none.
+    // Passing `event` unconditionally turns a call with nothing into a call with
+    // `undefined`, so `readable.removeAllListeners()` removed nothing once
+    // `events` started honouring the distinction -- which is how
+    // `test-stream-readable-event.js` caught this.
+    //
+    // A ternary rather than `.apply`, which would need the `arguments` object
+    // cast to a tuple and costs the compiled lane the same single refusal.
+    const result = arguments.length === 0
+      ? super.removeAllListeners()
+      : super.removeAllListeners(event);
     if (event === "readable" || event === undefined) {
       nextTick(updateReadableListening, this);
     }

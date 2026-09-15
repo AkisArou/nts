@@ -1697,6 +1697,529 @@ export const CORPORA = {
       { label: "inspect(t)", call: (m, t) => m.inspect(t) },
       { label: "stripVTControlCharacters(t)", call: (m, t) => m.stripVTControlCharacters(t) },
       { label: "toUSVString(t)", call: (m, t) => m.toUSVString(t) },
+
+      // **The rest of `util`**, which was 48 of 86. The 38 uncalled names were the
+      // error constructors, the callback/promise adapters, the deprecation
+      // helpers, the whole of `MIMEType`/`MIMEParams`, the encoders, and the
+      // abort-signal helpers.
+      //
+      // Eight of the 38 stay uncalled on purpose and are not here: the
+      // brand-checking `types` predicates excluded at `types-predicates` above,
+      // where the refusal and its 2,203-divergence cost are already written down.
+      //
+      // Every argument is derived from the input, because a spec that hands a
+      // fixed value to a pure function compares a constant. `seed` is the input
+      // read as a number and `pick` indexes a list with it, so which branch a
+      // call takes is a function of the input rather than of the spec.
+      {
+        label: "util-errors",
+        call: (m, t) => {
+          const seed = t.length + (t.charCodeAt(0) || 0);
+          const pick = (list) => list[seed % list.length];
+          const out = [];
+          // `_errnoException` and `_exceptionWithHostPort` are what the net and
+          // dgram stand-ins build their errors with, so their shape is what a
+          // caller catches. Compared through `code`, `errno`, `syscall`, the
+          // message and the own property names -- the last because node attaches
+          // `address` and `port` as own properties and a merged implementation
+          // that only formats the message would pass on the text alone.
+          const ERRNO = [-2, -13, -98, -4094, 0, 1];
+          const SYSCALL = ["open", "connect", "bind", pick(["listen", "read"])];
+          for (const errno of [pick(ERRNO), ERRNO[(seed * 3) % ERRNO.length]]) {
+            for (const syscall of [pick(SYSCALL)]) {
+              try {
+                const e = m._errnoException(errno, syscall, pick([undefined, t]));
+                out.push(`E|${e.code}|${e.errno}|${e.syscall}|${e.message}`);
+              } catch (error) {
+                out.push(`E|threw:${error.code || error.name}`);
+              }
+              try {
+                const e = m._exceptionWithHostPort(errno, syscall, pick(["1.2.3.4", "::1", t]),
+                  seed % 65536, pick([undefined, "extra"]));
+                out.push(`H|${e.code}|${e.syscall}|${e.address}|${e.port}|${e.message}` +
+                  `|${Object.keys(e).sort().join(",")}`);
+              } catch (error) {
+                out.push(`H|threw:${error.code || error.name}`);
+              }
+            }
+          }
+          // A signal name in, an exit code out. Node's answer is 128 + the
+          // signal's number, and an unknown name is rejected rather than
+          // guessed, so the list mixes real names with near-misses.
+          for (const sig of [pick(["SIGINT", "SIGTERM", "SIGKILL", "SIGHUP", "SIGUSR2",
+            "sigint", "SIGNOPE", "", t, "9"])]) {
+            try {
+              out.push(`S|${sig}|${m.convertProcessSignalToExitCode(sig)}`);
+            } catch (error) {
+              out.push(`S|${sig}|threw:${error.code || error.name}`);
+            }
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // The deprecation helpers, `inherits` and `_extend`.
+        //
+        // `deprecate` is compared through the *wrapper* rather than the warning:
+        // the returned function must keep the original's arity and answer, must
+        // carry the code, and must be marked deprecated. Node's wrapper is named
+        // `deprecated`, which is the one observable that a pass-through
+        // implementation returning the original function would fail -- and that
+        // exact substitution is how `process._extend`'s `name` was found wrong.
+        //
+        // The warning itself is deliberately not compared: it is emitted once per
+        // wrapper per process and `--no-deprecation` suppresses it, so its
+        // presence is a fact about the process rather than about the input.
+        label: "util-deprecate",
+        call: (m, t) => {
+          const seed = t.length + (t.charCodeAt(0) || 0);
+          const out = [];
+          const original = (a, b) => `${a}/${b}/${t}`;
+          try {
+            const wrapped = m.deprecate(original, `${t} is deprecated`, `DEP${seed % 10000}`);
+            out.push(`D|${wrapped.length}|${wrapped.name}|${wrapped("x", "y")}`);
+            out.push(`D|calledTwiceSame:${wrapped("x", "y") === wrapped("x", "y")}`);
+          } catch (error) {
+            out.push(`D|threw:${error.code || error.name}`);
+          }
+          // A wrapper over a constructor must still construct, which a naive
+          // `(...args) => fn(...args)` forwarder does not.
+          try {
+            function Ctor(v) { this.v = v; }
+            const Wrapped = m.deprecate(Ctor, "ctor", "DEP0001");
+            out.push(`C|${new Wrapped(t).v === t}`);
+          } catch (error) {
+            out.push(`C|threw:${error.code || error.name}`);
+          }
+          // `inherits`, through the chain it builds and `super_`, plus its
+          // validation: node rejects a missing prototype with a coded error.
+          const BAD = [undefined, null, {}, function noProto() {}];
+          try {
+            function Base() {}
+            Base.prototype.tag = () => t;
+            function Derived() {}
+            m.inherits(Derived, Base);
+            const d = new Derived();
+            out.push(`I|${d instanceof Base}|${d.tag()}|${Derived.super_ === Base}` +
+              `|${Object.getPrototypeOf(Derived.prototype) === Base.prototype}` +
+              `|${d.constructor === Derived}`);
+          } catch (error) {
+            out.push(`I|threw:${error.code || error.name}`);
+          }
+          try {
+            const bad = BAD[seed % BAD.length];
+            if (typeof bad === "function") delete bad.prototype;
+            m.inherits(function Sub() {}, bad);
+            out.push("I|badAccepted");
+          } catch (error) {
+            out.push(`I|bad:${error.code || error.name}`);
+          }
+          // `_extend` copies own enumerable string keys from the source and
+          // answers the target, and a non-object source is returned unchanged
+          // rather than rejected. Its own `name` is `deprecated`, which is the
+          // check that it is wrapped at all.
+          try {
+            const target = { a: 1, keep: t };
+            const source = { a: 2, b: t, [Symbol("s")]: 1 };
+            Object.defineProperty(source, "hidden", { value: 9, enumerable: false });
+            const got = m._extend(target, source);
+            out.push(`X|${got === target}|${JSON.stringify(got)}|${"hidden" in got}` +
+              `|${m._extend.name}`);
+            out.push(`X|${JSON.stringify(m._extend({ z: 1 }, [seed]))}`);
+            out.push(`X|primitive:${JSON.stringify(m._extend({ z: 1 }, seed))}`);
+          } catch (error) {
+            out.push(`X|threw:${error.code || error.name}`);
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // `debuglog`/`debug` through their **validation and their disabled
+        // shape**, not through what they print.
+        //
+        // Whether a section is enabled is a fact about `NODE_DEBUG` in the
+        // environment, and both lanes run without it, so comparing `enabled`
+        // alone would be a check whose answer never depends on its input. What
+        // does depend on the input is the argument: a non-string section is
+        // rejected with a coded error, and a non-function callback likewise, so
+        // the list mixes accepted and rejected values chosen by the input.
+        label: "util-debuglog",
+        call: (m, t) => {
+          const seed = t.length + (t.charCodeAt(0) || 0);
+          const SECTIONS = [t, "", "nts", 1, null, undefined, {}, Symbol.iterator];
+          const CALLBACKS = [undefined, () => {}, "not a function", 1, null];
+          const out = [];
+          for (const fn of ["debuglog", "debug"]) {
+            const section = SECTIONS[seed % SECTIONS.length];
+            const cb = CALLBACKS[(seed * 3) % CALLBACKS.length];
+            try {
+              const log = m[fn](section, cb);
+              // A disabled logger must still be callable and answer undefined,
+              // which is the whole of its contract when off.
+              out.push(`${fn}|${typeof log}|${log.enabled}|${log(t, 1, {}) === undefined}`);
+            } catch (error) {
+              out.push(`${fn}|threw:${error.code || error.name}`);
+            }
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // `callbackify` and `promisify`'s other direction, both awaited.
+        //
+        // The two halves that matter: a rejection must reach the callback as its
+        // first argument, and a function that rejects with a *falsy* reason must
+        // still arrive as an error -- node wraps it, because a falsy first
+        // argument would read as success. That wrapping is the observable a
+        // straightforward implementation misses, so the input chooses the
+        // rejection reason from a list whose entries are mostly falsy.
+        label: "util-callbackify",
+        call: async (m, t) => {
+          const seed = t.length + (t.charCodeAt(0) || 0);
+          const REASONS = [null, undefined, 0, "", false, NaN, new Error(t), t];
+          const reason = REASONS[seed % REASONS.length];
+          const out = [];
+          const settle = (fn) => new Promise((resolve) => {
+            try {
+              fn((...args) => resolve(args));
+            } catch (error) {
+              resolve([`threw:${error.code || error.name}`]);
+            }
+          });
+          try {
+            const ok = m.callbackify(async (v) => `${v}!`);
+            const got = await settle((cb) => ok(t, cb));
+            out.push(`ok|${got.length}|${got[0]}|${got[1]}`);
+          } catch (error) {
+            out.push(`ok|threw:${error.code || error.name}`);
+          }
+          try {
+            const bad = m.callbackify(async () => { throw reason; });
+            const got = await settle((cb) => bad(cb));
+            const err = got[0];
+            out.push(`bad|${got.length}|${typeof err}|${err instanceof Error}` +
+              `|${err && err.reason === reason}|${String(err && err.message).slice(0, 40)}`);
+          } catch (error) {
+            out.push(`bad|threw:${error.code || error.name}`);
+          }
+          // Its validation, and that the callback is required at the call.
+          for (const arg of [undefined, null, 1, "x", {}]) {
+            try {
+              m.callbackify(arg);
+              out.push(`v|${typeof arg}|accepted`);
+            } catch (error) {
+              out.push(`v|${typeof arg}|${error.code || error.name}`);
+            }
+          }
+          try {
+            m.callbackify(async () => 1)();
+            out.push("missing|accepted");
+          } catch (error) {
+            out.push(`missing|${error.code || error.name}`);
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // The abort-signal helpers. `aborted` resolves when a signal fires, so
+        // **every arm here aborts** -- a signal that never fires leaves the
+        // promise pending, the loop drains with it unsettled, and the probe's
+        // child exits with node's unsettled-await status rather than an answer.
+        // One arm is already aborted before `aborted` is called, which is the
+        // case a naive implementation that only subscribes to the event misses.
+        label: "util-abort",
+        call: async (m, t) => {
+          const seed = t.length + (t.charCodeAt(0) || 0);
+          const out = [];
+          try {
+            const already = AbortSignal.abort(t);
+            let resolved = false;
+            await m.aborted(already, {}).then(() => { resolved = true; });
+            out.push(`already|${resolved}|${already.aborted}|${already.reason}`);
+          } catch (error) {
+            out.push(`already|threw:${error.code || error.name}`);
+          }
+          try {
+            const ac = new AbortController();
+            const seen = m.aborted(ac.signal, {}).then(() => "settled");
+            ac.abort(seed % 2 === 0 ? new Error(t) : t);
+            out.push(`later|${await seen}|${ac.signal.aborted}` +
+              `|${ac.signal.reason instanceof Error ? "Error" : ac.signal.reason}`);
+          } catch (error) {
+            out.push(`later|threw:${error.code || error.name}`);
+          }
+          // Its validation: a non-signal and a non-object resource are both
+          // rejected, and which one this input tries is chosen by the input.
+          const BAD = [[undefined, {}], [null, {}], [{}, {}], [AbortSignal.abort(), null],
+            [AbortSignal.abort(), 1], [AbortSignal.abort(), undefined]];
+          const [sig, res] = BAD[seed % BAD.length];
+          try {
+            await m.aborted(sig, res);
+            out.push("bad|accepted");
+          } catch (error) {
+            out.push(`bad|${error.code || error.name}`);
+          }
+          // `transferableAbortSignal` marks a signal transferable and answers the
+          // same signal; `transferableAbortController` builds a controller whose
+          // signal is already marked. Compared through identity and through the
+          // signal still working, because a helper that returned a fresh
+          // unlinked signal would look right and abort nothing.
+          try {
+            const ac = m.transferableAbortController();
+            const marked = ac.signal;
+            const fired = m.aborted(marked, {}).then(() => "fired");
+            ac.abort(t);
+            out.push(`tac|${marked instanceof AbortSignal}|${await fired}|${marked.reason}`);
+          } catch (error) {
+            out.push(`tac|threw:${error.code || error.name}`);
+          }
+          try {
+            const plain = new AbortController();
+            const same = m.transferableAbortSignal(plain.signal);
+            out.push(`tas|${same === plain.signal}|${same instanceof AbortSignal}`);
+            plain.abort(t);
+            out.push(`tas|${same.aborted}|${same.reason}`);
+          } catch (error) {
+            out.push(`tas|threw:${error.code || error.name}`);
+          }
+          for (const bad of [undefined, null, {}, new AbortController()]) {
+            try {
+              m.transferableAbortSignal(bad);
+              out.push(`tas|bad:accepted:${typeof bad}`);
+            } catch (error) {
+              out.push(`tas|bad:${error.code || error.name}`);
+            }
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // `TextEncoder`/`TextDecoder`, over the input's own bytes.
+        //
+        // `encodeInto` is the interesting one: it writes into a caller's buffer
+        // and answers how far it got, so the destination is deliberately *too
+        // small* on one arm. Node stops on a character boundary rather than
+        // splitting a surrogate pair, so a short buffer is where an
+        // implementation that counts bytes instead of code points diverges.
+        label: "util-text-codec",
+        call: (m, t) => {
+          const seed = t.length + (t.charCodeAt(0) || 0);
+          const out = [];
+          const encoder = new m.TextEncoder();
+          const bytes = encoder.encode(t);
+          out.push(`enc|${encoder.encoding}|${bytes.length}|${Array.from(bytes).join(",")}`);
+          out.push(`enc|empty:${encoder.encode().length}|undef:${encoder.encode(undefined).length}`);
+          for (const size of [0, 1, 2, Math.max(0, bytes.length - 1), bytes.length,
+            bytes.length + 4]) {
+            const dest = new Uint8Array(size);
+            const got = encoder.encodeInto(t, dest);
+            out.push(`into|${size}|${got.read}|${got.written}|${Array.from(dest).join(",")}`);
+          }
+          const DECODERS = ["utf-8", "utf8", "latin1", "utf-16le", "ascii"];
+          for (const label of [DECODERS[seed % DECODERS.length], "utf-8"]) {
+            try {
+              const decoder = new m.TextDecoder(label, { fatal: seed % 2 === 0 });
+              out.push(`dec|${label}|${decoder.encoding}|${decoder.fatal}` +
+                `|${decoder.ignoreBOM}|${decoder.decode(bytes)}`);
+              out.push(`dec|${label}|empty:${decoder.decode()}` +
+                `|part:${decoder.decode(bytes.subarray(0, Math.max(0, bytes.length - 1)))}`);
+            } catch (error) {
+              out.push(`dec|${label}|threw:${error.code || error.name}`);
+            }
+          }
+          // Lone continuation and truncated sequences, which is where a decoder
+          // either substitutes U+FFFD or throws depending on `fatal`.
+          for (const fatal of [false, true]) {
+            try {
+              const decoder = new m.TextDecoder("utf-8", { fatal });
+              const broken = new Uint8Array([0x80, 0xc3, 0xe2, 0x82, bytes[0] ?? 0x41]);
+              out.push(`broken|${fatal}|${JSON.stringify(decoder.decode(broken))}`);
+            } catch (error) {
+              out.push(`broken|${fatal}|threw:${error.code || error.name}`);
+            }
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // `MIMEType` and every `MIMEParams` method, over a type built from the
+        // input. The type string is assembled rather than taken raw so that most
+        // inputs reach the parameter machinery instead of being rejected at the
+        // first slash, and the raw input is tried as well for the rejections.
+        label: "util-mime",
+        call: (m, t) => {
+          const seed = t.length + (t.charCodeAt(0) || 0);
+          const word = (t.replace(/[^a-zA-Z0-9]/g, "") || "plain").slice(0, 8);
+          const built = `text/${word};charset=utf-8;q=0.${seed % 10}`;
+          const out = [];
+          for (const spelling of [built, t, `${word}/${word}`, "text/plain;a=1;a=2"]) {
+            try {
+              const mime = new m.MIMEType(spelling);
+              const params = mime.params;
+              out.push(`M|${mime.type}|${mime.subtype}|${mime.essence}|${mime.toString()}` +
+                `|${JSON.stringify(mime.toJSON())}`);
+              out.push(`P|has:${params.has("charset")}|get:${params.get("charset")}` +
+                `|missing:${params.get("nope")}|hasMissing:${params.has("nope")}`);
+              params.set("added", word);
+              out.push(`P|afterSet:${params.toString()}|${mime.toString()}`);
+              out.push(`P|keys:${[...params.keys()].join(",")}` +
+                `|values:${[...params.values()].join(",")}` +
+                `|entries:${[...params.entries()].map((e) => e.join("=")).join(";")}`);
+              out.push(`P|json:${JSON.stringify(params.toJSON())}`);
+              params.delete("charset");
+              out.push(`P|afterDelete:${params.toString()}|${params.has("charset")}` +
+                `|${mime.toString()}`);
+              // Mutating `type`/`subtype` must re-render, and an invalid one must
+              // be rejected rather than stored.
+              try {
+                mime.subtype = word || "x";
+                out.push(`M|subtypeSet:${mime.toString()}`);
+              } catch (error) {
+                out.push(`M|subtypeSet:${error.code || error.name}`);
+              }
+              for (const bad of ["", "no slash", t]) {
+                try {
+                  params.set(bad, "v");
+                  out.push(`P|setBad:${JSON.stringify(bad)}:accepted:${params.toString()}`);
+                } catch (error) {
+                  out.push(`P|setBad:${JSON.stringify(bad)}:${error.code || error.name}`);
+                }
+              }
+            } catch (error) {
+              out.push(`M|${JSON.stringify(spelling)}|threw:${error.code || error.name}`);
+            }
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // `parseEnv`, over a `.env` document assembled from the input.
+        //
+        // Its rules are the reason this is worth comparing: `export` prefixes are
+        // stripped, quotes come off, a double-quoted value expands `\n`, a
+        // single-quoted one does not, `#` starts a comment except inside quotes,
+        // and a later assignment wins. Each of those is a line here, and the
+        // input picks the separator and slips into the values.
+        label: "util-parse-env",
+        call: (m, t) => {
+          const seed = t.length + (t.charCodeAt(0) || 0);
+          const word = (t.replace(/[^a-zA-Z0-9]/g, "") || "V").slice(0, 6);
+          const NL = ["\n", "\r\n", "\n\n"][seed % 3];
+          const doc = [
+            `A=${word}`,
+            `export B=${word}`,
+            `C="${word}\\nline"`,
+            `C2='${word}\\nline'`,
+            `D=${word} # trailing`,
+            `E="${word} # inside"`,
+            `# whole line ${word}`,
+            `F=`,
+            `G`,
+            `  H  =  ${word}  `,
+            `A=${word}again`,
+            `I=${JSON.stringify(t)}`,
+            `J=\`${word}\``,
+            `=${word}`,
+            `K=multi`,
+          ].join(NL);
+          const out = [];
+          for (const text of [doc, t, "", `${word}=${word}`]) {
+            try {
+              const got = m.parseEnv(text);
+              out.push(`P|${Object.keys(got).sort().join(",")}|${JSON.stringify(got)}`);
+            } catch (error) {
+              out.push(`P|threw:${error.code || error.name}`);
+            }
+          }
+          for (const bad of [undefined, null, 1, {}, []]) {
+            try {
+              out.push(`bad|${typeof bad}|${JSON.stringify(m.parseEnv(bad))}`);
+            } catch (error) {
+              out.push(`bad|${typeof bad}|${error.code || error.name}`);
+            }
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // `isDeepStrictEqual` and `getCallSites`.
+        //
+        // `isDeepStrictEqual` is `assert.deepStrictEqual`'s predicate half and is
+        // published separately, so it is called here over the pairs that
+        // separate deep-strict from deep-loose: a boxed primitive against its
+        // primitive, `-0` against `0`, `NaN` against itself, a symbol key on one
+        // side only -- the last being the arm that found this profile ignoring
+        // symbol keys altogether.
+        //
+        // `getCallSites` is compared through **the frame count it honours and
+        // the keys of a frame**, never through file names or line numbers: the
+        // host evaluates specs inside the harness and the probe evaluates them
+        // inside a child, so the locations differ by construction and are not a
+        // function of the input. The requested count is.
+        label: "util-deep-and-callsites",
+        call: (m, t) => {
+          const seed = t.length + (t.charCodeAt(0) || 0);
+          const sym = Symbol.for(`nts.${t.length % 4}`);
+          const PAIRS = [
+            [{ a: 1 }, { a: 1 }],
+            [{ a: 1, [sym]: t }, { a: 1 }],
+            [{ a: 1, [sym]: t }, { a: 1, [sym]: t }],
+            [new String(t), t],
+            [-0, 0],
+            [NaN, NaN],
+            [[1, 2], [1, 2]],
+            [new Map([["k", t]]), new Map([["k", t]])],
+            [new Set([t]), new Set([t])],
+            [new Date(seed * 1000), new Date(seed * 1000)],
+            [/a/g, /a/g],
+            [Object.create(null), {}],
+            [new Error(t), new Error(t)],
+            [Buffer.from(t), Buffer.from(t)],
+          ];
+          const out = [];
+          for (const [left, right] of PAIRS) {
+            try {
+              out.push(m.isDeepStrictEqual(left, right) ? "1" : "0");
+            } catch (error) {
+              out.push(`t:${error.code || error.name}`);
+            }
+          }
+          const answers = out.join("");
+          const frames = [];
+          for (const n of [1, 1 + (seed % 4), 0, 20]) {
+            try {
+              const got = m.getCallSites(n);
+              frames.push(`${n}|${Array.isArray(got)}|${got.length <= Math.max(n, 0)}` +
+                `|${got.length > 0 ? Object.keys(got[0]).sort().join(",") : "none"}`);
+            } catch (error) {
+              frames.push(`${n}|threw:${error.code || error.name}`);
+            }
+          }
+          for (const bad of [-1, "x", {}, 1.5]) {
+            try {
+              const got = m.getCallSites(bad);
+              frames.push(`bad:${JSON.stringify(bad)}|accepted:${Array.isArray(got)}`);
+            } catch (error) {
+              frames.push(`bad:${JSON.stringify(bad)}|${error.code || error.name}`);
+            }
+          }
+          // `setTraceSigInt` toggles a flag with no readable answer, so what is
+          // compared is that it accepts a boolean and rejects a non-boolean --
+          // the only part of it that is observable from outside.
+          const trace = [];
+          for (const arg of [seed % 2 === 0, !(seed % 2), undefined, 1, "x", null]) {
+            try {
+              trace.push(`${typeof arg}:${m.setTraceSigInt(arg) === undefined}`);
+            } catch (error) {
+              trace.push(`${typeof arg}:${error.code || error.name}`);
+            }
+          }
+          // Leave it off regardless of which arm ran last, so this spec does not
+          // change how the process answers a later signal.
+          try { m.setTraceSigInt(false); } catch { /* recorded above */ }
+          return `${answers}\n${frames.join("\n")}\n${trace.join("|")}`;
+        },
+      },
     ],
   },
 
@@ -3160,6 +3683,570 @@ export const CORPORA = {
             }
           }
           return log;
+        },
+      },
+
+      // **The rest of `stream`**, which was 56 of 108 published functions.
+      //
+      // The section header above excludes events and `pipe` because comparing
+      // them means comparing ordering, and that is `fuzz-timer-order.mjs`'s
+      // question. That rule is kept, and it is narrower than it was read to be:
+      // what it rules out is *when* a stream does something, not *what* it
+      // answers. `setEncoding`, `unshift`, `cork`, `isPaused`, `readableLength`
+      // and the rest below all answer synchronously from state the input sets.
+      //
+      // Everything asynchronous here is awaited to completion over a source that
+      // ends, and there are no timers. A stream that never ends would leave the
+      // probe's child holding a pending promise and the parent's `spawnSync`
+      // waiting on it, so every source is a finite array or an explicit
+      // `push(null)`.
+      {
+        // The readable side's mode machinery: encoding, push-back, and the
+        // paused/flowing distinction.
+        //
+        // `setEncoding` has the real trap. It changes what `read()` answers from
+        // a `Buffer` to a string, and it must apply to bytes **already
+        // buffered** as well as to later ones -- node re-decodes what is held --
+        // so the input decides whether the call lands before or after the pushes.
+        label: "readable-modes",
+        call: (m, s) => {
+          const seed = s.length;
+          const out = [];
+          const chunks = ["a", "bb", "ü", "日"].slice(0, 1 + (seed % 4));
+          const readable = new m.Readable({ read() {}, highWaterMark: 4 });
+
+          const encodeFirst = seed % 2 === 0;
+          if (encodeFirst) readable.setEncoding("utf8");
+          for (const chunk of chunks) out.push(`push:${readable.push(chunk)}`);
+          if (!encodeFirst) readable.setEncoding("utf8");
+          out.push(`len:${readable.readableLength}|enc:${readable.readableEncoding}`);
+
+          // `unshift` puts data back at the front, so the next `read` sees it
+          // ahead of anything pushed earlier.
+          out.push(`unshift:${readable.unshift("<")}`);
+          out.push(`afterUnshift:${readable.readableLength}`);
+          out.push(`read:${JSON.stringify(readable.read())}`);
+
+          // Paused and flowing. `isPaused` is not the negation of `pause()`: a
+          // stream that has never flowed is not paused either, and node reports
+          // `readableFlowing` as null for it.
+          out.push(`paused0:${readable.isPaused()}|flowing0:${readable.readableFlowing}`);
+          readable.pause();
+          out.push(`paused1:${readable.isPaused()}|flowing1:${readable.readableFlowing}`);
+          readable.resume();
+          out.push(`paused2:${readable.isPaused()}|flowing2:${readable.readableFlowing}`);
+          readable.pause();
+          out.push(`paused3:${readable.isPaused()}`);
+
+          // `_undestroy` puts a destroyed stream back into a usable state, which
+          // is what socket reuse is built on.
+          readable.destroy();
+          out.push(`destroyed:${readable.destroyed}|errored:${readable.errored}`);
+          readable._undestroy();
+          out.push(`undestroyed:${readable.destroyed}|readable:${readable.readable}`);
+
+          // The base `_read` is left unimplemented on purpose, and calling it is
+          // how a subclass that forgot to override it fails.
+          try {
+            m.Readable.prototype._read.call(readable, 16);
+            out.push("_read:accepted");
+          } catch (error) {
+            out.push(`_read:${error.code || error.name}`);
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // The writable side: corking, the default encoding, and the byte counts
+        // that make backpressure observable.
+        //
+        // `cork` is the interesting one. It buffers writes rather than passing
+        // them down, `writableCorked` counts the nesting, and only the matching
+        // number of `uncork`s releases them -- so a mismatched pair is a stream
+        // that silently stops delivering. The input sets the nesting depth, and
+        // one `uncork` short of it is asserted to release nothing.
+        label: "writable-cork",
+        call: (m, s) => {
+          const seed = s.length;
+          const written = [];
+          const writable = new m.Writable({
+            highWaterMark: 4,
+            write(chunk, encoding, cb) {
+              written.push(`${encoding}:${Buffer.from(chunk).toString("hex")}`);
+              cb();
+            },
+          });
+          const out = [];
+          const depth = 1 + (seed % 3);
+          for (let i = 0; i < depth; i++) writable.cork();
+          out.push(`corked:${writable.writableCorked}`);
+
+          // `setDefaultEncoding` changes how a *string* write is interpreted, so
+          // the bytes recorded above differ although the call does not.
+          const ENCODINGS = ["utf8", "latin1", "hex", "base64", "utf16le", "ascii"];
+          const encoding = ENCODINGS[seed % ENCODINGS.length];
+          try {
+            out.push(`setDefault:${writable.setDefaultEncoding(encoding) === writable}`);
+          } catch (error) {
+            out.push(`setDefault:${error.code || error.name}`);
+          }
+          out.push(`write:${writable.write("4142")}`);
+          out.push(`lenCorked:${writable.writableLength}|written:${written.length}`);
+
+          for (let i = 0; i < depth - 1; i++) writable.uncork();
+          out.push(`partial:${writable.writableCorked}|written:${written.length}`);
+          writable.uncork();
+          out.push(`released:${writable.writableCorked}|written:${JSON.stringify(written)}`);
+          out.push(`hwm:${writable.writableHighWaterMark}|need:${writable.writableNeedDrain}`);
+
+          try {
+            writable.setDefaultEncoding(`not-${encoding}`);
+            out.push("badEncoding:accepted");
+          } catch (error) {
+            out.push(`badEncoding:${error.code || error.name}`);
+          }
+          try {
+            m.Writable.prototype._write.call(writable, Buffer.from("x"), "buffer", () => {});
+            out.push("_write:accepted");
+          } catch (error) {
+            out.push(`_write:${error.code || error.name}`);
+          }
+
+          writable.destroy();
+          out.push(`destroyed:${writable.destroyed}`);
+          writable._undestroy();
+          out.push(`undestroyed:${writable.destroyed}|writable:${writable.writable}`);
+          return out.join("\n");
+        },
+      },
+      {
+        // `pipe`/`unpipe` through what they change **synchronously**, which is
+        // not an ordering question.
+        //
+        // `pipe` answers the destination -- that is what makes it chainable --
+        // and flips the source out of paused mode on the spot. `unpipe` undoes
+        // it. Neither fact is about when a chunk arrives, so both are in scope
+        // here while the delivery they set up is not.
+        label: "pipe-unpipe",
+        call: async (m, s) => {
+          const seed = s.length;
+          const out = [];
+          const source = new m.Readable({ read() {} });
+          source.push("x");
+          const sink = new m.Writable({ write(_c, _e, cb) { cb(); } });
+
+          out.push(`before:${source.readableFlowing}|listeners:${source.listenerCount("data")}`);
+          out.push(`pipeReturns:${source.pipe(sink) === sink}`);
+          out.push(`after:${source.readableFlowing}|listeners:${source.listenerCount("data")}`);
+          out.push(`names:${source.eventNames().map(String).sort().join(",")}`);
+
+          if (seed % 2 === 0) {
+            source.unpipe(sink);
+            out.push(`unpipeOne:${source.readableFlowing}`);
+          } else {
+            source.unpipe();
+            out.push(`unpipeAll:${source.readableFlowing}`);
+          }
+          out.push(`afterUnpipe:${source.listenerCount("data")}`);
+
+          // `removeAllListeners` with and without a name, which differ.
+          source.on("close", () => {});
+          source.on("error", () => {});
+          out.push(`namesBefore:${source.eventNames().map(String).sort().join(",")}`);
+          source.removeAllListeners(seed % 3 === 0 ? "close" : undefined);
+          out.push(`namesAfter:${source.eventNames().map(String).sort().join(",")}`);
+
+          // A `Writable` inherits `pipe` and it is meaningless on one, since
+          // there is nothing to read. It answers the destination **and then
+          // fails**: node emits `ERR_STREAM_CANNOT_PIPE` on the source a tick
+          // later, so the return value and the error are both part of the
+          // contract and the error is the half that is easy to miss.
+          //
+          // The listener is not optional. Without it the emit is an uncaught
+          // exception, and because it lands a tick later it killed the probe
+          // *during a different spec* -- `pipe-unpipe` reported a clean result
+          // and the process died inside `stream-lifecycle`, which is what a
+          // deferred throw looks like from the outside.
+          const w = new m.Writable({ write(_c, _e, cb) { cb(); } });
+          const pipeErrors = [];
+          w.on("error", (error) => pipeErrors.push(error.code || error.name));
+          out.push(`writablePipe:${w.pipe(sink) === sink}`);
+          await new Promise((resolve) => queueMicrotask(resolve));
+          await new Promise((resolve) => setImmediate(resolve));
+          out.push(`writablePipeError:${pipeErrors.join(",") || "none"}`);
+          w.destroy();
+          source.destroy();
+          sink.destroy();
+          return out.join("\n");
+        },
+      },
+      {
+        // `Stream`'s own surface: the constructors it republishes and the
+        // functions hanging off it.
+        //
+        // `stream.Readable` and `stream.Stream.Readable` are the same class, and
+        // a corpus that only reaches for the first never calls the second.
+        // Constructing through each is what would tell them apart if they ever
+        // stopped being one object.
+        label: "stream-statics",
+        call: (m, s) => {
+          const seed = s.length;
+          const out = [];
+          const Stream = m.Stream;
+          out.push(`selfRef:${Stream.Stream === Stream}`);
+          for (const name of ["Readable", "Writable", "Duplex", "Transform", "PassThrough"]) {
+            out.push(`same:${name}:${Stream[name] === m[name]}`);
+            try {
+              const made = new Stream[name]({
+                read() {},
+                write(_c, _e, cb) { cb(); },
+                transform(c, _e, cb) { cb(null, c); },
+              });
+              out.push(`new:${name}:${made.constructor.name}|${made instanceof Stream[name]}`);
+              made.destroy();
+            } catch (error) {
+              out.push(`new:${name}:${error.code || error.name}`);
+            }
+          }
+          try {
+            const base = new Stream();
+            out.push(`base:${typeof base.pipe}|${base instanceof Stream}`);
+          } catch (error) {
+            out.push(`base:${error.code || error.name}`);
+          }
+
+          // The default high water mark is **process-wide state**, so it is set,
+          // observed through a stream built while it holds, and put back. The
+          // host runs a preflight the child does not, so a value left behind here
+          // would be read by a later input on one side only -- which is exactly
+          // how `console.count` diverged before it was reset.
+          const objectMode = seed % 2 === 0;
+          const before = Stream.getDefaultHighWaterMark(objectMode);
+          try {
+            Stream.setDefaultHighWaterMark(objectMode, 1 + (seed % 7));
+            out.push(`hwmGet:${Stream.getDefaultHighWaterMark(objectMode)}`);
+            const made = new m.Readable({ objectMode, read() {} });
+            out.push(`hwmApplied:${made.readableHighWaterMark}`);
+            made.destroy();
+          } catch (error) {
+            out.push(`hwm:${error.code || error.name}`);
+          } finally {
+            Stream.setDefaultHighWaterMark(objectMode, before);
+          }
+          out.push(`hwmRestored:${Stream.getDefaultHighWaterMark(objectMode) === before}`);
+
+          // Its validation, which is where a default that is not a number would
+          // otherwise be stored and corrupt every stream built afterwards.
+          for (const bad of [-1, "8", null, 1.5, NaN]) {
+            try {
+              Stream.setDefaultHighWaterMark(objectMode, bad);
+              out.push(`hwmBad:${JSON.stringify(bad)}:accepted`);
+            } catch (error) {
+              out.push(`hwmBad:${JSON.stringify(bad)}:${error.code || error.name}`);
+            } finally {
+              Stream.setDefaultHighWaterMark(objectMode, before);
+            }
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // `destroy`, `finished` and `addAbortSignal` as free functions.
+        //
+        // `finished` is awaited over a stream that **has already ended**, so it
+        // settles without waiting for anything. The signal handed to
+        // `addAbortSignal` is already aborted for the same reason: one that never
+        // fires leaves the callback outstanding, and an unreffed timer to bound
+        // it cannot settle a promise because it does not hold the loop.
+        label: "stream-lifecycle",
+        call: async (m, s) => {
+          const seed = s.length;
+          const out = [];
+
+          const ended = m.Readable.from(["a", "b"]);
+          await ended.toArray();
+          try {
+            await new Promise((resolve, reject) => {
+              m.finished(ended, (error) => (error ? reject(error) : resolve()));
+            });
+            out.push("finished:clean");
+          } catch (error) {
+            out.push(`finished:${error.code || error.name}`);
+          }
+
+          // The same function on a stream destroyed with an error, which is the
+          // arm that reports rather than resolves.
+          const broken = new m.Readable({ read() {} });
+          m.destroy(broken, Object.assign(new Error(`broke${seed % 3}`), { code: "ENTS" }));
+          try {
+            await new Promise((resolve, reject) => {
+              m.finished(broken, (error) => (error ? reject(error) : resolve()));
+            });
+            out.push("finishedBroken:clean");
+          } catch (error) {
+            out.push(`finishedBroken:${error.code || error.message}`);
+          }
+          out.push(`destroyed:${broken.destroyed}|errored:${broken.errored && broken.errored.code}`);
+
+          // `addAbortSignal` with a signal that has already fired: the stream is
+          // destroyed with node's abort error.
+          const guarded = new m.Readable({ read() {} });
+          try {
+            out.push(`addAbortSignal:${m.addAbortSignal(AbortSignal.abort(), guarded) === guarded}`);
+            await new Promise((resolve) => { m.finished(guarded, () => resolve()); });
+            out.push(`aborted:${guarded.destroyed}|${guarded.errored && guarded.errored.name}`);
+          } catch (error) {
+            out.push(`addAbortSignal:${error.code || error.name}`);
+          }
+
+          // **`null` is excluded, and the reason is that node's answer for it is an
+          // accident rather than a decision.** Node's local validator reads
+          //
+          //     if (typeof signal !== 'object' || !('aborted' in signal))
+          //
+          // and `typeof null === "object"`, so `null` reaches the `in` operator,
+          // which throws an engine `TypeError` with no code. Every other rejected
+          // value gets `ERR_INVALID_ARG_TYPE`. This profile answers
+          // `ERR_INVALID_ARG_TYPE` for `null` too, which is the coded error the
+          // same function gives for `{}` and for `"signal"`.
+          //
+          // Matching node here would mean reproducing a defect to lose
+          // information: a caller branching on `error.code` can handle every bad
+          // argument except `null`. So it is recorded and not copied, and the
+          // recording is this comment plus its absence from the list -- one known
+          // decision kept out of the way of the comparisons around it.
+          //
+          // Labelled with the value and not `typeof`, because `typeof null` and
+          // `typeof {}` are both "object" and the two rows were indistinguishable.
+          for (const bad of [undefined, {}, "signal", 0, true]) {
+            const victim = new m.Readable({ read() {} });
+            try {
+              m.addAbortSignal(bad, victim);
+              out.push(`addAbortSignalBad:${JSON.stringify(bad) ?? "undefined"}:accepted`);
+            } catch (error) {
+              out.push(`addAbortSignalBad:${JSON.stringify(bad) ?? "undefined"}:${error.code || error.name}`);
+            }
+            victim.destroy();
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // `compose` and `Duplex.from`, which build a stream out of parts.
+        //
+        // Both are compared through `toArray` over a finite source, so the answer
+        // is the array and not the timing. `Duplex.from` accepts several shapes
+        // -- an iterable, an async generator function, a string, a promise -- and
+        // the input picks which, so the branch taken is a function of the input
+        // rather than of the spec.
+        label: "compose-and-from",
+        call: async (m, s) => {
+          const seed = s.length + (s.charCodeAt(0) || 0);
+          const out = [];
+          const items = ["a", "bb", "ccc"].slice(0, 1 + (seed % 3));
+
+          try {
+            const composed = m.compose(
+              m.Readable.from(items),
+              async function* upper(source) {
+                for await (const chunk of source) yield String(chunk).toUpperCase();
+              },
+            );
+            out.push(`compose:${JSON.stringify((await composed.toArray()).map(String))}`);
+          } catch (error) {
+            out.push(`compose:${error.code || error.name}`);
+          }
+
+          try {
+            const chained = m.Readable.from(items).compose(
+              async function* tag(source) {
+                for await (const chunk of source) yield `<${chunk}>`;
+              },
+            );
+            out.push(`readableCompose:${JSON.stringify((await chained.toArray()).map(String))}`);
+          } catch (error) {
+            out.push(`readableCompose:${error.code || error.name}`);
+          }
+
+          const SHAPES = ["iterable", "asyncgen", "string", "promise"];
+          const shape = SHAPES[seed % SHAPES.length];
+          try {
+            let built;
+            if (shape === "iterable") built = m.Duplex.from(items);
+            else if (shape === "asyncgen") built = m.Duplex.from(async function* gen() { yield* items; });
+            else if (shape === "string") built = m.Duplex.from(items.join("|"));
+            else built = m.Duplex.from(Promise.resolve(items.join("/")));
+            out.push(`from:${shape}:${JSON.stringify((await built.toArray()).map(String))}`);
+          } catch (error) {
+            out.push(`from:${shape}:${error.code || error.name}`);
+          }
+
+          for (const bad of [undefined, null, 1, true]) {
+            try {
+              out.push(`fromBad:${typeof bad}:accepted:${typeof m.Duplex.from(bad)}`);
+            } catch (error) {
+              out.push(`fromBad:${typeof bad}:${error.code || error.name}`);
+            }
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // The Web Streams bridges, both directions, drained to completion.
+        //
+        // `toWeb` hands back a `ReadableStream` whose reader must be run to
+        // `done`, and `fromWeb` the reverse. Each is awaited fully, so neither
+        // leaves a lock held or a promise pending.
+        label: "web-bridges",
+        call: async (m, s) => {
+          const seed = s.length;
+          const out = [];
+          const items = ["a", "bb", "ccc"].slice(0, 1 + (seed % 3));
+
+          try {
+            const web = m.Readable.toWeb(m.Readable.from(items));
+            out.push(`toWeb:${web.constructor.name}|locked:${web.locked}`);
+            const reader = web.getReader();
+            const seen = [];
+            for (;;) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              seen.push(String(value));
+            }
+            reader.releaseLock();
+            out.push(`toWebRead:${JSON.stringify(seen)}`);
+          } catch (error) {
+            out.push(`toWeb:${error.code || error.name}`);
+          }
+
+          try {
+            const source = new ReadableStream({
+              start(controller) {
+                for (const item of items) controller.enqueue(item);
+                controller.close();
+              },
+            });
+            out.push(`fromWeb:${JSON.stringify((await m.Readable.fromWeb(source).toArray()).map(String))}`);
+          } catch (error) {
+            out.push(`fromWeb:${error.code || error.name}`);
+          }
+
+          try {
+            const chunks = [];
+            const writable = new m.Writable({
+              write(chunk, _e, cb) { chunks.push(Buffer.from(chunk).toString()); cb(); },
+            });
+            const writer = m.Writable.toWeb(writable).getWriter();
+            for (const item of items) await writer.write(Buffer.from(item));
+            await writer.close();
+            out.push(`writableToWeb:${JSON.stringify(chunks)}`);
+          } catch (error) {
+            out.push(`writableToWeb:${error.code || error.name}`);
+          }
+
+          try {
+            const seen = [];
+            const web = new WritableStream({ write(chunk) { seen.push(String(chunk)); } });
+            const back = m.Writable.fromWeb(web);
+            await new Promise((resolve, reject) => {
+              back.on("error", reject);
+              back.end(items.join(""), () => resolve());
+            });
+            out.push(`writableFromWeb:${JSON.stringify(seen)}`);
+          } catch (error) {
+            out.push(`writableFromWeb:${error.code || error.name}`);
+          }
+
+          for (const bad of [undefined, null, {}, 1]) {
+            try {
+              m.Readable.fromWeb(bad);
+              out.push(`fromWebBad:${typeof bad}:accepted`);
+            } catch (error) {
+              out.push(`fromWebBad:${typeof bad}:${error.code || error.name}`);
+            }
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // `Transform`'s hooks and the legacy `wrap`.
+        //
+        // A `PassThrough` drives `Transform#_write`, `Transform#_read` and
+        // `PassThrough#_transform` through the machinery rather than by calling
+        // them, which is the only way those three are reached the way a program
+        // reaches them. The bare `Transform#_transform` is node's unimplemented
+        // stub and is called directly, because nothing that works reaches it.
+        label: "transform-and-wrap",
+        call: async (m, s) => {
+          const seed = s.length;
+          const out = [];
+          const items = ["a", "bb", "ccc"].slice(0, 1 + (seed % 3));
+
+          const through = new m.PassThrough();
+          for (const item of items) through.write(item);
+          through.end();
+          out.push(`passThrough:${JSON.stringify((await through.toArray()).map(String))}`);
+
+          try {
+            const bare = new m.Transform();
+            m.Transform.prototype._transform.call(bare, Buffer.from("x"), "buffer", (e) => {
+              out.push(`_transformCb:${e ? e.code || e.name : "null"}`);
+            });
+            bare.destroy();
+          } catch (error) {
+            out.push(`_transform:${error.code || error.name}`);
+          }
+
+          // `wrap` adapts an old-style stream -- one that only emits `data` and
+          // `end` -- into a modern readable. The source emits both synchronously
+          // after being wrapped, so the result is finite.
+          // Hand-rolled rather than `new EventEmitter()`, because the host
+          // evaluates these specs inside an ES module where `require` does not
+          // exist while the probe's child is CommonJS where it does. A helper
+          // that resolves differently on the two sides is a divergence the
+          // harness caused, and `wrap`'s contract needs only `on`, `pause` and
+          // `resume`.
+          const legacy = () => {
+            const handlers = new Map();
+            return {
+              on(name, fn) {
+                if (!handlers.has(name)) handlers.set(name, []);
+                handlers.get(name).push(fn);
+                return this;
+              },
+              removeListener(name, fn) {
+                const list = handlers.get(name);
+                if (list) handlers.set(name, list.filter((f) => f !== fn));
+                return this;
+              },
+              emit(name, ...args) {
+                for (const fn of handlers.get(name) ?? []) fn(...args);
+                return true;
+              },
+              pause() {},
+              resume() {},
+            };
+          };
+          try {
+            const source = legacy();
+            const wrapped = new m.Readable({ read() {} }).wrap(source);
+            for (const item of items) source.emit("data", item);
+            source.emit("end");
+            out.push(`wrap:${JSON.stringify((await wrapped.toArray()).map(String))}`);
+          } catch (error) {
+            out.push(`wrap:${error.code || error.name}`);
+          }
+
+          try {
+            const source = legacy();
+            const wrapped = m.Readable.wrap(source);
+            source.emit("data", items[0]);
+            source.emit("end");
+            out.push(`staticWrap:${JSON.stringify((await wrapped.toArray()).map(String))}`);
+          } catch (error) {
+            out.push(`staticWrap:${error.code || error.name}`);
+          }
+          return out.join("\n");
         },
       },
     ],

@@ -521,6 +521,29 @@ export class EventEmitter {
 
   /** Upstream `lib/events.js:743`. */
   removeAllListeners(type?: string | symbol): this {
+    // `arguments.length`, not `type === undefined`, because node distinguishes
+    // them and the difference is observable: `removeAllListeners()` drops every
+    // listener while `removeAllListeners(undefined)` drops **none**. Upstream
+    // reaches the wholesale branch through `if (arguments.length === 0)`, and an
+    // explicit `undefined` falls to the per-type branch where `events[undefined]`
+    // is missing and nothing happens.
+    //
+    // It matters because `undefined` is what a forwarded optional argument looks
+    // like. `Readable.prototype.removeAllListeners` passes `arguments` straight
+    // through, so `stream.removeAllListeners(maybeName)` with nothing in
+    // `maybeName` cleared every listener here and none on node.
+    //
+    // `arguments` rather than a rest parameter, which would also work and would
+    // change `removeAllListeners.length` from 1 to 0 -- a parameter declared
+    // `type?:` still counts, because the `?` is erased and leaves a plain
+    // parameter, and every other arity on this prototype already matches node.
+    const removeEverything = arguments.length === 0;
+    // Once `removeEverything` is false an argument was passed, but it may still
+    // have been `undefined` -- and that is the case this method now has to get
+    // right. Node looks up `events[undefined]`, an ordinary property read that
+    // necessarily misses, so the cast stands in for a lookup that cannot match
+    // rather than for a claim that the caller passed a name.
+    const key = type as EventName;
     const events = this._events;
     if (events === undefined) {
       return this;
@@ -528,13 +551,13 @@ export class EventEmitter {
 
     // Nobody is watching removals, so the store can be dropped wholesale.
     if (events.get("removeListener") === undefined) {
-      if (type === undefined) {
+      if (removeEverything) {
         this._events = emptyStore();
         this._eventsCount = 0;
         this[kPreserveEventShape] = false;
-      } else if (events.get(type) !== undefined) {
-        if (this[kPreserveEventShape]) events.set(type, undefined);
-        else events.delete(type);
+      } else if (events.get(key) !== undefined) {
+        if (this[kPreserveEventShape]) events.set(key, undefined);
+        else events.delete(key);
         if (--this._eventsCount === 0 && !this[kPreserveEventShape]) {
           this._events = emptyStore();
         }
@@ -542,7 +565,7 @@ export class EventEmitter {
       return this;
     }
 
-    if (type === undefined) {
+    if (removeEverything) {
       const keys = new Array<EventName>(events.size);
       let index = 0;
       for (const key of events.keys()) {
@@ -562,14 +585,14 @@ export class EventEmitter {
       return this;
     }
 
-    const listeners = events.get(type);
+    const listeners = events.get(key);
     if (listeners instanceof ListenerRecord) {
-      this.removeListener(type, listeners.callback);
+      this.removeListener(key, listeners.callback);
     } else if (listeners !== undefined) {
       // Last in, first out, so a listener that removes another still sees it.
       const entries = listeners.entries;
       for (let i = entries.length - 1; i >= 0; i--) {
-        this.removeListener(type, listenerAt(entries, i).callback);
+        this.removeListener(key, listenerAt(entries, i).callback);
       }
     }
     return this;
