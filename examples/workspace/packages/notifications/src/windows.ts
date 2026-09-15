@@ -1,23 +1,26 @@
-// Windows. The toast API, reached through a C shim.
+// Windows: WinRT.
 //
-// The real surface is WinRT (`Windows.UI.Notifications`), which is neither C
-// nor Java -- so this is the platform where "bind the native API" has no answer
-// in this compiler at all. The C shim is a stand-in and the fixture says so.
-import { schedule_at, cancel_by_id, set_tap_handler } from "c:notifications";
-import type { c_double } from "c:types";
+// `winrt:` names a `.winmd` namespace. Pretend-supported, and the nearest of
+// the three to something real here: `.winmd` is ECMA-335 metadata, so the
+// reader in `compiler/jvm-emitter` is the shape that transfers. What does not
+// transfer is the call -- WinRT is COM underneath, so this is a vtable and an
+// `HSTRING`, not a JNI-style bridge.
+import { Scheduler as Native } from "winrt:Example.Notifications";
 import type { Notification, Scheduler, TapHandler } from "./index.ts";
 
 class WindowsScheduler implements Scheduler {
+  private readonly native = new Native();
+
   schedule(notification: Notification): void {
-    schedule_at(notification.id, notification.title, notification.body, notification.delay as c_double);
+    this.native.Schedule(notification.id, notification.title, notification.body, notification.delay);
   }
 
   cancel(id: string): void {
-    cancel_by_id(id);
+    this.native.Cancel(id);
   }
 
   onTap(handler: TapHandler): void {
-    set_tap_handler(handler);
+    this.native.SetTapHandler(handler);
   }
 }
 

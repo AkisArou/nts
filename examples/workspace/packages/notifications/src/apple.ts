@@ -1,24 +1,28 @@
-// iOS and macOS share this file: the same C shim, two targets, two hosts.
+// iOS and macOS: one Swift type, two targets, two hosts.
 //
-// The real API is `UNUserNotificationCenter`, which is Objective-C. This
-// compiler binds C headers, so `native/apple/scheduler.h` is a C surface that
-// something else has to bridge. The fixture records that as a gap rather than
-// pretending a C header is the platform API.
-import { schedule_at, cancel_by_id, set_tap_handler } from "c:notifications";
-import type { c_double, c_int } from "c:types";
+// The specifier is `swift:` rather than `c:`, which is the pretend part -- today
+// this compiler binds C headers and class files. The realistic route is that
+// `swiftc -emit-objc-header` produces a header we already read, so `swift:` is
+// sugar over a generated C surface rather than a second binding mechanism.
+import { Scheduler as Native } from "swift:Notifications";
 import type { Notification, Scheduler, TapHandler } from "./index.ts";
 
 class AppleScheduler implements Scheduler {
+  private readonly native = new Native();
+
   schedule(notification: Notification): void {
-    schedule_at(notification.id, notification.title, notification.body, notification.delay as c_double);
+    this.native.schedule(notification.id, notification.title, notification.body, notification.delay);
   }
 
   cancel(id: string): void {
-    cancel_by_id(id);
+    this.native.cancel(id);
   }
 
   onTap(handler: TapHandler): void {
-    set_tap_handler(handler);
+    // Delivered on the main queue, which under `host.ios` is the runtime's own
+    // thread -- so this is a direct call. Android's equivalent is not, and that
+    // is a property of the host rather than of the language.
+    this.native.setTapHandler(handler);
   }
 }
 
