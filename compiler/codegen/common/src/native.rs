@@ -40,8 +40,9 @@ impl Layouts {
                 self.visit(pointee)?;
             }
             // An array's element may be a struct, and that struct still needs
-            // its definition emitted -- stored inline, so before this one.
-            Pointee::Array { element, .. } => self.visit(element)?,
+            // its definition emitted -- stored inline, so before this one. A
+            // flexible array member is the same question with no extent.
+            Pointee::Array { element, .. } | Pointee::Flexible(element) => self.visit(element)?,
             Pointee::Opaque(name) => self.tag(name, RecordKind::Struct)?,
             Pointee::Record(layout) => {
                 self.tag(&layout.name, layout.kind)?;

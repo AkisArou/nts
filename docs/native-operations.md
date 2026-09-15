@@ -993,6 +993,38 @@ Two defects found by running the first packed fixture, neither about packing:
   reached it as an unrecognised use of the pointer. There is no address of a
   bit-field to store anywhere, which is the whole reason they are their own ops.
 
+## Flexible array members
+
+`struct cmsghdr` ends in `unsigned char __cmsg_data[]`. The member has **no
+extent**: the struct is 16 bytes and `offsetof(struct cmsghdr, __cmsg_data)` is
+also 16, so it begins exactly where the record ends. It is placed at its
+element's alignment and raises the record's, which `struct { char c; long l[]; }`
+shows -- `l` at 8, size 8, align 8 -- and contributes no bytes of its own.
+
+`Flexible<T>` on the surface, and reading it gives a `Ptr<T>`: the decay C
+performs, and the only thing C offers, there being no extent to copy and no
+whole value to load. `caller.c` asserts the address this compiler reaches is the
+one `CMSG_DATA` computes, which is the platform's own answer.
+
+**The count is nowhere.** For `cmsghdr` it is `cmsg_len` minus the header;
+elsewhere it is another member, an argument, or a protocol. No header states it
+and this compiler does not invent one, so nothing bounds a read through a
+flexible member -- the same footing as every other native pointer here.
+
+Distinct from `Array { length: 0 }`, which lays out identically and spells
+differently: C writes `T name[]`, a zero-length array is a GNU extension, and
+`_Generic` wants `T (*)[]` against `T (*)[0]`. A count of zero on the surface
+would also be a claim -- that there are none -- where the truth is that the
+count is not in the type.
+
+**Every check the witness already emits works on one**, which was verified
+against the real header before any of it was written: `sizeof`, `offsetof` and
+`_Generic(&p->__cmsg_data, unsigned char (*)[])` are all legal C for a flexible
+array member. So it is checked like any other member rather than exempted.
+
+Giving the member an extent fails the agreement test on both backends, which is
+the control: every read after it lands past the payload.
+
 ### The witness asserts about a header's records, not about every tag
 
 Found while writing the packed fixture and **older than bit-fields**: a tag the

@@ -247,6 +247,15 @@ pub fn native_shape(pointee: &crate::hir::native::Pointee) -> Option<Shape> {
                 align: inner.align,
             })
         }
+        // No extent, and the element's alignment. `struct cmsghdr` is 16
+        // bytes with `__cmsg_data` at 16: the member raises the record's
+        // alignment and the record's size is rounded to it, and the member
+        // itself contributes nothing. Named here rather than left to the
+        // catch-all below, which would size it as the *pointer* its read decays
+        // to and make every record holding one eight bytes too long.
+        Pointee::Flexible(element) => {
+            Some(Shape { size: 0, align: native_shape(element)?.align })
+        }
         // The same bytes, with no alignment to promise. Naming it here rather
         // than letting it fall through matters for a packed record inside
         // another: the inner one's alignment must not raise the outer's.

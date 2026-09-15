@@ -234,6 +234,20 @@ pub enum Pointee {
         unit: Scalar,
         width: u32,
     },
+    /// `T name[]` at the end of a record -- C's *flexible array member*.
+    ///
+    /// Storage with no extent. It is placed at its element's alignment and
+    /// raises the record's, and contributes **zero bytes**: `struct cmsghdr` is
+    /// 16 bytes and `offsetof(struct cmsghdr, __cmsg_data)` is also 16.
+    ///
+    /// Distinct from `Array { length: 0 }`, which would lay out identically and
+    /// spell differently: C writes `T name[]`, a zero-length array is a GNU
+    /// extension, and `_Generic` wants `T (*)[]` against `T (*)[0]`. A count of
+    /// zero on the surface would also be a claim -- that there are none --
+    /// where the truth is that the count is not in the type at all. It comes
+    /// from somewhere else; for `cmsghdr` it is `cmsg_len`, and no part of this
+    /// can know that.
+    Flexible(Box<Pointee>),
     Record(std::sync::Arc<Record>),
     Pointer(Box<Pointee>),
     /// C's `void`, as the pointee of a `void *`. Storage of unstated element
@@ -439,7 +453,10 @@ impl Pointee {
             // The element's spelling. C writes the length in the *declarator*
             // -- `char name[65]`, not `char[65] name` -- so a member emits it
             // beside the name and a bare type spelling cannot carry it.
-            Self::Array { element, .. } => element.c_type(),
+            // An array's bound and a flexible array's brackets both live in
+            // the *declarator*, after the name, so neither is part of the type
+            // spelling and both answer with the element.
+            Self::Array { element, .. } | Self::Flexible(element) => element.c_type(),
             // A typedef, because C has no inline spelling for this. The name is
             // derived from the element so that two of them agree and two
             // different ones cannot collide -- the same rule the function
@@ -536,6 +553,9 @@ impl Pointee {
             // address, so nothing may point at one -- which is why the surface
             // projects it without the phantom `addrOf` reads.
             Self::Bits { unit, .. } => Some(unit.representation()),
+            // Reading `p.name[i]` is reading a `T`, exactly as for a sized
+            // array: the decay is the same and only the extent is missing. It
+            // answered with a *pointer* first, which is the type
             Self::Pointer(pointee) => Some(HirType::NativePointer((**pointee).clone())),
             // A view loads exactly what the type underneath it does, which is
             // what C allows through both of these. What they restrict is
@@ -546,7 +566,15 @@ impl Pointee {
             Self::Const(pointee) | Self::Unaligned(pointee) => pointee.element_type(),
             // Reading `p.name[i]` is reading a `T`: the array decays to a
             // pointer to its first element, exactly as it does in C.
-            Self::Array { element, .. } => element.element_type(),
+            // Reading `p.name[i]` is reading a `T` for both: the array decays
+            // to a pointer to its first element, exactly as in C, and a
+            // flexible member decays the same way with no extent to state.
+            //
+            // A flexible one answered with a *pointer* first, which is the type
+            // `native.index.addr` produces rather than the type it loads. The
+            // verifier said so: "native memory element", expected a pointer,
+            // found one.
+            Self::Array { element, .. } | Self::Flexible(element) => element.element_type(),
             // Nothing here is a value this can load, for four different
             // reasons that come to one answer.
             //
@@ -570,6 +598,7 @@ impl std::fmt::Display for Pointee {
             Self::Opaque(name) => write!(f, "{name}"),
             Self::Scalar(scalar) => write!(f, "{}", scalar.c_type()),
             Self::Bits { unit, width } => write!(f, "{}:{width}", unit.c_type()),
+            Self::Flexible(element) => write!(f, "{element}[]"),
             Self::Record(layout) => write!(f, "{}", layout.name),
             Self::Pointer(pointee) => write!(f, "{pointee}*"),
             Self::Void => write!(f, "void"),

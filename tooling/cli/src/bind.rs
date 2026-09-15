@@ -100,6 +100,10 @@ enum Shape {
     /// `ConstantExpr` in the `FieldDecl`'s `inner`, so the pass that describes
     /// members already has it and no second source has to agree with the first.
     Bits(&'static str, u32),
+    /// `T name[]` at the end of a record -- a flexible array member. No length,
+    /// because there is none: the count lives in another member, an argument or
+    /// a protocol, and no part of a header states it.
+    Flexible(Box<Shape>),
     /// A struct or union this binding also describes.
     Record(String),
     /// The same, for a record the header declares **without a tag**. Spelled
@@ -962,6 +966,13 @@ fn shape(c_type: &str, typedefs: &BTreeMap<String, String>) -> Result<Shape> {
         }
         return Ok(Shape::Pointer(Box::new(shape(inner, typedefs)?), constant));
     }
+    // `T []` -- a flexible array member, which clang spells with an empty
+    // bound. Before the sized case, whose `rsplit` on `[` would hand it an
+    // empty count and report "has no constant length" -- true of the spelling
+    // and wrong about the type, which has no length to be constant.
+    if let Some(element) = c_type.strip_suffix("[]") {
+        return Ok(Shape::Flexible(Box::new(shape(element.trim(), typedefs)?)));
+    }
     if let Some((element, count)) = c_type.strip_suffix(']').and_then(|s| s.rsplit_once('[')) {
         let count: u64 = count
             .trim()
@@ -1326,6 +1337,9 @@ impl Binding {
             // much of the unit it occupies is a different question, and one
             // this recompute deliberately does not answer -- see `recompute`.
             Shape::Bits(unit, _) => self.size_align(&Shape::Scalar(unit))?,
+            // No extent, and the element's alignment -- which the record still
+            // takes, and rounds its own size to.
+            Shape::Flexible(element) => (0, self.size_align(element)?.1),
             Shape::Record(tag) | Shape::AnonymousRecord(tag) => {
                 let nested = self.records.get(tag).ok_or_else(|| {
                     anyhow::anyhow!(
@@ -1367,6 +1381,7 @@ impl Shape {
             Self::Pointer(inner, false) => format!("Ptr<{}>", inner.spell(aliases)),
             Self::Array(element, count) => format!("CArray<{}, {count}>", element.spell(aliases)),
             Self::Bits(unit, width) => format!("Bits<{unit}, {width}>"),
+            Self::Flexible(element) => format!("Flexible<{}>", element.spell(aliases)),
             // Both are an alias this file declares. An anonymous one differs
             // only in what its own declaration says -- `Untagged<Union<...>>`
             // rather than a tag -- which `render` writes, not this.
@@ -1396,6 +1411,10 @@ impl Shape {
             Self::Bits(unit, _) => {
                 into.insert("Bits");
                 into.insert(unit);
+            }
+            Self::Flexible(element) => {
+                into.insert("Flexible");
+                element.imports(into);
             }
             Self::VoidPointer(constant) => {
                 into.insert(if *constant { "ConstPtr" } else { "Ptr" });

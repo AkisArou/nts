@@ -213,6 +213,63 @@ fn a_bit_field_reads_and_writes_the_same_bits_on_c_and_llvm() {
     }
 }
 
+/// A flexible array member, read and written on both backends.
+///
+/// `struct cmsghdr` contributes no bytes for `__cmsg_data`, so the struct is 16
+/// and the member is *at* 16. `caller.c` builds a real control message with the
+/// platform's own `CMSG_SPACE`/`CMSG_LEN`/`CMSG_DATA` and asserts that the
+/// address this compiler reaches is the one `CMSG_DATA` computes -- a
+/// description that gave the member any extent puts every read past the
+/// payload, and the two backends compute that address by different routes.
+#[test]
+fn a_flexible_array_member_reaches_the_bytes_after_the_record() {
+    let Some((dir, prepared)) = prepare_with_files(
+        "flexible",
+        include_str!("../../common/test-support/native-flexible/main.ts"),
+        hir::Provider::NoGc,
+        &[(
+            "cmsg.d.ts",
+            include_str!("../../common/test-support/native-flexible/cmsg.d.ts"),
+        )],
+    ) else {
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    std::fs::write(
+        dir.join("caller.c"),
+        include_str!("../../common/test-support/native-flexible/caller.c"),
+    )
+    .unwrap();
+    for source in ["caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+    }
+    // `offsetof` and `_Generic` both work on a flexible array member --
+    // `unsigned char (*)[]` is a type C has -- so the witness checks it like
+    // any other, which was verified against the real header before it was
+    // written.
+    clang(&dir, &["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "native_witness.c"]);
+    for (source, object, binary) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "caller.o", "nts_runtime.o", "-lm", "-o", binary]);
+        assert!(
+            Command::new(dir.join(binary)).status().unwrap().success(),
+            "{binary}"
+        );
+    }
+}
+
 #[test]
 fn aggregate_arguments_respect_register_exhaustion() {
     let mut ts = String::new();

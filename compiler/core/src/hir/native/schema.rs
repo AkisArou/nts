@@ -56,6 +56,12 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
     if let Some(tag) = marker(snapshot, ty, "___c_opaque") {
         return Some(Pointee::Opaque(text(snapshot, tag)?.to_owned()));
     }
+    // `Flexible<T>` -- `T name[]`, storage with no extent. Read before the
+    // pointer cases for the reason the others are: it is the thing a pointer to
+    // it would point at, not a pointer.
+    if let Some(element) = marker(snapshot, ty, "___c_flexible") {
+        return Some(super::Pointee::Flexible(Box::new(storage(snapshot, element)?)));
+    }
     // `Bits<T, N>` -- N bits of a T-sized unit. Read before the pointer cases
     // for the reason `CArray` is: it is not a pointer, and not a thing anything
     // may point at.
@@ -228,7 +234,9 @@ fn structure(
         // the same reason the struct case is.
         let ty = if let Some(scalar) = scalar(snapshot, property.ty) {
             Pointee::Scalar(scalar)
-        } else if let Some(inline @ (Pointee::Array { .. } | Pointee::Bits { .. })) =
+        } else if let Some(
+            inline @ (Pointee::Array { .. } | Pointee::Bits { .. } | Pointee::Flexible(_)),
+        ) =
             pointer_body(snapshot, property.ty, visiting)
         {
             // Two member types that are neither a scalar nor a pointer, and

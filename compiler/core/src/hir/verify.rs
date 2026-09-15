@@ -554,7 +554,8 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
             // arithmetic, one fewer level of type.
             OpKind::NativeIndexAddress { .. } => match element.viewed() {
                 super::native::Pointee::Opaque(_) => None,
-                super::native::Pointee::Array { element, .. } => {
+                super::native::Pointee::Array { element, .. }
+                | super::native::Pointee::Flexible(element) => {
                     Some(HirType::NativePointer((**element).clone()))
                 }
                 _ => Some(found.clone()),

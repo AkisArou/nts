@@ -504,6 +504,9 @@ fn spell(ty: &super::HirType) -> String {
         // specialization that cannot be reached. Spelled anyway rather than
         // unreachable!(): a name that is wrong is a link error, and a panic in
         // a monomorphizer is a crash with no program to look at.
+        HirType::NativePointer(super::native::Pointee::Flexible(element)) => {
+            format!("flex{}", spell(&HirType::NativePointer((**element).clone())))
+        }
         HirType::NativePointer(super::native::Pointee::Bits { unit, width }) => {
             format!("nativebits{}x{width}", unit.c_type().replace(' ', "_"))
         }

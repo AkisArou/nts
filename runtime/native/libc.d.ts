@@ -106,6 +106,20 @@ declare module "c:types" {
     readonly __c_bits: T;
     readonly __c_width: N;
   };
+  // `T name[]` at the end of a struct -- C's *flexible array member*. Storage
+  // with no extent: placed at T's alignment, raising the struct's, and adding
+  // no bytes. `struct cmsghdr` is 16 bytes and `__cmsg_data` is at 16.
+  //
+  // Reading it gives a `Ptr<T>`, the decay C performs, and that is all C offers
+  // -- there is no extent to copy and no whole value to load.
+  //
+  // **The count is not in the type, and not anywhere this compiler can see.**
+  // For `cmsghdr` it is `cmsg_len` minus the header; elsewhere it is another
+  // member, an argument, or a protocol. Nothing bounds a read through one,
+  // which is the same footing as every other native pointer here.
+  export type Flexible<T> = {
+    readonly __c_flexible: T;
+  };
   export type Ptr<T> = { readonly __c_pointer: T; readonly __c_writable: true } & (T extends
     | Struct<infer Fields, string>
     | Union<infer Fields, string>
@@ -118,6 +132,8 @@ declare module "c:types" {
           | { readonly __c_struct: unknown }
           | { readonly __c_union: unknown }
           ? Ptr<Fields[K]>
+            : Fields[K] extends Flexible<infer E>
+              ? Ptr<E>
           : Fields[K] extends CArray<infer E, number>
             ? Ptr<E>
             : Fields[K] extends Bits<number, number>
@@ -145,6 +161,8 @@ declare module "c:types" {
           | { readonly __c_struct: unknown }
           | { readonly __c_union: unknown }
           ? ConstPtr<Fields[K]>
+            : Fields[K] extends Flexible<infer E>
+              ? ConstPtr<E>
           : Fields[K] extends CArray<infer E, number>
             ? ConstPtr<E>
             : Fields[K] extends Bits<number, number>

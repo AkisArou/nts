@@ -140,6 +140,9 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
             let suffix = match &field.ty {
                 Pointee::Array { length, .. } => format!("[{length}]"),
                 Pointee::Bits { width, .. } => format!(" : {width}"),
+                // `T name[]`, and the brackets are the whole declaration: a
+                // flexible array member has no extent to write between them.
+                Pointee::Flexible(_) => "[]".to_owned(),
                 _ => String::new(),
             };
             writer.line(origin, format!("    {} {}{suffix};", field.ty.c_type(), field.name));
@@ -260,7 +263,7 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
                     // anonymous record's members sit wherever the record does,
                     // which is wherever its enclosing member sits.
                     let spelled = match (&field.ty, layout.packed || through_packing) {
-                        (Pointee::Array { element, .. }, _) => element.pointer_type(),
+                        (Pointee::Array { element, .. } | Pointee::Flexible(element), _) => element.pointer_type(),
                         (other, true) => {
                             Pointee::Unaligned(Box::new(other.clone())).pointer_type()
                         }
@@ -277,7 +280,10 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
                 // will not assign across. Below the arithmetic arm, which
                 // spells an array of its own when the enclosing record needs
                 // offsets rather than a member name.
-                Pointee::Array { .. } => {
+                // A flexible array member is the same: `p->name` decays to a
+                // pointer to its first element, and `&p->name` is `T (*)[]`,
+                // which C will not assign to a `T *`.
+                Pointee::Array { .. } | Pointee::Flexible(_) => {
                     format!("{name} = {}->{};", value_name(pointer), field.name)
                 }
                 // A member whose *type* is anonymous: the member has a name,
@@ -398,6 +404,10 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 Pointee::Array { element, length } => {
                     format!("{} (*)[{length}]", element.c_type())
                 }
+                // `T (*)[]` -- a pointer to an array of unknown bound, which is
+                // a type C has and `_Generic` accepts. Checked against the real
+                // `struct cmsghdr` before it was written.
+                Pointee::Flexible(element) => format!("{} (*)[]", element.c_type()),
                 // A member holding a callback: its address is a pointer to a
                 // function pointer, and the typedef that would spell it lives
                 // in `program.h`, which this file must not include. Written
@@ -474,6 +484,7 @@ fn pointee_is_foreign(pointee: &Pointee) -> bool {
         Pointee::Pointer(inner)
         | Pointee::Const(inner)
         | Pointee::Unaligned(inner)
+        | Pointee::Flexible(inner)
         | Pointee::Array { element: inner, .. } => pointee_is_foreign(inner),
     }
 }

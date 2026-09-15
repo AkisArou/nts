@@ -53,8 +53,12 @@ impl FuncBuilder<'_> {
         // what C does and what the surface says it gives back. The address is
         // the same one -- `&a` and `&a[0]` differ only in type -- so this is a
         // retyping and not a computation.
-        if let HirType::NativePointer(Pointee::Array { element, .. }) =
-            self.values[pointer.0 as usize].ty.clone()
+        // A flexible array member decays the same way and for the same reason.
+        // It differs only in having no extent to state, which nothing on this
+        // path reads.
+        if let HirType::NativePointer(
+            Pointee::Array { element, .. } | Pointee::Flexible(element),
+        ) = self.values[pointer.0 as usize].ty.clone()
         {
             let origin = self.origin(id);
             return Ok(self.push(
