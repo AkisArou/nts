@@ -108,6 +108,23 @@ export function debuglog(
         nts_debug_write(`${section.toUpperCase()} ${nts_process_pid()}: ${format(...args)}\n`);
       }
     : (): void => {};
+  // `enabled`, which node publishes on the returned logger as an enumerable
+  // configurable getter. It was absent here, so `debuglog("x").enabled` answered
+  // `undefined` where node answers `false` -- and code that branches on it, which
+  // is the reason node exposes it, took the wrong branch for a truthiness test
+  // only by luck: `undefined` is falsy, so a disabled section behaved correctly
+  // and an enabled one would not have.
+  //
+  // A getter rather than a value because node's is one. The value cannot change
+  // after this point here -- `NODE_DEBUG` is read once at module load -- so the
+  // getter is about the shape a caller sees, including its descriptor.
+  Object.defineProperty(log, "enabled", {
+    get(): boolean {
+      return enabled;
+    },
+    configurable: true,
+    enumerable: true,
+  });
   callback?.(log);
   return log;
 }
@@ -827,7 +844,23 @@ class ErrnoException extends Error {
   errno: number;
   syscall: string;
   address?: string | null;
-  port?: number;
+  /**
+   * `declare`, because a declared class field **is** an own key.
+   *
+   * `_exceptionWithHostPort` already guarded this the way node does -- node's
+   * `ExceptionWithHostPort` assigns `address` unconditionally and wraps the port
+   * in `if (port)` -- and the guard was doing nothing, because
+   * `useDefineForClassFields` emits a definition for a bare `port?: number;` and
+   * the key existed holding `undefined` before the constructor ran. So
+   * `Object.keys` answered `address,code,errno,port,syscall` for a port of 0 where
+   * node answers without it, and `"port" in error` was `true` where node says
+   * `false`. `declare` emits nothing and leaves the guard as the only thing that
+   * creates the key.
+   *
+   * `address` stays a real field: node assigns it unconditionally too, and an
+   * explicit `null` there is meaningful to a caller reporting what it tried.
+   */
+  declare port?: number;
 
   constructor(message: string, code: string, errno: number, syscall: string) {
     super(message);

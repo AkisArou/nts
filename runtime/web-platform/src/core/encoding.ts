@@ -193,6 +193,30 @@ function convertTextDecodeOptions(options: TextDecodeOptions | null | undefined)
   return options === undefined || options === null ? false : coerceToBoolean(options.stream);
 }
 
+/**
+ * The error a `fatal` decoder throws, in the shape node gives it.
+ *
+ * The Encoding standard says only that this is a `TypeError`, and it stays one --
+ * `instanceof TypeError` holds and WPT's encoding tests check nothing further.
+ * What is added is the two things node's callers read: `code`, which is how any
+ * node program distinguishes this from an argument-validation `TypeError`, and
+ * node's wording, which names the encoding that failed rather than leaving the
+ * reader to guess between the three this decoder implements.
+ *
+ * Found by the node conformance differential: `util.TextDecoder` is this class
+ * re-exported, so a caller comparing `error.code` got `undefined` here and
+ * `ERR_ENCODING_INVALID_ENCODED_DATA` from node. `"Invalid UTF-8"` was not wrong,
+ * it was unreadable to code -- and a bare `TypeError` is indistinguishable from
+ * the one this same class throws for a bad argument, which is exactly what the
+ * code exists to separate.
+ */
+function invalidEncodedData(encoding: string): TypeError {
+  const error = new TypeError(`The encoded data was not valid for encoding ${encoding}`);
+  // Node's error classes attach this; there is no standard subclass to extend.
+  (error as { code?: string }).code = "ERR_ENCODING_INVALID_ENCODED_DATA";
+  return error;
+}
+
 export class TextDecoder {
   #decoderEncoding: DecoderEncoding;
   #decoderFatal: boolean;
@@ -242,7 +266,7 @@ export class TextDecoder {
   #replacement(): void {
     this.#resetSequence();
     if (this.#decoderFatal) {
-      throw new TypeError("Invalid UTF-8");
+      throw invalidEncodedData(this.#decoderEncoding);
     }
   }
 
@@ -305,7 +329,7 @@ export class TextDecoder {
   }
 
   #utf16Error(): void {
-    if (this.#decoderFatal) throw new TypeError("Invalid UTF-16");
+    if (this.#decoderFatal) throw invalidEncodedData(this.#decoderEncoding);
   }
 
   decode(...args: [input?: AllowSharedBufferSource, options?: TextDecodeOptions]): string {

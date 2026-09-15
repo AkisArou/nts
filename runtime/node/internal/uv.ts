@@ -276,7 +276,17 @@ class UVAddressError extends Error implements UVHostPortError {
   errno: number;
   syscall: string;
   address?: string;
-  port?: number;
+  /**
+   * `declare`, not a field, because a declared class field **is** an own key.
+   *
+   * With `useDefineForClassFields` a bare `port?: number;` emits a definition, so
+   * the key exists holding `undefined` before the constructor runs and guarding
+   * the assignment below changes nothing. That was measured: the guard went in
+   * first and `Object.keys` still reported `port`. `declare` emits nothing and
+   * leaves the conditional assignment as the only thing that creates it, which
+   * is node's shape.
+   */
+  declare port?: number;
 
   constructor(
     message: string,
@@ -291,7 +301,17 @@ class UVAddressError extends Error implements UVHostPortError {
     this.errno = errno;
     this.syscall = syscall;
     this.address = address;
-    this.port = port;
+    // Conditional, because node's `ExceptionWithHostPort` assigns `address`
+    // unconditionally and guards the port with `if (port)`. An unconditional
+    // `this.port = port` leaves an own `port` key holding `undefined`, so
+    // `Object.keys` answered `address,code,errno,port,syscall` where node
+    // answers without the port and `"port" in error` was `true` where node says
+    // `false`. The callers already map port 0 to `undefined` -- 0 requests any
+    // free port and is not the port anything was tried on -- so this is about
+    // the key existing, not about its value.
+    if (port !== undefined && port > 0) {
+      this.port = port;
+    }
   }
 }
 
