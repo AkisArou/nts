@@ -26,7 +26,13 @@ fn repository() -> PathBuf {
 }
 
 /// Emit `examples/interop/ts-from-java`, which exists to be read from Java.
-fn emitted() -> Option<Vec<read::ClassFile>> {
+/// The program both helpers below are about, prepared once.
+///
+/// Shared rather than duplicated because the two answers must be about the same
+/// build: a test asserting the surface and a test asserting the pool disagreeing
+/// about which project or which provider they compiled would be two results
+/// nobody could compare.
+fn prepared() -> Option<hir::Program> {
     let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
         eprintln!("SKIP java_surface: NTS_TSGO is not set");
         return None;
@@ -50,9 +56,25 @@ fn emitted() -> Option<Vec<read::ClassFile>> {
         &hir::Options { provider: hir::Provider::NoGc, ..hir::Options::default() },
     )
     .expect("prepared HIR should verify");
+    Some(prepared.program)
+}
 
+/// The emitted classes as bytes, for a question about the constant pool.
+fn emitted_bytes() -> Option<Vec<(String, Vec<u8>)>> {
+    let program = prepared()?;
     Some(
-        nts_codegen_jvm::emit(&prepared.program)
+        nts_codegen_jvm::emit(&program)
+            .classes
+            .iter()
+            .map(|class| (class.binary_name.clone(), class.bytes.clone()))
+            .collect(),
+    )
+}
+
+fn emitted() -> Option<Vec<read::ClassFile>> {
+    let program = prepared()?;
+    Some(
+        nts_codegen_jvm::emit(&program)
             .classes
             .iter()
             .map(|class| read::class_file(&class.bytes).expect("our own output parses"))
@@ -132,4 +154,49 @@ fn a_class_carries_an_instance_method_for_each_of_its_statics() {
         !session.methods.iter().any(|m| m.name == "greet"),
         "a free function does not become an instance method"
     );
+}
+
+/// **Zero interface dispatch on `java.util.Map` or `java.util.Set`**, which
+/// `docs/jvm-interop.md` row 7 calls "zero, by construction".
+///
+/// Every table operation is a `public static` taking the table as its first
+/// argument, so emitted code never calls through the interface -- an interface a
+/// class does not call through is itable entries and no instructions.
+///
+/// **Checked by absence from the constant pool**, which is stronger than
+/// counting `invokeinterface` and needs no JDK: a class cannot dispatch on a
+/// type it never names, and every `invokeinterface` requires an
+/// `InterfaceMethodref` whose class entry is that UTF-8 string. So an emitted
+/// class containing neither string cannot reach either interface at all.
+///
+/// The row became worth asserting rather than believing when `NtsSet` was split
+/// off `NtsMap`: a refactor that gives a helper a new receiver type is exactly
+/// the kind that turns a static into a virtual call without anyone noticing.
+#[test]
+fn no_emitted_class_names_a_java_collection_interface() {
+    let Some(classes) = emitted_bytes() else {
+        return;
+    };
+    assert!(!classes.is_empty(), "ts-from-java emits classes");
+
+    // **The control, because a search that finds nothing proves nothing until it
+    // can find something.** `ts-from-java` returns a `Map` and a `Set`, so its
+    // `Program` must name the concrete classes even though it names neither
+    // interface -- which is the whole claim in one line. Without this, deleting
+    // the scan's body would leave the assertion below passing.
+    let names = |needle: &str| {
+        classes.iter().any(|(_, bytes)| bytes.windows(needle.len()).any(|w| w == needle.as_bytes()))
+    };
+    assert!(names("nts/rt/NtsMap"), "the emitted code names the concrete Map");
+    assert!(names("nts/rt/NtsSet"), "the emitted code names the concrete Set");
+
+    for (name, bytes) in &classes {
+        for interface in ["java/util/Map", "java/util/Set"] {
+            assert!(
+                !bytes.windows(interface.len()).any(|w| w == interface.as_bytes()),
+                "`{name}` names `{interface}` in its constant pool, so it may be dispatching \
+                 through the interface where every table operation should be an `invokestatic`"
+            );
+        }
+    }
 }
