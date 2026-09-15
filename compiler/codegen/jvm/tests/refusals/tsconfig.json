@@ -1,0 +1,5 @@
+{
+  "//": "A fixture whose whole job is to be REFUSED. It must typecheck -- these are legal TypeScript -- and the backend must decline each shape by name.",
+  "extends": "../../../../../tsconfig.fixtures.json",
+  "include": ["src"]
+}

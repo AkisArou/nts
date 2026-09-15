@@ -66,16 +66,25 @@ it.
 This is the table everything else depends on, and none of it is a design
 decision left to make -- it is what the backend emits today.
 
+**The `where` column stopped naming line numbers on 2026-09-15**, because all
+three into `types.rs` had drifted -- `:399` pointed at a `match_same_arms`
+comment, `:437` at the tag table, `:450` at the `Map` arm. This document already
+has a paragraph saying a line number is a citation with an expiry date; it said
+so about a file *another* lane owns, and these were into a file this lane owns
+and edits, which is if anything the faster-moving case. The rule does not depend
+on who owns the file, only on whether anything makes the coordinate follow the
+code, and nothing does.
+
 | TypeScript | JVM representation | where |
 | --- | --- | --- |
-| `string` | `java.lang.String` | `types.rs:399` |
+| `string` | `java.lang.String` | `types.rs`, `descriptor`'s `ManagedType::String` arm |
 | `number` | `double` | |
 | `boolean` | `Z` | |
 | `bigint` | `NtsBigInt`, two `long` fields, 128-bit wrapping | `NtsBigInt.java` |
-| `T[]`, program never grows one | a **bare JVM array** -- `[D`, `[Ljava/lang/String;` | `types.rs:450` |
-| `T[]`, program grows any array | `NtsArrayD` / `NtsArrayL` / `NtsArrayZ`: a wrapper with `items` and a `length` | `types.rs:437` |
-| `Uint8Array` etc. | `NtsViewU8`…, a window onto an `NtsBuffer` whose storage **is** a `byte[]` | `NtsBuffer.java:194` |
-| `Map`, `Set` | `NtsMap` and `NtsSet` over a shared `NtsTable` -- open addressing over `NtsValue[]` and `long[]`, "no boxed keys, boxed slots or HashMap nodes" | `NtsTable.java:9` |
+| `T[]`, program never grows one | a **bare JVM array** -- `[D`, `[Ljava/lang/String;` | `types.rs`, *"A bare JVM array, which is what a Java programmer writes"* |
+| `T[]`, program grows any array | `NtsArrayD` / `NtsArrayL` / `NtsArrayZ`: a wrapper with `items` and a `length` | `types.rs`, `growable` |
+| `Uint8Array` etc. | `NtsViewU8`…, a window onto an `NtsBuffer` whose storage **is** a `byte[]` | `NtsBuffer.java`, `storage` |
+| `Map`, `Set` | `NtsMap` and `NtsSet` over a shared `NtsTable` -- open addressing over `NtsValue[]` and `long[]`, "no boxed keys, boxed slots or HashMap nodes" | `NtsTable.java`, its class comment |
 | an object or class instance | one `final class nts/gen/<Layout>` | |
 | a closure | `nts/gen/Fn$<hash>` with a `call` method | |
 | `unknown` / erased | `NtsValue`: `int tag`, `double num`, `Object ref` | `NtsValue.java` |
@@ -414,6 +423,25 @@ And two semantics fail inbound that hold outbound:
 So `headers()` stays `java.util.HashMap<string, string>`. A declared
 `LinkedHashMap` is the one case where `Map` would be defensible, and only if the
 interface-dispatch cost were acceptable, which it is not.
+
+**The binder implements this asymmetry literally, as of 2026-09-15.** A `Map` or
+`Set` *parameter* renders as a union -- `Map<K, V> | java.util.Map<K, V>` --
+because a caller may supply either ours or one that came out of Java, and a
+`Map` or `Set` *return* renders as the plain Java type, because what we receive
+is whatever Java made and an `NtsMap` already is a `java.util.Map` by subtyping.
+
+It offered the union in both positions until it was looked at. That is not
+unsound -- TypeScript refuses `asMap()!.has(k)` with TS2339, because `has` is not
+on both arms, which was checked rather than assumed -- it is unusable: a caller
+reaches only the intersection and has no way to narrow, since nothing
+distinguishes the arms at run time. The section above had the rule; the code had
+the union both ways.
+
+And "nothing calls through the interface" is asserted now rather than argued:
+`no_emitted_class_names_a_java_collection_interface` checks that no emitted class
+contains the string `java/util/Map` or `java/util/Set` at all. A class cannot
+dispatch on a type it never names, and every `invokeinterface` needs that name in
+its pool -- so the absence is stronger than a count, and needs no JDK.
 
 ### Arrays: the Java type matters more than the Java-ness
 
