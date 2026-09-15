@@ -376,6 +376,14 @@ impl Binding {
             .any(|c| c.get("kind").and_then(serde_json::Value::as_str) == Some("PackedAttr"));
         let mut members = Vec::new();
         let mut nested = Vec::new();
+        // **Every** reason this record cannot be described, not the first.
+        //
+        // Stopping at the first one is how `struct sigaction` was filed for
+        // weeks as a function-pointer case: it reports `void (*)(void)` for
+        // `sa_restorer` and never reaches the anonymous union behind it, which
+        // is its actual blocker. Work got done on the reported cause -- useful
+        // work, for a wrong reason -- and the record still refused.
+        let mut problems: Vec<String> = Vec::new();
         // The `RecordDecl` immediately preceding a member is that member's own
         // anonymous type, which is how clang emits it. Kept so a member whose
         // spelling is `union (unnamed at ...)` resolves against the
@@ -402,20 +410,20 @@ impl Binding {
             if field.get("isBitfield") == Some(&serde_json::Value::Bool(true)) {
                 let member =
                     field.get("name").and_then(serde_json::Value::as_str).unwrap_or("<unnamed>");
-                bail!(
-                    "`{tag}.{member}` is a bit-field, which this surface cannot describe: it has \
-                     no address and no byte offset. Bind the record through an opaque pointer, \
-                     or read it from C."
-                );
+                problems.push(format!(
+                    "`{member}` is a bit-field: it has no address and no byte offset"
+                ));
+                continue;
             }
             let (written, desugared) = qual_type(field).unwrap_or_default();
-            let member = field.get("name").and_then(serde_json::Value::as_str).ok_or_else(|| {
-                anyhow::anyhow!(
-                    "`{tag}` has an unnamed member of type `{written}`. C reaches through one as \
-                     though its fields belonged to the enclosing record, and this surface has no \
-                     way to say that. Reach the member from C."
-                )
-            })?;
+            let Some(member) = field.get("name").and_then(serde_json::Value::as_str) else {
+                problems.push(format!(
+                    "an unnamed member of type `{written}`: C reaches through one as though its \
+                     fields belonged to the enclosing record, and this surface names types"
+                ));
+                pending = None;
+                continue;
+            };
             // A member whose *type* is anonymous gets a name from the record
             // and the member. Nothing outside this file uses it: the C side
             // never spells it, because C cannot.
@@ -434,10 +442,23 @@ impl Binding {
                 Shape::AnonymousRecord(invented)
             } else {
                 pending = None;
-                shape_of(written, desugared, typedefs)
-                    .with_context(|| format!("member `{member}` of `{tag}`"))?
+                match shape_of(written, desugared, typedefs) {
+                    Ok(shape) => shape,
+                    Err(why) => {
+                        problems.push(format!("`{member}`: {why}"));
+                        continue;
+                    }
+                }
             };
             members.push(Member { name: member.to_owned(), ty });
+        }
+        if !problems.is_empty() {
+            bail!(
+                "`{tag}` cannot be described, for {} reason{}:\n  - {}",
+                problems.len(),
+                if problems.len() == 1 { "" } else { "s" },
+                problems.join("\n  - ")
+            );
         }
         if members.is_empty() {
             bail!("`{tag}` has no members, which is not a layout a binding can describe");

@@ -761,6 +761,13 @@ the rest of this section exists.
 | a flexible array member (`unsigned char[]`, no length) | `cmsghdr` | refuses |
 | a bit-field | `iphdr` | refuses |
 
+**A refusal reports every reason, not the first.** That is how `sigaction` was
+filed for weeks as a function-pointer case: the mapper stopped at
+`void (*)(void)` for `sa_restorer` and never reached the anonymous union
+behind it, which is the actual blocker. Function-pointer members got built --
+useful work, done for a wrong reason -- and the record still refused. `iphdr`
+now reports both of its bit-fields rather than one.
+
 The set counted is `stat`, `tm`, `timeval`, `itimerval`, `sockaddr_in`,
 `sockaddr_in6`, `in6_addr`, `msghdr`, `cmsghdr`, `dirent`, `rlimit`, `rusage`,
 `statvfs`, `iovec`, `addrinfo`, `hostent`, `epoll_event`, `passwd`, `group`,
