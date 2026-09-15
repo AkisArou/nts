@@ -80,6 +80,35 @@ pub fn entry_uris(
     if named.is_empty() {
         return Vec::new();
     }
+    match_sources(&named, snapshot)
+}
+
+/// The same match, for entry files a caller names directly.
+///
+/// A build configuration names its product's `entry`, which is the same claim a
+/// tsconfig's `files` array makes and is made by the side that knows what is
+/// being built. Both go through one matcher, because the matching is the part
+/// with the subtlety -- see the note above on why a URI cannot be composed --
+/// and two copies of it would be two chances to get that wrong.
+#[must_use]
+pub fn entry_uris_for(
+    paths: &[camino::Utf8PathBuf],
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+) -> Vec<String> {
+    let named: Vec<std::path::PathBuf> = paths
+        .iter()
+        .filter_map(|path| std::fs::canonicalize(path).ok())
+        .collect();
+    if named.is_empty() {
+        return Vec::new();
+    }
+    match_sources(&named, snapshot)
+}
+
+fn match_sources(
+    named: &[std::path::PathBuf],
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+) -> Vec<String> {
     snapshot
         .sources
         .iter()

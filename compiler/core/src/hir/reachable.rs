@@ -66,6 +66,27 @@ pub enum Roots<'a> {
     /// A library whose whole export surface is public. The safe default, and
     /// the correct one whenever the product is not known.
     EveryExport,
+    /// A library whose surface is **what its entry modules publish**, which is
+    /// what every artifact this compiler emits actually exposes.
+    ///
+    /// `EveryExport` roots at the `exported` flag, so a helper exported for a
+    /// sibling module to import is a root -- correct for a TypeScript package,
+    /// where a consumer can import any module, and wrong for a `.so`, a
+    /// `.node`, a jar or an `.xcframework`. None of those has a way to reach
+    /// internal module: there is one entry and its surface is the ABI.
+    ///
+    /// **This is what removed a config field.** `exports: [...]` in
+    /// `nts.config.ts` was a hand-written list of the names crossing the ABI,
+    /// and it was a second statement of something the source already made: the
+    /// entry's exports. It only had a case to answer because the default here
+    /// was wider than any artifact -- so a helper the entry did not publish
+    /// stayed a root, and narrowing it needed a list. Naming the entry, which a
+    /// product must do anyway, says the same thing and cannot disagree with the
+    /// source.
+    ///
+    /// Derived from the program rather than carried as names, because
+    /// `public_api` is an output of lowering and roots are an input to it.
+    EntrySurface,
     /// A library with a declared surface (RFC §27.1). Names that are not
     /// actually exported are reported rather than ignored: a manifest that
     /// names a function the source does not export is a mistake in the
@@ -210,6 +231,34 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
             .filter(|func| names.contains(&func.name))
             .map(|func| func.name.as_str())
             .collect(),
+        // The entry's surface alone: `EveryExport` without the `exported`
+        // flag. What a single-entry artifact publishes, and nothing a sibling
+        // module merely exported so another sibling could import it.
+        //
+        // **Module evaluation is a root here too**, for the reason it is one
+        // under `Entry`: nothing *calls* it and the program is wrong without it.
+        // Leaving it out was measured rather than reasoned about --
+        // `examples/library` exports `add` and a module-level
+        // `const greeting`, and without this line the emitted C lost
+        // `module__init` and the string it stores, so a library whose whole
+        // surface is two names published one of them as null. That is the same
+        // wrong *answer* the named-entry arm was fixed for, arrived at from the
+        // other direction.
+        Roots::EntrySurface => program
+            .funcs
+            .iter()
+            .filter(|func| {
+                func.name == super::lower::MODULE_INIT
+                    || program
+                    .public_api
+                    .iter()
+                    .any(|(emitted, _)| *emitted == func.name)
+                    || program.public_namespaces.iter().any(|(_, properties)| {
+                        properties.iter().any(|(_, emitted)| *emitted == func.name)
+                    })
+            })
+            .map(|func| func.name.as_str())
+            .collect(),
         // `exported` *and* whatever the entry modules publish. The flag means
         // "the declaration carries `export`", so a module-private function the
         // entry re-exports under another name -- `export const alias = local`
@@ -217,7 +266,8 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
         //
         // Both, rather than `public_api` alone: the flag is what makes a
         // library's whole surface a root, and `public_api` is the entry's, and
-        // a program built as a library wants the first.
+        // a program built as a library wants the first. `EntrySurface` above is
+        // the arm that deliberately does *not* want it.
         Roots::EveryExport => program
             .funcs
             .iter()
