@@ -18,6 +18,7 @@
 import { EventEmitter } from "../../events/src/main.ts";
 import { Buffer } from "../../buffer/src/main.ts";
 import { AsyncContextFrame } from "../../internal/async-context.ts";
+import { deprecate } from "../../internal/deprecate.ts";
 import {
   emitAfter,
   emitBefore,
@@ -458,6 +459,39 @@ export class Socket extends EventEmitter {
     nts_udp_recv_stop(this.#handle);
     this.#receiving = false;
   }
+
+  /**
+   * `Socket.prototype._healthCheck` and `Socket.prototype._stopReceiving`, both
+   * deprecated upstream under DEP0112 and both still published.
+   *
+   * Thin wrappers over the private versions, which is what node's are: its
+   * `_healthCheck` is `deprecate(function() { healthCheck(this); }, ..., "DEP0112")`
+   * and the internal `healthCheck` is called from eight places in the module, as the
+   * `#` one is here. So the surface was the only thing missing.
+   *
+   * Wrapped in `deprecate` rather than merely named, because the warning is the
+   * observable: node emits DEP0112 on the first call and a caller reading its own
+   * stderr sees it. One warning per process, not per call, which is what makes it
+   * safe for a corpus to exercise.
+   *
+   * Arrow properties rather than methods so that each gets its own wrapper -- the
+   * shared `deprecate` counter is per-wrapper, and node warns separately for the two.
+   */
+  _healthCheck = deprecate(
+    (): void => {
+      this.#healthCheck();
+    },
+    "Socket.prototype._healthCheck() is deprecated",
+    "DEP0112",
+  );
+
+  _stopReceiving = deprecate(
+    (): void => {
+      this.#stopReceiving();
+    },
+    "Socket.prototype._stopReceiving() is deprecated",
+    "DEP0112",
+  );
 
   /**
    * Take a port, and start receiving on it.
@@ -975,11 +1009,24 @@ export class Socket extends EventEmitter {
     validateNumber(length, "length");
     validateNumber(port, "port");
     validateString(address, "address");
-    if (callback !== undefined && !isSendCallback(callback)) {
-      throw new ERR_INVALID_ARG_TYPE("callback", "Function", callback);
-    }
+    // The callback is **not** validated here, because node does not validate it
+    // anywhere: `send` normalises it instead, with the comment "Normalize callback so
+    // it's either a function or undefined but not anything else" and the line
+    // `if (typeof callback !== "function") callback = undefined;`. Our `send` already
+    // does the same, so this check was the only difference.
+    //
+    // It refused a call node runs, which is the direction that matters: a program
+    // passing a misspelled callback worked upstream and threw here. And it refused
+    // *early*, before `send` validates the port, so a caller with a bad port and a bad
+    // callback got `ERR_INVALID_ARG_TYPE` where node reports `ERR_SOCKET_BAD_PORT` --
+    // which is how the differential found it. Node ignoring a callback the caller
+    // meant to be called is worth disliking and is not this module's decision to
+    // reverse.
     if (typeof buffer === "string" || ArrayBuffer.isView(buffer)) {
-      this.send(buffer, offset, length, port, address, callback);
+      // Cast rather than narrowed, because the narrowing is `send`'s job: it accepts
+      // anything here and normalises a non-function to `undefined`, which is node's
+      // documented behaviour and the reason the check above was removed.
+      this.send(buffer, offset, length, port, address, callback as SendCallback | undefined);
       return;
     }
     throw new ERR_INVALID_ARG_TYPE(

@@ -3325,6 +3325,158 @@ export const CORPORA = {
           }
         },
       },
+        {
+          // **The rest of `dgram`**, which was 21 of 31 published functions.
+          //
+          // Every arm gets its own socket and closes it, and the `unref()` comes
+          // **after** the operation rather than before. That ordering is the whole
+          // safety argument: several of these bind implicitly -- `connect`,
+          // `connectSync`, `addSourceSpecificMembership` all succeed on an unbound
+          // socket by binding first -- and a bind re-refs the handle, so an `unref()`
+          // done at creation is undone by the very call under test. This corpus has
+          // been caught by that once already, in the arm where `socket.ref()` undid the
+          // setup's `unref()`.
+          //
+          // `sendto` is given arguments it rejects rather than a real destination. It
+          // would otherwise put a UDP packet on the loopback for every input, and what
+          // is worth comparing about it is the validation: six positional arguments
+          // whose order is easy to get wrong.
+          label: "dgram-rest",
+          call: async (m, s) => {
+            const out = [];
+            const seed = s.length;
+            // One socket per arm, closed in a `finally`, `unref` first so a close during
+            // a pending operation does not leave the loop holding it.
+            const withSocket = (label, run) => {
+              let socket;
+              try {
+                socket = m.createSocket(seed % 2 === 0 ? "udp4" : "udp6");
+                socket.on("error", () => {});
+                const got = run(socket);
+                out.push(`${label}:ok:${got === undefined ? "void" : typeof got === "object" && got !== null ? JSON.stringify(got) : String(got)}`);
+              } catch (error) {
+                out.push(`${label}:${error.code ?? error.name}`);
+              } finally {
+                if (socket !== undefined) {
+                  try { socket.unref(); } catch { /* not the subject */ }
+                  try { socket.close(); } catch { /* recorded by its own arm */ }
+                }
+              }
+            };
+
+            withSocket("_healthCheck", (socket) => socket._healthCheck());
+            withSocket("_stopReceiving", (socket) => socket._stopReceiving());
+            withSocket("disconnectUnconnected", (socket) => socket.disconnect());
+            withSocket("addressUnbound", (socket) => socket.address());
+
+            // The source-specific multicast pair, which binds implicitly. The group must
+            // be in 232/8 for IPv4, and the input picks which of several shapes is tried.
+            const GROUPS = [["1.2.3.4", "232.1.1.1"], ["0.0.0.0", "232.0.0.1"],
+              ["1.2.3.4", "224.0.0.1"], ["not-an-address", "232.1.1.1"],
+              ["1.2.3.4", "not-a-group"], [null, null]];
+            const [source, group] = GROUPS[seed % GROUPS.length];
+            withSocket(`addSourceSpecific(${source},${group})`, (socket) =>
+              socket.addSourceSpecificMembership(source, group));
+            withSocket(`dropSourceSpecific(${source},${group})`, (socket) =>
+              socket.dropSourceSpecificMembership(source, group));
+            // Dropping one that was never added, which is the arm that says the pair is
+            // doing something rather than both silently succeeding.
+            withSocket("dropWithoutAdd", (socket) =>
+              socket.dropSourceSpecificMembership("9.9.9.9", "232.9.9.9"));
+
+            // `bindSync` and `connectSync`, over argument shapes rather than one call:
+            // `bindSync(0)` is `ERR_INVALID_ARG_TYPE`, which is not what a reader of the
+            // name expects, so the shapes are what is compared.
+            for (const args of [[0], [{ port: 0 }], [], ["0"], [null], [{}]]) {
+              // The **shape**, not the address: a successful `bindSync` answers whatever
+              // port the kernel had free, which is not a function of the input. That was
+              // the only divergence this spec's first run produced -- three rows of
+              // `port:45248` against `port:56465` -- and it is the same mistake as
+              // comparing `_toUnixTimestamp(-1)`, which answers the wall clock.
+              withSocket(`bindSync(${JSON.stringify(args)})`, (socket) => {
+                socket.bindSync(...args);
+                const bound = socket.address();
+                return `${bound.address}|${bound.family}|${typeof bound.port}` +
+                  `|inRange:${bound.port > 0 && bound.port < 65536}`;
+              });
+            }
+            for (const args of [[1, "127.0.0.1"], [1], [0, "127.0.0.1"], ["1", "127.0.0.1"],
+              [null], [{ port: 1 }]]) {
+              withSocket(`connectSync(${JSON.stringify(args)})`, (socket) => {
+                socket.connectSync(...args);
+                // The remote *is* a function of the input here -- the port and address
+                // are what was asked for -- unlike the local port a bind assigns.
+                const remote = socket.remoteAddress();
+                // Then disconnect, which is the other half and only reachable once
+                // connected.
+                socket.disconnect();
+                return `${remote.address}|${remote.family}|${remote.port}|disconnected`;
+              });
+            }
+
+            // `sendto`'s six positional arguments, each shape rejected before a packet
+            // leaves. The buffer is real so the rejection is about the numbers.
+            const payload = Buffer.from(s.slice(0, 4) || "x");
+            const SENDTO = [
+              [payload, -1, 1, 1, "127.0.0.1"],
+              [payload, 0, -1, 1, "127.0.0.1"],
+              [payload, 0, 1, -1, "127.0.0.1"],
+              [payload, 0, 1, 70000, "127.0.0.1"],
+              [payload, "0", 1, 1, "127.0.0.1"],
+              [payload, 0, 1, 1, 12345],
+              ["not a buffer", 0, 1, 1, "127.0.0.1"],
+              // A bad callback **and** a bad port, which is the row that found the one
+              // defect here: node validates the port and reports `ERR_SOCKET_BAD_PORT`,
+              // while this validated the callback first and reported
+              // `ERR_INVALID_ARG_TYPE`. Node validates the callback nowhere -- `send`
+              // normalises a non-function to `undefined` -- so the check was both an
+              // extra refusal and an early one.
+              //
+              // Kept in this shape rather than with a valid port: a bad callback alone
+              // is *accepted* by node, which sends the packet, and a sixth of the corpus
+              // putting UDP on the loopback is not worth one row.
+              [payload, 0, 1, -1, "127.0.0.1", "not a function"],
+            ];
+            const sendArgs = SENDTO[seed % SENDTO.length];
+            withSocket(`sendto(${sendArgs.length})`, (socket) => socket.sendto(...sendArgs));
+
+            // `connect` is asynchronous, so it is awaited to whichever of the two events
+            // arrives. Both settle: a bad port rejects at validation and a good one
+            // connects, and a UDP connect needs no peer to answer.
+            // The socket is closed in a `finally` around the await, which the first
+            // version of this arm did not do -- and it was the only arm that did not,
+            // because it builds its socket inside a promise rather than through
+            // `withSocket`. Measured rather than noticed: descriptors grew by exactly
+            // one per input, 21 to 142 over 120 inputs, with 121 handles for 120 calls.
+            // One socket per input is the signature of a single unclosed arm.
+            {
+              let connectSocket;
+              const answer = await new Promise((resolve) => {
+                try {
+                  connectSocket = m.createSocket("udp4");
+                  connectSocket.on("error", (error) => resolve(`error:${error.code ?? error.name}`));
+                  connectSocket.on("connect", () => resolve("connected"));
+                  connectSocket.connect(1, "127.0.0.1");
+                } catch (error) {
+                  resolve(`threw:${error.code ?? error.name}`);
+                }
+              });
+              try {
+                if (connectSocket !== undefined) {
+                  connectSocket.unref();
+                  connectSocket.close();
+                }
+              } catch { /* its own arms cover the close paths */ }
+              out.push(`connect:${answer}`);
+            }
+
+            for (const args of [[70000, "127.0.0.1"], [-1], ["x"], [null]]) {
+              withSocket(`connectBad(${JSON.stringify(args)})`, (socket) =>
+                socket.connect(...args));
+            }
+            return out.join("\n");
+          },
+        },
     ];
     })(),
   },
