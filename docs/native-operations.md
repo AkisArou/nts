@@ -957,37 +957,61 @@ after `setVersion(6)`, byte 0 is `0x65` -- the neighbour intact, which is the
 arm a clear-mask one bit wide in the wrong place fails. Sabotaging the shift by
 one and the mask by one bit each fail it.
 
-### What is still refused
+### Packed
 
-- **A packed record holding a bit-field.** `__attribute__((packed))` changes the
-  bit rule as well as the byte rule -- a packed bit-field is not bumped -- and
-  laying one out by the unpacked rule would agree with a header only by
-  accident. Refused as a record rather than mislaid, with a control asserting
-  the same record unpacked *does* have a layout.
-- Nothing else. **`nts bind-c` derives one**, which the sentence here used to
-  say it could not: I had read `isBitfield` off the `FieldDecl` and concluded
-  the width was only in the layout dump. It is in the AST too -- a
-  `ConstantExpr` in the field's own `inner` -- so the pass that describes
-  members has it and no second source has to agree with the first.
+`__attribute__((packed))` removes both roundings, and the bit one is the less
+obvious. Read off clang the same way:
 
-  `check_bit_widths` then compares each width against `hi - lo + 1` from the
-  layout dump, which *is* an independent path to the same number and the one
-  thing this tool can get wrong by itself. Widening `ihl` by a bit gives
-  *`iphdr.ihl` is described as 5 bits and clang says 4*.
+```text
+packed:  unsigned int x : 30;  unsigned int y : 5;      0:0-29  3:6-10
+packed:  unsigned char p : 6;  unsigned int  q : 30;    0:0-5   0:6-35
+packed:  unsigned int m : 4;   unsigned char n;         0:0-3   1
+```
 
-  **The dump is read by name, not by position.** It nests: a record with an
-  anonymous member lists that member at depth 3 and its fields below it, so a
-  positional list has one entry where the binding has one *or many*. That lined
-  up for `struct rusage` by luck -- each of its fourteen anonymous unions
-  contributes exactly one lifted member, at the union's own offset -- and did
-  not for `struct tcphdr`, whose anonymous union contributes ten.
+A packed bit-field is **never** bumped, so `y` continues at absolute bit 30
+rather than starting a fifth byte, and `q` ends at bit 35 -- four bits past the
+32-bit unit it is declared in.
 
-  **And a union contributes its first *alternative*, not its first member.**
-  The two are the same only when the alternatives are scalars. `struct tcphdr`
-  is an anonymous union of two anonymous structs -- the `th_*` spelling and the
-  modern one -- and taking the first member kept one field and dropped nine.
-  The layout self-check caught it as `size 2 align 2` against clang's 20, which
-  is the check doing its job and the message naming the symptom.
+**That is what made the LLVM backend load the wrong bits.** It read "the storage
+unit containing the field", which is sound only while the allocator guarantees
+no field straddles one. It now loads exactly the bytes the field occupies --
+`load i40, ptr %p, align 1` for `q` -- which is also narrower for the unpacked
+case and never reads past the record's end. Reverting to the unit load fails the
+packed arm of the agreement test and nothing else.
+
+Two defects found by running the first packed fixture, neither about packing:
+
+- **The emitted struct dropped the `: width`.** A record the program *invents*
+  is defined in `program.c` rather than included, and the definition said
+  `uint8_t p; unsigned int q;`. Packed, that is five bytes -- and so is the
+  correct `uint8_t p : 6; unsigned int q : 30;` -- so `_Static_assert(sizeof ==
+  5)` passed over a struct whose members are in entirely different places. A
+  header-defined record was never affected, which is why `struct iphdr` was
+  right while this was wrong.
+- **`local<Flags>()` was refused as an escape.** `native_storage`'s borrow
+  analysis knew every native op except the two new ones, so a bit-field read
+  reached it as an unrecognised use of the pointer. There is no address of a
+  bit-field to store anywhere, which is the whole reason they are their own ops.
+
+### The witness asserts about a header's records, not about every tag
+
+Found while writing the packed fixture and **older than bit-fields**: a tag the
+declaration authored *without naming a header* produced a witness that could not
+compile.
+
+    error: invalid application of 'sizeof' to an incomplete type 'struct pair'
+
+`foreign()` is true of any tagged record and `from_header()` only of one a named
+header defines. The witness filtered on the first, so it asserted about a type
+nothing in that file defines. No example reached it because every example that
+authors a tag also names the header it came from.
+
+The witness filters on `from_header()` now. Nothing was lost by it, which was
+measured rather than assumed: the assertion count is **identical** for all eight
+examples that emit one -- 8, 40, 38, 14, 16, 3, 16, 10 before and after. What it
+drops is a file that never compiled, and for those records `program.c` still
+asserts size and offsets against its own definition, which is the only claim
+there is to make.
 
 ### The hand-written ABI is deleted for the chosen example
 

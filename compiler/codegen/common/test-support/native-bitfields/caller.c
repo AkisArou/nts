@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <netinet/ip.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "program.h"
 
@@ -37,7 +38,24 @@ int main(void) {
   assert(ttlOf(&h) == 200.0);
   assert(h.ttl == 200);
 
-  printf("bitfields: version=%d ihl=%d ttl=%d byte0=0x%02x\n", (int)versionOf(&h),
-         (int)ihlOf(&h), (int)ttlOf(&h), ((const unsigned char *)&h)[0]);
+  // The packed record, whose definition comes from `program.h` rather than
+  // from a system header. `q` straddles its own storage unit, which is the
+  // case a unit-sized load gets wrong by four bits.
+  struct flags f;
+  memset(&f, 0, sizeof f);
+  setP(&f, 63);
+  setQ(&f, 0x2AAAAAAA);
+  assert(pOf(&f) == 63.0);
+  assert(qOf(&f) == (double)0x2AAAAAAA);
+  // C's own view of the same bytes. The compiled TypeScript wrote them through
+  // this compiler's computed bit positions; this reads them through the
+  // packing C did for itself.
+  assert(f.p == 63u);
+  assert(f.q == 0x2AAAAAAAu);
+  assert(sizeof f == 5);
+
+  printf("bitfields: version=%d ihl=%d ttl=%d byte0=0x%02x q=0x%08x\n", (int)versionOf(&h),
+         (int)ihlOf(&h), (int)ttlOf(&h), ((const unsigned char *)&h)[0],
+         (unsigned)f.q);
   return 0;
 }

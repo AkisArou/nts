@@ -129,8 +129,17 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
             // `uint8_t bytes[8]`, never `uint8_t[8] bytes`. A type spelling
             // alone cannot carry it, which is why it is written here and why
             // `Pointee::Array::c_type` answers with the element.
+            // A bit-field's width lives in the declarator too, and dropping it
+            // is not a spelling difference: `uint8_t p; unsigned int q;` packed
+            // is five bytes and so is `uint8_t p : 6; unsigned int q : 30;`, so
+            // the `sizeof` assert passes over a struct whose members are in
+            // entirely different places. Only the record this program *invents*
+            // is emitted here -- one the binding names a header for is included
+            // rather than defined, which is why `struct iphdr` was right while
+            // this was wrong.
             let suffix = match &field.ty {
                 Pointee::Array { length, .. } => format!("[{length}]"),
+                Pointee::Bits { width, .. } => format!(" : {width}"),
                 _ => String::new(),
             };
             writer.line(origin, format!("    {} {}{suffix};", field.ty.c_type(), field.name));
@@ -341,7 +350,18 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         // An anonymous record cannot be asked about: `sizeof` and `offsetof`
         // both want a type name and it has none. Its members' *positions* are
         // still checked, through the enclosing record's own offsets.
-        if !layout.foreign() || layout.untagged() { continue; }
+        // `from_header`, not merely `foreign`. A tag the declaration authored
+        // without naming a header is a type **this program defines** -- nothing
+        // here includes a definition of it, so `sizeof(struct pair)` is an
+        // incomplete type and the whole file fails to compile. That has been
+        // true since the witness existed and no example reached it, because
+        // every example that authors a tag also names the header it came from.
+        //
+        // Nothing is lost by skipping them: the witness exists to compare this
+        // program's description against a header's, and for these there is no
+        // header to compare against. `program.c` still asserts their size and
+        // offsets against its own definition, which is the only claim available.
+        if !layout.from_header() || layout.untagged() { continue; }
         let placed = nts_core::hir::layout::native_place(layout)
             .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
         let tag = format!("{} {}", layout.kind.keyword(), layout.name);

@@ -149,77 +149,97 @@ invalid:
     base: &str,
     out: &str,
 ) -> Result<String, Diagnostic> {
-    Ok({
-            let Pointee::Record(layout) = storage else {
-                return Err(refuse(func, "a bit-field through a pointer to something else"));
-            };
-            let placed = nts_core::hir::layout::native_place(layout)
-                .ok_or_else(|| refuse(func, "a bit-field in a record with no layout"))?;
-            let Some(Pointee::Bits { unit, width }) =
-                layout.fields.get(field as usize).map(|member| &member.ty)
-            else {
-                return Err(refuse(func, "a bit-field index naming something else"));
-            };
-            let Some(Some(place)) = placed.bits.get(field as usize).copied() else {
-                return Err(refuse(func, "a bit-field with no bit position"));
-            };
-            let byte = u64::from(*placed.offsets.get(field as usize).ok_or_else(|| {
-                refuse(func, "a bit-field with no offset")
-            })?);
-            let unit_ty = unit.representation();
-            let signed = matches!(unit_ty, HirType::Int { signed: true, .. });
-            let unit_bits = u64::from(
-                nts_core::hir::layout::shape_of(&unit_ty)
-                    .ok_or_else(|| refuse(func, "a bit-field unit with no shape"))?
-                    .size,
-            ) * 8;
-            // The storage unit containing the field, which is where its own
-            // width may be loaded without reading past the record: the
-            // allocator bumps a field rather than let it straddle one, so a
-            // unit-aligned load always covers it.
-            let at = byte * 8 + u64::from(place.lo);
-            let unit_start = at / unit_bits * unit_bits;
-            let shift = at - unit_start;
-            let ty = ty_of(&unit_ty, func)?;
-            let ones = |bits: u64| {
-                if bits >= 64 { u64::MAX } else { (1u64 << bits) - 1 }
-            };
-            let mask = ones(u64::from(*width));
-            // Kept inside the unit's own width. `!(mask << shift)` is computed
-            // at 64 bits, and `and i32 %x, 18446744073709551375` is accepted --
-            // LLVM truncates it silently, which is right here and is not a
-            // thing to depend on.
-            let clear = !(mask << shift) & ones(unit_bits);
-            let base = format!(
-                "{out}.unit = getelementptr i8, ptr {base}, i64 {}",
-                unit_start / 8
-            );
-            if let OpKind::NativeBitStore { value, .. } = *kind {
-                let value = name(value);
-                format!(
-                    "{base}\n  {out}.old = load {ty}, ptr {out}.unit\n  \
-                     {out}.clear = and {ty} {out}.old, {clear}\n  \
-                     {out}.keep = and {ty} {value}, {mask}\n  \
-                     {out}.put = shl {ty} {out}.keep, {shift}\n  \
-                     {out}.new = or {ty} {out}.clear, {out}.put\n  \
-                     store {ty} {out}.new, ptr {out}.unit",
-                )
-            } else if signed {
-                // Sign-extended from its own width, which is what C does when it
-                // reads a signed bit-field: `int x : 4` holding 0b1111 is -1.
-                let top = unit_bits - shift - u64::from(*width);
-                let bottom = unit_bits - u64::from(*width);
-                format!(
-                    "{base}\n  {out}.raw = load {ty}, ptr {out}.unit\n  \
-                     {out}.top = shl {ty} {out}.raw, {top}\n  \
-                     {out} = ashr {ty} {out}.top, {bottom}"
-                )
-            } else {
-                format!(
-                    "{base}\n  {out}.raw = load {ty}, ptr {out}.unit\n  \
-                     {out}.sh = lshr {ty} {out}.raw, {shift}\n  \
-                     {out} = and {ty} {out}.sh, {mask}"
-                )
-            }
-        })
+    let Pointee::Record(layout) = storage else {
+        return Err(refuse(func, "a bit-field through a pointer to something else"));
+    };
+    let placed = nts_core::hir::layout::native_place(layout)
+        .ok_or_else(|| refuse(func, "a bit-field in a record with no layout"))?;
+    let Some(Pointee::Bits { unit, width }) =
+        layout.fields.get(field as usize).map(|member| &member.ty)
+    else {
+        return Err(refuse(func, "a bit-field index naming something else"));
+    };
+    let Some(Some(place)) = placed.bits.get(field as usize).copied() else {
+        return Err(refuse(func, "a bit-field with no bit position"));
+    };
+    let byte = u64::from(
+        *placed
+            .offsets
+            .get(field as usize)
+            .ok_or_else(|| refuse(func, "a bit-field with no offset"))?,
+    );
+    let unit_ty = unit.representation();
+    let signed = matches!(unit_ty, HirType::Int { signed: true, .. });
+    let unit_bits = u64::from(
+        nts_core::hir::layout::shape_of(&unit_ty)
+            .ok_or_else(|| refuse(func, "a bit-field unit with no shape"))?
+            .size,
+    ) * 8;
+    let width = u64::from(*width);
+
+    // **Exactly the bytes the field occupies**, rather than the storage unit it
+    // was declared in. The unit is the wrong span for a packed record: clang
+    // puts `unsigned char p : 6; unsigned int q : 30;` packed at `0:0-5` and
+    // `0:6-35`, so `q` ends four bits past the 32-bit unit it is declared in and
+    // a unit-sized load returns 26 of its 30 bits. It is also the wrong span at
+    // the end of a record, where a unit-sized load reads bytes the record does
+    // not have.
+    //
+    // `align 1` because a packed record promises nothing, and because a field
+    // that begins mid-byte has no alignment of its own to state. LLVM narrows
+    // the load itself where the pointer is better aligned than that.
+    let at = byte * 8 + u64::from(place.lo);
+    let first = at / 8;
+    let last = (at + width - 1) / 8;
+    let span = (last - first + 1) * 8;
+    let shift = at - first * 8;
+    let ones = |bits: u64| if bits >= 64 { u64::MAX } else { (1u64 << bits) - 1 };
+    let mask = ones(width);
+    let held = format!("i{span}");
+    let ty = ty_of(&unit_ty, func)?;
+    let mut lines = vec![format!("{out}.at = getelementptr i8, ptr {base}, i64 {first}")];
+
+    if let OpKind::NativeBitStore { value, .. } = *kind {
+        // Read, clear, place, write back. The clear mask is kept inside the
+        // span's own width: `!(mask << shift)` is computed at 64 bits, and
+        // LLVM would truncate the constant silently rather than complain.
+        let value = name(value);
+        let widened = match span.cmp(&unit_bits) {
+            std::cmp::Ordering::Equal => format!("{out}.wide = add {held} {value}, 0"),
+            std::cmp::Ordering::Greater => format!("{out}.wide = zext {ty} {value} to {held}"),
+            std::cmp::Ordering::Less => format!("{out}.wide = trunc {ty} {value} to {held}"),
+        };
+        lines.extend([
+            format!("{out}.old = load {held}, ptr {out}.at, align 1"),
+            format!("{out}.clear = and {held} {out}.old, {}", !(mask << shift) & ones(span)),
+            widened,
+            format!("{out}.keep = and {held} {out}.wide, {mask}"),
+            format!("{out}.put = shl {held} {out}.keep, {shift}"),
+            format!("{out}.new = or {held} {out}.clear, {out}.put"),
+            format!("store {held} {out}.new, ptr {out}.at, align 1"),
+        ]);
+        return Ok(lines.join("\n  "));
+    }
+
+    lines.extend([
+        format!("{out}.raw = load {held}, ptr {out}.at, align 1"),
+        format!("{out}.sh = lshr {held} {out}.raw, {shift}"),
+        format!("{out}.cut = and {held} {out}.sh, {mask}"),
+    ]);
+    // Back to the unit the member is declared as, then sign-extended from its
+    // own width if that unit is signed -- `int x : 4` holding `0b1111` is -1,
+    // and the mask above made it 15.
+    let narrowed = match span.cmp(&unit_bits) {
+        std::cmp::Ordering::Equal => format!("{out}.val = add {held} {out}.cut, 0"),
+        std::cmp::Ordering::Greater => format!("{out}.val = trunc {held} {out}.cut to {ty}"),
+        std::cmp::Ordering::Less => format!("{out}.val = zext {held} {out}.cut to {ty}"),
+    };
+    lines.push(narrowed);
+    if signed && width < unit_bits {
+        lines.push(format!("{out}.top = shl {ty} {out}.val, {}", unit_bits - width));
+        lines.push(format!("{out} = ashr {ty} {out}.top, {}", unit_bits - width));
+    } else {
+        lines.push(format!("{out} = add {ty} {out}.val, 0"));
+    }
+    Ok(lines.join("\n  "))
 }

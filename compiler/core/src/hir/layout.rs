@@ -209,13 +209,6 @@ pub fn native_place(layout: &crate::hir::native::Record) -> Option<Placement> {
             align,
         });
     }
-    // `__attribute__((packed))` changes the bit-field rule as well as the byte
-    // one -- a packed bit-field is not bumped to the next storage unit -- and
-    // no consumer has asked for the combination. Refused rather than laid out
-    // by the unpacked rule, which would agree with the header only by accident.
-    if layout.packed && layout.fields.iter().any(|f| matches!(f.ty, Pointee::Bits { .. })) {
-        return None;
-    }
     if layout.fields.iter().any(|f| matches!(f.ty, Pointee::Bits { .. })) {
         return place_bit_fields(layout, &shapes);
     }
@@ -288,6 +281,14 @@ fn place_bit_fields(
     use crate::hir::native::Pointee;
     let mut at = 0u64; // bits from the start of the record
     let mut align = 1u32;
+    // `__attribute__((packed))` removes both roundings, and the bit one is the
+    // less obvious of the two: a packed bit-field is **never** bumped, so it
+    // may straddle its own storage unit. Read off clang rather than assumed --
+    // `unsigned char p : 6; unsigned int q : 30;` packed puts `q` at `0:6-35`,
+    // which is six bits into a byte and four bits past the 32-bit unit it is
+    // declared in. A reader that loads "the unit containing it" gets 26 of its
+    // 30 bits.
+    let packed = layout.packed;
     let mut offsets = Vec::with_capacity(shapes.len());
     let mut bits = Vec::with_capacity(shapes.len());
     for (field, shape) in layout.fields.iter().zip(shapes) {
@@ -297,7 +298,7 @@ fn place_bit_fields(
             if unit == 0 {
                 return None;
             }
-            if at % unit + u64::from(width) > unit {
+            if !packed && at % unit + u64::from(width) > unit {
                 at = at.checked_add(unit - at % unit)?;
             }
             let byte = at / 8;
@@ -309,11 +310,15 @@ fn place_bit_fields(
             at = at.checked_add(u64::from(width))?;
             continue;
         }
-        let byte = round_up(u32::try_from(at.div_ceil(8)).ok()?, shape.align)?;
+        // An ordinary member still begins on a byte, and on its own alignment
+        // unless the record is packed.
+        let byte = u32::try_from(at.div_ceil(8)).ok()?;
+        let byte = if packed { byte } else { round_up(byte, shape.align)? };
         offsets.push(byte);
         bits.push(None);
         at = u64::from(byte.checked_add(shape.size)?).checked_mul(8)?;
     }
+    let align = if packed { 1 } else { align };
     Some(Placement {
         offsets,
         bits,

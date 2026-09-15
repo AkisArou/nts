@@ -125,9 +125,18 @@ fn borrowed(func: &Func, root: ValueId, summaries: &Borrows) -> bool {
             let op = func.value(value);
             for operand in super::verify::operands(&op.kind).into_iter().filter(|v| is_alias(*v)) {
                 let safe = match &op.kind {
-                    OpKind::NativeLoad { pointer, .. } | OpKind::NativeIndexAddress { pointer, .. }
+                    // A bit-field read joins the loads: it reaches the record
+                    // through its pointer and keeps nothing, there being no
+                    // address of a bit-field to store anywhere -- which is the
+                    // whole reason it is its own op. Without it a
+                    // `local<Flags>()` holding one was refused as an escape.
+                    OpKind::NativeBitLoad { pointer, .. }
+                    | OpKind::NativeLoad { pointer, .. } | OpKind::NativeIndexAddress { pointer, .. }
                         | OpKind::NativeFieldAddress { pointer, .. } => operand == *pointer,
                     OpKind::NativeStore { pointer, value, .. } => operand == *pointer && !is_alias(*value),
+                    OpKind::NativeBitStore { pointer, value, .. } => {
+                        operand == *pointer && !is_alias(*value)
+                    }
                     OpKind::Convert(_) => matches!(op.ty, HirType::NativePointer(_)),
                     // A copy reads and writes bytes and keeps nothing -- it is
                     // `*d = *s`, which stores no address anywhere -- so both

@@ -169,19 +169,77 @@ fn struct_iphdr_is_the_consumer_and_matches_the_header() {
     assert_eq!((size, align), (20, 4));
 }
 
-/// `__attribute__((packed))` does not bump, so laying one out by the unpacked
-/// rule would agree with the header only by accident. Refused while no consumer
-/// has asked, and refused *as a record* rather than silently mislaid.
+/// The packed rule, read off clang the way the unpacked one was.
+///
+/// ```text
+/// packed:  unsigned int x : 30;  unsigned int y : 5;      0:0-29  3:6-10
+/// packed:  unsigned char p : 6;  unsigned int  q : 30;    0:0-5   0:6-35
+/// packed:  unsigned int m : 4;   unsigned char n;         0:0-3   1
+/// ```
+///
+/// A packed bit-field is **never** bumped, so `y` continues at absolute bit 30
+/// -- byte 3, six bits in -- rather than starting a fifth byte. `q` is the case
+/// that matters to a reader: six bits into the record and thirty wide, it ends
+/// at bit 35, four bits past the 32-bit unit it is declared in. Anything that
+/// loads "the unit containing it" gets 26 of its 30 bits.
 #[test]
-fn a_packed_record_holding_a_bit_field_is_refused() {
-    let mut packed = record(&[
-        ("a", bits(Scalar::UInt, 30)),
-        ("b", bits(Scalar::UInt, 5)),
+fn a_packed_bit_field_is_never_bumped_and_may_straddle_its_unit() {
+    let packed = |fields: &[(&str, Pointee)]| {
+        let mut record = record(fields);
+        record.packed = true;
+        placed(&record)
+    };
+    let (rows, size, align) = packed(&[
+        ("x", bits(Scalar::UInt, 30)),
+        ("y", bits(Scalar::UInt, 5)),
     ]);
-    packed.packed = true;
-    assert!(native_place(&packed).is_none());
-    // The control: the same record unpacked does have a layout, so the arm
-    // above is reading `packed` and not "bit-fields are unsupported".
-    packed.packed = false;
-    assert!(native_place(&packed).is_some());
+    assert_eq!(
+        rows,
+        vec![
+            (0, Some(BitPlace { lo: 0, width: 30 })),
+            (3, Some(BitPlace { lo: 6, width: 5 })),
+        ]
+    );
+    assert_eq!((size, align), (5, 1));
+
+    let (rows, size, align) = packed(&[
+        ("p", bits(Scalar::UInt8, 6)),
+        ("q", bits(Scalar::UInt, 30)),
+    ]);
+    assert_eq!(
+        rows,
+        vec![
+            (0, Some(BitPlace { lo: 0, width: 6 })),
+            (0, Some(BitPlace { lo: 6, width: 30 })),
+        ],
+        "q straddles its unit rather than starting a new one"
+    );
+    assert_eq!((size, align), (5, 1));
+
+    // An ordinary member after a bit-field: on the next byte, and at no
+    // alignment of its own.
+    let (rows, size, align) = packed(&[
+        ("m", bits(Scalar::UInt, 4)),
+        ("n", Pointee::Scalar(Scalar::UInt8)),
+    ]);
+    assert_eq!(rows, vec![(0, Some(BitPlace { lo: 0, width: 4 })), (1, None)]);
+    assert_eq!((size, align), (2, 1));
+}
+
+/// The arm that makes the three above about *packing*: unpacked, the same
+/// fields bump and round, and every number differs.
+#[test]
+fn the_same_fields_unpacked_bump_and_round() {
+    let (rows, size, align) = placed(&record(&[
+        ("x", bits(Scalar::UInt, 30)),
+        ("y", bits(Scalar::UInt, 5)),
+    ]));
+    assert_eq!(
+        rows,
+        vec![
+            (0, Some(BitPlace { lo: 0, width: 30 })),
+            (4, Some(BitPlace { lo: 0, width: 5 })),
+        ]
+    );
+    assert_eq!((size, align), (8, 4));
 }
