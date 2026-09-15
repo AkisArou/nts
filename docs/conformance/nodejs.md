@@ -7280,6 +7280,62 @@ alone before believing it, and the durable fix is an explicit depth bound in
 `inspect` rather than relying on the stack — which is a different piece of work
 and is not pretended to be done here.
 
+## The compiled lane's premise, re-measured: two candidate levers, both zero
+
+The goal this work runs under says *"the compiled lane is bounded by the N-API
+boundary -- 496 declined exports, and the best single refusal fix publishes 2 names,
+so there is no lever there."* That was measured on an older binary, against declines
+that mostly could not name a cause. The native-interop lane changed both: the
+wrapper now consults the recorded cause, and `tooling/conformance/gates.mjs` walks
+the cascade **backwards** from each declined export to a root and counts exports per
+root. So the premise became testable in a way it had not been.
+
+Two candidates were produced and **both measure zero.**
+
+**`dictionary`** was the top cause by count: 15 zlib exports, all naming *"a property
+`dictionary` of unrepresentable type (a union of ArrayBufferView | ArrayBuffer |
+...)"*. Narrowed to a single type in a worktree:
+
+    baseline              declined=66  dictionary-lines=104
+    BinaryInput narrowed  declined=66  dictionary-lines=0
+
+The refusal vanished, the export set was identical name for name, and what appeared
+behind it was the census's actual top root -- a pointer cast between two structs
+that do not agree.
+
+**`asRequest`** was the top root by the backwards walk: 22 fs exports, each declining
+only as *"it calls `asRequest`, which was refused above"*, terminating at *"a generic
+function no call pins down (the type parameter `Arguments`)"*. A monomorphic
+`asRequestVoid` was written for the `(error) => void` shape and two exports switched
+to it:
+
+    baseline      declined=123  asRequest mentions=44  "takes an object"=0
+    specialised   declined=123  asRequest mentions=40  "takes an object"=2
+
+Identical export set again, and the new reason is **`takes an object`** -- which is
+the N-API boundary itself. Every export in that set is an asynchronous
+callback-taking fs function, a callback is an object, and an object cannot cross.
+`asRequest` was simply the first thing the compiler noticed on the way there.
+
+Measured on two of the twenty-two. The other twenty share the property that produced
+the new message rather than having been observed producing it, and that distinction
+is kept because the whole point of these two experiments is that a plausible
+mechanism is not a measured one.
+
+**So the premise holds, by a method that would have found a lever if one existed.**
+And the shape of the candidate set argues it better than either row: of 505 declined
+exports, 128 stand behind any shared root at all, 241 are independent one-export
+causes, and 135 name nothing. "Find the lever" is the wrong frame for three quarters
+of it whatever the top root had measured.
+
+**The generalisation worth more than either zero**: a rank by count ranks how far
+forward a diagnostic sits, not how many exports it gates, because the compiler
+reports one blocker at a time. A rank by *backwards walk* fixes the first problem
+and inherits a second -- it can only count what is behind a root as far as the next
+unprinted blocker, so it is an upper bound too. Both rankings are accurate and
+neither means what a reader takes it to mean. The only thing that collapses an upper
+bound to a number is removing the cause and diffing the export **set**, not its size.
+
 ## Corpus reach, and one number in a commit message that is wrong
 
 The differential corpus reaches **969 of 1,089 published functions**, up from 659.
