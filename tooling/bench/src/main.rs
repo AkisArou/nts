@@ -2657,6 +2657,16 @@ const KNOWN_BIMODAL: &[(&str, &str, f64, &str, Basis)] = &[
     // not about either program. The workload is a `boolean[5000]` sieve and a
     // flip that size out of one class file is the shape of a decision made once
     // per process. Named with the measurement rather than chased.
+    // 1.33x across five passes of one class file on 2026-09-15, and the row
+    // published 1.24x that sitting against **0.94x in two earlier ones** with
+    // our own side steady. Java read 6.31us here and about 8.3us before, so the
+    // reference is the moving half -- the same finding this file already
+    // records for `awfy-sieve`, on a row that had never been flagged.
+    //
+    // Two of the eight AWFY references now behave this way, which is worth more
+    // than either entry: the bar is "at or under hand-written Java", and on
+    // those rows hand-written Java is not one number.
+    ("awfy-list", "Java", 1.33, "five passes of one binary, against two earlier sittings", Basis::Bimodal),
     ("awfy-sieve", "Java", 1.27, "a previous sitting, and a second harness", Basis::Bimodal),
     ("awfy-sieve", "nts (JVM)", 1.28, "a control run, both harnesses", Basis::Bimodal),
     // The reference got 13% and 12% faster across two sittings while our side

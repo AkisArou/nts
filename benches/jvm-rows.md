@@ -107,6 +107,7 @@ meets them. This is the map; the row table below it is the current state.
   - `awfy-sieve`: two harnesses that should agree, differing by 40%, twice
   - Which other references are the unstable half: two, and four that are the machine
   - The eight AWFY rows had no JVM column for a fortnight, and four instruments missed it
+  - Re-measured at last: 30 of 52 at or under, and two of the eight AWFY references are bimodal
   - The control: the harnesses agree, and both halves of `awfy-sieve` are bimodal
   - `erasure-stored-unknown` is a `long[]` where the JVM wants a `double[]`: 3.5x on ART, 0% here
   - Generators as values: what this lane already has, and the two numbers that bear on it
@@ -8720,3 +8721,64 @@ as its worked example of "a ratio moving is not this compiler moving".
 Until it lowers again the table cannot be regenerated: `nts-bench` refuses to
 publish a table missing a row it used to carry, which is the right call and was
 *silent* about it until `b0e5c4fa`.
+
+## Re-measured at last: 30 of 52 at or under, and two of the eight AWFY references are bimodal
+
+Measured 2026-09-15 at `f55d42cf`, from a worktree pinned to it, **61 cases and
+zero spoiled**, with both other sessions holding gates, builds, `nts` and their
+conformance suites for the duration. The previous attempt ran on a shared
+machine, collected two cases noted as measured under load, and would have
+refused to publish. Asking for the window was worth more than the thirty-five
+minutes it cost.
+
+    nts (JVM)/Java     30 at or under 1.00x, 22 over, 9 with no Java reference
+
+The nine referenceless rows are the `json-*` family and are not a gap; see
+"nine of nine argued and none open" above.
+
+### The AWFY eight, which is the bar the lane's "done" is written about
+
+    awfy-bounce  1.01x   awfy-list   1.24x*   awfy-mandelbrot 0.84x   awfy-nbody 0.99x
+    awfy-permute 0.71x   awfy-queens 1.25x    awfy-sieve      0.94x   awfy-towers 0.95x
+
+**Six of eight under the bar**, and both rows over it are explained rather than
+open. `awfy-queens` is the `int[]` blocker -- `hir::elements` narrows `f64`
+elements and `reaches_a_runtime_helper`'s whole-program `borrowed` filter
+disqualifies `queenRows`, which is the other lane's to fix and has been handed
+over with the repro.
+
+### `awfy-list` is the reference moving, and it had never been flagged
+
+`nts-bench` reported **Java varying 1.33x across five passes of one class
+file**. The row published 1.24x this sitting against **0.94x in two earlier
+ones**, with our own side steady: Java read 6.31us here and about 8.3us before.
+So the 30% is the reference, not this compiler, and `KNOWN_BIMODAL` now carries
+it so the flag survives a sitting that happens to land in one mode.
+
+**Two of the eight AWFY references now behave this way**, `awfy-sieve` and
+`awfy-list`, and that is worth more than either entry on its own. The bar is
+"at or under hand-written Java", and on a quarter of the rows it names,
+hand-written Java is not one number. A single sweep cannot tell 1.24x from
+0.94x on those rows, and neither figure is the row.
+
+**What caught it is the shape worth keeping.** The spread check enumerates the
+*five passes* behind a published figure -- one level deeper than the number it
+prints. The Node lane put the general form better than this file had:
+
+> An instrument that enumerates one level shallower than the thing measuring it
+> will keep reporting complete.
+
+Their instance was `Object.keys(require("readline"))` against
+`Interface.prototype`, twenty-one methods missed for months. Mine was the `jvm`
+gate step counting *examples* while the defect lived in a *case*, eight rows for
+two days. Had the spread check enumerated at the level it publishes at, 1.24x
+would have entered the table as a codegen result and cost somebody a day.
+
+### And the refusal row published as a row
+
+    json-stringify-doc (rc)   --   --   --   refused   --   --   1.37 ms   ...
+
+`REFUSES_TODAY` matched the refusing set exactly on its first real outing, so
+the drift floor stayed quiet without being vacuous -- the run before it, with
+the detector firing on every case in the corpus, is what that floor exists to
+fail on.
