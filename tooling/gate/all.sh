@@ -1418,18 +1418,27 @@ step "clippy"  lint
 interop() {
   ran=0
   skipped=0
+  # `project` rather than `name`: `step()` holds the step's own name in `name`,
+  # `sh` has no function scope, and this loop assigned over it on every
+  # iteration. So the step's failure line -- which was fixed once already, to
+  # report the step rather than the command -- printed the **last project the
+  # loop happened to touch**: raising the floor below produced
+  # `FAILED: ts-from-java` for a project that had just reported `ok`.
+  #
+  # Two derivations of "what failed" in one shell, and the one that wins is
+  # whichever assigned last.
   for script in examples/interop/*/build.sh; do
-    name=$(basename "$(dirname "$script")")
-    out="$PWD/target/interop-$name"
+    project=$(basename "$(dirname "$script")")
+    out="$PWD/target/interop-$project"
     rm -rf "$out"
     if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" sh "$script" "$out" 2>&1); then
       case $output in
-        *SKIP*) skipped=$((skipped + 1)); printf '  %-16s skipped: %s\n' "$name" \
+        *SKIP*) skipped=$((skipped + 1)); printf '  %-16s skipped: %s\n' "$project" \
                   "$(printf '%s' "$output" | grep -m1 SKIP)" ;;
-        *) ran=$((ran + 1)); printf '  %-16s ok\n' "$name" ;;
+        *) ran=$((ran + 1)); printf '  %-16s ok\n' "$project" ;;
       esac
     else
-      printf '  %-16s FAILED\n' "$name"
+      printf '  %-16s FAILED\n' "$project"
       printf '%s\n' "$output" | tail -20 | sed 's/^/      /'
       return 1
     fi
@@ -1437,8 +1446,20 @@ interop() {
   printf '  %s built and ran, %s skipped for a missing toolchain\n' "$ran" "$skipped"
   # A floor, so a project that stops being built is noticed rather than
   # quietly dropping out of the loop.
-  if [ "$((ran + skipped))" -lt 9 ]; then
-    printf '  expected 9 interop project(s), saw %s\n' "$((ran + skipped))"
+  #
+  # **16, and it was 9 while there were 16.** Seven projects could have stopped
+  # building with this step still green -- the loop iterates whatever `glob`
+  # finds, so a directory that loses its `build.sh` leaves no trace except this
+  # count, and a count seven below the population cannot see it. `ran + skipped`
+  # rather than `ran`, so a box without a JDK or a cross-compiler still meets it.
+  #
+  # Exact rather than padded, which is this repository's rule for a floor: a
+  # project that goes away owes an explanation and then a new number. Measured
+  # 2026-09-15 -- 16 built and ran, 0 skipped.
+  interop_floor=16
+  if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
+    printf '  expected %s interop project(s), saw %s\n' \
+      "$interop_floor" "$((ran + skipped))"
     return 1
   fi
   return 0
