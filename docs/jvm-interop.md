@@ -160,8 +160,29 @@ checkable in one command and none had a current value written down.
 | --- | --- | --- |
 | the `jvm` gate floor | every example the other backends carry | **205 of 205**, and the floor line is `exact` -- it fails on `passed != total`, not only on a drop |
 | `unverifiable class` in the corpus | 0, and hard | **0**, over 184 single-file cases, beside `uncompilable C` at 0 |
-| a `nts (JVM)` number on every bench row | a number or a named refusal, never a blank | present; the README says why a blank is forbidden -- it would be indistinguishable from the `Java` column's blank, which means nobody wrote a reference |
+| a `nts (JVM)` number on every bench row | a number or a named refusal, never a blank | present -- **and this row was satisfied by a regression**, see below |
 | the AWFY rows at or under hand-written Java | 1.00x | **not what this row said.** It read "40 of 59 at or under, 19 over", and that is the `nts/Bun` column -- see directly below. Being re-measured; the published table is 1554 commits stale and eight of its rows are a regression this lane has since fixed |
+
+### The third row was satisfied by the break it should have caught
+
+"A number or a named refusal, never a blank" was written to stop a silent gap,
+and the reasoning behind it is still right: a blank would be indistinguishable
+from the `Java` column's blank, which means nobody wrote a reference.
+
+But on 2026-09-15 the eight `awfy-*` rows read `refused`, which **is** a named
+refusal, so the bar was met -- by eight cases the backend had stopped being able
+to emit two days earlier. The criterion cannot tell a construct this lane
+declines on purpose from one it declines because something broke, and those are
+the two things a reader most needs separated.
+
+`jvm_absence` already makes exactly this distinction one level down -- `Refused`
+against `NoDriver`, "two different absences that a single blank, or a single
+`refused`, would flatten into one". The same argument applies one level up and
+had not been made: a refusal that is *new* is a defect, and nothing compares
+this run's refusals against the last one's.
+
+What closed it is not a better sentence in this table but a floor somewhere that
+goes red: `benches.sh` now emits all 61 cases through `emit-jvm` (`d7150df9`).
 
 ### CORRECTED 2026-09-15: that queue was read off the column next to the one it names
 
