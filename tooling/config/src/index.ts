@@ -11,7 +11,6 @@
  * objects, so a resolved config can be read, cached and hashed.
  */
 
-export * from "./memory.ts";
 export * from "./native.ts";
 export * from "./product.ts";
 export * from "./target.ts";

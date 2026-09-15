@@ -11,14 +11,13 @@
 //     collide with theirs at load;
 //   - an installable **header**, which is the C equivalent of `exports`;
 //   - and a `.pc` file, because that is how the search actually happens.
-import { defineConfig, library, memory } from "@nts/config";
+import { defineConfig, library } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
     sdk: library.linux({
       entry: "./nts/sdk.ts",
-      runtime: { memory: memory.rcCycle() },
       exports: ["acme_remember", "acme_notify"],
       soname: "libacme.so.0",
       header: "acme.h",

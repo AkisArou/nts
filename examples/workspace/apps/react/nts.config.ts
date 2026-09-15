@@ -12,7 +12,7 @@
 // enforces it.
 //
 // No React dependency is declared. This names a planned feature.
-import { defineConfig, app, target, memory } from "@nts/config";
+import { defineConfig, app, target } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
@@ -26,7 +26,6 @@ export default defineConfig({
         target.macos({ minimumVersion: "14.0" }),
         target.windows(),
       ],
-      runtime: { memory: memory.rcCycle() },
       // profiles: [react.native()] -- the planned feature, not declared here.
     }),
   },

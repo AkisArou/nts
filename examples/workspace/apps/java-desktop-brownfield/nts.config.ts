@@ -24,7 +24,6 @@ export default defineConfig({
       release: 8,
       exports: ["Sdk"],
       javaPackage: "com.acme.sdk",
-      runtimeLinkage: "host-provided",
     }),
   },
 });

@@ -19,7 +19,6 @@
 import { defineConfig, library } from "@nts/config";
 
 export default defineConfig({
-  tsconfig: "./tsconfig.json",
   products: {
     sdk: library.android({
       entry: "./nts/sdk.ts",

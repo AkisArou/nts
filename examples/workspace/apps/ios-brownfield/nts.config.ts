@@ -13,7 +13,7 @@
 //     a specification; Apple has no equivalent, so our plist keys are something
 //     the consumer must copy. `packages/notifications/manifests/apple.plist`
 //     assumes a merger that does not exist, and this app is where that shows.
-import { defineConfig, library, memory } from "@nts/config";
+import { defineConfig, library } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
@@ -21,7 +21,6 @@ export default defineConfig({
     sdk: library.ios({
       entry: "./nts/sdk.ts",
       minimumVersion: "17.0",
-      runtime: { memory: memory.rcCycle() },
       exports: ["Sdk"],
       // The Swift module name a consumer writes `import AcmeSdk` for.
       moduleName: "AcmeSdk",

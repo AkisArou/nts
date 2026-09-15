@@ -10,7 +10,7 @@
 //   - and hardened runtime restricts what the embedded code may do -- JIT,
 //     unsigned memory -- which is a constraint on a *compiler's output* that no
 //     other target here imposes.
-import { defineConfig, library, memory } from "@nts/config";
+import { defineConfig, library } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
@@ -18,7 +18,6 @@ export default defineConfig({
     sdk: library.macos({
       entry: "./nts/sdk.ts",
       minimumVersion: "14.0",
-      runtime: { memory: memory.rcCycle() },
       exports: ["Sdk"],
       moduleName: "AcmeSdk",
       // Not modelled, and named so it is not mistaken for handled.

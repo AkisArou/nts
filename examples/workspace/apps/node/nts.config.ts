@@ -3,7 +3,7 @@
 // **The app that is a library to its host.** `node` and `native` share a target
 // family and differ in artifact kind, which is the pair showing why those two
 // axes cannot be merged: same machine, same backend, different thing produced.
-import { defineConfig, library, memory } from "@nts/config";
+import { defineConfig, library } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
@@ -11,7 +11,6 @@ export default defineConfig({
     addon: library.node({
       entry: "./src/main.ts",
       apiVersion: 8,
-      runtime: { memory: memory.rcCycle() },
       exports: ["digest", "putRecord"],
     }),
   },

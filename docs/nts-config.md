@@ -334,6 +334,76 @@ differ in a way "we bind C and class files" hides:
   JNI-style bridge. The types are the easy half.
 - **Objective-C** sits behind Swift and is reachable the same way.
 
+## 6e. Audit: every field, against what exists
+
+`tooling/config` was written 2026-08-26 from RFC §6 and §34 and never revised.
+Pointing 19 real configs at it produced 52 type errors, and reading each one
+produced this. **47 exported names became 26.**
+
+The test applied throughout, because "delete what has no reader" would delete
+everything -- *nothing* reads `nts.config.ts*, not one field:
+
+> Remove what is **derivable**, what names a **mechanism that does not exist**,
+> and what is a **`string` standing in for a decision nobody has made**.
+
+### Removed
+
+| what | why | evidence |
+| --- | --- | --- |
+| `runtime.family` | derivable | `"native" \| "jvm"` is decided by `target.backend`. `family: "native"` beside `target.android()` typechecked |
+| `memory.mmtk()` | no mechanism | `compiler/memory-lowering/src/lib.rs`: "experimental, gated behind RFC §3.7. **Not in this crate yet**" |
+| `memory.hostGC()` | not a provider | `hir::Provider` is `NoGc \| ReferenceCounting`. The JVM lane reaches "no retains, no releases" by compiling under `NoGc`; there was never a third thing |
+| `cycleCollection: "deferred" \| "incremental"` | no mechanism | the word appears nowhere in `memory-lowering`, `hir/rc.rs` or `runtime/c` |
+| the whole `memory` module, and `runtime` on products | not a product choice | the provider is a **`--rc` flag** (`tooling/cli/src/main.rs`), and `hir::Provider`'s own doc says `NoGc` is "never a silent default for an application". One value is the only shippable one, so it is a build mode, not configuration |
+| `runtimeLinkage` | no mechanism, borrowed vocabulary | nothing implements shading or relocation -- the three `relocat` hits are slot relocation and refusal text -- and there is **no jar target at all**. The only `--jar` is `nts bind` *reading* one. For a jar the words are "shaded" or "declared" anyway, not `bundled-private` |
+| `host` / `HostSpec` / `HostEnvironment` | untyped placeholder | five bare `string`s, so `host.android({ fetch: "banana" })` typechecked, and nothing read any of them. `ui` is a *rendering* choice rather than a host service, which is why it read oddly as a host property |
+| `profiles: ApiProfile[]` | no mechanism | nine profiles; the compiler has no notion of one |
+| `debug: DebugProfile` | no mechanism | five levels; nothing emits them |
+| `RuntimeFamily` | orphan | the type behind the deleted field, which outlived it |
+| six of ten `ProductKind` values | unconstructible | `framework`, `android-library`, `native-ui-sdk`, `host-surface-library`, `chromium-shell`, `module-package` were declared and unreachable. The union was referenced by **nothing, not even inside its own file** |
+
+**The host axis is real and its absence is deliberate.** iOS and macOS share a
+backend, a memory strategy and most of a native surface, and differ in exactly
+this. It is carried by the constructor -- `app.ios` is UIKit because it is
+`app.ios` -- and comes back when something consumes it, with values instead of
+strings.
+
+### Kept, and buildable today
+
+| field | how |
+| --- | --- |
+| `entry` | `--entry` takes a comma-separated list (`requested_entry`) |
+| `exports` | `hir::reachable::Roots::Entry`; `reachability.rs` tests naming fewer than the source exports, and naming one it does not |
+| `target` / `targets`, `backend`, `arch` | `Backend` is `hir`'s three, and `NTS_BACKEND` selects one |
+| `tsconfig` | the CLI takes a tsconfig path; now **defaults** to `./tsconfig.json` |
+
+### Kept, and not buildable yet
+
+Each names a decision that exists, with an artifact that does not. `emit-jvm
+--out` writes loose class files; `emit-c --napi` is the only real library
+artifact in the list.
+
+`kind` beyond `node-addon`; `javaPackage` (`nts.gen` is the documented gap);
+`soname`, `header`, `pkgConfig`, `importLibrary`, `moduleDefinition`;
+`apiVersion` and `platforms`; `consumerProguard`; `moduleName`; `native`,
+`manifests`, `dependencies`, `integrate`; `build.cache`; `workspace.packages`
+and `tsconfigBase`.
+
+### What the audit is really about
+
+None of this is a criticism of the RFC. It is day-one text and says so. What it
+shows is a failure mode specific to a *typed* proposal: `ProductKind` reads as
+"these are the ten things we build", `memory.mmtk({ plan, minHeap, maxHeap })`
+reads as a tuned collector, and `host.android({ ui: "android-views" })` reads as
+a configured host. Prose that claimed those things would be obviously
+aspirational. **In a type it reads as capability**, and it survived twenty days
+and one fixture written against it before anything checked.
+
+The check now exists: `examples/workspace/tsconfig.configs.json` typechecks 19
+configs against the package, and it is the first thing in this repository to
+typecheck an `nts.config.ts` at all -- `examples/library`'s resolved to stale
+built declarations and passed while describing an API that had changed.
+
 ## 7. Decided, and open
 
 **Decided**

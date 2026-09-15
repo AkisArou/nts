@@ -34,26 +34,17 @@
  */
 import type { Arch, Backend, Target } from "./target.ts";
 import { target as t } from "./target.ts";
-import type { MemoryProvider } from "./memory.ts";
-
-/**
- * How a library obtains its runtime.
- *
- * A genuine packaging decision rather than an inherited one: shading the runtime
- * into a jar duplicates it when two nts libraries meet in one application, and
- * declaring it makes the consumer resolve a second artifact. Neither is free.
- */
-export type RuntimeLinkage = "bundled-private" | "build-time-composed" | "host-provided";
-
-export interface RuntimeSpec {
-  readonly memory: MemoryProvider;
-}
 
 /** Everything a build can emit. Each value is produced by a constructor below. */
 export type ProductKind =
-  | "application" | "executable"
-  | "aar" | "jar" | "xcframework"
-  | "shared-library" | "static-library" | "node-addon";
+  | "application"
+  | "executable"
+  | "aar"
+  | "jar"
+  | "xcframework"
+  | "shared-library"
+  | "static-library"
+  | "node-addon";
 
 interface ProductBase {
   readonly entry: string;
@@ -61,20 +52,8 @@ interface ProductBase {
   readonly targets: readonly Target[];
 }
 
-/**
- * A memory strategy, on the targets where one exists.
- *
- * Absent on JVM targets, and that absence is the design: the JVM lane emits no
- * retains and no releases, because the platform collector owns everything. There
- * is no second provider to select, so `app.android` does not accept one.
- */
-interface NativeProduct {
-  readonly runtime: RuntimeSpec;
-}
-
 export interface AppProduct extends ProductBase {
   readonly kind: "application" | "executable";
-  readonly runtime?: RuntimeSpec;
   /** Reverse-DNS identifier, where the platform needs one. */
   readonly id?: string;
 }
@@ -95,18 +74,16 @@ export interface AarProduct extends LibraryBase {
 export interface JarProduct extends LibraryBase {
   readonly kind: "jar";
   readonly javaPackage: string;
-  readonly runtimeLinkage?: RuntimeLinkage;
 }
 
-export interface XcframeworkProduct extends LibraryBase, NativeProduct {
+export interface XcframeworkProduct extends LibraryBase {
   readonly kind: "xcframework";
   /** The Swift module a consumer writes `import` for. */
   readonly moduleName: string;
 }
 
-export interface NativeLibraryProduct extends LibraryBase, NativeProduct {
+export interface NativeLibraryProduct extends LibraryBase {
   readonly kind: "shared-library" | "static-library";
-  readonly runtimeLinkage?: RuntimeLinkage;
   /** Versioned soname, so an ABI break is a link error rather than a crash. */
   readonly soname?: string;
   /** The installable header, which is C's equivalent of `exports`. */
@@ -119,7 +96,7 @@ export interface NativeLibraryProduct extends LibraryBase, NativeProduct {
   readonly moduleDefinition?: string;
 }
 
-export interface NodeAddonProduct extends LibraryBase, NativeProduct {
+export interface NodeAddonProduct extends LibraryBase {
   readonly kind: "node-addon";
   /** Node-API version. This is what makes one binary work across Node majors. */
   readonly apiVersion: number;
@@ -128,7 +105,11 @@ export interface NodeAddonProduct extends LibraryBase, NativeProduct {
 }
 
 export type LibraryProduct =
-  | AarProduct | JarProduct | XcframeworkProduct | NativeLibraryProduct | NodeAddonProduct;
+  | AarProduct
+  | JarProduct
+  | XcframeworkProduct
+  | NativeLibraryProduct
+  | NodeAddonProduct;
 
 export type Product = AppProduct | LibraryProduct;
 
@@ -143,15 +124,13 @@ export type Product = AppProduct | LibraryProduct;
 // ---------------------------------------------------------------------------
 
 type AppOpts = Omit<AppProduct, "kind" | "targets">;
-/** JVM targets take no `runtime`: there is no memory strategy to choose. */
-type JvmAppOpts = Omit<AppOpts, "runtime">;
 
 const appBase = (
   spec: Omit<AppProduct, "kind"> & { readonly kind?: "application" | "executable" },
 ): AppProduct => ({ kind: spec.kind ?? "application", ...spec });
 
 export const app = Object.assign(appBase, {
-  android: (o: JvmAppOpts & { readonly minSdk: number; readonly arch?: Arch }): AppProduct => {
+  android: (o: AppOpts & { readonly minSdk: number; readonly arch?: Arch }): AppProduct => {
     const { minSdk, arch, ...rest } = o;
     return { kind: "application", targets: [t.android({ minSdk, arch })], ...rest };
   },
@@ -167,8 +146,7 @@ export const app = Object.assign(appBase, {
     const { backend, ...rest } = o;
     return { kind: "application", targets: [t.linux({ backend })], ...rest };
   },
-  windows: (o: AppOpts): AppProduct =>
-    ({ kind: "application", targets: [t.windows()], ...o }),
+  windows: (o: AppOpts): AppProduct => ({ kind: "application", targets: [t.windows()], ...o }),
   /** No UI host: a CLI. The narrowest artifact here. */
   cli: (o: AppOpts & { readonly backend?: Backend }): AppProduct => {
     const { backend, ...rest } = o;
@@ -180,31 +158,50 @@ const libraryBase = (spec: LibraryProduct): LibraryProduct => spec;
 
 export const library = Object.assign(libraryBase, {
   /** An AAR, because a directory of class files is not a thing Gradle resolves. */
-  android: (o: Omit<AarProduct, "kind" | "targets" | "runtime"> & { readonly minSdk: number }): AarProduct => {
+  android: (
+    o: Omit<AarProduct, "kind" | "targets"> & { readonly minSdk: number },
+  ): AarProduct => {
     const { minSdk, ...rest } = o;
     return { kind: "aar", targets: [t.android({ minSdk })], ...rest };
   },
   /** A jar. The easiest target to ship to, and the one `nts.gen` makes unacceptable today. */
-  jvm: (o: Omit<JarProduct, "kind" | "targets" | "runtime"> & { readonly release?: number }): JarProduct => {
+  jvm: (
+    o: Omit<JarProduct, "kind" | "targets"> & { readonly release?: number },
+  ): JarProduct => {
     const { release, ...rest } = o;
     return { kind: "jar", targets: [t.jvm({ release })], ...rest };
   },
   /** An XCFramework: per-architecture slices plus a module map, which is what Xcode resolves. */
-  ios: (o: Omit<XcframeworkProduct, "kind" | "targets"> & { readonly minimumVersion: string }): XcframeworkProduct => {
+  ios: (
+    o: Omit<XcframeworkProduct, "kind" | "targets"> & { readonly minimumVersion: string },
+  ): XcframeworkProduct => {
     const { minimumVersion, ...rest } = o;
     return { kind: "xcframework", targets: [t.ios({ minimumVersion })], ...rest };
   },
-  macos: (o: Omit<XcframeworkProduct, "kind" | "targets"> & { readonly minimumVersion: string }): XcframeworkProduct => {
+  macos: (
+    o: Omit<XcframeworkProduct, "kind" | "targets"> & { readonly minimumVersion: string },
+  ): XcframeworkProduct => {
     const { minimumVersion, ...rest } = o;
     return { kind: "xcframework", targets: [t.macos({ minimumVersion })], ...rest };
   },
   /** `.so` plus a `.pc`; without the latter a consumer hard-codes a path. */
-  linux: (o: Omit<NativeLibraryProduct, "kind" | "targets">): NativeLibraryProduct =>
-    ({ kind: "shared-library", targets: [t.linux()], pkgConfig: true, ...o }),
+  linux: (o: Omit<NativeLibraryProduct, "kind" | "targets">): NativeLibraryProduct => ({
+    kind: "shared-library",
+    targets: [t.linux()],
+    pkgConfig: true,
+    ...o,
+  }),
   /** `.dll` **and** `.lib`. Emitting one of the two fails in the consumer's link. */
-  windows: (o: Omit<NativeLibraryProduct, "kind" | "targets">): NativeLibraryProduct =>
-    ({ kind: "shared-library", targets: [t.windows()], importLibrary: true, ...o }),
+  windows: (o: Omit<NativeLibraryProduct, "kind" | "targets">): NativeLibraryProduct => ({
+    kind: "shared-library",
+    targets: [t.windows()],
+    importLibrary: true,
+    ...o,
+  }),
   /** A Node addon, the one artifact that is real today (`emit-c --napi`). */
-  node: (o: Omit<NodeAddonProduct, "kind" | "targets">): NodeAddonProduct =>
-    ({ kind: "node-addon", targets: [t.node()], ...o }),
+  node: (o: Omit<NodeAddonProduct, "kind" | "targets">): NodeAddonProduct => ({
+    kind: "node-addon",
+    targets: [t.node()],
+    ...o,
+  }),
 });

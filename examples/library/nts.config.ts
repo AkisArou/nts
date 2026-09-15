@@ -1,4 +1,4 @@
-import { defineConfig, library, memory } from "@nts/config";
+import { defineConfig, library } from "@nts/config";
 
 export default defineConfig({
   // `tsconfig` defaults to `./tsconfig.json` beside this file, so the line that
@@ -16,8 +16,6 @@ export default defineConfig({
     // expressible rather than merely unused.
     hello: library.linux({
       entry: "./src/main.ts",
-      runtimeLinkage: "bundled-private",
-      runtime: { memory: memory.rcCycle() },
       exports: ["add", "greeting"],
     }),
   },

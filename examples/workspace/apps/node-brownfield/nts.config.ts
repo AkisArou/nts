@@ -10,14 +10,13 @@
 //     Node majors -- the whole reason to target N-API rather than V8 directly;
 //   - and either `optionalDependencies` per platform or a prebuild fetched at
 //     install, which are two different failure modes for a user offline.
-import { defineConfig, library, memory } from "@nts/config";
+import { defineConfig, library } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
     addon: library.node({
       entry: "./nts/sdk.ts",
-      runtime: { memory: memory.rcCycle() },
       exports: ["remember", "digest"],
       apiVersion: 8,
       platforms: ["darwin-arm64", "darwin-x64", "linux-x64", "win32-x64"],

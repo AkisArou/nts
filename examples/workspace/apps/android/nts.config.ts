@@ -6,7 +6,6 @@
 import { defineConfig, app } from "@nts/config";
 
 export default defineConfig({
-  tsconfig: "./tsconfig.json",
   products: {
     app: app.android({
       entry: "./src/main.ts",
