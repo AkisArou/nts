@@ -615,17 +615,7 @@ try {
   if (oracleMode) {
     // A local `createRequire` rather than the file-scope `realRequire`, which is
     // declared further down and would be in its temporal dead zone here.
-    const nodeRequire = createRequire(import.meta.url);
-    underTest = nodeRequire(`node:${moduleName}`);
-    for (const id of [...siblings.keys()]) {
-      try {
-        siblings.set(id, nodeRequire(`node:${id}`));
-      } catch {
-        // Not a subpath node publishes; leaving ours would compare a mixture, so
-        // the id is dropped and a test that needs it fails visibly.
-        siblings.delete(id);
-      }
-    }
+    underTest = createRequire(import.meta.url)(`node:${moduleName}`);
   }
   // Skipped under `oracleMode`: the module *is* node's there, so the globals a
   // shim would install are already the ones the test should see, and installing
@@ -699,8 +689,30 @@ try {
       // found this: it was measuring node's timers and reporting the result as
       // ours, which is a hollow pass the sabotage run cannot catch. Dependency
       // globals are test prerequisites; only the subject's globals are blanked.
-      if (requestedSubpath === null) {
+      // Not under `oracleMode`: the subject is node's there, so a dependency global
+      // of *ours* makes the test see a mixture -- node's `fs` returning node's
+      // `Buffer` while `Buffer.isBuffer` is ours, which answers `false` for a
+      // perfectly good buffer. That reported `fs/test/encoding-aliases-static.js` as
+      // disagreeing with node about `readlink/buffer`, which it does not.
+      if (requestedSubpath === null && !oracleMode) {
         siblingShapeModule?.installGlobals?.(shaped, siblingExports);
+      }
+    }
+  }
+  // **After the sibling loop, not before it.** An earlier version of this rewrote
+  // `siblings` up beside the `underTest` swap, where the loop below had not run yet
+  // and promptly put ours back. `oracleMode` means *stock node*: the subject, its
+  // subpaths and its dependencies all come from node, or the test is answering about
+  // a mixture. Only `internals` stay ours, because node does not publish them.
+  if (oracleMode) {
+    const nodeRequire = createRequire(import.meta.url);
+    for (const id of [...siblings.keys()]) {
+      try {
+        siblings.set(id, nodeRequire(`node:${id}`));
+      } catch {
+        // Not something node publishes. Dropped rather than left as ours, so a test
+        // that needs it fails visibly instead of comparing two different runtimes.
+        siblings.delete(id);
       }
     }
   }
