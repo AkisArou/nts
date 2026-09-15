@@ -2396,18 +2396,102 @@ them, and the census reports a *message* rather than a construct — a root can
 change its wording without changing what it refuses, and two roots can merge.
 Comparing rows across the two would be the same mistake as comparing the totals.
 
-What would be worth saying is what the new table does *not* contain, because
-absence is checkable where a rank is not — `then` on a promise held 22 things
-across 21 modules on 2026-09-11 and is not in the ten above. **But ten rows of
-208 cannot support that claim**, and this file has already paid for reading
-absence from a truncated table once: a row was searched for, not found, and
-"corpus reach is zero" went into a checked-in fixture while the cause sat in
-`internal/errors.ts`. `--top=208` is what settles it, and until that run is on
-record this says only that the row is not in the top ten.
+**A root leaving the census is not evidence it was fixed**, and the clearest
+case here is one I nearly recorded the wrong way round.
 
-The 479 declined exports are the half this table cannot see, and **228 of them
-say only "no function of that name was compiled"** — the effect, with the cause
-left unsaid.
+`then` on a promise held 22 things across 21 modules on 2026-09-11 and appears
+nowhere in the 208 roots of the `--top=250` run. Absence is checkable where a
+rank is not, so that looked like the one real change this pair of tables
+supports. It is not: `tooling/conformance/blockers/a-promise-method-call` opens
+`// expect: a method call on something without methods` and describes `.then` on
+a promise. The construct still refuses. **The message was renamed**, and under
+its new wording it is 15 things across 24 modules — fewer things, more modules,
+and nothing was fixed.
+
+So the census reports *messages*, which is what it can see, and a message is not
+a construct. What settles "does this still refuse" is the blocker: it carries
+the expected diagnostic beside a description of the shape, so a renaming shows
+up as the two disagreeing rather than as a row vanishing. Reading a root's
+absence as a fix is the mirror of reading a truncated table's absence as zero
+reach, which this file has already paid for once.
+
+### The half the roots table cannot see
+
+The 493 declined exports emit no diagnostic, so none of them is in the table
+above. Read on 2026-09-15 from the same run, at `--top=250` so that all 166
+reasons are present rather than the top ten:
+
+| | exports | reasons |
+|---|---|---|
+| name a representational cause | 315 | 98 |
+| point at another declaration — *it calls `X`, which was refused* | 124 | 65 |
+| **state only an effect** | **54** | **3** |
+
+**This is the item that had already mostly been done, and the ledger did not
+know.** The line here read *228 of them say only "no function of that name was
+compiled"*. That message is now 4 exports across 4 modules. What remained were
+two others of the same shape — *is a class whose constructor was not compiled*
+(30) and *is a namespace member whose function was not compiled* (20) — which
+say the thing they depend on is missing without saying which thing or why.
+
+The mechanism was findable because the napi wrapper already tries: every one of
+these goes through `why_uncompiled`, which looks the name up in
+`program.uncompiled` and falls back to the bare sentence when it is not there.
+So the question was never "what phrasing" but **which drops forget to record**.
+Two did:
+
+- `settle`'s `NTS2006` loop, which refuses a function for native storage or a
+  bridged body that suspends, removed it from `funcs` and reported a diagnostic
+  without pushing to `uncompiled`;
+- the reader of a global whose initializer was refused, the same.
+
+`drop_callers_of_refused` beside them had recorded its reason since it was
+written, which is why the cascade half already answers with *it calls `X`*.
+
+A cascade pointer is not a root cause — *it calls `asRequest`, which was
+refused* names where to look next, not what could not be carried — but it is a
+walkable chain, and 124 of these are on one. The 315 that name a cause are
+rankable beside the roots table; the 124 have to be followed first.
+
+#### What the remaining 54 are, traced rather than counted
+
+Recording the cause at the two drops above moved the effect-only count from 54
+to **53**. That is not a fix and it is worth writing down as one of the ways a
+diagnosis fails: the mechanism was real — both sites did drop a function without
+saying why — and it was not the mechanism behind these.
+
+Following one case answers it. `stream` declines `Readable`, `Stream` and
+`Duplex` with no cause while `PassThrough` gets *it calls `Transform#constructor`,
+which was refused*. So the wrapper's lookup works; what differs is the entry.
+
+Verified by reading the dumps: `Readable#constructor` is absent from the
+prepared HIR **and from the unprepared one**, while `runtime/node/stream/src/readable.ts:299`
+declares a constructor and 526 other constructors are lowered. So it was never
+lowered rather than lowered and dropped, and `program.uncompiled` — which
+records refusals — has nothing under that name to find.
+
+The refusal itself is there: `readable.ts:296 NTS1001 a method without a body`,
+which is `_construct?(callback): void`, a member declared without one.
+
+**And `note_uncompiled` cannot file it.** It keys on `declared_name`, which
+returns the first `IDENTIFIER` child of the declaration, and returns early
+without recording when there is none:
+
+    let Some(name) = FuncBuilder::probe(snapshot).declared_name(id) else {
+        return;
+    };
+
+A constructor declaration has no identifier naming it — `constructor` is a
+keyword. *Inferred*, not yet confirmed: that early return is what silences these,
+and the confirmation is a one-line probe printing `declared_name` for a
+constructor node. If it instead returns a *parameter's* identifier the entry is
+worse than missing, because it is filed under a name nothing will ask for.
+
+Either way the fix is the same shape and is not a message: a refusal has to be
+recorded under **the name the lowering would have given the function**, which
+for a constructor is `<owner>#constructor` and is already spelled that way at
+`lower.rs:23323`. A name that only syntax can produce cannot answer a question
+asked in the lowering's own vocabulary.
 
 ### First, by whether anything can check it
 
