@@ -17,6 +17,8 @@ declare module "java:com.example.ui" {
   /** com.example.ui.Loader Final: cannot be extended. */
   export class Loader {
     constructor();
+    /** Throws java.lang.InterruptedException. Propagates as the Java exception itself, terminating the program; not catchable by a TypeScript `try` yet. */
+    static awaitReturned(): void;
     static load(a0: string, a1: Loader.OnBytes | ((a0: Uint8Array) => void)): void;
   }
 

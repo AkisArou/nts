@@ -70,6 +70,97 @@ public final class NtsForeign {
 
 
     /**
+     * Deliver a callback that arrived on a thread we may not own.
+     *
+     * <p>Returns {@code true} when the work was posted and the caller is done,
+     * and {@code false} when the caller is already on the closure's lane and
+     * should simply run the body. Those are the only two answers: a thread that
+     * is neither is a refusal, thrown here.
+     *
+     * <p><b>Why this decides rather than the emitted bridge.</b> The questions
+     * are all policy -- is this the closure's lane, was the inbox at its
+     * ceiling, what should a refusal say -- and a bridge answering them in
+     * bytecode puts every one of them where nothing can read or test it. The
+     * bridge asks one question and gets one boolean.
+     *
+     * <p><b>A full inbox throws rather than drops.</b> {@link NtsInbox#reserve}
+     * answering {@code null} is the only backpressure signal there is, and the
+     * framework method being {@code void} means there is nobody to hand it to.
+     * Dropping would lose a completion silently, which is the one outcome the
+     * inbox's own contract forbids.
+     */
+    public static boolean deliverBytes(NtsLaneBound closure, byte[] data) {
+        NtsEnv lane = laneOf(closure);
+        if (NtsEnv.installed() == lane) {
+            return false;
+        }
+        if (!postBytes(NtsEnv.inbox(lane), (NtsBytesCallback) closure, data, 0,
+                       data == null ? 0 : data.length)) {
+            throw new NtsRefusal(
+                "the lane's inbox is at its ceiling, so this callback cannot be delivered -- "
+                    + "raise the capacity with NtsEnv.create, or let the lane drain");
+        }
+        return true;
+    }
+
+    /** {@link #deliverBytes}, for a callback that takes nothing. */
+    public static boolean deliver(NtsLaneBound closure) {
+        NtsEnv lane = laneOf(closure);
+        if (NtsEnv.installed() == lane) {
+            return false;
+        }
+        if (!post(NtsEnv.inbox(lane), (NtsCallback) closure)) {
+            throw new NtsRefusal("the lane's inbox is at its ceiling, so this callback "
+                + "cannot be delivered -- raise the capacity with NtsEnv.create");
+        }
+        return true;
+    }
+
+    /** {@link #deliverBytes}, for a callback that takes one number. */
+    public static boolean deliverNumber(NtsLaneBound closure, double value) {
+        NtsEnv lane = laneOf(closure);
+        if (NtsEnv.installed() == lane) {
+            return false;
+        }
+        if (!postNumber(NtsEnv.inbox(lane), (NtsNumberCallback) closure, value)) {
+            throw new NtsRefusal("the lane's inbox is at its ceiling, so this callback "
+                + "cannot be delivered -- raise the capacity with NtsEnv.create");
+        }
+        return true;
+    }
+
+    /** {@link #deliverBytes}, for a callback that takes one string. */
+    public static boolean deliverText(NtsLaneBound closure, String value) {
+        NtsEnv lane = laneOf(closure);
+        if (NtsEnv.installed() == lane) {
+            return false;
+        }
+        if (!postText(NtsEnv.inbox(lane), (NtsTextCallback) closure, value)) {
+            throw new NtsRefusal("the lane's inbox is at its ceiling, so this callback "
+                + "cannot be delivered -- raise the capacity with NtsEnv.create");
+        }
+        return true;
+    }
+
+    /**
+     * The lane a closure crossed on, refusing by name when it never did.
+     *
+     * <p>Null means the closure reached Java without passing through the
+     * crossing that records it -- a route this compiler does not emit, so it is
+     * a statement about the compiler rather than about the program, and it says
+     * so.
+     */
+    private static NtsEnv laneOf(NtsLaneBound closure) {
+        NtsEnv lane = closure.lane();
+        if (lane == null) {
+            throw new NtsRefusal(
+                "a callback reached Java without a lane recorded, so there is nowhere to "
+                    + "deliver it -- this is a compiler bug rather than a program error");
+        }
+        return lane;
+    }
+
+    /**
      * Post a zero-argument callback. Returns false if the inbox is at its
      * ceiling or closed.
      */

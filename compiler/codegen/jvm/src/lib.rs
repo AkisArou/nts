@@ -884,8 +884,28 @@ fn bridge_body(
     // The result is discarded: this is a question, not a value. One `ThreadLocal`
     // get per callback on the lane, which is the UI path's whole cost, against a
     // corruption that only appears on the platform this lane is for.
-    code.invoke_static(origin, pool, types::ENV, "current", "()Lnts/rt/NtsEnv;");
-    code.pop(origin, 1);
+    //
+    // **When the shape can be delivered, ask the runtime instead.** It answers
+    // `false` for "you are already on this closure's lane, run the body" and
+    // `true` for "posted, you are done" -- and throws for anything else, which
+    // is the thread that owns no lane and the inbox that is full. One question,
+    // one boolean, and every piece of policy in a file that can be read.
+    if let Some(delivery) = types::deliverable(want) {
+        let direct = code.label();
+        code.load(origin, Kind::Ref, 0);
+        match delivery.method {
+            "()V" => {}
+            "([BDD)V" | "(Ljava/lang/String;)V" => code.load(origin, Kind::Ref, 1),
+            _ => code.load(origin, Kind::Double, 1),
+        }
+        code.invoke_static(origin, pool, types::FOREIGN, delivery.deliver, delivery.delivers);
+        code.branch_zero(origin, nts_jvm_emitter::Compare::Eq, direct);
+        code.ret(origin, None);
+        code.bind(direct);
+    } else {
+        code.invoke_static(origin, pool, types::ENV, "current", "()Lnts/rt/NtsEnv;");
+        code.pop(origin, 1);
+    }
 
     code.load(origin, Kind::Ref, 0);
     let mut at: u16 = 1;
@@ -969,8 +989,11 @@ fn bridge_body(
 /// at link time while the second is silent.
 ///
 /// True exactly when some foreign interface this layout implements declares a
-/// `void` member, because that is the only shape a foreign thread can be served
-/// at all: posting runs later, and there is nobody left to return a value to.
+/// member the inbox can carry. `void` is necessary -- posting runs later and
+/// there is nobody left to return a value to -- and not sufficient: the runtime
+/// holds a holder for a fixed set of argument shapes, and a `void` member
+/// outside them has nowhere to put its arguments. [`types::deliverable`] is the
+/// set, and is the same function the bridge asks when it emits the post.
 pub(crate) fn carries_env(program: &Program, layout: &nts_core::hir::Layout) -> bool {
     let mut wanted: Vec<String> = hierarchy::implemented(program, layout);
     for id in &layout.types {
@@ -989,10 +1012,218 @@ pub(crate) fn carries_env(program: &Program, layout: &nts_core::hir::Layout) -> 
                         .and_then(|(head, want)| {
                             head.rsplit_once('.').map(|(owner, _)| (owner, want))
                         })
-                        .is_some_and(|(owner, want)| owner == interface && want.ends_with(")V"))
+                        .is_some_and(|(owner, want)| {
+                            owner == interface && types::deliverable(want).is_some()
+                        })
             })
         },
     )
+}
+
+/// The body of a posted closure's callback method.
+///
+/// Four shapes, written out rather than adapted generically, because there are
+/// four and a generic adapter with one real case reads as though it handles
+/// more than it does. Each brings the holder's arguments to what our function
+/// takes and calls it -- the same two steps the foreign bridge takes, from a
+/// different starting descriptor.
+fn delivered_body(
+    layout: &nts_core::hir::Layout,
+    ours: &nts_core::hir::Func,
+    delivery: &types::Deliverable,
+    full: &str,
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<nts_jvm_emitter::Body, Diagnostic> {
+    let this = VType::Object(types::class_name(layout));
+    let locals = match delivery.method {
+        "()V" => vec![this],
+        "([BDD)V" => {
+            vec![this, VType::Object("[B".to_owned()), VType::Double, VType::Double]
+        }
+        "(D)V" => vec![this, VType::Double],
+        _ => vec![this, VType::Object("java/lang/String".to_owned())],
+    };
+    // **Summed, not written down.** A `double` is two slots, so `([BDD)V` is
+    // six and not four -- and writing the number out gave five, which the JVM
+    // rejects at load with `ClassFormatError: Arguments can't fit into locals`.
+    // Every parameter of a callback arrives assigned, so the prologue has
+    // nothing to initialise and the count is the whole frame.
+    let slots: u16 = locals.iter().map(VType::slots).sum();
+    let mut code = Code::new(locals, slots);
+    code.initialize_locals(origin, slots);
+    code.load(origin, Kind::Ref, 0);
+    match delivery.method {
+        "()V" => {}
+        "([BDD)V" => {
+            // The holder's window, honoured rather than ignored.
+            code.load(origin, Kind::Ref, 1);
+            code.load(origin, Kind::Double, 2);
+            code.load(origin, Kind::Double, 4);
+            code.invoke_static(
+                origin,
+                pool,
+                "nts/rt/NtsViewU8",
+                "from",
+                "([BDD)Lnts/rt/NtsViewU8;",
+            );
+        }
+        "(D)V" => code.load(origin, Kind::Double, 1),
+        _ => code.load(origin, Kind::Ref, 1),
+    }
+    code.invoke_static(origin, pool, PROGRAM, &body::method_name(&ours.name), full);
+    code.ret(origin, None);
+    code.finish(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4008",
+            format!("the delivery for `{}` could not be written: {error}", ours.name),
+            origin.location,
+        )
+    })
+}
+
+/// The `Nts*Callback` method a posted closure is driven through.
+///
+/// **The inbox needs a shape it already has a holder for.** `NtsForeign.postBytes`
+/// takes an `NtsBytesCallback` and captures the array, the offset and the length
+/// beside it; the closure implementing that interface is what lets the runtime's
+/// existing helper own the holder, so no class is generated per bridge.
+///
+/// The body is the foreign bridge's, reached the same way: bring the arguments
+/// to what our function takes, then call it. The difference is the offset and
+/// length, which `postBytes` carries and which this must honour -- a callback
+/// reading the whole array would be ignoring two of its own parameters, correct
+/// only while every poster passes the whole array.
+/// The field a closure carries its lane in, and the two accessors
+/// `NtsLaneBound` declares.
+///
+/// Split from [`foreign_bridges`] because it is not a bridge: a bridge adapts
+/// one of *our* functions to a descriptor a jar declared, and this is storage
+/// plus the pair of methods that reach it. The two share only the question of
+/// whether this class needs a lane at all, which [`carries_env`] answers for
+/// both.
+fn lane_accessors(
+    layout: &nts_core::hir::Layout,
+    pool: &mut Pool,
+    builder: &mut ClassBuilder,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+        builder.field(access::PACKAGE, types::ENV_MEMBER, types::ENV_DESCRIPTOR);
+        let mut code = Code::new(
+            vec![
+                VType::Object(types::class_name(layout)),
+                VType::Object(types::ENV.to_owned()),
+            ],
+            2,
+        );
+        code.initialize_locals(origin, 2);
+        code.load(origin, Kind::Ref, 0);
+        code.load(origin, Kind::Ref, 1);
+        code.put_field(
+            origin,
+            pool,
+            &types::class_name(layout),
+            types::ENV_MEMBER,
+            types::ENV_DESCRIPTOR,
+        );
+        code.ret(origin, None);
+        let body = code.finish(pool).map_err(|error| {
+            Diagnostic::error(
+                "NTS4008",
+                format!("the lane setter for `{}` could not be written: {error}", layout.name),
+                origin.location,
+            )
+        })?;
+        builder.method(
+            access::PUBLIC,
+            "bindLane".to_owned(),
+            format!("({}){}", types::ENV_DESCRIPTOR, "V"),
+            Some(body),
+        );
+
+        // And the reader, so `NtsForeign` can decide delivery without the
+        // emitter naming a generated field from inside the runtime.
+        let mut code = Code::new(vec![VType::Object(types::class_name(layout))], 1);
+        code.initialize_locals(origin, 1);
+        code.load(origin, Kind::Ref, 0);
+        code.get_field(
+            origin,
+            pool,
+            &types::class_name(layout),
+            types::ENV_MEMBER,
+            types::ENV_DESCRIPTOR,
+        );
+        code.ret(origin, Some(Kind::Ref));
+        let body = code.finish(pool).map_err(|error| {
+            Diagnostic::error(
+                "NTS4008",
+                format!("the lane reader for `{}` could not be written: {error}", layout.name),
+                origin.location,
+            )
+        })?;
+        builder.method(
+            access::PUBLIC,
+            "lane".to_owned(),
+            format!("(){}", types::ENV_DESCRIPTOR),
+            Some(body),
+        );
+    Ok(())
+}
+
+fn deliverable_bridges(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    pool: &mut Pool,
+    builder: &mut ClassBuilder,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+    let mut seen: Vec<&'static str> = Vec::new();
+    let mut wanted: Vec<String> = hierarchy::implemented(program, layout);
+    for id in &layout.types {
+        for interface in closure_interfaces(program).get(id).into_iter().flatten() {
+            if !wanted.iter().any(|it| it == interface) {
+                wanted.push(interface.clone());
+            }
+        }
+    }
+    for interface in wanted {
+        if !nts_core::hir::runtime::is_foreign_layout_name(&interface) {
+            continue;
+        }
+        let mut rows: Vec<(&str, &str)> = program
+            .foreign
+            .iter()
+            .filter(|(_, row)| row.kind == nts_core::hir::runtime::ForeignKind::Interface)
+            .filter_map(|(key, _)| {
+                let (head, want) = key.split_once(':')?;
+                let (owner, member) = head.rsplit_once('.')?;
+                (owner == interface).then_some((member, want))
+            })
+            .collect();
+        rows.sort_unstable();
+        for (_, want) in rows {
+            let Some(delivery) = types::deliverable(want) else { continue };
+            // One class may implement two jar interfaces of the same shape; the
+            // method is the shape's, so emitting it twice is a duplicate member
+            // the JVM refuses at load.
+            if seen.contains(&delivery.interface) {
+                continue;
+            }
+            seen.push(delivery.interface);
+            builder.interfaces.push(delivery.interface.to_owned());
+            let closure = format!("{}#call", layout.name);
+            let Some(ours) = program.funcs.iter().find(|f| f.name == closure) else { continue };
+            let Some(full) = body::signature(program, ours) else { continue };
+            let body = delivered_body(layout, ours, &delivery, &full, pool, origin)?;
+            builder.method(
+                access::PUBLIC,
+                "call".to_owned(),
+                delivery.method.to_owned(),
+                Some(body),
+            );
+        }
+    }
+    Ok(())
 }
 
 fn foreign_bridges(
@@ -1076,39 +1307,9 @@ fn foreign_bridges(
     // Package-private, like every generated field: `nts/gen/Program` writes it
     // and nothing outside the package may.
     if carries_env(program, layout) {
-        builder.field(access::PACKAGE, types::ENV_MEMBER, types::ENV_DESCRIPTOR);
+        lane_accessors(layout, pool, builder, origin)?;
         builder.interfaces.push(types::LANE_BOUND.to_owned());
-        let mut code = Code::new(
-            vec![
-                VType::Object(types::class_name(layout)),
-                VType::Object(types::ENV.to_owned()),
-            ],
-            2,
-        );
-        code.initialize_locals(origin, 2);
-        code.load(origin, Kind::Ref, 0);
-        code.load(origin, Kind::Ref, 1);
-        code.put_field(
-            origin,
-            pool,
-            &types::class_name(layout),
-            types::ENV_MEMBER,
-            types::ENV_DESCRIPTOR,
-        );
-        code.ret(origin, None);
-        let body = code.finish(pool).map_err(|error| {
-            Diagnostic::error(
-                "NTS4008",
-                format!("the lane setter for `{}` could not be written: {error}", layout.name),
-                origin.location,
-            )
-        })?;
-        builder.method(
-            access::PUBLIC,
-            "bindLane".to_owned(),
-            format!("({}){}", types::ENV_DESCRIPTOR, "V"),
-            Some(body),
-        );
+        deliverable_bridges(program, layout, pool, builder, origin)?;
     }
     Ok(())
 }

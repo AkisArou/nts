@@ -65,7 +65,7 @@ NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$nts" emit-jvm "$here/tsconfig.json" 
 javac --release 8 -Xlint:all,-options -cp "$emitted:$here/target/classes:$emitted/nts-runtime.jar" \
   -d "$here/target/classes" "$here/java/Run.java"
 got=$(java -Xverify:all -cp "$here/target/classes:$emitted:$emitted/nts-runtime.jar" Run)
-want="100 1 1 1 10 0 loader:NtsRefusal"
+want="100 1 1 1 10 4"  # the 4 is the loader's callback, posted from its thread and run on ours
 if [ "$got" != "$want" ]; then
   echo "android-shape: the TypeScript printed"
   echo "  $got"

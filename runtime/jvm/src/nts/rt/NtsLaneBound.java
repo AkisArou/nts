@@ -20,4 +20,14 @@ package nts.rt;
 public interface NtsLaneBound {
     /** Remember the lane; called at the crossing, on that lane. */
     void bindLane(NtsEnv lane);
+
+    /**
+     * The lane remembered, or {@code null} if this closure never crossed on one.
+     *
+     * <p>Here so that {@link NtsForeign} can decide delivery on its own. The
+     * alternative is the emitter reading a generated field and branching in
+     * bytecode, which puts the policy -- is this our lane, is the inbox full,
+     * what does a refusal say -- in the one place it cannot be read or tested.
+     */
+    NtsEnv lane();
 }

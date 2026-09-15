@@ -14,7 +14,17 @@ public final class Run {
         Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
             @Override
             public void uncaughtException(Thread who, Throwable what) {
-                refused.append(who.getName()).append(':').append(what.getClass().getSimpleName());
+                // **Only the loader's, and everything else is printed.** A
+                // handler that records every thread swallows a failure on the
+                // main thread too, and the JVM then exits 1 having printed
+                // nothing at all -- which is what this did, and it cost more to
+                // diagnose than the bug it was hiding.
+                if (who != Thread.currentThread() && "loader".equals(who.getName())) {
+                    refused.append(who.getName()).append(':')
+                        .append(what.getClass().getSimpleName());
+                    return;
+                }
+                what.printStackTrace();
             }
         });
 
@@ -24,11 +34,48 @@ public final class Run {
         // callback has not necessarily run yet. Waiting is not politeness: read
         // it at the end of `main` instead and it reads 0, which is how this
         // assertion would silently stop asserting anything.
-        long deadline = System.currentTimeMillis() + 2000;
+        // **The lane drains its own inbox, and that is the whole point.**
+        //
+        // `Loader.load` calls back on a thread it owns. The bridge does not run
+        // the TypeScript there -- it posts, because everything in this runtime
+        // except the inbox is confined to one lane. The work runs here, on the
+        // thread that owns the lane, when this loop picks it up.
+        //
+        // A real application's event loop is this loop. It is written out here
+        // because the project has no loop of its own, and writing it out is
+        // what shows that delivery is the host's turn rather than magic.
+        nts.rt.NtsEnv lane = nts.rt.NtsEnv.current();
+
+        // **Wait for the worker to return, then check it has NOT run yet.**
+        //
+        // This is the assertion that distinguishes delivery from the race it
+        // replaced, and without it the fixture passes either way: both end with
+        // the same number written, and differ only in when. A posted callback
+        // has not run when `onBytes` returns. One called directly on the
+        // loader's thread has.
+        //
+        // Learned by sabotage: making `deliverBytes` answer "run it here" --
+        // which restores exactly the unsound behaviour this work removed --
+        // left the output unchanged, so the test was green for the wrong
+        // reason and proved nothing.
+        com.example.ui.Loader.awaitReturned();
+        boolean posted = nts.gen.Program.loaded() == 0;
+
+        long deadline = System.currentTimeMillis() + 5000;
         while (refused.length() == 0 && nts.gen.Program.loaded() == 0
             && System.currentTimeMillis() < deadline) {
-            Thread.sleep(1);
+            if (!nts.rt.NtsEnv.step(lane)) {
+                Thread.sleep(1);
+            }
         }
-        System.out.println(line + " " + (int) nts.gen.Program.loaded() + " " + refused);
+        if (!posted) {
+            System.out.println("RAN ON THE LOADER'S THREAD, not posted");
+            return;
+        }
+        // The refusal is appended only when there is one. It used to be
+        // unconditional, which left a trailing space once delivery started
+        // working -- the assertion then failed on a difference nobody could see.
+        System.out.println(line + " " + (int) nts.gen.Program.loaded()
+            + (refused.length() == 0 ? "" : " " + refused));
     }
 }

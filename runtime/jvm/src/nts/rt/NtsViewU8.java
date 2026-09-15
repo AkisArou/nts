@@ -153,4 +153,28 @@ public final class NtsViewU8 extends NtsView {
         for (int i = 0; i < xs.length; i++) { setAt(view, i, xs[i]); }
         return view;
     }
+
+    /**
+     * A window on part of a Java array, for a callback delivered through the
+     * inbox.
+     *
+     * <p>{@link NtsForeign#postBytes} carries an offset and a length beside the
+     * array, so a callback that read the whole of it would be ignoring two of
+     * its own parameters -- correct only for as long as every poster happens to
+     * pass the whole array, and silently wrong the first time one does not.
+     *
+     * <p>A copy, like {@link #from(byte[])}: a view is a window onto an
+     * `NtsBuffer` and a Java array is not one. Out of range is clamped rather
+     * than thrown, because this runs on a lane draining an inbox, where a throw
+     * is a lane that stops rather than a call that fails.
+     */
+    public static NtsViewU8 from(byte[] xs, double offset, double length) {
+        if (xs == null) { return of(0); }
+        int at = offset < 0 ? 0 : offset > xs.length ? xs.length : (int) offset;
+        int want = length < 0 ? 0 : (int) length;
+        int count = Math.min(want, xs.length - at);
+        NtsViewU8 view = of(count);
+        for (int i = 0; i < count; i++) { setAt(view, i, xs[at + i]); }
+        return view;
+    }
 }

@@ -99,6 +99,60 @@ pub const ENV: &str = "nts/rt/NtsEnv";
 pub const LANE_BOUND: &str = "nts/rt/NtsLaneBound";
 /// The boundary helpers a callback from a foreign thread goes through.
 pub const FOREIGN: &str = "nts/rt/NtsForeign";
+
+/// How a `void` interface member is delivered through the inbox.
+///
+/// The runtime carries a holder for each of these shapes already, so a closure
+/// that implements the matching interface can be posted with no generated
+/// holder class -- which is the whole reason the shapes are a fixed set rather
+/// than anything a jar declares. A member outside them cannot be delivered and
+/// is refused by name.
+#[derive(Debug)]
+pub struct Deliverable {
+    /// The `Nts*Callback` the closure must also implement.
+    pub interface: &'static str,
+    /// That interface's single method, which the closure gets a body for.
+    pub method: &'static str,
+    /// The `NtsForeign.deliver*` a bridge calls to hand the call over.
+    pub deliver: &'static str,
+    /// That helper's descriptor.
+    pub delivers: &'static str,
+}
+
+/// The delivery for a bridge descriptor, when there is one.
+#[must_use]
+pub fn deliverable(descriptor: &str) -> Option<Deliverable> {
+    if !descriptor.ends_with(")V") {
+        return None;
+    }
+    Some(match descriptor {
+        "()V" => Deliverable {
+            interface: "nts/rt/NtsCallback",
+            method: "()V",
+            deliver: "deliver",
+            delivers: "(Lnts/rt/NtsLaneBound;)Z",
+        },
+        "([B)V" => Deliverable {
+            interface: "nts/rt/NtsBytesCallback",
+            method: "([BDD)V",
+            deliver: "deliverBytes",
+            delivers: "(Lnts/rt/NtsLaneBound;[B)Z",
+        },
+        "(D)V" => Deliverable {
+            interface: "nts/rt/NtsNumberCallback",
+            method: "(D)V",
+            deliver: "deliverNumber",
+            delivers: "(Lnts/rt/NtsLaneBound;D)Z",
+        },
+        "(Ljava/lang/String;)V" => Deliverable {
+            interface: "nts/rt/NtsTextCallback",
+            method: "(Ljava/lang/String;)V",
+            deliver: "deliverText",
+            delivers: "(Lnts/rt/NtsLaneBound;Ljava/lang/String;)Z",
+        },
+        _ => return None,
+    })
+}
 /// The field a closure carries its lane in; see `foreign_bridges`.
 pub const ENV_MEMBER: &str = "$env";
 /// The descriptor for [`ENV`].
