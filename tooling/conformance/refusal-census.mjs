@@ -284,8 +284,23 @@ if (declines.size > 0) {
   console.log(`\n  ${total} export(s) the wrapper declined, by reason. These emit no`);
   console.log("  diagnostic, so none of them is in the table above.\n");
   console.log(`  ${"names".padStart(6)} ${"mods".padStart(5)}  reason`);
-  for (const [reason, v] of ranked.slice(0, 10)) {
+  /* The same cap the roots table has, and the same rule about saying so.
+   *
+   * This was a bare `slice(0, 10)` with no line beneath it, in a file whose own
+   * comment above records what a silent truncation cost. The roots table was
+   * fixed and this one was not, because the lesson was filed against the table
+   * it happened to. Ten rows of 2026-09-15's forty-three reasons is 220 of 493
+   * exports, and nothing said so -- including to me, reading it to decide what
+   * the largest unnamed cause was. */
+  const shown = ranked.slice(0, top);
+  for (const [reason, v] of shown) {
     console.log(`  ${String(v.names.size).padStart(6)} ${String(v.modules.size).padStart(5)}  ${reason.slice(0, 68)}`);
+  }
+  const hidden = ranked.length - shown.length;
+  if (hidden > 0) {
+    const names = ranked.slice(shown.length).reduce((n, [, v]) => n + v.names.size, 0);
+    console.log(`\n  ${hidden} more reason(s) not shown, of ${ranked.length}, covering`);
+    console.log(`  ${names} of the ${total} export(s). --top=${ranked.length} to see them.`);
   }
   console.log("\n  \"no function of that name was compiled\" is the one to read twice: it");
   console.log("  states the effect and leaves the cause unsaid, where every other reason");

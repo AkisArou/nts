@@ -49,49 +49,46 @@ a backlog.
 `✅` has two clauses and a row can only show you one of them. "Lowers" is
 checkable from the row by compiling the construct. "Where it is observable the
 examples agree with node" is not — it needs an example, and the row has to say
-which. Counted 2026-09-14:
+which.
+
+    instrument   awk over this file, counting table rows containing ✅
+    taken        2026-09-15
+
+      awk '/^\|/ && /✅/ { rows++
+             if ($0 ~ /examples\//) e++
+             if ($0 ~ /[0-9]+ cases?/ || $0 ~ /[0-9]+ of [0-9]+/) c++ }
+           END { print rows, e, c }' docs/conformance/typescript.md
 
 | | |
 |---|---|
-| `✅` rows | 159 |
-| naming an `examples/` directory | 16 |
-| quoting a case count | 13 |
-| doing **either** | 20 |
-| doing **neither** | **139** |
+| `✅` table rows | 166 |
+| naming an `examples/` directory | 102 |
+| quoting a case count | 14 |
+| doing **either** | 104 |
+| doing **neither** | **62** |
 
-**This measures citation, not correctness.** A row can be perfectly true and
-say nothing about why; most of these are ordinary language constructs that many
-examples exercise incidentally. It is not a claim that 139 rows are wrong.
+**The method is written out because the last count and this one disagree by
+86 and neither said how it counted.** The block here previously read 159 rows,
+16 naming an example, 139 citing nothing, dated 2026-09-14. The case-count
+number moved 13 → 14 over the same interval while the example number moved
+16 → 102, which is the signature of a citation campaign rather than of two
+different counting rules: the log carries it three rows at a time — *Three more;
+97 of 159*, *100 of 159*, *149 of 217 examples now reachable from the ledger*.
 
-It is a claim about what a reader can check. For 139 rows the second clause of
+That campaign was tracked in commit messages and not in the file, so the file
+kept asserting a number the work had already moved. A count that lives outside
+the thing it counts goes stale silently, which is the same failure this section
+is about one level up.
+
+**This measures citation, not correctness.** A row can be perfectly true and say
+nothing about why; most of the uncited are ordinary language constructs that
+many examples exercise incidentally. It is not a claim that 62 rows are wrong.
+
+It is a claim about what a reader can check. For 62 rows the second clause of
 `✅` is unverifiable from the ledger, and the sample so far says that is where
-the wrong ones live: this file already records three rows in two days whose
-explanation cell was empty and whose claim was wrong, and `namespace` — eleven
-characters, no evidence — was a fourth. Every row corrected this way has come
-out of the uncited 139; none has come out of the cited 20.
-
-So the honest reading of the `✅` column is **20 rows that show their work and
-139 that ask to be taken on trust**, and the cheapest way to improve the ledger
-is not to probe rows at random but to make a row cite the example that already
-covers it — which also reveals the rows where no example does.
-
-**Searched for those, and there are none — a negative result worth recording so
-nobody builds the instrument twice.** Taking every still-uncited `✅` row with a
-checkable identifier in its subject (52 of them) and asking whether *any*
-example source mentions any of those identifiers: **51 of 52 hit**. The single
-miss is `ToInt32`/`ToUint32`, which are specification names no program would
-ever contain — the operators themselves are in `examples/bitwise`. So the miss
-is the instrument's, not the ledger's.
-
-What that rules out: the uncited rows are **not** sitting on absent evidence.
-The example suite touches essentially all of them. What it does **not** rule
-out is the thing that actually goes wrong — `namespace` was wrong while the
-word appeared in the corpus, so "an example mentions the term" is far weaker
-than "an example covers the row" and cannot find a false `✅`. Those still need
-probing one at a time, and the citation pass is what turns up which row to
-probe, by failing to find an example that is *about* it.
-
----
+the wrong ones live: this file records rows whose explanation cell was empty and
+whose claim was wrong, and `namespace` — eleven characters, no evidence — was
+another. Every row corrected that way has come out of the uncited set.
 
 ## 1. Expressions and operators
 
@@ -2344,34 +2341,69 @@ the one that comes next has no way to start.
 
 ## 15. What to do next, ordered by evidence
 
-### Rebaselined 2026-09-11
+### Rebaselined 2026-09-15
 
 The numbered rows further down were measured on 2026-09-08 and are kept for
-their reasoning, not their counts. `tooling/conformance/refusal-census.mjs` over
-all 22 modules now reports:
+their reasoning, not their counts.
 
-    812 distinct named things behind 1379 sites, 158 distinct root messages
-    1284 further things refuse only because something they call was refused
-    479 exports the wrapper declined, which emit no diagnostic at all
+    instrument   tooling/conformance/refusal-census.mjs
+    taken        2026-09-15
+    compiler     a10b27ca, a copy pinned before the run
+    population   26 modules
 
-**Do not read that against the 1,097 below as a direction.** They are different
-units counted by different instruments over a corpus the Node lane has been
-growing all week, and comparing them would be this file's own §14 mistake.
+    881 distinct named things behind 1378 sites, 208 distinct root messages
+    1538 further things refuse only because something they call was refused
+    493 exports the wrapper declined, which emit no diagnostic at all
 
-The ten largest roots, by *things* rather than by sites:
+The same instrument over **22** modules on 2026-09-11 reported 812 behind 1379,
+158 roots, 1284 cascade-only and 479 declined.
+
+**Those two sets of numbers do not form a direction, and the reason is the
+population rather than the instrument.** The corpus went from 22 modules to 26
+in four days; 881 against 812 is four more modules' worth of code as much as it
+is anything the compiler did. Every number above carries its date, its
+instrument and its module count for that reason — a count whose population is
+unstated is a number two people will read differently, which is what §14
+records this file already doing once.
+
+What *can* be read across the two is a ratio, and one moved: cascade-only was
+1.58× the named things and is now 1.75×. That is a claim about shape rather
+than size, and it says the tail of things blocked only by something else grew
+faster than the roots did. It is not evidence about any particular root.
+
+**Do not read any of it against the 1,097 below.** Those are different units
+counted by a different instrument.
+
+The ten largest roots, by *things* rather than by sites. Truncated where the
+census truncates them, with the blocker each is filed under where it has one:
 
 | things | sites | mods | root |
 |---|---|---|---|
-| 39 | 42 | 21 | a member on a union whose arms lay their fields out differently — the **discriminant** half is closed. Where every arm puts a field at the same index with the same name and representation the read is sound, and it is `OpKind::SharedFieldGet`: the op carries the arm types and the field index and states the *fact* that they agree, rather than an `Unerase` naming one arm and stating an instruction. C and LLVM emit the pointer read a common initial sequence already licenses; the JVM emits one `instanceof`, `checkcast` and `getfield` per arm, measured by its lane at 1759 ns/pass against 6213 for a synthesised interface. The first spelling threw `ClassCastException` there and was reverted the same evening — the unerase names one arm, so a backend cannot learn the others and the failing cast is the only instruction it licenses. What remains refused is a field whose *representation* differs between arms, and any field behind a disagreement: the agreement is a prefix, not a set. Record 0289. **Re-read 2026-09-12, and the row is mostly not this.** The diagnostic asserted a disagreement between union arms and never tested one — every member read on an erased receiver got that sentence — so the census ranked it first on a cause that was false for most of its instances. Made to ask the question `shared_field` already answers, the 133 sites in `util`, `stream`, `http`, `fs` and `buffer` split **97 / 21 / 7 / 7**, and by the census's own unit of distinct named things **25 / 5 / 4 / 3**: an **intersection** that erased (25 things — a separately filed blocker this message was absorbing), a union one of whose members has no layout (5), a union whose members share no leading field (4), and a field past the prefix its arms agree about (3). So the genuinely union-shaped remainder is **12 things across five modules**, three of which are the correct refusal this row already describes. The thing to build is not here. Record 0309. **Nor is it the intersections, which was tried the same day and reverted.** Representing an intersection as whichever member has a concrete representation — `object` and `unknown` constrain nothing, so take the other — cleared **37 of 39** of them in `util` and `stream`, the largest refusal drop of the session, and answered *wrongly*: every one of those sites is `"k" in v` narrowing to `object & { k: unknown }`, whose concrete member is a **synthetic record the checker built from the key name**, with `k` at index zero. The value is any object having a `k` at all, wherever its own class put it. A class with two fields ahead of it disagreed with node on **29 of 29 cases**, having refused honestly a moment before. The sentence is one this file already owns from the presence work: **`in` answers whether a property exists, not where it is.** A correct narrowing has to establish a *layout* — `instanceof` does and already lowers — so the 37 were never available. `blockers/an-intersection-from-an-in-narrowing` holds the counterexample and its `instanceof` control; record 0310. This is a different shape from `intersection-from-two-narrowings`, which refuses at a **call** rather than a member read and did not move: `an erased value where a concrete representation is wanted` stayed at 8 in `util` and 13 in `stream` throughout |
-| 36 | 36 | 13 | a rest parameter that is not an array — the tuple-union shape and the **fixed-arity** shape have both closed, the latter including a generic `...args: A` the instantiation pins to a tuple. What remains is an `A` no instantiation pins down. Record 0287 |
-| 35 | 60 | 18 | a structural cast that is not a prefix |
-| 27 | 35 | 21 | a method with no declaration in the hierarchy — the tail, `.call` and `.apply` having both closed. One text over at least three causes, so this row is a count of message texts and not of roots |
-| 25 | 25 | 10 | a generic rest forwarded to its callback — the forwarding itself now works, `cb(...args)` included. What stops the remaining sites is **capturing** the binder in a closure, whose type is the type parameter rather than the instantiation |
-| 24 | 41 | 15 | `in` on an object with an optional declarer |
-| 24 | 30 | 7 | a method assigned per instance |
-| 23 | 27 | 11 | a member a type does not declare |
-| 22 | 22 | 21 | `then` on a promise |
-| 19 | 32 | 15 | a name from an enclosing scope |
+| 48 | 66 | 20 | a pointer cast between two native types — `annotated-const-read` |
+| 45 | 47 | 15 | a member on an intersection, which is erased here — `an-intersection-from-an-in-narrowing` |
+| 27 | 33 | 13 | a member a type does not declare |
+| 25 | 34 | 16 | a method with no declaration in the hierarchy — `a-generator-method` |
+| 24 | 24 | 19 | an erased value where a concrete representation is wanted — `intersection-from-two-narrowings` |
+| 24 | 30 | 9 | a member declared with a type that has no representation — `a-method-assigned-per-instance` |
+| 24 | 24 | 9 | a conditional of unrepresentable type (a union with `undefined`) |
+| 22 | 30 | 14 | a global member with no definition here — `json-stringify` |
+| 21 | 31 | 9 | a function returning an iterator — `a-function-returning-an-iterator` |
+| 18 | 40 | 18 | a parameter of unrepresentable type — `for-await-loop` |
+
+**This table is not the 2026-09-11 one with different numbers in it, and no row
+should be read against that one.** Four days and four more modules separate
+them, and the census reports a *message* rather than a construct — a root can
+change its wording without changing what it refuses, and two roots can merge.
+Comparing rows across the two would be the same mistake as comparing the totals.
+
+What would be worth saying is what the new table does *not* contain, because
+absence is checkable where a rank is not — `then` on a promise held 22 things
+across 21 modules on 2026-09-11 and is not in the ten above. **But ten rows of
+208 cannot support that claim**, and this file has already paid for reading
+absence from a truncated table once: a row was searched for, not found, and
+"corpus reach is zero" went into a checked-in fixture while the cause sat in
+`internal/errors.ts`. `--top=208` is what settles it, and until that run is on
+record this says only that the row is not in the top ten.
 
 The 479 declined exports are the half this table cannot see, and **228 of them
 say only "no function of that name was compiled"** — the effect, with the cause
