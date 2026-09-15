@@ -677,8 +677,20 @@ fn object_class(
         builder.method(access::PUBLIC, "resume", "()V", Some(rendered));
     }
 
-    member_forwarders(program, layout, &mut builder, &mut pool)?;
+    // **Dispatch first, and the order is load-bearing rather than tidy.**
+    // Both of these declare instance methods on this class, and for a method
+    // that is *both* a member of the layout and an entry in its dispatch table
+    // -- which every override is -- they declare the same name and descriptor.
+    // `dispatch_forwarders` is the one that must win: it names the method after
+    // the layout that *declared* the slot rather than the one implementing it,
+    // and it emits the covariant bridge. `member_forwarders` then skips what is
+    // already there.
+    //
+    // Asking the builder what it already holds, rather than re-deriving which
+    // functions occupy a slot, because two derivations of one fact disagree
+    // eventually and the disagreement here is a class that does not load.
     dispatch_forwarders(program, layout, &mut builder, &mut pool)?;
+    member_forwarders(program, layout, &mut builder, &mut pool)?;
     // A bound interface declares its own widths; see `foreign_bridges`.
     foreign_bridges(program, layout, handed_to, &mut pool, &mut builder, &origin)?;
     // A field the JVM zeroes to `null` where the language's zero is
@@ -1909,7 +1921,17 @@ fn member_forwarders(
                 origin.location,
             )
         })?;
-        builder.method(access::PUBLIC, body::method_name(&member), forwarded, Some(rendered));
+        let name = body::method_name(&member);
+        // Already declared by `dispatch_forwarders`, which ran first and had
+        // more to say about it. A second copy is not a bigger surface: the JVM
+        // rejects the whole class at load, which is what `DuplicateMember`
+        // catches and what cost all eight `awfy-*` rows their JVM column
+        // between 2026-09-13 and 2026-09-15 -- every one of those classes has a
+        // `benchmark()D` that is an override.
+        if builder.methods.iter().any(|m| m.name == name && m.descriptor == forwarded) {
+            continue;
+        }
+        builder.method(access::PUBLIC, name, forwarded, Some(rendered));
     }
     Ok(())
 }
