@@ -1484,12 +1484,33 @@ fn print_program(program: &hir::Program) {
 /// root's signature is its published ABI, so nothing narrows. Reading that and
 /// concluding the compiler had missed something cost me a whole diagnosis: four
 /// conversions around a modulo that the real build does not have.
-fn requested_entry() -> Vec<String> {
-    std::env::args()
-        .skip_while(|arg| arg != "--entry")
-        .nth(1)
-        .map(|names| names.split(',').map(str::to_owned).collect())
-        .unwrap_or_default()
+/// Every name any `--entry` names, in either spelling.
+///
+/// **There were two parsers and they disagreed.** This one took the first
+/// `--entry` and split it on commas; the emitters' took every `--entry` and
+/// split nothing. So `--entry a,b` meant two roots to `nts hir` and one root
+/// named `"a,b"` to `emit-c` -- a name no function has, which matches nothing,
+/// which narrows the program to nothing:
+///
+///     emit-c --entry published                (kept) onlyPublished published
+///     emit-c --entry published,diagnostic     (kept)
+///
+/// Empty output, exit zero. Reading the two commands' help would not have told
+/// you, because each was right about itself.
+///
+/// So both spellings are accepted everywhere rather than one being declared the
+/// winner: each is already in use, neither is wrong, and a flag that silently
+/// empties a program is not a thing to leave one more release.
+fn entry_names() -> Vec<String> {
+    let args: Vec<String> = std::env::args().collect();
+    args.iter()
+        .enumerate()
+        .filter(|(_, arg)| arg.as_str() == "--entry")
+        .filter_map(|(at, _)| args.get(at + 1))
+        .flat_map(|names| names.split(','))
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect()
 }
 
 fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
@@ -1520,18 +1541,23 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // Raw lowering stays the default because it is what maps onto the source.
     let want_passes = std::env::args().any(|arg| arg == "--prepared" || arg == "--rc");
     let (program, diagnostics) = if want_passes {
-        let entry = requested_entry();
+        let entry = selected_roots(tsconfig)?;
         let options = hir::Options {
             provider: if std::env::args().any(|arg| arg == "--rc") {
                 hir::Provider::ReferenceCounting
             } else {
                 hir::Provider::NoGc
             },
-            roots: if entry.is_empty() {
-                hir::reachable::Roots::EveryExport
-            } else {
-                hir::reachable::Roots::Entry(&entry)
-            },
+            // Through `selected_roots`, so this prints the program a backend
+            // receives rather than a neighbouring one. It did not: the old
+            // parser here never appended module initialization, so
+            // `hir --prepared --entry published` dropped `module#init` while
+            // `emit-c --entry published` kept it. An instrument describing a
+            // state nothing consumes is the failure this command exists to
+            // avoid, and `named_entry`'s own comment is about what a missing
+            // `module#init` costs -- five module-level `const`s left null and a
+            // benchmark answering 32768 against node's 10240.
+            roots: entry.as_deref().map_or(hir::reachable::Roots::EveryExport, hir::reachable::Roots::Entry),
             ..hir::Options::default()
         };
         // An invalid program is exactly the one worth reading, so the
@@ -2159,87 +2185,97 @@ fn write_standalone(program: &hir::Program, out: &Utf8Path, sources: &[&str]) ->
 ///
 /// Prints rather than writes: the slice it renders is scalar, so there is no
 /// runtime to place beside it yet and a file would suggest otherwise.
-/// The entry points a `--entry <name>` flag names, or module initialization.
-///
-/// Repeatable, because a program may have more than one and `Roots::Entry`
-/// takes a list.
-fn named_entry() -> Vec<String> {
+/// The name a `--product` flag selects, when a config declares more than one.
+fn requested_product() -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
-    let named: Vec<String> = args
-        .iter()
-        .enumerate()
-        .filter(|(_, arg)| arg.as_str() == "--entry")
-        .filter_map(|(at, _)| args.get(at + 1).cloned())
-        .collect();
-    if named.is_empty() {
-        vec![hir::lower::MODULE_INIT.to_owned()]
-    } else {
-        // Module evaluation is a root in the same sense the named entry is:
-        // nothing *calls* it, and the program is wrong without it. The
-        // no-`--entry` arm above has always known that; the named arm dropped
-        // it, and `nts-bench` had to push it back at `main.rs:1799` with a
-        // comment saying why.
-        //
-        // It surfaces as a wrong **answer** rather than a link error, which is
-        // what makes it worth fixing rather than documenting. The JVM lane
-        // found `symbol-keyed-map --entry work` printing 32768 against node's
-        // 10240: five module-level `const` symbols stayed null, five distinct
-        // map keys collapsed into one, and every lookup hit it. 24 of the 60
-        // bench cases have a `module#init`.
-        //
-        // Worse, their sweep reported `agree` for two days -- `java` and
-        // `dalvikvm` were bit-identical on a program that was not the
-        // benchmark. Two runtimes agreeing is what a wrong program does too.
-        //
-        // The flag's own documentation recommends it for reproducing what a
-        // benchmark builds, which is exactly the use where a silently different
-        // answer costs the most.
-        let mut named = named;
-        if !named.iter().any(|name| name == hir::lower::MODULE_INIT) {
-            named.push(hir::lower::MODULE_INIT.to_owned());
-        }
-        named
-    }
+    args.iter()
+        .position(|arg| arg == "--product")
+        .and_then(|at| args.get(at + 1))
+        .cloned()
 }
 
-/// How a program should be prepared, from the flags every emitter shares.
+/// The reachability roots this invocation names, or `None` for every export.
 ///
-/// `--main` says the product is an **executable**, which is a claim about
-/// reachability rather than about output: a module's exports are not roots for
-/// one, because nothing outside the program can call them. `--rc` selects
-/// reference counting.
+/// Three sources, in this order, and the order is the claim:
 ///
-/// `--entry <name>` names the entry point when it is not module initialization,
-/// which is what a benchmark has: `nts-bench` prepares with `Roots::Entry(["work"])`,
-/// so `--main` alone -- whose entry is module init -- prunes a bench case to
-/// nothing. Without it the CLI cannot render the program a row actually runs,
-/// and an A/B through it prices something else.
+/// 1. **`--entry`**, which names roots outright.
+/// 2. **`--main`**, which says the product is an executable -- so a module's
+///    exports are not roots, because nothing outside the program can call them,
+///    and the entry is module evaluation, because that is what an executable is.
+/// 3. **`exports:` in `nts.config.ts`**, which is the same claim written down
+///    once instead of passed on every invocation.
 ///
-/// One function because the three emitters must agree, and for a long time they
-/// did not: `emit-c` read both flags and `emit-llvm` and `emit-jvm` read
-/// neither, so those two always emitted the **library** reading with every
-/// export a root. A root is a wall -- its parameters stay as wide as their
-/// declared types, because the next caller is a linker away -- so the CLI
-/// showed `(Queens;DD)Z` for a method the benchmark compiles as `(Queens;II)Z`.
+/// `None` is `Roots::EveryExport`, which is what a library with no narrowing is:
+/// every export is a root and every root's signature is its published ABI.
 ///
-/// The JVM session found that by emitting the same case both ways and noticing
-/// the descriptors differed; the web-platform session lost an hour to the same
-/// thing on the C side, where the flag existed and was not known. A command
-/// whose output does not match what is built is worse than no command, because
-/// its answers are specific and wrong.
-/// Every binding table sitting beside a `.d.ts` in this program.
+/// A flag beats the file because a flag is what you type to answer a question
+/// about this run. The file is not a default the flag overrides so much as the
+/// same statement made durably, and where both are present the transient one is
+/// the one that was meant.
+fn selected_roots(tsconfig: &Utf8Path) -> Result<Option<Vec<String>>> {
+    let named = entry_names();
+    let standalone = std::env::args().any(|arg| arg == "--main");
+    let from_config = if named.is_empty() && !standalone {
+        config_exports(tsconfig)?
+    } else {
+        None
+    };
+    let Some(mut roots) = (match (named.is_empty(), standalone, from_config) {
+        (false, _, _) => Some(named),
+        (true, true, _) => Some(Vec::new()),
+        (true, false, Some(exports)) => Some(exports),
+        (true, false, None) => None,
+    }) else {
+        return Ok(None);
+    };
+    // Module evaluation is a root in the same sense a named entry is: nothing
+    // *calls* it, and the program is wrong without it. The no-`--entry` arm has
+    // always known that; the named arm dropped it, and `nts-bench` had to push
+    // it back with a comment saying why.
+    //
+    // It surfaces as a wrong **answer** rather than a link error, which is what
+    // makes it worth fixing rather than documenting. The JVM lane found
+    // `symbol-keyed-map --entry work` printing 32768 against node's 10240: five
+    // module-level `const` symbols stayed null, five distinct map keys collapsed
+    // into one, and every lookup hit it. 24 of the 60 bench cases have a
+    // `module#init`.
+    //
+    // Worse, their sweep reported `agree` for two days -- `java` and `dalvikvm`
+    // were bit-identical on a program that was not the benchmark. Two runtimes
+    // agreeing is what a wrong program does too.
+    if !roots.iter().any(|name| name == hir::lower::MODULE_INIT) {
+        roots.push(hir::lower::MODULE_INIT.to_owned());
+    }
+    Ok(Some(roots))
+}
+
+/// The `exports` list of the product this build is for, if a config declares one.
 ///
-/// `nts bind` writes `com.example.bind` next to `com.example.d.ts`, and this is
-/// the only place that convention is known. Keyed by `(source, span end)`,
-/// which is what `lower` holds for a declaration: the checker has already
-/// resolved the overload, so the declaration it picked selects the row.
-///
-/// **A missing table is not an error here and should be**, which is worth
-/// saying rather than leaving: a `.d.ts` declaring a `java:` module with no
-/// `.bind` beside it falls through to the backend's "no name for this call",
-/// which is true and points at the backend when the fault is a file the user
-/// could regenerate in a second. Refusing it needs the module specifier, which
-/// this function does not parse.
+/// **Absent at every step is not an error.** Most projects have no config, a
+/// config need not declare products, and a product need not narrow its exports
+/// -- those are three different ways of saying "every export is a root", which
+/// is the same answer `Roots::EveryExport` gives. What *is* an error is a config
+/// that exists and cannot be read, or one with several products and no
+/// `--product` to choose between them: emitting an artifact nobody asked for,
+/// under a name that says otherwise, is worse than stopping.
+fn config_exports(tsconfig: &Utf8Path) -> Result<Option<Vec<String>>> {
+    let Some(path) = nts_build::config::beside(tsconfig) else { return Ok(None) };
+    let resolved = nts_build::config::resolve(&path)?;
+    let named = requested_product();
+    let Some((name, product)) = nts_build::config::product(&resolved, named.as_deref())? else {
+        return Ok(None);
+    };
+    let Some(exports) = product.exports.clone() else { return Ok(None) };
+    // Said out loud, because it changes what is emitted and was not asked for on
+    // this command line. A narrowing that happens silently is indistinguishable
+    // from a compiler that lost the function.
+    eprintln!(
+        "{path}: product `{name}` publishes {} name(s); the rest are not roots",
+        exports.len()
+    );
+    Ok(Some(exports))
+}
+
 fn foreign_tables(
     snapshot: &nts_semantic_schema::SemanticSnapshot,
 ) -> hir::runtime::ForeignTable {
@@ -2292,35 +2328,25 @@ fn selected_provider() -> hir::Provider {
 }
 
 fn emit_options<'a>(
-    entry: &'a [String],
+    entry: Option<&'a [String]>,
     entry_files: &'a [String],
     foreign: &'a hir::runtime::ForeignTable,
 ) -> hir::Options<'a> {
-    // **`!entry.is_empty()` was never false.** `named_entry` returns
-    // `vec![MODULE_INIT]` when nothing is named -- module evaluation is a root
-    // in the same sense a named entry is -- so this read `standalone` for every
-    // invocation, and the *library* reading below was unreachable code.
+    // **`!entry.is_empty()` was never false.** This read the flags itself and
+    // asked `entry.is_empty()`, and the entry list always held at least
+    // `MODULE_INIT` -- so the test was true on every invocation and the
+    // *library* arm below was unreachable code. What that costs is the whole
+    // surface: with `Roots::Entry(["module#init"])` the only functions kept are
+    // the ones module evaluation reaches, so an exported function nothing calls
+    // internally is pruned before any backend sees it.
     //
-    // What that costs is the whole surface. With `Roots::Entry(["module#init"])`
-    // the only functions kept are the ones module evaluation reaches, so an
-    // exported function nothing calls internally is pruned before any backend
-    // sees it. `export function addTwo(n: number) { return n + 2; }` emitted an
-    // empty `class nts/gen/Program` through `emit-jvm`, against the two
-    // occurrences `emit-c` emits for the same file -- and `emit_c` has this
-    // logic written out separately and correctly, which is why only the two
-    // callers of *this* function had it.
-    //
-    // Asked of the arguments, which is where the claim actually is: `--main`
-    // says the product is an executable and `--entry` names its roots. A
-    // synthesized default is not a claim about anything.
-    let standalone = std::env::args().any(|arg| arg == "--main" || arg == "--entry");
+    // `None` now means every export, and it is a value rather than a predicate
+    // over `std::env::args()` read from inside a function that has no other
+    // business with the command line. `selected_roots` is the one place the
+    // flags and the config are read.
     hir::Options {
         provider: selected_provider(),
-        roots: if standalone {
-            hir::reachable::Roots::Entry(entry)
-        } else {
-            hir::reachable::Roots::EveryExport
-        },
+        roots: entry.map_or(hir::reachable::Roots::EveryExport, hir::reachable::Roots::Entry),
         // Two different questions that both read as "where does it start".
         // `roots` is what reachability keeps and is named in *functions*;
         // this is which source files the project called its product, and it
@@ -2337,9 +2363,12 @@ fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
-    let entry = named_entry();
+    let entry = selected_roots(tsconfig)?;
     let entry_files = nts_frontend_ts::entry_uris(tsconfig, &snapshot);
-    let prepared = match hir::prepare_with(&snapshot, &emit_options(&entry, &entry_files, &foreign_tables(&snapshot))) {
+    let prepared = match hir::prepare_with(
+        &snapshot,
+        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot)),
+    ) {
         Ok(prepared) => prepared,
         Err(problems) => {
             for problem in &problems {
@@ -2380,9 +2409,12 @@ fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<(
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
-    let entry = named_entry();
+    let entry = selected_roots(tsconfig)?;
     let entry_files = nts_frontend_ts::entry_uris(tsconfig, &snapshot);
-    let prepared = match hir::prepare_with(&snapshot, &emit_options(&entry, &entry_files, &foreign_tables(&snapshot))) {
+    let prepared = match hir::prepare_with(
+        &snapshot,
+        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot)),
+    ) {
         Ok(prepared) => prepared,
         Err(problems) => {
             for problem in &problems {
@@ -2491,7 +2523,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     // real today: a Node addon is the C backend, so `exports:` in a config --
     // whose whole job is to name fewer roots than the entry exports -- could
     // never have reached the artifact it was written for.
-    let entry = named_entry();
+    let entry = selected_roots(tsconfig)?;
     let entry_files = nts_frontend_ts::entry_uris(tsconfig, &snapshot);
     // **`--main` decides what is written, not what survives**, and the variable
     // it replaced answered both. Those separate here: `emit_options` reads
@@ -2500,7 +2532,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     let standalone = std::env::args().any(|arg| arg == "--main");
     let prepared = match hir::prepare_with(
         &snapshot,
-        &emit_options(&entry, &entry_files, &foreign_tables(&snapshot)),
+        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot)),
     ) {
         Ok(prepared) => prepared,
         Err(problems) => {

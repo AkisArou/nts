@@ -12,6 +12,10 @@ nts-semantic-schema.workspace = true
 camino.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true
+# The resolved config arrives as JSON on node's stdout. See `config.rs` for why
+# it is evaluated rather than parsed.
+serde_json.workspace = true
+anyhow.workspace = true
 
 [lints]
 workspace = true

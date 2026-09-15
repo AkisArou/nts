@@ -581,6 +581,102 @@ configs against the package, and it is the first thing in this repository to
 typecheck an `nts.config.ts` at all -- `examples/library`'s resolved to stale
 built declarations and passed while describing an API that had changed.
 
+## 6f. The first consumer, and the three defects found on the way to it
+
+Everything above is about the shape of the config. Nothing read one: `grep -rn
+"nts\.config" --include="*.rs"` returned two comments in `reachable.rs` and no
+code. `exports` had been argued from required to optional, given a documented
+default, and audited twice, without ever changing an artifact.
+
+It does now. `nts_build::config` evaluates the file and `exports` becomes
+`hir::reachable::Roots::Entry`, which is the API `reachability.rs` has tested all
+along.
+
+### Evaluated, not parsed
+
+The file's contents are function calls -- `library.native({ targets:
+[target.linux()], entry })`. Parsing it would mean reimplementing those
+constructors in Rust: a second answer to what `target.linux()` produces, in a
+different language from the one the user typechecks against. Every round of this
+audit has been about deleting that shape, so the real constructors run and the
+value they return is read.
+
+Two alternatives were considered for resolving `@nts/config` and both rejected.
+Injecting a resolver hook at this repository's copy works here and not in an
+installed compiler. Shipping a *runtime* implementation of the constructors
+inside `nts` works everywhere and is worse than either -- it is a second
+implementation of `library.native`, so the package the user typechecks against
+and the one that decides what gets built could disagree.
+
+So node resolves it like any dependency, and the cost is stated rather than
+discovered: **node is a config-time dependency of a compiler that is otherwise
+Rust.** It is bounded by the config being optional. A project without one never
+invokes node, which is every example in this tree but one.
+
+### Three defects in the flag it had to join
+
+The wiring is four lines. Finding out why they could not be written took the rest.
+
+**`emit-c` accepted `--entry` and ignored it.** `emit-llvm` and `emit-jvm` build
+options through `emit_options`, which reads `--main` *or* `--entry`; `emit_c` had
+the decision written out again and the copy had drifted to `--main` alone. So the
+flag parsed, selected nothing, and the output looked like an answer. It matters
+here more than anywhere: **a Node addon is the C backend**, and `exports` exists
+to narrow exactly that kind of product, so the field could never have reached the
+one artifact that is real today.
+
+**There were two `--entry` parsers with different syntax.** `nts hir` took the
+first occurrence and split it on commas; the emitters took every occurrence and
+split nothing. So `--entry a,b` meant two roots to one command and a single root
+named `"a,b"` to the other -- a name no function has, which matches nothing,
+which narrows the program to nothing:
+
+    emit-c --entry published              (kept) onlyPublished published
+    emit-c --entry published,diagnostic   (kept)
+
+Empty output, exit zero. Both spellings are accepted everywhere now: each was
+already in use, neither is wrong, and a flag that silently empties a program is
+not a thing to leave.
+
+**`nts hir --prepared --entry X` printed a program no backend receives.** Its
+parser never appended module initialization, which the emitters' has appended
+since a benchmark answered 32768 against node's 10240 -- five module-level
+`const`s left null, five map keys collapsed into one. Measured on a probe with
+one module-level `const`:
+
+    hir --prepared                      module#init  present
+    hir --prepared --entry published    module#init  absent
+    emit-c --entry published            module__init present
+
+`--prepared` exists to show what a backend sees. One parser now, one place that
+appends the root.
+
+### What it does, and what it refuses
+
+A flag beats the file, because a flag answers a question about this run. Several
+products with no `--product` is an error naming them, not a guess: emitting an
+artifact nobody asked for under a name that says otherwise is worse than
+stopping. A config that exists and cannot be read stops the build -- the
+permissive direction there means a build quietly ignoring the file it was
+configured by. And narrowing says so on stderr, because silent narrowing is
+indistinguishable from a compiler that lost the function.
+
+Absent is not an error at any step: most projects have no config, a config need
+not declare products, and a product need not narrow. Those are three ways of
+saying every export is a root, which is what `Roots::EveryExport` already means.
+
+Checked against a binary built from the parent commit, over all 218 examples and
+every flag combination `emit-c` takes: zero differing. The only behaviour that
+changed is the flag that did nothing.
+
+### Still no consumer
+
+`manifests`, `dependencies` and `integrate` are read by nothing, and
+`nts_build::config` deliberately does not deserialize them -- a struct member
+that is parsed and never read is the same shape as a config field nothing
+reaches. `targets` is deserialized and unused, which is the one exception, and it
+is there because the next consumer is target selection.
+
 ## 7. Decided, and open
 
 **Decided**

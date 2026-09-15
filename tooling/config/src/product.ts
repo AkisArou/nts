@@ -70,10 +70,19 @@ interface LibraryBase extends ProductBase {
    *
    * It is a **narrower**, not a declaration. Naming fewer than the source
    * exports shrinks the ABI *and* the binary, because this becomes
-   * `hir::reachable::Roots::Entry` and the rest stops being a root;
-   * `reachability.rs` tests that, including the case where a name is not an
-   * export at all. So it earns its place only where the entry is a barrel that
-   * re-exports more than the artifact should carry.
+   * `hir::reachable::Roots::Entry` and the rest stops being a root.
+   *
+   * **This is the one field a compiler reads**, as of `nts_build::config`.
+   * `nts emit-c` evaluates the config beside the tsconfig, takes this list, and
+   * emits only what those names reach -- so on the probe in
+   * `tooling/cli/tests/config_roots.rs` the addon publishes `published` instead
+   * of `published` and `diagnostic`, and the generated C loses the private
+   * helper the second one called. A `--entry` flag overrides it, and narrowing
+   * prints a line saying it happened, because a silent one is
+   * indistinguishable from a compiler that lost the function.
+   *
+   * It earns its place only where the entry is a barrel that re-exports more
+   * than the artifact should carry.
    *
    * Where it disagrees with the source and is *wider*, the source is the one to
    * change: an `export` that should not be public is a missing keyword, not a

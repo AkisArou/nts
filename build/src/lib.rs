@@ -12,3 +12,16 @@
 //!
 //! Every action key folds in `nts_semantic_schema::SCHEMA_VERSION`. A schema change
 //! therefore invalidates derived artifacts without separate bookkeeping.
+//!
+//! # What is actually here
+//!
+//! [`config`], and nothing else yet. This crate was fourteen lines of the
+//! paragraphs above and no code, depended on by nobody -- a description of a
+//! build planner that did not exist, which reads as capability the same way a
+//! config field nothing reaches does.
+//!
+//! [`config`] is its first content because it is the first thing the DAG above
+//! needs: the planner cannot lower artifact nodes until something says what the
+//! artifacts are. `nts emit-c` reads a product's `exports` through it today.
+
+pub mod config;
