@@ -161,7 +161,7 @@ checkable in one command and none had a current value written down.
 | the `jvm` gate floor | every example the other backends carry | **205 of 205**, and the floor line is `exact` -- it fails on `passed != total`, not only on a drop |
 | `unverifiable class` in the corpus | 0, and hard | **0**, over 184 single-file cases, beside `uncompilable C` at 0 |
 | a `nts (JVM)` number on every bench row | a number or a named refusal, never a blank | present -- **and this row was satisfied by a regression**, see below |
-| the AWFY rows at or under hand-written Java | 1.00x | **not what this row said.** It read "40 of 59 at or under, 19 over", and that is the `nts/Bun` column -- see directly below. Being re-measured; the published table is 1554 commits stale and eight of its rows are a regression this lane has since fixed |
+| the AWFY rows at or under hand-written Java | 1.00x | **six of the eight AWFY rows under it**, and across the whole table **30 of 52 rows with a reference at or under, 22 over**, 9 without one. Re-measured 2026-09-15 at `f55d42cf`, 61 cases, zero spoiled. The figure this row used to carry -- "40 of 59, 19 over" -- was the `nts/Bun` column; see below |
 
 ### The third row was satisfied by the break it should have caught
 
@@ -183,6 +183,23 @@ this run's refusals against the last one's.
 
 What closed it is not a better sentence in this table but a floor somewhere that
 goes red: `benches.sh` now emits all 61 cases through `emit-jvm` (`d7150df9`).
+
+### The AWFY eight, measured
+
+    awfy-bounce  1.01x   awfy-list   1.24x*   awfy-mandelbrot 0.84x   awfy-nbody 0.99x
+    awfy-permute 0.71x   awfy-queens 1.25x    awfy-sieve      0.94x   awfy-towers 0.95x
+
+Both rows over the bar are explained rather than open. `awfy-queens` is the
+`int[]` blocker of row 2 below -- `hir::elements` does narrow `f64` elements and
+`reaches_a_runtime_helper`'s whole-program `borrowed` filter disqualifies
+`queenRows` -- and is the middle end's.
+
+`awfy-list` is **not a codegen number**. The run flagged its Java reference
+varying **1.33x across five passes of one class file**, and two earlier sittings
+read the row at 0.94x with our own side steady. Two of the eight AWFY references
+now behave this way, `awfy-sieve` being the other, which is worth stating where
+the bar is: this table's fourth row says "at or under hand-written Java", and on
+a quarter of the rows it names, hand-written Java is not one number.
 
 ### CORRECTED 2026-09-15: that queue was read off the column next to the one it names
 
