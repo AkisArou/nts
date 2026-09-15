@@ -7216,9 +7216,22 @@ underneath.
 So the cost was measured instead of argued. Adding node's check moved `util`'s own
 `NTS1001` count from 76 to 78 and `assert`'s cone from 965 to 967, and left the
 declined-export counts unchanged at 36 and 24: two more refusals inside a function
-that was already refused, and not one published name lost. **A refusal inside an
-already-refused function is free**, and nothing in the ledger distinguished those
-from refusals that cost an export.
+that was already refused, and not one published name lost. The cascade held too --
+`NTS1003` stayed at 328 for `util` and 337 for `assert`, so nothing that compiled
+before compiles less now.
+
+**A refusal inside an already-declined function costs the compiled backend
+nothing**, and nothing in the ledger distinguishes those from refusals that cost an
+export. Scoped deliberately to that backend: a body `emit-c` declines still *runs*
+on the interpreted lane, which is the whole reason this change has an effect, so
+"free" is a statement about what the compiled lane loses and never about the code
+being inert. The native-interop lane raised exactly that caution against the first
+draft of this paragraph, which said "free" without the qualifier.
+
+The column that would have prevented this is better computed than stored: take the
+declined-export set, then the refusals whose enclosing function is in it. A stored
+column is a second derivation of something the cone already knows, and two
+derivations of one fact drift -- which is the failure this whole section is about.
 
 What node compares is the **constructor**, not the prototype, with a prototype
 fallback when the constructor is `undefined` and not an own property — which is
@@ -7243,6 +7256,50 @@ twenty-eight rows against node rather than twenty-four plus three exceptions.
 `assert.deepStrictEqual`'s `skipPrototype: true` option also becomes meaningful.
 It was accepted and ignored, because the comparison it exists to relax was the
 comparison that was missing.
+
+## Five `util` names this profile does not publish, and why each is still absent
+
+Extending the differential corpus over `util`'s uncalled names took its reach from
+48 of 86 to 78 of 86 and found four defects worth fixing. It also found five names
+that are simply not here. Each is recorded rather than stubbed, because a stub that
+satisfies a value differential while doing nothing is the worst of the three
+options — it reads as closed.
+
+**`MIMEType` and `MIMEParams`** (13 names: the constructor, `toString`, `toJSON`,
+and nine `MIMEParams` methods). A real parser from the MIME sniffing standard,
+roughly 200 lines, and the largest single block of `util` still missing. The
+constructor throwing is what makes the other twelve unreachable, so this is one
+item and not thirteen. Nothing blocks it but the work.
+
+**`getCallSites`**. Needs the frames of the current stack with `scriptName`,
+`lineNumber`, `column`, `columnNumber`, `functionName` and `scriptId`. Node asks
+V8 directly; the interpreted lane would have to parse `Error.prototype.stack`,
+which is a format and not an interface. Reachable, not free.
+
+**`setTraceSigInt`**. Node starts or stops a `SigintWatchdog` that prints a stack
+trace when SIGINT arrives. The **only** thing a value differential can observe
+about it is that it returns `undefined` and accepts any argument — node does not
+validate, so every call answers the same thing. A version written to satisfy that
+would be a function that toggles nothing and compares equal, which is why this one
+is named here instead. Implementing it honestly means changing how the process
+answers a signal, inside a test harness that relies on signals.
+
+**`transferableAbortSignal` and `transferableAbortController`**. Node marks a
+signal transferable so it can cross a `postMessage` to a worker. This profile has
+no `worker_threads`, so there is no transfer path for the mark to matter to, and a
+validate-and-return pair would be indistinguishable from the real thing **today**
+and silently wrong the moment a worker appears. That is a precondition living in a
+comment, which expires without telling anyone, so the pair stays absent until
+there is something to transfer to.
+
+Separately, and not an absence: `addAbortSignal(null, stream)` throws an uncoded
+`TypeError` on node while every other rejected value gets `ERR_INVALID_ARG_TYPE`.
+That is not a decision upstream — its local validator reads `typeof signal !==
+'object' || !('aborted' in signal)`, and `typeof null === "object"`, so `null`
+reaches the `in` operator and the engine throws. This profile answers
+`ERR_INVALID_ARG_TYPE` for `null` too. Matching node would mean reproducing a
+defect in order to lose information a caller branches on, so the row is excluded
+from the corpus with that reasoning written at it rather than copied.
 
 ## The harness bug that reported a pass
 
