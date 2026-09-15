@@ -1,8 +1,21 @@
-// `readline`'s surface, complete.
+// `readline`'s surface, complete -- **module keys and `Interface.prototype`**.
 //
 // All eight of node's names, matching types, matching function names, and the
 // alias identities below. Nothing is pinned absent -- if that changes, the
 // empty list is what fails.
+//
+// The prototype sweep was added after this file, titled "complete", missed 21
+// methods. It compared `Object.keys(require("readline"))` and stopped there, so
+// every method on the module's principal class was outside what it looked at:
+// `_insertString`, `_ttyWrite`, `_wordLeft` and eighteen more existed on node and
+// not here, and this file said the surface was complete the whole time. The claim
+// was true of the eight module keys; "complete" was the word that was wrong.
+//
+// What found it was `corpus-reach.mjs`, which counts *published functions* and so
+// walks one level into published objects -- it reported 26 of readline's 38 as
+// never called, and 21 of those turned out to be never called because they were
+// never there. A surface test that enumerates one level shallower than the
+// instrument measuring it will keep reporting complete.
 //
 // Node's answers come from a child `node -p`: inside this harness
 // `require("node:readline")` and `require("readline")` are the same object.
@@ -102,6 +115,53 @@ for (const name of present) {
     findings.push(`readline.${name} and readline.${rep} are one object on node and are not here`);
   }
 }
+
+// **`Interface.prototype`**, which is where the 21 were missing.
+//
+// Read from a child rather than listed here, for the same reason the module keys
+// are: a hand-written list is a second copy of node's surface that goes stale
+// without saying so. Own property names of the prototype chain up to (but not
+// including) `EventEmitter.prototype`, because everything above that belongs to
+// `events` and is that module's surface to match.
+const nodeInterfaceMethods = fromRealNode(
+  '(() => {' +
+    'const { Interface } = require("node:readline");' +
+    'const stop = require("node:events").EventEmitter.prototype;' +
+    'const out = [];' +
+    'for (let p = Interface.prototype; p && p !== stop && p !== Object.prototype;' +
+    '     p = Object.getPrototypeOf(p)) {' +
+    '  for (const k of Object.getOwnPropertyNames(p)) {' +
+    '    const d = Object.getOwnPropertyDescriptor(p, k);' +
+    '    if (d && typeof d.value === "function" && k !== "constructor") out.push(k);' +
+    '  }' +
+    '}' +
+    'return [...new Set(out)].sort();' +
+  '})()',
+);
+
+const ourInterface = mod.Interface.prototype;
+const missingMethods = nodeInterfaceMethods.filter(
+  (name) => typeof ourInterface[name] !== "function",
+);
+if (missingMethods.length > 0) {
+  findings.push(
+    `Interface.prototype is missing ${missingMethods.length} of node's ${nodeInterfaceMethods.length} method(s): ${missingMethods.join(", ")}`,
+  );
+}
+
+// A sanity floor on the sweep itself. If the child ever answers an empty list --
+// a changed internal layout, a `require` that resolves elsewhere -- the filter
+// above finds nothing missing and this file reports a complete surface for the
+// second time. The number is deliberately well under node's current count rather
+// than equal to it, so an added method is not a failure and a broken probe is.
+assert.ok(
+  nodeInterfaceMethods.length >= 20,
+  `the prototype probe found only ${nodeInterfaceMethods.length} method(s) on node's Interface, which means it stopped working rather than that node shrank`,
+);
+assert.ok(
+  nodeInterfaceMethods.includes("_ttyWrite"),
+  "the prototype probe must reach the underscore-prefixed internals, which are the ones this check exists for",
+);
 
 assert.deepStrictEqual(
   findings,

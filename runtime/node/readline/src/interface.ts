@@ -218,7 +218,11 @@ export class InterfaceBase extends EventEmitter {
   /** Set by the keypress decoder when the chunk was a single character. */
   declare [kSawKeyPress]: boolean;
 
-  #historyManager: History;
+  // `!`, because the constructor assigns this through `setupHistoryManager` rather
+  // than inline. Node's constructor does the same thing, and keeping the
+  // assignment in the method is what lets `repl` replace the manager on an
+  // interface that already exists.
+  #historyManager!: History;
   #prompt = "> ";
   #oldPrompt = "";
   #questionCallback: QuestionCallback | null = null;
@@ -324,7 +328,7 @@ export class InterfaceBase extends EventEmitter {
     this.output = output;
     this.completer = completer;
     this.crlfDelay = crlfDelay ? Math.max(MIN_CRLF_DELAY, crlfDelay) : MIN_CRLF_DELAY;
-    this.#historyManager = new History(this, historyOptions);
+    this.setupHistoryManager(historyOptions);
     this.setPrompt(prompt);
     this.terminal = !!terminal;
 
@@ -1364,6 +1368,177 @@ export class InterfaceBase extends EventEmitter {
 
   [Symbol.dispose](): void {
     this.close();
+  }
+
+  // ---- Node's underscore-prefixed internals -------------------------------
+  //
+  // Every line-editing operation below already existed as a `#` private method,
+  // and the behaviour was right: driving this interface through `write()` agrees
+  // with node on the line, the cursor and the bytes written. What was missing is
+  // that **node publishes these on the prototype** and this class did not, so 21
+  // of readline's 38 published functions had no counterpart here.
+  //
+  // They are not decoration. Programs reach for them -- overriding `_ttyWrite` to
+  // intercept a keypress and calling `_refreshLine()` after changing `line` are
+  // both ordinary things to do to a readline interface -- and until they existed
+  // the differential could not compare any of this module's cursor arithmetic
+  // directly. It could only reach it through `write()`, which exercises one path
+  // per keypress and never asks whether `_wordLeft` and `_deleteWordLeft` agree
+  // about where a word begins.
+  //
+  // `test/export-surface-static.js` calls itself "`readline`'s surface, complete"
+  // and did not see this, because it compares the module's own keys and never
+  // `Interface.prototype`. It now checks both; the claim was true of what it
+  // looked at and the gap was outside it.
+  //
+  // Thin delegates rather than renaming the private methods: the `#` versions stay
+  // the implementation and stay unreachable from outside by accident, and these
+  // are the surface node documents. A caller that overrides `_ttyWrite` does not
+  // change what this class calls internally, which is also true upstream --
+  // node's `_ttyWrite` is invoked as `this._ttyWrite(...)` from its keypress
+  // handler, so an override there *does* take effect, and that is the one
+  // difference worth naming rather than papering over.
+
+  /**
+   * `Interface.prototype.setupHistoryManager`, which node publishes and calls from
+   * its own constructor exactly as this does.
+   *
+   * It was the twenty-second missing method and the only one that was not already
+   * a private method waiting for a name -- this work happened inline in the
+   * constructor, so there was nothing to delegate to and the method had to be cut
+   * out of it. `repl` calls it directly on an interface it has already
+   * constructed, to replace the manager with one that persists to a file, which is
+   * why it is a method at all rather than constructor code.
+   *
+   * Node does two further things here that this cannot. It honours
+   * `options.onHistoryFileLoaded` by calling `historyManager.initialize(cb)` --
+   * that belongs to node's `ReplHistory`, which reads and writes a history file,
+   * where this `History` is in memory only. And it defines the `history` accessor
+   * on the *instance*; here it is a prototype accessor, which answers the same for
+   * every caller that reads or assigns `rl.history` and differs only for one that
+   * inspects the property's own descriptor.
+   *
+   * Both are named rather than stubbed: an `onHistoryFileLoaded` that is accepted
+   * and never called is worse than one that is absent, because a caller waiting on
+   * it waits forever.
+   */
+  setupHistoryManager(options: HistoryOptions): void {
+    this.#historyManager = new History(this, options);
+  }
+
+  /** `Interface.prototype._insertString`. */
+  _insertString(c: string): void {
+    this.#insertString(c);
+  }
+
+  /** `Interface.prototype._wordLeft`. */
+  _wordLeft(): void {
+    this.#wordLeft();
+  }
+
+  /** `Interface.prototype._wordRight`. */
+  _wordRight(): void {
+    this.#wordRight();
+  }
+
+  /** `Interface.prototype._deleteLeft`. */
+  _deleteLeft(): void {
+    this.#deleteLeft();
+  }
+
+  /** `Interface.prototype._deleteRight`. */
+  _deleteRight(): void {
+    this.#deleteRight();
+  }
+
+  /** `Interface.prototype._deleteWordLeft`. */
+  _deleteWordLeft(): void {
+    this.#deleteWordLeft();
+  }
+
+  /** `Interface.prototype._deleteWordRight`. */
+  _deleteWordRight(): void {
+    this.#deleteWordRight();
+  }
+
+  /** `Interface.prototype._deleteLineLeft`. */
+  _deleteLineLeft(): void {
+    this.#deleteLineLeft();
+  }
+
+  /** `Interface.prototype._deleteLineRight`. */
+  _deleteLineRight(): void {
+    this.#deleteLineRight();
+  }
+
+  /** `Interface.prototype._moveCursor`. */
+  _moveCursor(dx: number): void {
+    this.#moveCursor(dx);
+  }
+
+  /** `Interface.prototype._getCursorPos`, which node also publishes unprefixed. */
+  _getCursorPos(): CursorPos {
+    return this.getCursorPos();
+  }
+
+  /** `Interface.prototype._getDisplayPos`. */
+  _getDisplayPos(str: string): CursorPos {
+    return this.#getDisplayPos(str);
+  }
+
+  /** `Interface.prototype._addHistory`, which answers the committed line. */
+  _addHistory(): string {
+    return this.#addHistory();
+  }
+
+  /** `Interface.prototype._historyPrev`. */
+  _historyPrev(): void {
+    this.#historyPrev();
+  }
+
+  /** `Interface.prototype._historyNext`. */
+  _historyNext(): void {
+    this.#historyNext();
+  }
+
+  /** `Interface.prototype._refreshLine`. */
+  _refreshLine(): void {
+    this.#refreshLine();
+  }
+
+  /** `Interface.prototype._line`. */
+  _line(): void {
+    this.#line();
+  }
+
+  /** `Interface.prototype._onLine`. */
+  _onLine(line: string): void {
+    this.#onLine(line);
+  }
+
+  /** `Interface.prototype._tabComplete`. */
+  _tabComplete(lastKeypressWasTab: boolean): void {
+    this.#tabComplete(lastKeypressWasTab);
+  }
+
+  /** `Interface.prototype._setRawMode`, which answers the mode it replaced. */
+  _setRawMode(mode: boolean): boolean {
+    return this.#setRawMode(mode);
+  }
+
+  /** `Interface.prototype._writeToOutput`. */
+  _writeToOutput(stringToWrite: string): void {
+    this.#writeToOutput(stringToWrite);
+  }
+
+  /** `Interface.prototype._normalWrite`. */
+  _normalWrite(b: string | Buffer | undefined): void {
+    this.#normalWrite(b);
+  }
+
+  /** `Interface.prototype._ttyWrite`, the dispatcher every keypress goes through. */
+  _ttyWrite(s: string | Buffer | undefined, key: Key | undefined): void {
+    this.#ttyWrite(s, key);
   }
 }
 

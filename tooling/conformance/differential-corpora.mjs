@@ -4722,6 +4722,279 @@ export const CORPORA = {
           return [written, String(returned)];
         },
       },
+
+      // **`Interface`'s line-editing internals**, which were 26 of readline's 38
+      // published functions and none of them called.
+      //
+      // The section header says `createInterface` is excluded because it attaches
+      // to a stream and answers over time. That is true of the *events* it emits
+      // and not of these: `_wordLeft`, `_deleteWordRight`, `_insertString` and the
+      // rest each rewrite `line` and `cursor` synchronously and return nothing, so
+      // the state after a sequence of them is a value and a function of the input.
+      //
+      // This is where cursor arithmetic lives, which is the part of readline most
+      // likely to be subtly wrong: word movement has to agree with word deletion
+      // about where a word starts, and `_getDisplayPos` has to agree with both
+      // about how wide a character is.
+      //
+      // The interface is built over an in-memory `Readable` and a capturing
+      // `Writable`. Neither is a libuv handle, so neither holds the loop open, and
+      // `close()` runs at the end regardless.
+      {
+        label: "line-editing-internals",
+        call: async (m, s) => {
+          const { Readable, Writable } = await import("node:stream");
+          const ESC = String.fromCharCode(27);
+          const written = [];
+          const output = new Writable({
+            write(chunk, _encoding, cb) { written.push(String(chunk)); cb(); },
+          });
+          output.columns = 40;
+          output.rows = 10;
+          const input = new Readable({ read() {} });
+          input.isTTY = true;
+          input.setRawMode = () => {};
+
+          const lines = [];
+          let rl;
+          try {
+            rl = m.createInterface({
+              input,
+              output,
+              terminal: true,
+              prompt: "> ",
+              historySize: 4,
+              completer: (line) => [
+                ["alpha", "beta", "betamax"].filter((c) => c.startsWith(line)),
+                line,
+              ],
+            });
+          } catch (error) {
+            return `createInterface:${error.code || error.name}`;
+          }
+          rl.on("line", (line) => lines.push(line));
+
+          const log = [];
+          const snap = (tag) => log.push(`${tag}|${JSON.stringify(rl.line)}|${rl.cursor}`);
+
+          // Seed the line so the editing operations have material, with a word
+          // boundary in it: word movement and word deletion have to agree about
+          // where a word begins.
+          rl._insertString(["alpha beta", "a b  c", "unicode word", "one"][s.length % 4]);
+          snap("seed");
+
+          // The operations, chosen by the input's own characters so which sequence
+          // runs is a function of the input rather than of this spec.
+          const OPS = [
+            ["wordLeft", () => rl._wordLeft()],
+            ["wordRight", () => rl._wordRight()],
+            ["deleteLeft", () => rl._deleteLeft()],
+            ["deleteRight", () => rl._deleteRight()],
+            ["deleteWordLeft", () => rl._deleteWordLeft()],
+            ["deleteWordRight", () => rl._deleteWordRight()],
+            ["deleteLineLeft", () => rl._deleteLineLeft()],
+            ["deleteLineRight", () => rl._deleteLineRight()],
+            ["moveMinus2", () => rl._moveCursor(-2)],
+            ["movePlus3", () => rl._moveCursor(3)],
+            ["insertX", () => rl._insertString("X")],
+            ["insertWide", () => rl._insertString("nihon")],
+            ["refresh", () => rl._refreshLine()],
+            ["cursorPos", () => log.push(`cursorPos|${JSON.stringify(rl._getCursorPos())}`)],
+            ["displayPos", () => log.push(`displayPos|${JSON.stringify(rl._getDisplayPos(rl.line))}`)],
+            ["writeOut", () => rl._writeToOutput("|out|")],
+            ["setRawTrue", () => rl._setRawMode(true)],
+            ["setRawFalse", () => rl._setRawMode(false)],
+          ];
+          for (let i = 0; i < s.length && i < 8; i++) {
+            const [name, run] = OPS[s.charCodeAt(i) % OPS.length];
+            try {
+              run();
+              snap(name);
+            } catch (error) {
+              log.push(`${name}|threw:${error.code || error.name}`);
+            }
+          }
+
+          // `_deleteLeft` and `_deleteRight` unconditionally, because the rotation
+          // above never selected them: an operation is picked by `charCodeAt(i) %
+          // 18`, and across the whole corpus no input's characters landed on those
+          // two indices. `corpus-reach.mjs` reported exactly that -- 36 of 38, with
+          // these the only pair left -- which is the case a spec that *contains* a
+          // call still does not make.
+          //
+          // Still a function of the input: they act on whatever line and cursor the
+          // rotation above produced, so the result differs per input even though
+          // the call does not.
+          for (const [name, run] of [
+            ["tailDeleteLeft", () => rl._deleteLeft()],
+            ["tailDeleteRight", () => rl._deleteRight()],
+          ]) {
+            try {
+              run();
+              snap(name);
+            } catch (error) {
+              log.push(`${name}|threw:${error.code || error.name}`);
+            }
+          }
+
+          // History: `_addHistory` commits the line and the two navigators walk it.
+          // `historySize: 4` means the fifth entry evicts the first, which is the
+          // part an unbounded implementation gets wrong.
+          try {
+            for (const entry of ["first", "second", "third", "fourth", "fifth"]) {
+              rl.line = entry;
+              rl.cursor = entry.length;
+              log.push(`addHistory|${JSON.stringify(rl._addHistory())}`);
+            }
+            log.push(`history|${JSON.stringify(rl.history)}`);
+            rl._historyPrev();
+            snap("historyPrev1");
+            rl._historyPrev();
+            snap("historyPrev2");
+            rl._historyNext();
+            snap("historyNext");
+          } catch (error) {
+            log.push(`history|threw:${error.code || error.name}`);
+          }
+
+          // `_tabComplete` consults the completer and either completes uniquely or
+          // lists candidates. "beta" is deliberately a prefix of "betamax", so the
+          // ambiguous branch is reachable.
+          try {
+            rl.line = ["al", "beta", "zzz", ""][s.length % 4];
+            rl.cursor = rl.line.length;
+            rl._tabComplete(false);
+            await new Promise((resolve) => queueMicrotask(resolve));
+            await new Promise((resolve) => setImmediate(resolve));
+            snap("tabComplete");
+          } catch (error) {
+            log.push(`tabComplete|threw:${error.code || error.name}`);
+          }
+
+          try {
+            rl.line = "committed";
+            rl.cursor = 9;
+            rl._line();
+            snap("line");
+            log.push(`emitted|${JSON.stringify(lines)}`);
+          } catch (error) {
+            log.push(`line|threw:${error.code || error.name}`);
+          }
+
+          // `_ttyWrite` is the dispatcher every keypress goes through, so driving
+          // it reaches the bindings rather than the methods directly. The character
+          // is empty for the control bindings because node dispatches those on
+          // `key.ctrl` and `key.name`, not on what was typed.
+          const KEYS = [
+            ["plain", "z", { name: "z" }],
+            ["ctrlA", "", { name: "a", ctrl: true }],
+            ["ctrlE", "", { name: "e", ctrl: true }],
+            ["ctrlK", "", { name: "k", ctrl: true }],
+            ["ctrlU", "", { name: "u", ctrl: true }],
+            ["ctrlW", "", { name: "w", ctrl: true }],
+            ["backspace", "", { name: "backspace" }],
+            ["left", undefined, { name: "left" }],
+            ["right", undefined, { name: "right" }],
+            ["metaB", undefined, { name: "b", meta: true }],
+            ["metaF", undefined, { name: "f", meta: true }],
+            ["metaD", undefined, { name: "d", meta: true }],
+            ["home", undefined, { name: "home" }],
+            ["end", undefined, { name: "end" }],
+          ];
+          rl.line = "alpha beta gamma";
+          rl.cursor = 6;
+          for (let i = 0; i < s.length && i < 6; i++) {
+            const [name, ch, key] = KEYS[(s.charCodeAt(i) * 7 + i) % KEYS.length];
+            try {
+              rl._ttyWrite(ch, key);
+              snap(`tty:${name}`);
+            } catch (error) {
+              log.push(`tty:${name}|threw:${error.code || error.name}`);
+            }
+          }
+
+          // `question` writes its prompt and holds the line until one is
+          // committed, which `_line` does synchronously here -- so it settles.
+          try {
+            const answered = await new Promise((resolve) => {
+              rl.question("pick? ", (answer) => resolve(answer));
+              rl.line = "picked";
+              rl.cursor = 6;
+              rl._line();
+            });
+            log.push(`question|${JSON.stringify(answered)}`);
+          } catch (error) {
+            log.push(`question|threw:${error.code || error.name}`);
+          }
+
+          rl.close();
+          input.destroy();
+          output.destroy();
+
+          // The bytes the interface wrote. Escape sequences are the point, so they
+          // are kept and the ESC byte is spelled out, which keeps the comparison
+          // readable through the probe's JSON.
+          const bytes = written.join("").replaceAll(ESC, "<ESC>");
+          return `${log.join("\n")}\nwritten:${JSON.stringify(bytes)}`;
+        },
+      },
+      {
+        // The promises API, a separate published surface: its own
+        // `createInterface`, its own `Interface#question` taking no callback, and
+        // `Readline`'s `clearScreenDown` and `rollback`.
+        //
+        // `rollback` is the one worth comparing. `Readline` queues operations and
+        // `commit` flushes them; `rollback` discards the queue instead, so the
+        // observable is that **nothing** was written -- which an implementation
+        // that writes eagerly passes every other check and fails here.
+        label: "readline-promises",
+        call: async (m, s) => {
+          const { Readable, Writable } = await import("node:stream");
+          const ESC = String.fromCharCode(27);
+          const written = [];
+          const output = new Writable({
+            write(chunk, _encoding, cb) { written.push(String(chunk)); cb(); },
+          });
+          output.columns = 40;
+          output.rows = 10;
+          const input = new Readable({ read() {} });
+          const out = [];
+
+          try {
+            const readline = new m.promises.Readline(output);
+            readline.cursorTo(1 + (s.length % 5), 2).clearScreenDown();
+            out.push(`beforeRollback:${written.length}`);
+            await readline.rollback();
+            out.push(`afterRollback:${written.length}`);
+            readline.cursorTo(0, 0).clearScreenDown();
+            await readline.commit();
+            out.push(`afterCommit:${JSON.stringify(written.join("").replaceAll(ESC, "<ESC>"))}`);
+          } catch (error) {
+            out.push(`readline:${error.code || error.name}`);
+          }
+
+          try {
+            const rl = m.promises.createInterface({ input, output, terminal: false });
+            const pending = rl.question("q? ");
+            // Pushed into the input rather than emitted as a `line` event. The
+            // promises `question` resolves from the interface's own line handler,
+            // which an external `emit("line", ...)` walks straight past -- so the
+            // promise stayed pending, the loop drained, and the first run of this
+            // spec died with node's unsettled-top-level-await warning rather than
+            // an answer.
+            input.push(`answer${s.length % 3}\n`);
+            input.push(null);
+            out.push(`question:${JSON.stringify(await pending)}`);
+            rl.close();
+          } catch (error) {
+            out.push(`question:${error.code || error.name}`);
+          }
+
+          input.destroy();
+          output.destroy();
+          return out.join("\n");
+        },
+      },
     ],
   },
   diagnostics_channel: {
