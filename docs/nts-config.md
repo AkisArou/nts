@@ -249,6 +249,91 @@ mixed source root must declare its direction; it cannot be inferred from a path.
 
 ---
 
+## 6a. Two fields that should not exist, and why
+
+`examples/workspace` was built to argue against, and it argued two fields out of
+the config on its first reading.
+
+**`language` on a source root is derivable** from the extension, and a directory
+may legitimately hold two -- `.java` beside `.kt` is ordinary, and both become
+class files. Declaring it makes the config a second derivation of something the
+filesystem already carries.
+
+**`direction` was the wrong shape entirely, and the fixture proved it.** The
+first version declared `native/android/...` **twice**, once per direction,
+because `Scheduler.java` is called by TypeScript *and* calls back into it. A
+directory that must appear twice is not described by that field: direction is a
+property of edges, not of roots.
+
+It is inferred the way mutual recursion always is -- **declarations before
+bodies**:
+
+1. read native declarations and generate bindings;
+2. typecheck TypeScript and emit our artefacts;
+3. compile native bodies against both.
+
+That resolves the cycle whenever the native signature takes an *opaque handle*
+(`setTapHandler(Object)`). Where a native signature **names a type we generate**
+the cycle is real -- and it is detectable at step 1, so the honest answers are a
+two-phase compile or a refusal naming the signature. Neither is a field a user
+should have to write.
+
+## 6b. What a package contributes besides code
+
+Precedent already decided this. `runtime/jvm/web-platform/android/` ships an
+`AndroidManifest.xml` contributing a permission and a `consumer-rules.pro`, and
+**AGP merges them**. So: emit what each platform's own merger understands rather
+than reimplementing merging.
+
+| platform | fragment | cost of forgetting |
+| --- | --- | --- |
+| Android | `AndroidManifest.xml`, `consumer-rules.pro` | a missing `POST_NOTIFICATIONS` is a **silent no-op at run time** |
+| iOS / macOS | `Info.plist`, entitlements | a missing background mode fails **App Review**, not the build |
+| Windows | `.appxmanifest` capabilities | a toast without the capability is dropped |
+| Linux | `.desktop`, D-Bus service files | the notification is attributed to nothing |
+
+**One case is open and is not a detail.** `NSFaceIDUsageDescription` is mandatory
+on iOS -- an app calling Face ID without it is *terminated by the system* -- but
+the string is the consumer's to write. A package can supply the key and not the
+value. Whether a merged fragment can **demand** a value, rather than silently
+ship a placeholder into a shipping app, is undecided, and it fails in review
+rather than in CI.
+
+## 6c. Platform package managers: consume the resolved output
+
+`runtime/jvm/web-platform/android/dependencies.tsv` states the rule better than
+a design document would:
+
+> A version range or a `+` would make the artifact that ships differ from the
+> artifact that was reviewed, which is the whole of a supply-chain problem in one
+> line.
+
+So: **take each ecosystem's resolved output, pin it with digests, never drive the
+resolver.** A Gradle or Maven classpath, `Package.resolved`, `Podfile.lock`,
+`pkg-config --libs`. We do not parse `build.gradle` -- a Turing-complete program
+-- any more than we parse a Makefile. This is §5's rule about configs, one layer
+out: read what was resolved, not the thing that resolves.
+
+The **reverse** direction is unanswered and is a separate piece of work:
+*emitting* a Gradle module, an SPM package or a podspec so an existing native
+project can consume us. `runtime/jvm/web-platform/android/build.gradle.kts` is a
+hand-written instance, which suggests the shape is known and not generalised.
+
+## 6d. How far the non-C, non-Java platforms actually are
+
+The fixture writes Apple in Swift and Windows in WinRT, and the three distances
+differ in a way "we bind C and class files" hides:
+
+- **Swift is near.** `swiftc -emit-objc-header` produces a C/ObjC header we
+  already read, and `.swiftinterface` carries the module surface. `swift:` is
+  sugar over a generated C surface rather than a second binding mechanism.
+- **WinRT is nearer than it looks.** `.winmd` is **ECMA-335 metadata**, so
+  `compiler/jvm-emitter`'s class reader is the shape that transfers -- a metadata
+  reader over a specified binary format producing declarations. What does *not*
+  transfer is the call: WinRT is COM underneath, a vtable and an `HSTRING`, not a
+  JNI-style bridge. The types are the easy half.
+- **Objective-C** sits behind Swift and is reachable the same way.
+
 ## 7. Decided, and open
 
 **Decided**
