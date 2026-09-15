@@ -9,7 +9,7 @@
 // managed and increasingly native consumers, and **vcpkg** for C++ -- which is
 // the same "ship for both resolvers or be unavailable to half your consumers"
 // problem as SwiftPM against CocoaPods on Apple.
-import { defineConfig, library, target } from "nts/config";
+import { defineConfig, library, target } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

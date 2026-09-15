@@ -16,7 +16,7 @@
 // That last point is the reverse direction `docs/nts-config.md` §6c names as
 // unanswered: consuming a package manager's resolved output is one problem, and
 // *emitting something it resolves* is another. This app is the case for it.
-import { defineConfig, library, target } from "nts/config";
+import { defineConfig, library, target } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

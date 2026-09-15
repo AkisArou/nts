@@ -5,7 +5,7 @@
 // copies of it, four languages, four manifests and two lockfiles" are different
 // facts, and a config that made the simple case pay for the complex one would be
 // the wrong shape.
-import { defineConfig, sources } from "nts/config";
+import { defineConfig, sources } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

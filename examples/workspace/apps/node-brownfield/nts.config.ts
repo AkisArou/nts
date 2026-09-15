@@ -10,7 +10,7 @@
 //     Node majors -- the whole reason to target N-API rather than V8 directly;
 //   - and either `optionalDependencies` per platform or a prebuild fetched at
 //     install, which are two different failure modes for a user offline.
-import { defineConfig, library, target } from "nts/config";
+import { defineConfig, library, target } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

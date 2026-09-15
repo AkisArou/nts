@@ -13,7 +13,7 @@
 //     a specification; Apple has no equivalent, so our plist keys are something
 //     the consumer must copy. `packages/notifications/manifests/apple.plist`
 //     assumes a merger that does not exist, and this app is where that shows.
-import { defineConfig, library, target } from "nts/config";
+import { defineConfig, library, target } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

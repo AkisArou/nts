@@ -10,7 +10,7 @@
 //   - and hardened runtime restricts what the embedded code may do -- JIT,
 //     unsigned memory -- which is a constraint on a *compiler's output* that no
 //     other target here imposes.
-import { defineConfig, library, target } from "nts/config";
+import { defineConfig, library, target } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

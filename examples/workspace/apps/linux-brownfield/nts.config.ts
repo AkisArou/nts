@@ -11,7 +11,7 @@
 //     collide with theirs at load;
 //   - an installable **header**, which is the C equivalent of `exports`;
 //   - and a `.pc` file, because that is how the search actually happens.
-import { defineConfig, library, target } from "nts/config";
+import { defineConfig, library, target } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

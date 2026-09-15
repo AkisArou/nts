@@ -2,7 +2,7 @@
 //
 // Same backend as macOS and a different host, which is the pair that shows host
 // is its own axis rather than a consequence of the target.
-import { defineConfig, app, target, host, memory } from "nts/config";
+import { defineConfig, app, target, host, memory } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

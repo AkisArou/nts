@@ -14,7 +14,7 @@
 //     dependency. Shading duplicates it when two nts libraries meet in one
 //     application; declaring it makes the consumer resolve a second artifact.
 //     Neither is free and the choice is not made.
-import { defineConfig, library, target } from "nts/config";
+import { defineConfig, library, target } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

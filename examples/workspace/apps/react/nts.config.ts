@@ -12,7 +12,7 @@
 // enforces it.
 //
 // No React dependency is declared. This names a planned feature.
-import { defineConfig, app, target, memory } from "nts/config";
+import { defineConfig, app, target, memory } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

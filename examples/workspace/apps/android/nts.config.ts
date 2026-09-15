@@ -3,7 +3,7 @@
 // Depends on `notifications` (Java + TS) and `biometrics` (android+ios only),
 // so both of that package's constraints are satisfied here and violated in
 // `apps/linux`.
-import { defineConfig, app, target, host, memory } from "nts/config";
+import { defineConfig, app, target, host, memory } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

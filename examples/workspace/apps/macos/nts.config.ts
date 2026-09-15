@@ -1,6 +1,6 @@
 // macOS. The same backend and the same source as iOS; a different host, a
 // different minimum, and a different artifact kind at the end of it.
-import { defineConfig, app, target, host, memory } from "nts/config";
+import { defineConfig, app, target, host, memory } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

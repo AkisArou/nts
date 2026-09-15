@@ -12,7 +12,7 @@
 //
 // Packages have no products at all. Most have no config: see
 // `packages/storage` and `packages/telemetry`.
-import { defineConfig, debug } from "nts/config";
+import { defineConfig, debug } from "@native-typescript/config";
 
 export default defineConfig({
   workspace: {

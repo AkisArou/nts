@@ -3,7 +3,7 @@
 // **The app that is a library to its host.** `node` and `native` share a target
 // family and differ in artifact kind, which is the pair showing why those two
 // axes cannot be merged: same machine, same backend, different thing produced.
-import { defineConfig, library, target } from "nts/config";
+import { defineConfig, library, target } from "@native-typescript/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",

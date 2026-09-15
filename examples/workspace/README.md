@@ -23,6 +23,49 @@ floor is worse than no fixture.
 If any of that changes, this directory becomes 40-odd new corpus entries that
 nobody meant to add.
 
+## The config package these configs import already exists
+
+`@native-typescript/config` is real: `tooling/config/`, written 2026-08-26,
+typed, and exporting `defineConfig`, `app`, `library`, `memory` and the `Target`,
+`Workspace` and `Product` types. `examples/library/nts.config.ts` uses it.
+
+**I did not find it before writing this fixture, and invented a parallel API.**
+The import specifier said `nts/config`, which is nothing. Corrected.
+
+Two things calibrate how much weight it carries, and they point the same way:
+
+- **It has been written once and never revised.** Three commits touch it: the
+  one that created it, a test removal, and the restore of the 1121-file deletion
+  of 2026-09-04. Twenty days, no engineering has argued with it.
+- **Nothing reads it.** No Rust anywhere loads `nts.config.ts`; the two mentions
+  in `hir/reachable.rs` are comments about what `exports:` is *for*. It appears
+  in the gate only because `examples/library` symlinks it in order to typecheck.
+
+So it is a typed proposal with no consumer -- the same category as the RFC text
+it implements, and it should be argued with rather than deferred to. This fixture
+now imports it and marks its own additions as proposed.
+
+### What it already gets right, and three things it does not
+
+Right: `products` as a **record**, so the key is the product's identity and
+uniqueness is by construction; builders that return **plain data**, which is what
+lets a resolved config be hashed; and `Target` as a composed object rather than a
+preset, which is RFC §6's argument.
+
+Not right, and all three are visible from this fixture:
+
+1. **`ProductKind` is exported and referenced by nothing** -- not even inside its
+   own file. It lists ten kinds; `Product = AppProduct | LibraryProduct` permits
+   three. `framework`, `android-library`, `native-ui-sdk`,
+   `host-surface-library`, `chromium-shell` and `module-package` are declared
+   and unconstructible, which is why this fixture reached for `kind: "aar"` and
+   `kind: "xcframework"` -- the concepts exist in the type and cannot be used.
+2. **`workspace.tsconfig` is mandatory.** It should default to `./tsconfig.json`
+   beside the config, and be written only when it differs.
+3. **There are no per-target constructors.** One flat `LibraryProduct` has to
+   accept every field for every platform, so `soname` on an Android library and
+   `javaPackage` on a Linux one are both expressible and neither is meaningful.
+
 ## Project references carry the dependency graph
 
 Every package is a **composite** TypeScript project and every app **references**
