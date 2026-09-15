@@ -7,6 +7,16 @@
 const assert = require("assert");
 const { parseArgs } = require("util");
 
+// **`__proto__: null` in every `values` expectation.** Node builds this object with a
+// null prototype -- its input is `process.argv`, and `--__proto__` is a flag a user can
+// pass -- and `deepStrictEqual` compares prototypes. These expectations were plain
+// objects and passed, which is how the missing prototype survived here; running this
+// file against node (`NTS_CONFORMANCE_ORACLE=1`) failed on the prototype alone.
+//
+// The case below with `toString` and `constructor` as option names is the one this
+// matters most for, and a plain-prototype expectation was the weakest possible version
+// of it.
+
 assert.deepStrictEqual(
   parseArgs({
     args: ["-rvf", "file.txt", "tail"],
@@ -15,7 +25,7 @@ assert.deepStrictEqual(
     options: { file: { short: "f", type: "string" } },
   }),
   {
-    values: { r: true, v: true, file: "file.txt" },
+    values: { __proto__: null, r: true, v: true, file: "file.txt" },
     positionals: ["tail"],
   },
 );
@@ -31,7 +41,7 @@ assert.deepStrictEqual(
     },
   }),
   {
-    values: { alpha: true, beta: "c" },
+    values: { __proto__: null, alpha: true, beta: "c" },
     positionals: ["tail"],
     tokens: [
       {
@@ -68,6 +78,7 @@ assert.deepStrictEqual(
   }),
   {
     values: {
+      __proto__: null,
       input: ["c", "d"],
       enabled: [true, true],
       fallback: "ready",
@@ -119,7 +130,7 @@ assert.deepStrictEqual(
     options: { color: { type: "boolean", multiple: true } },
   }),
   {
-    values: { color: [false, true, false] },
+    values: { __proto__: null, color: [false, true, false] },
     positionals: [],
     tokens: [
       {
@@ -157,7 +168,7 @@ assert.deepStrictEqual(
     tokens: true,
   }),
   {
-    values: {},
+    values: { __proto__: null },
     positionals: ["--not-an-option", "tail"],
     tokens: [
       { kind: "option-terminator", index: 0 },
@@ -179,7 +190,7 @@ assert.deepStrictEqual(
     },
   }),
   {
-    values: { toString: true, constructor: true },
+    values: { __proto__: null, toString: true, constructor: true },
     positionals: [],
   },
 );

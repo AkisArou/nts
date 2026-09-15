@@ -18,7 +18,7 @@ const isThenable = (v) =>
 /**
  * **A promise that reaches the comparison makes it vacuous, so this refuses one loudly.**
  *
- * The host renders with `JSON.stringify`, and an unresolved promise renders as `{}` on both
+ * The host renders with `render`, and an unresolved promise renders as `{}` on both
  * sides -- so a spec that forgets an `await` inside an array does not fail, it *agrees*, for
  * every input, forever. That is the shape this directory keeps producing: a check whose answer
  * cannot depend on its input.
@@ -61,7 +61,7 @@ const call = async (fn, args, label) => {
   }
 };
 
-import(corporaPath).then(async ({ CORPORA }) => {
+import(corporaPath).then(async ({ CORPORA, render }) => {
   const corpus = CORPORA[moduleName];
   const target = require(moduleName);
   const inputs = JSON.parse(readFileSync(inputsPath, "utf8"));
@@ -88,5 +88,10 @@ import(corporaPath).then(async ({ CORPORA }) => {
     }
     rows.push(row);
   }
-  console.log("NTSDIFF " + JSON.stringify(rows));
+  // **`render`, not `JSON.stringify`.** A null prototype does not survive JSON, so
+  // serialising the rows here would flatten every null-prototype answer into a plain
+  // object before the host ever saw it -- and fixing the host's renderer alone would
+  // have changed nothing. `render` turns the prototype into an ordinary marker key,
+  // which does survive, and the host re-renders both sides with the same function.
+  console.log("NTSDIFF " + render(rows));
 });

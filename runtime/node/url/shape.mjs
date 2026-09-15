@@ -6,6 +6,7 @@
 // so substituting them is safe and is what the WHATWG tests measure.
 export function shape(exports) {
   shapeWhatwgClasses(exports.URL, exports.URLSearchParams);
+  shapeLegacyQuery(exports.Url);
   return {
     URL: exports.URL,
     URLSearchParams: exports.URLSearchParams,
@@ -20,6 +21,49 @@ export function shape(exports) {
     resolve: exports.resolve,
     resolveObject: exports.resolveObject,
     urlToHttpOptions: exports.urlToHttpOptions,
+  };
+}
+
+/**
+ * `url.parse(s, true).query` carries a **null prototype** in node, and must here too.
+ *
+ * The same correction `querystring/shape.mjs` makes, for the same reason and at the
+ * same boundary: an NTS record has no prototype chain, so the compiled module is
+ * already right, and it is the N-API and direct-TypeScript lanes that materialise the
+ * record as an ordinary object with `Object.prototype`. This is representation
+ * shaping only -- the parsing stays in TypeScript.
+ *
+ * It matters more here than it reads. The object is built from a query string, which
+ * is untrusted input, and a plain prototype makes `?__proto__=x` a pollution surface.
+ * `querystring.parse` was already shaped; this route was not, because the legacy
+ * parser has `this.query = {}` paths of its own that never reach `querystring`.
+ *
+ * Wrapped on `Url.prototype.parse` rather than on the module function, because both
+ * `url.parse(s, true)` and `new url.Url().parse(s, true)` are node's spellings and
+ * the module function delegates to the method. An empty query is shaped too: node
+ * gives `url.parse("http://h/", true).query` a null prototype as well.
+ *
+ * Found by running our own tests against node (`NTS_CONFORMANCE_ORACLE=1`), where
+ * `url/test/parse-query-static.js` failed on the prototype alone. The differential
+ * could not see it: every row rendered the object through `JSON.stringify`, which
+ * does not carry a prototype.
+ */
+function shapeLegacyQuery(Url) {
+  if (typeof Url !== "function" || typeof Url.prototype?.parse !== "function") return;
+  // Captured under a different name than the wrapper. A *named* function expression
+  // binds its own name inside its body, so `function parse` shadowing a `const parse`
+  // makes `parse.apply(...)` call itself -- which it did, and every url test that
+  // parses died on a stack overflow.
+  const original = Url.prototype.parse;
+  // Named `parse`, not something descriptive: `Function.prototype.name` is observable
+  // and `export-surface-static.js` compares it against node's. A wrapper that renames
+  // the function it wraps is a visible difference, and util's surface test caught
+  // exactly that on the sibling of this change.
+  Url.prototype.parse = function parse(...args) {
+    const result = original.apply(this, args);
+    const query = this.query;
+    if (query !== null && typeof query === "object") Object.setPrototypeOf(query, null);
+    return result;
   };
 }
 

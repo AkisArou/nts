@@ -12,7 +12,11 @@ const url = require('url');
   assert.strictEqual(parsed.href, '/foo/bar?baz=quux#frag');
   assert.strictEqual(parsed.hash, '#frag');
   assert.strictEqual(parsed.search, '?baz=quux');
-  assert.deepStrictEqual(parsed.query, { baz: 'quux' });
+  // `{ __proto__: null, ... }`: node gives the parsed query a null prototype, and
+  // `deepStrictEqual` compares prototypes. This asserted a plain object and passed,
+  // which is how the missing prototype survived -- running this file against node
+  // (`NTS_CONFORMANCE_ORACLE=1`) failed here on the prototype alone.
+  assert.deepStrictEqual(parsed.query, { __proto__: null, baz: 'quux' });
   assert.strictEqual(parsed.pathname, '/foo/bar');
   assert.strictEqual(parsed.path, '/foo/bar?baz=quux');
 }
@@ -24,7 +28,8 @@ const url = require('url');
   assert.strictEqual(parsed.slashes, true);
   assert.strictEqual(parsed.host, 'example.com');
   assert.strictEqual(parsed.hostname, 'example.com');
-  assert.deepStrictEqual(parsed.query, {});
+  // An empty query is null-prototype too; node does not special-case it.
+  assert.deepStrictEqual(parsed.query, { __proto__: null });
   assert.strictEqual(parsed.search, null);
   assert.strictEqual(parsed.pathname, '/');
   assert.strictEqual(parsed.path, '/');
@@ -38,7 +43,7 @@ const url = require('url');
   assert.strictEqual(parsed.hostname, null);
   assert.strictEqual(parsed.hash, null);
   assert.strictEqual(parsed.search, '?query=value');
-  assert.deepStrictEqual(parsed.query, { query: 'value' });
+  assert.deepStrictEqual(parsed.query, { __proto__: null, query: 'value' });
   assert.strictEqual(parsed.pathname, '/example');
   assert.strictEqual(parsed.path, '/example?query=value');
   assert.strictEqual(parsed.href, '/example?query=value');

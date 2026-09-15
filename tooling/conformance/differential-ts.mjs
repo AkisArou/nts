@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 
-import { CORPORA, makeRandom } from "./differential-corpora.mjs";
+import { CORPORA, makeRandom, render } from "./differential-corpora.mjs";
 
 /* Emitted trees under one root, removed when the run ends.
  *
@@ -64,7 +64,7 @@ if (modules.length === 0) {
   process.exit(2);
 }
 
-const show = (r) => JSON.stringify(r);
+const show = (r) => render(r);
 
 const isThenable = (v) =>
   v !== null && (typeof v === "object" || typeof v === "function") && typeof v.then === "function";

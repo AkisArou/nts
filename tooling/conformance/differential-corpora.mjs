@@ -25,6 +25,37 @@ import { Readable, Writable } from "node:stream";
 // asking node's registry about our handle would be a comparison of two unrelated things.
 import { resolveObjectURL, Blob as BufferBlob } from "node:buffer";
 
+/**
+ * **How both sides render an answer, and why it is not plain `JSON.stringify`.**
+ *
+ * `JSON.stringify` cannot see a prototype. `{ a: 1 }` and an object with the same key
+ * and a **null** prototype serialise to the identical string, so every spec returning
+ * an object has been comparing its contents and never its shape. That is not a corner:
+ * node deliberately gives a null prototype to every container built from untrusted
+ * input -- `querystring.parse`, `url.parse(q, true).query`, `util.parseArgs().values` --
+ * precisely so that a key called `__proto__` cannot reach `Object.prototype`. A
+ * reimplementation returning a plain object is a prototype-pollution surface, and it
+ * agreed here 110,470 times.
+ *
+ * Found by a different instrument: running our own tests against node
+ * (`NTS_CONFORMANCE_ORACLE=1`) failed on three of them for exactly this, in three
+ * modules whose differentials were clean.
+ *
+ * The marker is added to a *copy* with an ordinary prototype, so the replacer does not
+ * see a null-prototype object again and recurse forever.
+ */
+export function render(value) {
+  return JSON.stringify(value, (_key, v) => {
+    if (
+      v !== null && typeof v === "object" && !Array.isArray(v) &&
+      Object.getPrototypeOf(v) === null
+    ) {
+      return { "[[null-prototype]]": true, ...v };
+    }
+    return v;
+  }) ?? "undefined";
+}
+
 export function makeRandom(seed = 0x9e3779b9) {
   let state = seed >>> 0;
   return () => ((state = (state * 1664525 + 1013904223) >>> 0) / 0x100000000);
@@ -2706,6 +2737,26 @@ export const CORPORA = {
     },
     calls: [
       {
+        // `util.parseArgs().values`, as an object. Node gives it a null prototype --
+        // it is built from `process.argv`, which is exactly the untrusted input the
+        // precaution exists for, and `--__proto__` is a flag a user can pass.
+        label: "parse-args-values",
+        call: (m, s) => {
+          try {
+            const text = String(s).replace(/[^a-zA-Z0-9]/g, "") || "x";
+            const result = m.parseArgs({
+              args: [`--${text}`, "--flag", "tail"],
+              options: { [text]: { type: "boolean" }, flag: { type: "boolean" } },
+              allowPositionals: true,
+              strict: false,
+            });
+            return { values: result.values, positionals: result.positionals };
+          } catch (error) {
+            return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+          }
+        },
+      },
+      {
         // **The pure helpers outside `types`**, which nothing called:
         // `getSystemErrorName`, `getSystemErrorMessage`, `getSystemErrorMap`,
         // `isArray`, `styleText`, `parseArgs`, `parseEnv` and `diff`.
@@ -3734,6 +3785,21 @@ export const CORPORA = {
     },
     calls: [
       {
+        // `url.parse(s, true).query`, as an object rather than a rendering of one --
+        // node builds it with a null prototype for the same reason `querystring.parse`
+        // does. See `parse-object` there; this is the same container reached by a
+        // second route, and the legacy parser has its own `this.query = {}` paths that
+        // do not go through `querystring` at all.
+        label: "legacy-query-object",
+        call: (m, s) => {
+          try {
+            return m.parse(`http://h/?${s}`, true).query;
+          } catch (error) {
+            return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+          }
+        },
+      },
+      {
         // **`URLSearchParams.delete` and `has` with a second argument**, which
         // node added and which has one case nothing here covered: an explicit
         // `undefined` is treated as *no value given*, so `delete(name, undefined)`
@@ -4084,6 +4150,20 @@ export const CORPORA = {
       return s;
     },
     calls: [
+      {
+        // **The container itself, with its prototype.**
+        //
+        // Every other row here renders the parsed object through a string, and a
+        // string cannot carry a prototype. Node gives this object a *null* prototype
+        // on purpose: it is built from untrusted input, and a key spelled `__proto__`
+        // must not reach `Object.prototype`. A reimplementation returning `{}` is a
+        // prototype-pollution surface that agrees on every key and every value.
+        //
+        // `render` marks the prototype, so returning the object rather than a
+        // rendering of it is the whole of what this row does differently.
+        label: "parse-object",
+        call: (m, s) => m.parse(s),
+      },
       { name: "parse", args: (s) => [s] },
       { name: "escape", args: (s) => [s] },
       { name: "unescape", args: (s) => [s] },

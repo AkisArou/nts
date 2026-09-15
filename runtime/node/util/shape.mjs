@@ -97,6 +97,33 @@ export function shape(exports) {
   delete util.setInspectDefaultOptions;
   delete util.colors;
   delete util.styles;
+
+  // `parseArgs().values` carries a **null prototype** in node, and must here too --
+  // the same boundary correction `querystring/shape.mjs` and `url/shape.mjs` make,
+  // and representation shaping only. An NTS record has no prototype chain, so the
+  // compiled module is already right; this restores it for the lanes that materialise
+  // the record as an ordinary object.
+  //
+  // The input is `process.argv`, which is the untrusted input the precaution exists
+  // for: `--__proto__` is a flag a user can pass, and with `Object.prototype` under it
+  // the parsed values object is a pollution surface.
+  //
+  // Found by running `util/test/parse-args-static.js` against node
+  // (`NTS_CONFORMANCE_ORACLE=1`), where it failed on the prototype alone.
+  if (typeof util.parseArgs === "function") {
+    // A different name than the wrapper: a named function expression binds its own
+    // name inside its body, so `function parseArgs` over a `const parseArgs` recurses.
+    const original = util.parseArgs;
+    // Named `parseArgs`: `Function.prototype.name` is observable and
+    // `export-surface-static.js` compares it against node's.
+    util.parseArgs = function parseArgs(...args) {
+      const result = original.apply(this, args);
+      if (result?.values !== null && typeof result?.values === "object") {
+        Object.setPrototypeOf(result.values, null);
+      }
+      return result;
+    };
+  }
   return util;
 }
 
