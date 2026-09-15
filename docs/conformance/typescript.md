@@ -2614,6 +2614,26 @@ Two more zeros belong here for the same reason, from §7's attribute work:
 `captures(none)` was worth nothing once `memory(read)` was in place, and the
 allocator attributes (`malloc`, `returns_nonnull`) were worth nothing at all.
 
+**A fifth, from the native lane on 2026-09-15, and the cheapest kind.** A
+binding's `@ntsHeader` says which headers describe a declaration. `schema.rs`
+walked up the declaration's parents to *find* that module and returned a
+`bool` — so every program carried every `@ntsHeader` in the snapshot, reached or
+not. `native-stat` compiled with seven headers and used one.
+
+The fact was not merely available; it had already been computed and was being
+thrown away at the return. Carrying it is a `NodeId` on `Naming::Tagged` and one
+on `native::Function`, and the header set becomes the union over the records and
+calls a program holds. Measured: **seven headers to one** for `native-stat`,
+zero for `native-callback`, and every witness assertion count unchanged —
+8/40/38/14/16/3/16/10 before and after, which is what separates "fewer headers"
+from "fewer checks".
+
+It belongs in this section rather than in §7 because it is the **stated** kind in
+its purest form: nobody had to prove anything, and the whole change is finding
+the line where a computed fact is discarded and not discarding it. The version
+that *derived* the same set — guessing which modules a program reaches from node
+kinds — passed sixteen examples and every test while emptying a witness.
+
 ### What is still on the table
 
 Each row is a fact TypeScript states today and HIR does not carry. None of them
