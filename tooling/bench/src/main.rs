@@ -237,8 +237,60 @@ fn publish(
         println!("\nREADME updated.");
     } else if !requested.is_empty() {
         println!("\nREADME not updated: a filtered run measures only part of the table.");
+    } else {
+        println!("\n{}", lost_case_decline(rows, cases));
     }
     Ok(())
+}
+
+/// Why a full run declined to publish, when what it lost was a case.
+///
+/// **The third decline reason, and it used to be the silent one.** `publish`'s
+/// comment says the three sit together so a reader meets them in one place; two
+/// of them printed and this one returned without a word. A full sweep that lost
+/// a case wrote nothing to the README and said nothing about not writing, so it
+/// read as a publish that had simply not changed anything -- the only trace a
+/// `failed:` line for one case, forty rows above, inside the table the eye takes
+/// as the result.
+///
+/// That cost twenty-eight minutes of watching a finished run on 2026-09-15. The
+/// case was `json-stringify-doc`, whose `work` a lowering refusal had dropped
+/// since the last publish: `emit-c` printed `NTS1001`, **exited zero**, wrote C
+/// with no entry point, and the failure surfaced as `undefined reference to
+/// 'work'` from the linker, with nothing connecting it to the refusal five lines
+/// above.
+///
+/// A separate function so it can be asserted rather than watched: the branch it
+/// serves is reachable only from a full sweep that loses a case, which is forty
+/// minutes to provoke and not something to leave untested on that account.
+///
+/// Names the cases rather than counting them, because which one it is decides
+/// what to do next -- a case that lost its reference and a case this compiler
+/// can no longer lower produce the identical line here and nothing else
+/// separates them.
+fn lost_case_decline(rows: &[Row], cases: &[Utf8PathBuf]) -> String {
+    let measured: std::collections::HashSet<&str> = rows
+        .iter()
+        .map(|row| row.case.strip_suffix(" (rc)").unwrap_or(&row.case))
+        .collect();
+    let lost: Vec<&str> = cases
+        .iter()
+        .filter_map(|case| case.file_name())
+        .filter(|name| !measured.contains(name))
+        .collect();
+    format!(
+        "README not updated: {} of {} cases produced no row -- {}. A table \
+         missing a row it used to carry is not a smaller table, it is one that \
+         answers a different question, so this declines rather than publishing \
+         the rest.",
+        lost.len(),
+        cases.len(),
+        if lost.is_empty() {
+            "and not one of them could be named, which is a bug in this function".to_owned()
+        } else {
+            lost.join(", ")
+        }
+    )
 }
 
 /// Refuse to begin, or warn about the row that was measured anyway.
@@ -2427,5 +2479,65 @@ fn human(ns: f64) -> String {
         format!("{:.2} us", ns / 1_000.0)
     } else {
         format!("{:.2} ms", ns / 1_000_000.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Row, lost_case_decline};
+    use camino::Utf8PathBuf;
+
+    fn row(case: &str) -> Row {
+        Row {
+            case: case.to_owned(),
+            cpp: None,
+            nts: 1.0,
+            unspecialized: 1.0,
+            node: 1.0,
+            llvm: None,
+            jvm: None,
+            jvm_absence: None,
+            java: None,
+            bun: None,
+            varied: Vec::new(),
+        }
+    }
+
+    fn cases(names: &[&str]) -> Vec<Utf8PathBuf> {
+        names
+            .iter()
+            .map(|name| Utf8PathBuf::from(format!("/benches/cases/{name}")))
+            .collect()
+    }
+
+    /// The line the silent branch did not print, asserted rather than watched.
+    ///
+    /// This is the shape of 2026-09-15: a full sweep, one case lost to a
+    /// lowering refusal, and a `publish` that returned without a word.
+    #[test]
+    fn a_lost_case_is_named_in_the_decline() {
+        let message = lost_case_decline(
+            &[row("fib"), row("objects (rc)")],
+            &cases(&["fib", "objects", "json-stringify-doc"]),
+        );
+        assert!(
+            message.contains("json-stringify-doc"),
+            "the lost case has to be named, not counted: {message}"
+        );
+        assert!(message.contains("1 of 3"), "{message}");
+        // The two that *were* measured must not be reported lost -- and
+        // `objects` is the one that proves the `(rc)` suffix is handled, since
+        // its row is spelled `objects (rc)` and its directory is `objects`.
+        assert!(!message.contains("objects"), "{message}");
+        assert!(!message.contains("fib"), "{message}");
+    }
+
+    /// A sweep that lost nothing never reaches this branch; if it somehow does,
+    /// the message must not claim a clean run declined for a named case.
+    #[test]
+    fn nothing_lost_says_so_rather_than_naming_a_case() {
+        let message = lost_case_decline(&[row("fib")], &cases(&["fib"]));
+        assert!(message.contains("0 of 1"), "{message}");
+        assert!(message.contains("bug in this function"), "{message}");
     }
 }
