@@ -828,6 +828,60 @@ recursive call's reasons into one string made `struct tcphdr` report
 different places. It now reports 11, each marked `through an unnamed member:`
 once however deep it was found.
 
+## Every header, whether the program reached the module or not
+
+`program.native_headers` is a scan of the **snapshot**: every `declare module`
+carrying `@ntsHeader` contributes, reached or not. `runtime/native/libc.d.ts`
+declares several, so the cost is paid by every program that names any header at
+all. Measured, before this section changed anything:
+
+| example | headers in its translation unit | headers it uses |
+|---|---|---|
+| `native-stat` | `math.h stdbool.h stddef.h stdint.h stdlib.h string.h sys/stat.h` | 1 |
+| `native-poll` | the same seven, with `poll.h` for `sys/stat.h` | 1 |
+| `native-rusage` | `math.h stdlib.h sys/resource.h` | 1 |
+
+**The obvious fix is wrong, and the way it is wrong is the reason to write this
+down.** Filtering to modules the program reaches -- a module declaring a type
+always contributes, a function-only module contributes when one of its functions
+is called -- drops `math.h` and `stdlib.h` from every example above and leaves
+all sixteen green. It also silently empties a check. A binding of `getpid` alone
+declares no type, and matching its function name failed; with the filter on, the
+witness became
+
+    extern int getpid(void);          /* and no <unistd.h> */
+
+which compares a prototype against nothing. Unfiltered it includes `<unistd.h>`
+and the comparison is real. **Sixteen examples and every test stayed green
+through that**, because a witness that checks less still compiles -- the failure
+is invisible to everything except the baseline arm, which is running the
+unfiltered build and reading what it emits.
+
+So the rule has to be "a module contributes iff the program holds a declaration
+that came from it", and that is *provenance*, not a guess from node kinds. It is
+not recorded anywhere today: `native::Function` and `native::Record` do not know
+which module declared them, and `schema.rs::declares_a_header` walks up to find
+one and returns a `bool`, discarding the identity it just located. Reverted
+until that exists, because an over-included header costs compile time and a
+missing one costs a check nobody can see is gone.
+
+**A collision this makes reachable, and one it does not.** `examples/interop/
+native-rusage` cannot name its constant `RUSAGE_SELF`: a module-level `const` is
+emitted as a file-scope variable in the translation unit that includes
+`<sys/resource.h>`, and the header declares that identifier as an enumerator.
+That one is native interop's to own, and narrowing the header set narrows it.
+
+A program-level `let y1 = 3` also fails --
+
+    error: redefinition of 'y1' as different kind of symbol
+    note: previous definition is here  /usr/include/bits/mathcalls.h:279
+
+-- under `-std=gnu11`, clang's default, where glibc stops guarding the BSD math
+names. That one looked like the same bug and is **not**: `nts_runtime.h`
+includes `<math.h>` itself, so it is there for every program whether or not any
+binding names a header, and removing the over-inclusion left it exactly where it
+was. The examples pin `-std=c11`, which is why nothing had seen it.
+
 ## Bit-fields: refused in both directions, not described
 
 A bit-field has no address and no byte offset -- `&p->version` does not
