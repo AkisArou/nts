@@ -653,6 +653,22 @@ fn write_readme(root: &Utf8Path, totals: &Totals) -> Result<()> {
     let share = (totals.lowered * 100).checked_div(considered).unwrap_or(0);
 
     let mut out = String::new();
+    // **Who wrote this, and from where.** Nothing else in the repository
+    // answers that, and the question is asked by the *reader* of a surprising
+    // diff rather than by whoever ran the tool -- so a comment beside the
+    // writer cannot reach them. Two sessions have now spent an exchange
+    // establishing whose uncommitted edit this block was, the second one after
+    // a session had read the warning above the same afternoon, for a different
+    // question. The recognisable moment is "a file changed and I do not know
+    // who changed it", and this is the first line such a reader sees.
+    let _ = writeln!(
+        out,
+        "<sub>Written by `nts-suite`, compiled in `{}`. It edits that tree's \
+         README wherever it is run from, including a sealed worktree — the \
+         destination is chosen when the binary is built, not when it runs. \
+         Regenerate with `cargo run --release -p nts-suite`.</sub>\n",
+        env!("CARGO_MANIFEST_DIR").rsplit_once("/tooling/").map_or("?", |(root, _)| root)
+    );
     let _ = writeln!(
         out,
         "{attempted} single-file cases from TypeScript's own test suite, compiled \

@@ -150,6 +150,8 @@ and what to do next. The corpus below is the independent measure of the same
 question.
 
 <!-- corpus:start -->
+<sub>Written by `nts-suite`, compiled in `/home/akisarou/Projects/nts`. It edits that tree's README wherever it is run from, including a sealed worktree — the destination is chosen when the binary is built, not when it runs. Regenerate with `cargo run --release -p nts-suite`.</sub>
+
 184 single-file cases from TypeScript's own test suite, compiled as ordinary programs.
 
 | outcome | files |
