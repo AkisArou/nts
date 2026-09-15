@@ -254,6 +254,14 @@ globalThis.nts_process_execve = (path, args, env) => host.execve(path, args,
     return [pair.slice(0, at), pair.slice(at + 1)];
   })));
 globalThis.nts_process_load_env_file = (path) => errnoOf(() => host.loadEnvFile(path));
+
+// `host.getBuiltinModule` rather than a `require` of our own: node already does
+// the id normalisation -- accepting `fs` and `node:fs`, answering `undefined` for
+// anything not requirable -- and reimplementing that list here would be a second
+// copy of node's builtin set that goes stale without saying so.
+globalThis.nts_process_get_builtin_module = (id) => host.getBuiltinModule(id);
+
+globalThis.nts_process_debug_end = () => host._debugEnd();
 globalThis.nts_process_raw_debug = (text) => host._rawDebug(text);
 
 const installedProcess = () => {

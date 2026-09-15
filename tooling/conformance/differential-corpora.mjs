@@ -4813,6 +4813,252 @@ export const CORPORA = {
           }
         },
       },
+
+      // **The part of `process`'s remaining surface that a value compare can hold**,
+      // which is its argument validation and nothing else.
+      //
+      // The header above already names what is excluded and why -- `hrtime`,
+      // `uptime`, `memoryUsage`, `cpuUsage`, `resourceUsage` and `pid` answer
+      // differently every call by design; `exit`, `abort`, `kill` and `chdir`
+      // change the host rather than answer about it; `emitWarning` puts hundreds of
+      // warnings on stderr over a corpus run. All of that still holds, and
+      // `constrainedMemory`, `availableMemory`, `threadCpuUsage`,
+      // `getActiveResourcesInfo`, `_getActiveHandles` and `_getActiveRequests`
+      // belong to the same first group: each answers about the process it runs in,
+      // and the host has a preflight the child does not.
+      //
+      // Named here because `corpus-reach.mjs` counts them and a reader deserves to
+      // know which absences are decisions: `reallyExit`, `_kill`, `execve`,
+      // `_fatalException`, `dlopen` with a real path, `openStdin`, `_tickCallback`,
+      // `report.writeReport`, and `stdout.write`/`stderr.write` with their
+      // `_destroy`/`destroySoon`. The last pair is the sharpest -- the probe returns
+      // its results **on stdout**, so a spec that writes there corrupts the channel
+      // the comparison travels over, and the failure would read as a divergence.
+      //
+      // What is left is validation, and it is worth having: these are the errors a
+      // caller sees for a wrong argument, and there are eighteen functions here
+      // whose validation nothing compared.
+      {
+        // The credential setters, with **non-numeric and non-string arguments
+        // only**.
+        //
+        // That restriction is the whole safety argument. Node validates the
+        // argument's type before it asks the kernel, so an object, an array, `null`
+        // and `true` answer `ERR_INVALID_ARG_TYPE` and the process's credentials are
+        // untouched. A number or a string could name a real user or group, and
+        // succeeding would drop the privileges of every later input in the run.
+        //
+        // Checked rather than argued: the credentials are read before and after and
+        // the comparison includes whether they moved, so if this ever stops being
+        // safe the corpus says so instead of quietly running as somebody else.
+        label: "process-credentials-refused",
+        call: (m, s) => {
+          const BAD = [{}, [], null, true, undefined];
+          const before = `${m.getuid()}:${m.getgid()}:${m.geteuid()}:${m.getegid()}`;
+          const out = [];
+          const attempt = (label, fn) => {
+            try {
+              fn();
+              out.push(`${label}:ACCEPTED`);
+            } catch (error) {
+              out.push(`${label}:${error.code ?? error.name}`);
+            }
+          };
+          const show = (v) =>
+            v === null ? "null" : v === undefined ? "undefined" : Array.isArray(v) ? "array" : typeof v;
+          for (let i = 0; i < BAD.length; i++) {
+            const bad = BAD[(s.length + i) % BAD.length];
+            const shown = show(bad);
+            attempt(`setuid(${shown})`, () => m.setuid(bad));
+            attempt(`setgid(${shown})`, () => m.setgid(bad));
+            attempt(`seteuid(${shown})`, () => m.seteuid(bad));
+            attempt(`setegid(${shown})`, () => m.setegid(bad));
+            attempt(`setgroups(${shown})`, () => m.setgroups(bad));
+            attempt(`initgroups(${shown})`, () => m.initgroups(bad, bad));
+          }
+          const after = `${m.getuid()}:${m.getgid()}:${m.geteuid()}:${m.getegid()}`;
+          out.push(`credentialsMoved:${before !== after}`);
+          return out.join("\n");
+        },
+      },
+      {
+        // `loadEnvFile` and `getBuiltinModule`.
+        //
+        // `loadEnvFile` is **always given a path**. Its no-argument form reads `.env`
+        // from the working directory, and loading one would put variables into the
+        // process that every later input then runs under -- and the host and the
+        // child have different working directories, so the two sides would not even
+        // load the same file.
+        label: "process-loadenv-and-builtin",
+        call: (m, s) => {
+          const out = [];
+          const show = (v) =>
+            v === null ? "null" : v === undefined ? "undefined" : Array.isArray(v) ? "array" : typeof v;
+          const attempt = (label, fn) => {
+            try {
+              out.push(`${label}:ok:${fn()}`);
+            } catch (error) {
+              out.push(`${label}:${error.code ?? error.name}`);
+            }
+          };
+          const GONE = `/nonexistent-nts-${s.length % 5}/no-such.env`;
+          attempt("loadEnvFile(missing)", () => m.loadEnvFile(GONE) ?? "void");
+          for (const bad of [null, 1, true, {}, []]) {
+            attempt(`loadEnvFile(${show(bad)})`, () => m.loadEnvFile(bad) ?? "void");
+          }
+          // `getBuiltinModule` over names that exist, names that do not, and the
+          // `node:` prefix, which node accepts for some spellings and not others.
+          const NAMES = ["fs", "node:fs", "path", "node:path", "nope", "node:nope",
+            "http", "node:http", "", "node:", s.slice(0, 6)];
+          for (let i = 0; i < NAMES.length; i++) {
+            const name = NAMES[(s.length + i) % NAMES.length];
+            attempt(`getBuiltinModule(${JSON.stringify(name)})`, () => {
+              const got = m.getBuiltinModule(name);
+              return got === undefined ? "undefined" : typeof got;
+            });
+          }
+          for (const bad of [null, undefined, 1, {}, []]) {
+            attempt(`getBuiltinModule(${show(bad)})`, () => m.getBuiltinModule(bad) ?? "void");
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // `finalization`'s three registrations, `ref`/`unref`, and the source-map
+        // toggle.
+        //
+        // `finalization.register` takes a value and a callback and fires the callback
+        // when the value is collected, which is not something a comparison can wait
+        // for -- so what is compared is the validation and the return value, and
+        // `unregister` is called for every successful registration so nothing is
+        // left attached.
+        //
+        // `setSourceMapsEnabled` is **restored**, because it is process-wide state.
+        // The host runs a preflight the child does not, so a value left behind here
+        // would be read by a later input on one side only, which is how
+        // `console.count` diverged before it was reset.
+        label: "process-finalization-and-refs",
+        call: (m, s) => {
+          const out = [];
+          const show = (v) =>
+            v === null ? "null" : v === undefined ? "undefined" : Array.isArray(v) ? "array" : typeof v;
+          const attempt = (label, fn) => {
+            try {
+              out.push(`${label}:ok:${fn()}`);
+            } catch (error) {
+              out.push(`${label}:${error.code ?? error.name}`);
+            }
+          };
+          const BAD = [null, undefined, 1, "x", {}, []];
+          for (let i = 0; i < 3; i++) {
+            const bad = BAD[(s.length + i) % BAD.length];
+            const shown = show(bad);
+            attempt(`register(${shown})`, () => m.finalization.register(bad, () => {}) ?? "void");
+            attempt(`registerBeforeExit(${shown})`, () => m.finalization.registerBeforeExit(bad, () => {}) ?? "void");
+            attempt(`unregister(${shown})`, () => m.finalization.unregister(bad) ?? "void");
+          }
+          // A registration that succeeds, then withdrawn. The held value is local, so
+          // nothing outlives the call.
+          attempt("registerValid", () => {
+            const held = { tag: s.length };
+            m.finalization.register(held, () => {});
+            m.finalization.unregister(held);
+            return "registered-and-withdrawn";
+          });
+          attempt("registerBeforeExitValid", () => {
+            const held = { tag: s.length };
+            m.finalization.registerBeforeExit(held, () => {});
+            m.finalization.unregister(held);
+            return "registered-and-withdrawn";
+          });
+
+          // `ref`/`unref` take a handle. Nothing here is one.
+          for (let i = 0; i < 3; i++) {
+            const bad = BAD[(s.length + i * 2) % BAD.length];
+            const shown = show(bad);
+            attempt(`ref(${shown})`, () => m.ref(bad) ?? "void");
+            attempt(`unref(${shown})`, () => m.unref(bad) ?? "void");
+          }
+
+          // **`setSourceMapsEnabled` is not here, and it is the one absence in this
+          // module that is a missing feature rather than a decision about shape.**
+          //
+          // It enables source-map translation of stack traces upstream. This profile
+          // has no source-map machinery, so implementing it would store a flag that
+          // nothing reads -- and a caller who sets it and then expects a translated
+          // trace is worse off than one who finds the function missing. That is the
+          // line this file draws elsewhere too: the two profiler notifiers *are*
+          // implemented, because node's are literally `() => {}` and a no-op is the
+          // faithful version of a no-op.
+          //
+          // `getSourceMapsSupport` is not on node's `process` at all, which the first
+          // version of this spec guarded on -- so that arm was inert on both sides
+          // and its agreement said nothing.
+          return out.join("\n");
+        },
+      },
+      {
+        // The internal accessors, each with an argument node rejects.
+        //
+        // `binding` and `_linkedBinding` name a native module; an unknown name is
+        // refused and a wrong type is refused earlier. `dlopen` is given a descriptor
+        // that is not a module object, so it fails before opening anything -- a real
+        // path would load native code into the process.
+        //
+        // **`_debugProcess` is not here, because it cannot be called safely either
+        // way.** A number is a **pid** and it sends that process SIGUSR1. And a
+        // non-number **aborts node**: there is no JavaScript validation at all, so
+        // the argument reaches C++ and fails `args[0]->IsNumber()` at
+        // `node_process_methods.cc:401`, SIGABRT with a core dump. The first draft of
+        // this spec passed non-numbers on exactly the reasoning that they were the
+        // safe half, and the run died.
+        //
+        // That is the second node assertion this corpus reached today; the other is
+        // `fs.writeFileSync(-0, "x")`. Both are recorded in
+        // `docs/conformance/nodejs.md`, and both are the same shape: a JavaScript
+        // argument reaching a C++ `CHECK` with nothing in between.
+        //
+        // Guarded by `typeof`, because two of these have come and gone across node
+        // versions and a missing one should read as absent rather than as a throw
+        // from calling `undefined`.
+        label: "process-internal-refused",
+        call: (m, s) => {
+          const out = [];
+          const show = (v) =>
+            v === null ? "null" : v === undefined ? "undefined" : Array.isArray(v) ? "array" : typeof v;
+          const attempt = (label, fn) => {
+            try {
+              out.push(`${label}:ok:${fn()}`);
+            } catch (error) {
+              out.push(`${label}:${error.code ?? error.name}`);
+            }
+          };
+          // **`binding` and `_linkedBinding` are not here, and that is a decision.**
+          //
+          // They hand back node's *internal C++ bindings* by name. This profile has
+          // no such table to expose -- its native side is its own -- so publishing
+          // them would mean either a table that lies about what it contains or a
+          // function whose every answer is an error. Node's own `binding` is
+          // deprecated and emits a warning when it succeeds.
+          //
+          // The differential is what named them: every call answered `TypeError`
+          // here, because the property does not exist, against `Error` from
+          // `binding` and `ERR_INVALID_MODULE` from `_linkedBinding` on node. That
+          // is a true difference and not one worth closing by inventing a registry.
+          for (const bad of [null, undefined, 1, {}, []]) {
+            attempt(`dlopen(${show(bad)})`, () => m.dlopen(bad, bad) ?? "void");
+          }
+          attempt("_debugEnd()", () => m._debugEnd() ?? "void");
+          for (const name of ["_startProfilerIdleNotifier", "_stopProfilerIdleNotifier"]) {
+            if (typeof m[name] === "function") {
+              attempt(name, () => m[name]() ?? "void");
+            } else {
+              out.push(`${name}:absent`);
+            }
+          }
+          return out.join("\n");
+        },
+      },
     ],
   },
   async_hooks: {

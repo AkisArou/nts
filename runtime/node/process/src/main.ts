@@ -140,6 +140,20 @@ declare function nts_process_execve(
 /** Zero on success, otherwise a negative libuv filesystem error. */
 /** @ntsAbi managed */
 declare function nts_process_load_env_file(path: string): number;
+/**
+ * The builtin named by `id`, or `undefined` if it is not one.
+ *
+ * A module object, so this is an interpreted-lane function by construction: an
+ * object cannot cross the N-API boundary, and the compiled backend declines it
+ * along with the other 496. That is the honest shape rather than a limitation of
+ * this declaration -- `getBuiltinModule` exists to hand back `node:fs`, and there
+ * is nothing to hand back on a lane where modules are linked rather than required.
+ */
+/** @ntsAbi managed */
+declare function nts_process_get_builtin_module(id: string): unknown;
+/** Stop the inspector, which is a no-op when none is attached. */
+/** @ntsAbi managed */
+declare function nts_process_debug_end(): void;
 /** @ntsAbi managed */
 declare function nts_process_raw_debug(text: string): void;
 
@@ -579,6 +593,18 @@ class Process extends EventEmitter {
 
   loadEnvFile = loadEnvFile;
 
+  getBuiltinModule = getBuiltinModule;
+
+  ref = ref;
+
+  unref = unref;
+
+  _debugEnd = _debugEnd;
+
+  _startProfilerIdleNotifier = _startProfilerIdleNotifier;
+
+  _stopProfilerIdleNotifier = _stopProfilerIdleNotifier;
+
   /** Write past every stream and every hook, for debugging the streams. */
   _rawDebug = _rawDebug;
 }
@@ -630,8 +656,17 @@ function kill(pid: number, signal?: string | number): true {
   return true;
 }
 
-function exit(...given: [] | [code: number | string | null | undefined]): never {
-  if (given.length !== 0) process.exitCode = given[0];
+function exit(code?: number | string | null): never {
+  // `arguments.length`, not a rest parameter, and the distinction is arity rather
+  // than behaviour: a rest parameter gives `exit.length === 0` where node's is 1.
+  // Node uses a named parameter and `if (arguments.length !== 0)`, which keeps both
+  // the arity and the difference between `exit()` and `exit(undefined)` -- the first
+  // leaves `exitCode` alone and the second clears it.
+  //
+  // The same shape as `removeAllListeners` and `Readable`'s override of it: what a
+  // caller passed and how many arguments they passed are two different questions,
+  // and only `arguments` answers the second.
+  if (arguments.length !== 0) process.exitCode = code;
 
   emitExitOnce(process, process.exitCode ?? 0);
   return reallyExit(process.exitCode ?? 0);
@@ -680,7 +715,11 @@ function emitUnhandledRejection(reason: unknown, promise: object): boolean {
   }
 }
 
-function fatalException(error: unknown, fromPromise = false): boolean {
+// `fromPromise?:` rather than `= false`, for arity: node's `_fatalException` is
+// `(er, fromPromise) => ...` with length 2, and a default initializer is excluded
+// from `Function.length` so `= false` gave 1. An optional parameter erases to a
+// plain one and keeps the 2, while `undefined` is falsy and behaves as `false` did.
+function fatalException(error: unknown, fromPromise?: boolean): boolean {
   // If a monitor, capture callback, or uncaughtException listener throws, the
   // runtime must treat that as a failure of the fatal-error handler. It must
   // not feed the new error through the same user handlers a second time. Node
@@ -771,10 +810,109 @@ function execve(
   return nts_process_execve(execPath, args, pairs);
 }
 
-function loadEnvFile(path = ".env"): void {
-  validateString(path, "path");
-  const result = nts_process_load_env_file(path);
-  if (result !== 0) throw uvException(result, "open", path);
+/**
+ * `process._debugEnd`, which stops the inspector.
+ *
+ * A no-op when nothing is attached, which is the only state this profile's tests
+ * run in -- but routed to the real thing rather than stubbed, because "no inspector
+ * is attached" is a fact about the run and not about the function.
+ */
+function _debugEnd(): void {
+  nts_process_debug_end();
+}
+
+/**
+ * `process._startProfilerIdleNotifier` and `process._stopProfilerIdleNotifier`.
+ *
+ * **Empty on purpose, because node's are empty.** Upstream they are literally
+ * `process._startProfilerIdleNotifier = () => {}` in
+ * `internal/bootstrap/switches/is_main_thread.js`, kept so that code written
+ * against an older node does not break. A no-op here is the faithful
+ * implementation rather than a stub standing in for missing work -- which is the
+ * distinction that keeps `setSourceMapsEnabled` out of this file: that one does
+ * something upstream, and a flag nothing reads would be a lie.
+ *
+ * Built by a factory, because node's `name` is `""` and matching that takes some
+ * care: an arrow assigned to a member expression takes no name from it, while
+ * `const f = () => {}` or a class field both *do* take theirs.
+ * `export-surface-static.js` compares names, so an arrow returned from a call --
+ * which is named by nothing -- is what makes them agree. `(0, () => {})` also works
+ * in JavaScript and TypeScript rejects it: "left side of comma operator is unused
+ * and has no side effects".
+ */
+const anonymousNoop = (): (() => void) => () => {};
+const _startProfilerIdleNotifier = anonymousNoop();
+const _stopProfilerIdleNotifier = anonymousNoop();
+
+/**
+ * `process.ref` and `process.unref`, which ask a thing to hold the loop open or to
+ * stop holding it.
+ *
+ * Neither validates and neither throws: a nullish argument returns, and anything
+ * else is asked for a `ref`/`unref` to call and ignored when it has none -- so
+ * `process.ref("x")` is a no-op rather than an error. That is deliberate upstream,
+ * because the point is to ref *whatever* a caller happens to be holding without
+ * first proving it is refable.
+ *
+ * The symbol is consulted **before** the method, which is the part a plain
+ * `value.ref?.()` would get wrong: an object can offer a private ref under
+ * `Symbol.for("nodejs.ref")` while its public `ref` means something else entirely.
+ *
+ * No binding: this is pure JavaScript upstream too.
+ */
+function ref(maybeRefable: unknown): void {
+  if (maybeRefable === null || maybeRefable === undefined) return;
+  const holder = maybeRefable as Record<PropertyKey, unknown>;
+  const fn = holder[Symbol.for("nodejs.ref")] ?? holder.ref;
+  if (typeof fn === "function") (fn as (this: unknown) => void).call(maybeRefable);
+}
+
+function unref(maybeRefable: unknown): void {
+  if (maybeRefable === null || maybeRefable === undefined) return;
+  const holder = maybeRefable as Record<PropertyKey, unknown>;
+  const fn = holder[Symbol.for("nodejs.unref")] ?? holder.unref;
+  if (typeof fn === "function") (fn as (this: unknown) => void).call(maybeRefable);
+}
+
+/**
+ * `process.getBuiltinModule`, node's way to reach a builtin without `require`.
+ *
+ * Node normalises the id first: a bare `fs` and a prefixed `node:fs` both resolve,
+ * and an id that is not requirable answers `undefined` rather than throwing. Only
+ * a non-string is an error, which is what makes it usable as a probe -- a caller
+ * asks for a module it may not have and branches on `undefined`.
+ *
+ * Found absent by the differential: every call answered `TypeError` here because
+ * the property did not exist, against `object` or `undefined` on node.
+ */
+function getBuiltinModule(id: string): unknown {
+  validateString(id, "id");
+  return nts_process_get_builtin_module(id);
+}
+
+function loadEnvFile(path: string | null | undefined = undefined): void {
+  // `!= null`, which is node's test, so **both** `undefined` and `null` mean the
+  // default `.env`. A default parameter of `".env"` only covers `undefined`, so
+  // `loadEnvFile(null)` answered `ERR_INVALID_ARG_TYPE` here and `ENOENT` on node
+  // -- node fell through to the default path and reported that it was not there.
+  //
+  // The difference matters for a forwarded argument: `loadEnvFile(options.path)`
+  // with nothing in `path` loads the default upstream and threw here, which is the
+  // same shape as `removeAllListeners(undefined)` one module over.
+  //
+  // The `= undefined` is load-bearing and is node's, with node's reason: it is
+  // written that way "so that `loadEnvFile.length` returns 0". A parameter declared
+  // `path?:` does **not** do it -- the `?` erases and leaves a plain parameter, so
+  // arity was 1 against node's 0. Only a default initializer is excluded from
+  // `Function.length`.
+  //
+  // Measured rather than reasoned: the first version of this comment claimed an
+  // optional parameter gave the same 0, and the probe that compared the arity said
+  // otherwise on the same run that confirmed the five behaviours.
+  const resolved = path != null ? path : ".env";
+  if (path != null) validateString(path, "path");
+  const result = nts_process_load_env_file(resolved);
+  if (result !== 0) throw uvException(result, "open", resolved);
   refreshEnvironment();
 }
 

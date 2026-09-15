@@ -25,6 +25,7 @@
 require("../common");
 
 const assert = require("assert");
+const { execFileSync } = require("child_process");
 
 // Every function node publishes on `process` that this profile also publishes.
 // Read off the object rather than listed, so a new export is covered the day it
@@ -50,14 +51,56 @@ assert.ok(checked.length > 0, "no functions found on process, so this file check
 // mistake. `export const uptime = nts_process_uptime` does not leak a name on
 // this lane, because the stand-in is `globalThis.nts_process_uptime = () => ...`
 // and a property assignment infers no name at all -- so the function arrives
-// anonymous where node has `"uptime"`. Every function node publishes has a name;
-// an empty one is a surface defect whatever node happens to call it.
-const anonymous = checked.filter((n) => process[n].name === "");
+// anonymous where node has `"uptime"`. An empty name is a surface defect
+// **wherever node has one**.
+//
+// That last clause was "whatever node happens to call it", asserting the empty
+// list outright on the reasoning that every function node publishes has a name.
+// It does not. `process._startProfilerIdleNotifier` and
+// `process._stopProfilerIdleNotifier` are literally
+// `process._startProfilerIdleNotifier = () => {}` upstream -- an arrow assigned to
+// a member expression, which takes no name from it -- so node's own `name` for both
+// is `""`. Implementing them faithfully made this file fail, naming them, which is
+// the right outcome for the wrong reason: they were correct.
+//
+// So node's answer is read rather than assumed. A hand-written exemption list would
+// be a second copy of node's surface that goes stale, which is the failure this
+// whole file exists to catch one level down.
+const nodeAnonymous = new Set(
+  JSON.parse(
+    execFileSync(
+      process.execPath,
+      ["-p", 'JSON.stringify(Object.getOwnPropertyNames(process).filter((k) => { try { return typeof process[k] === "function" && process[k].name === ""; } catch { return false; } }))'],
+      { encoding: "utf8" },
+    ),
+  ),
+);
+// A floor on the probe: if the child ever answers nothing -- a changed spelling, a
+// `-p` that fails -- every name would look unexempted and this check would report
+// defects that are node's own shape. Two is what node has today, and asserting "at
+// least one" keeps an added anonymous function upstream from failing this.
+assert.ok(
+  nodeAnonymous.size >= 1,
+  "the probe found no anonymous functions on node's process, which means it stopped working rather than that node changed",
+);
+const anonymous = checked.filter((n) => process[n].name === "" && !nodeAnonymous.has(n));
 assert.deepStrictEqual(
   anonymous,
   [],
-  `public functions with no name, where node names every one: ${anonymous.join(", ")}`,
+  `public functions with no name, where node names its: ${anonymous.join(", ")}`,
 );
+// **No mirror check here**, deliberately. Asserting that a function node leaves
+// anonymous is anonymous here too is a reasonable property, and it belongs in
+// `export-surface-static.js`, which already compares every name against node's and
+// carries the allowances with their reasons -- including this exact one:
+// "_fatalException  anonymous on node -- assigned to the member, so named".
+//
+// A draft of this file added that mirror and it immediately failed on
+// `_fatalException`, contradicting an allowance recorded one file over. Two checks
+// deriving one fact will disagree eventually, and the one that disagrees later is
+// the one nobody reconciles. This file's question is narrower and stays narrower: a
+// name from the native layer must not be observable from script.
+
 assert.deepStrictEqual(
   leaked,
   [],

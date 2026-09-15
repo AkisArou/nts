@@ -46,6 +46,24 @@ const nodeNames = fromRealNode(
 // Which keys hold the *same object* in node. Each key maps to the first key
 // (in sorted order) holding an identical value, so aliases share a
 // representative and the whole grouping compares with one assertion.
+// **Arity**, which this file did not compare and which hides real defects.
+//
+// `Function.length` is part of a function's observable shape and it moves for
+// reasons that are easy to get wrong in TypeScript: a parameter written `path?:`
+// erases to a plain one and **counts**, while `path = undefined` does not. So
+// `loadEnvFile` read 1 against node's 0, and `exit` read 0 against node's 1 because
+// a rest parameter counts for nothing. Neither was visible here; both were found by
+// an ad-hoc probe, which is the sign the check belonged in a file.
+//
+// Two differences existed when this was added, `exit` and `_fatalException`, and
+// both were fixed rather than allowed -- so there is no allowance list, and the
+// empty one is what fails if a third appears.
+const nodeLengths = fromRealNode(
+  'Object.fromEntries(Object.keys(require("node:process"))' +
+    '.filter((k) => typeof require("node:process")[k] === "function")' +
+    '.map((k) => [k, require("node:process")[k].length]))',
+);
+
 const nodeAliases = fromRealNode(
   '(() => { const m = require("node:process"); const ks = Object.keys(m).sort();' +
     ' return Object.fromEntries(ks.map((k) => [k, ks.find((j) => m[j] === m[k])])); })()',
@@ -103,29 +121,23 @@ const NAME_DIFFERS = {
 // This test failing is what said so. The list is a ledger of known gaps, and it
 // shrinking is the outcome it exists to make visible.
 const ABSENT = [
-  "_debugEnd",
   "_debugProcess",
   "_eval",
   "_kill",
   "_linkedBinding",
   "_preload_modules",
   "_print_eval",
-  "_startProfilerIdleNotifier",
-  "_stopProfilerIdleNotifier",
   "_tickCallback",
   "binding",
   "debugPort",
   "dlopen",
   "domain",
-  "getBuiltinModule",
   "moduleLoadList",
   "openStdin",
   "reallyExit",
-  "ref",
   "report",
   "setSourceMapsEnabled",
   "sourceMapsEnabled",
-  "unref",
 ];
 
 const missing = nodeKeys.filter((name) => !ours.has(name));
@@ -178,6 +190,7 @@ assert.deepStrictEqual(
 // re-running it, and the shape is the useful part.
 const typeMismatches = [];
 const nameMismatches = [];
+const arityMismatches = [];
 
 for (const name of nodeKeys) {
   if (ABSENT.includes(name)) continue;
@@ -192,10 +205,23 @@ for (const name of nodeKeys) {
       `${name}.name: ours ${JSON.stringify(mod[name].name)}, expected ${JSON.stringify(expected)}`,
     );
   }
+  if (mod[name].length !== nodeLengths[name]) {
+    arityMismatches.push(
+      `${name}.length: ours ${mod[name].length}, node's ${nodeLengths[name]}`,
+    );
+  }
 }
 
 assert.deepStrictEqual(typeMismatches, [], `process type divergence(s): ${typeMismatches.join(" | ")}`);
 assert.deepStrictEqual(nameMismatches, [], `process name divergence(s): ${nameMismatches.join(" | ")}`);
+assert.deepStrictEqual(arityMismatches, [], `process arity divergence(s): ${arityMismatches.join(" | ")}`);
+// A floor on the probe. The risk here is not a wrong answer -- comparing against
+// `undefined` fails loudly -- it is the filter silently matching nothing, which
+// leaves the loop with nothing to compare and reads as agreement.
+assert.ok(
+  Object.keys(nodeLengths).length >= 40,
+  `the arity probe found only ${Object.keys(nodeLengths).length} functions on node's process, which means it stopped working rather than that node shrank`,
+);
 
 // **The aliases**, which node's own tests have no reason to assert: on node two
 // keys holding one object are the same object by construction. An artifact that
