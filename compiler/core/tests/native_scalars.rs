@@ -486,6 +486,50 @@ fn a_copy_survives_and_is_refused_between_two_types() {
     );
 }
 
+/// A variadic tail C would promote is refused **naming the type to declare**.
+///
+/// The guarantee is thin: nothing would miscompile if this were silent, since
+/// the two backends would simply disagree with each other about a conversion
+/// neither declaration mentions. What the refusal buys is the remedy -- C
+/// promotes anything below `int` and every `float`, so the author needs to be
+/// told *which* type the callee actually receives, and "that type is not
+/// allowed" leaves them guessing between `int` and `unsigned int`.
+///
+/// So the words are asserted. The accepted arm is what makes it a check.
+#[test]
+fn a_promoted_variadic_tail_is_refused_with_the_type_to_declare() {
+    for (tail, promoted) in [("c_uint16", Some("int")), ("c_float", Some("double")), ("c_uint32", None)] {
+        let Some(snapshot) = snapshot(&format!("variadic-{tail}"), &format!("
+            declare function log(first: c_int, ...rest: {tail}[]): c_int;
+            export function go(): number {{ return log(1 as c_int, 2 as {tail}); }}
+        ")) else { return; };
+        let prepared = hir::prepare(&snapshot).unwrap();
+        let refusal = prepared.diagnostics.iter().find(|d| d.message.contains("variadic tail"));
+        match promoted {
+            None => assert!(refusal.is_none(), "`{tail}` passes as declared: {refusal:?}"),
+            Some(promoted) => {
+                let message = &refusal.expect("a promoted tail must be refused").message;
+                for expected in [tail_c_name(tail), promoted, "declare"] {
+                    assert!(
+                        message.contains(expected),
+                        "`{tail}`: the refusal has to name `{expected}`, or the author is left \
+                         guessing which type to write: {message}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// The C spelling a brand stands for, which is what the diagnostic uses.
+fn tail_c_name(brand: &str) -> &'static str {
+    match brand {
+        "c_uint16" => "uint16_t",
+        "c_float" => "float",
+        other => panic!("no C spelling recorded for {other}"),
+    }
+}
+
 #[test]
 fn prepared_storage_verifier_catches_corrupted_counts_and_borrow_contracts() {
     let Some(snapshot) = snapshot("local-verifier", r#"

@@ -340,6 +340,20 @@ assumed. Each row below was run.
 | a rest parameter of non-array type | **no** | tsgo answers `TS2370` first |
 | a callback entering on a foreign thread | **no**, for a standalone program | see below |
 
+**For some of these the guarantee is not what they buy.** Delete the
+conflicting-ABI check and the program still fails -- the C compiler says
+`conflicting types for 'collide'` about a `program.c` nobody wrote. What the
+refusal buys is naming the symbol and *both* prototypes. Same for the variadic
+promotion, whose value is `declare `int``, and for a `--no-escape` naming
+nothing, whose value is the list of names that do exist.
+
+A guard like that survives "does the bad case still fail?" and dies to it, so
+its test asserts **the words**: that the ABI refusal names `collide`, `size_t`
+and `int`; that the promotion refusal names `uint16_t`, `int` and `declare`;
+that the contract refusal names the function, the bad name, every real name and
+why they differ from the header's. A message that degraded to a category would
+pass a test written for one, and would be worth less than the C compiler's.
+
 The three tsgo cases are kept and marked in place: the input here is a snapshot
 rather than the source, and a malformed one should be refused. They are not
 controls, and saying so is the point -- an unmarked unreachable guard is

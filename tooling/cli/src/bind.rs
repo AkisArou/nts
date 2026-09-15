@@ -1339,6 +1339,54 @@ mod tests {
         );
     }
 
+    /// A `--no-escape` naming nothing is refused **with the names that exist**.
+    ///
+    /// The guarantee here is cheap: without the check the tool emits
+    /// `@ntsNoEscape path` and the *compiler* refuses it one step later, about
+    /// a generated file, naming a tag rather than the flag that produced it.
+    /// What the check buys is the list -- the names come from the header with
+    /// leading underscores stripped, so `__file` becomes `file`, which is not
+    /// guessable from reading the header.
+    ///
+    /// So the assertion is on the words. A message that said only "no such
+    /// parameter" would pass a test for the category and would be worth less
+    /// than the compiler's own.
+    #[test]
+    fn a_contract_naming_nothing_lists_the_parameters_that_exist() {
+        let mut binding = Binding::default();
+        binding.functions.push(Function {
+            name: "stat".to_owned(),
+            parameters: vec![
+                ("file".to_owned(), Shape::Pointer(Box::new(Shape::Scalar("c_char")), true)),
+                ("buf".to_owned(), Shape::VoidPointer(false)),
+            ],
+            result: Some(Shape::Scalar("c_int")),
+            variadic: false,
+        });
+
+        let refused = binding
+            .check_contracts(&request(vec![("stat".to_owned(), "path".to_owned())]))
+            .unwrap_err()
+            .to_string();
+        for expected in ["stat", "path", "file", "buf", "underscores"] {
+            assert!(refused.contains(expected), "must name `{expected}`: {refused}");
+        }
+
+        // A function nobody is binding is a different sentence, and says so.
+        let other = binding
+            .check_contracts(&request(vec![("fstat".to_owned(), "buf".to_owned())]))
+            .unwrap_err()
+            .to_string();
+        assert!(other.contains("not one of the functions being bound"), "{other}");
+
+        // And the arm that makes both checks: a contract that does name a
+        // parameter passes, or this would hold on a tool that refused every
+        // contract.
+        binding
+            .check_contracts(&request(vec![("stat".to_owned(), "buf".to_owned())]))
+            .expect("`buf` is a parameter of `stat`");
+    }
+
     #[test]
     fn the_binding_reproduces_the_layouts_it_describes_and_refuses_when_it_cannot() {
         let mut binding = Binding::default();

@@ -663,11 +663,20 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         .iter()
         .find(|d| d.code == "NTS2007")
         .unwrap_or_else(|| panic!("no NTS2007: {:?}", emitted.diagnostics));
-    assert!(
-        refusal.message.contains("conflicting ABI declarations"),
-        "{}",
-        refusal.message
-    );
+    // **The words, not just the category.** What this refusal buys is not that
+    // the program fails -- delete the check and the C compiler still refuses,
+    // saying `conflicting types for 'collide'` about a `program.c` nobody
+    // wrote. What it buys is naming the symbol and *both* prototypes, so the
+    // author can see which two declarations disagree and how. A message that
+    // degraded to "an ABI problem" would pass a test that asserted only the
+    // category, and would have lost the entire value of the check.
+    for expected in ["collide", "conflicting ABI declarations", "size_t", "int"] {
+        assert!(
+            refusal.message.contains(expected),
+            "the refusal has to name `{expected}`, or it is worth less than the C compiler's: {}",
+            refusal.message
+        );
+    }
     // And the reason the CLI treats this one as fatal while it tolerates the
     // rest. Both halves are asserted, because only the pair is a check: a
     // predicate that answered `true` for everything would pass the line below
