@@ -2546,25 +2546,34 @@ records refusals — has nothing under that name to find.
 The refusal itself is there: `readable.ts:296 NTS1001 a method without a body`,
 which is `_construct?(callback): void`, a member declared without one.
 
-**And `note_uncompiled` cannot file it.** It keys on `declared_name`, which
-returns the first `IDENTIFIER` child of the declaration, and returns early
-without recording when there is none:
+**`note_uncompiled` records in a different vocabulary.** It keys on
+`declared_name`, which is syntax — `parse`, `isWritableStream` — while every
+reader asks in the lowering's names: `Catalog#parse`, `Readable#constructor`.
+Measured on `stream` with a probe at the recording site: **51 entries under a
+Readable/Stream name and not one containing `#`**. So a refused class member is
+recorded and can never be found again by the wrapper that wants it.
 
-    let Some(name) = FuncBuilder::probe(snapshot).declared_name(id) else {
-        return;
-    };
+That is now fixed — a refusal is filed under the qualified name as well, which
+is what `lower.rs` spells when it builds `format!("{owner}#constructor")`.
 
-A constructor declaration has no identifier naming it — `constructor` is a
-keyword. *Inferred*, not yet confirmed: that early return is what silences these,
-and the confirmation is a one-line probe printing `declared_name` for a
-constructor node. If it instead returns a *parameter's* identifier the entry is
-worse than missing, because it is filed under a name nothing will ask for.
+**But it is not why these three decline without a cause, and the first
+explanation here was wrong.** This section previously said `declared_name`
+returns nothing for a constructor and `note_uncompiled` silently returns. A
+probe printing every such early return found **zero** across the whole of
+`stream`. The inference was marked as an inference, which is the only reason
+checking it was possible.
 
-Either way the fix is the same shape and is not a message: a refusal has to be
-recorded under **the name the lowering would have given the function**, which
-for a constructor is `<owner>#constructor` and is already spelled that way at
-`lower.rs:23323`. A name that only syntax can produce cannot answer a question
-asked in the lowering's own vocabulary.
+What is established: `Readable#constructor` has no definition in the program
+*and* no refusal naming it, while `Duplex#_final` and its siblings are lowered
+normally, and `PassThrough` does get a cause because the cascade names
+`Transform#constructor`. A constructor that is neither compiled nor refused is
+a third state, and the message the wrapper gives for it — "was not compiled" —
+is accurate about all three, which is why it reads as one problem. Open.
+
+A caution earned three times in one sitting: `Stream#constructor` matched
+`WebSocketStream#constructor` and `Duplex#constructor` matched nothing it
+appeared to, because substring search has no notion of a name boundary. Every
+count above uses one.
 
 ### First, by whether anything can check it
 

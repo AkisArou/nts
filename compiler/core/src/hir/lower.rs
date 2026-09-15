@@ -2807,6 +2807,35 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
 /// One entry per name. A generic with several copies can refuse more than once
 /// and the first reason is as good as the fifth; a list of five would read as
 /// five problems.
+/// `Owner#member`, when the declaration is a class member.
+///
+/// Walks to the enclosing `class`, which is syntax rather than the hierarchy
+/// lookup the lowering uses -- this runs where a refusal is recorded and has a
+/// node, not a resolved type. A constructor is named `constructor` regardless
+/// of what `declared_name` found in it, because that is what the lowering
+/// spells: `lower.rs` builds `format!("{owner}#constructor")`.
+fn qualified_name(
+    snapshot: &SemanticSnapshot,
+    id: NodeId,
+    declared: &str,
+) -> Option<String> {
+    let probe = FuncBuilder::probe(snapshot);
+    let member = match snapshot.nodes.get(id.0 as usize)?.kind {
+        NodeKind::Syntax(syntax::CONSTRUCTOR) => "constructor",
+        NodeKind::Syntax(syntax::METHOD_DECLARATION) => declared,
+        _ => return None,
+    };
+    let mut at = snapshot.nodes.get(id.0 as usize)?.parent;
+    while let Some(node) = at {
+        let record = snapshot.nodes.get(node.0 as usize)?;
+        if record.kind == NodeKind::Syntax(syntax::CLASS_DECLARATION) {
+            return probe.declared_name(node).map(|owner| format!("{owner}#{member}"));
+        }
+        at = record.parent;
+    }
+    None
+}
+
 fn note_uncompiled(
     snapshot: &SemanticSnapshot,
     program: &mut super::Program,
@@ -2818,6 +2847,25 @@ fn note_uncompiled(
     };
     if program.uncompiled.iter().any(|(at, _)| *at == name) {
         return;
+    }
+    // **Also under the name the lowering would give it.** `uncompiled` is
+    // keyed by `declared_name`, which is syntax: `parse`, `constructor`. Every
+    // reader asks in the lowering's vocabulary -- `Catalog#parse`,
+    // `Readable#constructor` -- so a refused class member was recorded and
+    // never found again.
+    //
+    // Measured 2026-09-15 on `stream`: 51 entries recorded under a
+    // Readable/Stream name and **not one containing `#`**, while the napi
+    // wrapper declined `Readable`, `Stream` and `Duplex` with "is a class whose
+    // constructor was not compiled" -- the effect, because `why_uncompiled`
+    // looked up `Readable#constructor` and there was nothing to find.
+    //
+    // Both are pushed rather than the bare one replaced: a top-level function
+    // is asked for by its bare name, and the two vocabularies agree only there.
+    if let Some(qualified) = qualified_name(snapshot, id, &name) {
+        if !program.uncompiled.iter().any(|(at, _)| *at == qualified) {
+            program.uncompiled.push((qualified, diagnostic.message.clone()));
+        }
     }
     program.uncompiled.push((name, diagnostic.message.clone()));
 }
