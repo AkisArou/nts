@@ -311,6 +311,30 @@ function dispatchEscapedException(error) {
  * state with. Whatever still passes was never measuring us.
  */
 const sabotaged = process.env["NTS_CONFORMANCE_SABOTAGE"] === "1";
+
+/**
+ * **`NTS_CONFORMANCE_ORACLE=1`: run the file against *node's* module instead of ours.**
+ *
+ * The mirror of `--sabotage`. Sabotage asks "does this file still pass when the module
+ * supplies nothing", which finds tests that never measured us. This asks the opposite
+ * question about the same files: **does this file pass against the implementation it
+ * claims to describe?**
+ *
+ * A test that fails here asserts something node does not do. That is not a hypothetical
+ * failure mode -- `events/test/eventemitter-asyncresource.js` asserted
+ * `emitDestroy() === emitter` under a header saying it was isolated from upstream
+ * `test-eventemitter-asyncresource.js`, which calls `foo.emitDestroy()` and asserts
+ * nothing about what comes back. The assertion was ours, it was wrong, and having it
+ * pinned is why `emitDestroy` returned `this` here for as long as it did. Running that
+ * file against node would have failed the day it was written.
+ *
+ * **What this cannot judge.** Internals stay ours, because node does not publish them;
+ * a file reaching `internal/...` is answering about a mixture and is reported as such
+ * rather than counted either way. A file asserting a documented non-goal fails here
+ * correctly and is a known difference rather than a defect -- which is why the output
+ * is a list to read and not a number to gate on.
+ */
+const oracleMode = process.env["NTS_CONFORMANCE_ORACLE"] === "1";
 /**
  * Hand the *shim* an empty exports object, and let it run.
  *
@@ -588,7 +612,25 @@ try {
   if (sabotaged) {
     underTest = {};
   }
-  shapeModule?.installGlobals?.(underTest, sabotaged ? {} : exports);
+  if (oracleMode) {
+    // A local `createRequire` rather than the file-scope `realRequire`, which is
+    // declared further down and would be in its temporal dead zone here.
+    const nodeRequire = createRequire(import.meta.url);
+    underTest = nodeRequire(`node:${moduleName}`);
+    for (const id of [...siblings.keys()]) {
+      try {
+        siblings.set(id, nodeRequire(`node:${id}`));
+      } catch {
+        // Not a subpath node publishes; leaving ours would compare a mixture, so
+        // the id is dropped and a test that needs it fails visibly.
+        siblings.delete(id);
+      }
+    }
+  }
+  // Skipped under `oracleMode`: the module *is* node's there, so the globals a
+  // shim would install are already the ones the test should see, and installing
+  // ours over them would put our object back into the comparison.
+  if (!oracleMode) shapeModule?.installGlobals?.(underTest, sabotaged ? {} : exports);
   if (sabotaged && declaredInternals !== null) {
     // Keep the ids resolvable but blank their exports. Dropping the ids makes
     // a test report "needs internal/..." and skip before it reaches the API

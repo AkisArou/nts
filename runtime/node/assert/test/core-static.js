@@ -38,6 +38,24 @@ assert.throws(
   },
   { code: "E_STATIC", message: /bad input/, cause: { id: 7 } },
 );
+// **A deliberate difference from node, recorded here because this file used to
+// assert it as node's behaviour.** Node reads `expected[key]` for whatever keys
+// the object has and deep-compares; an unknown key therefore compares
+// `actual[key]` -- `undefined` -- against the expected value and fails with
+// `ERR_ASSERTION`. Node's only validation is that the object is not *empty*
+// (`lib/assert.js:538`), and it has no "unsupported property" rule at all.
+//
+// This profile types the expectation as `ErrorExpectation`, a fixed set of
+// declared fields, because a dynamic `expected[key]` read has no representation
+// in the compiled lane -- so an undeclared key is reported as
+// `ERR_INVALID_ARG_VALUE` rather than compared.
+//
+// The assertion below is of *our* behaviour and is labelled as such. It said
+// `{ code: "ERR_INVALID_ARG_VALUE" }` under a header claiming this file retains
+// behaviour from upstream `test-assert.js`, which made a local design choice
+// read as node's. Found by running this file against node itself
+// (`NTS_CONFORMANCE_ORACLE=1`), where it failed: `ERR_ASSERTION` !==
+// `ERR_INVALID_ARG_VALUE`.
 assert.throws(
   () =>
     assert.throws(
@@ -45,6 +63,17 @@ assert.throws(
         throw { code: "E_STATIC" };
       },
       { arbitrary: 1 },
+    ),
+  { code: "ERR_INVALID_ARG_VALUE" },
+);
+// The empty-object rule *is* node's, and agrees.
+assert.throws(
+  () =>
+    assert.throws(
+      () => {
+        throw { code: "E_STATIC" };
+      },
+      {},
     ),
   { code: "ERR_INVALID_ARG_VALUE" },
 );
