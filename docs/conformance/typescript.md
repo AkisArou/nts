@@ -293,7 +293,7 @@ counter, not by reading the emitted C.
 | ✗ | an executor that is not an arrow written at the call, or a `resolve` used as a value rather than called (`new Promise(r => { saved = r })`) — both need a real closure over the promise |
 | ✅ | a **`catch` that spans an `await`** — `try { await p } catch { … }`, including a bound reason, a `throw` and an `await` reaching one handler, two awaits in one `try`, nesting, a rethrow, and an `await` inside the handler itself. A rejection is an *edge into the handler* like a `throw`, and the block it leaves does not exist when the lowering runs — `suspend` creates it on splitting at the `await` — so the handler and its arguments are settled at the lowering, into `OpKind::Await`, and read there. **89 occurrences across 17 sites** in `runtime/node`, and it was a wrong answer rather than a gap: `try { await failing() } catch { return -99 }` compiled, ran, and rejected. Record 0167 `examples/async-methods` carries `async` methods, which were refused for a reason that had stopped applying; `examples/async-unsupported` names the parts of `async` this lowering still refuses. |
 | ✅ | a **`finally` that spans an `await`**, with a `catch` beside it or without. With one it already worked once un-refused: the rejection reaches the handler and the handler's normal exit runs the `finally`. Without one there was nowhere to go, so a handler is **synthesised where the source wrote none** — `try { … } finally { F }` becomes `try { … } catch (e) { F; throw e } finally { F }`, which is what explicit cleanup means. Built only where a rejection recorded itself, because a block with no predecessors is one the verifier rejects. **29 occurrences across 6 sites**, evenly split between the two shapes, and it was a wrong answer: node runs the `finally` and this did not. Record 0171 `examples/async-finally` carries it. |
-| ✅ | type predicates (`x is T`) and `asserts x is T` — `examples/advanced`, `): pet is Fish` |
+| ✅ | type predicates (`x is T`) and `asserts x is T` — **run against node 2026-09-15, 87 cases across 3 functions, agreed on every one.** `examples/a-type-predicate-that-narrows` carries a guard taken both ways, its negation (which narrows the *other* arm in the `else`), and an `asserts` predicate, which narrows for the rest of the scope rather than inside a branch. The previous citation was `examples/advanced` — where the only guard is `isFish(pet: Fish | Bird)`, taking an object, so that example is one of the **nine the gate reports as having "compared nothing"** and no case had ever been compared. The row was true and its evidence was the syntax being accepted. See §16: the narrowing reaches lowering through `node_types`, not through `SignatureRecord::type_predicate`, which has no reader. |
 | ✅ | rest parameters | the call gathers its trailing arguments into the array `examples/rest-parameters` carries the ordinary form, `function f(...xs: number[])`. |
 | ✅ | calling a function held in an **optional** property — `hook.init?.(…)` written as a guard and a call | not the same slot as a union with `undefined` in it, which is why one lowered while the other did not: a nullable reference is a pointer, and an optional property has a third state — *absent*, as against present-and-`undefined` — so it erases. The licence to unerase is the checker's narrowing, and it is asked of the **type** rather than the representation, because `F` and `F \| undefined` are both a pointer and a width test would admit the un-narrowed case. Unguarded still refuses: node throws `TypeError: … is not a function` there and a null call is not that. `emitInit` compiles because of this. Record 0291 — `examples/an-optional-chained-method-call` |
 | ✅ | `parseInt` and `parseFloat` | neither is `Number(s)`, and the difference is that both **stop at the first character their grammar does not admit**: `Number("12abc")` is NaN and both of these answer 12. `parseFloat` is not `strtod` on the whole string either — `parseFloat("0x10")` is 0 where `strtod` reads a hexadecimal float and answers 16, `"inf"` is NaN where `strtod` accepts it, and `"1e"` is 1 because an exponent needs a digit after it. The longest admitted prefix is measured first and `strtod` is handed only that, because rounding a decimal string to the nearest double is what it is for. `examples/parse-int` and `examples/parse-float` |
@@ -2325,13 +2325,41 @@ engine rather than not at all.
 `tooling/gate/all.sh` runs all of it. Three measures, and they answer different
 questions:
 
+Every number below is from the gate on **2a1603b8, 2026-09-15**, read off the
+run rather than carried forward — the previous set said 90 examples, 49 lowering
+cleanly and 22 modules, and had been true at some point.
+
 | | what it says | today |
 |---|---|---|
-| examples | the compiled program agrees with node, case by case | 90 of 90 |
-| sweep | a generated cross-product agrees with node, cell by cell | 9,570 cases across 330 functions |
-| corpus | arbitrary input produces no invalid IR and no C that will not compile | 49 lower cleanly; `invalid HIR` 0, `uncompilable C` 0 — both hard rows |
-| profile | how much of a real standard library lowers | 22 modules emit and verify; 1,097 distinct refusal sites |
-| rc | the same examples hold nothing at exit under reference counting | 87 of 90, three named |
+| examples | the compiled program agrees with node, case by case | **208 of 208** — but see below: **9 of them compare nothing** |
+| sweep | a generated cross-product agrees with node, cell by cell | 10,005 cases across 345 functions |
+| corpus | arbitrary input produces no invalid IR and no C that will not compile | 184 single-file cases, 53 lower cleanly; `invalid HIR` 0, `uncompilable C` 0 — both hard rows |
+| profile | how much of a real standard library lowers | 26 modules emit and verify; 18,257 refusals against 23,301 definitions |
+| rc | the same examples hold nothing at exit under reference counting | 207 of 208 |
+| LLVM / JVM | the same examples through the other two backends | 206 of 206 each |
+
+**"208 of 208 agree" is not 208 examples checked.** The runner names the
+exception itself and it is worth reading rather than skipping: *9 compared
+nothing (no exported function with scalar arguments and a scalar result)* —
+`advanced`, `calls`, `classes`, `dates-unsupported`,
+`enum-reverse-map-unsupported`, `generator-unsupported`,
+`generic-classes-unsupported`, `jsx`, `types`. Those nine are compiled and not
+*run*, so an example among them can support a claim about what the compiler
+**accepts** and never one about what it **answers**.
+
+That matters to §6, because a ✅ row citing one of the nine cites a compile.
+Checked 2026-09-15: two rows did. `declare` (ambient) also carries a probe, so
+its evidence stands. **Type predicates did not** — the row cited
+`examples/advanced`, whose only guard takes an object, and no case had ever been
+compared. `examples/a-type-predicate-that-narrows` now runs it: 87 cases across
+3 functions, agreeing with node. The row was true; its evidence was the syntax
+being accepted.
+
+The node lane found the same shape from the other side on the same day:
+`path.matchesGlob` had never been called by their corpus, and the first run of
+it disagreed with node on **1,257 inputs** over three separate rules. A function
+nothing calls and an example nothing runs are one hazard, and neither reports a
+failure — they report nothing, which reads as coverage.
 
 Only the examples and the sweep check **correctness**, and they check it
 differently: an example covers what somebody thought to write down, a sweep
