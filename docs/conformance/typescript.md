@@ -2591,6 +2591,55 @@ A caution earned three times in one sitting: `Stream#constructor` matched
 appeared to, because substring search has no notion of a name boundary. Every
 count above uses one.
 
+### What a fix would publish, measured
+
+    instrument   tooling/conformance/prize.mjs --all
+    taken        2026-09-15
+    compiler     f7c451e6, a copy pinned before the run
+
+For each module, node's own tests run twice: against the TypeScript on node, and
+against the compiled `.node`. A file that **passes interpreted and fails
+compiled** is one the implementation already gets right and the compiled
+artifact cannot yet reach. That set is the prize.
+
+**25 modules, 1,998 files passing interpreted, 48 passing compiled, 1,950 to
+gain.** The compiled lane reaches 2.4% of what the implementation already does.
+
+| module | interp | compiled | to gain | most-named |
+|---|---:|---:|---:|---|
+| `http` | 408 | 3 | **405** | `createServer` (273) |
+| `fs` | 351 | 4 | **347** | `mkdirSync` (57) |
+| `stream` | 252 | 1 | **251** | `Readable` (80) |
+| `net` | 155 | 6 | **149** | `createServer` (98) |
+| `async_hooks` | 118 | 2 | 116 | `createHook` (65) |
+| `child_process` | 109 | 0 | 109 | — |
+| `process` | 90 | 0 | 90 | `_fatalException` (75) |
+| `dgram` | 77 | 0 | 77 | `createSocket` (68) |
+| `zlib` | 68 | 1 | 67 | |
+| `timers` | 60 | 0 | 60 | — |
+
+**This is a different ranking from the roots table above, and it is the one to
+act on.** §15 records `last-mile.mjs` naming `internal/errors.ts:547` as reached
+by fifteen of twenty-two modules; it was cleared and none of the fifteen moved.
+Reach counts how many chains pass through a point and says nothing about what is
+on the other side.
+
+**The `most-named` column is where the two halves of this section meet.** It
+names the export whose absence the failing tests mention most. For `stream` it
+is `Readable` at 80 of 251 — and `Readable` is exactly the export the napi
+wrapper declines with *no cause*, traced above. The largest single nameable item
+in that module is a decline the census cannot see, which is what §2's half-that-
+cannot-be-seen predicted and this instrument confirms independently.
+
+`http` and `net` both name `createServer`, 273 and 98. Four modules name nothing
+at all — `child_process`, `timers`, `events`, `console` — which means their
+failures do not mention a missing export, so the cause is elsewhere and the
+`most-named` column is not a ranking for them.
+
+**`inverted` is 0 for every module.** No file passes compiled and fails
+interpreted, so nothing here is the compiled lane being *more* correct, and the
+gap is one-directional.
+
 ### First, by whether anything can check it
 
 The queue splits on a line that has nothing to do with difficulty: **node 24
