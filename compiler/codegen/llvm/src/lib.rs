@@ -2903,6 +2903,7 @@ fn memory_operation(
         OpKind::NativeLocal { .. } | OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. }
         | OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
         | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. }
+        | OpKind::NativeBitLoad { .. } | OpKind::NativeBitStore { .. }
         | OpKind::NativeCopy { .. } => {
             return native_memory::operation(func, &op.kind, &op.ty, &out);
         }

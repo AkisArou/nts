@@ -882,24 +882,93 @@ includes `<math.h>` itself, so it is there for every program whether or not any
 binding names a header, and removing the over-inclusion left it exactly where it
 was. The examples pin `-std=c11`, which is why nothing had seen it.
 
-## Bit-fields: refused in both directions, not described
+## Bit-fields
 
-A bit-field has no address and no byte offset -- `&p->version` does not
-compile -- so nothing in this surface can spell one, and `hir::layout` has no
-rule for packing them. What matters is that neither half of the toolchain
-describes one *wrongly*:
+`struct iphdr` refused for two of them, and now describes. The surface spells
+one `Bits<T, N>`:
 
-- `nts bind-c` refuses by name: *`flags.version` is a bit-field, which this
-  surface cannot describe*. Its layout self-check already refused the record,
-  since it cannot reproduce a layout whose members have no byte offsets, but
-  that reported two sizes and named the symptom.
-- A **hand-written** binding for the same struct -- four bit-fields described
-  as four `unsigned int`s -- is refused by `program.c` itself:
-  `_Static_assert(sizeof(struct flags) == 16u)` against a header that says 4.
+```ts
+ihl: Bits<c_uint, 4>;
+version: Bits<c_uint, 4>;
+```
 
-The second only works because `program.h` includes what the binding names.
-While nts defined its own copy of the struct, that assertion compared two
-derivations of one field list and passed.
+and projects it as a plain `number` -- deliberately **without** the `__c_of`
+phantom every other member carries. That phantom is the only thing `addrOf`
+reads, so `addrOf(h.ihl)` is a *type error* rather than a diagnostic, which is
+what C says too: a bit-field has no address and `&p->ihl` does not compile.
+The surface cannot express what C forbids, instead of expressing it and
+refusing it a pass later.
+
+**The allocation rule is read from clang, not from the ABI document.** Three
+probe structs separate cases the document states together:
+
+| written | clang says |
+|---|---|
+| `unsigned int a : 3; unsigned int b : 7;` | `0:0-2` `0:3-9` |
+| `unsigned int a : 30; unsigned int b : 5;` | `0:0-29` `4:0-4` |
+| `unsigned char p : 6; unsigned int q : 30;` | `0:0-5` `4:0-29` |
+
+The first says a bit-field simply continues where the last ended, across a byte
+boundary -- clang prints the end past 7 rather than starting a new byte. The
+second and third say when it does *not*: a field is bumped to the next multiple
+of its own unit's width whenever staying put would straddle one. The third is
+the discriminating pair, because the unit that decides the bump belongs to the
+**arriving** field, not to the one before it.
+
+**A fourth test exists because the first four all passed a wrong compiler.**
+Hard-coding the unit width to 32 bits left every one of them green: in each, a
+32-bit assumption and the field's real unit happen to bump at the same place.
+`unsigned char a : 6; unsigned char b : 5;` is where they part -- an 8-bit unit
+has no room at bit 6 and bumps to bit 8, a 32-bit one would not. Four tests
+whose names claimed to check the unit and none that did.
+
+**`NativeBitLoad` and `NativeBitStore`, not an address and a load.** `&p->ihl`
+is not an expression C has, so an HIR that produced one could only be emitted by
+a backend that fused the pair back together and hoped nothing had come between
+them. The model says the true thing: there is no address here, so no op makes
+one, and `Place::NativeBits` carries the record's pointer and the member's index
+instead.
+
+### What checks it, and what cannot
+
+`offsetof` and `_Generic(&...)` are **both illegal** on a bit-field, so the
+witness emits neither. `sizeof` and `_Alignof` remain, and a misallocated run
+changes the size of the record holding it -- but not always: `ihl` widened from
+4 bits to 8 leaves `struct iphdr` 20 bytes, so the static check does not see it.
+
+Worse, **the C backend cannot see it either.** It emits `h->version` and lets
+`<netinet/ip.h>` decide where the bits are, so a width this binding gets wrong
+produces a correct read anyway. The claim is invisible to the whole C lane.
+
+The LLVM backend is what makes it load-bearing. It has no C compiler to defer
+to, so it shifts and masks using the positions `hir::layout` computed:
+
+```llvm
+%v1.raw = load i32, ptr %v1.unit
+%v1.sh  = lshr i32 %v1.raw, 4
+%v1     = and i32 %v1.sh, 15
+```
+
+So `a_bit_field_reads_and_writes_the_same_bits_on_c_and_llvm` is two
+*independent derivations* of one layout compared by running both, rather than
+one derivation checked against itself. Its `caller.c` fills a real `struct
+iphdr` and asserts what each backend reports; both answer `version=4 ihl=5` and,
+after `setVersion(6)`, byte 0 is `0x65` -- the neighbour intact, which is the
+arm a clear-mask one bit wide in the wrong place fails. Sabotaging the shift by
+one and the mask by one bit each fail it.
+
+### What is still refused
+
+- **A packed record holding a bit-field.** `__attribute__((packed))` changes the
+  bit rule as well as the byte rule -- a packed bit-field is not bumped -- and
+  laying one out by the unpacked rule would agree with a header only by
+  accident. Refused as a record rather than mislaid, with a control asserting
+  the same record unpacked *does* have a layout.
+- **`nts bind-c` still refuses one.** The AST carries `isBitfield` and not the
+  width; the width is in the layout dump, as `hi - lo + 1`, which is the right
+  source and a different pass from the one that describes members. So `iphdr`
+  is hand-written for now, and `tcphdr` -- eleven bit-fields behind two
+  anonymous records -- stays refused by name.
 
 ### The hand-written ABI is deleted for the chosen example
 
@@ -925,22 +994,29 @@ formality.
 
 ### What blocks real headers, counted
 
-Twenty-six POSIX records, asked for one at a time. **Twenty-two work** --
-nineteen when the survey was first run, and each one that changed is the reason
-a part of this section exists.
+Twenty-six POSIX records, asked for one at a time, **through `nts bind-c`** --
+so this counts what can be *derived from a header*, not what the compiler can
+describe. **Twenty-two work**, nineteen when the survey was first run, and each
+one that changed is the reason a part of this section exists.
+
+The two are no longer the same question. A hand-written binding of `struct
+iphdr` compiles and runs on both backends; the row below says only that the
+generator cannot write one yet, because the width it needs is in the layout
+dump rather than in the AST it describes members from.
 
 | cause | records | |
 |---|---|---|
 | an **anonymous** record as a *named member's type* | `sockaddr_in6`, `in6_addr` | described |
 | an **unnamed member**, whose fields C reaches as the enclosing record's | `rusage` | described |
-| a bit-field | `iphdr`, `tcphdr` | refuses |
+| a bit-field | `iphdr`, `tcphdr` | the **compiler** describes one; `bind-c` still refuses |
 | a flexible array member (`unsigned char[]`, no length) | `cmsghdr` | refuses |
 | a typedef naming an **unnamed struct** (`__sigset_t`) | `sigaction` | refuses |
 
 `tcphdr` and `sigaction` both moved rows without anything being done to them,
 which is the part worth reading. Each had been filed under the first thing that
 stopped the walk. `tcphdr` reported an unnamed member and nothing past it;
-reaching through finds eleven bit-fields. `sigaction` reported an anonymous
+reaching through finds eleven bit-fields -- which the compiler now describes and
+the generator still cannot derive, so it moved rows twice. `sigaction` reported an anonymous
 union; resolving that reaches `__sigset_t`, which is a typedef of a struct with
 no tag -- a third shape, and the one this survey had never produced. **A cause
 recorded from a walk that stops is the cause of the stop, not of the refusal**,

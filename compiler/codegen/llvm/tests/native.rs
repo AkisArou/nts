@@ -156,6 +156,63 @@ fn managed_declarations_execute_with_the_nts_abi_on_c_and_llvm() {
     );
 }
 
+/// Two derivations of one bit-field layout, compared by running both.
+///
+/// The C backend emits `h->version` and lets `<netinet/ip.h>` decide where the
+/// bits are. The LLVM backend has no C compiler to defer to, so it shifts and
+/// masks using the positions `hir::layout` computed. A width or an offset this
+/// compiler gets wrong is therefore **invisible in C** -- the emitted read is
+/// correct whatever the binding claims -- and wrong here. Agreement is the only
+/// thing that checks the claim.
+#[test]
+fn a_bit_field_reads_and_writes_the_same_bits_on_c_and_llvm() {
+    let Some((dir, prepared)) = prepare_with_files(
+        "bitfields",
+        include_str!("../../common/test-support/native-bitfields/main.ts"),
+        hir::Provider::NoGc,
+        &[(
+            "ip.d.ts",
+            include_str!("../../common/test-support/native-bitfields/ip.d.ts"),
+        )],
+    ) else {
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    std::fs::write(
+        dir.join("caller.c"),
+        include_str!("../../common/test-support/native-bitfields/caller.c"),
+    )
+    .unwrap();
+    for source in ["caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+    }
+    // The witness is compiled for its assertions, not linked. It carries the
+    // record's `sizeof` and `_Alignof` and the offsets of the members that have
+    // them -- a bit-field has neither an `offsetof` nor an address, so those
+    // two lines are the only static check a run of them gets.
+    clang(&dir, &["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "native_witness.c"]);
+    for (source, object, binary) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "caller.o", "nts_runtime.o", "-lm", "-o", binary]);
+        assert!(
+            Command::new(dir.join(binary)).status().unwrap().success(),
+            "{binary}"
+        );
+    }
+}
+
 #[test]
 fn aggregate_arguments_respect_register_exhaustion() {
     let mut ts = String::new();
