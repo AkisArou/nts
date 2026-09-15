@@ -3870,6 +3870,324 @@ export const CORPORA = {
           return out;
         },
       },
+
+        // **The rest of `net`**, which was 40 of 86 published functions.
+        //
+        // The header above excludes `connect`, `createServer` and `Socket` because
+        // "they answer over time to a peer". That is true of connecting and of
+        // delivering bytes, and it is not true of the 44 names below: a `Socket`
+        // that has never connected answers about **its own state**, synchronously,
+        // and `setNoDelay`, `address()`, `ref` and the rest are exactly the calls a
+        // program makes before and after a connection rather than during one.
+        //
+        // `net.Stream === net.Socket`, which is why one spec closes both listings:
+        // `corpus-reach.mjs` counts `Socket#setTimeout` and `Stream#setTimeout` as
+        // two published names and they are one function object.
+        //
+        // Nothing here listens, connects or binds, so nothing holds the loop:
+        // `process._getActiveHandles()` is empty after a run. That is the property
+        // that makes this safe, and it is a property of *not calling* `listen` or
+        // `connect` rather than of cleaning up afterwards.
+        {
+          // The module's pure helpers.
+          //
+          // `_normalizeArgs` is the argument parser every `connect` and `listen`
+          // overload goes through -- a port, a path, a host, an options object, a
+          // callback, in almost any arrangement -- and it answers an array with no
+          // I/O. It is the single most reused piece of logic in the module and
+          // nothing called it.
+          //
+          // The two `autoSelectFamily` defaults are **process-wide**, so each is set,
+          // read back, and put back. The host runs a preflight the child does not, so
+          // a value left behind would be read by a later input on one side only.
+          label: "net-pure-helpers",
+          call: (m, s) => {
+            const out = [];
+            const attempt = (label, fn) => {
+              try {
+                out.push(`${label}:ok:${fn()}`);
+              } catch (error) {
+                out.push(`${label}:${error.code ?? error.name}`);
+              }
+            };
+            const shapes = [
+              [],
+              [s],
+              [80],
+              [80, s],
+              [s, 80],
+              [{ port: 80, host: s }],
+              [{ path: s }],
+              [80, s, () => {}],
+              [s, () => {}],
+              [{ port: 80 }, () => {}],
+              [null],
+              [undefined, () => {}],
+            ];
+            for (let i = 0; i < shapes.length; i++) {
+              const args = shapes[(s.length + i) % shapes.length];
+              attempt(`_normalizeArgs(${args.length})`, () => {
+                const got = m._normalizeArgs(args);
+                // The callback is a function, which does not stringify usefully, so
+                // its presence is recorded rather than its identity.
+                return JSON.stringify(got.map((part) =>
+                  typeof part === "function" ? "fn" : part));
+              });
+            }
+
+            const wasFamily = m.getDefaultAutoSelectFamily();
+            const wasTimeout = m.getDefaultAutoSelectFamilyAttemptTimeout();
+            try {
+              attempt("setDefaultAutoSelectFamily", () =>
+                m.setDefaultAutoSelectFamily(s.length % 2 === 0) ?? "void");
+              out.push(`familyRead:${m.getDefaultAutoSelectFamily()}`);
+              attempt("setDefaultAutoSelectFamilyAttemptTimeout", () =>
+                m.setDefaultAutoSelectFamilyAttemptTimeout(1 + (s.length % 9)) ?? "void");
+              out.push(`timeoutRead:${m.getDefaultAutoSelectFamilyAttemptTimeout()}`);
+              for (const bad of [null, "x", {}, -1, 0, 1.5, NaN]) {
+                attempt(`familyBad:${String(bad)}`, () => m.setDefaultAutoSelectFamily(bad) ?? "void");
+                attempt(`timeoutBad:${String(bad)}`, () =>
+                  m.setDefaultAutoSelectFamilyAttemptTimeout(bad) ?? "void");
+              }
+            } finally {
+              m.setDefaultAutoSelectFamily(wasFamily);
+              m.setDefaultAutoSelectFamilyAttemptTimeout(wasTimeout);
+            }
+            out.push(`restored:${m.getDefaultAutoSelectFamily() === wasFamily}` +
+              `|${m.getDefaultAutoSelectFamilyAttemptTimeout() === wasTimeout}`);
+
+            // `fromJSON` rebuilds a list from what `toJSON` produced, so the round trip
+            // is the comparison: a list that serialises and does not deserialise is only
+            // visible if both halves run.
+            //
+            // **On the instance, not the class.** `BlockList.fromJSON` is `undefined` --
+            // it is `BlockList.prototype.fromJSON` -- so the first version of this arm
+            // called `undefined` on both sides, caught the same `TypeError` on both, and
+            // *agreed*. `corpus-reach.mjs` is what said otherwise: the name stayed in the
+            // never-called list while the row read as a match, which is the only signal a
+            // hollow agreement gives.
+            attempt("fromJSON", () => {
+              const list = new m.BlockList();
+              list.addAddress("1.2.3.4");
+              list.addRange("10.0.0.1", `10.0.0.${1 + (s.length % 9)}`);
+              list.addSubnet("192.168.0.0", 24);
+              const json = list.toJSON();
+              const back = new m.BlockList();
+              const answer = back.fromJSON(json);
+              // The order is deliberately part of the comparison: node's `toJSON` after a
+              // `fromJSON` does not reproduce the order it was given, and that is a fact
+              // about the rebuild rather than about the input.
+              return `returns:${String(answer)}|from:${JSON.stringify(json)}` +
+                `|to:${JSON.stringify(back.toJSON())}` +
+                `|checks:${back.check("1.2.3.4")}${back.check("192.168.0.9")}${back.check("8.8.8.8")}`;
+            });
+            // A string is JSON-parsed rather than rejected, an empty array is accepted,
+            // and an array of nonsense is accepted and yields nothing -- three answers
+            // that no type check would predict.
+            for (const bad of [null, undefined, 1, "x", "[]", "{}", {}, [], ["nonsense"],
+              [`Address: IPv4 1.2.3.${s.length % 9}`]]) {
+              attempt(`fromJSONBad:${JSON.stringify(bad) ?? String(bad)}`, () => {
+                const victim = new m.BlockList();
+                victim.fromJSON(bad);
+                return JSON.stringify(victim.toJSON());
+              });
+            }
+
+            // `BoundSocket`, which **binds a real socket**, so every one is closed in a
+            // `finally`. Measured: 200 of them peak at +201 descriptors and `close()`
+            // returns every one, so closing as they are made keeps the peak at one.
+            //
+            // The port and the descriptor number are *not* compared -- a bound port is
+            // whatever the kernel had free and an fd is whatever the process had free,
+            // and neither is a function of the input. What is compared is the shape, the
+            // family, and the errors a closed one answers.
+            // Throttled to one input in twenty. A closed `BoundSocket` returns its
+            // descriptor but stays in `process._getActiveHandles()` as an object, so a
+            // call on every input would leave twelve thousand of them and about 87MB --
+            // the same accounting as `_createServerHandle` above, and the same conclusion:
+            // harmless and pointless. Two hundred calls reach the three methods.
+            for (const options of (s.length % 20 === 0
+              ? [undefined, {}, { port: 0 }, null, 1, "x", []]
+              : [])) {
+              let bound;
+              try {
+                bound = new m.BoundSocket(options);
+                const address = bound.address();
+                attempt(`BoundSocket(${JSON.stringify(options) ?? String(options)})`, () =>
+                  `addr:${typeof address === "object" && address !== null ? `${address.address}|${address.family}|${typeof address.port}` : String(address)}` +
+                  `|fd:${typeof bound.fd()}`);
+                attempt("isPipe", () => String(bound.isPipe()));
+              } catch (error) {
+                out.push(`BoundSocket(${JSON.stringify(options) ?? String(options)}):${error.code ?? error.name}`);
+              } finally {
+                if (bound !== undefined) {
+                  try { bound.close(); } catch { /* recorded below */ }
+                }
+              }
+              if (bound !== undefined) {
+                attempt("afterClose:address", () => JSON.stringify(bound.address()));
+                attempt("afterClose:close", () => String(bound.close()));
+              }
+            }
+            return out.join("\n");
+          },
+        },
+        {
+          // A `Socket` that has never connected, which is 22 published names on
+          // `Socket` and the same 22 on `Stream`.
+          //
+          // Every call here is about the socket's own state. `address()` on one with
+          // no handle is `{}`; `setNoDelay` and `setKeepAlive` answer the socket so
+          // they chain; `_getpeername` and `_getsockname` answer an empty object
+          // rather than throwing; `ref` and `unref` are no-ops with no handle to
+          // touch. Those are the answers a program gets when it configures a socket
+          // before connecting, which is the ordinary order to do it in.
+          //
+          // `setTimeout` is set and then **cleared with 0**, because a timeout left
+          // on a socket is a timer, and `_onTimeout` is called directly with a
+          // `timeout` listener attached -- without one node's default behaviour on
+          // that event is to destroy the socket, which would make every later line
+          // answer about a destroyed socket instead.
+          label: "net-unconnected-socket",
+          call: (m, s) => {
+            const out = [];
+            const attempt = (label, fn) => {
+              try {
+                const got = fn();
+                out.push(`${label}:ok:${got === undefined ? "void" : typeof got === "object" && got !== null ? JSON.stringify(got) : String(got)}`);
+              } catch (error) {
+                out.push(`${label}:${error.code ?? error.name}`);
+              }
+            };
+            const socket = new m.Socket();
+            const events = [];
+            socket.on("error", (error) => events.push(`error:${error.code ?? error.name}`));
+            socket.on("timeout", () => events.push("timeout"));
+
+            out.push(`identity:Stream===Socket:${m.Stream === m.Socket}`);
+            attempt("address", () => socket.address());
+            attempt("_getpeername", () => socket._getpeername());
+            attempt("_getsockname", () => socket._getsockname());
+            attempt("setNoDelay", () => socket.setNoDelay(s.length % 2 === 0) === socket);
+            attempt("setKeepAlive", () =>
+              socket.setKeepAlive(s.length % 2 === 0, s.length % 5) === socket);
+            attempt("getTypeOfService", () => socket.getTypeOfService());
+            attempt("setTypeOfService", () => socket.setTypeOfService(s.length % 8) === socket);
+            for (const bad of [null, "x", {}, -1, 256, 1.5]) {
+              attempt(`setTypeOfServiceBad:${String(bad)}`, () => socket.setTypeOfService(bad) === socket);
+            }
+            attempt("pause", () => socket.pause() === socket);
+            attempt("resume", () => socket.resume() === socket);
+            attempt("ref", () => socket.ref() === socket);
+            attempt("unref", () => socket.unref() === socket);
+            attempt("setTimeout", () => socket.setTimeout(1000 + s.length) === socket);
+            out.push(`timeoutStored:${socket.timeout}`);
+            attempt("_onTimeout", () => socket._onTimeout() ?? "void");
+            attempt("setTimeoutClear", () => socket.setTimeout(0) === socket);
+            out.push(`timeoutCleared:${socket.timeout}`);
+            attempt("_writev", () => socket._writev(
+              [{ chunk: Buffer.from(s.slice(0, 4)), encoding: "buffer" }], () => {}) ?? "void");
+            out.push(`state:pending:${socket.pending}|connecting:${socket.connecting}` +
+              `|readyState:${socket.readyState}|destroyed:${socket.destroyed}`);
+
+            // The three ways to end a socket, each on its own instance so the first
+            // does not decide what the others see.
+            for (const [name, run] of [
+              ["destroySoon", (sock) => sock.destroySoon()],
+              ["resetAndDestroy", (sock) => sock.resetAndDestroy()],
+              ["_reset", (sock) => sock._reset()],
+            ]) {
+              const victim = new m.Socket();
+              const seen = [];
+              victim.on("error", (error) => seen.push(error.code ?? error.name));
+              attempt(name, () => run(victim) === undefined ? "void" : "returned");
+              out.push(`${name}:destroyed:${victim.destroyed}|events:${seen.join(",") || "none"}`);
+              victim.destroy();
+            }
+
+            socket.destroy();
+            out.push(`afterDestroy:${socket.destroyed}|events:${events.join(",") || "none"}`);
+            return out.join("\n");
+          },
+        },
+        {
+          // A `Server` that has never listened, and `_createServerHandle`.
+          //
+          // `close` on one answers `ERR_SERVER_NOT_RUNNING` through its callback
+          // rather than throwing, which is the distinction a caller that always
+          // closes depends on. `getConnections` answers 0 asynchronously.
+          //
+          // `_createServerHandle` is given an address that **cannot** bind, so it
+          // reports an error instead of producing a handle. If it ever does produce
+          // one, the handle is closed on the spot -- an open handle holds the loop
+          // and the probe's child would never exit.
+          label: "net-unlistened-server",
+          call: async (m, s) => {
+            const out = [];
+            const attempt = (label, fn) => {
+              try {
+                const got = fn();
+                out.push(`${label}:ok:${got === undefined ? "void" : typeof got === "object" && got !== null ? JSON.stringify(got) : String(got)}`);
+              } catch (error) {
+                out.push(`${label}:${error.code ?? error.name}`);
+              }
+            };
+            const server = new m.Server();
+            server.on("error", () => {});
+            attempt("address", () => server.address());
+            attempt("ref", () => server.ref() === server);
+            attempt("unref", () => server.unref() === server);
+            attempt("setTimeout", () => server.setTimeout(1000 + s.length) === server);
+            attempt("maxConnections", () => {
+              server.maxConnections = 1 + (s.length % 4);
+              return server.maxConnections;
+            });
+            out.push(`getConnections:${await new Promise((resolve) => {
+              try {
+                server.getConnections((error, count) =>
+                  resolve(error ? `cb:${error.code ?? error.name}` : `ok:${count}`));
+              } catch (error) {
+                resolve(`threw:${error.code ?? error.name}`);
+              }
+            })}`);
+            out.push(`close:${await new Promise((resolve) => {
+              try {
+                server.close((error) => resolve(error ? `cb:${error.code ?? error.name}` : "ok"));
+              } catch (error) {
+                resolve(`threw:${error.code ?? error.name}`);
+              }
+            })}`);
+            attempt("_setupWorker", () => server._setupWorker({
+              addHandle() {}, removeHandle() {},
+            }) ?? "void");
+            for (const bad of [null, undefined, 1, "x"]) {
+              attempt(`_setupWorkerBad:${String(bad)}`, () => server._setupWorker(bad) ?? "void");
+            }
+
+            // **`_createServerHandle` is not called, and the absence it names is
+            // structural rather than a gap.**
+            //
+            // It hands back a raw libuv `TCP` or `Pipe` handle by address, and node
+            // needs that because its `cluster` creates the handle in the primary and
+            // passes the object itself to a worker. This profile's cluster distributes
+            // differently -- the primary listens and hands the *connection* over, which
+            // is what `runtime/node/cluster/test/listen-fd-*.js` pins -- so there is no
+            // caller here for a detached server handle and nothing sensible to return.
+            //
+            // Two things measured along the way, because the first draft called it and
+            // the reasoning about why was wrong twice. It leaks: the handle is created
+            // *before* the bind is tried and the error code is returned instead, so
+            // there is nothing to close, and a guard on
+            // `typeof got.close === "function"` closes nothing because what it is
+            // handed is a number. But the leak is cheaper than it looks -- 12,000 calls
+            // leave 12,000 entries in `process._getActiveHandles()` and cost **one**
+            // file descriptor, 87MB of RSS, and no delay to exit. A draft of this
+            // comment claimed twelve thousand descriptors, which is what the handle
+            // count looks like it implies; `/proc/self/fd` says otherwise because the
+            // bind fails before a socket is opened.
+            return out.join("\n");
+          },
+        },
     ];
     })(),
   },

@@ -60,7 +60,6 @@ const ours = new Set(Object.keys(mod));
 //                          child_process
 const ABSENT = [
   "_createServerHandle",
-  "_normalizeArgs",
 ];
 
 const missing = nodeKeys.filter((name) => !ours.has(name));

@@ -9,6 +9,18 @@
 //     after close   node   local=undefined  lport=undefined  lfam=undefined  remote="127.0.0.1"
 //                   ours   local="127.0.0.1" lport=38776     lfam="IPv4"     remote="127.0.0.1"
 //
+// **`address()` and `_getsockname()` are the same fact, and were a second derivation of it.**
+// The three getters were fixed here and `address()` was not, because nothing connected them:
+//
+//     after destroy   node   address() = {}
+//                     ours   address() = {"address":"127.0.0.1","family":"IPv4","port":56434}
+//
+// Node defines `Socket.prototype.address` as exactly `return this._getsockname()`, so on node the
+// four cannot disagree. Here they were four reads of two private fields, and correcting three left
+// the fourth stale — the narrower-derivation mistake inside one object. All four now go through
+// `_getsockname()`, which is also why `_getsockname` and `_getpeername` are published: they were
+// node's surface already, and they are the single source these read from.
+//
 // Found by adding a socket round trip to `differential-corpora.mjs`. It is **not** compared there:
 // read in a `close` handler, node answers these in a standalone program and answers nothing under
 // the differential — same code, same input, different arrangement, because its post-destroy
@@ -37,6 +49,11 @@ server.listen(0, "127.0.0.1", common.mustCall(() => {
     assert.strictEqual(typeof client.localPort, "number", "localPort while connected");
     assert.strictEqual(typeof client.localFamily, "string", "localFamily while connected");
     assert.strictEqual(client.remoteAddress, "127.0.0.1");
+    // The live half of the same three, so an implementation answering `{}` always would
+    // pass every post-destroy assertion below and fail here.
+    assert.strictEqual(typeof client.address().port, "number", "address() while connected");
+    assert.strictEqual(typeof client._getsockname().port, "number", "_getsockname() while connected");
+    assert.strictEqual(client._getpeername().address, "127.0.0.1", "_getpeername() while connected");
 
     client.end("x");
   }));
@@ -49,10 +66,18 @@ server.listen(0, "127.0.0.1", common.mustCall(() => {
     assert.strictEqual(client.localPort, undefined, "localPort must not outlive the handle");
     assert.strictEqual(client.localFamily, undefined, "localFamily must not outlive the handle");
 
+    // The method the three are defined over, which was the one that stayed stale.
+    assert.deepStrictEqual(client.address(), {},
+      "address() must not outlive the handle either, being `return this._getsockname()`");
+    assert.deepStrictEqual(client._getsockname(), {},
+      "_getsockname() is the single source the three getters and address() read");
+
     // And the peer, which node caches, is still there. This is the control: if the getters simply
     // returned `undefined` unconditionally, every assertion above would pass and this would fail.
     assert.strictEqual(client.remoteAddress, "127.0.0.1",
       "remoteAddress is cached by node and must survive the handle");
+    assert.strictEqual(client._getpeername().address, "127.0.0.1",
+      "_getpeername() is cached too, which is the asymmetry with _getsockname()");
 
     server.close(common.mustCall(() => { finished(); }));
   }));

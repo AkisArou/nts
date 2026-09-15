@@ -920,16 +920,54 @@ export class Socket extends Duplex {
    * the timing instead.
    */
   get localAddress(): string | undefined {
-    if (this._handle === null) return undefined;
-    return this.#boundPath ?? this.#localAddress?.address;
+    return this._getsockname().address;
   }
   get localPort(): number | undefined {
-    if (this._handle === null) return undefined;
-    return this.#localAddress?.port;
+    return this._getsockname().port;
   }
   get localFamily(): string | undefined {
-    if (this._handle === null) return undefined;
-    return this.#localAddress?.family;
+    return this._getsockname().family;
+  }
+
+  /**
+   * `Socket.prototype._getsockname`, which node publishes and defines the three
+   * getters above and `address()` over.
+   *
+   * Defined here for the same reason: they were four separate derivations of one
+   * fact and they had already drifted. The getters guarded on the handle -- fixed
+   * earlier today, after all three outlived it -- and `address()` read the cached
+   * field directly, so it kept answering a destroyed socket's address where node
+   * answers `{}`:
+   *
+   *     after destroy   node   {}
+   *                     ours   {"address":"127.0.0.1","family":"IPv4","port":56434}
+   *
+   * That is the narrower-derivation mistake inside one object: the three getters
+   * were corrected and the method they should have been *defined over* was not,
+   * because nothing connected them.
+   *
+   * The bound-path arm comes first, as node's does. A pipe adopted with a source
+   * path keeps answering it even after the handle goes, which is why node tests it
+   * ahead of the handle -- and is the one behaviour this reordering changes.
+   */
+  _getsockname(): AddressInfo | Record<string, never> {
+    if (this.#boundPath !== undefined) {
+      return { address: this.#boundPath } as unknown as AddressInfo;
+    }
+    if (this._handle === null) return {};
+    return this.#localAddress ?? {};
+  }
+
+  /**
+   * `Socket.prototype._getpeername`.
+   *
+   * Node caches the peer and keeps answering it after the handle goes, which is the
+   * asymmetry documented above the getters: `remoteAddress` survives a close and
+   * `localAddress` does not. So this reads the cache with no handle test, and `{}`
+   * when there has never been a peer.
+   */
+  _getpeername(): AddressInfo | Record<string, never> {
+    return this.#remoteAddress ?? {};
   }
   get remoteAddress(): string | undefined {
     return this.#remoteAddress?.address;
@@ -941,9 +979,13 @@ export class Socket extends Duplex {
     return this.#remoteAddress?.family;
   }
 
-  /** The local end of the connection. Empty until there is one. */
+  /**
+   * The local end of the connection. Empty until there is one, and empty again once
+   * the handle goes -- node defines this as exactly `return this._getsockname()`
+   * and so does this.
+   */
   address(): AddressInfo | Record<string, never> {
-    return this.#localAddress ?? {};
+    return this._getsockname();
   }
 
   get bufferSize(): number {
@@ -1781,8 +1823,11 @@ export class Socket extends Duplex {
     this.timeout = duration;
 
     if (duration > 0) {
+      // `this._onTimeout()`, not an inline emit, because node's timer calls the
+      // method -- so a caller that overrides `_onTimeout` changes what happens on a
+      // timeout, which is the reason the method is published at all.
       this.#timer = setTimeout(() => {
-        this.emit("timeout");
+        this._onTimeout();
       }, duration);
       this.#timer.unref();
       if (callback !== undefined) this.once("timeout", callback);
@@ -1790,6 +1835,21 @@ export class Socket extends Duplex {
       this.removeListener("timeout", callback);
     }
     return this;
+  }
+
+  /**
+   * `Socket.prototype._onTimeout`, what the idle timer calls.
+   *
+   * Node suppresses the timeout while a write is still draining: it compares the
+   * handle's `writeQueueSize` against the size it recorded last time and refreshes
+   * instead of emitting. This profile does not track that size, so the suppression
+   * is absent and the event fires on a socket with a write in flight where node's
+   * would wait one more interval. Named rather than approximated -- guessing at "a
+   * write is in progress" from `writableLength` would suppress the event in cases
+   * node does not, which is a worse answer than the honest one.
+   */
+  _onTimeout(): void {
+    this.emit("timeout");
   }
 
   #refreshTimeout(): void {
@@ -1863,6 +1923,22 @@ export class Socket extends Duplex {
   #reset(): void {
     this.#resetOnDestroy = true;
     this.destroy();
+  }
+
+  /**
+   * `Socket.prototype._reset`, which node publishes and `resetAndDestroy` reaches.
+   *
+   * A delegate rather than a rename: the `#` version stays the implementation, so an
+   * override cannot change what this class does to itself mid-teardown, and this is
+   * the surface node documents.
+   */
+  _reset(): this {
+    this.#reset();
+    // Node's is `return this.destroy()`, and `destroy` answers the socket -- so
+    // `_reset()` answers the socket too. It read `undefined` here, which is the kind
+    // of difference only a comparison notices: nothing breaks, and a caller chaining
+    // off it gets `undefined.on is not a function` instead.
+    return this;
   }
 
   static #resetConnectedSocket(this: Socket): void {
@@ -2671,6 +2747,76 @@ export function createServer(
   connectionListener?: (socket: Socket) => void,
 ): Server {
   return new Server(options, connectionListener);
+}
+
+/**
+ * `net._normalizeArgs`, the parser node's `connect` and `listen` overloads share.
+ *
+ * A port, a path, a host, an options object and a callback, in almost any
+ * arrangement, reduced to `[options, callback]`. The rules are not obvious and each
+ * one is a decision:
+ *
+ *   - `args.length === 0` answers `[{}, null]` before looking at anything.
+ *   - An object first argument is used **as** the options -- node hands back the
+ *     caller's own object, not a copy, so a subscriber sees keys the application put
+ *     there.
+ *   - A string first argument is a **path** only if it is not a port. Node's test is
+ *     `Number(s) >= 0 ? Number(s) : false`, so `"80"` is a port and `"/tmp/sock"` is
+ *     a path -- and `""` is a **port**, because `Number("") === 0`. That last one is
+ *     the answer nobody guesses: `_normalizeArgs([""])` is `[{ port: "" }, null]`.
+ *   - A host is only read from `args[1]`, and only when it is a string.
+ *   - The callback is the **last** argument if it is a function, wherever it sits.
+ *
+ * **This is not the path this module takes, and that is worth stating plainly.**
+ * `listen` and `connect` here use `normaliseListenArguments`, which builds a typed
+ * `ListenOptions` -- deliberately, and the comment in `listen` explains that the
+ * diagnostics channel publishes the caller's raw object precisely because the typed
+ * one would drop unknown keys. So this function is node's parser published for
+ * callers that reach for it, not a description of what happens inside `connect`, and
+ * a divergence here would not by itself mean `connect` parses differently.
+ *
+ * Node also marks the returned array with an internal symbol, which its own
+ * `connect` checks to avoid normalising twice. That marker is omitted rather than
+ * faked under a different key: nothing here consults it, and re-parsing an
+ * already-normalised options object is idempotent.
+ */
+function normalizeArgs(
+  args: readonly unknown[],
+): [Record<string, unknown>, ((...rest: unknown[]) => void) | null] {
+  if (args.length === 0) return [{}, null];
+
+  const first = args[0];
+  let options: Record<string, unknown> = {};
+  if (typeof first === "object" && first !== null) {
+    options = first as Record<string, unknown>;
+  } else if (isPipeName(first)) {
+    options.path = first;
+  } else {
+    options.port = first;
+    if (args.length > 1 && typeof args[1] === "string") options.host = args[1];
+  }
+
+  const last = args[args.length - 1];
+  return [options, typeof last === "function" ? (last as (...rest: unknown[]) => void) : null];
+}
+
+/**
+ * Whether `value` names a pipe rather than a port, which is node's `isPipeName`.
+ *
+ * `Number(value) >= 0` decides it, so every numeric string is a port and `""` is
+ * too. A `NaN` or negative result is a path.
+ */
+// Exported under the underscore node uses, while the declaration keeps node's own
+// name: `net._normalizeArgs.name` is `"normalizeArgs"` upstream, because node writes
+// `function normalizeArgs` and publishes it under `_normalizeArgs`.
+// `export-surface-static.js` compares names, and declaring it as
+// `export function _normalizeArgs` made the name the export key instead.
+export { normalizeArgs as _normalizeArgs };
+
+function isPipeName(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const asNumber = Number(value);
+  return !(asNumber >= 0);
 }
 
 export function connect(...args: ConnectArguments): Socket {

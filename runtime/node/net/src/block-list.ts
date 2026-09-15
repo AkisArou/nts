@@ -275,11 +275,16 @@ export class BlockList {
   fromJSON(data: string | string[]): void {
     let rules: unknown;
     if (typeof data === "string") {
-      try {
-        rules = JSON.parse(data);
-      } catch {
-        throw new ERR_INVALID_ARG_TYPE("data", ["string", "string[]"], data);
-      }
+      // Unguarded, as node's is. A string that is not JSON raises the parser's own
+      // `SyntaxError` and it propagates: node writes `data = JSONParse(data)` with
+      // nothing around it.
+      //
+      // This caught it and answered `ERR_INVALID_ARG_TYPE`, which loses a distinction
+      // a caller needs -- "you passed the wrong type" and "you passed a string that is
+      // not JSON" are different mistakes, and only the second is worth a parse
+      // position. `fromJSON("x")` was the single diverging row out of everything this
+      // class publishes.
+      rules = JSON.parse(data);
     } else {
       rules = data;
     }
