@@ -2538,6 +2538,23 @@ The rule is:
 
 # 34. Configuration Example
 
+> **Superseded, and kept for the shape of the argument rather than the fields.**
+> `docs/nts-config.md` is the live design and `examples/workspace/` is the
+> checked-in tree that typechecks against `@nts/config`. The example below names
+> a surface that was culled once each field was asked what implementation it
+> met: `runtime.family`, `runtime.memory`, `runtimeLinkage`, `exports`,
+> `profiles` and `modules` are all gone, along with the `memory.*` builders
+> entirely — the provider is a `--rc` flag and only one of the two that exist is
+> shippable, which makes it a build mode rather than product configuration.
+>
+> Two structural things here are also wrong rather than merely stale. **One
+> config holding every product** does not survive a monorepo: `apps/android` and
+> `apps/ios` are separately buildable and separately owned, so a root file
+> listing both makes every app's build depend on every other app's config
+> parsing. And **`exports:`** existed only because the default root set was
+> wider than any artifact this compiler emits; narrowing it to the entry
+> module's own surface removed the question the field answered.
+
 ```ts
 import {
   defineConfig,

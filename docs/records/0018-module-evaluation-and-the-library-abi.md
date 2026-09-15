@@ -477,7 +477,9 @@ Runtime refusals, which are statuses or thrown errors rather than diagnostics:
 
 **Decision: `nts build` runs `node --experimental-strip-types <shim>` where the shim imports the config and writes `JSON.stringify(default)` to stdout; the Rust side parses the JSON.**
 
-The config's value comes from being *computed*: `library({…})` normalizes `"shared"` to `"shared-library"` (`tooling/config/src/product.ts:106-114`), `memory.rcCycle()` builds a provider record, `defineConfig` is the identity whose doc comment says validation happens at build planning (`product.ts:100-104`). A JSON-subset restriction throws that away; a Rust re-implementation is a second implementation free to drift — the same argument `link_modules` makes for not writing a second module resolver. The node dependency is build-time only and the project already depends on node for its differential oracle.
+The config's value comes from being *computed*: `library({…})` normalizes `"shared"` to `"shared-library"` (`tooling/config/src/product.ts:106-114`), `memory.rcCycle()` builds a provider record, `defineConfig` is the identity whose doc comment says validation happens at build planning (`product.ts:100-104`).
+
+> **Two of those three examples no longer exist, and the argument does — 2026-09-16.** The bare `library({…})` callable was removed (`587cdaa8`) and the whole `memory` module with it (`0dd2e2f4`), the provider being a `--rc` flag rather than product configuration. The claim is unaffected and now rests on live code: `library.android({ minSdk, compileSdk })` takes two scalars and *builds* `kind: "aar"` and a whole `targets` array from them (`product.ts:282-290`), and `app` defaults `kind` to `"application"` (`product.ts:219`). A JSON subset could express neither. Cited here rather than rewritten above, because a record is what was argued at the time and the correction is the part worth dating. A JSON-subset restriction throws that away; a Rust re-implementation is a second implementation free to drift — the same argument `link_modules` makes for not writing a second module resolver. The node dependency is build-time only and the project already depends on node for its differential oracle.
 
 ### 8.3 Build-planning validation (RFC §27.3's "fail at build planning")
 
@@ -511,6 +513,9 @@ export function reading(): number { return started; }
 ```
 ```ts
 // nts.config.ts (excluded from tsconfig; see §8.4)
+// As written in 2026-09; `library({...})`, `runtimeLinkage`, `runtime` and
+// `exports` have all since been removed. `examples/library/nts.config.ts` is
+// the live equivalent. Left as it was, because a record shows what was argued.
 export default defineConfig({
   workspace: { root: ".", tsconfig: "./tsconfig.json" },
   products: {

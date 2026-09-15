@@ -384,36 +384,59 @@ The target is a Vite-quality loop for a natively compiled language:
 
 Escalation is explicit and ordered: refresh-compatible → module-replaceable → React remount → realm restart → process restart → native rebuild. ([§32](docs/RFC.md#32-development-and-hot-reload))
 
-## Configuration sketch
+## Configuration
 
-Proposed shape, abridged from [§34](docs/RFC.md#34-configuration-example):
+Real rather than proposed: these are checked-in files that typecheck against
+`@nts/config`, and the build reads them. `docs/nts-config.md` is the live design
+document.
+
+**Products live where they are built.** An app's config names one product:
 
 ```ts
+// examples/workspace/apps/android/nts.config.ts
+import { defineConfig, app } from "@nts/config";
+
 export default defineConfig({
-  workspace: { root: ".", tsconfig: "./tsconfig.json" },
-
   products: {
-    android: app({
-      entry: "./src/mobile.tsx",
-      target: target.android({ backend: "jvm", minSdk: 26 }),
-      runtime: { family: "jvm", memory: memory.hostGC() },
-      host: host.android({ scheduler: "looper", fetch: "okhttp", ui: "android-views" }),
-      profiles: [profile.ecmascript(), profile.web(), react.native()],
-      modules: [modules.application(), modules.clipboard()],
-    }),
-
-    coreLibrary: library({
-      entry: "./src/library.ts",
-      kind: "shared",
-      runtimeLinkage: "bundled-private",
-      runtime: { memory: memory.rcCycle() },
-      exports: ["createClient", "processMessage", "destroyClient"],
+    app: app.android({
+      entry: "./src/main.ts",
+      id: "dev.example.workspace",
+      minSdk: 29,
+      compileSdk: 36,
+      arch: ["aarch64", "armv7"],
     }),
   },
-
-  dev: { hmr: { mode: "auto", preserveReactState: true }, overlay: true },
 });
 ```
+
+and a workspace root names none:
+
+```ts
+// examples/workspace/nts.config.ts
+import { defineConfig } from "@nts/config";
+
+export default defineConfig({
+  workspace: {
+    root: ".",
+    tsconfigBase: "./tsconfig.base.json",
+    packages: ["apps/*", "packages/*"],
+  },
+});
+```
+
+[§34](docs/RFC.md#34-configuration-example) shows one config holding every
+product, which reads well for a single project and does not survive a monorepo —
+`apps/android` and `apps/ios` are separately buildable, and a root listing both
+makes every app's build depend on every other app's config parsing.
+
+**The sketch that stood here named six fields that no longer exist**:
+`runtime.memory`, `runtime.family`, `runtimeLinkage`, `exports`, `profiles` and
+`modules`. Each was removed rather than given a better default, because none had
+met an implementation — the memory provider is a `--rc` flag and of the two
+providers that exist only one is shippable, so it is a build mode; `exports` was
+a second statement of what the entry module already exports, and narrowing the
+root set to the entry's own surface removed the question it answered. A config
+that cannot express a choice has no business exporting a builder for one.
 
 ## Non-goals for initial releases
 
