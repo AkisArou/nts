@@ -293,6 +293,22 @@ export class Dir {
     await this.close();
   }
 
+  /**
+   * `Dir.prototype.entries`, the async iterator under its published name.
+   *
+   * Node's is `return this[SymbolAsyncIterator]()`, and this class already had the
+   * symbol -- so `for await (const entry of dir)` worked while `dir.entries()` was
+   * `undefined`. The iteration was there and the name was not, which is the shape
+   * `corpus-reach.mjs` keeps finding: a method counted as published because node
+   * publishes it, reachable here only through syntax rather than through its name.
+   *
+   * Exhausting it closes the directory, as node's does, so a `closeSync` afterwards
+   * answers `ERR_DIR_CLOSED` rather than closing a second time.
+   */
+  entries(): AsyncGenerator<DirectoryEntry, void, undefined> {
+    return this[Symbol.asyncIterator]();
+  }
+
   async *[Symbol.asyncIterator](): AsyncGenerator<
     DirectoryEntry,
     void,

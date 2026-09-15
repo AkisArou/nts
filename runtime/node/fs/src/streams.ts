@@ -861,9 +861,16 @@ export class WriteStream extends Writable {
     warnWriteStreamOpen();
   }
 
-  /** Node's older name for `end`, kept because programs still call it. */
-  destroySoon(): void {
-    this.end();
+  /**
+   * Node's older name for `end`, kept because programs still call it.
+   *
+   * It answers what `end` answers -- the stream -- because upstream it *is* `end`:
+   * `WriteStream.prototype.destroySoon = WriteStream.prototype.end`, one function
+   * under two names. This wrapped it and dropped the return, so a caller chaining
+   * off `destroySoon()` got `undefined` where node gives back the stream.
+   */
+  destroySoon(): this {
+    return this.end();
   }
 }
 

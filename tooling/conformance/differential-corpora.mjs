@@ -507,6 +507,40 @@ export const CORPORA = {
           return `${error.code ?? error.name}`;
         }
       };
+
+      /**
+       * Wait for whichever of `names` fires first, or give up after `bound` ms.
+       *
+       * The bound is not belt-and-braces. `corpus-reach.mjs` reaches every published
+       * function by replacing it with a delegating wrapper, and node's fs streams
+       * compare `stream.open` **by identity** against its two known implementations
+       * (`internal/fs/streams.js:57`) to decide whether a subclass has overridden it.
+       * A wrapper fails that identity test, so node takes the deprecated custom-open
+       * path -- which here never completes, leaving `pending` true and `open` unfired
+       * forever. Bisected: wrapping `open` alone does it; `_write`, `_writev`,
+       * `_destroy`, `close` and `destroySoon` are all transparent.
+       *
+       * So a spec that waits unconditionally for `open` hangs the instrument that
+       * measures it, which is how this was found -- `corpus-reach.mjs` exited with
+       * node's unsettled-await status and named no spec. Bounded, the run completes and
+       * the row says `timeout`, which is a visible answer rather than a stalled
+       * process.
+       *
+       * The timer is cleared on the normal path, so it costs nothing when the event
+       * arrives -- and it is reffed, because an unreffed one cannot settle a promise.
+       */
+      const firstEvent = (target, names, bound = 2000) =>
+        new Promise((resolve) => {
+          let settled = false;
+          const finish = (answer) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(answer);
+          };
+          const timer = setTimeout(() => finish("timeout"), bound);
+          for (const name of names) target.on(name, (value) => finish(`${name}:${value === undefined ? "" : typeof value}`));
+        });
       return [
         // Error paths. See `REJECTED` above.
         { label: "readFileSync!", throws: true, call: (m, s) => m.readFileSync(rejectedNonNumeric(s)) },
@@ -1152,6 +1186,420 @@ export const CORPORA = {
             // error, which is the arm that says the pairing above is what stopped
             // the poller and not this call failing.
             out.push(`unwatchUnknown:${attempt(() => m.unwatchFile(`${GONE}never`) ?? "void")}`);
+            return out.join("\n");
+          },
+        },
+        // **`fs`'s stream machinery**, the last 28 published functions and the only
+        // ones this section could not reach read-only.
+        //
+        // The rest of `fs` is compared by refusing to act -- every path two levels
+        // under a directory that does not exist -- and that cannot reach `open`,
+        // `_write`, `_writev` or `close`, because those run only when a write
+        // *succeeds*. So the safety argument here is different and it is
+        // **`/dev/null`**: a write target that accepts every byte, keeps none, and has
+        // no state for two processes to disagree about. `bytesWritten` and `path` are
+        // exact, the success path runs end to end, and nothing exists afterwards to
+        // clean up or to have raced over.
+        //
+        // `FileWriteStream === WriteStream` and `FileReadStream === ReadStream`, which
+        // is why one spec closes both listings: `corpus-reach.mjs` counts
+        // `WriteStream#open` and `FileWriteStream#open` as two published names and
+        // they are one function object.
+        {
+          // The writable half, driven to completion against `/dev/null`.
+          label: "fs-write-streams",
+          call: async (m, s) => {
+            const out = [];
+            const attempt = (label, fn) => {
+              try {
+                const got = fn();
+                out.push(`${label}:ok:${got === undefined ? "void" : typeof got === "object" && got !== null ? "object" : String(got)}`);
+              } catch (error) {
+                out.push(`${label}:${error.code ?? error.name}`);
+              }
+            };
+            const payload = (s.slice(0, 6) || "x").repeat(1 + (s.length % 3));
+
+            const stream = m.createWriteStream("/dev/null", {
+              flags: "a",
+              highWaterMark: 4 + (s.length % 8),
+            });
+            const errors = [];
+            stream.on("error", (error) => errors.push(error.code ?? error.name));
+            out.push(`pendingBeforeOpen:${stream.pending}|path:${stream.path}`);
+            const opened = await firstEvent(stream, ["open", "error"]);
+            out.push(`open:${opened}|pending:${stream.pending}`);
+            // **Stops here if the stream never opened**, because everything below waits
+            // on it: `end`, `_write` and `_writev` all answer through a callback the
+            // machinery only runs once there is a descriptor, so continuing means
+            // awaiting callbacks that cannot fire. Bounding each of them individually
+            // would report a dozen timeouts for one cause; bailing reports the cause.
+            if (opened === "timeout") {
+              stream.destroy();
+              return `${out.join("\n")}\nbailed:stream-never-opened`;
+            }
+
+            attempt("write", () => stream.write(payload));
+            attempt("writeAgain", () => stream.write(payload));
+            attempt("cork", () => stream.cork());
+            attempt("writeCorked", () => stream.write(payload));
+            attempt("uncork", () => stream.uncork());
+
+            // `_write` and `_writev` called directly, which is how a subclass reaches
+            // them and the only way this corpus can name them: the machinery routes
+            // through whichever of the two fits the queue, so driving the stream alone
+            // reaches one or the other and never both.
+            await new Promise((resolve) => {
+              stream._write(Buffer.from(payload), "buffer", (error) => {
+                out.push(`_write:${error ? error.code ?? error.name : "ok"}`);
+                resolve();
+              });
+            });
+            await new Promise((resolve) => {
+              stream._writev(
+                [{ chunk: Buffer.from(payload), encoding: "buffer" },
+                  { chunk: Buffer.from("|"), encoding: "buffer" }],
+                (error) => {
+                  out.push(`_writev:${error ? error.code ?? error.name : "ok"}`);
+                  resolve();
+                },
+              );
+            });
+
+            await new Promise((resolve) => stream.end(payload, () => resolve()));
+            out.push(`afterEnd:bytesWritten:${stream.bytesWritten}` +
+              `|writableFinished:${stream.writableFinished}|destroyed:${stream.destroyed}`);
+            attempt("close", () => stream.close());
+            await new Promise((resolve) => setImmediate(resolve));
+            out.push(`afterClose:destroyed:${stream.destroyed}|errors:${errors.join(",") || "none"}`);
+            attempt("closeAgain", () => stream.close());
+            attempt("destroySoon", () => stream.destroySoon());
+            attempt("_destroy", () => stream._destroy(null, () => {}));
+
+            // A second stream ended without `close` being called, so `destroySoon` runs
+            // on one that is still open -- the arm that says the two are different.
+            const second = m.createWriteStream("/dev/null");
+            second.on("error", () => {});
+            const secondOpened = await firstEvent(second, ["open", "error"]);
+            out.push(`second:open:${secondOpened}`);
+            if (secondOpened === "timeout") {
+              second.destroy();
+              return `${out.join("\n")}\nbailed:second-never-opened`;
+            }
+            attempt("second:write", () => second.write(payload));
+            attempt("second:destroySoon", () => second.destroySoon());
+            await new Promise((resolve) => setImmediate(resolve));
+            out.push(`second:destroyed:${second.destroyed}|bytes:${second.bytesWritten}`);
+            second.destroy();
+
+            // The failure path: a parent that does not exist, so `open` reports and
+            // nothing is created. This is what the rest of the section relies on, and
+            // it reaches `_destroy` through the error rather than through a call.
+            const doomed = m.createWriteStream(`${BASE}no-such-dir-nts/child${s.length % 5}`);
+            out.push(`doomed:${await firstEvent(doomed, ["error", "open"])}`);
+            out.push(`doomed:destroyed:${doomed.destroyed}|pending:${doomed.pending}`);
+            doomed.destroy();
+            return out.join("\n");
+          },
+        },
+        {
+          // The readable half, which needs no `/dev/null` argument: it only reads, and
+          // it reads the file the rest of this section already reads.
+          label: "fs-read-streams",
+          call: async (m, s) => {
+            const out = [];
+            const attempt = (label, fn) => {
+              try {
+                const got = fn();
+                out.push(`${label}:ok:${got === undefined ? "void" : typeof got === "object" && got !== null ? "object" : String(got)}`);
+              } catch (error) {
+                out.push(`${label}:${error.code ?? error.name}`);
+              }
+            };
+            const stream = m.createReadStream(`${BASE}src/main.ts`, {
+              start: 0,
+              end: 8 + (s.length % 16),
+              highWaterMark: 4 + (s.length % 8),
+            });
+            stream.on("error", () => {});
+            out.push(`pending:${stream.pending}|path:${stream.path}`);
+            // Raced against a bound for the same reason: a stream whose `open` was
+            // wrapped never opens, and `toArray` on it never settles.
+            const drained = await Promise.race([
+              stream.toArray().then((chunks) => Buffer.concat(chunks).toString("hex")),
+              new Promise((resolve) => {
+                const timer = setTimeout(() => resolve("timeout"), 2000);
+                if (typeof timer.unref === "function") { /* reffed on purpose */ }
+              }),
+            ]);
+            out.push(`read:${drained}|bytesRead:${stream.bytesRead}`);
+            if (drained === "timeout") {
+              stream.destroy();
+              return `${out.join("\n")}\nbailed:read-never-drained`;
+            }
+            attempt("closeAfterDrain", () => stream.close());
+
+            // `_read` and `_destroy` on **separate** streams, and that is not tidiness.
+            //
+            // A direct `_read` starts a read the machinery would otherwise have
+            // ordered, and `_destroy` called afterwards defers its close until that
+            // read finishes -- which nothing drains, so **the callback never fires**.
+            // The first version of this spec did both on one stream and hung the
+            // harness: an unsettled promise, the loop drained, and node's
+            // unsettled-top-level-await warning instead of a result. Measured after:
+            // `_destroy` with no prior `_read` calls back in both the clean and the
+            // errored form.
+            const reader = m.createReadStream(`${BASE}src/main.ts`);
+            reader.on("error", () => {});
+            // `_read` **before** the file is open is not compared, and node's answer is
+            // why. Its `_read` computes a length, allocates, and hands the descriptor
+            // to the binding without checking that there is one -- so with `fd` still
+            // null the read reaches the layer that rejects it and the caller sees
+            // `ERR_INVALID_ARG_TYPE` about a buffer argument. This profile returns
+            // instead. Reproducing an unguarded read to match the error it happens to
+            // produce is not worth the row, and the machinery never calls `_read` in
+            // that order -- only a subclass reaching past it can.
+            out.push("_readBeforeOpen:recorded-not-compared");
+            const readerOpened = await firstEvent(reader, ["open", "error"]);
+            out.push(`reader:open:${readerOpened}`);
+            if (readerOpened === "timeout") {
+              reader.destroy();
+              return `${out.join("\n")}\nbailed:reader-never-opened`;
+            }
+            attempt("_readAfterOpen", () => reader._read(4));
+            reader.destroy();
+
+            for (const [name, cause] of [["clean", null], ["errored", new Error(`boom${s.length % 3}`)]]) {
+              const victim = m.createReadStream(`${BASE}src/main.ts`);
+              victim.on("error", () => {});
+              const victimOpened = await firstEvent(victim, ["open", "error"]);
+              out.push(`_destroy:${name}:open:${victimOpened}`);
+              if (victimOpened === "timeout") {
+                victim.destroy();
+                return `${out.join("\n")}\nbailed:victim-never-opened`;
+              }
+              await new Promise((resolve) => {
+                victim._destroy(cause, (error) => {
+                  out.push(`_destroy:${name}:${error ? error.message ?? error.code : "ok"}`);
+                  resolve();
+                });
+              });
+              out.push(`_destroy:${name}:destroyed:${victim.destroyed}`);
+              attempt(`closeAfter_destroy:${name}`, () => victim.close());
+              victim.destroy();
+            }
+
+            // A read stream over a path that is not there, which reports rather than
+            // opening.
+            const missing = m.createReadStream(`${BASE}no-such-dir-nts/child`);
+            out.push(`missing:${await firstEvent(missing, ["error", "open"])}`);
+            missing.destroy();
+            return out.join("\n");
+          },
+        },
+        {
+          // `Utf8Stream`, node's buffered utf8 file writer, against `/dev/null`.
+          //
+          // Everything here happens **after `ready`**, and that is the point rather
+          // than tidiness: the destination opens asynchronously, so `flushSync` called
+          // straight after construction answers `ERR_INVALID_STATE` and called after
+          // `ready` answers nothing at all. Which one a run gets is a fact about
+          // scheduling, so the spec waits and compares the settled behaviour.
+          label: "fs-utf8-stream",
+          call: async (m, s) => {
+            const out = [];
+            const attempt = (label, fn) => {
+              try {
+                const got = fn();
+                out.push(`${label}:ok:${got === undefined ? "void" : String(got)}`);
+              } catch (error) {
+                out.push(`${label}:${error.code ?? error.name}`);
+              }
+            };
+            let stream;
+            try {
+              stream = new m.Utf8Stream({ dest: "/dev/null" });
+            } catch (error) {
+              return `construct:${error.code ?? error.name}`;
+            }
+            const errors = [];
+            stream.on("error", (error) => errors.push(error.code ?? error.name));
+            const utf8Ready = await firstEvent(stream, ["ready", "error"]);
+            out.push(`ready:${utf8Ready}`);
+            if (utf8Ready === "timeout") {
+              try { stream.destroy(); } catch { /* nothing to lose here */ }
+              return `${out.join("\n")}\nbailed:utf8-never-ready`;
+            }
+
+            const payload = (s.slice(0, 5) || "x").repeat(1 + (s.length % 4));
+            attempt("write", () => stream.write(payload));
+            attempt("writeEmpty", () => stream.write(""));
+            attempt("flushSync", () => stream.flushSync());
+            await new Promise((resolve) => {
+              try {
+                stream.flush((error) => {
+                  out.push(`flush:${error ? error.code ?? error.name : "ok"}`);
+                  resolve();
+                });
+              } catch (error) {
+                out.push(`flush:${error.code ?? error.name}`);
+                resolve();
+              }
+            });
+            // `reopen` on **one input in twenty**, because it leaks a descriptor per
+            // call and the leak is node's.
+            //
+            // Bisected rather than guessed: over ten iterations each, `end` with the
+            // close awaited holds flat, `write`+`flushSync`+`end` holds flat, `destroy`
+            // holds flat, and `reopen` then `end` grows by nine. So `reopen` opens the
+            // replacement without releasing what it replaced, and `end` closes only the
+            // current one. Measured against `require("fs")`, so it is upstream and not
+            // this profile's to fix here.
+            //
+            // One in twenty reaches the name for `corpus-reach.mjs` and bounds the
+            // waste at a couple of hundred descriptors instead of one per input.
+            if (s.length % 20 === 0) {
+              attempt("reopen", () => stream.reopen("/dev/null"));
+              attempt("writeAfterReopen", () => stream.write(payload));
+            }
+
+            // **`end` and `destroy` go on separate streams**, for the same reason
+            // `_read` and `_destroy` do in `fs-read-streams`. `end` schedules a final
+            // flush; destroying before that flush lands means it completes against a
+            // destroyed stream and *throws* `ERR_INVALID_STATE: Utf8Stream is
+            // destroyed` -- uncaught, asynchronously, during a **later input's** spec,
+            // which is the worst shape a failure can take because it does not name the
+            // arm that caused it.
+            attempt("end", () => stream.end());
+            await new Promise((resolve) => {
+              stream.on("close", () => resolve());
+              stream.on("finish", () => resolve());
+              setImmediate(() => resolve());
+            });
+            attempt("writeAfterEnd", () => stream.write(payload));
+            attempt("flushSyncAfterEnd", () => stream.flushSync());
+            out.push(`errors:${errors.join(",") || "none"}`);
+
+            // `destroy` on a stream that was never ended, so nothing is in flight.
+            const doomed = new m.Utf8Stream({ dest: "/dev/null" });
+            const doomedErrors = [];
+            doomed.on("error", (error) => doomedErrors.push(error.code ?? error.name));
+            const doomedReady = await firstEvent(doomed, ["ready", "error"]);
+            out.push(`doomedReady:${doomedReady}`);
+            if (doomedReady === "timeout") {
+              try { doomed.destroy(); } catch { /* nothing to lose here */ }
+              return `${out.join("\n")}\nbailed:doomed-never-ready`;
+            }
+            attempt("destroy", () => doomed.destroy());
+            attempt("destroyAgain", () => doomed.destroy());
+            attempt("writeAfterDestroy", () => doomed.write(payload));
+            attempt("flushSyncAfterDestroy", () => doomed.flushSync());
+            out.push(`doomedErrors:${doomedErrors.join(",") || "none"}`);
+
+            // Its constructor's refusals, which are the only part reachable without a
+            // destination.
+            // Each victim is **allowed to settle before it is destroyed**, which the
+            // first version did not do. A destination that cannot be opened fails
+            // asynchronously, and destroying the stream first meant the failure arrived
+            // at an already-destroyed stream and was *thrown* rather than emitted:
+            // `ERR_INVALID_STATE: Utf8Stream is destroyed`, uncaught, during a later
+            // input's spec. A deferred throw does not name the arm that caused it.
+            for (const options of [undefined, {}, { dest: null }, { dest: 1.5 },
+              { dest: `${BASE}no-such-dir-nts/child` }]) {
+              const shown = JSON.stringify(options) ?? "undefined";
+              let victim;
+              try {
+                victim = new m.Utf8Stream(options);
+              } catch (error) {
+                out.push(`construct:${shown}:${error.code ?? error.name}`);
+                continue;
+              }
+              // **What construction answered, not what settles after it.** A
+              // destination that cannot be opened reports asynchronously, and how many
+              // turns that takes differs: waiting one `setImmediate` caught this
+              // profile's `ENOENT` and node's "neither", which is a race rather than a
+              // difference. Waiting long enough for both would cost a reffed timer per
+              // victim per input.
+              //
+              // The handler stays attached so the eventual failure is emitted rather
+              // than thrown, and the stream is left alone rather than destroyed -- a
+              // destroyed one turns that same failure into an uncaught
+              // `ERR_INVALID_STATE` during a **later input's** spec, which is how this
+              // arm first announced itself.
+              victim.on("error", () => {});
+              out.push(`construct:${shown}:ok`);
+            }
+            return out.join("\n");
+          },
+        },
+        {
+          // `Dir`'s two remaining methods, both read-only.
+          //
+          // The recursive walk runs over `src/` rather than the base directory,
+          // because the base holds `dist`, `node_modules` and `.tsbuild` -- build
+          // output another session may be rewriting while this runs. Comparing a
+          // listing that a peer's build can change mid-sweep is a race, not a
+          // comparison, and `src/` is source.
+          label: "fs-dir-recursive",
+          call: async (m, s) => {
+            const out = [];
+            const attempt = (label, fn) => {
+              try {
+                out.push(`${label}:ok:${fn()}`);
+              } catch (error) {
+                out.push(`${label}:${error.code ?? error.name}`);
+              }
+            };
+            // Each handle closed in a `finally`. Without it a throw part-way through a
+            // walk leaks the directory, and node says so only much later and without
+            // naming the arm: "Warning: Closing directory handle on garbage
+            // collection". Descriptors grew by one per call until this was added.
+            const walk = (label, step) => {
+              let dir;
+              try {
+                dir = m.opendirSync(`${BASE}src`, { recursive: true });
+                const names = [];
+                for (;;) {
+                  const entry = step(dir);
+                  if (entry === null || entry === undefined) break;
+                  names.push(entry.name);
+                }
+                out.push(`${label}:ok:${JSON.stringify(names.sort())}`);
+              } catch (error) {
+                out.push(`${label}:${error.code ?? error.name}`);
+              } finally {
+                if (dir !== undefined) {
+                  try { dir.closeSync(); } catch { /* the iterator may have closed it */ }
+                }
+              }
+            };
+            walk("readSyncRecursive", (dir) => dir.readSyncRecursive());
+            walk("recursiveReadSync", (dir) => dir.readSync());
+            let entriesDir;
+            try {
+              const dir = m.opendirSync(`${BASE}src`);
+              entriesDir = dir;
+              const iterator = dir.entries();
+              out.push(`entries:${typeof iterator}|next:${typeof iterator.next}`);
+              const names = [];
+              for (;;) {
+                const step = await iterator.next();
+                if (step.done) break;
+                names.push(step.value.name);
+              }
+              out.push(`entriesNames:${JSON.stringify(names.sort())}`);
+              // The iterator closed the handle, so closing again reports.
+              out.push(`closeAfterEntries:${(() => {
+                try { dir.closeSync(); return "ok"; } catch (error) { return error.code ?? error.name; }
+              })()}`);
+            } catch (error) {
+              out.push(`entries:${error.code ?? error.name}`);
+            } finally {
+              if (entriesDir !== undefined) {
+                try { entriesDir.closeSync(); } catch { /* exhausting the iterator closes it */ }
+              }
+            }
+            out.push(`seed:${s.length % 4}`);
             return out.join("\n");
           },
         },

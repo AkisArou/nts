@@ -49,6 +49,35 @@
 // run, so the wrapper delegates with the original receiver and rethrows
 // unchanged. Constructors are skipped -- wrapping one breaks `new` -- and named
 // in the summary rather than silently dropped.
+//
+// **A wrapper is transparent to a caller and not to an identity check**, and that
+// is a sharper limit than the constructor one above.
+//
+// `fs`'s stream classes are the known case. `internal/fs/streams.js:57` reads
+//
+//     if (stream.open !== openWriteFs && stream.open !== openReadFs) {
+//
+// -- node compares `open` **by identity** against its two implementations to decide
+// whether a subclass has overridden it. A delegating wrapper fails that test, so
+// node takes the deprecated custom-open path, and on this profile that path never
+// completes: `open` stays unfired and `pending` stays true forever. Bisected, and it
+// is `open` alone: `_write`, `_writev`, `_destroy`, `close` and `destroySoon` all
+// wrap transparently.
+//
+// Two consequences worth knowing before reading a number off this file.
+//
+// A spec that waits unconditionally on `open` **hangs this instrument**. That is how
+// the limit was found: a run over `fs` exited with node's unsettled-await status and
+// named no spec, because the loop had nothing left to do and the await never settled.
+// The `fs` stream specs now bound that wait and bail with `bailed:stream-never-opened`
+// rather than stalling, which is a visible answer instead of a wedged process.
+//
+// And the sixteen names that come *after* `open` on those classes -- `_write`,
+// `_writev`, `_destroy`, `close` and `destroySoon` on `WriteStream` and
+// `FileWriteStream`, `_read`, `_destroy` and `close` on the read pair -- are reported
+// here as never called and **are** called, by `differential-ts.mjs`, which wraps
+// nothing. So this file under-counts them by construction. Read the differential for
+// those, not this.
 
 import { loadNode } from "./surface-load.mjs";
 import { CORPORA } from "./differential-corpora.mjs";
