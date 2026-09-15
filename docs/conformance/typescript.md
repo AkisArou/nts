@@ -2441,9 +2441,14 @@ to be answerable from numbers already on disk, without the instrument and
 without the root-selection bias that spoiled the three probes.
 
 **Published functions against declined exports, all 26 modules, 2026-09-15.**
-Published counted as `napi_create_function` in the emitted `addon.c` — exported
-*functions* only, so a class like `fs.Stats` and a namespace like `fs.constants`
-are registered separately and not in this column.
+Published counted as `napi_create_function` in the emitted `addon.c`, which
+counts a namespace's own members as well as top-level exports — `path`'s 34 is
+11 top-level plus two namespaces' worth. Classes are registered separately and
+are not in the column. **The emitted file states all four numbers itself now**,
+so this no longer has to be counted by hand: every `addon.c` ends with
+
+    /* This module publishes 1 top-level function(s), 1 class(es) and 2
+     * namespace(s), and declines 123 export(s). ... */
 
 | module | published | declined | rate |
 |---|---:|---:|---:|

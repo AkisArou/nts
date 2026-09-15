@@ -2031,7 +2031,7 @@ fn class_definition(
         )
     } else {
         format!(
-            "    {{\n        napi_property_descriptor members[] = {{\n            {}\n        }};\n        napi_value ctor;\n        if (!nts_napi_check(env, napi_define_class(env, {property}, NAPI_AUTO_LENGTH, nts_napi_new_{instance}, NULL, sizeof(members) / sizeof(members[0]), members, &ctor), \"could not define a class\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, ctor), \"could not export a class\")) return NULL;\n    }}\n",
+            "    {{\n        /* ONE CLASS'S MEMBERS, for `napi_define_class` -- not the\n         * module's exports either. See the note on `own[]`: counting\n         * `napi_property_descriptor` entries by shape finds a class\n         * before it finds the module. */\n        napi_property_descriptor members[] = {{\n            {}\n        }};\n        napi_value ctor;\n        if (!nts_napi_check(env, napi_define_class(env, {property}, NAPI_AUTO_LENGTH, nts_napi_new_{instance}, NULL, sizeof(members) / sizeof(members[0]), members, &ctor), \"could not define a class\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, ctor), \"could not export a class\")) return NULL;\n    }}\n",
             descriptors.join(",\n            ")
         )
     };
@@ -3559,7 +3559,7 @@ fn field_accessors(
     } else {
         let _ = write!(
             out,
-            "    napi_property_descriptor own[] = {{\n        {}\n    }};\n    return nts_napi_check(env, napi_define_properties(env, self, sizeof(own) / sizeof(own[0]), own), \"could not define the instance fields\");\n}}\n",
+            "    /* One INSTANCE'S OWN FIELDS -- not this module's exports.\n     *\n     * Two readers counting a module's published exports found this array\n     * first, independently, an hour apart, and both counted `dev`, `mode`,\n     * `nlink`, `blksize` as exports. It comes first in the file and has\n     * exactly the shape an export table has, so anything matching quoted\n     * names by shape lands here.\n     *\n     * The module's own totals are stated in the banner above the module\n     * initialiser, so nothing here needs counting by hand. */\n    napi_property_descriptor own[] = {{\n        {}\n    }};\n    return nts_napi_check(env, napi_define_properties(env, self, sizeof(own) / sizeof(own[0]), own), \"could not define the instance fields\");\n}}\n",
             descriptors.join(",\n        ")
         );
     }
@@ -3795,6 +3795,46 @@ fn emit_layouts(
 }
 
 #[must_use]
+/// **The module's own totals, stated rather than left to be counted, and
+/// stated here because this is the first point at which they are final.**
+///
+/// Two readers counting one module's published exports on 2026-09-15 both
+/// landed on a class's `own[]` field descriptors -- `dev`, `mode`, `nlink`,
+/// `blksize` -- independently, an hour apart. That array comes first in the
+/// file and has exactly the shape an export table has, so the trap is in the
+/// artifact rather than in either reader.
+///
+/// Two things went wrong fixing it, both worth the lines they cost. A
+/// comment pointing at `napi_create_function` put that token *in* the file
+/// and moved the count it described from 2 to 3: a note telling a reader
+/// what to grep for becomes a match for the grep. And a first banner was
+/// emitted before `report_missing`, so it said `fs` declines 11 where the
+/// true figure is 123 -- a wrong number wearing the authority of having been
+/// printed by the compiler, which is worse than no number at all.
+///
+/// Only quantities that can be stated exactly are stated. A namespace's own
+/// members are published on the namespace object and are in none of these
+/// counts, which is why that is said rather than folded in.
+fn totals_banner(
+    functions: usize,
+    classes: usize,
+    namespaces: usize,
+    declined: usize,
+) -> String {
+    format!(
+        "\n/* This module publishes {functions} top-level function(s), {classes} class(es) \
+         and {namespaces} namespace(s),\n\
+         * and declines {declined} export(s). A namespace's own members are published on \
+         it and\n\
+         * are counted in none of these.\n\
+         *\n\
+         * Stated because counting them out of this file is a trap: the \
+         `napi_property_descriptor`\n\
+         * arrays above belong to classes, not to the module. */\n"
+    )
+}
+
+#[must_use]
 pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     let mut out = preamble(program);
 
@@ -3951,6 +3991,13 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     out.push_str("    return exports;\n}\n");
 
     report_missing(program, &wrapped, &published_classes, refused, &mut skipped);
+
+    out.push_str(&totals_banner(
+        wrapped.len(),
+        published_classes.len(),
+        program.public_namespaces.len(),
+        skipped.len(),
+    ));
 
     Addon {
         source: out,
