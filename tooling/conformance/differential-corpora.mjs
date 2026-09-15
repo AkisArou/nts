@@ -2489,6 +2489,147 @@ export const CORPORA = {
           return log.join(",") + `|final=${emitter.listenerCount("x")}`;
         },
       },
+      {
+        // **`addAbortListener`**, which `corpus-reach.mjs` had as uncalled on both the
+        // module and the class.
+        //
+        // It is not `signal.addEventListener("abort", fn)` with a nicer name, and the
+        // differences are all in the edges: a signal that is *already* aborted must
+        // still call the listener (node schedules it, rather than dropping it or
+        // calling it synchronously), the return value is a disposable carrying
+        // `Symbol.dispose` which removes the listener, and disposing twice is silent.
+        // A reimplementation that forwards straight to `addEventListener` gets the
+        // already-aborted case wrong and nothing else, which is why the row separates
+        // "fired" from "fired synchronously".
+        label: "addAbortListener",
+        call: async (m, program) => {
+          const out = [];
+          const show = (f) => {
+            try {
+              return String(f());
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          const both = [
+            ["module", m.addAbortListener],
+            ["static", m.EventEmitter?.addAbortListener],
+          ];
+          for (const [where, add] of both) {
+            if (typeof add !== "function") { out.push(`${where}:absent`); continue; }
+
+            // A fresh signal: the listener must not fire before the abort, and must
+            // fire once after it.
+            {
+              const controller = new AbortController();
+              const log = [];
+              const disposable = show(() => {
+                const d = add(controller.signal, (event) => log.push(`fired:${event?.type}`));
+                return `${typeof d}:${typeof d?.[Symbol.dispose]}`;
+              });
+              log.push(`before=${log.length}`);
+              controller.abort(new Error(String(program).slice(0, 4) || "why"));
+              await new Promise((resolve) => setImmediate(resolve));
+              out.push(`${where}:fresh:${disposable}:${log.join("/")}`);
+            }
+
+            // **Already aborted.** The listener still runs, and the question the row
+            // is really asking is whether it runs *synchronously*: node does not.
+            {
+              const controller = new AbortController();
+              controller.abort();
+              const log = [];
+              add(controller.signal, () => log.push("fired"));
+              out.push(`${where}:sync=${log.length}`);
+              await new Promise((resolve) => setImmediate(resolve));
+              out.push(`${where}:after=${log.join("/")}`);
+            }
+
+            // Disposing removes the listener, and disposing twice is silent.
+            {
+              const controller = new AbortController();
+              const log = [];
+              const d = add(controller.signal, () => log.push("fired"));
+              out.push(`${where}:dispose=${show(() => String(d[Symbol.dispose]()))}`);
+              out.push(`${where}:dispose2=${show(() => String(d[Symbol.dispose]()))}`);
+              controller.abort();
+              await new Promise((resolve) => setImmediate(resolve));
+              out.push(`${where}:afterDispose=${log.length}`);
+            }
+
+            // What it refuses. A non-signal first argument and a non-function second
+            // are both validated, and the codes are the comparable part.
+            out.push(`${where}:bad1=${show(() => String(add(String(program), () => {})))}`);
+            out.push(`${where}:bad2=${show(() => String(add(new AbortController().signal, String(program))))}`);
+          }
+          out.push(`same=${m.addAbortListener === m.EventEmitter?.addAbortListener}`);
+          return out.join("|");
+        },
+      },
+      {
+        // **`EventEmitterAsyncResource`** -- `emit`, `emitDestroy`, and the three
+        // accessors -- plus the two self-references node publishes and nothing called:
+        // `events.EventEmitter.EventEmitter` and `events.init`.
+        //
+        // `asyncId` and `triggerAsyncId` are *accessors* rather than methods, which is
+        // the shape a reimplementation gets wrong first; their values are per-process
+        // counters and so are compared by type and ordering rather than by value.
+        //
+        // `emitDestroy` returns **nothing**, and calling it twice is silent. Both
+        // halves of that were wrong here: ours returned `this`, and this comment
+        // claimed node throws on the second call until the row was run.
+        label: "async-resource",
+        call: (m, program) => {
+          const out = [];
+          const show = (f) => {
+            try {
+              return String(f());
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          out.push(`self=${m.EventEmitter?.EventEmitter === m.EventEmitter}`);
+          out.push(`init=${typeof m.init}:${typeof m.EventEmitter?.init}`);
+
+          const Resource = m.EventEmitterAsyncResource;
+          if (typeof Resource !== "function") return `${out.join("|")}|resource:absent`;
+
+          const name = `R${String(program).slice(0, 3).replace(/[^a-zA-Z]/g, "") || "x"}`;
+          const resource = new Resource({ name });
+          out.push(`proto=${Object.getOwnPropertyNames(Object.getPrototypeOf(resource)).sort().join(",")}`);
+          out.push(`kinds=${["asyncId", "triggerAsyncId", "asyncResource"].map((key) => {
+            const d = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(resource), key);
+            return `${key}:${d === undefined ? "absent" : (typeof d.get === "function" ? "getter" : typeof d.value)}`;
+          }).join(",")}`);
+          out.push(`types=${typeof resource.asyncId}:${typeof resource.triggerAsyncId}:${typeof resource.asyncResource}`);
+          // Two resources in a row: the ids are counters, so the *relation* is stable
+          // where the values are not.
+          const second = new Resource({ name: `${name}2` });
+          out.push(`increasing=${second.asyncId > resource.asyncId}`);
+          out.push(`triggerShared=${second.triggerAsyncId === resource.triggerAsyncId}`);
+          out.push(`backref=${resource.asyncResource?.eventEmitter === resource}`);
+
+          // `emit` runs the listener inside the resource's async scope and returns what
+          // `EventEmitter#emit` returns.
+          const log = [];
+          resource.on("x", (value) => log.push(`got:${value}`));
+          out.push(`emit=${show(() => String(resource.emit("x", String(program).length)))}`);
+          out.push(`emitNone=${show(() => String(resource.emit("nobody")))}`);
+          out.push(`log=${log.join("/")}`);
+
+          out.push(`destroy=${show(() => String(resource.emitDestroy()))}`);
+          // Silent, not an error: node's `emitDestroy` has no guard on a second call.
+          out.push(`destroy2=${show(() => String(resource.emitDestroy()))}`);
+          out.push(`emitAfter=${show(() => String(resource.emit("x", 1)))}`);
+          second.emitDestroy();
+
+          // The name is required: constructing without one, and with a non-string,
+          // are both validated.
+          out.push(`noName=${show(() => String(new Resource().constructor.name))}`);
+          out.push(`badName=${show(() => String(new Resource({ name: 7 }).constructor.name))}`);
+          return out.join("|");
+        },
+      },
     ],
   },
 

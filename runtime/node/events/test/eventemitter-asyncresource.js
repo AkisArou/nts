@@ -47,7 +47,13 @@ emitter.on('work', common.mustCall(function(value) {
   assert.strictEqual(executionAsyncId(), emitter.asyncId);
 }));
 assert.strictEqual(emitter.emit('work', 42), true);
-assert.strictEqual(emitter.emitDestroy(), emitter);
+// Upstream calls `foo.emitDestroy()` and asserts nothing about what comes back.
+// This line asserted it returned the emitter, which node does not do -- its
+// implementation is `emitDestroy() { this.#asyncResource.emitDestroy(); }` -- so
+// the assertion was this file's own invention and it pinned the wrong behaviour
+// in place. Asserting `undefined` keeps a check here rather than dropping to
+// upstream's bare call.
+assert.strictEqual(emitter.emitDestroy(), undefined);
 
 setImmediate(common.mustCall(() => {
   hook.disable();

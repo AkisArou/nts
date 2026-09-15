@@ -27,6 +27,7 @@ import {
   validateInteger,
   validateNumberRange,
   validateObject,
+  validateString,
 } from "../../internal/validators.ts";
 import type {
   AbortListener,
@@ -217,6 +218,78 @@ function eventListenerAt(
 const kCapture: unique symbol = Symbol("kCapture");
 const kPreserveEventShape: unique symbol = Symbol("kPreserveEventShape");
 
+/**
+ * The field effects every new emitter gets, shared by the constructor and by the
+ * published `init` below so that the two cannot answer differently.
+ *
+ * `eventsAbsent` is the one thing its two callers decide for themselves, because
+ * they can: the constructor runs immediately after the field initialisers and
+ * knows the store is fresh, while `init` may be handed any object at all and has
+ * to ask node's question -- is the store missing, *or* merely inherited.
+ */
+function initEmitterFields(
+  target: EventEmitter,
+  options: { captureRejections?: boolean } | undefined,
+  eventsAbsent: boolean,
+): void {
+  if (eventsAbsent) {
+    target._events = emptyStore();
+    target._eventsCount = 0;
+    target[kPreserveEventShape] = false;
+  } else {
+    // A store the caller established deliberately has a shape worth keeping, so
+    // node preserves it rather than clearing it.
+    target[kPreserveEventShape] = true;
+  }
+  // Node writes `this._maxListeners ||= undefined`, which is not a no-op: a
+  // `_maxListeners` of `0` is falsy and becomes `undefined`, restoring the default
+  // rather than the limit of zero the object was carrying.
+  if (!target._maxListeners) target._maxListeners = undefined;
+  applyCaptureRejections(target, options?.captureRejections);
+}
+
+/**
+ * **`EventEmitter.init`**, which node publishes twice over and nothing here had.
+ *
+ * It is on the class as a static, and because node's `module.exports` *is* the
+ * `EventEmitter` class it is an export of `node:events` as well -- `events.init`
+ * and `EventEmitter.init` are the same function value. Both were `undefined`
+ * here, found by comparing the module's surface against node's for the first
+ * time.
+ *
+ * The `this` is deliberately not required to be an `EventEmitter` at runtime.
+ * Node's is called as `EventEmitter.init.call(obj, opts)` against plain objects
+ * -- that is what it is *for* -- which is also why this one and not the
+ * constructor carries the prototype lookup.
+ */
+export function init(
+  this: EventEmitter,
+  options?: { captureRejections?: boolean } | undefined,
+): void {
+  const prototype = Object.getPrototypeOf(this) as EventEmitter | null;
+  // **`_events` inherited from the prototype counts as absent.** For an ordinary
+  // emitter this reduces to `_events === undefined`, because the store is an
+  // instance field and the prototype has none -- it is the plain object that node
+  // supports here which makes the second arm reachable.
+  initEmitterFields(
+    this,
+    options,
+    this._events === undefined || this._events === prototype?._events,
+  );
+}
+
+function applyCaptureRejections(
+  target: EventEmitter,
+  capture: boolean | undefined,
+): void {
+  if (capture) {
+    validateBoolean(capture, "options.captureRejections");
+    target[kCapture] = true;
+  } else {
+    target[kCapture] = captureRejectionsDefault;
+  }
+}
+
 export class EventEmitter {
   /**
    * Statically named optional rejection hook. A computed symbol known at
@@ -256,18 +329,25 @@ export class EventEmitter {
   [kPreserveEventShape] = false;
 
   constructor(options?: { captureRejections?: boolean }) {
-    this._events = emptyStore();
-    this._eventsCount = 0;
-    this._configureCaptureRejections(options?.captureRejections);
+    // The same effects `init` applies, through the same function -- `init` is
+    // published, so a second copy of the logic here would be a second answer to one
+    // question and the two would drift apart silently.
+    //
+    // **Not `init.call(this, options)`, which is what node writes.** A `.call` is a
+    // closure to this compiler and `init` reads `Object.getPrototypeOf`; routing the
+    // constructor through either took `EventEmitter#constructor` from compiled to
+    // refused, and the refusal cascaded into `on`, `addListener` and
+    // `prependListener`. Measured, not assumed: 44 diagnostics in this file before
+    // the change and 47 after, with `EventEmitter#constructor` among the three.
+    //
+    // What differs is only *which question decides that the store is absent*, and
+    // the constructor can answer it without a prototype lookup: a field initialiser
+    // has just run, so `_events` is `undefined` unless a subclass field set it.
+    initEmitterFields(this, options, this._events === undefined);
   }
 
   protected _configureCaptureRejections(capture: boolean | undefined): void {
-    if (capture !== undefined) {
-      validateBoolean(capture, "options.captureRejections");
-      this[kCapture] = capture;
-    } else {
-      this[kCapture] = captureRejectionsDefault;
-    }
+    applyCaptureRejections(this, capture);
   }
 
   /**
@@ -317,6 +397,7 @@ export class EventEmitter {
   static usingDomains = false;
 
   /** Module helpers are the same function values on Node's exported class. */
+  static readonly init = init;
   static readonly addAbortListener = addAbortListener;
   static readonly getEventListeners = getEventListeners;
   static readonly getMaxListeners = getMaxListeners;
@@ -750,6 +831,20 @@ export class EventEmitterAsyncResource extends EventEmitter {
     const emitterOptions = typeof options === "string" ? undefined : options;
     super(emitterOptions);
 
+    // **`options.name` is required when this class is constructed directly.**
+    // Node guards it with `new.target === EventEmitterAsyncResource`, so a
+    // subclass is exempt and falls through to `AsyncResource`'s own validation of
+    // `type` -- which is why the two report different argument names for the same
+    // mistake. Reproduced with the guard rather than unconditionally, because an
+    // unconditional check would reject `class Sub extends EventEmitterAsyncResource {}`,
+    // which node accepts.
+    //
+    // The default below therefore only ever applies to a subclass, which is where
+    // the `new.target.name` non-goal above lives.
+    if (typeof options !== "string" && new.target === EventEmitterAsyncResource) {
+      validateString(emitterOptions?.name, "options.name");
+    }
+
     const name = typeof options === "string"
       ? options
       : options?.name ?? "EventEmitterAsyncResource";
@@ -769,9 +864,15 @@ export class EventEmitterAsyncResource extends EventEmitter {
     );
   }
 
-  emitDestroy(): this {
+  /**
+   * Node returns nothing here, and calling it twice is silent rather than an error.
+   *
+   * `return this` was wrong in a way nothing could see from inside: it makes the
+   * call chainable, which reads as a convenience and is a different function. It
+   * was found by comparing the return value against node for the first time.
+   */
+  emitDestroy(): void {
     this.#asyncResource.emitDestroy();
-    return this;
   }
 
   get asyncId(): number {
