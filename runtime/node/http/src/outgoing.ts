@@ -748,6 +748,27 @@ export class OutgoingMessage<
     return [...this.#headersMap.values()].map((entry) => entry[0]);
   }
 
+  /**
+   * `OutgoingMessage.prototype._renderHeaders`, the headers keyed by the spelling
+   * they were **given** rather than the folded one.
+   *
+   * `getHeaders()` answers the lower-cased keys, which is what a program wants for
+   * lookup; this answers the raw ones, which is what goes on the wire. Node exposes
+   * both and the difference is the whole point of the pair -- a caller assembling a
+   * request by hand needs the spelling back.
+   *
+   * Refuses once the head is out, as node does: rendering after the bytes have gone
+   * cannot affect them, so answering would be a lie about what was sent.
+   */
+  _renderHeaders(): OutgoingHeaders {
+    if (this._header) throw new ERR_HTTP_HEADERS_SENT("render");
+    const rendered: OutgoingHeaders = {};
+    for (const entry of this.#headersMap.values()) {
+      rendered[entry[0]] = entry[1];
+    }
+    return rendered;
+  }
+
   hasHeader(name: string): boolean {
     if (typeof name !== "string") {
       throw new ERR_INVALID_ARG_TYPE("name", "string", name);
@@ -818,6 +839,11 @@ export class OutgoingMessage<
   protected prepareHeaders(): void {
     if (this.headersSent) return;
     if (!this[kStatusLine]) this._implicitHeader();
+    // Re-checked, because the override may have rendered. Node's `_implicitHeader`
+    // *is* the render -- `ServerResponse`'s calls `writeHead` and `ClientRequest`'s
+    // calls `_storeHeader` -- so a subclass written against node produces the whole
+    // head here, and continuing would build it a second time.
+    if (this.headersSent) return;
     if (!this[kStatusLine]) return;
 
     const declared = this.#headersMap.get("content-length");
@@ -1397,10 +1423,26 @@ export class ServerResponse extends OutgoingMessage {
     return this;
   }
 
+  /**
+   * `ServerResponse.prototype._implicitHeader`, which **renders the head**.
+   *
+   * Node's is `this.writeHead(this.statusCode)`, so after it `_header` is a string
+   * and anything that refuses once the head is out -- `writeContinue`,
+   * `writeEarlyHints`, `setHeader` -- refuses. This set the status line and left the
+   * render to `prepareHeaders`, so `res._implicitHeader()` produced a half-built
+   * response: `_header` stayed `null` and `writeContinue` afterwards succeeded where
+   * node answers `ERR_HTTP_HEADERS_SENT`.
+   *
+   * That split is invisible inside this module, which calls the two together. It is
+   * not invisible to a caller: this method exists **to be overridden**, and a
+   * subclass written against node renders in it, which is why `prepareHeaders` now
+   * re-checks `headersSent` after calling it.
+   */
   protected override _implicitHeader(): void {
     const message = this.statusMessage ?? STATUS_CODES[this.statusCode] ?? "unknown";
     if (checkInvalidHeaderChar(message)) throw new ERR_INVALID_CHAR("statusMessage");
     this[kStatusLine] = `${RESPONSE_VERSION} ${this.statusCode} ${message}`;
+    this.prepareHeaders();
   }
 
   /** Attach the connection currently carrying this response. */

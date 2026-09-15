@@ -21,6 +21,7 @@ import { addAbortSignal } from "../../stream/src/add-abort-signal.ts";
 import { getTimerDuration } from "../../timers/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
+  ERR_HTTP_HEADERS_SENT,
   ConnResetException,
   ERR_INVALID_ARG_VALUE,
   ERR_INVALID_ARG_TYPE,
@@ -633,8 +634,18 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
     this.emit("error", error);
   }
 
+  /**
+   * `ClientRequest.prototype._implicitHeader`, which renders the head and refuses if
+   * it is already out.
+   *
+   * Node's calls `_storeHeader` and throws `ERR_HTTP_HEADERS_SENT("render")` first if
+   * `_header` is set. Both halves were missing: this set the request line and
+   * deferred the render, so a second call quietly rebuilt it.
+   */
   protected override _implicitHeader(): void {
+    if (this._header) throw new ERR_HTTP_HEADERS_SENT("render");
     this[kStatusLine] = `${this.method} ${this.path} HTTP/1.1`;
+    this.prepareHeaders();
   }
 
   /** Given a connection by the agent, or made one. Everything starts here. */

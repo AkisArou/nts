@@ -3622,6 +3622,271 @@ export const CORPORA = {
         label: "maxHeaderSize",
         call: (m) => m.maxHeaderSize,
       },
+
+      // **The rest of `http`'s value-shaped surface**, which was 35 of 78 published
+      // functions and is mostly `OutgoingMessage`.
+      //
+      // The header above covers two validators and two tables, and the reason the
+      // rest sat uncompared is that `http` reads as a module about connections. Most
+      // of it is not: an `OutgoingMessage` built with `new` and never attached to a
+      // socket answers every header question synchronously, and header *bookkeeping*
+      // is the part of `http` a caller touches most and the part most likely to be
+      // almost right -- case folding, which spellings survive, whether a second
+      // `setHeader` replaces or appends, and what `getRawHeaderNames` remembers.
+      //
+      // Nothing here listens or connects. `ClientRequest` and `WebSocket` are not
+      // here for exactly that reason: constructing either opens a socket, and the
+      // nine `ClientRequest` methods and two `WebSocket` methods need a live peer to
+      // answer about rather than a shape. They stay uncalled, named here so the gap
+      // is a decision.
+      {
+        // `OutgoingMessage`'s header bookkeeping, detached.
+        //
+        // The return values are compared by **identity against the message**, never
+        // by stringifying them: these methods answer `this`, and `JSON.stringify` on
+        // an `OutgoingMessage` is 30 internal fields including `_events`, which is a
+        // shape rather than an answer and would bury the row it is in.
+        label: "outgoing-headers",
+        call: (m, s) => {
+          const out = [];
+          const message = new m.OutgoingMessage();
+          const attempt = (label, fn) => {
+            try {
+              const got = fn();
+              out.push(`${label}:ok:${got === message ? "self" : got === undefined ? "void" : typeof got === "object" && got !== null ? JSON.stringify(got) : String(got)}`);
+            } catch (error) {
+              out.push(`${label}:${error.code ?? error.name}`);
+            }
+          };
+          // Names drawn from the input, so the case folding and the token grammar are
+          // exercised by what the corpus generates rather than by a fixed list.
+          const raw = s.replace(/[^\x21-\x7e]/g, "") || "X-Nts";
+          const name = raw.slice(0, 20);
+          const mixed = `${name.toUpperCase()}`;
+
+          attempt("setHeader", () => message.setHeader(name, "1"));
+          attempt("hasHeaderExact", () => message.hasHeader(name));
+          attempt("hasHeaderLower", () => message.hasHeader(name.toLowerCase()));
+          attempt("hasHeaderUpper", () => message.hasHeader(mixed));
+          attempt("getHeader", () => message.getHeader(name.toLowerCase()));
+          attempt("getHeaderNames", () => JSON.stringify(message.getHeaderNames()));
+          attempt("getRawHeaderNames", () => JSON.stringify(message.getRawHeaderNames()));
+          attempt("getHeaders", () => JSON.stringify(message.getHeaders()));
+
+          // A second `setHeader` under a different spelling: node replaces, keeping the
+          // *new* raw spelling, which `getRawHeaderNames` is the only way to see.
+          attempt("setHeaderAgain", () => message.setHeader(mixed, "2"));
+          attempt("afterAgain", () =>
+            `${JSON.stringify(message.getHeaders())}|${JSON.stringify(message.getRawHeaderNames())}`);
+
+          // `appendHeader` accumulates where `setHeader` replaces, and only for the
+          // headers node allows more than one of.
+          attempt("appendHeaderNew", () => message.appendHeader("X-Multi", `a${s.length % 5}`));
+          attempt("appendHeaderSame", () => message.appendHeader("x-multi", "b"));
+          attempt("appendedValue", () => JSON.stringify(message.getHeader("X-MULTI")));
+          attempt("appendHeaderOnSet", () => message.appendHeader(name, "3"));
+          attempt("afterAppendOnSet", () => JSON.stringify(message.getHeader(name)));
+
+          // `setHeaders` takes a `Map` or a `Headers`, and rejects a plain object --
+          // which is the mistake everybody makes with it.
+          attempt("setHeadersMap", () =>
+            message.setHeaders(new Map([["x-map", `${s.length % 7}`], ["X-Map2", "y"]])));
+          attempt("afterSetHeaders", () => JSON.stringify(message.getHeaders()));
+          for (const bad of [{ "x-obj": "1" }, null, undefined, 1, "x", []]) {
+            attempt(`setHeadersBad:${Array.isArray(bad) ? "array" : bad === null ? "null" : typeof bad}`,
+              () => message.setHeaders(bad));
+          }
+
+          attempt("removeHeader", () => message.removeHeader(mixed));
+          attempt("afterRemove", () =>
+            `${JSON.stringify(message.getHeaderNames())}|${message.hasHeader(name)}`);
+          attempt("removeUnknown", () => message.removeHeader("x-never-set"));
+          attempt("_renderHeaders", () => JSON.stringify(message._renderHeaders()));
+
+          // The names node refuses outright, and the ones it refuses only in a
+          // particular position.
+          for (const bad of ["", " ", "x y", "x:y", `x${String.fromCharCode(10)}y`, "ü"]) {
+            attempt(`setHeaderBadName:${JSON.stringify(bad)}`, () => message.setHeader(bad, "v"));
+            attempt(`getHeaderBadName:${JSON.stringify(bad)}`, () => String(message.getHeader(bad)));
+          }
+          for (const bad of [undefined, null, {}, `v${String.fromCharCode(13)}w`]) {
+            attempt(`setHeaderBadValue:${String(bad)}`, () => message.setHeader("X-Ok", bad));
+          }
+
+          attempt("cork", () => message.cork());
+          attempt("uncork", () => message.uncork());
+          attempt("addTrailers", () => message.addTrailers({ "X-Trailer": `t${s.length % 3}` }));
+          attempt("addTrailersMap", () => message.addTrailers(new Map([["x-t2", "u"]])));
+          attempt("setTimeout", () => message.setTimeout(1000 + (s.length % 50)));
+          attempt("setTimeoutZero", () => message.setTimeout(0));
+
+          // The three the base class leaves unimplemented, which is how a subclass that
+          // forgot one fails.
+          attempt("_implicitHeader", () => message._implicitHeader());
+          attempt("flushHeaders", () => message.flushHeaders());
+          attempt("write", () => message.write("x"));
+
+          // `pipe` on an outgoing message refuses outright: there is nothing to read
+          // from one. Synchronous, unlike `Writable#pipe` in `stream`, which answers the
+          // destination and then emits the same code a tick later.
+          for (const destination of [{}, null, undefined]) {
+            attempt(`pipe:${destination === null ? "null" : typeof destination}`, () =>
+              message.pipe(destination));
+          }
+
+          attempt("destroy", () => message.destroy());
+          out.push(`destroyed:${message.destroyed}|writable:${message.writable}` +
+            `|headersSent:${message.headersSent}`);
+          // Every header call again, now that the message is destroyed.
+          attempt("afterDestroy:setHeader", () => message.setHeader("X-After", "1"));
+          attempt("afterDestroy:getHeaders", () => JSON.stringify(message.getHeaders()));
+          return out.join("\n");
+        },
+      },
+      {
+        // `ServerResponse`'s informational writes and `IncomingMessage`'s two
+        // internals, both detached.
+        //
+        // The informational responses go **first**, before `_implicitHeader`: once the
+        // head is rendered node answers `ERR_HTTP_HEADERS_SENT` to all four, so
+        // calling them afterwards compares one error four times and says nothing about
+        // what any of them does.
+        label: "http-response-and-incoming",
+        call: (m, s) => {
+          const out = [];
+          const attempt = (label, fn) => {
+            try {
+              const got = fn();
+              out.push(`${label}:ok:${got === undefined ? "void" : typeof got === "object" && got !== null ? "object" : String(got)}`);
+            } catch (error) {
+              out.push(`${label}:${error.code ?? error.name}`);
+            }
+          };
+          const fresh = () => new m.ServerResponse({
+            method: s.length % 2 === 0 ? "GET" : "HEAD",
+            httpVersionMajor: 1,
+            httpVersionMinor: 1,
+          });
+
+          // Each on its own response, so the first does not decide the rest.
+          for (const [name, run] of [
+            ["writeContinue", (res) => res.writeContinue()],
+            ["writeProcessing", (res) => res.writeProcessing()],
+            ["writeEarlyHints", (res) => res.writeEarlyHints({ link: "</a>; rel=preload" })],
+            ["writeInformation", (res) => (typeof res.writeInformation === "function"
+              ? res.writeInformation(103)
+              : "ABSENT")],
+          ]) {
+            const res = fresh();
+            attempt(name, () => run(res));
+            try { res.destroy(); } catch { /* recorded above if it matters */ }
+          }
+          // And the same four after the head is rendered, which is the other half of
+          // their contract.
+          const rendered = fresh();
+          attempt("_implicitHeader", () => rendered._implicitHeader());
+          attempt("afterHead:writeContinue", () => rendered.writeContinue());
+          attempt("afterHead:writeEarlyHints", () => rendered.writeEarlyHints({}));
+          attempt("headerRendered", () => typeof rendered._header === "string");
+          try { rendered.destroy(); } catch { /* not the subject */ }
+
+          const incoming = new m.IncomingMessage();
+          // **`setTimeout` is not called on it**, and node's answer is why.
+          //
+          // Node's is `this.socket.setTimeout(msecs)` with no guard, so on a message
+          // that has no socket -- which is only reachable by constructing one by hand,
+          // as here -- it raises a bare `TypeError` from dereferencing `null`. This
+          // profile guards and answers the message.
+          //
+          // Matching node would mean reproducing an unguarded dereference, and the case
+          // does not arise in a real request: an `IncomingMessage` the server hands you
+          // always has a socket. So ours stays, and the row is recorded rather than
+          // compared -- the same call as `stream.addAbortSignal(null, ...)`, where node's
+          // error is an accident of `'aborted' in null` rather than a decision.
+          attempt("inc._addHeaderLineDistinct", () =>
+            incoming._addHeaderLineDistinct("set-cookie", `a=${s.length % 9}`, incoming.headers));
+          attempt("inc._addHeaderLineDistinctTwice", () =>
+            incoming._addHeaderLineDistinct("set-cookie", "b=2", incoming.headers));
+          attempt("inc.headers", () => JSON.stringify(incoming.headers));
+          attempt("inc._dumpAndCloseReadable", () => incoming._dumpAndCloseReadable());
+
+          // `MessageEvent` and its legacy initialiser, which `http` republishes for the
+          // WebSocket surface. `initMessageEvent` predates constructor arguments and is
+          // kept for compatibility -- it mutates an already-built event, which is the
+          // part worth comparing.
+          try {
+            const event = new m.MessageEvent(`msg${s.length % 3}`, { data: `d${s.length % 5}` });
+            out.push(`event:${event.type}|${String(event.data)}|${event.bubbles}|${event.cancelable}`);
+            const returned = event.initMessageEvent(
+              "changed", true, true, `later${s.length % 4}`, "origin", "lastId",
+            );
+            out.push(`initMessageEvent:${returned === undefined ? "void" : typeof returned}` +
+              `|${event.type}|${String(event.data)}|${event.bubbles}|${event.cancelable}` +
+              `|${event.origin}|${event.lastEventId}`);
+          } catch (error) {
+            out.push(`MessageEvent:${error.code ?? error.name}`);
+          }
+          return out.join("\n");
+        },
+      },
+      {
+        // A `Server` that never listened, an `Agent`, and the two module-level
+        // setters.
+        //
+        // `setGlobalProxyFromEnv` reads the environment and configures the global
+        // agent from it. With no proxy variables set there is nothing for it to do,
+        // which is why it is safe to call -- and that makes its answer a fact about
+        // the environment rather than about the input, so what is compared is only
+        // that it accepts no arguments and answers `undefined`. Said plainly because
+        // a row that cannot vary is worth less than it looks.
+        label: "http-server-and-agent",
+        call: async (m, s) => {
+          const out = [];
+          const attempt = (label, fn) => {
+            try {
+              const got = fn();
+              out.push(`${label}:ok:${got === undefined ? "void" : typeof got === "object" && got !== null ? "object" : String(got)}`);
+            } catch (error) {
+              out.push(`${label}:${error.code ?? error.name}`);
+            }
+          };
+          const server = new m.Server();
+          server.on("error", () => {});
+          attempt("setTimeout", () => server.setTimeout(1000 + (s.length % 40)));
+          attempt("closeIdleConnections", () => server.closeIdleConnections());
+          attempt("closeAllConnections", () => server.closeAllConnections());
+          out.push(`close:${await new Promise((resolve) => {
+            try {
+              server.close((error) => resolve(error ? `cb:${error.code ?? error.name}` : "ok"));
+            } catch (error) {
+              resolve(`threw:${error.code ?? error.name}`);
+            }
+          })}`);
+
+          const agent = new m.Agent({ keepAlive: s.length % 2 === 0, maxSockets: 1 + (s.length % 4) });
+          attempt("agent.destroy", () => agent.destroy());
+          attempt("agent.destroyTwice", () => agent.destroy());
+
+          for (const count of [1 + (s.length % 8), 0, -1, 1.5, "4", null]) {
+            attempt(`setMaxIdleHTTPParsers:${String(count)}`, () => m.setMaxIdleHTTPParsers(count));
+          }
+          // Put it back, because it is process-wide.
+          attempt("setMaxIdleHTTPParsersRestore", () => m.setMaxIdleHTTPParsers(1000));
+
+          attempt("setGlobalProxyFromEnv", () =>
+            typeof m.setGlobalProxyFromEnv === "function"
+              ? m.setGlobalProxyFromEnv()
+              : "ABSENT");
+
+          // `_connectionListener` expects a socket. Everything here is not one, so it
+          // reports rather than wiring anything up.
+          for (const bad of [null, undefined, 1, {}, "socket"]) {
+            attempt(`_connectionListener:${bad === null ? "null" : typeof bad}`, () =>
+              m._connectionListener(bad));
+          }
+          return out.join("\n");
+        },
+      },
     ];
     })(),
   },
