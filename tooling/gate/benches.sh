@@ -1,5 +1,5 @@
 #!/bin/sh
-# Every benchmark case, emitted and compiled by both backends. Nothing runs.
+# Every benchmark case, emitted and compiled by all three backends. Nothing runs.
 #
 #   tooling/gate/benches.sh          # all of them
 #   tooling/gate/benches.sh fib      # one, with its output
@@ -95,6 +95,42 @@ for case in benches/cases/*/; do
     printf '  %-22s LLVM IR did not compile\n' "$name"
     cat "$work/log" | head -12
     fail=1
+    continue
+  fi
+
+  # **The third backend, and the reason it is here is a fortnight of silence.**
+  #
+  # All eight `awfy-*` cases emitted no class at all between 2026-09-13 and
+  # 2026-09-15 -- `benchmark()D` declared twice, because an override is both a
+  # member of its layout and an entry in its dispatch table and two emitters
+  # each wrote it. Nothing said so. This script covered the two native backends;
+  # the `jvm` gate step is 205 of 205 *examples*, and no example has that shape;
+  # `bench-agree.sh` does drive the JVM backend and every one of those eight
+  # reports "exported nothing with scalar arguments and a scalar result", so
+  # they sit outside its floor. The eight rows this lane's "done" is written
+  # about were the eight nothing looked at, and it took a hand-run table to see
+  # it.
+  #
+  # **`emit-jvm` exits zero when it refuses**, which is the whole trap: it
+  # renders what it can and reports the rest as diagnostics, so the status says
+  # nothing and the diagnostic is the only signal. `emit-c` above can be tested
+  # with `if !` and this cannot, and writing it that way would have produced a
+  # step that passes on every case it fails to emit.
+  #
+  # No `javac`, no `java`, no linking: whether the backend *rendered* the
+  # program is a different question from whether it runs, the second is what
+  # `nts-bench`'s checksums and the `jvm` step are for, and this one costs
+  # milliseconds.
+  if ! "$nts" emit-jvm "$project" --out "$out/jvm" >"$work/log" 2>&1; then
+    printf '  %-22s emit-jvm failed\n' "$name"
+    [ -n "$only" ] && cat "$work/log"
+    fail=1
+    continue
+  fi
+  if grep -qE 'declined:|NTS4[0-9][0-9][0-9]' "$work/log"; then
+    printf '  %-22s emit-jvm declined\n' "$name"
+    grep -E 'declined:|NTS4[0-9][0-9][0-9]' "$work/log" | head -4 | sed 's/^/    /'
+    fail=1
   fi
 done
 
@@ -112,4 +148,4 @@ if [ "$count" -eq 0 ]; then
   printf '  passing. `benches/cases/*/case.ts` is what it looks for.\n'
   exit 1
 fi
-echo "  $count benchmark case(s) compile, both backends"
+echo "  $count benchmark case(s) compile, all three backends"
