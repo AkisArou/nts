@@ -20,6 +20,23 @@
 #
 # The file is edited in place and restored from git, so it refuses to start on a
 # dirty one: restoring would discard whatever was being worked on.
+#
+# # `nts check` cannot observe an `NTS` code, and that is worth knowing here
+#
+# `check` stops after the frontend. Every `NTS` diagnostic is produced by
+# lowering, below that, so a harness built on `check` can verify a claim about a
+# `TS` code and **never** one about an `NTS` code -- and reports the second as
+# "not produced" rather than as "not observable from here".
+#
+# This script ran `check` until 2026-09-15 and every claim in every `refused.ts`
+# happened to be a `TS` code, so the hole sat under a passing harness until the
+# first lowering claim arrived. It then took four wrong explanations to find,
+# three of them committed or nearly so, because "the refusal did not fire" and
+# "this command cannot see the refusal" are indistinguishable from the output.
+#
+# The general shape, for anyone writing another one of these: a tool that
+# answers in the vocabulary of a *result* when the honest answer is about
+# *itself*. `emit-c` exiting 0 while refusing is the same thing one lane over.
 set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 project=${1:?usage: check-refusals.sh <example-dir>}
