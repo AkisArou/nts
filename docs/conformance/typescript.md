@@ -2743,7 +2743,66 @@ declined. Assert `wrote program.c` before reporting any count. Smaller output
 is never evidence.
 
 The original sentence, for the record: *one cause is worth fifteen exports and
-it is a **declaration** in `runtime/node/zlib`, not a lowering.* The trade it described — narrowing
+it is a **declaration** in `runtime/node/zlib`, not a lowering.*
+
+#### Item 3 redone, by what a fix clears rather than by what it says
+
+`tooling/conformance/gates.mjs`, 2026-09-15, 26 modules. The correction above
+says a rank by count is a rank by diagnostic reach; this is the ranking that
+does not have that defect. A declined export names a cause, and where the cause
+is a cascade — `it calls X, which was refused above` — X has a cause of its
+own. Following those edges to a function with no outgoing edge gives the
+**root** the export stands behind, and roots rank by how many exports reach
+them.
+
+    505 declined exports
+    128 reach a root through the cascade
+    241 are their own root -- a reason, and no chain
+    135 name no cause at all
+
+| exports | modules | root |
+|---:|---:|---|
+| **22** | 1 | `asRequest` |
+| 12 | 1 | `displayBytePath` |
+| 9 | 2 | `uvException` |
+| 5 | 1 | `validateOptions` |
+| 4 | 4 | `objectToBuffer` |
+
+**The top root is a generic function no call pins down.**
+`fs/src/request.ts:15` declares `asRequest<Arguments extends unknown[]>`, and
+its terminal refusal is
+
+    NTS1001 a generic function no call pins down (the type parameter `Arguments`)
+
+with 22 `fs` exports behind it — `access`, `chmod`, `chown`, `copyFile`,
+`fchmod`, `fchown`, `fdatasync`, `fsync` and the rest, each declining only as
+*it calls `asRequest`, which was refused above*. That message appears **36
+times in `fs` alone**. It is the same name this file already records as having
+"sat at the head of the node profile for a day while being invisible to every
+census, because a census reads diagnostics" — and it is invisible to a rank by
+count for the same reason, since it is one message standing behind twenty-two
+silent declines.
+
+**What this number is, precisely: an upper bound.** Fixing a root clears its
+chain only as far as the next blocker, and the compiler stops at the first, so
+the blocker beyond it has never been printed. The only way to collapse an
+upper bound to a real number is the node lane's worktree test — remove the
+construct, re-emit, diff the export set — which is cheap enough to run per
+candidate. This is a queue to run that test against, in order. It is not a
+promise, and the `dictionary` correction above is what happens when a ranked
+list is read as one.
+
+**And what it did not move.** Nothing yet: no fix has been made on the strength
+of it. The three counts it reports about itself are the honest shape of the
+problem — only **128 of 505** declines stand behind any shared root at all, 241
+are independent one-export causes, and 135 still name nothing. So even a
+perfect run down this queue leaves the larger half untouched, and "find the
+lever" is the wrong frame for three quarters of this set.
+
+Two limits the instrument states in its own header rather than leaving to a
+reader: a cycle among the edges is cut at the first repeat and reported as the
+root, which is a choice and not a fact; and an export declining for its own
+reason ranks as one export however expensive it is. The trade it described — narrowing
 `dictionary` costs an interpreted-lane API that no longer accepts what node
 accepts — was real and correctly flagged by the node lane before either of us
 acted on it. It simply never had to be made, because the gain was zero.
