@@ -7257,6 +7257,36 @@ twenty-eight rows against node rather than twenty-four plus three exceptions.
 It was accepted and ignored, because the comparison it exists to relax was the
 comparison that was missing.
 
+## Corpus reach, and one number in a commit message that is wrong
+
+The differential corpus reaches **969 of 1,089 published functions**, up from 659.
+Per module:
+
+    readline  38/38   os      20/20   punycode 6/6    querystring 7/7   zlib 45/45
+    net       85/86   dgram   30/31   buffer  115/117  assert  41/43   async_hooks 17/18
+    stream   102/108  util    78/86   http    67/78   console 36/43   path   36/39
+    url       30/35   timers   6/9    events  28/34   fs     141/169  process 31/63
+    diagnostics_channel 8/11        string_decoder 2/3
+
+**The commit that published six `process` names claims "Reach 14 -> 63 of 63 for
+the arms compared here". That is wrong: it is 31 of 63.** The hedge "for the arms
+compared here" was meant to scope it and instead reads as a total, which is the
+worse failure — a reader skimming the line concludes the module is closed.
+
+The 32 still uncalled in `process` are the ones its corpus header excludes with
+reasons: `hrtime`, `uptime`, `memoryUsage`, `cpuUsage`, `resourceUsage`,
+`threadCpuUsage`, `constrainedMemory`, `availableMemory` and `pid` answer
+differently every call; `exit`, `abort`, `kill`, `chdir`, `reallyExit`, `_kill`,
+`execve` and `_fatalException` change the host; `emitWarning` and `_rawDebug` write
+to stderr; `stdout.write` and `stderr.write` write to the channel the probe returns
+its results on; `binding` and `_linkedBinding` expose node's internal C++ table;
+`setSourceMapsEnabled` needs source-map machinery that does not exist here; and
+`_debugProcess` aborts the process either way.
+
+So `process` is close to its ceiling and the number that says so is 31, not 63.
+Recording the mistake rather than only the correction, because the shape recurs:
+a count with a qualifier attached is read as a count.
+
 ## Two ways to abort node from JavaScript, both found by the same corpus
 
 `fs.writeFileSync(-0, "x")` and `process._debugProcess(anythingNotANumber)` each
