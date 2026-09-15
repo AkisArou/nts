@@ -87,6 +87,32 @@ import { CORPORA } from "./differential-corpora.mjs";
 // clean-looking output from a run that had processed nothing. Exactly the shape this file exists
 // to catch one level down.
 const ARGS = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+/**
+ * Give `wrapper` the `name` and `length` of the function it stands in for.
+ *
+ * A delegating wrapper is transparent to a *caller* and opaque to a *comparison*,
+ * and there are four comparisons worth naming. Identity and a `WeakMap` keyed on
+ * the original cannot be preserved -- a wrapper is a different object, which is the
+ * point -- and those are what break `fs`'s stream `open`, documented above.
+ *
+ * `name` and `length` can be, and they were not. A `function (...args)` in a
+ * descriptor's `value` reports `length` 0, and `name` **"value"**, taken from the
+ * property key of the descriptor literal. That second one is the dangerous half:
+ * not an empty name a reader would question, but a plausible string that a surface
+ * check comparing names would report as the *wrong* name rather than a missing one.
+ * Measured: `Buffer.prototype.readUInt8` is `name: "", length: 1` and wraps to
+ * `name: "value", length: 0`.
+ *
+ * So both are copied back. This does not make wrapping safe -- node compares
+ * identity in at least one place that matters -- it removes two of the four ways a
+ * wrapped run can differ, and leaves the two that cannot be removed named.
+ */
+const keepShape = (wrapper, original) =>
+  Object.defineProperties(wrapper, {
+    name: { value: original.name, writable: false, enumerable: false, configurable: true },
+    length: { value: original.length, writable: false, enumerable: false, configurable: true },
+  });
+
 const MODULES = ARGS.length > 0
   ? ARGS
   : Object.keys(CORPORA).sort();
@@ -151,10 +177,10 @@ for (const moduleName of MODULES) {
               restore.push([proto, methodKey, descriptor]);
               Object.defineProperty(proto, methodKey, {
                 ...descriptor,
-                value: function (...args) {
+                value: keepShape(function (...args) {
                   counts.set(original, counts.get(original) + 1);
                   return original.apply(this, args);
-                },
+                }, original),
               });
             }
           }
@@ -176,10 +202,10 @@ for (const moduleName of MODULES) {
             restore.push([value, staticKey, descriptor]);
             Object.defineProperty(value, staticKey, {
               ...descriptor,
-              value: function (...args) {
+              value: keepShape(function (...args) {
                 counts.set(original, counts.get(original) + 1);
                 return original.apply(this === value ? value : this, args);
-              },
+              }, original),
             });
           }
           continue;
@@ -187,10 +213,10 @@ for (const moduleName of MODULES) {
         const original = value;
         if (!counts.has(original)) counts.set(original, 0);
         nameToFn.set(path, original);
-        copy[key] = function (...args) {
+        copy[key] = keepShape(function (...args) {
           counts.set(original, counts.get(original) + 1);
           return original.apply(this === copy ? source : this, args);
-        };
+        }, original);
         continue;
       }
       if (depth < 1 && value !== null && typeof value === "object") {
