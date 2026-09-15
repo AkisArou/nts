@@ -2040,9 +2040,15 @@ impl Emitter<'_> {
             //
             // A first attempt put this in `coerce_callback` and emitted nothing
             // at all: that function is not on the erased path.
-            if want.starts_with('L') && nts_core::hir::runtime::is_foreign_layout_name(
-                &want[1..want.len() - 1],
-            ) {
+            //
+            // **Only where a closure could be the argument**, which means a jar
+            // interface and not any reference. `is_foreign_layout_name` is
+            // `contains('/')`, so the first version of this fired on
+            // `java/lang/String` too -- `new Catalog("widgets")` emitted a
+            // `bind` on its own string argument, which did nothing and claimed
+            // the lane on the way. Harmless and wrong, and invisible from the
+            // floor because `bind` ignores what it cannot use.
+            if self.is_foreign_interface(want) {
                 code.dup(origin);
                 code.invoke_static(
                     origin,
@@ -2054,6 +2060,42 @@ impl Emitter<'_> {
             }
         }
         Ok(())
+    }
+
+    /// Whether a descriptor names a jar interface a *closure* could satisfy and
+    /// the inbox could deliver.
+    ///
+    /// Three narrowings, each one a version of this that was too wide:
+    ///
+    /// - not "a class with a `/` in its name", which `is_foreign_layout_name`
+    ///   tests and which is every reference type on the platform. That version
+    ///   put a `bind` on the string argument of `new Catalog("widgets")`.
+    /// - not "any interface the binding table knows", because `java.util.Map` is
+    ///   one and `weigh(Map)` is not a callback registration.
+    /// - **functional**, meaning the jar declares exactly one member on it. A
+    ///   closure implements one method; an interface with several is not
+    ///   something a closure was handed to.
+    ///
+    /// And that member has to be one the inbox can carry, which is the same
+    /// question `carries_env` asks of the closure at the other end. Asking it
+    /// here too is what keeps a `bind` off a crossing that could never use one.
+    fn is_foreign_interface(&self, want: &str) -> bool {
+        let Some(class) = want.strip_prefix('L').and_then(|it| it.strip_suffix(';')) else {
+            return false;
+        };
+        let members: Vec<&str> = self
+            .shape
+            .program
+            .foreign
+            .iter()
+            .filter(|(_, row)| row.kind == nts_core::hir::runtime::ForeignKind::Interface)
+            .filter_map(|(key, _)| {
+                let (head, want) = key.split_once(':')?;
+                let (owner, _) = head.rsplit_once('.')?;
+                (owner == class).then_some(want)
+            })
+            .collect();
+        members.len() == 1 && types::deliverable(members[0]).is_some()
     }
 
     /// The argument a fixed intrinsic declared as a callback interface,
