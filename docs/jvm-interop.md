@@ -61,6 +61,31 @@ coordinate was not. A line number into a file you do not own is a citation with
 an expiry date, and `grep` finds the phrase after any edit that does not delete
 it.
 
+## Where "done" stands, measured 2026-09-15
+
+The lane's definition of done is four numbers rather than a feature list. Three
+are measured here for the first time in one place, which is the point: each was
+checkable in one command and none had a current value written down.
+
+| | target | today |
+| --- | --- | --- |
+| the `jvm` gate floor | every example the other backends carry | **205 of 205**, and the floor line is `exact` -- it fails on `passed != total`, not only on a drop |
+| `unverifiable class` in the corpus | 0, and hard | **0**, over 184 single-file cases, beside `uncompilable C` at 0 |
+| a `nts (JVM)` number on every bench row | a number or a named refusal, never a blank | present; the README says why a blank is forbidden -- it would be indistinguishable from the `Java` column's blank, which means nobody wrote a reference |
+| the AWFY rows at or under hand-written Java | 1.00x | **40 of 59 rows at or under, 19 over** |
+
+**The nineteen are the work queue**, and they are not scattered: eight are
+`json-*`, four are `erasure-*`, and the largest single row is
+`json-stringify-doc` at 3.03x. `symbol-keyed-map` at 2.82x and `growth-grown` at
+2.35x are the two outside those families. A queue with that much structure is a
+statement about two or three representations rather than nineteen problems.
+
+**The floor is 205, not 86 of 87.** That number comes from this lane's original
+plan, when the jvm step counted a different population, and it has been quoted
+since in goal text and hand-offs. The gate says
+`backend_examples 205 ... exact`, which is a stricter thing than the old number
+was: not a ratchet that may rise, but an equality that fails on any decline.
+
 ## The representations, measured
 
 This is the table everything else depends on, and none of it is a design
