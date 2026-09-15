@@ -89,6 +89,9 @@ enum Shape {
     Array(Box<Shape>, u64),
     /// A struct or union this binding also describes.
     Record(String),
+    /// The same, for a record the header declares **without a tag**. Spelled
+    /// through `Anonymous<T>`, which tells the compiler not to try to name it.
+    AnonymousRecord(String),
     /// `int (*)(int)` -- a C function pointer, which the surface spells as an
     /// ordinary TypeScript function type because at this boundary that can
     /// mean nothing else.
@@ -98,6 +101,8 @@ enum Shape {
 #[derive(Debug, Clone)]
 struct Record {
     tag: String,
+    /// A name this tool invented, because the header gave the type none.
+    anonymous: bool,
     union: bool,
     packed: bool,
     members: Vec<Member>,
@@ -245,6 +250,12 @@ pub(crate) fn run(request: &Request) -> Result<String> {
     let layout = dir.join("nts-bind-layout.c");
     let mut text = preamble(request);
     for record in binding.records.values() {
+        // An anonymous record has no tag, so `sizeof` cannot name it. Its
+        // layout is checked through the record that holds it: that record's
+        // size and its members' offsets both move if this one is wrong.
+        if record.anonymous {
+            continue;
+        }
         let keyword = if record.union { "union" } else { "struct" };
         let _ = writeln!(
             text,
@@ -333,11 +344,15 @@ impl Binding {
     /// `None` when these headers hold no complete definition of it -- the
     /// caller decides whether that is a refusal, because a requested tag that
     /// is missing and a nested one that is missing are different sentences.
+    ///
+    /// The second half of the pair is every **anonymous** record found inside
+    /// it. Those have no tag of their own, so nothing can look them up later;
+    /// they are handed back with the record that holds them.
     fn record_named(
         nodes: &[&serde_json::Value],
         tag: &str,
         typedefs: &BTreeMap<String, String>,
-    ) -> Result<Option<Record>> {
+    ) -> Result<Option<(Record, Vec<Record>)>> {
         let Some(node) = nodes.iter().find(|n| {
             n.get("kind").and_then(serde_json::Value::as_str) == Some("RecordDecl")
                 && n.get("completeDefinition") == Some(&serde_json::Value::Bool(true))
@@ -345,13 +360,37 @@ impl Binding {
         }) else {
             return Ok(None);
         };
+        Self::record_from(node, tag, typedefs).map(Some)
+    }
+
+    /// The same, from a declaration already in hand -- which is how an
+    /// anonymous one is reached, since it has no name to find it by.
+    fn record_from(
+        node: &serde_json::Value,
+        tag: &str,
+        typedefs: &BTreeMap<String, String>,
+    ) -> Result<(Record, Vec<Record>)> {
         let union = node.get("tagUsed").and_then(serde_json::Value::as_str) == Some("union");
         let packed = children(node)
             .iter()
             .any(|c| c.get("kind").and_then(serde_json::Value::as_str) == Some("PackedAttr"));
         let mut members = Vec::new();
+        let mut nested = Vec::new();
+        // The `RecordDecl` immediately preceding a member is that member's own
+        // anonymous type, which is how clang emits it. Kept so a member whose
+        // spelling is `union (unnamed at ...)` resolves against the
+        // declaration rather than against the location string.
+        let mut pending: Option<&serde_json::Value> = None;
         for field in children(node) {
-            if field.get("kind").and_then(serde_json::Value::as_str) != Some("FieldDecl") {
+            let kind = field.get("kind").and_then(serde_json::Value::as_str);
+            if kind == Some("RecordDecl")
+                && field.get("name").is_none()
+                && field.get("completeDefinition") == Some(&serde_json::Value::Bool(true))
+            {
+                pending = Some(field);
+                continue;
+            }
+            if kind != Some("FieldDecl") {
                 continue;
             }
             // A bit-field is a member with no address and no byte offset:
@@ -372,17 +411,41 @@ impl Binding {
             let (written, desugared) = qual_type(field).unwrap_or_default();
             let member = field.get("name").and_then(serde_json::Value::as_str).ok_or_else(|| {
                 anyhow::anyhow!(
-                    "`{tag}` has an unnamed member of type `{written}`, which has no spelling in a binding"
+                    "`{tag}` has an unnamed member of type `{written}`. C reaches through one as \
+                     though its fields belonged to the enclosing record, and this surface has no \
+                     way to say that. Reach the member from C."
                 )
             })?;
-            let ty = shape_of(written, desugared, typedefs)
-                .with_context(|| format!("member `{member}` of `{tag}`"))?;
+            // A member whose *type* is anonymous gets a name from the record
+            // and the member. Nothing outside this file uses it: the C side
+            // never spells it, because C cannot.
+            let ty = if written.contains("(unnamed at") {
+                let Some(declaration) = pending.take() else {
+                    bail!(
+                        "`{tag}.{member}` has an anonymous type with no declaration beside it, \
+                         which is a parse this tool does not know how to read"
+                    );
+                };
+                let invented = format!("{tag}_{member}");
+                let (mut inner, deeper) = Self::record_from(declaration, &invented, typedefs)?;
+                inner.anonymous = true;
+                nested.push(inner);
+                nested.extend(deeper);
+                Shape::AnonymousRecord(invented)
+            } else {
+                pending = None;
+                shape_of(written, desugared, typedefs)
+                    .with_context(|| format!("member `{member}` of `{tag}`"))?
+            };
             members.push(Member { name: member.to_owned(), ty });
         }
         if members.is_empty() {
             bail!("`{tag}` has no members, which is not a layout a binding can describe");
         }
-        Ok(Some(Record { tag: tag.to_owned(), union, packed, members }))
+        Ok((
+            Record { tag: tag.to_owned(), anonymous: false, union, packed, members },
+            nested,
+        ))
     }
 
     fn collect(&mut self, json: &serde_json::Value, request: &Request) -> Result<()> {
@@ -412,8 +475,11 @@ impl Binding {
         // complete definition wins, and `check` catches any disagreement with
         // the layout clang actually used.
         for tag in &wanted_records {
-            if let Some(record) = Self::record_named(&nodes, tag, &typedefs)? {
+            if let Some((record, nested)) = Self::record_named(&nodes, tag, &typedefs)? {
                 self.records.insert((*tag).to_owned(), record);
+                for inner in nested {
+                    self.records.insert(inner.tag.clone(), inner);
+                }
             }
         }
         for tag in &wanted_records {
@@ -510,8 +576,11 @@ impl Binding {
             }
             let mut found = false;
             for tag in &nested {
-                if let Some(record) = Self::record_named(nodes, tag, typedefs)? {
+                if let Some((record, nested)) = Self::record_named(nodes, tag, typedefs)? {
                     self.records.insert(tag.clone(), record);
+                    for inner in nested {
+                        self.records.insert(inner.tag.clone(), inner);
+                    }
                     found = true;
                 }
             }
@@ -626,13 +695,18 @@ fn shape(c_type: &str, typedefs: &BTreeMap<String, String>) -> Result<Shape> {
             let tag = tag.trim();
             // clang spells an anonymous record by where it was written --
             // `(unnamed at /usr/include/bits/sigaction.h:31:5)`. That is a
-            // location, not a tag, and the surface has no way to name a type
-            // the header did not name. `struct sigaction` holds one.
+            // location and not a tag, so the caller resolves it against the
+            // `RecordDecl` that precedes the member in the parse; by the time
+            // a spelling reaches here it has already been replaced by the name
+            // this tool invented. One arriving unreplaced is a member shape
+            // this does not handle -- an unnamed member, which C reaches
+            // through as if its fields were the outer record's.
             if tag.starts_with('(') {
                 bail!(
-                    "an anonymous {}, which this surface cannot describe: it has no tag to \
-                     name and clang spells it as {tag}. Bind the record through an opaque \
-                     pointer, or reach the member from C.",
+                    "an anonymous {} reached as a type spelling rather than through its \
+                     declaration, which means an *unnamed* member: C reaches through one as \
+                     though its fields belonged to the enclosing record, and this surface has \
+                     no way to say that. Reach the member from C.",
                     keyword.trim()
                 );
             }
@@ -796,6 +870,9 @@ impl Binding {
     /// against the headers a consumer really compiles with, under their macros.
     fn check(&self, observed: &BTreeMap<String, Observed>) -> Result<()> {
         for record in self.records.values() {
+            if record.anonymous {
+                continue;
+            }
             let Some(seen) = observed.get(&record.tag) else {
                 bail!(
                     "clang laid out no `{}`, so nothing checks this binding",
@@ -852,7 +929,7 @@ impl Binding {
                 let (size, align) = self.size_align(element)?;
                 (size * count, align)
             }
-            Shape::Record(tag) => {
+            Shape::Record(tag) | Shape::AnonymousRecord(tag) => {
                 let nested = self.records.get(tag).ok_or_else(|| {
                     anyhow::anyhow!(
                         "`{tag}` is stored inline but is not one of the records being bound; \
@@ -892,7 +969,10 @@ impl Shape {
             Self::Pointer(inner, true) => format!("ConstPtr<{}>", inner.spell(aliases)),
             Self::Pointer(inner, false) => format!("Ptr<{}>", inner.spell(aliases)),
             Self::Array(element, count) => format!("CArray<{}, {count}>", element.spell(aliases)),
-            Self::Record(tag) => alias_for(tag, aliases),
+            // Both are an alias this file declares. An anonymous one differs
+            // only in what its own declaration says -- `Anonymous<Union<...>>`
+            // rather than a tag -- which `render` writes, not this.
+            Self::Record(tag) | Self::AnonymousRecord(tag) => alias_for(tag, aliases),
             Self::FnPointer(parameters, result) => format!(
                 "({}) => {}",
                 parameters
@@ -926,7 +1006,7 @@ impl Shape {
                 into.insert("CArray");
                 element.imports(into);
             }
-            Self::Record(_) => {}
+            Self::Record(_) | Self::AnonymousRecord(_) => {}
             Self::FnPointer(parameters, result) => {
                 for parameter in parameters {
                     parameter.imports(into);
@@ -982,6 +1062,9 @@ impl Binding {
             if record.packed {
                 needed.insert("Packed");
             }
+            if record.anonymous {
+                needed.insert("Anonymous");
+            }
             for member in &record.members {
                 member.ty.imports(&mut needed);
             }
@@ -1024,7 +1107,14 @@ impl Binding {
                 .map(|m| format!("    {}: {};", m.name, m.ty.spell(&request.aliases)))
                 .collect::<Vec<_>>()
                 .join("\n");
-            let body = format!("{keyword}<{{\n{members}\n  }}, \"{}\">", record.tag);
+            // An anonymous record gets no tag: the header gave it none, and a
+            // tag invented here would be a second type beside the header's.
+            // `Anonymous<T>` is what tells the compiler not to try to name it.
+            let body = if record.anonymous {
+                format!("Anonymous<{keyword}<{{\n{members}\n  }}>>")
+            } else {
+                format!("{keyword}<{{\n{members}\n  }}, \"{}\">", record.tag)
+            };
             let body = if record.packed { format!("Packed<{body}>") } else { body };
             let _ = writeln!(out, "  export type {} = {body};", alias_for(&record.tag, &request.aliases));
         }
@@ -1179,6 +1269,7 @@ mod tests {
     fn record(tag: &str, union: bool, packed: bool, members: &[(&str, Shape)]) -> Record {
         Record {
             tag: tag.to_owned(),
+            anonymous: false,
             union,
             packed,
             members: members
