@@ -1910,6 +1910,36 @@ export const CORPORA = {
               `strictNotEqual=${show(() => m.strict.notEqual("1", 1))}`,
               `strictOkSame=${show(() => m.strict.ok(text.length === 0 ? 0 : 1))}`,
               `errorCtor=${m.strict.AssertionError === m.AssertionError}`,
+              // **`Assert#ok` called, not typed.** `corpus-reach.mjs` counts calls, and
+              // it was still reporting this uncalled while the row above asserted the
+              // class existed.
+              //
+              // The generated *message* is deliberately not compared: node embeds the
+              // source text of the call -- `The expression evaluated to a falsy value:
+              // \n\n  ok(0)\n` -- and source-text recovery is a §13 non-goal named in
+              // this module's own test header. Ours says `0 == true`. What is compared
+              // is the code, the `generatedMessage` flag, and that an explicit message
+              // wins and clears that flag, which is the part that is not a non-goal.
+              `assertOkPass=${show(() => new m.Assert().ok(text.length + 1))}`,
+              `assertOkFail=${show(() => new m.Assert().ok(0))}`,
+              `assertOkGen=${(() => {
+                try {
+                  new m.Assert().ok(0);
+                  return "no-throw";
+                } catch (error) {
+                  return `${error.code}/${error.generatedMessage}`;
+                }
+              })()}`,
+              `assertOkExplicit=${(() => {
+                try {
+                  new m.Assert().ok(0, text || "why");
+                  return "no-throw";
+                } catch (error) {
+                  return `${error.code}/${error.generatedMessage}/${error.message}`;
+                }
+              })()}`,
+              `assertStrictOpt=${show(() => new m.Assert({ strict: true }).equal("1", 1))}`,
+              `assertLooseOpt=${show(() => new m.Assert({ strict: false }).equal("1", 1))}`,
             ].join("|");
           },
         },
@@ -5895,6 +5925,34 @@ export const CORPORA = {
             `pipe=${typeof m.Stream.prototype.pipe}`,
             `pipeDistinct=${m.Stream.prototype.pipe !== m.Readable.prototype.pipe}`,
             `transformRead=${typeof m.Transform.prototype._read}`,
+            // **Called, not typed.** The four lines above are property reads, which
+            // `corpus-reach.mjs` correctly counts as never calling any of them. Each is
+            // now exercised: `Stream.Stream` by constructing through it, the legacy
+            // `pipe` by piping a bare `Stream` into a writable, and `Transform#_read`
+            // by invoking it directly -- it is the internal the transform machinery
+            // calls, and calling it on a fresh transform must be silent.
+            `selfConstruct=${show(() => {
+              const legacy = new (m.Stream.Stream)();
+              return `${legacy.constructor.name}/${legacy instanceof m.Stream}`;
+            })}`,
+            `legacyPipe=${show(() => {
+              const src = new m.Stream();
+              const dst = new m.Writable({ write(_c, _e, cb) { cb(); } });
+              return m.Stream.prototype.pipe.call(src, dst) === dst ? "returns-dest" : "other";
+            })}`,
+            `legacyPipeEmit=${show(() => {
+              const src = new m.Stream();
+              const seen = [];
+              const dst = new m.Writable({ write(chunk, _e, cb) { seen.push(String(chunk)); cb(); } });
+              m.Stream.prototype.pipe.call(src, dst);
+              src.emit("data", text);
+              return seen.join(",");
+            })}`,
+            `transformReadCall=${show(() => {
+              const t = new m.Transform({ transform(c, _e, cb) { cb(null, c); } });
+              m.Transform.prototype._read.call(t);
+              return "silent";
+            })}`,
             `fromList=${typeof m.Readable._fromList}:${m.Readable._fromList?.length}`,
             `duplexFromWeb=${typeof m.Duplex.fromWeb}:${m.Duplex.fromWeb?.length}`,
             `duplexToWeb=${typeof m.Duplex.toWeb}:${m.Duplex.toWeb?.length}`,
@@ -8103,6 +8161,39 @@ export const CORPORA = {
             `calls=${calls.join(",")}`,
             `stdout=${JSON.stringify(mask(out.join("")))}`,
             `stderrTrace=${JSON.stringify(firstTraceLine(err.join("")))}`,
+            // **The module-level four, called.** The block above exercises
+            // `Console#time` and its siblings; these are the *module* functions, which
+            // write to the global console and so needed stdout captured to be reachable
+            // at all. `corpus-reach.mjs` counts calls, and it kept reporting these four
+            // uncalled while the line below asserted their `typeof`.
+            //
+            // `process.stdout.write` is restored in a `finally`. If it were not, the
+            // probe's own `NTSDIFF` line would be swallowed -- which the harness reports
+            // as "the probe produced no results" rather than as agreement, but a silent
+            // stdout is not a thing to leave to chance.
+            `moduleCalls=${(() => {
+              const captured = [];
+              const realOut = process.stdout.write;
+              const realErr = process.stderr.write;
+              try {
+                process.stdout.write = (chunk) => { captured.push(`out:${chunk}`); return true; };
+                process.stderr.write = (chunk) => { captured.push(`err:${chunk}`); return true; };
+                m.time(label);
+                m.timeLog(label, "mid");
+                m.timeEnd(label);
+                m.timeEnd(`${label}-absent`);
+                m.trace("t", 1);
+              } catch (error) {
+                captured.push(`threw:${error?.code ?? error?.name}`);
+              } finally {
+                process.stdout.write = realOut;
+                process.stderr.write = realErr;
+              }
+              return JSON.stringify(
+                mask(captured.join("")).split("\n").filter((line) =>
+                  !line.startsWith("    at ")).join("\n"),
+              );
+            })()}`,
             // The module-level functions exist and are the same shape as the methods.
             `module=${typeof m.time}:${typeof m.timeEnd}:${typeof m.timeLog}:${typeof m.trace}`,
             `arity=${m.time?.length}:${m.timeEnd?.length}:${m.timeLog?.length}:${m.trace?.length}`,
