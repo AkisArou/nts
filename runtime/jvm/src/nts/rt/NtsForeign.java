@@ -49,6 +49,27 @@ public final class NtsForeign {
     private NtsForeign() {}
 
     /**
+     * Record the current lane on a closure about to cross to Java.
+     *
+     * <p>Takes {@code Object} because the emitted code usually holds an erased
+     * value here and does not know the class. Values that are not lane-bound --
+     * a user object implementing the interface itself, an already-bound Java
+     * listener -- pass through untouched, which is why this is an
+     * {@code instanceof} rather than a cast.
+     *
+     * <p>{@link NtsEnv#current} is the claiming form on purpose: this runs in
+     * the program's own code, so a thread that is not a lane is a refusal that
+     * belongs *here*, where the call site is, rather than later on a framework's
+     * thread where it would name nothing a reader could act on.
+     */
+    public static void bind(Object closure) {
+        if (closure instanceof NtsLaneBound) {
+            ((NtsLaneBound) closure).bindLane(NtsEnv.current());
+        }
+    }
+
+
+    /**
      * Post a zero-argument callback. Returns false if the inbox is at its
      * ceiling or closed.
      */

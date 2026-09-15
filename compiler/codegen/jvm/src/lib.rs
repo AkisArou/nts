@@ -960,6 +960,41 @@ fn bridge_body(
     })
 }
 
+/// Whether this layout's class carries the lane its closure belongs to.
+///
+/// **One derivation, read from two places.** `foreign_bridges` uses it to emit
+/// the field and `ops::coerce_callback` to emit the store that fills it; a
+/// second copy of the rule would put the store on a class without the field, or
+/// the field on a class nothing writes -- and the first is a `NoSuchFieldError`
+/// at link time while the second is silent.
+///
+/// True exactly when some foreign interface this layout implements declares a
+/// `void` member, because that is the only shape a foreign thread can be served
+/// at all: posting runs later, and there is nobody left to return a value to.
+pub(crate) fn carries_env(program: &Program, layout: &nts_core::hir::Layout) -> bool {
+    let mut wanted: Vec<String> = hierarchy::implemented(program, layout);
+    for id in &layout.types {
+        for interface in closure_interfaces(program).get(id).into_iter().flatten() {
+            if !wanted.iter().any(|it| it == interface) {
+                wanted.push(interface.clone());
+            }
+        }
+    }
+    wanted.iter().filter(|it| nts_core::hir::runtime::is_foreign_layout_name(it)).any(
+        |interface| {
+            program.foreign.iter().any(|(key, row)| {
+                row.kind == nts_core::hir::runtime::ForeignKind::Interface
+                    && key
+                        .split_once(':')
+                        .and_then(|(head, want)| {
+                            head.rsplit_once('.').map(|(owner, _)| (owner, want))
+                        })
+                        .is_some_and(|(owner, want)| owner == interface && want.ends_with(")V"))
+            })
+        },
+    )
+}
+
 fn foreign_bridges(
     program: &Program,
     layout: &nts_core::hir::Layout,
@@ -1024,6 +1059,56 @@ fn foreign_bridges(
                 Some(rendered),
             );
         }
+    }
+
+    // **The lane this closure belongs to, captured where it crosses.**
+    //
+    // A framework may call a bound interface from a thread we do not own, and
+    // everything here except the inbox is confined to one lane. To deliver such
+    // a call rather than refuse it, the bridge has to know *which* lane -- and
+    // it cannot ask when it runs, because by then it is on the wrong thread.
+    //
+    // Set at the crossing rather than at construction: a `ClosureStatic`
+    // singleton is built in `<clinit>`, which may run on any thread that first
+    // touches the class, while handing a closure to Java is always the
+    // program's own code and therefore always on the lane.
+    //
+    // Package-private, like every generated field: `nts/gen/Program` writes it
+    // and nothing outside the package may.
+    if carries_env(program, layout) {
+        builder.field(access::PACKAGE, types::ENV_MEMBER, types::ENV_DESCRIPTOR);
+        builder.interfaces.push(types::LANE_BOUND.to_owned());
+        let mut code = Code::new(
+            vec![
+                VType::Object(types::class_name(layout)),
+                VType::Object(types::ENV.to_owned()),
+            ],
+            2,
+        );
+        code.initialize_locals(origin, 2);
+        code.load(origin, Kind::Ref, 0);
+        code.load(origin, Kind::Ref, 1);
+        code.put_field(
+            origin,
+            pool,
+            &types::class_name(layout),
+            types::ENV_MEMBER,
+            types::ENV_DESCRIPTOR,
+        );
+        code.ret(origin, None);
+        let body = code.finish(pool).map_err(|error| {
+            Diagnostic::error(
+                "NTS4008",
+                format!("the lane setter for `{}` could not be written: {error}", layout.name),
+                origin.location,
+            )
+        })?;
+        builder.method(
+            access::PUBLIC,
+            "bindLane".to_owned(),
+            format!("({}){}", types::ENV_DESCRIPTOR, "V"),
+            Some(body),
+        );
     }
     Ok(())
 }

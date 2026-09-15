@@ -2028,6 +2028,30 @@ impl Emitter<'_> {
             let integral = self.narrowed.contains(&arg)
                 || matches!(self.ty(arg), HirType::Int { .. } | HirType::Bool);
             self.narrow_one(code, pool, arg, want, integral, origin)?;
+            // **After the narrowing, which is where every crossing converges.**
+            //
+            // A closure reaching a jar's interface arrives by two different
+            // paths -- erased, where the binding renders the parameter as a
+            // union and the code reads `.ref` and casts, and typed, where it is
+            // already the class. Only the second knows which closure class it
+            // is, and the first is the common one. Both end here with the value
+            // on the stack as the interface, so the lane is recorded here and
+            // the `instanceof` is `NtsForeign.bind`'s rather than the emitter's.
+            //
+            // A first attempt put this in `coerce_callback` and emitted nothing
+            // at all: that function is not on the erased path.
+            if want.starts_with('L') && nts_core::hir::runtime::is_foreign_layout_name(
+                &want[1..want.len() - 1],
+            ) {
+                code.dup(origin);
+                code.invoke_static(
+                    origin,
+                    pool,
+                    types::FOREIGN,
+                    "bind",
+                    "(Ljava/lang/Object;)V",
+                );
+            }
         }
         Ok(())
     }

@@ -168,6 +168,26 @@ public final class NtsEnv {
      * exactly one". What is JVM-specific is that a lane must be named, because
      * the wake is `LockSupport.unpark` on a `Thread`.
      */
+    /**
+     * The environment installed on this thread, or {@code null}, claiming
+     * nothing.
+     *
+     * <p>{@link #current} cannot answer this question: it *claims* the default
+     * for the first lane that asks and throws for any second one, which is
+     * right for a lane entering the runtime and wrong for code asking which
+     * thread it is on. A generated bridge asks exactly that, on a thread that
+     * may be a framework's, and must get an answer rather than an exception.
+     *
+     * <p>**Null here means "not a lane", not "no environment".** A lane has
+     * this set as a side effect of its first {@link #current} -- including the
+     * one a closure's crossing makes, which is why a bridge comparing this
+     * against the environment its closure captured is comparing two things that
+     * are both set by the time either matters.
+     */
+    public static NtsEnv installed() {
+        return CURRENT.get();
+    }
+
     public static NtsEnv current() {
         NtsEnv here = CURRENT.get();
         if (here != null) { return here; }

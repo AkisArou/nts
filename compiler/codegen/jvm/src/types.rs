@@ -94,6 +94,15 @@ pub const PROMISE: &str = "nts/rt/NtsPromise";
 
 /// The environment, which owns the platform slot and the completion lane.
 pub const ENV: &str = "nts/rt/NtsEnv";
+/// The interface a lane-carrying closure implements, so the crossing can set
+/// its lane without knowing its class -- the argument is usually erased there.
+pub const LANE_BOUND: &str = "nts/rt/NtsLaneBound";
+/// The boundary helpers a callback from a foreign thread goes through.
+pub const FOREIGN: &str = "nts/rt/NtsForeign";
+/// The field a closure carries its lane in; see `foreign_bridges`.
+pub const ENV_MEMBER: &str = "$env";
+/// The descriptor for [`ENV`].
+pub const ENV_DESCRIPTOR: &str = "Lnts/rt/NtsEnv;";
 pub const PROMISE_DESCRIPTOR: &str = "Lnts/rt/NtsPromise;";
 
 /// The interface a suspended function's frame implements, so the loop can run
