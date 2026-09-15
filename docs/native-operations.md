@@ -1061,6 +1061,50 @@ keyword back fails it, and so does an unemptied set: a signal that was never
 added must not be a member, which is the arm that passes over a set saying yes
 to everything.
 
+### A prototype check needs the header to declare the symbol first
+
+**Found 2026-09-15 by building the control rather than by reading the code**,
+and closed the same day. Re-declaring a function is how the witness checks a
+prototype: `extern int fsync(void);` against glibc's `fsync(int)` is
+
+    error: conflicting types for 'fsync'
+    /usr/include/unistd.h:989:12: note: previous declaration is here
+
+which is the check working. But it only works when the header declares the
+symbol **at all**. Name the wrong header and there is nothing to conflict with
+— our `extern` is simply a new declaration, and clang is happy:
+
+    @ntsHeader stdio.h   #include <stdio.h>
+                         extern int getpid(void);
+                         -Wall -Wextra -Werror: clean
+
+Zero diagnostics, a witness that compiles, and a prototype compared against
+nothing. It is the same hazard this section's over-inclusion work was about —
+"a getpid-only binding lost `<unistd.h>` and compared a prototype against
+nothing" — reached from the other side: not a *missing* header but a *wrong*
+one. A check whose answer cannot depend on its input is not a check.
+
+The fix is one line, and where it goes is the whole of it:
+
+    _Static_assert(sizeof(&getpid) > 0, "a named header declares getpid");
+    extern int getpid(void);
+
+`sizeof(&f)` needs `f` to be a declared identifier and evaluates nothing, so it
+fails exactly when the named headers do not declare the symbol. It must sit
+**above** the `extern`, because that line would otherwise supply the very
+declaration the probe is looking for and the check would pass under any header
+in the world — the same ordering trap as a feature probe written below its
+first use.
+
+Both arms verified against real headers: `unistd.h` compiles clean, `stdio.h`
+now gives `error: use of undeclared identifier 'getpid'`.
+
+**Safe on this population, checked rather than assumed.** All 29 libc entry
+points these bindings reach compile clean under `-Wall -Wextra -Werror`,
+including `ceil`, `floor`, `fabs`, `fabsf`, `copysign` and `ldexp` — the ones a
+header may define as a macro, which is the case that would have made `&f`
+ill-formed. 59 test suites pass unchanged.
+
 ### The witness asserts about a header's records, not about every tag
 
 Found while writing the packed fixture and **older than bit-fields**: a tag the

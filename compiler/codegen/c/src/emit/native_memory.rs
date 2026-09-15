@@ -452,7 +452,32 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 .or_insert_with(|| native_prototype(&target.name, target, Spelling::Expanded));
         }
     }
-    for prototype in declared.values() {
+    for (name, prototype) in &declared {
+        // **The probe goes above the declaration, and that is the whole of
+        // it.** Re-declaring a prototype checks it against the header's own --
+        // `fsync(void)` against `fsync(int)` is `conflicting types for 'fsync'`
+        // -- but only when the header declares it at all. Name the wrong header
+        // and there is nothing to conflict with: our `extern` is simply a new
+        // declaration, clang accepts it, and the witness passes having compared
+        // the prototype against nothing.
+        //
+        // Demonstrated 2026-09-15 rather than reasoned about: `getpid` under
+        // `@ntsHeader stdio.h` emitted `#include <stdio.h>` and
+        // `extern int getpid(void);`, and `-Wall -Wextra -Werror` was clean. A
+        // check whose answer cannot depend on its input is not a check.
+        //
+        // `sizeof(&f)` needs `f` to be a declared identifier and evaluates
+        // nothing, so it fails exactly when the named headers do not declare
+        // the symbol. It must precede the `extern` below, because that line
+        // would otherwise supply the declaration the probe is looking for and
+        // the check would pass for every header in the world.
+        //
+        // Safe on this population, checked rather than assumed: all 29 libc
+        // entry points these bindings reach -- including `ceil`, `fabs`,
+        // `copysign` and `ldexp`, which headers routinely define as macros --
+        // compile clean under `-Wall -Wextra -Werror`.
+        writer.line(origin, format!(
+            "_Static_assert(sizeof(&{name}) > 0, \"a named header declares {name}\");"));
         writer.line(origin, format!("extern {prototype}"));
         wrote = true;
     }
