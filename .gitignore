@@ -6,6 +6,11 @@
 # after a commit went wrong, 6,793 untracked files in it is not a tidiness
 # complaint -- it is the signal being buried.
 /target-jvm
+# A third, for the same reason. This one belongs to the build-system lane, whose
+# changes are in `tooling/cli` and want a baseline binary and a changed one side
+# by side -- which is one rebuild of the shared directory each way, and the
+# other two sessions paying for both.
+/target-config
 
 # TypeScript / pnpm
 node_modules/

@@ -2272,6 +2272,25 @@ fn foreign_tables(
     out
 }
 
+/// The memory provider this invocation selected.
+///
+/// **One answer, because two disagreeing is the failure it prevents.** `emit_c`
+/// read `--rc` itself to decide whether to print the `-DNTS_PROVIDER_RC` note,
+/// and `emit_options` read it to pick the provider. The note exists because
+/// compiling the runtime without that define while the program counts references
+/// balances every count and still grows the heap -- so a version of this where
+/// the two reads drifted would print the wrong advice about the quiet failure it
+/// was written to prevent.
+fn selected_provider() -> hir::Provider {
+    // NoGC stays the default: it is what RFC 9.1 says it is, and choosing a
+    // provider silently is exactly what that section forbids.
+    if std::env::args().any(|arg| arg == "--rc") {
+        hir::Provider::ReferenceCounting
+    } else {
+        hir::Provider::NoGc
+    }
+}
+
 fn emit_options<'a>(
     entry: &'a [String],
     entry_files: &'a [String],
@@ -2296,11 +2315,7 @@ fn emit_options<'a>(
     // synthesized default is not a claim about anything.
     let standalone = std::env::args().any(|arg| arg == "--main" || arg == "--entry");
     hir::Options {
-        provider: if std::env::args().any(|arg| arg == "--rc") {
-            hir::Provider::ReferenceCounting
-        } else {
-            hir::Provider::NoGc
-        },
+        provider: selected_provider(),
         roots: if standalone {
             hir::reachable::Roots::Entry(entry)
         } else {
@@ -2456,34 +2471,36 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
 
-    // `--rc` selects reference counting (RFC 9.2). NoGC stays the default: it
-    // is what 9.1 says it is, and choosing a provider silently is exactly what
-    // that section forbids.
-    let provider = if std::env::args().any(|arg| arg == "--rc") {
-        hir::Provider::ReferenceCounting
-    } else {
-        hir::Provider::NoGc
-    };
-    // `--main` says the product is an executable, which is a claim about
-    // reachability as much as about output: a module's exports are not roots
-    // for one, because nothing outside the program can call them. The entry is
-    // module evaluation, because that is what an executable *is* -- the same
-    // thing `node main.js` runs.
+    // **Through `emit_options`, like the other two emitters.**
+    //
+    // This had the provider and the roots written out again, and the copy had
+    // drifted: `standalone` was `--main` alone, so `--entry` selected nothing
+    // and the entry list was the constant `[MODULE_INIT]`. `emit-llvm` and
+    // `emit-jvm` honoured the flag and this did not, silently -- a flag that is
+    // accepted and ignored is worse than one that is rejected, because the
+    // output looks like an answer.
+    //
+    // Measured on a two-export probe, where `published` and `diagnostic` each
+    // call a private helper:
+    //
+    //     emit-llvm                      diagnostic onlyDiagnostic onlyPublished published
+    //     emit-llvm --entry published                              onlyPublished published
+    //     emit-c    --entry published    diagnostic onlyDiagnostic onlyPublished published
+    //
+    // The C column is the defect. It matters most on the one product that is
+    // real today: a Node addon is the C backend, so `exports:` in a config --
+    // whose whole job is to name fewer roots than the entry exports -- could
+    // never have reached the artifact it was written for.
+    let entry = named_entry();
+    let entry_files = nts_frontend_ts::entry_uris(tsconfig, &snapshot);
+    // **`--main` decides what is written, not what survives**, and the variable
+    // it replaced answered both. Those separate here: `emit_options` reads
+    // `--main` *or* `--entry` for reachability, and the standalone `main()` and
+    // its libuv host below are a `--main` question only.
     let standalone = std::env::args().any(|arg| arg == "--main");
-    let entry = [hir::lower::MODULE_INIT.to_owned()];
-    let roots = if standalone {
-        hir::reachable::Roots::Entry(&entry)
-    } else {
-        hir::reachable::Roots::EveryExport
-    };
     let prepared = match hir::prepare_with(
         &snapshot,
-        &hir::Options {
-            provider,
-            roots,
-            entry_files: &nts_frontend_ts::entry_uris(tsconfig, &snapshot),
-            ..hir::Options::default()
-        },
+        &emit_options(&entry, &entry_files, &foreign_tables(&snapshot)),
     ) {
         Ok(prepared) => prepared,
         Err(problems) => {
@@ -2583,7 +2600,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     // runtime without this define while the program counts references balances
     // the counts and still grows the heap, which is the quiet failure worth
     // spending two lines of output to prevent.
-    if provider == hir::Provider::ReferenceCounting {
+    if selected_provider() == hir::Provider::ReferenceCounting {
         println!("compile the runtime with -DNTS_PROVIDER_RC");
     }
     Ok(())
