@@ -988,7 +988,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     // every lane of *ours* is absent for one reason -- the program was refused --
     // and the references and the engines still measure, so the row is a real row
     // with `--` in four cells rather than a case that vanished.
-    let refused = missing_entry(&specialized_text, &entry);
+    let refused = missing_entry(&specialized_text, &driver_entries(&entry));
     if let Some(ref name) = refused {
         eprintln!(
             "note: {shown:<16} this compiler refuses `{name}`, so its four columns \
@@ -2050,6 +2050,28 @@ fn java_tool(name: &str) -> Utf8PathBuf {
     Utf8PathBuf::from(name)
 }
 
+/// The entry names the native driver actually calls.
+///
+/// `entry_points` appends `MODULE_INIT` as a *reachability* root -- "module
+/// evaluation is a root in the same sense the entry point is" -- and it is
+/// neither called by the driver unconditionally nor spelled the same way: the C
+/// is `void module__init(void)`, with the `#` mangled to `__`.
+///
+/// **Handing it to `missing_entry` reported every case in the corpus as
+/// refused**, blanking all four of this compiler's columns on a clean sweep,
+/// because a definition of `module#init(` exists nowhere. Whether module
+/// evaluation was emitted is already `initializes`, and the driver calls it
+/// only when it was.
+///
+/// Caught by watching the first two rows of a full run rather than by any test,
+/// which is the finding: the change had been verified on the case that *is*
+/// refused and never on one that is not. A detector needs its negative control
+/// more than its positive one -- the positive is the case you were thinking
+/// about.
+fn driver_entries(entry: &[String]) -> Vec<String> {
+    entry.iter().filter(|name| *name != hir::lower::MODULE_INIT).cloned().collect()
+}
+
 /// The entry point the driver calls, if lowering did not keep it.
 ///
 /// **`emit-c` refuses and exits zero.** It renders what it can and reports the
@@ -2603,7 +2625,7 @@ fn human(ns: f64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Row, lost_case_decline, missing_entry};
+    use super::{Row, driver_entries, lost_case_decline, missing_entry};
     use camino::Utf8PathBuf;
 
     fn row(case: &str) -> Row {
@@ -2684,6 +2706,29 @@ mod tests {
             missing_entry(nested, &entry),
             Some("work".to_owned()),
             "a call to `work` inside another function does not define it"
+        );
+    }
+
+    /// The negative control this change shipped without, and the bug it hid.
+    ///
+    /// `entry_points` appends `MODULE_INIT`, whose C spelling is
+    /// `module__init`, so asking `missing_entry` for a definition of
+    /// `module#init(` finds none and calls every case in the corpus refused.
+    /// A full sweep reported it on `absences`, `accumulate` and `array-from`
+    /// before anyone looked.
+    #[test]
+    fn the_module_init_root_is_not_a_driver_entry() {
+        let entry = vec!["work".to_owned(), nts_core::hir::lower::MODULE_INIT.to_owned()];
+        assert_eq!(driver_entries(&entry), vec!["work".to_owned()]);
+
+        // And the whole question, asked the way `run_case` asks it: a healthy
+        // program is not refused.
+        let healthy = "double work(double v0);\ndouble work(double v0) {\n  return v0;\n}\nvoid module__init(void) {\n}\n";
+        assert_eq!(missing_entry(healthy, &driver_entries(&entry)), None);
+        assert_eq!(
+            missing_entry(healthy, &entry),
+            Some(nts_core::hir::lower::MODULE_INIT.to_owned()),
+            "unfiltered, the root itself reads as a refusal -- which is the bug"
         );
     }
 
