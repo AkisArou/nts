@@ -1487,6 +1487,8 @@ mod foreign_contracts {
             result: Type::Void,
             retention,
             variadic: None,
+            // This asks about retention, which no module decides.
+            declared_at: None,
         }))
     }
 

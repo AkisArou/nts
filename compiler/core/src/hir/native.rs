@@ -1,7 +1,7 @@
 //! Declaration-authored C ABI types. Brands describe a foreign boundary;
 //! inside TypeScript their values retain JavaScript's primitive semantics.
 
-use nts_semantic_schema::{MemberKind, SemanticSnapshot, TypeId, TypeKind};
+use nts_semantic_schema::{MemberKind, NodeId, SemanticSnapshot, TypeId, TypeKind};
 
 use super::{HirType, ManagedType};
 
@@ -30,6 +30,14 @@ pub struct Function {
     /// declaration is the only place that can be checked. A binding that needs
     /// two shapes of `ioctl` declares two names for it.
     pub variadic: Option<Type>,
+    /// The `declare module` whose `@ntsHeader` covers this declaration, when
+    /// one does.
+    ///
+    /// The same fact [`Record::declaring_module`] carries, for the other half
+    /// of what a program holds. Compiler metadata: no backend reads it and no
+    /// C changes, and what it decides is which headers a translation unit needs
+    /// rather than anything about the call.
+    pub declared_at: Option<NodeId>,
 }
 
 /// What a foreign call keeps of one argument after it returns.
@@ -358,9 +366,13 @@ pub enum Naming {
     /// translation unit holding that header can be asked whether this program
     /// described it correctly.
     ///
-    /// `from_header` is whether the *binding* named that header, which decides
-    /// whether `program.h` includes it or defines its own copy.
-    Tagged { from_header: bool },
+    /// `from_header` is **which** `declare module` named that header, when one
+    /// did. It decides whether `program.h` includes the header or defines its
+    /// own copy -- and, because it is an identity rather than a bool, which
+    /// headers a program that uses this record needs. A program is not obliged
+    /// to carry every header in the snapshot, and carried all of them while
+    /// this said only *that* one was named.
+    Tagged { from_header: Option<NodeId> },
     /// Declared by a header **without a tag**, so nothing can name it.
     ///
     /// Inferred rather than marked: a header-defined record's members are the
@@ -393,7 +405,18 @@ impl Record {
     /// includes that header rather than defining its own copy.
     #[must_use]
     pub const fn from_header(&self) -> bool {
-        matches!(self.naming, Naming::Tagged { from_header: true })
+        matches!(self.naming, Naming::Tagged { from_header: Some(_) })
+    }
+
+    /// The `declare module` whose `@ntsHeader` describes this record, when one
+    /// does. What a program needs in its translation unit is the union of these
+    /// over the records and calls it actually holds.
+    #[must_use]
+    pub const fn declaring_module(&self) -> Option<NodeId> {
+        match self.naming {
+            Naming::Tagged { from_header } => from_header,
+            _ => None,
+        }
     }
 
     /// Whether the header declares it without a tag. See [`Naming::Untagged`].
@@ -832,6 +855,9 @@ impl Function {
             parameters,
             variadic,
             result,
+            // Filled in by whoever resolved the callee, which is the only place
+            // that has the declaration node.
+            declared_at: None,
         })
     }
 }
@@ -1111,5 +1137,5 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     (base? == brand.needs_exact_integer()).then_some(brand)
 }
 
-mod schema;
+pub(crate) mod schema;
 pub use schema::{is_layout, pointer, storage};

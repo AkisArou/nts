@@ -202,7 +202,7 @@ fn structure(
     // depends on it: a record this header defines makes its untagged members
     // the header's too, however deep.
     let foreign = !tag.is_empty();
-    let from_header = foreign && declares_a_header(snapshot, parent);
+    let from_header = foreign.then(|| declaring_module(snapshot, parent)).flatten();
     let naming = if foreign {
         super::Naming::Tagged { from_header }
     } else if within_header {
@@ -210,7 +210,7 @@ fn structure(
     } else {
         super::Naming::Invented
     };
-    let members_are_the_header_s = from_header || within_header;
+    let members_are_the_header_s = from_header.is_some() || within_header;
     let mut ordered: Vec<_> = properties.iter().collect();
     ordered.sort_by_key(|p| snapshot.nodes[p.declaration.map_or(0, |id| id.0) as usize].origin.location.span.start);
     let mut fields = Vec::new();
@@ -291,18 +291,27 @@ fn structure(
 /// together, and which one carries a given tag is the C compiler's to know --
 /// claiming to know it here would be a second derivation of a fact the
 /// preprocessor already holds, and the two could disagree.
-fn declares_a_header(snapshot: &SemanticSnapshot, from: nts_semantic_schema::NodeId) -> bool {
+/// The enclosing declaration whose `@ntsHeader` covers `from`, if any.
+///
+/// **Which one, not whether.** It answered `bool` and the identity it had just
+/// found was discarded, so a program had no way to say which headers it needs
+/// and carried every one in the snapshot -- `native-stat` compiled with seven
+/// and used one.
+pub(crate) fn declaring_module(
+    snapshot: &SemanticSnapshot,
+    from: nts_semantic_schema::NodeId,
+) -> Option<nts_semantic_schema::NodeId> {
     let mut at = Some(from);
     while let Some(id) = at {
-        let Some(node) = snapshot.nodes.get(id.0 as usize) else { return false };
+        let node = snapshot.nodes.get(id.0 as usize)?;
         if node.native.as_ref().is_some_and(|native| {
             native.headers.as_ref().is_some_and(|headers| !headers.is_empty())
         }) {
-            return true;
+            return Some(id);
         }
         at = node.parent;
     }
-    false
+    None
 }
 
 /// Storage named by a native type argument; pointer types occupy one word.

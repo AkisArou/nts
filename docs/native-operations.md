@@ -828,59 +828,54 @@ recursive call's reasons into one string made `struct tcphdr` report
 different places. It now reports 11, each marked `through an unnamed member:`
 once however deep it was found.
 
-## Every header, whether the program reached the module or not
+## A program carries the headers it reaches
 
-`program.native_headers` is a scan of the **snapshot**: every `declare module`
-carrying `@ntsHeader` contributes, reached or not. `runtime/native/libc.d.ts`
-declares several, so the cost is paid by every program that names any header at
-all. Measured, before this section changed anything:
+`program.native_headers` was a scan of the **snapshot**: every `declare module`
+carrying `@ntsHeader` contributed, reached or not, and
+`runtime/native/libc.d.ts` declares several. It is a scan of the *program* now:
 
-| example | headers in its translation unit | headers it uses |
+| example | before | after |
 |---|---|---|
-| `native-stat` | `math.h stdbool.h stddef.h stdint.h stdlib.h string.h sys/stat.h` | 1 |
-| `native-poll` | the same seven, with `poll.h` for `sys/stat.h` | 1 |
-| `native-rusage` | `math.h stdlib.h sys/resource.h` | 1 |
+| `native-stat` | `math stdbool stddef stdint stdlib string sys/stat` | `sys/stat.h` |
+| `native-poll` | the same seven, with `poll.h` | `poll.h` |
+| `native-rusage` | `math stdlib sys/resource` | `sys/resource.h` |
+| `native-callback` | `math stdlib` | none |
 
-**The obvious fix is wrong, and the way it is wrong is the reason to write this
-down.** Filtering to modules the program reaches -- a module declaring a type
+**The identity, not a rule about names.** `declares_a_header` walked up to find
+the module and returned a `bool`, discarding what it had just located;
+`Naming::Tagged` carries that `NodeId` now and `native::Function` carries the
+same fact for a call. What a program needs is the union over the records and
+calls it actually holds, which is a question about the program rather than a
+guess about the snapshot.
+
+**The first attempt guessed, and emptied a check.** It filtered on "does the
+program reach this module", decided from node kinds -- a module declaring a type
 always contributes, a function-only module contributes when one of its functions
-is called -- drops `math.h` and `stdlib.h` from every example above and leaves
-all sixteen green. It also silently empties a check. A binding of `getpid` alone
-declares no type, and matching its function name failed; with the filter on, the
-witness became
+is called. Sixteen examples and every test stayed green. It also made the
+witness for a `getpid`-only binding
 
     extern int getpid(void);          /* and no <unistd.h> */
 
-which compares a prototype against nothing. Unfiltered it includes `<unistd.h>`
-and the comparison is real. **Sixteen examples and every test stayed green
-through that**, because a witness that checks less still compiles -- the failure
-is invisible to everything except the baseline arm, which is running the
-unfiltered build and reading what it emits.
+a prototype compared against nothing, because that binding declares no type and
+the function-name match missed. **Nothing observes a check that stopped
+checking**, so the rule had to be exact rather than clever.
 
-So the rule has to be "a module contributes iff the program holds a declaration
-that came from it", and that is *provenance*, not a guess from node kinds. It is
-not recorded anywhere today: `native::Function` and `native::Record` do not know
-which module declared them, and `schema.rs::declares_a_header` walks up to find
-one and returns a `bool`, discarding the identity it just located. Reverted
-until that exists, because an over-included header costs compile time and a
-missing one costs a check nobody can see is gone.
+Both measurements the second attempt owed, taken rather than argued:
 
-**A collision this makes reachable, and one it does not.** `examples/interop/
-native-rusage` cannot name its constant `RUSAGE_SELF`: a module-level `const` is
-emitted as a file-scope variable in the translation unit that includes
-`<sys/resource.h>`, and the header declares that identifier as an enumerator.
-That one is native interop's to own, and narrowing the header set narrows it.
+- the `getpid`-only binding keeps `<unistd.h>`, which is the case that failed
+  before;
+- the witness assertion count is **identical** for all eight examples that emit
+  one -- 8, 40, 38, 14, 16, 3, 16, 10 -- so nothing that was being checked
+  stopped being checked.
 
-A program-level `let y1 = 3` also fails --
-
-    error: redefinition of 'y1' as different kind of symbol
-    note: previous definition is here  /usr/include/bits/mathcalls.h:279
-
--- under `-std=gnu11`, clang's default, where glibc stops guarding the BSD math
-names. That one looked like the same bug and is **not**: `nts_runtime.h`
-includes `<math.h>` itself, so it is there for every program whether or not any
-binding names a header, and removing the over-inclusion left it exactly where it
-was. The examples pin `-std=c11`, which is why nothing had seen it.
+**What this does not fix, and was briefly credited with.** A program-level
+`let y1 = 3` still fails against `<math.h>` under `-std=gnu11`:
+`nts_runtime.h` includes it for every program, whether or not any binding names
+a header. Removing the over-inclusion left that error byte for byte. The
+examples pin `-std=c11`, which is why nothing had seen it. The `RUSAGE_SELF`
+collision is the one this *does* narrow: a module-level `const` is emitted into
+the translation unit that includes the headers a binding names, and there are
+fewer of them now.
 
 ## Bit-fields
 

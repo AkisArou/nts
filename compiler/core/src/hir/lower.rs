@@ -4879,8 +4879,36 @@ fn collect_declared_facts(program: &mut Program, snapshot: &SemanticSnapshot) {
 /// by lowering, which follows values, and there is exactly one pass over the
 /// nodes here against the many a lookup would repeat.
 fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
+    // The modules this program actually holds a declaration from, rather than
+    // every module in the snapshot. `runtime/native/libc.d.ts` declares several
+    // and a program importing one of them carried all of their headers:
+    // `native-stat` compiled with seven and used one.
+    //
+    // **By identity, not by a rule about names.** An earlier attempt filtered
+    // on "does the program reach this module" guessed from node kinds, left
+    // sixteen examples and every test green, and emptied a witness -- a binding
+    // of `getpid` alone declares no type, the guess said unreached, and the
+    // witness compared `extern int getpid(void);` against nothing. Nothing
+    // observes a check that stopped checking, so the rule has to be exact.
+    let mut reached = rustc_hash::FxHashSet::default();
+    let mut seen = rustc_hash::FxHashSet::default();
+    for func in &program.funcs {
+        for op in &func.values {
+            if let OpKind::Call { callee: super::Callee::Native(target), .. } = &op.kind {
+                reached.extend(target.declared_at);
+            }
+            // A record enters a program through a type, not only through a
+            // call: a program may hold a `Ptr<Rusage>` and call nothing from
+            // the module that describes it. Every value is walked, parameters
+            // included -- a parameter is an `OpKind::Param` with its own type,
+            // not a separate list.
+            if let HirType::NativePointer(pointee) = &op.ty {
+                collect_native_modules(pointee, &mut reached, &mut seen);
+            }
+        }
+    }
     let (mut headers, mut defines) = (Vec::new(), Vec::new());
-    for node in &snapshot.nodes {
+    for (at, node) in snapshot.nodes.iter().enumerate() {
         if !matches!(
             node.kind,
             NodeKind::Syntax(
@@ -4891,6 +4919,9 @@ fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
             continue;
         }
         let Some(native) = node.native.as_ref() else { continue };
+        if !reached.contains(&nts_semantic_schema::NodeId(u32::try_from(at).unwrap_or(u32::MAX))) {
+            continue;
+        }
         headers.extend(native.headers.iter().flatten().cloned());
         defines.extend(native.defines.iter().flatten().cloned());
     }
@@ -4900,6 +4931,43 @@ fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
     }
     program.native_headers = headers;
     program.native_defines = defines;
+}
+
+/// Every module a native type reaches a record from, following the views and
+/// elements a pointee is made of.
+///
+/// `seen` stops a record that points at itself, which C has and this walk would
+/// otherwise follow forever.
+fn collect_native_modules(
+    pointee: &super::native::Pointee,
+    into: &mut rustc_hash::FxHashSet<nts_semantic_schema::NodeId>,
+    seen: &mut rustc_hash::FxHashSet<String>,
+) {
+    use super::native::Pointee;
+    match pointee {
+        Pointee::Record(layout) => {
+            if !seen.insert(layout.name.clone()) {
+                return;
+            }
+            into.extend(layout.declaring_module());
+            for field in &layout.fields {
+                collect_native_modules(&field.ty, into, seen);
+            }
+        }
+        Pointee::Pointer(inner)
+        | Pointee::Const(inner)
+        | Pointee::Unaligned(inner)
+        | Pointee::Flexible(inner)
+        | Pointee::Array { element: inner, .. } => collect_native_modules(inner, into, seen),
+        Pointee::Scalar(_) | Pointee::Opaque(_) | Pointee::Void | Pointee::Bits { .. } => {}
+        Pointee::FnPointer(signature) => {
+            for ty in signature.parameters.iter().chain(std::iter::once(&*signature.result)) {
+                if let super::native::Type::Pointer(inner) = ty {
+                    collect_native_modules(inner, into, seen);
+                }
+            }
+        }
+    }
 }
 
 fn collect_class_identities(program: &mut Program, snapshot: &SemanticSnapshot) {
@@ -28653,6 +28721,11 @@ impl<'a> FuncBuilder<'a> {
         }
         let mut native = super::native::Function::from_signature(self.snapshot, name, signature, abi)
             .map_err(|why| self.unsupported(call, &why))?;
+        // The module whose `@ntsHeader` covers this declaration, recorded where
+        // the declaration node is still in hand. `collect_native_headers` reads
+        // it, so a program carries the headers it reaches rather than every one
+        // in the snapshot.
+        native.declared_at = declaration.and_then(|decl| self.declaring_module(decl));
         if let Some(names) = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.no_escape.as_ref()) {
             if names.is_empty() { return Err(self.unsupported(call, "@ntsNoEscape needs at least one native-pointer parameter")); }
             for name in names {

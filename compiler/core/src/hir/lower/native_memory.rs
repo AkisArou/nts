@@ -134,6 +134,11 @@ impl FuncBuilder<'_> {
     /// `unsigned int ihl : 4` loads as an `unsigned int`, not as a four-bit
     /// thing: C promotes the member to its declared type on the way out, and
     /// the width lives in the layout rather than in the value.
+    /// The module whose `@ntsHeader` covers a declaration, if one does.
+    pub(super) fn declaring_module(&self, at: NodeId) -> Option<NodeId> {
+        super::super::native::schema::declaring_module(self.snapshot, at)
+    }
+
     pub(super) fn native_bit_unit(
         &mut self,
         id: NodeId,

@@ -22,7 +22,9 @@ fn record(fields: &[(&str, Pointee)]) -> Record {
             })
             .collect(),
         kind: RecordKind::Struct,
-        naming: Naming::Tagged { from_header: true },
+        // `Some` of some module: these tests are about the layout rule, and
+        // what the identity *is* only decides which header a program carries.
+        naming: Naming::Tagged { from_header: Some(nts_semantic_schema::NodeId(0)) },
         packed: false,
     }
 }
