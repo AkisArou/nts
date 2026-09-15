@@ -62,12 +62,12 @@ which.
 | | |
 |---|---|
 | `✅` table rows | 166 |
-| naming an `examples/` directory | 114 |
+| naming an `examples/` directory | 118 |
 | quoting a case count | 14 |
-| doing **either** | 116 |
-| doing **neither** | **50** |
+| doing **either** | 120 |
+| doing **neither** | **46** |
 
-Thirteen rows were cited on 2026-09-15 and the count moved 62 → 50. The table
+Seventeen rows were cited on 2026-09-15 and the count moved 62 → 46. The table
 above is the *current* answer to its own awk, re-run after the edits, so the
 number and the file cannot drift apart the way the previous block's did.
 
@@ -81,6 +81,20 @@ would be decoration. Twelve rows survived that filter out of fifty-six, which
 is the honest yield — the rest name constructs too common for a search to
 distinguish, and they need somebody to decide which example is the *point* of
 the row rather than merely a place the construct occurs.
+
+A second pass matched row *subjects* against example directory names, which are
+descriptive enough to carry it — `map-and-set`, `iteration`,
+`a-throw-that-stays-in-its-function`. It found four more and, on the way, the
+one result of this exercise that changes a claim rather than annotating it:
+**`examples/map-and-set` never iterates a `Map` or a `Set`.** Twenty-one
+`new Map`, five `new Set`, and not one `for...of` over either. It is the example
+a reader would reach for to cite the two iteration rows, and it does not carry
+them; `examples/iteration` does.
+
+A search for that iteration had itself missed `examples/iteration`, because the
+receiver is `m.keys()` — a string containing neither `Map` nor `Set`. Reading
+the two candidates is what caught both the wrong citation and the missed one,
+which is why the second pass had to be by hand rather than by another filter.
 
 **The method is written out because the last count and this one disagree by
 86 and neither said how it counted.** The block here previously read 159 rows,
