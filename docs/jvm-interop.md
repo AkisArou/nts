@@ -161,13 +161,60 @@ checkable in one command and none had a current value written down.
 | the `jvm` gate floor | every example the other backends carry | **205 of 205**, and the floor line is `exact` -- it fails on `passed != total`, not only on a drop |
 | `unverifiable class` in the corpus | 0, and hard | **0**, over 184 single-file cases, beside `uncompilable C` at 0 |
 | a `nts (JVM)` number on every bench row | a number or a named refusal, never a blank | present; the README says why a blank is forbidden -- it would be indistinguishable from the `Java` column's blank, which means nobody wrote a reference |
-| the AWFY rows at or under hand-written Java | 1.00x | **40 of 59 rows at or under, 19 over** |
+| the AWFY rows at or under hand-written Java | 1.00x | **not what this row said.** It read "40 of 59 at or under, 19 over", and that is the `nts/Bun` column -- see directly below. Being re-measured; the published table is 1554 commits stale and eight of its rows are a regression this lane has since fixed |
 
-**The nineteen are the work queue**, and they are not scattered: eight are
-`json-*`, four are `erasure-*`, and the largest single row is
-`json-stringify-doc` at 3.03x. `symbol-keyed-map` at 2.82x and `growth-grown` at
-2.35x are the two outside those families. A queue with that much structure is a
-statement about two or three representations rather than nineteen problems.
+### CORRECTED 2026-09-15: that queue was read off the column next to the one it names
+
+The row above read **"40 of 59 rows at or under, 19 over"**, and the paragraph
+here called the nineteen a work queue with structure: eight `json-*`, four
+`erasure-*`, worst `json-stringify-doc` at 3.03x, then `symbol-keyed-map` 2.82x
+and `growth-grown` 2.35x.
+
+Counted from `nts (JVM)/Java`, the published table gives **27 at or under, 24
+over, and 8 with no reference at all**. Counted from `nts/Bun` it gives
+**exactly 40 and 19**. The three rows named settle which, because each is a Bun
+value and none is a Java one:
+
+    row                  nts/Bun    nts (JVM)/Java
+    json-stringify-doc     3.03x      --  (no ref.java, by decision)
+    symbol-keyed-map       2.82x     2.94x
+    growth-grown           2.35x     1.01x
+
+So the one row in this table whose purpose is to divide the runtime out -- the
+only column anywhere that prices this compiler's codegen against a person
+writing Java, on the same JVM, in the same run -- was reporting a comparison
+against JavaScriptCore. The README's legend says in as many words that every
+*other* ratio mixes a codegen difference with an engine difference and cannot
+separate them. This row exists to be the exception and had quietly become
+another instance.
+
+**What it changes.** `growth-grown`, `closure-merge` and `dispatch` are 1.01x,
+1.01x and 0.99x against Java: three of the four rows the queue sent someone to
+fix are already at parity in the lane the row is about, and the work would have
+gone into moving an engine comparison through it. The eight `json-*` rows cannot
+enter this column at all -- they have no `ref.java` by decision, `benches/jvm-rows.md`
+argues each one, and the last was priced and refused because the reference would
+need a second Grisu to stay correct. "Eight are `json-*`" is six even in the Bun
+column; "four are `erasure-*`" is exactly right there and zero here.
+
+**What makes this worth a section rather than a diff.** The wrong column is
+*coherent*. Nineteen rows, eight of one family and four of another, with a
+plausible worst case -- it reads as a queue with structure, and "two or three
+representations rather than nineteen problems" is a good inference from it. It
+was then copied into a goal text as a session's opening instruction, so the
+error survived being restated twice before anyone counted a column.
+
+The aggregate matched a column; the individual rows are what said *which*. One
+row was enough -- `growth-grown` at 2.35x against 1.01x -- and it was visible
+from the start.
+
+**And the queue is not the only thing that was stale.** Re-measuring on
+2026-09-15, the first full sweep since `e7342345` on 2026-09-09 and 1554 commits
+back, returned `refused` in the `nts (JVM)` column for all eight `awfy-*` rows:
+an override is both a member of its layout and an entry in its dispatch table,
+and since `c213fe13` two emitters had each been writing it. Fixed in `0a9ec047`.
+The eight rows this bar is *written about* had no instrument standing behind
+them -- see `benches/jvm-rows.md`.
 
 **The floor is 205, not 86 of 87.** That number comes from this lane's original
 plan, when the jvm step counted a different population, and it has been quoted
