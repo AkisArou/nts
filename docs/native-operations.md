@@ -1020,6 +1020,47 @@ array member. So it is checked like any other member rather than exempted.
 Giving the member an extent fails the agreement test on both backends, which is
 the control: every read after it lands past the payload.
 
+## A record C names only by a typedef
+
+`__sigset_t` is `typedef struct { unsigned long __val[16]; } __sigset_t;` -- a
+struct with **no tag**. C spells the type `__sigset_t`, and `struct __sigset_t`
+is a *different*, incomplete type the header never defines. Everything else
+about it is an ordinary header record: `sizeof`, `offsetof` and `_Generic` all
+work, and only the keyword that is not written separates it.
+
+    Typedef<Struct<{ __val: CArray<c_ulong, 16> }, "__sigset_t">>
+
+**A wrapper rather than a third argument**, for the reason `Packed<T>` is one:
+it says a thing about the whole record, and a positional flag in a tag slot
+reads as part of the name.
+
+**It is the one thing here that could not be inferred**, which is worth stating
+because every other marker was removed for being inferable. Nothing in
+`Struct<{...}, "__sigset_t">` says which of the two the header wrote, and this
+compiler does not read headers -- the generator does, and a hand-written binding
+has to be able to say it too. Three spellings were considered; the one that
+needed no new vocabulary turned out not to work for exactly this reason.
+
+Four places spell a record's C name and each had to ask: `Pointee::c_type`, the
+witness's assertions, `program.c`'s own layout asserts, and the **forward
+declaration** -- which is skipped entirely, because `__sigset_t;` is not a
+declaration and `struct __sigset_t;` declares the wrong type.
+
+`nts bind-c` derives one. Its layout probe spells it bare too, and
+`parse_layouts` accepts clang's bare dump line: a tagged record prints as
+`struct rusage` and a typedef-named one prints as `__sigset_t`, with no keyword,
+because there is no tag to print.
+
+**The survey is 26 of 26.** `sigaction` was the last, and it needed three things
+that arrived separately -- the anonymous union lifted, the function-pointer
+members described, and this.
+
+`caller.c` includes the real `<signal.h>` beside `program.h` and asks the same
+question twice, through libc and through the compiled TypeScript. Putting the
+keyword back fails it, and so does an unemptied set: a signal that was never
+added must not be a member, which is the arm that passes over a set saying yes
+to everything.
+
 ### The witness asserts about a header's records, not about every tag
 
 Found while writing the packed fixture and **older than bit-fields**: a tag the
@@ -1066,16 +1107,21 @@ formality.
 
 Twenty-six POSIX records, asked for one at a time, **through `nts bind-c`** --
 so this counts what can be *derived from a header*, not what the compiler can
-describe. **Twenty-four work**, nineteen when the survey was first run, and
+describe. **All twenty-six work**, nineteen when the survey was first run, and
 each one that changed is the reason a part of this section exists.
+
+That the number reached 26 is not a claim that every C record describes -- it is
+a claim about *these* records, chosen before the work rather than after it, and
+the population is written out below for that reason. A survey that grew to fit
+its answer would report the same number and mean nothing.
 
 | cause | records | |
 |---|---|---|
 | an **anonymous** record as a *named member's type* | `sockaddr_in6`, `in6_addr` | described |
 | an **unnamed member**, whose fields C reaches as the enclosing record's | `rusage` | described |
 | a bit-field | `iphdr`, `tcphdr` | described |
-| a flexible array member (`unsigned char[]`, no length) | `cmsghdr` | refuses |
-| a typedef naming an **unnamed struct** (`__sigset_t`) | `sigaction` | refuses |
+| a flexible array member (`unsigned char[]`, no length) | `cmsghdr` | described |
+| a typedef naming an **unnamed struct** (`__sigset_t`) | `sigaction` | described |
 
 `tcphdr` and `sigaction` both moved rows without anything being done to them,
 which is the part worth reading. Each had been filed under the first thing that
@@ -1156,11 +1202,18 @@ belonged to the enclosing record -- and that is C resolving it, not something
 this surface has to reproduce. The first needed a lowering path; the second
 needed the binding to stop insisting on a name, and nothing else.
 
-Twenty-two of twenty-six now. The two still refusing for a *naming* reason do
-not exist: `tcphdr` and `sigaction` were counted here and belong to bit-fields
-and to a typedef of an unnamed struct respectively.
+Twenty-six of twenty-six now, and **no record in this survey refuses for a
+naming reason any more**. The two that were counted here belonged elsewhere:
+`tcphdr` to bit-fields and `sigaction` to a typedef of an unnamed struct, each
+filed under the first thing that stopped the walk rather than under what it
+needed.
 
-Neither is described wrongly. Each refusal names the member and the reason.
+The three shapes are now separated by what C offers, which is what decides the
+work each needs. A **tag** is spelled with its keyword. A **typedef name** is
+spelled without one, and `Typedef<T>` says so because nothing else can. An
+**unnamed record** has no spelling at all, and every consumer of one reaches its
+members by byte offset -- the only case of the three that needed a lowering
+path rather than a way to write the name.
 
 ### What it refuses, surveyed against real headers
 

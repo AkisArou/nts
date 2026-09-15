@@ -373,6 +373,19 @@ pub enum Naming {
     /// to carry every header in the snapshot, and carried all of them while
     /// this said only *that* one was named.
     Tagged { from_header: Option<NodeId> },
+    /// Named by a **typedef** rather than by a tag: `typedef struct { ... } X;`
+    /// gives the struct no tag, only a typedef name, so C spells the type `X`
+    /// and never `struct X`.
+    ///
+    /// Everything else about it is a header's record -- `sizeof(X)`,
+    /// `offsetof(X, f)` and `_Generic(&p->f, T *)` all work -- so it is
+    /// `foreign` and `from_header` like a tagged one, and differs only in the
+    /// keyword that is *not* written.
+    ///
+    /// clang reports such a member's type as `struct X`, because an unnamed
+    /// record takes a typedef name for linkage; that spelling is not one source
+    /// may use, which is how this reads as a missing definition and is not one.
+    Typedef { from_header: Option<NodeId> },
     /// Declared by a header **without a tag**, so nothing can name it.
     ///
     /// Inferred rather than marked: a header-defined record's members are the
@@ -398,14 +411,23 @@ impl Record {
     /// Whether `name` is a C tag some header defines.
     #[must_use]
     pub const fn foreign(&self) -> bool {
-        matches!(self.naming, Naming::Tagged { .. })
+        matches!(self.naming, Naming::Tagged { .. } | Naming::Typedef { .. })
+    }
+
+    /// Whether C spells this type without a `struct` or `union` keyword.
+    #[must_use]
+    pub const fn spelled_bare(&self) -> bool {
+        matches!(self.naming, Naming::Typedef { .. })
     }
 
     /// Whether the binding named the header that defines it, so `program.h`
     /// includes that header rather than defining its own copy.
     #[must_use]
     pub const fn from_header(&self) -> bool {
-        matches!(self.naming, Naming::Tagged { from_header: Some(_) })
+        matches!(
+            self.naming,
+            Naming::Tagged { from_header: Some(_) } | Naming::Typedef { from_header: Some(_) }
+        )
     }
 
     /// The `declare module` whose `@ntsHeader` describes this record, when one
@@ -414,7 +436,7 @@ impl Record {
     #[must_use]
     pub const fn declaring_module(&self) -> Option<NodeId> {
         match self.naming {
-            Naming::Tagged { from_header } => from_header,
+            Naming::Tagged { from_header } | Naming::Typedef { from_header } => from_header,
             _ => None,
         }
     }
@@ -469,6 +491,9 @@ impl Pointee {
             // either. A member *declaration* of one would be wrong, and
             // `types` refuses to emit a record that holds one.
             Self::Record(layout) if layout.untagged() => "char".to_owned(),
+            // A typedef-named record is spelled bare: `__sigset_t`, never
+            // `struct __sigset_t`, because the struct has no tag to write.
+            Self::Record(layout) if layout.spelled_bare() => layout.name.clone(),
             Self::Record(layout) => format!("{} {}", layout.kind.keyword(), layout.name),
             Self::Pointer(pointee) => pointee.pointer_type(),
             Self::Void => "void".to_owned(),

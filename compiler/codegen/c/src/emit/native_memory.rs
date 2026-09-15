@@ -26,7 +26,15 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
         // An anonymous record has no tag to declare. Its name here is one this
         // compiler invented for the TypeScript side and for diagnostics, and
         // emitting it would declare a second, unrelated type.
-        if layouts.structs.get(name).is_some_and(|record| record.untagged()) {
+        // A typedef-named record has no tag either, so there is nothing to
+        // forward-declare: `__sigset_t;` is not a declaration and
+        // `struct __sigset_t;` declares a *different*, incomplete type that the
+        // header never defines. The header is included and provides it.
+        if layouts
+            .structs
+            .get(name)
+            .is_some_and(|record| record.untagged() || record.spelled_bare())
+        {
             continue;
         }
         writer.line(origin, format!("{} {name};", kind.keyword()));
@@ -165,7 +173,11 @@ fn layout_asserts(
     layout: &nts_core::hir::native::Record,
     shape: &nts_core::hir::layout::Placement,
 ) {
-    let tag = format!("{} {}", layout.kind.keyword(), layout.name);
+    let tag = if layout.spelled_bare() {
+        layout.name.clone()
+    } else {
+        format!("{} {}", layout.kind.keyword(), layout.name)
+    };
     writer.line(origin, format!("_Static_assert(sizeof({tag}) == {}u, \"native struct size\");", shape.size));
     writer.line(origin, format!("_Static_assert(_Alignof({tag}) == {}u, \"native struct alignment\");", shape.align));
     for (field, offset) in layout.fields.iter().zip(&shape.offsets) {
@@ -370,7 +382,13 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         if !layout.from_header() || layout.untagged() { continue; }
         let placed = nts_core::hir::layout::native_place(layout)
             .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
-        let tag = format!("{} {}", layout.kind.keyword(), layout.name);
+        // `__sigset_t`, not `struct __sigset_t`: a typedef-named record has
+        // no tag to write, and every assertion below names the type.
+        let tag = if layout.spelled_bare() {
+            layout.name.clone()
+        } else {
+            format!("{} {}", layout.kind.keyword(), layout.name)
+        };
         writer.line(origin, format!("_Static_assert(sizeof({tag}) == {}u, \"{} size\");", placed.size, layout.name));
         writer.line(origin, format!("_Static_assert(_Alignof({tag}) == {}u, \"{} alignment\");", placed.align, layout.name));
         for (field, offset) in layout.fields.iter().zip(placed.offsets) {

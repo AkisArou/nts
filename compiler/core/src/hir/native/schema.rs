@@ -203,7 +203,12 @@ fn structure(
     // the header's too, however deep.
     let foreign = !tag.is_empty();
     let from_header = foreign.then(|| declaring_module(snapshot, parent)).flatten();
-    let naming = if foreign {
+    // `Typedef<...>` says the name is a typedef rather than a tag, which
+    // changes only how C spells the type. Read before the tagged case, which it
+    // is otherwise identical to.
+    let naming = if foreign && marker(snapshot, ty, "___c_typedef").is_some() {
+        super::Naming::Typedef { from_header }
+    } else if foreign {
         super::Naming::Tagged { from_header }
     } else if within_header {
         super::Naming::Untagged

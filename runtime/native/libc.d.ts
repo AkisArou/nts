@@ -41,6 +41,19 @@ declare module "c:types" {
   // `Packed<Struct<{...}, "epoll_event">>` and everything that reads a struct
   // keeps reading one.
   export type Packed<T> = T & { readonly __c_packed: true };
+  // The record's name is a **typedef**, not a tag. C spells the type
+  // `__sigset_t` and never `struct __sigset_t`, because
+  // `typedef struct { ... } __sigset_t;` gives the struct no tag at all -- only
+  // a typedef name, which C11 6.7.8 grants for linkage and which is not a name
+  // source may write after `struct`.
+  //
+  // A wrapper rather than a third argument to `Struct`, for the reason `Packed`
+  // is one: it says a thing about the whole record, and a positional flag in a
+  // tag slot reads as part of the name. It is the only thing in this surface
+  // that changes how a type is *spelled* rather than how it is laid out, which
+  // is why it is not inferable -- nothing in `Struct<{...}, "__sigset_t">` says
+  // which of the two the header wrote, and this compiler does not read headers.
+  export type Typedef<T> = T & { readonly __c_typedef: true };
   // A record the header declares **without a tag** needs no marker:
   //
   //     struct in6_addr { union { uint8_t a[16]; uint32_t b[4]; } __in6_u; };

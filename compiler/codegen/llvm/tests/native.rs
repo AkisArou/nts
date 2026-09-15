@@ -270,6 +270,60 @@ fn a_flexible_array_member_reaches_the_bytes_after_the_record() {
     }
 }
 
+/// A record C names only by a typedef, on both backends.
+///
+/// `__sigset_t` is `typedef struct { ... } __sigset_t;` -- no tag, so C spells
+/// it `__sigset_t` and `struct __sigset_t` is a *different*, incomplete type
+/// the header never defines. `caller.c` includes the real `<signal.h>` beside
+/// `program.h`, which is what would fail if this program declared the tagged
+/// one: every assertion would then be about a type nothing defines.
+#[test]
+fn a_record_named_only_by_a_typedef_is_spelled_without_the_keyword() {
+    let Some((dir, prepared)) = prepare_with_files(
+        "typedef",
+        include_str!("../../common/test-support/native-typedef/main.ts"),
+        hir::Provider::NoGc,
+        &[(
+            "signal.d.ts",
+            include_str!("../../common/test-support/native-typedef/signal.d.ts"),
+        )],
+    ) else {
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    std::fs::write(
+        dir.join("caller.c"),
+        include_str!("../../common/test-support/native-typedef/caller.c"),
+    )
+    .unwrap();
+    for source in ["caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+    }
+    // The witness names the type in every assertion it makes, so it is the file
+    // that stops compiling first if the keyword comes back.
+    clang(&dir, &["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "native_witness.c"]);
+    for (source, object, binary) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "caller.o", "nts_runtime.o", "-lm", "-o", binary]);
+        assert!(
+            Command::new(dir.join(binary)).status().unwrap().success(),
+            "{binary}"
+        );
+    }
+}
+
 #[test]
 fn aggregate_arguments_respect_register_exhaustion() {
     let mut ts = String::new();

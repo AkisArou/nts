@@ -115,11 +115,31 @@ enum Shape {
     FnPointer(Vec<Shape>, Box<Option<Shape>>),
 }
 
+/// How a header names a record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Naming {
+    /// `struct rusage` -- a tag, spelled with its keyword.
+    Tagged,
+    /// `typedef struct { ... } __sigset_t;` -- no tag at all, so C spells the
+    /// type `__sigset_t`, and `struct __sigset_t` is a different, incomplete
+    /// type the header never defines.
+    Typedef,
+    /// Written inside another record with no name of its own. It has no
+    /// spelling in C at all, and its layout is checked through its holder.
+    Anonymous,
+}
+
 #[derive(Debug, Clone)]
 struct Record {
+    /// How C names this type, which decides how it is spelled.
+    ///
+    /// Three states rather than two bools: they are one fact and two of the
+    /// four combinations do not exist -- a record with no tag cannot also be
+    /// named by one. `hir::native::Naming` records the same thing for the same
+    /// reason, and clippy's "more than 3 bools" was right about both.
+    naming: Naming,
     tag: String,
     /// A name this tool invented, because the header gave the type none.
-    anonymous: bool,
     union: bool,
     packed: bool,
     members: Vec<Member>,
@@ -296,14 +316,20 @@ pub(crate) fn run(request: &Request) -> Result<String> {
         // An anonymous record has no tag, so `sizeof` cannot name it. Its
         // layout is checked through the record that holds it: that record's
         // size and its members' offsets both move if this one is wrong.
-        if record.anonymous {
+        if record.naming == Naming::Anonymous {
             continue;
         }
-        let keyword = if record.union { "union" } else { "struct" };
+        // A typedef-named record is spelled bare: `sizeof(__sigset_t)`, since
+        // `struct __sigset_t` is an incomplete type the header never defines.
+        let spelled = if record.naming == Naming::Typedef {
+            record.tag.clone()
+        } else {
+            format!("{} {}", if record.union { "union" } else { "struct" }, record.tag)
+        };
         let _ = writeln!(
             text,
-            "_Static_assert(sizeof({keyword} {}) > 0, \"{}\");",
-            record.tag, record.tag
+            "_Static_assert(sizeof({spelled}) > 0, \"{}\");",
+            record.tag
         );
     }
     std::fs::write(&layout, text).with_context(|| format!("writing {}", layout.display()))?;
@@ -434,9 +460,49 @@ impl Binding {
                 && n.get("completeDefinition") == Some(&serde_json::Value::Bool(true))
                 && n.get("name").and_then(serde_json::Value::as_str) == Some(tag)
         }) else {
-            return Ok(None);
+            // A typedef of a record the header left untagged. C spells the type
+            // by the typedef name, so it is describable -- what it lacks is a
+            // *tag*, and the surface says so with `Typedef<...>` rather than
+            // refusing the record. Reached only when no `RecordDecl` of that
+            // name exists, so a tagged type is never read this way.
+            let Some(node) = Self::typedef_target(nodes, tag) else {
+                return Ok(None);
+            };
+            let (mut record, nested) = Self::record_from(node, tag, typedefs)?;
+            record.naming = Naming::Typedef;
+            return Ok(Some((record, nested)));
         };
         Self::record_from(node, tag, typedefs).map(Some)
+    }
+
+    /// The unnamed `RecordDecl` a typedef of this name points at, if any.
+    ///
+    /// Matched by the id on the typedef's `RecordType` rather than by which
+    /// node precedes which: the parse is walked depth-first and a record's own
+    /// fields sit between it and the typedef that follows it.
+    fn typedef_target<'a>(
+        nodes: &[&'a serde_json::Value],
+        tag: &str,
+    ) -> Option<&'a serde_json::Value> {
+        let declared = nodes.iter().find_map(|node| {
+            (node.get("kind").and_then(serde_json::Value::as_str) == Some("TypedefDecl")
+                && node.get("name").and_then(serde_json::Value::as_str) == Some(tag))
+            .then(|| {
+                children(node)
+                    .iter()
+                    .find_map(|inner| inner.get("decl")?.get("id")?.as_str())
+            })
+            .flatten()
+        })?;
+        nodes
+            .iter()
+            .copied()
+            .find(|node| {
+                node.get("kind").and_then(serde_json::Value::as_str) == Some("RecordDecl")
+                    && node.get("id").and_then(serde_json::Value::as_str) == Some(declared)
+                    && node.get("completeDefinition") == Some(&serde_json::Value::Bool(true))
+                    && node.get("name").is_none()
+            })
     }
 
     /// The same, from a declaration already in hand -- which is how an
@@ -600,7 +666,7 @@ impl Binding {
                 };
                 let invented = format!("{tag}_{member}");
                 let (mut inner, deeper) = Self::describe(declaration, &invented, typedefs)?;
-                inner.anonymous = true;
+                inner.naming = Naming::Anonymous;
                 nested.push(inner);
                 nested.extend(deeper);
                 Shape::AnonymousRecord(invented)
@@ -625,7 +691,7 @@ impl Binding {
             )]);
         }
         Ok((
-            Record { tag: tag.to_owned(), anonymous: false, union, packed, members },
+            Record { tag: tag.to_owned(), naming: Naming::Tagged, union, packed, members },
             nested,
         ))
     }
@@ -1170,10 +1236,20 @@ fn parse_layouts(text: &str) -> BTreeMap<String, Observed> {
             // The record's own line. A tag it is: `struct epoll_event`, or an
             // anonymous one clang spells with a source location, which is not
             // a name a binding can carry and is left for `check` to miss.
+            // `struct rusage`, `union epoll_data` -- or, for a record C names
+            // only by a typedef, the bare name with no keyword at all: clang
+            // dumps `__sigset_t`, because there is no tag to print. An
+            // anonymous one is `struct x::(anonymous at ...)`, which the space
+            // excludes either way.
             tag = body
                 .strip_prefix("struct ")
                 .or_else(|| body.strip_prefix("union "))
-                .filter(|rest| !rest.contains(' '))
+                .or(Some(body))
+                .filter(|rest| {
+                    !rest.is_empty()
+                        && !rest.contains(' ')
+                        && rest.chars().all(|c| c.is_alphanumeric() || c == '_')
+                })
                 .map(str::to_owned);
             offsets.clear();
             named.clear();
@@ -1210,7 +1286,7 @@ impl Binding {
     /// against the headers a consumer really compiles with, under their macros.
     fn check(&self, observed: &BTreeMap<String, Observed>) -> Result<()> {
         for record in self.records.values() {
-            if record.anonymous {
+            if record.naming == Naming::Anonymous {
                 continue;
             }
             let Some(seen) = observed.get(&record.tag) else {
@@ -1476,12 +1552,16 @@ impl Binding {
         Ok(())
     }
 
-    fn render(&self, request: &Request) -> String {
+    /// Every name this binding's spellings need imported from `c:types`.
+    fn imports_needed(&self) -> BTreeSet<&'static str> {
         let mut needed: BTreeSet<&'static str> = BTreeSet::new();
         for record in self.records.values() {
             needed.insert(if record.union { "Union" } else { "Struct" });
             if record.packed {
                 needed.insert("Packed");
+            }
+            if record.naming == Naming::Typedef {
+                needed.insert("Typedef");
             }
 
             for member in &record.members {
@@ -1497,6 +1577,11 @@ impl Binding {
             }
         }
 
+        needed
+    }
+
+    fn render(&self, request: &Request) -> String {
+        let needed = self.imports_needed();
         let mut out = String::new();
         out.push_str("// Generated by `nts bind-c`. Edit the command, not this file.\n//\n");
         out.push_str("// Derived from one compiler's reading of these headers under these macros,\n");
@@ -1538,7 +1623,10 @@ impl Binding {
             // enclosing record's tag, since a header-defined struct's members
             // have the header's types. A tag invented here would be a second
             // type beside the header's and would not compile.
-            let body = if record.anonymous {
+            let body = if record.naming == Naming::Typedef {
+                // The name is a typedef, so C writes it without a keyword.
+                format!("Typedef<{keyword}<{{\n{members}\n  }}, \"{}\">>", record.tag)
+            } else if record.naming == Naming::Anonymous {
                 format!("{keyword}<{{\n{members}\n  }}>")
             } else {
                 format!("{keyword}<{{\n{members}\n  }}, \"{}\">", record.tag)
@@ -1697,7 +1785,7 @@ mod tests {
     fn record(tag: &str, union: bool, packed: bool, members: &[(&str, Shape)]) -> Record {
         Record {
             tag: tag.to_owned(),
-            anonymous: false,
+            naming: Naming::Tagged,
             union,
             packed,
             members: members
