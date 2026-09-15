@@ -19,12 +19,12 @@ export default defineConfig({
   ],
 
   manifests: [
-    manifest({ target: "android-29", path: "manifests/android.xml" }),
+    manifest({ targets: ["android-29"], path: "manifests/android.xml" }),
     // Supplies a *key* whose value the consumer must replace. Whether a merged
     // fragment can demand that, rather than silently ship a placeholder into a
     // shipping app, is open.
     manifest({
-      target: "ios-17",
+      targets: ["ios-17"],
       path: "manifests/apple.plist",
       requiresValue: ["NSFaceIDUsageDescription"],
     }),

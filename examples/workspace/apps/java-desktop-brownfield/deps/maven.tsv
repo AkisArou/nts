@@ -1,0 +1,4 @@
+# Exact versions and SHA-256 digests, resolved by Maven and recorded here.
+# The resolved classpath, not the POM: a POM carries ranges and a parent chain,
+# and resolving it again is how the artifact that ships stops being the artifact
+# that was reviewed. See runtime/jvm/web-platform/android/dependencies.tsv.

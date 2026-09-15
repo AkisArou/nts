@@ -46,9 +46,17 @@ export const sources = (spec: NativeSources): NativeSources => spec;
  * background mode fails App Review rather than the build.
  */
 export interface Manifest {
-  /** One target id, or several. `"android-29"`, not a constructed `Target`. */
-  readonly target?: TargetId;
-  readonly targets?: readonly TargetId[];
+  /**
+   * Which targets the fragment is for. `"android-29"`, not a constructed
+   * `Target`.
+   *
+   * **One field, not `target` beside `targets`.** Both were here, both meant the
+   * same axis, and `manifest({ target: "windows", targets: ["linux-gnu"] })`
+   * typechecked -- a fragment claiming two disjoint answers about where it
+   * applies, with nothing deciding which won. `NativeSources` had only the
+   * plural, so the singular was not even consistent with its neighbour.
+   */
+  readonly targets: readonly TargetId[];
   readonly path: string;
   /**
    * Keys the fragment declares and cannot fill.

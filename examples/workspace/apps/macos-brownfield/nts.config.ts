@@ -23,4 +23,11 @@ export default defineConfig({
       // signing: { identity: "...", hardenedRuntime: true, notarize: true },
     }),
   },
+  // A podspec. CocoaPods is both a resolver we read and a build system we emit
+  // for, which is why it is in `Resolver` and in `Integration` -- the same name
+  // naming two different jobs.
+  integrate: ["cocoapods"],
+  dependencies: {
+    "macos-14": { from: "cocoapods", lockfile: "./deps/Podfile.lock" },
+  },
 });

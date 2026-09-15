@@ -1483,6 +1483,26 @@ step "corpus"  corpus
 # did: see the header of the script.
 step "benches"  ./tooling/gate/benches.sh
 step "example-refusals" example_refusals
+
+# `nts.config.ts` against the type package that defines it, plus the fixture's
+# own program.
+#
+# **Nothing checked either.** The configs typecheck under
+# `examples/workspace/tsconfig.configs.json`, which catches a wrong field name
+# and nothing else -- not a target id that two files spell differently, not a
+# constructor the package exports and nothing calls, not a `lockfile` path that
+# is not there. All three were live when this step was written.
+#
+# It builds the fixture's program too, which is the half no audit had covered:
+# `tsc -b tsconfig.solution.json` had never passed, on `baseUrl` removal in
+# TypeScript 7 and five `types: ["@nts/platform-*"]` entries no package
+# provided. The seven `Cannot find module 'c:digest'` errors that remain are
+# expected and counted -- those are the binding modules the compiler generates,
+# and they name the build order rather than a defect.
+#
+# Skips the build when there is no `node_modules/.bin/tsc`, which is what a
+# detached worktree looks like; the config half still runs. Seconds.
+step "config" node tooling/config/audit.mjs
 step "interop" interop
 
 # The 152 fixtures in `tooling/conformance/blockers`, which nothing ran.

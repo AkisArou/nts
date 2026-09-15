@@ -24,4 +24,8 @@ export default defineConfig({
       moduleName: "AcmeSdk",
     }),
   },
+  // A SwiftPM `buildToolPlugin`. Same job as the Gradle plugin and a different
+  // sandbox: a SwiftPM plugin cannot write outside its work directory, so the
+  // XCFramework is a declared output rather than something we drop in place.
+  integrate: ["swiftpm"],
 });

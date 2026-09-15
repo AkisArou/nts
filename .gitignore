@@ -56,3 +56,10 @@ node_modules/
 # points at it. Both are derived from `node_modules` and rebuilt on demand.
 .nts/
 tsconfig.nts.json
+
+# Declaration output from `tsc -b examples/workspace/tsconfig.solution.json`.
+# Composite projects must emit, so the fixture's packages emit declarations into
+# `.types/`. It is not here because it was overlooked: until the baseUrl and
+# platform-surface fixes the solution build failed on every project, so nothing
+# was ever written and there was nothing to ignore.
+.types/

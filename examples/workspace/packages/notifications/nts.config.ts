@@ -61,10 +61,10 @@ export default defineConfig({
   // and a consumer forgetting the iOS background mode fails App Review. Neither
   // is a failure a package should be able to inflict by omission.
   manifests: [
-    manifest({ target: "android-29", path: "manifests/android.xml" }),
+    manifest({ targets: ["android-29"], path: "manifests/android.xml" }),
     manifest({ targets: ["ios-17", "macos-14"], path: "manifests/apple.plist" }),
-    manifest({ target: "windows", path: "manifests/windows.appxmanifest" }),
-    manifest({ target: "linux-gnu", path: "manifests/linux.desktop" }),
+    manifest({ targets: ["windows"], path: "manifests/windows.appxmanifest" }),
+    manifest({ targets: ["linux-gnu"], path: "manifests/linux.desktop" }),
   ],
 
   // **Resolved artefacts, pinned -- not a resolver we drive.**

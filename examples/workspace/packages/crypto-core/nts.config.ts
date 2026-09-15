@@ -9,7 +9,7 @@ import { defineConfig, sources } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
-  targets: ["android-29", "ios-17", "macos-14", "linux-gnu", "windows", "node-addon"],
+  targets: ["android-29", "ios-17", "macos-14", "linux-gnu", "windows", "node-api-8"],
   native: [
     // No `targets`: compiled for every target the consumer builds.
     sources({ dir: "native", header: "native/digest.h" }),

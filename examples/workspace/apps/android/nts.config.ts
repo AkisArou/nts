@@ -11,6 +11,12 @@ export default defineConfig({
       entry: "./src/main.ts",
       id: "dev.example.workspace",
       minSdk: 29,
+      // Built against the API 36 surface, running back to 29 -- the two
+      // numbers Gradle keeps apart as compileSdk and minSdk.
+      compileSdk: 36,
+      // An APK carries one lib/<abi>/ per ABI. Play splits them; a single
+      // arch could not say this.
+      arch: ["aarch64", "armv7"],
     }),
   },
 });

@@ -7,34 +7,87 @@
  * `targets: [...]` list intersects over. Two targets with the same `id` are the
  * same target; `os` and `arch` alone cannot say that, because `android-29` and
  * `android-33` share both.
+ *
+ * ## The surface is not the deployment floor
+ *
+ * These were one field and the audit caught it as a spelling difference, which
+ * is what a conflated fact looks like from outside. `target.ios({
+ * minimumVersion: "17.0" })` produced the id `ios-17.0`, every package declared
+ * `"ios-17"`, and the two never intersected -- so the configuration check those
+ * packages exist to demand would have rejected every iOS app in the fixture, on
+ * a string compare, for a version they agree about.
+ *
+ * Making the id drop the minor would have fixed the symptom. The cause is that
+ * **the SDK you compile against and the oldest OS you run on are different
+ * numbers on every platform here**: Xcode builds against the iOS 18 SDK with a
+ * deployment target of 15.0, and Gradle pairs `compileSdk` with a lower
+ * `minSdk`. The surface belongs to the id because that is what the types come
+ * from; the floor belongs to `minimumVersion` because that is what the linker
+ * and the manifest are told. So both are accepted, and the second defaults to
+ * the first.
  */
 
 /** Backends the compiler can lower to (RFC §6.2). */
 export type Backend = "c" | "llvm" | "jvm";
 
-/** Architectures a native target can be built for. */
-export type Arch = "x86_64" | "aarch64" | "armv7" | "wasm32";
+/**
+ * Backends that produce a native object. `Backend` minus the JVM, and a real
+ * distinction rather than a convenience: `target.linux({ backend: "jvm" })`
+ * typechecked and produced the id `linux-gnu`, which names a libc type surface
+ * a program on the JVM does not have. A desktop JVM target is `target.jvm`.
+ */
+export type NativeBackend = Exclude<Backend, "jvm">;
 
 /**
- * The stable name of a target.
+ * Architectures a native target can be built for.
+ *
+ * `wasm32` was here and is gone: no backend emits it, no target constructor
+ * could produce it, and it was reachable only as `target.linux({ arch:
+ * "wasm32" })`, which is not a thing. It comes back with a target.
+ */
+export type Arch = "x86_64" | "aarch64" | "armv7";
+
+/**
+ * The stable name of a target: the platform **type surface**.
  *
  * A **package** declares support in ids -- `"android-29"` -- because it is
  * making a claim, not composing a build. A **product** carries constructed
  * `Target`s, because it is the thing being built. The id is the bridge: it names
  * the prelude package, keys the cache, and is what a target set intersects over.
+ *
+ * Spelled as a pattern rather than `string` for the same reason it is spelled at
+ * all. The two sides of that bridge are written in different files by different
+ * people, and `string` accepts `"andriod-29"`, `"linux"` and `"ios-17.0"`
+ * equally. A pattern does not catch a wrong *number*, which is why the
+ * constructors below derive theirs rather than taking one.
  */
-export type TargetId = string;
+export type TargetId =
+  | `android-${number}`
+  | `java-${number}`
+  | `ios-${number}`
+  | `macos-${number}`
+  | `node-api-${number}`
+  | "linux-gnu"
+  | "windows";
 
 /** A resolved compilation target (RFC §6.1). */
 export interface Target {
-  /** Stable name: the prelude package, the cache key, the intersection key. */
-  readonly id: string;
+  /** Stable name of the type surface: the prelude package, the cache key. */
+  readonly id: TargetId;
   readonly os: string;
   readonly arch?: Arch;
   readonly backend: Backend;
-  /** Minimum platform version, where the platform has one. */
+  /**
+   * Oldest platform version the artifact runs on, where the platform has one.
+   *
+   * Not the same number as the id's. The id is what the program typechecks
+   * against and this is what it is allowed to assume at run time.
+   */
   readonly minimumVersion?: string;
 }
+
+/** `"17.0"` and `"17"` name one SDK. The id takes the major. */
+const major = (version: string): number => Number.parseInt(version, 10);
 
 /**
  * Target constructors.
@@ -44,8 +97,16 @@ export interface Target {
  * both for either and mean neither.
  */
 export const target = {
-  android: (o: { readonly minSdk: number; readonly arch?: Arch }): Target => ({
-    id: `android-${o.minSdk}`,
+  /**
+   * Android. `compileSdk` is the `android.jar` bound against and `minSdk` is the
+   * manifest floor; Gradle keeps them apart and so does this.
+   */
+  android: (o: {
+    readonly minSdk: number;
+    readonly compileSdk?: number;
+    readonly arch?: Arch;
+  }): Target => ({
+    id: `android-${o.compileSdk ?? o.minSdk}`,
     os: "android",
     arch: o.arch ?? "aarch64",
     backend: "jvm",
@@ -55,29 +116,38 @@ export const target = {
   /** Desktop JVM. `release` is the `javac --release` level, and the default is
    *  8 because that is what `runtime/jvm/build.sh` builds the runtime jar at. */
   jvm: (o: { readonly release?: number } = {}): Target => ({
-    id: `java${o.release ?? 8}`,
+    id: `java-${o.release ?? 8}`,
     os: "jvm",
     backend: "jvm",
     minimumVersion: String(o.release ?? 8),
   }),
 
-  ios: (o: { readonly minimumVersion: string; readonly arch?: Arch }): Target => ({
-    id: `ios-${o.minimumVersion}`,
+  /** iOS. `sdk` is the SDK major; it defaults to the deployment target's. */
+  ios: (o: {
+    readonly minimumVersion: string;
+    readonly sdk?: number;
+    readonly arch?: Arch;
+  }): Target => ({
+    id: `ios-${o.sdk ?? major(o.minimumVersion)}`,
     os: "ios",
     arch: o.arch ?? "aarch64",
     backend: "llvm",
     minimumVersion: o.minimumVersion,
   }),
 
-  macos: (o: { readonly minimumVersion: string; readonly arch?: Arch }): Target => ({
-    id: `macos-${o.minimumVersion}`,
+  macos: (o: {
+    readonly minimumVersion: string;
+    readonly sdk?: number;
+    readonly arch?: Arch;
+  }): Target => ({
+    id: `macos-${o.sdk ?? major(o.minimumVersion)}`,
     os: "macos",
     arch: o.arch ?? "aarch64",
     backend: "llvm",
     minimumVersion: o.minimumVersion,
   }),
 
-  linux: (o: { readonly arch?: Arch; readonly backend?: Backend } = {}): Target => ({
+  linux: (o: { readonly arch?: Arch; readonly backend?: NativeBackend } = {}): Target => ({
     id: "linux-gnu",
     os: "linux",
     arch: o.arch ?? "x86_64",
@@ -91,10 +161,23 @@ export const target = {
     backend: "llvm",
   }),
 
-  /** A Node addon. The only target whose artifact is a library to its host. */
-  node: (o: { readonly arch?: Arch } = {}): Target => ({
-    id: "node-addon",
-    os: "node",
+  /**
+   * A Node addon. The only target whose artifact is a library to its host.
+   *
+   * **The Node-API version is the surface, so it is the id.** That is the whole
+   * point of targeting N-API: one binary keeps working across Node majors
+   * because the ABI is versioned, and the version decides which functions exist
+   * -- which is what a type surface is. `os` and `arch` are the machine, and
+   * several of them share one id, because a darwin-arm64 addon and a linux-x64
+   * addon typecheck against exactly the same thing.
+   */
+  node: (o: {
+    readonly apiVersion?: number;
+    readonly os?: string;
+    readonly arch?: Arch;
+  } = {}): Target => ({
+    id: `node-api-${o.apiVersion ?? 8}`,
+    os: o.os ?? "linux",
     arch: o.arch ?? "x86_64",
     backend: "c",
   }),

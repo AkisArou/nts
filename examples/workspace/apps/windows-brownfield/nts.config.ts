@@ -17,6 +17,18 @@ export default defineConfig({
     sdk: library.native({
       targets: [target.windows()],
       entry: "./nts/sdk.ts",
+      // As on Linux: the namespace belongs in the config, not in the
+      // identifiers. `src/main.cpp` links `acme_remember` either way.
+      prefix: "acme_",
     }),
+  },
+  // An MSBuild `.targets` import. The one ecosystem where the hook and the
+  // package format are separable: NuGet ships the `.targets` that runs us.
+  integrate: ["msbuild"],
+  // vcpkg for the C++ half. NuGet is the other answer and they are not
+  // interchangeable -- shipping for one leaves half the consumers unable to
+  // resolve you, which is the same bind as SwiftPM against CocoaPods on Apple.
+  dependencies: {
+    windows: { from: "vcpkg", lockfile: "./deps/vcpkg.json" },
   },
 });

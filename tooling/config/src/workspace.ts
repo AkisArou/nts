@@ -39,7 +39,14 @@ export interface Workspace {
  * and outputs** to the host, or every consumer build is a full rebuild, which is
  * the difference between a plugin that works and one that is switched off.
  */
-export type Integration = "gradle" | "swiftpm" | "cmake" | "msbuild" | "maven" | "npm";
+export type Integration =
+  | "gradle"
+  | "swiftpm"
+  | "cocoapods"
+  | "cmake"
+  | "msbuild"
+  | "maven"
+  | "npm";
 
 export interface Config {
   /**
@@ -48,6 +55,14 @@ export interface Config {
    * **Optional, defaulting to `./tsconfig.json` beside this file.** It was
    * mandatory and should not have been: every config in the workspace fixture
    * wrote the same string. Named only when it differs.
+   *
+   * **A root config that declares only `workspace` has no program**, so the
+   * default does not apply to it. That is not a special case invented for this
+   * sentence: `examples/workspace/nts.config.ts` names its shared settings
+   * `tsconfig.base.json` on purpose, because the gate globs every
+   * `tsconfig.json` one level under `examples/` -- so the default resolved to a
+   * file
+   * that deliberately does not exist, and the audit's path check found it.
    *
    * Referenced and never restated -- `files`, `include` and the project
    * references live there, so the two files cannot disagree about what the

@@ -407,7 +407,8 @@ entry. That is clearest on a Node addon, where the artifact's surface is
 literally the module's exports and there is no visibility mechanism underneath
 for a config to select from.
 
-`examples/library`'s whole product is now `library.linux({ entry })`.
+`examples/library`'s whole product is now
+`library.native({ targets: [target.linux()], entry })`.
 
 ### An XCFramework is not the Apple `.so`, and the artifact is chosen by consumption
 
@@ -455,6 +456,109 @@ not choose; the default derives from the product name and version.
 The fixture shows the consequence: `macos-brownfield` uses `library.xcframework`
 because it ships through CocoaPods, and that now reads as a decision rather than
 as what macOS happens to produce.
+
+### Audited by an instrument, and it found what reading had not
+
+The three rounds above were read out of the source by hand. This one is
+`tooling/config/audit.mjs`, a gate step: it evaluates every `nts.config.ts` in
+the tree against the package that defines it, builds the fixture's program, and
+asks eleven questions whose answers depend on the input. Every question that
+reports nothing has been shown to fire on a mutation -- one of them on a
+*discriminating pair*, where a package claiming `android-30` is a finding and the
+same claim at `android-29` is not.
+
+It was worth building because reading found the fields and missed the facts.
+
+**The id conflated an SDK with a deployment floor.** `target.ios({
+minimumVersion: "17.0" })` produced `ios-17.0`; every package declared
+`"ios-17"`; the two never intersected. So the configuration check those packages
+exist to demand -- fail by name rather than at link time with a missing symbol --
+would have rejected every iOS app in the fixture, over a string compare, for a
+version both sides agree about.
+
+Dropping the minor fixes the symptom. The cause is that **the SDK you compile
+against and the oldest OS you run on are different numbers on every platform
+here**: Xcode builds against the iOS 18 SDK with a deployment target of 15.0,
+Gradle pairs `compileSdk` with a lower `minSdk`. The surface belongs to the id
+because that is where the types come from; the floor belongs to `minimumVersion`
+because that is what the linker and the manifest are told. Both are now accepted
+and the second defaults to the first.
+
+Then the fix exposed a second conflation one level up. With `apps/android` saying
+`compileSdk: 36` out loud, the audit reported that no package claims
+`android-36` -- correctly, and it is not a defect. **Id equality is the wrong
+satisfaction rule.** A package declaring `"android-29"` is claiming it needs API
+29 *at run time*, and an app compiled against 36 with a `minSdk` of 29 satisfies
+it. So a claim is compared by family, and its version against the consumer's
+floor.
+
+**`Integration` was covered 0 of 6, and the first instrument said 2 of 6.** It
+collected every string in every config into one bag, and `"gradle"` and
+`"swiftpm"` are `Resolver` members too -- so one union's coverage answered for
+another's. Coverage is now read from the field each union is written in. The
+six build-system hooks, and the whole `integrate` field, were set by no fixture
+at all; the seven brownfield apps are exactly the consumers that need them, and
+now declare one each.
+
+**The fixture's program sources had never typechecked.** Nothing had run `tsc -b
+tsconfig.solution.json`, and it failed on every project: `baseUrl` is removed in
+TypeScript 7, and five `types: ["@nts/platform-*"]` entries named surface
+packages that existed nowhere in the tree. The earlier rounds reported the
+configs CLEAN and were right about the configs -- a measurement's population is
+part of its claim. The surfaces are now placeholder packages under
+`types/@nts/`, deliberately empty rather than sketched, because a surface with
+three invented declarations is a claim about an API nobody has read.
+
+Seven errors remain and are counted rather than fixed: `c:digest`,
+`java:com.example.notifications`, `swift:Notifications`,
+`winrt:Example.Notifications`. Those are the binding modules the compiler
+generates from `native: [...]`, and they cannot resolve before `nts` runs. That
+is the build order the `integrate` hooks exist to enforce -- bind, typecheck,
+emit, then compile the native bodies -- so it is a fact about the pipeline rather
+than a defect, and the audit fails on any error that is not one of them.
+
+#### What the coverage questions turned up
+
+- **`static-library` was constructible and nothing built one**, so nothing had
+  ever checked that it differs from a shared library only in packaging.
+  `apps/linux-brownfield` now ships both, which is what a real C SDK does.
+- **`NativeLibraryProduct` had no way to name its namespace.** An AAR has
+  `javaPackage` and an XCFramework has `moduleName`; C has one flat namespace per
+  process, so `remember` from two libraries is a silent interposition at load
+  rather than a link error. The fixture had this written in a *comment*, as
+  something a shared library owes its consumer, and had encoded it in the
+  identifiers instead -- `export function acme_remember`. `prefix: "acme_"` is
+  the field; the sources dropped the manual prefix and `src/main.cpp` links the
+  same symbol.
+- **A Node addon said where it runs twice.** `platforms: ["darwin-arm64", ...]`
+  was bare strings beside a `targets` field that said x86_64 -- two spellings of
+  one axis, already disagreeing. `apiVersion` moved to the target, because the
+  Node-API version *is* the surface, and the machines became targets that share
+  it.
+- **A manifest fragment could claim two disjoint answers.** `Manifest` had
+  `target` beside `targets`, both meant the same axis, and nothing decided which
+  won. One field.
+- **`exports` was set by nothing**, one round after being relaxed from required
+  because eight of eight uses restated the entry's exports. It now has the one
+  case it is for and no more: `apps/linux-brownfield` exports `dumpState` because
+  its own tests import it, and the ABI publishes two names.
+- **Four `lockfile` paths pointed at files that were not there** -- written one
+  commit earlier by the fix for `Resolver` coverage. Every path a config names is
+  now checked, and the same check found that the workspace root's *default*
+  `./tsconfig.json` does not exist: that fixture names its shared settings
+  `tsconfig.base.json` on purpose, and a root config declaring only `workspace`
+  has no program for the default to point at.
+- **`wasm32` was in `Arch`** and reachable only as `target.linux({ arch:
+  "wasm32" })`. No backend emits it. `armv7` stayed and is now real:
+  `apps/android` ships two ABIs, which is what an APK does.
+- **`target.linux({ backend: "jvm" })` typechecked**, producing the id
+  `linux-gnu` -- a libc type surface a program on the JVM does not have. The
+  native constructors take `NativeBackend`.
+
+One exemption is named rather than skipped: the bare `library()` callable is
+called by no fixture, and every library kind has a constructor, so there is
+nothing left for it to express until a kind exists that has none. `app()` bare is
+used, by `apps/react`.
 
 ### What the audit is really about
 

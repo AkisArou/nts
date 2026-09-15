@@ -28,6 +28,15 @@ export default defineConfig({
       // name and is wrong for a shipped library: `docs/jvm-interop.md` lists it
       // under packaging gaps.
       javaPackage: "com.acme.sdk",
+
+      // Shipped inside the AAR as `consumerProguardFiles`, so the consumer's R8
+      // keeps what our reflection reaches. The comment above has claimed this
+      // since the file was written and no field said it.
+      consumerProguard: "./proguard-rules.pro",
     }),
   },
+  // A Gradle plugin registering our compile as a task wired into `preBuild`,
+  // declaring its inputs and outputs so a consumer build is not a full rebuild
+  // every time. Without a hook the consumer runs us by hand and forgets.
+  integrate: ["gradle"],
 });

@@ -1,0 +1,6 @@
+{
+  "name": "@nts/platform-ios-17",
+  "version": "0.0.0",
+  "private": true,
+  "types": "index.d.ts"
+}

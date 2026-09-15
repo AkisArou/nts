@@ -32,7 +32,7 @@
  * None of this is a judgement about the RFC; it is day-one text, and these are
  * the parts that had not met an implementation yet.
  */
-import type { Arch, Backend, Target } from "./target.ts";
+import type { Arch, NativeBackend, Target } from "./target.ts";
 import { target as t } from "./target.ts";
 
 /** Everything a build can emit. Each value is produced by a constructor below. */
@@ -154,14 +154,42 @@ export interface NativeLibraryProduct extends LibraryBase {
   readonly soname?: string;
   /** The installed header. Defaults to the product name. */
   readonly header?: string;
+  /**
+   * Prefix on every exported C symbol. Defaults to the product name.
+   *
+   * The one library kind that had no way to name its namespace. An AAR has
+   * `javaPackage` and an XCFramework has `moduleName`; C has one flat namespace
+   * per process, so `digest` from two libraries is a silent interposition at
+   * load rather than a link error -- and `apps/linux-brownfield` had this
+   * written in a comment, as something a shared library owes its consumer, with
+   * no field to say it in.
+   */
+  readonly prefix?: string;
 }
 
+/**
+ * A Node addon.
+ *
+ * **`apiVersion` and `platforms` are both gone from this type**, and for the two
+ * different reasons this audit keeps finding.
+ *
+ * `apiVersion` moved to the target, because the Node-API version *is* the type
+ * surface -- it decides which functions exist, which is the thing an id names.
+ *
+ * `platforms` was `readonly string[]`, held `["darwin-arm64", "linux-x64"]`, and
+ * described where the addon runs. So does `targets`. Two fields for one axis,
+ * one of them bare strings a typo passes through, and the fixture had them
+ * disagreeing already: `targets` said x86_64 and `platforms` named four
+ * machines including two that were not it. The fan-out is `targets`, and
+ * `library.node({ platforms })` still writes it that way -- it builds them.
+ *
+ * There is no namespace field, and that is not the omission `prefix` was. A
+ * `.node` is opened with `dlopen` and publishes through its N-API registration
+ * rather than through exported C symbols, so there is no flat namespace for two
+ * addons to collide in.
+ */
 export interface NodeAddonProduct extends LibraryBase {
   readonly kind: "node-addon";
-  /** Node-API version. This is what makes one binary work across Node majors. */
-  readonly apiVersion: number;
-  /** One binary per platform-arch; five before musl. */
-  readonly platforms?: readonly string[];
 }
 
 export type LibraryProduct =
@@ -190,25 +218,41 @@ const appBase = (
 ): AppProduct => ({ kind: spec.kind ?? "application", ...spec });
 
 export const app = Object.assign(appBase, {
-  android: (o: AppOpts & { readonly minSdk: number; readonly arch?: Arch }): AppProduct => {
-    const { minSdk, arch, ...rest } = o;
-    return { kind: "application", targets: [t.android({ minSdk, arch })], ...rest };
+  /**
+   * `arch` takes several, because an Android app normally ships several. An APK
+   * carries one `lib/<abi>/` directory per ABI and Play splits them; one arch
+   * was the shape that could not say `arm64-v8a` beside `armeabi-v7a`.
+   */
+  android: (
+    o: AppOpts & {
+      readonly minSdk: number;
+      readonly compileSdk?: number;
+      readonly arch?: Arch | readonly Arch[];
+    },
+  ): AppProduct => {
+    const { minSdk, compileSdk, arch, ...rest } = o;
+    const arches = arch === undefined ? [undefined] : Array.isArray(arch) ? arch : [arch as Arch];
+    return {
+      kind: "application",
+      targets: arches.map((a) => t.android({ minSdk, compileSdk, arch: a })),
+      ...rest,
+    };
   },
-  ios: (o: AppOpts & { readonly minimumVersion: string }): AppProduct => {
-    const { minimumVersion, ...rest } = o;
-    return { kind: "application", targets: [t.ios({ minimumVersion })], ...rest };
+  ios: (o: AppOpts & { readonly minimumVersion: string; readonly sdk?: number }): AppProduct => {
+    const { minimumVersion, sdk, ...rest } = o;
+    return { kind: "application", targets: [t.ios({ minimumVersion, sdk })], ...rest };
   },
-  macos: (o: AppOpts & { readonly minimumVersion: string }): AppProduct => {
-    const { minimumVersion, ...rest } = o;
-    return { kind: "application", targets: [t.macos({ minimumVersion })], ...rest };
+  macos: (o: AppOpts & { readonly minimumVersion: string; readonly sdk?: number }): AppProduct => {
+    const { minimumVersion, sdk, ...rest } = o;
+    return { kind: "application", targets: [t.macos({ minimumVersion, sdk })], ...rest };
   },
-  linux: (o: AppOpts & { readonly backend?: Backend }): AppProduct => {
+  linux: (o: AppOpts & { readonly backend?: NativeBackend }): AppProduct => {
     const { backend, ...rest } = o;
     return { kind: "application", targets: [t.linux({ backend })], ...rest };
   },
   windows: (o: AppOpts): AppProduct => ({ kind: "application", targets: [t.windows()], ...o }),
   /** No UI host: a CLI. The narrowest artifact here. */
-  cli: (o: AppOpts & { readonly backend?: Backend }): AppProduct => {
+  cli: (o: AppOpts & { readonly backend?: NativeBackend }): AppProduct => {
     const { backend, ...rest } = o;
     return { kind: "executable", targets: [t.linux({ backend: backend ?? "c" })], ...rest };
   },
@@ -219,10 +263,13 @@ const libraryBase = (spec: LibraryProduct): LibraryProduct => spec;
 export const library = Object.assign(libraryBase, {
   /** An AAR, because a directory of class files is not a thing Gradle resolves. */
   android: (
-    o: Omit<AarProduct, "kind" | "targets"> & { readonly minSdk: number },
+    o: Omit<AarProduct, "kind" | "targets"> & {
+      readonly minSdk: number;
+      readonly compileSdk?: number;
+    },
   ): AarProduct => {
-    const { minSdk, ...rest } = o;
-    return { kind: "aar", targets: [t.android({ minSdk })], ...rest };
+    const { minSdk, compileSdk, ...rest } = o;
+    return { kind: "aar", targets: [t.android({ minSdk, compileSdk })], ...rest };
   },
 
   /** A jar. The easiest target to ship to, and the one `nts.gen` makes unacceptable today. */
@@ -268,9 +315,18 @@ export const library = Object.assign(libraryBase, {
   }),
 
   /** A Node addon, the one artifact that is real today (`emit-c --napi`). */
-  node: (o: Omit<NodeAddonProduct, "kind" | "targets">): NodeAddonProduct => ({
-    kind: "node-addon",
-    targets: [t.node()],
-    ...o,
-  }),
+  node: (
+    o: Omit<NodeAddonProduct, "kind" | "targets"> & {
+      readonly apiVersion?: number;
+      readonly platforms?: readonly { readonly os: string; readonly arch: Arch }[];
+    },
+  ): NodeAddonProduct => {
+    const { apiVersion, platforms, ...rest } = o;
+    const machines = platforms ?? [{ os: "linux", arch: "x86_64" as const }];
+    return {
+      kind: "node-addon",
+      targets: machines.map((m) => t.node({ apiVersion, os: m.os, arch: m.arch })),
+      ...rest,
+    };
+  },
 });

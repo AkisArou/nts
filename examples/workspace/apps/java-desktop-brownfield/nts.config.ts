@@ -25,4 +25,12 @@ export default defineConfig({
       javaPackage: "com.acme.sdk",
     }),
   },
+  // A Maven plugin bound to `generate-sources`. The simplest hook here, because
+  // the lifecycle phase already exists and means exactly this.
+  integrate: ["maven"],
+  // Maven's resolved output, not its POM. Same rule as everywhere else here:
+  // read what a resolver produced, never drive the resolver.
+  dependencies: {
+    "java-8": { from: "maven", lockfile: "./deps/maven.tsv" },
+  },
 });

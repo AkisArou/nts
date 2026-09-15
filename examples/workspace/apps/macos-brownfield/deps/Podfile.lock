@@ -1,0 +1,6 @@
+# CocoaPods' own resolved output, copied in rather than re-resolved.
+#
+# The same file the consuming app already commits -- which is the point: this is
+# read, never produced, and never a `pod install` we drive.
+PODS: []
+COCOAPODS: 1.15.2

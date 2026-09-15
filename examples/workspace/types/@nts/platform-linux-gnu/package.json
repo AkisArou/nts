@@ -1,0 +1,6 @@
+{
+  "name": "@nts/platform-linux-gnu",
+  "version": "0.0.0",
+  "private": true,
+  "types": "index.d.ts"
+}

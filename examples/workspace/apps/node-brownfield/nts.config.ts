@@ -18,7 +18,22 @@ export default defineConfig({
     addon: library.node({
       entry: "./nts/sdk.ts",
       apiVersion: 8,
-      platforms: ["darwin-arm64", "darwin-x64", "linux-x64", "win32-x64"],
+      // These become `targets`, all sharing the `node-api-8` id: one Node-API
+      // surface, four machines. They used to be bare strings in a `platforms`
+      // field beside a `targets` field that said x86_64 -- two spellings of one
+      // axis, already disagreeing.
+      platforms: [
+        { os: "darwin", arch: "aarch64" },
+        { os: "darwin", arch: "x86_64" },
+        { os: "linux", arch: "x86_64" },
+        { os: "win32", arch: "x86_64" },
+      ],
     }),
+  },
+  // An npm lifecycle script. The weakest of the seven: `prepare` runs on
+  // install, there is no input/output declaration, so every install rebuilds.
+  integrate: ["npm"],
+  dependencies: {
+    "node-api-8": { from: "npm", lockfile: "./deps/package-lock.json" },
   },
 });

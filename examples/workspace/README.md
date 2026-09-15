@@ -51,11 +51,17 @@ What changed, and every item came from writing a config against it:
   rewrite. The kinds are now `aar`, `jar`, `xcframework`, `shared-library`,
   `static-library`, `node-addon`, `application`, `executable`, and each has a
   constructor that produces it.
-- **Constructors are per target.** `library.android` takes `javaPackage` and no
-  `soname`; `library.linux` takes `soname` and no `javaPackage`. Checked both
-  ways: a valid Android library typechecks, and the same with `soname` added
-  fails by name. The invalid combinations stopped being *sayable* rather than
-  being caught later.
+- **Constructors are per target, and one is per *consumer*.**
+  `library.android` takes `javaPackage` and no `soname`; `library.native` takes
+  `soname` and `prefix` and no `javaPackage`. Checked both ways: a valid Android
+  library typechecks, and the same with `soname` added fails by name. The invalid
+  combinations stopped being *sayable* rather than being caught later.
+
+  `library.native` covers Linux, macOS and Windows together, because `.so`,
+  `.dylib` and `.dll` are one kind of artifact with different packaging.
+  `library.xcframework` is the Apple *distribution* format and is chosen by how
+  the artifact is consumed, not by which platform it targets -- see
+  `docs/nts-config.md`.
 - **`tsconfig` defaults** to `./tsconfig.json` beside the config. Every config
   here used to write that string; `examples/library` no longer does.
 - **`host` and `debug` have builders.** `host.ios()` and `host.macos()` differ in
@@ -258,8 +264,11 @@ share it.
 That last point is the hard one. `docs/nts-config.md` §6 records the ordering
 cycle: TypeScript-calls-native needs bindings generated before the TypeScript is
 checked, and native-calls-TypeScript needs the emitted artefacts before the
-native compiles. `notifications` needs both, in one package, which is why its
-config declares a direction per source root rather than letting one be inferred.
+native compiles. `notifications` needs both, in one package -- and the config
+does *not* declare which, because a direction is a property of edges rather than
+of source roots. See the next section, and the build order in
+`tooling/config/audit.mjs`, where the seven unresolved `c:`/`java:`/`swift:`/
+`winrt:` modules are exactly this cycle's first phase not having run.
 
 ## Two config fields were removed, and the removals are the design
 
