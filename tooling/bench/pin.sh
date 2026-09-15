@@ -47,6 +47,33 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 tree=${NTS_BENCH_TREE:-$HOME/.cache/nts-jvm-sweep}
 stamp=$tree/PINNED
 
+# **Which HEAD -- and it is not whichever tree this copy of the script sits in.**
+#
+# `root` above is derived from `$0`, and the benchmark worktree contains a copy
+# of this script. Run that one:
+#
+#     cd ~/.cache/nts-jvm-sweep && sh tooling/bench/pin.sh HEAD
+#
+# and `root` is the worktree, so `HEAD` resolves to the commit the tree is
+# *already* detached at, `$at` equals `$sha`, and the distance reported below is
+# the tree measured against itself. It prints a complete provenance block ending
+# in **"0 commit(s) behind the current HEAD"** -- the most reassuring line this
+# script owns -- for a tree that was 1069 commits stale. Nothing fails, nothing
+# moves, and the output says the one thing a reader is checking for.
+#
+# That is this script's own thesis turned against it: a stamp that lies is worse
+# than no stamp, "in the direction of false confidence". A distance measured
+# against the wrong HEAD is the same lie with an extra digit.
+#
+# So commits and distances resolve against the **main checkout**, located
+# through git rather than through this file's path. `--git-common-dir` is the
+# shared `.git` that every linked worktree points at, and its parent is the
+# checkout that owns it. It answers relative (`.git`) from the main checkout and
+# absolute from a worktree, so the `cd` is done in two steps rather than
+# concatenated -- the one-step spelling resolves the relative answer against
+# whatever the caller's cwd happened to be.
+main=$(CDPATH= cd -- "$root" && CDPATH= cd -- "$(git rev-parse --git-common-dir)/.." && pwd)
+
 # **Both a date and a distance, because they answer different questions.** The
 # commit count says how much has happened since; the authored date says whether
 # this is before or after the work someone is thinking about, which is what a
@@ -58,7 +85,7 @@ report() {
   sed 's/^/  /' "$stamp"
   pinned=$(sed -n 's/^commit: //p' "$stamp")
   [ -n "$pinned" ] || return 0
-  behind=$(git -C "$root" rev-list --count "$pinned..HEAD" 2>/dev/null || echo "?")
+  behind=$(git -C "$main" rev-list --count "$pinned..HEAD" 2>/dev/null || echo "?")
   echo "  ${behind} commit(s) behind the current HEAD"
   # The emissions are what a sweep actually reads, and they can be older than
   # the pin: a re-pin that kept them leaves classes from before it.
@@ -82,12 +109,12 @@ fi
 
 commit=$1
 keep=${2:-}
-sha=$(git -C "$root" rev-parse "$commit")
-short=$(git -C "$root" rev-parse --short "$commit")
+sha=$(git -C "$main" rev-parse "$commit")
+short=$(git -C "$main" rev-parse --short "$commit")
 
 [ -d "$tree" ] || {
   echo "creating the worktree at $tree"
-  git -C "$root" worktree add --detach "$tree" "$sha"
+  git -C "$main" worktree add --detach "$tree" "$sha"
 }
 
 # Named before the attempt rather than discovered in git's error, because three
@@ -170,8 +197,8 @@ elif [ -d "$tree/target/bench" ]; then
   echo "  a sweep across it now compares two programs. Re-emit before trusting it."
 fi
 
-subject=$(git -C "$root" log -1 --format=%s "$sha")
-when=$(git -C "$root" log -1 --format=%ci "$sha")
+subject=$(git -C "$main" log -1 --format=%s "$sha")
+when=$(git -C "$main" log -1 --format=%ci "$sha")
 
 cat > "$stamp" <<EOF
 commit: $sha
