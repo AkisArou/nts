@@ -239,6 +239,67 @@ const ansiPattern = new RegExp(
  * is observable only under a collection, and is recorded in the conformance
  * ledger rather than papered over.
  */
+/**
+ * Declared locally, as `stream/src/operators.ts` and two others do: this profile's
+ * TypeScript environment has no `AbortController` and no `AbortSignal`, only the
+ * structural `AbortSignalLike`. Copying the local declaration is the established
+ * idiom here rather than a shortcut.
+ */
+declare const AbortController: {
+  new (): { readonly signal: AbortSignalLike; abort(reason?: unknown): void };
+};
+
+/**
+ * `util.transferableAbortSignal`, which marks a signal so it may cross a
+ * `postMessage` to a worker, and answers the **same** signal.
+ *
+ * **The marking is invisible, and that is measured rather than assumed.** On node,
+ * a marked signal and an unmarked one have identical own symbols -- the transfer
+ * mode is a private handshake with `worker_threads` and leaves no trace any caller
+ * can read. So everything observable about this function is the validation and the
+ * identity, and both are here exactly.
+ *
+ * `worker_threads` does not exist in this profile, so there is nothing to transfer
+ * *to* and nothing for a mark to mean. That is the honest shape of the gap: not a
+ * stub standing in for work, but a function whose whole effect is a handshake with
+ * a module that is absent. Whoever adds `worker_threads` has to wire the mark here,
+ * and this comment is where they will look -- which is a precondition living in a
+ * comment, so it is also written in the conformance ledger.
+ *
+ * The check is structural, matching `aborted` below rather than node's private-symbol
+ * test, because this profile has no `AbortSignal` **type** to name -- only the
+ * `AbortSignalLike` shape. The two agree on everything reachable, including an
+ * `AbortController`, which both reject because it carries neither `aborted` nor
+ * `addEventListener`. They would differ for a hand-built object wearing both, which
+ * node rejects for lacking its private symbol and this accepts.
+ */
+export function transferableAbortSignal(signal: AbortSignalLike): AbortSignalLike {
+  if (
+    signal === null ||
+    typeof signal !== "object" ||
+    !("aborted" in signal) ||
+    typeof signal.addEventListener !== "function"
+  ) {
+    throw new ERR_INVALID_ARG_TYPE("signal", "AbortSignal", signal);
+  }
+  return signal;
+}
+
+/**
+ * `util.transferableAbortController`, an `AbortController` whose signal is marked
+ * transferable from the start.
+ *
+ * Same reasoning as above: with the mark unobservable and `worker_threads` absent,
+ * what is left is an ordinary controller, which is what node's answers too. Arity 0,
+ * as node's is.
+ */
+export function transferableAbortController(): {
+  readonly signal: AbortSignalLike;
+  abort(reason?: unknown): void;
+} {
+  return new AbortController();
+}
+
 export async function aborted(signal: AbortSignalLike, resource: object): Promise<void> {
   // Deliberately stricter than `validateAbortSignal`, which permits
   // `undefined` because its callers take an optional signal. Here the signal

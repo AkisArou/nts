@@ -112,8 +112,6 @@ const ours = new Set(Object.keys(mod));
 const ABSENT = [
   "getCallSites",
   "setTraceSigInt",
-  "transferableAbortController",
-  "transferableAbortSignal",
 ];
 
 const missing = nodeKeys.filter((name) => !ours.has(name));
