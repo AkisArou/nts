@@ -8,9 +8,13 @@
 # `struct timespec` is not asked for. It is stored inline in `stat`, so its
 # layout is part of `stat`'s, and `nts bind-c` pulls it in.
 set -eu
+# The output path is an argument so `build.sh` can regenerate into a scratch
+# file and compare: a generated file nothing re-derives is asserted, not
+# checked.
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+out=${1:-"$root/examples/interop/native-stat/types/stat.d.ts"}
 "${NTS_BIN:-$root/target/release/nts}" bind-c \
   --module c:stat --header sys/stat.h --define _GNU_SOURCE \
   --record stat --alias stat=Stat --alias timespec=TimeSpec \
   --fn stat --no-escape stat:file --no-escape stat:buf \
-  --out "$root/examples/interop/native-stat/types/stat.d.ts"
+  --out "$out"

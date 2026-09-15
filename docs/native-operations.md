@@ -761,6 +761,18 @@ the rest of this section exists.
 | a flexible array member (`unsigned char[]`, no length) | `cmsghdr` | refuses |
 | a bit-field | `iphdr` | refuses |
 
+**A generated binding is re-derived by the build that uses it.** Each
+`build.sh` runs its example's `bind.sh` into a scratch file and compares. A
+generated file nothing regenerates is *asserted*, not checked: if `nts bind-c`
+changed what it emits, or the headers moved, the committed file would go stale
+in silence and only a **wrong** binding would be caught, by the witness. This
+catches a stale one too, and the message names the script to run.
+
+Verified by making one stale -- `revents` as `c_int32` -- which exits 1. The
+first attempt at that control changed nothing, because the `sed` pattern had
+six spaces of indentation where the file has four, so the check was tested
+against an input that had not moved and read as working.
+
 **A refusal reports every reason, not the first.** That is how `sigaction` was
 filed for weeks as a function-pointer case: the mapper stopped at
 `void (*)(void)` for `sa_restorer` and never reached the anonymous union
