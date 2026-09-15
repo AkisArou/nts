@@ -2361,6 +2361,57 @@ subject to the same caution as everything else in §15 — clearing a refusal
 advances a chain and is not the same as publishing anything. Nobody should start
 it on the strength of 578.
 
+### Three roots, three zeros: read this before the queue below
+
+**On this corpus, clearing a named refusal has never once published an export.**
+Three roots were tested by removing the construct in a throwaway worktree and
+diffing the export set — the node lane's method, and the only one that answers
+"what does this buy" rather than "what does this clear":
+
+| root | rank | refusal after removal | exports published |
+|---|---|---|---:|
+| `dictionary`'s union | top by *message count* | the pointer-cast root behind it | **0** |
+| `asRequest` | #1 by exports-behind | `takes an object` | **0** |
+| `toUnixTimestamp` | #6 by exports-behind | `asRequest`, `displayBytePath`, and the boundary | **0** |
+
+`toUnixTimestamp` is the clearest of the three because the cause was the
+cheapest — `Date.now` has no definition, so it is a missing builtin and not a
+representation question. Removing it took the refusal 2 → 0 and the published
+count 22 → 22, and routed **four of its five exports straight into the #1 and #2
+roots**. The fifth is `toUnixTimestamp` itself, whose parameter is
+`number | string | Date` — a union that erases, so it could not cross however
+well it lowered.
+
+**So exports-behind-a-root is not the payoff and the table below must not be
+read as one.** The number behind a root is the number that moves to the *next*
+root. Two of the three terminated at `takes an object`, from two unrelated
+lowering questions, which is the boundary rather than the compiler.
+
+Counted at the surface, 2026-09-15: of 506 declined exports, **431 name a
+lowering refusal and 62 name a boundary one** (31 "exported as a value of type
+`X`, which does not cross", 16 "takes an object", 6 "returns an object"). That
+split is *also* a measurement of what is in front rather than of what is
+terminal — which is this section's whole subject — and the three probes are the
+evidence that the terminal distribution is much more boundary-weighted than the
+surface one.
+
+**What this does not say.** It is not an argument against fixing the refusals:
+`asRequest` moving one link is real, and a compiler that refuses a call any
+reader can pin is wrong whatever it publishes. It is an argument against
+*counting exports* as the return on a lowering fix, and against any plan built
+on this table's left-hand column. If published exports are the goal, the work is
+at the N-API boundary — making an object cross — and not in lowering at all.
+
+**A fourth instance of the rename hazard, from inside this measurement.** A set
+difference over refused names reported `_toUnixTimestamp` as newly publishable.
+It was not: the export is `export { toUnixTimestamp as _toUnixTimestamp }`, and
+once the `Date.now` refusal went the name was reported *unaliased* with a
+different reason. Newly-publishable and newly-blocked were the same export. What
+caught it was the published count **not** moving — two numbers disagreeing, one
+of them checkable. After `<obj6704>`, the brace scanner and `asRequest<[erased]x2>`,
+this is the fourth today: a name that carries anything unstable will be read as
+a change by any instrument that diffs names.
+
 ### The queue, with each root's own reason — 2026-09-15
 
 `gates.mjs` could name a root and not say why *that root* was refused, so
