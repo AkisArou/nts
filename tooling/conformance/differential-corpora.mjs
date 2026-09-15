@@ -19,6 +19,11 @@
 
 /** A seeded PRNG. Same seed, same sequence, in every process. */
 import { Readable, Writable } from "node:stream";
+// `resolveObjectURL` is the only way to observe what `URL.createObjectURL` registered, and it
+// lives in `node:buffer` rather than `node:url`. Imported at the top like the streams above, so
+// that under the probe's substitution each side resolves the handle with *its own* registry --
+// asking node's registry about our handle would be a comparison of two unrelated things.
+import { resolveObjectURL, Blob as BufferBlob } from "node:buffer";
 
 export function makeRandom(seed = 0x9e3779b9) {
   let state = seed >>> 0;
@@ -3743,6 +3748,126 @@ export const CORPORA = {
           } catch (error) {
             return `threw ${error.name}: ${error.code ?? ""}`;
           }
+        },
+      },
+      {
+        // **The three names on this module the corpus has never called**, found by
+        // `corpus-reach.mjs`: `fileURLToPathBuffer`, and the `createObjectURL`/
+        // `revokeObjectURL` pair that `URL` carries as statics.
+        //
+        // `fileURLToPathBuffer` is not `Buffer.from(fileURLToPath(u))`. It exists
+        // because a POSIX path is *bytes*, and a percent-escape in a file URL can
+        // decode to a byte sequence that is not valid UTF-8 -- `%80` alone is a
+        // path a filesystem accepts and a string cannot hold. So the two are
+        // compared side by side on the same URL: the string form is the one that
+        // has to substitute U+FFFD, and a reimplementation that defines the buffer
+        // form in terms of the string form agrees on every input that happens to
+        // be valid UTF-8 and loses the byte on the ones that are not.
+        //
+        // The result is compared as **hex**, deliberately. Rendering a Buffer
+        // through `JSON.stringify` gives `{"type":"Buffer","data":[...]}`, which
+        // compares fine, but a lone `%80` inside a *string* result would render as
+        // the replacement character on both sides and hide exactly the divergence
+        // this row exists to find.
+        label: "fileurl-bytes",
+        call: (m, s) => {
+          // **`instanceof Uint8Array`, not `Buffer.isBuffer`.** `isBuffer` is an
+          // `instanceof Buffer` test, and under the probe's substitution the buffer
+          // the module returns comes from *our* `Buffer` class while the `isBuffer`
+          // reachable here is the host's. It answers `false` for a perfectly good
+          // buffer, and the row then renders it with `String(v)` -- which is
+          // `toString("utf8")`, which replaces the very bytes this spec exists to
+          // compare. It reported 524 divergences that way before this was fixed.
+          // `Uint8Array` is a genuine shared global and both classes extend it.
+          const show = (f) => {
+            try {
+              const v = f();
+              return v instanceof Uint8Array ? `buf:${Buffer.from(v).toString("hex")}` : String(v);
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          // `s` is a URL-shaped generator string, so it carries the escapes and the
+          // non-ASCII this row wants; it is pinned under a `file:` scheme rather
+          // than used as the whole URL.
+          const tail = encodeURIComponent(s).slice(0, 24);
+          const urls = [
+            `file:///a/${tail}`,
+            `file:///%80/${tail}`,
+            `file:///%C3%BC/${tail}`,
+            `file:///a%2Fb/${tail}`,
+            `file:///${tail}%80%80`,
+            `file://localhost/a/${tail}`,
+          ];
+          const out = [];
+          for (const raw of urls) {
+            out.push(show(() => m.fileURLToPath(raw)));
+            out.push(show(() => (typeof m.fileURLToPathBuffer === "function"
+              ? m.fileURLToPathBuffer(raw)
+              : "absent")));
+            // The URL object arm as well as the string arm: node accepts both, and
+            // they reach the parser by different routes.
+            out.push(show(() => (typeof m.fileURLToPathBuffer === "function"
+              ? m.fileURLToPathBuffer(new URL(raw))
+              : "absent")));
+            out.push(show(() => (typeof m.fileURLToPathBuffer === "function"
+              ? m.fileURLToPathBuffer(raw, { windows: false })
+              : "absent")));
+          }
+          return out.join("|");
+        },
+      },
+      {
+        // `URL.createObjectURL` and `URL.revokeObjectURL`, statics on the class rather
+        // than exports of the module, which nothing in the corpus had called.
+        //
+        // **The blob round trip is not comparable on this lane, and the reason is
+        // worth stating rather than working around.** `run-one.mjs` substitutes one
+        // module; `url`'s `createObjectURL` delegates to `buffer`'s, whose gate is
+        // `blob instanceof Blob` against *our* class -- so under `run-one.mjs url`
+        // the only blob the spec can build is node's and ours rejects every one. The
+        // mirror holds in the `buffer` lane, where node's `URL` would refuse our
+        // blob. Registering a blob and resolving it needs both modules substituted
+        // together, which this harness does not do, and the 524 divergences it
+        // reported before this comment were entirely that.
+        //
+        // What survives is the half that has rules in it and no instance to carry
+        // across: node validates the argument (an object that merely inherits from
+        // `Blob.prototype` is refused -- the real gate is an own brand), and the
+        // revoke path is *silent* for a handle that was never registered, for a
+        // second revoke, and for an argument that is not a string. Those are exactly
+        // what a reimplementation tightens into a throw, and they compare cleanly.
+        label: "object-url-contract",
+        call: (m, s) => {
+          const show = (f) => {
+            try {
+              return String(f());
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          if (typeof m.URL?.createObjectURL !== "function") return "absent";
+          const handle = `blob:nodedata:${String(s).slice(0, 8)}`;
+          return [
+            `arity:${m.URL.createObjectURL.length}:${m.URL.revokeObjectURL.length}`,
+            `name:${m.URL.createObjectURL.name}`,
+            show(() => m.URL.createObjectURL(String(s))),
+            show(() => m.URL.createObjectURL({ size: 1, type: "text/plain" })),
+            show(() => m.URL.createObjectURL(null)),
+            show(() => m.URL.createObjectURL()),
+            // Inherits `Blob.prototype` and carries no brand. Node refuses it on the
+            // missing brand; ours refuses it because the prototype is node's and its
+            // gate is `instanceof` its own class. **Both refuse, for different
+            // reasons, so this row does not separate the two gates on this lane** --
+            // it is here because a reimplementation that accepted a prototype-only
+            // object would still be caught, and that is the failure worth holding.
+            show(() => m.URL.createObjectURL(Object.create(globalThis.Blob.prototype))),
+            show(() => m.URL.revokeObjectURL(handle)),
+            show(() => m.URL.revokeObjectURL(handle)),
+            show(() => m.URL.revokeObjectURL(String(s))),
+            show(() => m.URL.revokeObjectURL(null)),
+            show(() => m.URL.revokeObjectURL()),
+          ].join("|");
         },
       },
     ],
