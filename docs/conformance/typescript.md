@@ -62,12 +62,12 @@ which.
 | | |
 |---|---|
 | `✅` table rows | 166 |
-| naming an `examples/` directory | 138 |
+| naming an `examples/` directory | 141 |
 | quoting a case count | 14 |
-| doing **either** | 140 |
-| doing **neither** | **26** |
+| doing **either** | 143 |
+| doing **neither** | **23** |
 
-Thirty-seven rows were cited on 2026-09-15 and the count moved 62 → 26. Five more say in the row that no example exercises part of what they claim — `var`, `%=`/`^=`/`>>>=`, `ReadonlyMap`/`ReadonlySet`, five of the six type-operator forms, and `xs[next()] += 1` — which the count cannot express and a reader of the row can see. The table
+Forty rows were cited on 2026-09-15 and the count moved 62 → 23. Five more say in the row that no example exercises part of what they claim — `var`, `%=`/`^=`/`>>>=`, `ReadonlyMap`/`ReadonlySet`, five of the six type-operator forms, and `xs[next()] += 1` — which the count cannot express and a reader of the row can see. The table
 above is the *current* answer to its own awk, re-run after the edits, so the
 number and the file cannot drift apart the way the previous block's did.
 
@@ -111,6 +111,14 @@ and `examples/library` carry them, outside the `src/` directory the glob
 assumed. Three of the four wrong answers in this exercise came from a search
 that was narrower than the question, and none of them announced itself; each
 returned a confident empty set.
+
+**Three of the remaining rows are not rows.** The awk counts any table line
+holding a ✅, and three of them are the legend's own key and the header of the
+count table above — they can never be cited and should never have been in the
+denominator. The honest remainder is twenty rather than twenty-three, and the
+instrument says twenty-three because it was written to be cheap rather than
+exact. Left as it is, with this note, because changing the awk now would make
+every earlier number in this section incomparable with it.
 
 **The method is written out because the last count and this one disagree by
 86 and neither said how it counted.** The block here previously read 159 rows,
@@ -2167,11 +2175,11 @@ nothing fails loudly when they are.
 |---|---|---|
 | ✅ | allocation; frame placement for what does not escape |
 | ✅ | reference counting, and a cycle collector over one traversal `examples/cycles` carries the half reference counting cannot reclaim, and `examples/borrowed-traversal` the shapes it gets wrong together with a check that can fail. |
-| ✅ | strings, arrays, objects, tagged values (`NtsValue`) |
-| ✅ | promises, microtasks, the tick queue |
+| ✅ | strings, arrays, objects, tagged values (`NtsValue`) — `examples/erased-truthiness` and `examples/object-literal-through-a-union` for tagged values |
+| ✅ | promises, microtasks, the tick queue — `examples/promise-constructor` |
 | ✅ | timers: `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval` `examples/timers` carries all four, `clearTimeout` included. **`clearTimeout` added 2026-09-14**: the row listed three of the four and the example it now cites has carried all four throughout — five uses of `clearTimeout`, one of them cancelling a live timer. A row can understate its own subject and read as complete, and citing the example is what surfaced it. |
 | ✅ | host loop, task posting, thread-ownership assertions |
-| ✅ | a hash table — open addressing, linear probing, tombstones, power-of-two slots; `Map` and `Set` are built on it, and `Object`'s enumeration statics turned out not to need one |
+| ✅ | a hash table — open addressing, linear probing, tombstones, power-of-two slots; `Map` and `Set` are built on it, and `Object`'s enumeration statics turned out not to need one — `examples/string-keyed-table` and `examples/map-and-set` |
 | ✗ | a regular-expression engine |
 | ◐ | **a time value** — `nts_date_new`, `nts_date_value` and the `TimeClip` normalisation, three entry points and a `double`. No **clock** and no **calendar**: a wall clock is a capability this runtime does not have, and the field extraction that would need one is §2's `Date` rows. The JVM runtime carries the same three, and `examples/dates` agrees with node on 174 cases through it. This row read ✗ while `nts_time_clip` was in `runtime/c` — the second false row found in this file today, and found by looking rather than by anything that runs |
 | ✗ | **a call-stack depth limit.** Unbounded recursion is `SIGSEGV` here where node throws a `RangeError` | **priced 2026-09-12, and it is affordable.** Two forms, measured against the emitted `fib__whole` copied verbatim so the arms differ in one thing, min of ten runs: a **depth counter** (increment, compare, decrement) costs **1.96x** and a **stack-pointer compare** costs **1.33x** — on a body that does *nothing*, which is the worst case there is. Put **eight floating-point operations** in the body and both read **1.00x**; at thirty-two, the same. The check is still there — 57 instructions against 40, with the global still referenced, verified in the assembly rather than assumed — and the CPU issues it alongside arithmetic it does not depend on. So the premise that a per-call check is a cost this project cannot pay holds only where the call does nothing at all. The stack-pointer form is the one to build: one global reference against the counter's five, and no memory write. **A second cost, found 2026-09-12 and not priced by that record: what the check does when it fires.** node's `RangeError` is *catchable*, and a throw raised inside a call is refused here — see the `try`/`catch` row, where a `throw` lowers to a jump to the enclosing handler **block** and a callee has no edge back to its caller's handler. A depth check is by construction inside a call, so it cannot reach a `catch` in the frame that started the recursion. What is available today is a **controlled abort** naming the depth, which is strictly better than `SIGSEGV` — a defined failure instead of undefined behaviour — and is still not what node does. So this row is two features with one name: the check is affordable and buildable now, and *agreeing with node about it* waits on cross-call exceptions, which the `try`/`catch` row says is unwinding the reference counts rather than the jump. Pricing the instruction cost answered the question the queue asked and not the one that decides the row |
