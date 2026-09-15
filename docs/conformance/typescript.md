@@ -2713,12 +2713,40 @@ not previously be asked at all:
 | 2 | it calls `bigintColumn`, which was refused above |
 | 2 | `dispatchCapturedRejection`, a static field this compiler gave no storage |
 
-One cause is worth fifteen exports and it is a **declaration** in
-`runtime/node/zlib`, not a lowering. That is the node lane's to weigh, and it
-is not free: `dictionary`'s union is node's documented shape, so narrowing it
-trades a compiled-lane gain against an interpreted-lane API that no longer
-accepts what node accepts — and the interpreted lane is the one running node's
-suite. Recorded here so the trade is visible rather than implied by a rank.
+**Corrected within the hour, and the correction is the point of the table.**
+The sentence that stood here said "one cause is worth fifteen exports". It is
+worth **zero**. The node lane removed `dictionary` in a detached worktree and
+re-emitted: the refusal disappears — 104 lines to 0 — and the declined set is
+**identical name for name**, 66 either side, category distribution unchanged.
+Not one export was gated by it.
+
+What it was standing in front of is the pointer-cast root:
+
+    no wrapper for Brotli: ... a `BrotliOptions` where a
+      `CompressionStreamOptions` is wanted, which is a pointer cast between
+      two structs that do not agree about where their fields are
+    no wrapper for Gzip:   ... it calls `Zlib#constructor`, which was refused above
+
+So **a rank by count is a rank by diagnostic reach, not by value.** The
+compiler reports one blocker at a time, so the cause with the most mentions is
+whichever sits furthest forward in the program, and that is uncorrelated with
+how many exports it gates. The table above is accurate and its ordering does
+not mean what a reader will take it to mean — which is why the sentence is left
+in place, struck, rather than quietly replaced.
+
+The measurement that *does* answer "is this cause worth anything" is removal in
+a throwaway worktree followed by a diff of the export set, and it is cheap
+enough to run per candidate. One trap in running it, walked into and recorded:
+the first attempt took declines from 66 to **0**, which reads as total success
+and was a failed compile — `TS2358`, nothing emitted, therefore nothing
+declined. Assert `wrote program.c` before reporting any count. Smaller output
+is never evidence.
+
+The original sentence, for the record: *one cause is worth fifteen exports and
+it is a **declaration** in `runtime/node/zlib`, not a lowering.* The trade it described — narrowing
+`dictionary` costs an interpreted-lane API that no longer accepts what node
+accepts — was real and correctly flagged by the node lane before either of us
+acted on it. It simply never had to be made, because the gain was zero.
 
 `compiler/core/tests/constructor_refusal.rs` is the regression, and it has two
 controls that can fail: the fixture must actually refuse `_read` with a named
