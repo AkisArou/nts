@@ -355,6 +355,39 @@ impl Binding {
     /// The second half of the pair is every **anonymous** record found inside
     /// it. Those have no tag of their own, so nothing can look them up later;
     /// they are handed back with the record that holds them.
+    /// Whether `tag` names a typedef of a record the header left untagged.
+    ///
+    /// Told apart from a genuinely absent definition by the id clang puts on
+    /// the typedef's `RecordType`: its `decl.id` names the `RecordDecl`, which
+    /// is complete and has no name. Matching on the id rather than on which
+    /// node precedes which, because the parse is walked depth-first and a
+    /// record's own fields sit between it and the typedef that follows it.
+    ///
+    /// This only produces a better refusal. Describing one needs a way to say
+    /// "spelled without `struct`", which the surface does not have -- a record
+    /// is named by its tag there, and a tag is exactly what this type lacks.
+    fn typedef_of_an_unnamed_record(nodes: &[&serde_json::Value], tag: &str) -> bool {
+        let Some(declared) = nodes.iter().find_map(|node| {
+            (node.get("kind").and_then(serde_json::Value::as_str) == Some("TypedefDecl")
+                && node.get("name").and_then(serde_json::Value::as_str) == Some(tag))
+            .then(|| {
+                children(node)
+                    .iter()
+                    .find_map(|inner| inner.get("decl")?.get("id")?.as_str())
+                    .map(std::borrow::ToOwned::to_owned)
+            })
+            .flatten()
+        }) else {
+            return false;
+        };
+        nodes.iter().any(|node| {
+            node.get("kind").and_then(serde_json::Value::as_str) == Some("RecordDecl")
+                && node.get("id").and_then(serde_json::Value::as_str) == Some(declared.as_str())
+                && node.get("completeDefinition") == Some(&serde_json::Value::Bool(true))
+                && node.get("name").is_none()
+        })
+    }
+
     fn record_named(
         nodes: &[&serde_json::Value],
         tag: &str,
@@ -698,9 +731,25 @@ impl Binding {
                 }
             }
             if !found {
+                let tag = nested.iter().next().map_or("", String::as_str);
+                // Two different facts wear the same symptom here, and the
+                // message used to state the first for both. `__sigset_t` is
+                // not missing: it is `typedef struct { ... } __sigset_t`, and
+                // clang gives an unnamed record a typedef name for linkage, so
+                // the member's spelling reads `struct __sigset_t` while no tag
+                // of that name exists anywhere in the parse.
+                if Self::typedef_of_an_unnamed_record(nodes, tag) {
+                    bail!(
+                        "`{tag}` is a typedef of a struct with **no tag**, and this surface \
+                         describes a record by its tag. C spells the type `{tag}` and never \
+                         `struct {tag}`; clang reports the second because an unnamed record \
+                         takes a typedef name for linkage, which is why this reads as a \
+                         missing definition and is not one"
+                    );
+                }
                 bail!(
-                    "these headers define no complete `{}`, which is stored inline in a record being bound",
-                    nested.iter().next().map_or("", String::as_str)
+                    "these headers define no complete `{tag}`, which is stored inline in a \
+                     record that was asked for"
                 );
             }
         }
@@ -1597,5 +1646,44 @@ mod tests {
             assert_eq!(problem.matches(THROUGH).count(), 1, "{problem}");
             assert!(problem.contains("bit-field"), "{problem}");
         }
+    }
+
+    #[test]
+    fn a_typedef_of_an_unnamed_record_is_told_from_a_definition_that_is_absent() {
+        // `typedef struct { ... } named_t;` -- the shape `__sigset_t` has. The
+        // `RecordDecl` carries no name and the typedef points at it by id.
+        let untagged: serde_json::Value = serde_json::from_str(
+            r#"{"kind": "TranslationUnitDecl", "inner": [
+                 {"id": "0x1", "kind": "RecordDecl", "completeDefinition": true, "inner": []},
+                 {"kind": "TypedefDecl", "name": "named_t",
+                  "inner": [{"kind": "RecordType", "decl": {"id": "0x1", "kind": "RecordDecl"}}]}
+               ]}"#,
+        )
+        .unwrap();
+        let mut nodes = Vec::new();
+        walk(&untagged, &mut nodes);
+        assert!(Binding::typedef_of_an_unnamed_record(&nodes, "named_t"));
+
+        // The arms that must answer differently, or the check above is reading
+        // nothing but "a typedef of this name exists".
+        assert!(
+            !Binding::typedef_of_an_unnamed_record(&nodes, "absent_t"),
+            "a name with no typedef at all"
+        );
+        let tagged: serde_json::Value = serde_json::from_str(
+            r#"{"kind": "TranslationUnitDecl", "inner": [
+                 {"id": "0x1", "kind": "RecordDecl", "name": "s", "completeDefinition": true},
+                 {"kind": "TypedefDecl", "name": "named_t",
+                  "inner": [{"kind": "RecordType", "decl": {"id": "0x1", "kind": "RecordDecl"}}]}
+               ]}"#,
+        )
+        .unwrap();
+        let mut nodes = Vec::new();
+        walk(&tagged, &mut nodes);
+        assert!(
+            !Binding::typedef_of_an_unnamed_record(&nodes, "named_t"),
+            "`typedef struct s {{ ... }} named_t` has a tag, so it is describable and this \
+             must not claim otherwise"
+        );
     }
 }
