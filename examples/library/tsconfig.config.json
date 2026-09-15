@@ -1,0 +1,11 @@
+{
+  "//": "Typechecks `nts.config.ts` against the real @nts/config, separately from the program. Named tsconfig.config.json and not tsconfig.json for the reason stated in examples/workspace: the gate globs every tsconfig.json one level under examples/, and a second one here would enrol this fixture twice.",
+  "//why": "Separate rather than merged. The config is evaluated by node at build-planning time and the program is compiled by nts; putting both in one project made the compiler lower the build system into the artifact. Two projects is the honest shape, and `tooling/config/audit.mjs` fails if a config is enrolled in neither.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["nts.config.ts"],
+  "references": [{ "path": "../../tooling/config" }]
+}

@@ -76,10 +76,23 @@ for shared in third_party/typescript-go third_party/test262 third_party/are-we-f
 done
 
 # `node_modules` is not in any commit either, and its absence does not look
-# like its absence: `examples/library` imports a workspace package, so it fails
-# to *typecheck*, and `backend_examples` counts that as a plain failure with
-# thirty other names beside it. Three of these, and the nested ones are the ones
-# that get missed -- the workspace links inside resolve by absolute path.
+# like its absence. Three of these, and the nested ones are the ones that get
+# missed -- the workspace links inside resolve by absolute path.
+#
+# **What needs it moved, and the old reason no longer holds.** This used to say
+# `examples/library` fails to *typecheck* without it, because its
+# `tsconfig.json` pulled `nts.config.ts` into the program and that file imports
+# `@nts/config`. It does not any more: the config is typechecked by
+# `tsconfig.config.json` beside it, and the program is `src/` alone -- which was
+# the fix for `nts hir` lowering the whole build-config package into a shared
+# library and refusing six times inside `tooling/config/src`.
+#
+# The dependency is still real and is now a *config-time* one. `nts emit-c`
+# evaluates `nts.config.ts` with node to read the product's `exports`, node
+# resolves `@nts/config` like any dependency, and a config that exists and
+# cannot be read stops the build rather than being ignored. So the copy below is
+# still load-bearing; `backend_examples` would count its absence as a plain
+# failure with thirty other names beside it, exactly as before.
 for modules in node_modules examples/library/node_modules runtime/node/node_modules; do
   [ -d "$root/$modules" ] || continue
   # **Copied rather than linked where a workspace link lives inside it.**

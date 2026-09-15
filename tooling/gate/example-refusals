@@ -60,7 +60,6 @@ a-throw-that-stays-in-its-function 1 the constructs the name promises
 # 2026-09-11 is that the compiler says so instead of emitting nothing and
 # leaving the napi wrapper to report the effect with the cause unsaid.
 advanced 2 an exported generic function this program never instantiates
-library 1 a parameter of intersection type
 module-evaluation 1 a regular expression literal
 calls 1 an erased value where a concrete representation is wanted
 jsx 2 a jsx self closing element

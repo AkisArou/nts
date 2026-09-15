@@ -1,9 +1,9 @@
 {
+  "//": "The program, and only the program. `nts.config.ts` used to be in `include` and `tooling/config` in `references`, which put the build system's own types inside a shared library's program: `nts hir` lowered all of @nts/config and refused six times, every one of them in tooling/config/src, none in src/. A build configuration is read at build-planning time and is not part of the artifact, so it is typechecked by tsconfig.config.json beside this file instead.",
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": ".",
     "noEmit": false
   },
-  "include": ["src/**/*", "nts.config.ts"],
-  "references": [{ "path": "../../tooling/config" }]
+  "include": ["src/**/*"]
 }
