@@ -1856,6 +1856,64 @@ export const CORPORA = {
           // both sides throw: a key nothing knows about still gives
           // `ERR_INVALID_ARG_VALUE` here and `ERR_ASSERTION` in node, so it is
           // deliberately **not** in this row. See `readErrorField`'s `default`.
+          // **`assert.strict` and `Assert#ok`**, the two names `corpus-reach.mjs` had
+          // this module never calling. Both agree with node on every input; the row is
+          // coverage rather than a fix, and it is worth having because the *relations*
+          // between these objects are the kind of thing a reimplementation gets almost
+          // right.
+          //
+          // `assert.strict` is a callable that is **not** `assert`, carries its own
+          // `strict` back-reference to itself, and routes the loose assertions through
+          // the strict comparison -- `strict.equal("1", 1)` throws where
+          // `assert.equal("1", 1)` does not. That pair is the whole point of the
+          // object, and a profile that aliased `strict` to `assert` would pass every
+          // test that only calls one of them.
+          //
+          // `assert.ok === assert` is true and `assert.strict.ok === assert.strict` is
+          // **false**, which is node being deliberately inconsistent; asserting both
+          // directions is what stops the relation being "simplified".
+          label: "strict-namespace",
+          call: (m, s) => {
+            const show = (f) => {
+              try {
+                f();
+                return "ok";
+              } catch (error) {
+                return `${(error && error.code) || (error && error.name) || "?"}`;
+              }
+            };
+            const text = String(s);
+            return [
+              `type=${typeof m.strict}`,
+              `notAssert=${m.strict !== m}`,
+              `selfref=${m.strict.strict === m.strict}`,
+              `okIsAssert=${m.ok === m}`,
+              `strictOkIsStrict=${m.strict.ok === m.strict}`,
+              // **The sharpest of the three, and the one the other two do not imply.**
+              // `assert`, `assert.ok` and `assert.strict.ok` are one function in node,
+              // and it is the *loose* callable -- so the strict surface's `ok` belongs
+              // to the loose one. `assert/shape.mjs` records having had this wrong in
+              // the plausible direction (`strict.ok = strict`), which made the two
+              // surfaces disagree on `ok` while agreeing on `fail` and `ifError`.
+              `strictOkIsAssert=${m.strict.ok === m}`,
+              `strictOkIsLooseOk=${m.strict.ok === m.ok}`,
+              `callTruthy=${show(() => m.strict(text.length + 1))}`,
+              `callFalsy=${show(() => m.strict(0))}`,
+              `callMessage=${show(() => m.strict(0, text))}`,
+              // Where loose and strict part company, in both directions.
+              `strictEqualLoose=${show(() => m.strict.equal("1", 1))}`,
+              `looseEqualLoose=${show(() => m.equal("1", 1))}`,
+              `strictEqualEmpty=${show(() => m.strict.equal("", 0))}`,
+              `looseEqualEmpty=${show(() => m.equal("", 0))}`,
+              `strictDeepLoose=${show(() => m.strict.deepEqual({ a: "1" }, { a: 1 }))}`,
+              `looseDeepLoose=${show(() => m.deepEqual({ a: "1" }, { a: 1 }))}`,
+              `strictNotEqual=${show(() => m.strict.notEqual("1", 1))}`,
+              `strictOkSame=${show(() => m.strict.ok(text.length === 0 ? 0 : 1))}`,
+              `errorCtor=${m.strict.AssertionError === m.AssertionError}`,
+            ].join("|");
+          },
+        },
+        {
           label: "throws-expectation-keys",
           call: (m, s) => {
             const show = (f) => {
