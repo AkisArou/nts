@@ -61,6 +61,42 @@ coordinate was not. A line number into a file you do not own is a citation with
 an expiry date, and `grep` finds the phrase after any edit that does not delete
 it.
 
+## A `try` around a bound call is a wrong answer, not a refusal
+
+**Measured 2026-09-15, and this is the sharpest open defect in the lane.**
+
+`hir/lower.rs` refuses a call inside a `try`, by name, with the reason written
+out: *"a call inside a `try`, whose `throw` would not reach this handler"*. A
+`throw` lowers to a jump to the handler block, which is a branch inside one
+function; a callee has no edge back to its caller's handler. The refusal is
+right and its comment says it was measured on all three backends.
+
+**It does not fire for a bound call.** Two programs, one difference:
+
+| inside a `try` | what happens |
+| --- | --- |
+| `deep(n)`, a plain TypeScript call | `NTS1001 a call inside a `try`, whose `throw` would not reach this handler` |
+| `catalog.parse("abc")`, a bound Java call | compiles clean, **no exception table**, and aborts with `java.lang.NumberFormatException` where node prints `caught` |
+
+So the guard covers our own calls and misses the interop ones, which is the
+case it matters most for: a jar's methods throw, and `parse` declares
+`throws NumberFormatException` in the binding this compiler generated.
+
+The category is the one this document's non-negotiables put first. A refusal is
+fine and an abort matching node is fine; a `catch` that compiles, emits nothing
+and never runs is a silent wrong answer.
+
+**The fix is not in this lane.** A backend cannot see the region: `Block` carries
+`params`, `ops` and a `terminator`, `Func` carries no handler table, and the
+five `Terminator` variants have no unwind edge. Whatever reaches the JVM has
+already lost the fact that a call was inside a `try`. The refusal has to widen
+where it already lives, in `hir/lower.rs`'s `lower_try` -- `call_within` is
+finding the plain call and not the bound one.
+
+Reported rather than worked around, because a backend-side approximation of
+"was this inside a `try`" would be a second derivation of something the lowering
+knows and dropped, and this document has a section on what that costs.
+
 ## Where "done" stands, measured 2026-09-15
 
 The lane's definition of done is four numbers rather than a feature list. Three
