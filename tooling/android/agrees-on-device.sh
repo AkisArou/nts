@@ -60,6 +60,48 @@ sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 
 command -v adb > /dev/null 2>&1 || { echo "SKIP: no adb" >&2; exit 0; }
 adb get-state > /dev/null 2>&1 || { echo "SKIP: no device" >&2; exit 0; }
+
+# **The API level the dex is built for, in one place, checked against the device
+# it is about to run on.**
+#
+# `d8 --min-api` below and the device are two halves of one fact, and nothing
+# joined them. Booting `nts-api26-x86_64` -- which is in the AVD list, and is
+# the arm64 image `arm-barrier.sh` names, so it is the obvious one to reach for
+# -- produced **nine cases reported as DIFFER**, each with a `dalvikvm` stack
+# trace where its answer should be:
+#
+#     fib   DIFFER jvm=4107fa1000000000 art=  at java.lang.ClassLoader.getSystemClassLoader
+#
+# The run was red, and it was red in the one way this step is built to mean
+# something: `differ` is the only fatal count precisely because a divergence is a
+# wrong answer. Nine wrong answers, from an environment mismatch, and the script
+# had no way to say so -- it keeps only `tail -1` of the device output, so the
+# exception that explains it is discarded and what survives is the shape of a
+# correctness failure.
+#
+# On API 29 the same nine agree to the bit. Nothing was wrong with the compiler,
+# the dex, or the device; the two numbers simply had to be the same number.
+# `device_api` rather than `sdk`: `sdk` above is **ANDROID_HOME**, and calling
+# this one `sdk` clobbered it -- the next line resolves `$sdk/build-tools/*` and
+# the run died with "SKIP: no build-tools", which is a message about the host
+# toolchain and was nothing of the kind. Caught by running the control, which is
+# the only arm that could have caught it: the new check's own behaviour was
+# correct in both directions.
+MIN_API=29
+device_api=$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r\n')
+case $device_api in
+  '' | *[!0-9]*)
+    echo "SKIP: the device did not report ro.build.version.sdk" >&2
+    exit 0
+    ;;
+esac
+if [ "$device_api" -lt "$MIN_API" ]; then
+  echo "SKIP: the device is API $device_api and the dex is built for $MIN_API." >&2
+  echo "  Every case would load-fail and be counted as a divergence, which is" >&2
+  echo "  this step's one fatal outcome. Boot an API $MIN_API or newer image --" >&2
+  echo "  \`nts-api29-x86_64\` is the one this lane uses." >&2
+  exit 0
+fi
 [ -n "$sdk" ] || { echo "SKIP: no ANDROID_HOME" >&2; exit 0; }
 tools=$(ls -d "$sdk"/build-tools/* 2>/dev/null | sort -V | tail -1)
 [ -n "$tools" ] || { echo "SKIP: no build-tools" >&2; exit 0; }
@@ -190,7 +232,7 @@ JAVA
   jvm=$(java -cp "$out/classes:$out/classes/nts-runtime.jar" "$main" 2>&1 | tail -1)
   # The runtime jar goes to `d8` whole: it is the artefact the ratchets are
   # about, and dexing the classes without it would test the wrong thing.
-  if ! "$tools/d8" --min-api 29 --output "$out/dex" \
+  if ! "$tools/d8" --min-api "$MIN_API" --output "$out/dex" \
     $(find "$out/classes" -name '*.class') "$out/classes/nts-runtime.jar" > /dev/null 2>&1; then
     printf "%-22s d8 refused it\n" "$case"
     noted=$((noted + 1))
