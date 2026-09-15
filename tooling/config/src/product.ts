@@ -59,8 +59,29 @@ export interface AppProduct extends ProductBase {
 }
 
 interface LibraryBase extends ProductBase {
-  /** Names crossing the public ABI. Managed objects never do (RFC §27.2). */
-  readonly exports: readonly string[];
+  /**
+   * Names crossing the public ABI. Managed objects never do (RFC §27.2).
+   *
+   * **Optional, defaulting to the entry module's exports**, because that is
+   * what it already says. Measured across the workspace fixture before this was
+   * relaxed: eight library configs declared `exports`, and in **eight of eight**
+   * the list was identical to the entry's -- a second statement of one fact,
+   * agreeing today, with nothing keeping it agreeing.
+   *
+   * It is a **narrower**, not a declaration. Naming fewer than the source
+   * exports shrinks the ABI *and* the binary, because this becomes
+   * `hir::reachable::Roots::Entry` and the rest stops being a root;
+   * `reachability.rs` tests that, including the case where a name is not an
+   * export at all. So it earns its place only where the entry is a barrel that
+   * re-exports more than the artifact should carry.
+   *
+   * Where it disagrees with the source and is *wider*, the source is the one to
+   * change: an `export` that should not be public is a missing keyword, not a
+   * config entry. That is most obvious on a Node addon, where the artifact's
+   * surface is literally the module's exports and there is no visibility
+   * mechanism underneath for a config to select from.
+   */
+  readonly exports?: readonly string[];
 }
 
 export interface AarProduct extends LibraryBase {

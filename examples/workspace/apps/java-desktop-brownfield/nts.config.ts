@@ -22,7 +22,6 @@ export default defineConfig({
     sdk: library.jvm({
       entry: "./nts/sdk.ts",
       release: 8,
-      exports: ["Sdk"],
       javaPackage: "com.acme.sdk",
     }),
   },

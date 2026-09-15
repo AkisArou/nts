@@ -373,7 +373,7 @@ strings.
 | field | how |
 | --- | --- |
 | `entry` | `--entry` takes a comma-separated list (`requested_entry`) |
-| `exports` | `hir::reachable::Roots::Entry`; `reachability.rs` tests naming fewer than the source exports, and naming one it does not |
+| `exports` | `hir::reachable::Roots::Entry`; `reachability.rs` tests naming fewer than the source exports, and naming one it does not. **Now optional** -- see below |
 | `target` / `targets`, `backend`, `arch` | `Backend` is `hir`'s three, and `NTS_BACKEND` selects one |
 | `tsconfig` | the CLI takes a tsconfig path; now **defaults** to `./tsconfig.json` |
 
@@ -388,6 +388,26 @@ artifact in the list.
 `apiVersion` and `platforms`; `consumerProguard`; `moduleName`; `native`,
 `manifests`, `dependencies`, `integrate`; `build.cache`; `workspace.packages`
 and `tsconfigBase`.
+
+### `exports` was a duplicate in eight of eight
+
+Checked rather than assumed: every library config in the fixture declared
+`exports`, and in **all eight** the list was character-identical to the entry
+module's exports. Not one narrowed anything. A second statement of one fact,
+agreeing today, with nothing keeping it agreeing.
+
+It is now **optional, defaulting to the entry's exports**, and is documented as
+a *narrower*: naming fewer shrinks the ABI and the binary, because it becomes
+`Roots::Entry` and the rest stops being a root. It earns its place only where
+the entry is a barrel re-exporting more than the artifact should carry.
+
+Where it disagrees with the source and is *wider*, the source is what to change
+-- an `export` that should not be public is a missing keyword, not a config
+entry. That is clearest on a Node addon, where the artifact's surface is
+literally the module's exports and there is no visibility mechanism underneath
+for a config to select from.
+
+`examples/library`'s whole product is now `library.linux({ entry })`.
 
 ### What the audit is really about
 

@@ -18,7 +18,6 @@ export default defineConfig({
   products: {
     sdk: library.linux({
       entry: "./nts/sdk.ts",
-      exports: ["acme_remember", "acme_notify"],
       soname: "libacme.so.0",
       header: "acme.h",
       pkgConfig: true,

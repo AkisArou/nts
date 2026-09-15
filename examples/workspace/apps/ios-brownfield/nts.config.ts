@@ -21,7 +21,6 @@ export default defineConfig({
     sdk: library.ios({
       entry: "./nts/sdk.ts",
       minimumVersion: "17.0",
-      exports: ["Sdk"],
       // The Swift module name a consumer writes `import AcmeSdk` for.
       moduleName: "AcmeSdk",
     }),

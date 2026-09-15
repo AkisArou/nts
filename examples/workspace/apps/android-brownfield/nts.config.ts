@@ -24,12 +24,6 @@ export default defineConfig({
       entry: "./nts/sdk.ts",
       minSdk: 29,
 
-      // The contract. `examples/interop/ts-from-java` pins its published Java
-      // surface in `expected/Api.javap` and diffs it on every build; a library
-      // consumed by someone else's app wants exactly that, and for the same
-      // reason -- the surface is the thing that cannot change quietly.
-      exports: ["Sdk"],
-
       // Java package for the generated classes. `nts.gen` is the current fixed
       // name and is wrong for a shipped library: `docs/jvm-interop.md` lists it
       // under packaging gaps.

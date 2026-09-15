@@ -11,7 +11,6 @@ export default defineConfig({
     addon: library.node({
       entry: "./src/main.ts",
       apiVersion: 8,
-      exports: ["digest", "putRecord"],
     }),
   },
 });

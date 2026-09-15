@@ -11,7 +11,6 @@
 import { defineConfig, sources, manifest } from "@nts/config";
 
 export default defineConfig({
-  tsconfig: "./tsconfig.json",
   targets: ["android-29", "ios-17"],
 
   native: [
@@ -24,6 +23,10 @@ export default defineConfig({
     // Supplies a *key* whose value the consumer must replace. Whether a merged
     // fragment can demand that, rather than silently ship a placeholder into a
     // shipping app, is open.
-    manifest({ target: "ios-17", path: "manifests/apple.plist", requiresValue: ["NSFaceIDUsageDescription"] }),
+    manifest({
+      target: "ios-17",
+      path: "manifests/apple.plist",
+      requiresValue: ["NSFaceIDUsageDescription"],
+    }),
   ],
 });

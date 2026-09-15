@@ -18,7 +18,6 @@ export default defineConfig({
     sdk: library.macos({
       entry: "./nts/sdk.ts",
       minimumVersion: "14.0",
-      exports: ["Sdk"],
       moduleName: "AcmeSdk",
       // Not modelled, and named so it is not mistaken for handled.
       // signing: { identity: "...", hardenedRuntime: true, notarize: true },

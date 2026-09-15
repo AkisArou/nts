@@ -16,7 +16,6 @@ export default defineConfig({
   products: {
     sdk: library.windows({
       entry: "./nts/sdk.ts",
-      exports: ["acme_remember", "acme_notify"],
       // Both halves. `library.windows` already defaults `importLibrary` to
       // true, because forgetting it is a link error in the consumer's project
       // rather than in ours.
