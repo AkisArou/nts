@@ -5,6 +5,14 @@ out=${1:-"$root/target/interop-native-rusage"}
 cc=${CC:-clang}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/examples/interop/native-rusage"
+derived=$(mktemp)
+trap 'rm -f "$derived"' EXIT
+sh "$source/bind.sh" "$derived"
+if ! diff -u "$source/types/rusage.d.ts" "$derived"; then
+  echo "the committed binding is not what bind.sh produces here; run:" >&2
+  echo "  sh $source/bind.sh" >&2
+  exit 1
+fi
 "$nts" emit-c "$source" --out "$out"
 # The witness is a check, not code: it declares no symbol and defines no
 # function, so it is compiled for its assertions and never linked. It includes

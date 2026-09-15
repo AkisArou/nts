@@ -871,16 +871,27 @@ formality.
 
 ### What blocks real headers, counted
 
-Twenty-six POSIX records, asked for one at a time. **Twenty-one work** --
-nineteen when the survey was first run, and the two that changed are the reason
-the rest of this section exists.
+Twenty-six POSIX records, asked for one at a time. **Twenty-two work** --
+nineteen when the survey was first run, and each one that changed is the reason
+a part of this section exists.
 
 | cause | records | |
 |---|---|---|
-| an **anonymous** record as a *named member's type* | `sockaddr_in6`, `in6_addr` | described now |
-| an **unnamed member** of anonymous type | `rusage`, `tcphdr`, `sigaction` | refuses |
+| an **anonymous** record as a *named member's type* | `sockaddr_in6`, `in6_addr` | described |
+| an **unnamed member**, whose fields C reaches as the enclosing record's | `rusage` | described |
+| a bit-field | `iphdr`, `tcphdr` | refuses |
 | a flexible array member (`unsigned char[]`, no length) | `cmsghdr` | refuses |
-| a bit-field | `iphdr` | refuses |
+| a typedef naming an **unnamed struct** (`__sigset_t`) | `sigaction` | refuses |
+
+`tcphdr` and `sigaction` both moved rows without anything being done to them,
+which is the part worth reading. Each had been filed under the first thing that
+stopped the walk. `tcphdr` reported an unnamed member and nothing past it;
+reaching through finds eleven bit-fields. `sigaction` reported an anonymous
+union; resolving that reaches `__sigset_t`, which is a typedef of a struct with
+no tag -- a third shape, and the one this survey had never produced. **A cause
+recorded from a walk that stops is the cause of the stop, not of the refusal**,
+and both entries read as naming problems for as long as nothing looked past the
+first one.
 
 **A generated binding is re-derived by the build that uses it.** Each
 `build.sh` runs its example's `bind.sh` into a scratch file and compares. A
@@ -909,17 +920,33 @@ The set counted is `stat`, `tm`, `timeval`, `itimerval`, `sockaddr_in`,
 used slightly different sets, and a count whose population is not stated is a
 number two people will read differently.
 
-Anonymous records blocked **five times** what bit-fields do, and each is a
-header a network program reaches for immediately. That count is
-why they came first: a gap list written from the C standard's table of contents
-ranks by what C *has*, and this ranks by what these headers *use*.
+Anonymous records read as blocking **five times** what bit-fields do, and that
+count is why they came first: a gap list written from the C standard's table of
+contents ranks by what C *has*, and this ranks by what these headers *use*. The
+ranking was right and **the count was not**. Of its five, `tcphdr` is a
+bit-field record and `sigaction` a typedef-of-an-unnamed-struct record; each had
+been filed under the first thing that stopped the walk. The real margin was 3 to
+2, not 5 to 1.
 
-Two of the four are described now, and the split between them is a real
-difference in C rather than in this tool. A **named member whose type is
-anonymous** -- `union { ... } __in6_u;` -- is reached as `p->__in6_u.field`, so
-only its *type* is unnameable. An **unnamed member** is reached as `p->field`,
-as though its fields belonged to the enclosing record, and this surface has no
-way to say that. Twenty-one of twenty-six now.
+That is worth keeping rather than quietly fixing. A survey that records the
+first refusal per record ranks **causes of stops**, and a record with several
+blockers is counted entirely against whichever one the walk happens to reach
+first. The margin it reported was three times the real one, and the only reason
+the decision survived is that the true margin pointed the same way.
+
+All four are described now, and the split between them is a real difference in
+C rather than in this tool -- one that turned out to decide how much work each
+needed. A **named member whose type is anonymous** -- `union { ... } __in6_u;`
+-- is reached as `p->__in6_u.field`, so only its *type* is unnameable, and every
+consumer of one has to reach its members by byte offset because C offers no
+other way. An **unnamed member** is reached as `p->field`, as though its fields
+belonged to the enclosing record -- and that is C resolving it, not something
+this surface has to reproduce. The first needed a lowering path; the second
+needed the binding to stop insisting on a name, and nothing else.
+
+Twenty-two of twenty-six now. The two still refusing for a *naming* reason do
+not exist: `tcphdr` and `sigaction` were counted here and belong to bit-fields
+and to a typedef of an unnamed struct respectively.
 
 Neither is described wrongly. Each refusal names the member and the reason.
 
