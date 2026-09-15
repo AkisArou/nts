@@ -716,7 +716,7 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
             "| {} | {} | {} | **{}** | {jvm} | {} | {} |{bun} {} | {} |{against_bun} {} |",
             row.case,
             row.cpp.map_or_else(|| "--".to_owned(), human),
-            human(row.nts),
+            row.nts.map_or_else(|| "--".to_owned(), human),
             row.llvm.map_or_else(|| "--".to_owned(), human),
             row.java.map_or_else(|| "--".to_owned(), human),
             human(row.node),
@@ -766,8 +766,24 @@ struct Row {
     /// a second implementation of it in C++ to have something to divide by is
     /// a correctness burden rather than a reference.
     cpp: Option<f64>,
-    nts: f64,
-    unspecialized: f64,
+    /// This compiler's primary lane. **`None` where it refused the program.**
+    ///
+    /// Non-optional until 2026-09-15, which meant "this compiler cannot compile
+    /// this case" had no representation and necessarily became a *lost row* --
+    /// and a lost row stops the whole README from being published, because a
+    /// table missing a row it used to carry answers a different question.
+    ///
+    /// So one correct refusal took the entire table down. `json-stringify-doc`
+    /// is the case: `c9f3d3a0` refuses a structural-to-subclass pointer cast
+    /// that used to be a SIGSEGV, that case's `work` reaches `options.replacer`
+    /// on an anonymous type not declaring it, and lowering drops the function.
+    /// The refusal is right; losing every other row over it is not.
+    ///
+    /// The README already had the vocabulary -- its legend says a `--` in a
+    /// backend column is "a program it refuses" -- and only this type could not
+    /// say it.
+    nts: Option<f64>,
+    unspecialized: Option<f64>,
     node: f64,
     /// The same program through the second backend. `None` where it refused
     /// the program, which is most of them today and is the honest answer.
@@ -968,6 +984,18 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     // emitted only when it does, and calling a function that was never emitted
     // is a link error -- which is `standalone_main`'s own rule, applied here.
     let initializes = specialized_text.contains("void module__init(void)");
+    // Whether this compiler kept the function the driver calls. When it did not,
+    // every lane of *ours* is absent for one reason -- the program was refused --
+    // and the references and the engines still measure, so the row is a real row
+    // with `--` in four cells rather than a case that vanished.
+    let refused = missing_entry(&specialized_text, &entry);
+    if let Some(ref name) = refused {
+        eprintln!(
+            "note: {shown:<16} this compiler refuses `{name}`, so its four columns \
+             are `--`; the references and the engines still ran"
+        );
+    }
+    let lowers = refused.is_none();
     std::fs::write(&specialized, &specialized_text)
         .with_context(|| format!("writing {specialized}"))?;
     std::fs::write(&plain, emit(&tsconfig, &entry, false, provider, false)?)
@@ -979,9 +1007,36 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         Err(_) => false,
     };
 
+    let emission =
+        Emission { renderable, initializes, needs_unicode, refused: refused.as_deref() };
     let (results, jvm_absence) = variants(root, case, out, name, &tsconfig, &entry, provider, defines,
-        &specialized, &plain, &rendered, renderable, initializes, needs_unicode)?;
-    finish_row(case, out, name, &shown, &results, jvm_absence)
+        &specialized, &plain, &rendered, emission)?;
+    finish_row(case, out, name, &shown, &results, jvm_absence, lowers)
+}
+
+/// What emitting the case established, before anything is built.
+///
+/// Threading these as loose arguments tripped `fn_params_excessive_bools`, and
+/// the lint is right for a reason beyond counting: `true, false, true, true` at
+/// a call site says nothing, and they are all one subject -- what this compiler
+/// managed to produce for this case.
+///
+/// The fourth is the refused entry point **by name rather than as a `bool`**,
+/// which `struct_excessive_bools` then asked for and which is the better field
+/// anyway: "refused" is a question with an answer, and the answer is which
+/// function lowering would not keep.
+#[derive(Clone, Copy)]
+struct Emission<'a> {
+    /// The LLVM backend rendered it.
+    renderable: bool,
+    /// The program has top-level code, so `module__init` exists to call.
+    initializes: bool,
+    /// The program reaches the Unicode tables, which are linked only then.
+    needs_unicode: bool,
+    /// The entry point lowering refused, if it refused one. `Some` takes all
+    /// four of this compiler's lanes rather than one: the refusal is in the
+    /// middle end, above every backend.
+    refused: Option<&'a str>,
 }
 
 /// Every variant of one case, built and measured in the order `VARIANTS` gives.
@@ -1003,15 +1058,13 @@ fn variants(
     specialized: &Utf8Path,
     plain: &Utf8Path,
     rendered: &Utf8Path,
-    renderable: bool,
-    initializes: bool,
-    needs_unicode: bool,
+    emission: Emission<'_>,
 ) -> Result<(Vec<Option<Measured>>, Option<JvmAbsence>)> {
     let mut results: Vec<Option<Measured>> = Vec::new();
     // Why the JVM column is empty, where it is. Two different absences that a
     // single blank -- or a single `refused` -- would flatten into one.
     let mut jvm_absence: Option<JvmAbsence> = None;
-    let driver = native_driver(case, out, name, initializes)?;
+    let driver = native_driver(case, out, name, emission.initializes)?;
     // Only the lanes asked for. `NTS_BENCH_LANES=jvm` compiles no C++, no C and
     // no LLVM, which is most of a run's wall clock: every other lane goes
     // through `clang -flto` per case and the JVM lane goes through `javac`.
@@ -1025,6 +1078,16 @@ fn variants(
         if let Some(ref only) = lanes
             && !only.iter().any(|want| lane_matches(want, variant.label))
         {
+            results.push(None);
+            continue;
+        }
+        // Nothing of ours to build when lowering refused the entry point, and
+        // that is all four of our lanes rather than one: the refusal is in the
+        // middle end, above every backend, so C, the unspecialised control, LLVM
+        // and the JVM lose the same function. `C++` and `Java` are hand-written
+        // and unaffected, which is what makes the row still worth having -- it
+        // keeps saying what the references and the engines cost.
+        if emission.refused.is_some() && variant.label.starts_with("nts") {
             results.push(None);
             continue;
         }
@@ -1048,7 +1111,7 @@ fn variants(
             driver.clone()
         };
         let cpp = vec![front, root.join("benches/common/main.cpp")];
-        let mut c = runtime_sources(out, needs_unicode);
+        let mut c = runtime_sources(out, emission.needs_unicode);
         match variant.generated {
             // Not a C++ file linked against a generated object, so it leaves
             // this loop rather than joining the command line below. A refused
@@ -1104,7 +1167,7 @@ fn variants(
             }
             Generated::Specialized => c.push(specialized.to_owned()),
             Generated::Unspecialized => c.push(plain.to_owned()),
-            Generated::Llvm if renderable => c.push(rendered.to_owned()),
+            Generated::Llvm if emission.renderable => c.push(rendered.to_owned()),
             Generated::Llvm => {
                 results.push(None);
                 continue;
@@ -1163,7 +1226,7 @@ fn work_agrees(row: &Row) -> Result<()> {
     ("hand-written references", vec![("C++", row.cpp), ("Java", row.java)]),
     (
         "this compiler's backends",
-        vec![("nts C", Some(row.nts)), ("nts LLVM", row.llvm), ("nts JVM", row.jvm)],
+        vec![("nts C", row.nts), ("nts LLVM", row.llvm), ("nts JVM", row.jvm)],
     ),
     ("engines", vec![("node", Some(row.node)), ("bun", row.bun)]),
     ] {
@@ -1285,6 +1348,7 @@ fn finish_row(
     shown: &str,
     results: &[Option<Measured>],
     jvm_absence: Option<JvmAbsence>,
+    lowers: bool,
 ) -> Result<Row> {
     let harness = node_harness(case, out, name)?;
     let node = measure(std::process::Command::new("node").arg(&harness))?;
@@ -1308,10 +1372,16 @@ fn finish_row(
     // render `--`; without one, an absent `nts` column is a failure, because
     // every ratio in the table divides by it.
     let filtered = wanted_lanes().is_some();
-    let required = |at: usize| -> Result<f64> {
+    // Three ways our column can be absent, and only one of them is a defect.
+    // A filter excluded it deliberately; this compiler refused the program, and
+    // `--` is what the README's legend already calls that; or it should have run
+    // and did not, which is the bug this `bail!` has always been for and which
+    // the other two must not be allowed to look like.
+    let required = |at: usize| -> Result<Option<f64>> {
         match results.get(at).and_then(Option::as_ref) {
-            Some(measured) => Ok(measured.ns_per_op),
-            None if filtered => Ok(f64::NAN),
+            Some(measured) => Ok(Some(measured.ns_per_op)),
+            None if filtered => Ok(Some(f64::NAN)),
+            None if !lowers => Ok(None),
             None => bail!("a variant that must run did not"),
         }
     };
@@ -1365,11 +1435,11 @@ fn finish_row(
         "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9}",
         row.case,
         row.cpp.map_or_else(|| "--".to_owned(), human),
-        human(row.nts),
+        row.nts.map_or_else(|| "--".to_owned(), human),
         row.llvm.map_or_else(|| "--".to_owned(), human),
         jvm_cell(row.jvm, row.jvm_absence),
         row.java.map_or_else(|| "--".to_owned(), human),
-        human(row.unspecialized),
+        row.unspecialized.map_or_else(|| "--".to_owned(), human),
         human(row.node),
         row.bun.map_or_else(|| "--".to_owned(), human),
         row.against(row.cpp),
@@ -1980,6 +2050,55 @@ fn java_tool(name: &str) -> Utf8PathBuf {
     Utf8PathBuf::from(name)
 }
 
+/// The entry point the driver calls, if lowering did not keep it.
+///
+/// **`emit-c` refuses and exits zero.** It renders what it can and reports the
+/// rest as diagnostics, so a function lowering dropped leaves a C file that
+/// compiles perfectly -- `clang -c` has no opinion about a translation unit with
+/// no `work` in it -- and the break surfaces from the *linker*, as `undefined
+/// reference to 'work'`, with nothing tying it to the `NTS1001` printed five
+/// lines earlier.
+///
+/// That read as a mysterious build failure for one case and took the README
+/// table down with it. Asked here instead, where the answer is "this compiler
+/// refuses this program", which the table has a spelling for.
+///
+/// Looks for the *definition*, not the declaration: the generated C emits
+/// `double work(double v0);` at the top of every file that calls it and
+/// `double work(double v0) {` only where it has a body. `initializes` above
+/// asks the same kind of question the same way.
+fn missing_entry(text: &str, entry: &[String]) -> Option<String> {
+    entry
+        .iter()
+        .find(|name| !text.lines().any(|line| defines(line, name)))
+        .cloned()
+}
+
+/// Whether one line of generated C opens the body of `name`.
+///
+/// Unindented and ending in `{`, which together separate a definition from both
+/// the prototype above it and any block inside another function.
+///
+/// The name has to be matched on a word boundary rather than after a space: a
+/// `string`-returning entry is emitted `NtsString *work(...)`, with no space
+/// before it, and a substring test alone would also accept `nts_work(`.
+fn defines(line: &str, name: &str) -> bool {
+    if !line.ends_with('{') || line.starts_with(char::is_whitespace) {
+        return false;
+    }
+    let needle = format!("{name}(");
+    let mut from = 0;
+    while let Some(found) = line[from..].find(&needle) {
+        let at = from + found;
+        let before = line[..at].chars().next_back();
+        if !matches!(before, Some(c) if c.is_alphanumeric() || c == '_') {
+            return true;
+        }
+        from = at + 1;
+    }
+    false
+}
+
 fn entry_points(case: &Utf8Path) -> Result<Vec<String>> {
     let source = std::fs::read_to_string(case.join("case.ts"))
         .with_context(|| format!("reading {case}/case.ts"))?;
@@ -2484,15 +2603,15 @@ fn human(ns: f64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Row, lost_case_decline};
+    use super::{Row, lost_case_decline, missing_entry};
     use camino::Utf8PathBuf;
 
     fn row(case: &str) -> Row {
         Row {
             case: case.to_owned(),
             cpp: None,
-            nts: 1.0,
-            unspecialized: 1.0,
+            nts: Some(1.0),
+            unspecialized: Some(1.0),
             node: 1.0,
             llvm: None,
             jvm: None,
@@ -2530,6 +2649,56 @@ mod tests {
         // its row is spelled `objects (rc)` and its directory is `objects`.
         assert!(!message.contains("objects"), "{message}");
         assert!(!message.contains("fib"), "{message}");
+    }
+
+    /// The shape that took the README table down: a declaration and no body.
+    ///
+    /// This is `json-stringify-doc`'s generated C exactly -- lowering refused the
+    /// function, `emit-c` exited zero, the prototype stayed because the driver
+    /// is emitted from the same entry list, and the first thing to notice was
+    /// the linker.
+    #[test]
+    fn a_declared_but_undefined_entry_is_a_refusal() {
+        let entry = vec!["work".to_owned()];
+        let defined = "#include <stdint.h>\ndouble work(double v0);\ndouble work(double v0) {\n  return v0;\n}\n";
+        let declared_only = "#include <stdint.h>\ndouble work(double v0);\n";
+        assert_eq!(missing_entry(defined, &entry), None, "a body is a definition");
+        assert_eq!(
+            missing_entry(declared_only, &entry),
+            Some("work".to_owned()),
+            "a prototype alone is not"
+        );
+    }
+
+    /// A body is a body wherever the entry list points, and an *indented* line
+    /// ending in `{` is a block inside some other function, not a definition.
+    #[test]
+    fn a_nested_block_is_not_a_definition() {
+        let entry = vec!["work".to_owned()];
+        // The line has to be one the guard actually decides: indented, ending
+        // in `{`, and naming `work`. The first version of this fixture had no
+        // such line -- it passed with the indentation check removed, which is a
+        // test whose answer did not depend on the thing it was testing.
+        let nested = "double other(double v) {\n  if (work(v)) {\n    return 1;\n  }\n}\n";
+        assert_eq!(
+            missing_entry(nested, &entry),
+            Some("work".to_owned()),
+            "a call to `work` inside another function does not define it"
+        );
+    }
+
+    /// The two shapes a naive substring test gets wrong.
+    #[test]
+    fn a_pointer_return_defines_and_a_longer_name_does_not() {
+        let entry = vec!["work".to_owned()];
+        let pointer = "NtsString *work(double v0) {\n  return 0;\n}\n";
+        assert_eq!(missing_entry(pointer, &entry), None, "no space before the name");
+        let lookalike = "double nts_work(double v0) {\n  return v0;\n}\n";
+        assert_eq!(
+            missing_entry(lookalike, &entry),
+            Some("work".to_owned()),
+            "`nts_work` is not `work`"
+        );
     }
 
     /// A sweep that lost nothing never reaches this branch; if it somehow does,
