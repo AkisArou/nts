@@ -17,6 +17,27 @@ export function refused(catalog: Catalog): void {
   // Refused by the checker
   // ---------------------------------------------------------------------
 
+  // NTS1001: a call inside a `try`, whose `throw` would not reach this handler
+  //
+  // A Java method can throw, and a TypeScript `try` cannot catch it: a `throw`
+  // lowers to a jump to the handler *block*, which is a branch inside one
+  // function, and a callee has no edge back to its caller's handler. Refused
+  // rather than compiled, because the alternative is a `catch` that never runs.
+  //
+  // **This was a wrong answer until 2026-09-15 and is the reason this section
+  // exists.** The guard has always been here and had always fired for a
+  // TypeScript call; it could not see a bound one. `calls_compiled_code` tests
+  // membership of a set built by scanning function *bodies* for a `throw`, and
+  // a declaration-only foreign method has no body -- so it was structurally
+  // excluded rather than overlooked. The `try` compiled, emitted no exception
+  // table, and aborted where node prints the caught value.
+  //
+  // A native C call is still allowed inside a `try`, and that is not an
+  // oversight: C cannot unwind into TypeScript, so there is nothing to catch
+  // and nothing to refuse.
+  //
+  //   try { catalog.parse("abc"); } catch (e) { }
+
   // TS2365: Operator '+' cannot be applied to types 'bigint' and '1'.
   //
   // `Catalog.id()` is a Java `long`, which exceeds 2^53 and does not

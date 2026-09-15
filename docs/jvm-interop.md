@@ -61,9 +61,11 @@ coordinate was not. A line number into a file you do not own is a citation with
 an expiry date, and `grep` finds the phrase after any edit that does not delete
 it.
 
-## A `try` around a bound call is a wrong answer, not a refusal
+## A `try` around a bound call: was a wrong answer, now a refusal
 
-**Measured 2026-09-15, and this is the sharpest open defect in the lane.**
+**Measured 2026-09-15, and fixed the same day at `0266b852`.** Kept because the
+shape is the lane's sharpest example of how a correct guard goes wrong, and
+because the fix has a constraint the obvious version misses.
 
 `hir/lower.rs` refuses a call inside a `try`, by name, with the reason written
 out: *"a call inside a `try`, whose `throw` would not reach this handler"*. A
@@ -76,7 +78,8 @@ right and its comment says it was measured on all three backends.
 | inside a `try` | what happens |
 | --- | --- |
 | `deep(n)`, a plain TypeScript call | `NTS1001 a call inside a `try`, whose `throw` would not reach this handler` |
-| `catalog.parse("abc")`, a bound Java call | compiles clean, **no exception table**, and aborts with `java.lang.NumberFormatException` where node prints `caught` |
+| `catalog.parse("abc")`, a bound Java call | **was**: compiles clean, no exception table, aborts with `java.lang.NumberFormatException` where node prints `caught`. **Now**: the same `NTS1001` |
+| `getrusage(0, u)`, a native C call | compiles, and correctly so -- C cannot unwind into TypeScript, so there is nothing to catch |
 
 So the guard covers our own calls and misses the interop ones, which is the
 case it matters most for: a jar's methods throw, and `parse` declares
@@ -93,7 +96,8 @@ already lost the fact that a call was inside a `try`. The refusal has to widen
 where it already lives, in `hir/lower.rs`'s `lower_try` -- `call_within` is
 finding the plain call and not the bound one.
 
-Reported rather than worked around, because a backend-side approximation of
+Fixed in the lowering, which is where it had to be. Not worked around here,
+because a backend-side approximation of
 "was this inside a `try`" would be a second derivation of something the lowering
 knows and dropped, and this document has a section on what that costs. The
 `catch` is not merely unhandled at the JVM level -- it is **absent from the class
@@ -125,11 +129,14 @@ So the predicate splits by what the foreign call *is*:
 | `Callee::External(name)` not in `program.foreign` | no -- a runtime helper, which aborts |
 | `Callee::Native(_)` | no -- C cannot unwind into TypeScript |
 
-`program.foreign` is the discriminator rather than a new set because it *is* the
-JVM binding table and nothing else fills it: its `ForeignKind` values are JVM
+The discriminator is that binding table rather than a new set, because it *is*
+the JVM's and nothing else fills it: its `ForeignKind` values are JVM
 member kinds, so a C-only program has it empty and the native lane is excluded
 by construction. `ops.rs` already performs that exact lookup to tell a bound
-method from a helper, so the two lanes ask one question.
+method from a helper, so the two lanes ask one question. As landed it keys on
+the *position* form -- `foreign[(file, span.end)]` -- because
+`calls_compiled_code` runs on AST nodes before a `Callee` exists; the same
+table, reached the way lowering already reaches it.
 
 **Not restricted to methods declaring `throws`**, which is the tempting version
 and is wrong: Java's unchecked exceptions mean any method can raise, and a
