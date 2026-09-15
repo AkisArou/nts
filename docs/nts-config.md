@@ -409,6 +409,53 @@ for a config to select from.
 
 `examples/library`'s whole product is now `library.linux({ entry })`.
 
+### An XCFramework is not the Apple `.so`, and the artifact is chosen by consumption
+
+The constructors were per *platform* -- `library.linux`, `library.windows`,
+`library.macos`, `library.ios` -- and two of those encoded a mistake.
+
+**Three Apple things get collapsed by the name and are not the same:**
+
+    .dylib          the shared library itself -- this is what `.so` is
+    .framework      a bundle: that binary plus headers, a module map, Info.plist
+    .xcframework    several frameworks, one slice per platform *and* environment
+
+**XCFramework exists for a problem `.so` does not have.** A universal binary
+cannot hold both an `arm64` iOS *device* slice and an `arm64` iOS *simulator*
+slice: same architecture, different platform triple, and `lipo` has nowhere to
+put the distinction. The `.xcframework` is the container that can.
+
+So `library.macos` always producing one was wrong. A macOS program linking with
+clang or CMake wants a `.dylib` and a header -- *identical in shape to Linux*.
+Only an Xcode consumer (a SwiftPM `binaryTarget`, CocoaPods
+`vendored_frameworks`, an app embedding it) wants the XCFramework.
+
+The constructors now split by **how the artifact is consumed**:
+
+    library.native({ targets: [linux, macos, windows] })   .so / .dylib / .dll
+    library.xcframework({ targets: [ios, macos] })          Apple distribution
+
+`library.native` is one constructor over several targets because those three are
+one *kind* of artifact with different packaging, not three kinds. And what
+differs between them turned out to be derived rather than configured, which is
+this audit's recurring shape:
+
+- **the import library** on Windows is always emitted -- a `.dll` without its
+  `.lib` cannot be linked against, so it was never a choice;
+- **the `.pc`** on unix is always emitted, because a consumer who cannot find the
+  library hard-codes a path, and a hard-coded path is how a library stops being
+  redistributable;
+- **`moduleDefinition` is gone entirely.** A `.def` is a second way to say which
+  symbols are exported, and we generate the code -- the list is `exports`, and
+  two spellings of it is the duplicate that field had just lost.
+
+`soname` survives as an **override** for a library that must match a name it did
+not choose; the default derives from the product name and version.
+
+The fixture shows the consequence: `macos-brownfield` uses `library.xcframework`
+because it ships through CocoaPods, and that now reads as a decision rather than
+as what macOS happens to produce.
+
 ### What the audit is really about
 
 None of this is a criticism of the RFC. It is day-one text and says so. What it

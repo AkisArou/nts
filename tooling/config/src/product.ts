@@ -97,24 +97,63 @@ export interface JarProduct extends LibraryBase {
   readonly javaPackage: string;
 }
 
+/**
+ * The Apple **distribution** artifact, which is not the Apple equivalent of a
+ * `.so`.
+ *
+ * Three levels get collapsed into one by the name, and they are not the same
+ * thing:
+ *
+ *   `.dylib`        the shared library itself -- this is what `.so` is
+ *   `.framework`    a bundle: that binary plus headers, a module map, Info.plist
+ *   `.xcframework`  several frameworks, one slice per platform *and* per
+ *                   environment
+ *
+ * **XCFramework exists for a problem `.so` does not have.** A universal binary
+ * cannot hold both an `arm64` iOS *device* slice and an `arm64` iOS *simulator*
+ * slice: same architecture, different platform triple, and `lipo` has nowhere to
+ * put the distinction. An `.xcframework` is the container that can.
+ *
+ * So this is chosen by **how the artifact is consumed**, not by which platform
+ * it targets. A macOS program linking with clang or CMake wants `library.native`
+ * and a `.dylib`, exactly as on Linux. A SwiftPM `binaryTarget` or a CocoaPods
+ * `vendored_frameworks` wants this.
+ */
 export interface XcframeworkProduct extends LibraryBase {
   readonly kind: "xcframework";
   /** The Swift module a consumer writes `import` for. */
   readonly moduleName: string;
 }
 
+/**
+ * A shared library with a C ABI: `.so`, `.dylib`, `.dll`.
+ *
+ * One product across Linux, macOS and Windows, because it is one *kind* of
+ * artifact with per-platform packaging rather than three kinds. What differs
+ * between them is **derived, not configured**, which is the lesson the rest of
+ * this audit kept producing:
+ *
+ *   - **the import library** on Windows is emitted always. A `.dll` without its
+ *     `.lib` cannot be linked against, so it was never a choice;
+ *   - **the `.pc`** on unix is emitted always, because a consumer that cannot
+ *     find the library hard-codes a path, and a hard-coded path is how a library
+ *     stops being redistributable;
+ *   - **a module-definition file** is gone entirely. A `.def` is an alternative
+ *     way to say which symbols are exported, and we generate the code -- the
+ *     export list is `exports`, and having two spellings of it is the duplicate
+ *     that field just lost.
+ */
 export interface NativeLibraryProduct extends LibraryBase {
   readonly kind: "shared-library" | "static-library";
-  /** Versioned soname, so an ABI break is a link error rather than a crash. */
+  /**
+   * Versioned soname, so an ABI break is a link error rather than a crash.
+   *
+   * An **override**. The default is derived from the product name and version;
+   * this is for a library that must match a name it did not choose.
+   */
   readonly soname?: string;
-  /** The installable header, which is C's equivalent of `exports`. */
+  /** The installed header. Defaults to the product name. */
   readonly header?: string;
-  /** Emit a `.pc`, because on Linux that is how the search actually happens. */
-  readonly pkgConfig?: boolean;
-  /** Windows needs the import library beside the DLL; one without the other is unlinkable. */
-  readonly importLibrary?: boolean;
-  /** A `.def` naming the exported symbols, where the linker wants one. */
-  readonly moduleDefinition?: string;
 }
 
 export interface NodeAddonProduct extends LibraryBase {
@@ -185,6 +224,7 @@ export const library = Object.assign(libraryBase, {
     const { minSdk, ...rest } = o;
     return { kind: "aar", targets: [t.android({ minSdk })], ...rest };
   },
+
   /** A jar. The easiest target to ship to, and the one `nts.gen` makes unacceptable today. */
   jvm: (
     o: Omit<JarProduct, "kind" | "targets"> & { readonly release?: number },
@@ -192,33 +232,41 @@ export const library = Object.assign(libraryBase, {
     const { release, ...rest } = o;
     return { kind: "jar", targets: [t.jvm({ release })], ...rest };
   },
-  /** An XCFramework: per-architecture slices plus a module map, which is what Xcode resolves. */
-  ios: (
-    o: Omit<XcframeworkProduct, "kind" | "targets"> & { readonly minimumVersion: string },
-  ): XcframeworkProduct => {
-    const { minimumVersion, ...rest } = o;
-    return { kind: "xcframework", targets: [t.ios({ minimumVersion })], ...rest };
-  },
-  macos: (
-    o: Omit<XcframeworkProduct, "kind" | "targets"> & { readonly minimumVersion: string },
-  ): XcframeworkProduct => {
-    const { minimumVersion, ...rest } = o;
-    return { kind: "xcframework", targets: [t.macos({ minimumVersion })], ...rest };
-  },
-  /** `.so` plus a `.pc`; without the latter a consumer hard-codes a path. */
-  linux: (o: Omit<NativeLibraryProduct, "kind" | "targets">): NativeLibraryProduct => ({
+
+  /**
+   * A shared library, for one or more of Linux, macOS and Windows.
+   *
+   * `.so`, `.dylib` and `.dll` are one kind of artifact with different
+   * packaging, so this is one constructor over several targets rather than
+   * three. **A macOS consumer linking with clang or CMake wants this**, not
+   * `library.xcframework`: the Apple equivalent of a `.so` is a `.dylib`, and an
+   * XCFramework sits two levels above it.
+   */
+  native: (o: Omit<NativeLibraryProduct, "kind">): NativeLibraryProduct => ({
     kind: "shared-library",
-    targets: [t.linux()],
-    pkgConfig: true,
     ...o,
   }),
-  /** `.dll` **and** `.lib`. Emitting one of the two fails in the consumer's link. */
-  windows: (o: Omit<NativeLibraryProduct, "kind" | "targets">): NativeLibraryProduct => ({
-    kind: "shared-library",
-    targets: [t.windows()],
-    importLibrary: true,
+
+  /** A static archive, where a consumer links the code in rather than beside. */
+  staticNative: (o: Omit<NativeLibraryProduct, "kind">): NativeLibraryProduct => ({
+    kind: "static-library",
     ...o,
   }),
+
+  /**
+   * An XCFramework, for Xcode consumers: a SwiftPM `binaryTarget`, CocoaPods
+   * `vendored_frameworks`, or an app embedding it.
+   *
+   * Takes the Apple targets **together**, because holding several platform and
+   * environment slices in one artifact is the entire reason the format exists --
+   * a universal binary cannot carry both an `arm64` device slice and an `arm64`
+   * simulator slice, same architecture and different triple.
+   */
+  xcframework: (o: Omit<XcframeworkProduct, "kind">): XcframeworkProduct => ({
+    kind: "xcframework",
+    ...o,
+  }),
+
   /** A Node addon, the one artifact that is real today (`emit-c --napi`). */
   node: (o: Omit<NodeAddonProduct, "kind" | "targets">): NodeAddonProduct => ({
     kind: "node-addon",

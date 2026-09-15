@@ -1,4 +1,4 @@
-import { defineConfig, library } from "@nts/config";
+import { defineConfig, library, target } from "@nts/config";
 
 export default defineConfig({
   // `tsconfig` defaults to `./tsconfig.json` beside this file.
@@ -20,7 +20,8 @@ export default defineConfig({
     //
     // No memory provider either: it is a `--rc` flag rather than configuration,
     // because of the two the compiler has, exactly one is shippable.
-    hello: library.linux({
+    hello: library.native({
+      targets: [target.linux()],
       entry: "./src/main.ts",
     }),
   },
