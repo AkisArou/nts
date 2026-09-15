@@ -7257,6 +7257,29 @@ twenty-eight rows against node rather than twenty-four plus three exceptions.
 It was accepted and ignored, because the comparison it exists to relax was the
 comparison that was missing.
 
+## `test-util-inspect-long-running.js` fails under load and not otherwise
+
+It builds a 1,000-level structure with circular references and calls
+`util.inspect(obj, { depth: Infinity })`. Upstream the point is that a huge object
+must not exhaust the heap; here the failure mode is the stack:
+
+    FAIL  test-util-inspect-long-running.js
+            Maximum call stack size exceeded
+
+Measured before attributing it: **0 failures in 5 runs** with nothing else running
+-- three isolated `--only` runs and two full `util` suites, all 29 passed / 0
+failed -- against one failure in a full 26-module sweep that ran alongside a corpus
+reach measurement. Nothing under `util`'s cone had changed since it last passed, so
+it is the machine and not the module.
+
+Worth writing down rather than shrugging at, because a sweep is exactly when it
+will happen again and the failure names a real limit: this profile's `inspect`
+recurses where node's iterates, so how deep it can go is a property of the
+*process*, not of the input. A future sweep reporting this should re-run the file
+alone before believing it, and the durable fix is an explicit depth bound in
+`inspect` rather than relying on the stack — which is a different piece of work
+and is not pretended to be done here.
+
 ## Corpus reach, and one number in a commit message that is wrong
 
 The differential corpus reaches **969 of 1,089 published functions**, up from 659.
