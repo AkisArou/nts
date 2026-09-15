@@ -26148,6 +26148,39 @@ impl<'a> FuncBuilder<'a> {
     /// the snapshot is the host's, and a `new` of a provided error is this
     /// compiler's own.
     fn calls_compiled_code(&self, call: NodeId) -> bool {
+        // A bound foreign member, reached through the binding table. It can
+        // raise, and the premise above -- "only compiled code can" -- was
+        // written before there was a backend where that is false. A Java method
+        // throws; the JVM session found `try { c.parse("abc") } catch {}`
+        // compiling clean, emitting no exception table, and aborting where node
+        // prints the caught value.
+        //
+        // **Any** bound member, not only one declaring `throws`. Java's
+        // unchecked exceptions are in no `throws` clause -- a
+        // `NullPointerException` out of a getter is the ordinary case -- so
+        // reading the declaration would be right about the declared half and
+        // silently permissive about the rest.
+        //
+        // Native C is deliberately *not* this. A C function cannot unwind into
+        // TypeScript: `examples/interop/native-callback` shows the converse on
+        // purpose, containing a `throw` inside a bridge because `longjmp` past a
+        // foreign frame skips what it holds. Refusing here would take away every
+        // `try` holding a native call. The two are separated by construction
+        // rather than by a check: this table is keyed by a *binding*
+        // declaration, its `ForeignKind` is `Static`/`Virtual`/`Interface`/
+        // `Special`/`Field`/`StaticField` -- JVM member kinds -- and nothing
+        // native writes to it, so a C-only program asks an empty map.
+        //
+        // The same lookup `Callee::External` is resolved with, so this and
+        // codegen answer one question rather than two that can disagree.
+        if let Some(declaration) =
+            self.snapshot.call_targets.get(&call).and_then(|target| target.callee)
+        {
+            let at = self.location(declaration);
+            if self.foreign.contains_key(&(at.file.0, at.span.end)) {
+                return true;
+            }
+        }
         let Some(callee) = self.children(call).first().copied() else {
             return false;
         };
