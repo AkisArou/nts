@@ -2313,6 +2313,54 @@ checked this, and cannot. The instrument that sees it is the differential, or a
 compiled benchmark with a checksum; the ordinary suite is silent, and silent
 here reads exactly like correct.
 
+### Reading a member by a runtime key, measured 2026-09-15
+
+The node lane asked whether `expected[key]` can be given a representation, so
+that `assert.throws` stops refusing a program node runs. Measured before
+answering, and the measurement splits the question in two.
+
+**The site they asked about needs the metaobject protocol.**
+`readErrorField(value: object, key: string)` takes TypeScript's `object`, which
+represents as an **erased** value — a tag and a payload. Reading a named member
+off one means asking the runtime "which offset is `key` on whatever this
+actually is", and `NtsDescriptor` carries `kind`, `size`, a reference-offset
+table for the collector and a method table. **No field names.** Adding them is a
+representation change: a name table per object type, and with an erased receiver
+the compiler cannot bound which types reach the site, so conservatively that is
+every object type in the program.
+
+**That half is worth 10 sites.** And on `assert` specifically the residual after
+their twelve added names is **6 expectations of 4,182**, three of which are keys
+a test invented in order to fail. It does not pay for itself.
+
+**But the first count was 10 because I counted a message and not a cause.** One
+cause wears several diagnostics here, and the siblings are much larger:
+
+| sites | the refusal |
+|---:|---|
+| 299 | ``indexing `X`, which stands for `X` here, which is not an array`` — `this` on a class: `WritableStreamDefaultWriter` 224, `WritableStream` 56, `Timeout` 14 |
+| 248 | ``indexing `X`, which is not an array`` — `ReadableStream` 168, `HighWaterMarkOptions` 32, `StreamLike` 18 |
+| 14 | indexing a union of an object \| null |
+| 10 | indexing an **object type** — the erased case above |
+| 7 | indexing a union of a tuple \| undefined |
+
+578 together, and **547 of them have a statically known receiver.** That is a
+different and much smaller feature: where the type is known at the site, `o[k]`
+is a switch over *that type's own* property names against the runtime key, which
+needs no runtime name table and no representation change at all.
+
+**And 578 sites are 31 distinct source locations.** Counted rather than assumed
+— `http/src/outgoing.ts` 6, `web-platform/src/streams/writable.ts` 5,
+`readable.ts` 4, `util/src/deep-equal.ts` 3. That is the twenty-fold
+site-to-cause overstatement this file's census header warns about, confirmed on
+a fresh case, and it is the number any decision should use.
+
+So the answer to the lane is: **the erased read is deferred with a reason and a
+count**; the static read is a real candidate at 31 distinct sites, unstarted, and
+subject to the same caution as everything else in §15 — clearing a refusal
+advances a chain and is not the same as publishing anything. Nobody should start
+it on the strength of 578.
+
 ### Deferred rather than rejected
 
 Wanted, and not soon: `Atomics` and `SharedArrayBuffer` need an agent model and
