@@ -127,6 +127,20 @@ export interface ErrorExpectation {
   readonly diff?: DiffMode;
   readonly details?: readonly unknown[];
   readonly stack?: string | RegExp;
+  // The error properties node's own suite actually asserts on; see the note in
+  // `readErrorField`'s `default` for why this is a floor and not the rule.
+  readonly constructor?: unknown;
+  readonly permission?: string | RegExp;
+  readonly resource?: string | RegExp;
+  readonly info?: unknown;
+  readonly reason?: string | RegExp;
+  readonly library?: string | RegExp;
+  readonly function?: string | RegExp;
+  readonly errcode?: number | string;
+  readonly errstr?: string | RegExp;
+  readonly url?: string | RegExp;
+  readonly filename?: string | RegExp;
+  readonly errorCode?: number | string;
 }
 
 export type Expectation =
@@ -237,7 +251,73 @@ function readErrorField(value: object, key: string): ErrorField {
       return "stack" in value
         ? { present: true, value: value.stack }
         : MISSING_ERROR_FIELD;
+    case "constructor":
+      return "constructor" in value
+        ? { present: true, value: value.constructor }
+        : MISSING_ERROR_FIELD;
+    case "permission":
+      return "permission" in value
+        ? { present: true, value: value.permission }
+        : MISSING_ERROR_FIELD;
+    case "resource":
+      return "resource" in value
+        ? { present: true, value: value.resource }
+        : MISSING_ERROR_FIELD;
+    case "info":
+      return "info" in value
+        ? { present: true, value: value.info }
+        : MISSING_ERROR_FIELD;
+    case "reason":
+      return "reason" in value
+        ? { present: true, value: value.reason }
+        : MISSING_ERROR_FIELD;
+    case "library":
+      return "library" in value
+        ? { present: true, value: value.library }
+        : MISSING_ERROR_FIELD;
+    case "function":
+      return "function" in value
+        ? { present: true, value: value.function }
+        : MISSING_ERROR_FIELD;
+    case "errcode":
+      return "errcode" in value
+        ? { present: true, value: value.errcode }
+        : MISSING_ERROR_FIELD;
+    case "errstr":
+      return "errstr" in value
+        ? { present: true, value: value.errstr }
+        : MISSING_ERROR_FIELD;
+    case "url":
+      return "url" in value
+        ? { present: true, value: value.url }
+        : MISSING_ERROR_FIELD;
+    case "filename":
+      return "filename" in value
+        ? { present: true, value: value.filename }
+        : MISSING_ERROR_FIELD;
+    case "errorCode":
+      return "errorCode" in value
+        ? { present: true, value: value.errorCode }
+        : MISSING_ERROR_FIELD;
     default:
+      // **Not node's rule, and the gap is measured rather than assumed.** Node reads
+      // `expected[key]` for whatever keys the object has and deep-compares, so an
+      // unknown key fails the assertion; here the whole call is refused with
+      // `ERR_INVALID_ARG_VALUE`, which rejects a program node runs.
+      //
+      // The dynamic read is what has no compiled representation, so closing this
+      // properly is a lowering question and not one this file can answer. Counting the
+      // cost first: of 4,182 object-literal expectations in node's own suite, 148 name
+      // a key this switch did not have. The twelve added above are the real error
+      // properties behind 145 of them -- `permission` and `resource` from the
+      // permission model, `reason`/`library`/`function`/`errcode`/`errstr` from
+      // OpenSSL, and `constructor`, which is idiomatic documented usage rather than
+      // test-only arbitrariness. The remaining three are keys a test invented to make
+      // an assertion fail on purpose.
+      //
+      // **Twelve more names is not the fix**, and adding them is a treadmill: a user's
+      // own error property lands here exactly as before. The enumeration is a floor
+      // under the common cases while the general question is open.
       return MISSING_ERROR_FIELD;
   }
 }

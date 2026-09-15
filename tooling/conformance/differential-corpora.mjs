@@ -1839,6 +1839,58 @@ export const CORPORA = {
           // The loose pair is given `"1"` against `1` and `""` against `0`, which
           // is where `==` and `===` part company and where a reimplementation that
           // routes both through one comparison stops being distinguishable.
+          // **The keys an expectation object may carry.** Node reads whatever keys
+          // the object has; this profile enumerates them, because a dynamic
+          // `expected[key]` read has no compiled representation. Twelve were added
+          // after counting the cost against node's own suite -- 148 of 4,182
+          // object-literal expectations named a key the enumeration lacked, led by
+          // `permission`, `resource` and `constructor`.
+          //
+          // `constructor` is the one worth a row of its own: it is idiomatic node,
+          // it is how 35 upstream sites spell "the error class", and it was refused
+          // outright here. The matching and mismatching arms are both compared, so
+          // a key that is *accepted but never consulted* is caught as well as one
+          // that is rejected.
+          //
+          // The last arm is the residual and it is expected to agree only because
+          // both sides throw: a key nothing knows about still gives
+          // `ERR_INVALID_ARG_VALUE` here and `ERR_ASSERTION` in node, so it is
+          // deliberately **not** in this row. See `readErrorField`'s `default`.
+          label: "throws-expectation-keys",
+          call: (m, s) => {
+            const show = (f) => {
+              try {
+                f();
+                return "passed";
+              } catch (error) {
+                return `${(error && error.code) || (error && error.name) || "?"}`;
+              }
+            };
+            const text = String(s).slice(0, 6) || "x";
+            const withProps = (props) => () => {
+              const error = new TypeError(text);
+              for (const [key, value] of Object.entries(props)) error[key] = value;
+              throw error;
+            };
+            return [
+              show(() => m.throws(withProps({}), { constructor: TypeError })),
+              show(() => m.throws(withProps({}), { constructor: RangeError })),
+              show(() => m.throws(withProps({}), { constructor: TypeError, message: text })),
+              show(() => m.throws(withProps({ permission: text }), { permission: text })),
+              show(() => m.throws(withProps({ permission: text }), { permission: `${text}!` })),
+              show(() => m.throws(withProps({ resource: text }), { resource: text })),
+              show(() => m.throws(withProps({ info: { at: text } }), { info: { at: text } })),
+              show(() => m.throws(withProps({ reason: text, library: "ssl" }), { reason: text, library: "ssl" })),
+              show(() => m.throws(withProps({ errcode: text.length }), { errcode: text.length })),
+              show(() => m.throws(withProps({ errstr: text }), { errstr: text })),
+              show(() => m.throws(withProps({ url: text }), { url: text })),
+              show(() => m.throws(withProps({ filename: text }), { filename: text })),
+              show(() => m.throws(withProps({ errorCode: text.length }), { errorCode: text.length })),
+              show(() => m.throws(withProps({ function: text }), { function: text })),
+            ].join("|");
+          },
+        },
+        {
           label: "assertions",
           call: (m, s) => {
             const show = (f) => {
