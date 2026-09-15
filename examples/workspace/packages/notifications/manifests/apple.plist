@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Merged into the app's Info.plist. Notifications need no usage string, but
+     they do need the background mode to deliver while suspended -- and an app
+     that ships without it fails review rather than at build time, which is the
+     worst place for this to surface. -->
+<plist version="1.0">
+<dict>
+    <key>UIBackgroundModes</key>
+    <array><string>remote-notification</string></array>
+</dict>
+</plist>

@@ -1,0 +1,5 @@
+<!-- USE_BIOMETRIC is required; without it the prompt throws rather than
+     returning false, so a consumer that omits it sees a crash and not a denial. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+</manifest>

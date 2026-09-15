@@ -1,0 +1,10 @@
+<!-- Contributed to the app's AndroidManifest by the merge, not written by the app.
+     POST_NOTIFICATIONS is required from API 33; a consumer that forgets it gets a
+     silent no-op at runtime, which is exactly the class of failure a package
+     should not be able to inflict on its consumer. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <application>
+        <receiver android:name="com.example.notifications.TapReceiver" android:exported="false" />
+    </application>
+</manifest>

@@ -1,0 +1,5 @@
+# Merged into the app's .desktop entry. libnotify needs no permission, but a
+# desktop notification is attributed to a StartupWMClass, and getting it wrong
+# makes the notification appear to come from nothing.
+[Desktop Entry]
+StartupNotify=true

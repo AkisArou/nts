@@ -1,0 +1,11 @@
+<!-- Merged into the app's package manifest. Toasts are a declared capability. -->
+<Package>
+  <Capabilities>
+    <Capability Name="internetClient" />
+  </Capabilities>
+  <Applications>
+    <Application>
+      <uap:VisualElements ToastCapable="true" />
+    </Application>
+  </Applications>
+</Package>

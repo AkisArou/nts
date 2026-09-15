@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- NSFaceIDUsageDescription is mandatory: an iOS app that calls Face ID without
+     it is terminated by the system, not denied. The string is the consumer's to
+     write, so a package can only supply the key and a placeholder -- which is
+     itself a design question the fixture poses: can a merged fragment REQUIRE a
+     value from its consumer rather than supply one? -->
+<plist version="1.0">
+<dict>
+    <key>NSFaceIDUsageDescription</key>
+    <string>REQUIRED: describe why this app uses Face ID.</string>
+</dict>
+</plist>
