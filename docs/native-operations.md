@@ -318,6 +318,41 @@ The includes are emitted only where a layout needs them. An include is not free
 in this file -- `<stdlib.h>` declares `div`, a name a TypeScript program is
 entitled to export -- so a program naming no header-backed struct gets none.
 
+## Which of these checks can actually fire
+
+A guard nobody reaches does not read as unbuilt -- it reads as protection. So
+for every refusal added here, the question asked was not *is it correct* but
+**which call sites reach it**, and the answer is written down rather than
+assumed. Each row below was run.
+
+| refusal | reachable from TypeScript? | how it fails |
+|---|---|---|
+| `NTS2007` conflicting ABI | yes | `emit-c` exits 1: the emitted call is wrong |
+| an anonymous record in a record we must define | yes | exits 0, and `program.c` does not compile |
+| a copy between two different native types | yes | lowering refuses |
+| a variadic tail C would promote | yes | lowering refuses, naming the promoted type |
+| a variadic function with no fixed parameter | yes | lowering refuses |
+| `bind-c`: a contract naming no parameter | yes | refuses, listing the ones that exist |
+| `bind-c`: a bit-field, an anonymous record | yes | refuses by name |
+| `bind-c`: a layout it cannot reproduce | yes | caught its own `c_uint32` bug |
+| a copy into a `const` native view | **no** | tsgo answers `TS2345` first |
+| a rest parameter that is not last | **no** | tsgo answers `TS1014` first |
+| a rest parameter of non-array type | **no** | tsgo answers `TS2370` first |
+| a callback entering on a foreign thread | **no**, for a standalone program | see below |
+
+The three tsgo cases are kept and marked in place: the input here is a snapshot
+rather than the source, and a malformed one should be refused. They are not
+controls, and saying so is the point -- an unmarked unreachable guard is
+indistinguishable from a working one.
+
+**The thread check is the uncomfortable row.** `nts_callback_enter` asserts
+`nts_is_owner_thread`, which delegates to a host. A standalone program has
+installed no host and the answer is unconditionally `true`, so the guard sits
+on exactly the right path and cannot fire on it. It is real for an embedder and
+inert for every example here. The runtime has no way of its own to know which
+thread owns it, and inventing one would be a second answer to a question the
+host already owns -- so this is a limitation recorded, not a bug fixed.
+
 ## Effects: what a call does to memory, and who may say so
 
 ABI says how bits cross. Effects say what a call does to memory and when, and
