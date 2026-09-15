@@ -2862,10 +2862,10 @@ fn note_uncompiled(
     //
     // Both are pushed rather than the bare one replaced: a top-level function
     // is asked for by its bare name, and the two vocabularies agree only there.
-    if let Some(qualified) = qualified_name(snapshot, id, &name) {
-        if !program.uncompiled.iter().any(|(at, _)| *at == qualified) {
-            program.uncompiled.push((qualified, diagnostic.message.clone()));
-        }
+    if let Some(qualified) = qualified_name(snapshot, id, &name)
+        && !program.uncompiled.iter().any(|(at, _)| *at == qualified)
+    {
+        program.uncompiled.push((qualified, diagnostic.message.clone()));
     }
     program.uncompiled.push((name, diagnostic.message.clone()));
 }
