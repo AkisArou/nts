@@ -2727,6 +2727,63 @@ export const CORPORA = {
           out.push(`self=${m.EventEmitter?.EventEmitter === m.EventEmitter}`);
           out.push(`init=${typeof m.init}:${typeof m.EventEmitter?.init}`);
 
+          // **Called, not merely typed.** The two lines above assert that these names
+          // exist and nothing more, which `corpus-reach.mjs` correctly counts as never
+          // calling them -- and a `typeof` is exactly the check that passes for a
+          // function which does the wrong thing. `init` is the emitter initialiser, so
+          // what it *does* is the comparable part.
+          //
+          // Run against a plain object, which is what it is for: node's own callers
+          // are `EventEmitter.init.call(obj, opts)`. The observable result is the set
+          // of keys it installs, the counter it zeroes, and the null prototype on the
+          // store it creates.
+          out.push(`initOnBare=${show(() => {
+            const bare = {};
+            m.init.call(bare);
+            return [
+              Object.keys(bare).sort().join(","),
+              bare._eventsCount,
+              bare._maxListeners,
+              // **Not the store's container.** `_events` is a `Map` here and a
+              // null-prototype object in node -- a recorded difference, documented at
+              // `EventStore` in `events/src/main.ts`, deliberately not fixed because
+              // event dispatch is the hottest path in the profile and which container
+              // is faster is a question for a measurement. Comparing it here would
+              // diverge on every input forever, which spends the row: a spec that is
+              // always red can never show a *new* divergence. What is compared is that
+              // a store exists and that the keys and counter around it agree.
+              bare._events === undefined ? "no-store" : "store",
+            ].join("/");
+          })}`);
+          // A second call must not clear a store the first one established.
+          out.push(`initTwice=${show(() => {
+            const bare = {};
+            m.init.call(bare);
+            bare._events.x = 1;
+            m.init.call(bare);
+            return `${bare._events?.x}/${bare._eventsCount}`;
+          })}`);
+          // `_maxListeners` of 0 is falsy, and node's `||= undefined` restores the
+          // default rather than keeping the limit of zero.
+          out.push(`initZeroMax=${show(() => {
+            const bare = { _maxListeners: 0 };
+            m.init.call(bare);
+            return String(bare._maxListeners);
+          })}`);
+          out.push(`initOnEmitter=${show(() => {
+            const emitter = new m.EventEmitter();
+            emitter.on("x", () => {});
+            m.EventEmitter.init.call(emitter);
+            return `${emitter.listenerCount("x")}/${emitter._eventsCount}`;
+          })}`);
+          // `EventEmitter.EventEmitter` is the class itself; constructing through it is
+          // what makes it a call rather than a property read.
+          out.push(`selfConstruct=${show(() => {
+            const viaSelf = new (m.EventEmitter.EventEmitter)();
+            viaSelf.on("y", () => {});
+            return `${viaSelf instanceof m.EventEmitter}/${viaSelf.listenerCount("y")}`;
+          })}`);
+
           const Resource = m.EventEmitterAsyncResource;
           if (typeof Resource !== "function") return `${out.join("|")}|resource:absent`;
 

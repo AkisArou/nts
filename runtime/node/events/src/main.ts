@@ -168,6 +168,40 @@ class ListenerList {
 
 /** Either the one listener for an event, or all of them. */
 type Registered = ListenerRecord | ListenerList;
+
+/**
+ * **A `Map`, where node's `_events` is a null-prototype object. This is an observable
+ * difference and it is recorded here rather than fixed, because fixing it is a
+ * performance decision and not only a correctness one.**
+ *
+ * `_events` is an own enumerable property of every emitter, so the container shows
+ * through anything that renders one:
+ *
+ *     node   EventEmitter { _events: [Object: null prototype] { work: [Function] }, ... }
+ *     ours   EventEmitter { _events: Map(1) { 'work' => ListenerRecord { ... } }, ... }
+ *
+ * `Object.keys` agrees -- three keys, the same three -- so the *surface* matches and
+ * only the value differs. But `EventEmitter` is the base of every stream, socket,
+ * server, `readline` interface, `dgram` socket and `process` itself, so
+ * `util.inspect` of any of those differs from node's, as does
+ * `assert.deepStrictEqual` between two of them.
+ *
+ * Two representation choices are bundled here, and both are node-visible: the store
+ * is a `Map` rather than an object, and each entry is a `ListenerRecord` rather than
+ * the listener function itself.
+ *
+ * **Why it is not simply changed.** Event dispatch is the hottest path in the profile
+ * -- every stream chunk, every socket read, every timer callback goes through it --
+ * and a `Map` get is not a property lookup on a null-prototype object. Which is
+ * faster here is a question for a measurement, not for an argument, and performance
+ * is the reason this project exists. Changing the base class of everything on
+ * correctness grounds alone would be trading one unmeasured thing for another.
+ *
+ * Found by making `events`' differential spec *call* `EventEmitter.init` rather than
+ * check its `typeof`: the initialiser installs the store, so what the store is became
+ * comparable for the first time. `corpus-reach.mjs` was already reporting `init` as
+ * never called while the spec asserted it existed.
+ */
 type EventStore = Map<EventName, Registered | undefined>;
 
 let defaultMaxListeners = 10;
