@@ -2493,6 +2493,57 @@ confidently about the wrong thing, which is the day's fourth instrument error
 and the third caught only by looking at the names it returned rather than the
 count.
 
+### The largest refusal text, closed 2026-09-16
+
+``indexing `X`, which stands for `X` here, which is not an array`` was **299
+sites**, the largest single refusal text in the corpus. Every one of them is a
+class member reached by a `unique symbol` key *from inside its own class*, where
+that class is **generic**.
+
+The asymmetry is the defect: the same member, reached two ways, and only the
+computed spelling needed a representation. `names_a_property` sends a
+`PROPERTY_ACCESS_EXPRESSION` down a path that never consults the receiver's
+lowered type, and requires an `ELEMENT_ACCESS_EXPRESSION`'s receiver to be
+`Managed(Object(..))`. TypeScript models `this` as a type parameter constrained
+to its own class; for a **non-generic** class that constraint decomposes into an
+object and the check passes, and for a generic one the constraint is the
+*uninstantiated* form — `Holder<T>` — which `tsgo::decompose` leaves as a
+`Structured` placeholder.
+
+**And the stated ground for that placeholder is true of a generic function and
+false here.** §16 records it as "only instantiations are ever lowered, so the
+members of a form parameterised by one are members nothing can use", probed on
+2026-09-15 with `g<T>(b: Box<T>): T` and found to hold. It holds for a generic
+*function*. A method reaching its own field through `this` is the case it does
+not cover, and `nts types` shows why in three lines: the polymorphic `this` is
+`TypeParameter { name: "Holder", constraint: #6 }`, `#6` is `Holder<T>`
+**Structured**, and `#15` — the instantiated `Holder<number>` — is a decomposed
+`Object`.
+
+**Measured on one tree, against a control built from the same tree minus the
+change.**
+
+| module | before | after |
+|---|---:|---:|
+| `http` | 26 | **0** |
+| `fs` | 22 | **1** |
+| `stream` | 20 | **0** |
+| `util` | 20 | **0** |
+| `timers` | 1 | **0** |
+
+89 → 1. Every ``not an array`` refusal roughly halves with it: `http` 52 → 26,
+`fs` 47 → 26, `stream` 40 → 20, `util` 38 → 18.
+
+**What it did not move: declined exports, 74/21/29/123/41, identical either
+side.** Which is what this section now expects of a lowering fix and states
+before the queue. What it *did* buy is correctness reaching further:
+`examples/a-symbol-key-inside-a-generic-class` reads, writes and
+compound-assigns through two symbol keys inside a generic class and from outside
+it — **87 cases across 3 functions, agreeing with node on every one**, and
+refused by the pre-change binary with 4 diagnostics, so it measures something.
+It carries a non-generic arm as well, which always worked, so a change breaking
+that would show.
+
 ### The queue, with each root's own reason — 2026-09-15
 
 `gates.mjs` could name a root and not say why *that root* was refused, so

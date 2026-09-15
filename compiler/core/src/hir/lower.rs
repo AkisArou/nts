@@ -9771,6 +9771,46 @@ impl<'a> FuncBuilder<'a> {
                 })
     }
 
+    /// The polymorphic `this` inside a **generic** class, which has no object
+    /// representation to test.
+    ///
+    /// TypeScript models `this` as a type parameter named after its class and
+    /// constrained to it. For a *non-generic* class the constraint decomposes
+    /// into an object and `type_of` answers `Managed(Object(..))`, so the check
+    /// beside this one passes. For a generic one the constraint is the
+    /// **uninstantiated** form -- `Holder<T>` -- which `tsgo::decompose` leaves
+    /// as a `Structured` placeholder on the stated ground that "only
+    /// instantiations are ever lowered, so the members of a form parameterised
+    /// by one are members nothing can use".
+    ///
+    /// **That ground is true of a generic function and false here.** A method
+    /// body reaches its own fields through `this`, and a placeholder has no
+    /// members, so `this[kCount]` stopped naming a property and fell through to
+    /// the array path -- `indexing `this`, which stands for `Holder` here,
+    /// which is not an array`. `this.count` never did, because a property
+    /// access does not consult the receiver's representation at all.
+    ///
+    /// The asymmetry is the whole defect: the same member, reached two ways,
+    /// and only the computed spelling required a representation. Measured
+    /// 2026-09-16: **299 sites** carry that sentence, the largest single
+    /// refusal text in the corpus, and every one of them is a class member
+    /// reached by a `unique symbol` key from inside its own class.
+    fn stands_for_its_own_class(&self, object: NodeId) -> bool {
+        let Some(ty) = self.snapshot.node_types.get(&object) else {
+            return false;
+        };
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return false;
+        };
+        matches!(
+            &record.kind,
+            TypeKind::TypeParameter {
+                name,
+                constraint: Some(constraint),
+            } if named(self.snapshot, *constraint) == Some(name.as_str())
+        )
+    }
+
     fn names_a_property(&self, id: NodeId) -> bool {
         match self.kind_of(id) {
             // A module's member is not one: there is no receiver, so a call
@@ -9818,10 +9858,10 @@ impl<'a> FuncBuilder<'a> {
                     // into something held as an array is an element, and no
                     // narrowing of the source type changes that.
                     !self.holds_an_array(*object)
-                        && matches!(
+                        && (matches!(
                             self.type_of(*object),
                             Some(HirType::Managed(ManagedType::Object(_)))
-                        )
+                        ) || self.stands_for_its_own_class(*object))
                         && self.names_one_member(*index)
                         && self.literal_name(*index).is_some()
                 }
