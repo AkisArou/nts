@@ -1,10 +1,17 @@
-//! `exports:` in `nts.config.ts` narrows what a build keeps.
+//! A product's `entry` in `nts.config.ts` decides what a build publishes.
 //!
-//! **The field existed for three rounds of design before anything read it.** It
-//! was argued down from required to optional, given a documented default, and
-//! audited twice -- and `grep -rn "nts\.config" --include="*.rs"` returned two
-//! comments and no code. These tests are what make it a fact rather than a
-//! shape: a config on disk changes the functions the compiler emits.
+//! **The config existed for three rounds of design before anything read it.**
+//! `grep -rn "nts\.config" --include="*.rs"` returned two comments and no code.
+//! These tests are what make it a fact rather than a shape: a config on disk
+//! changes the functions the compiler emits.
+//!
+//! What it publishes is **what the entry module exports**, which is the whole of
+//! the claim. An `exports: [...]` list sat in the config for one commit, and it
+//! was a second statement of that -- it only had a question to answer because
+//! the default root set is `EveryExport`, which roots at the `export` keyword in
+//! every module and is wider than any artifact can publish. The fixture below is
+//! built to tell those two apart: `internal.ts` exports a function the entry
+//! does not re-export, so `EveryExport` keeps it and `EntrySurface` does not.
 //!
 //! The half that is not tested here is named rather than left implicit. Nothing
 //! reads `manifests`, `dependencies` or `integrate` yet, so nothing here
@@ -17,15 +24,31 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const SOURCE: &str = r"
+/// The entry. Publishes `published`, and reaches one private helper.
+const ENTRY: &str = r"
+import { helper } from './internal.js';
+
 function onlyPublished(n: number): number { return n * 3; }
+
+export function published(n: number): number { return onlyPublished(n) + helper(0); }
+";
+
+/// A sibling the entry imports one name from.
+///
+/// `diagnostic` is the discriminator: it carries `export`, so the `exported`
+/// flag makes it a root under `EveryExport`, and the entry does not re-export
+/// it, so it is not in the artifact's surface. A test in the same project can
+/// still import this module directly, which is the case the deleted `exports`
+/// field was introduced to serve.
+const INTERNAL: &str = r"
 function onlyDiagnostic(n: number): number { return n + 7; }
 
-export function published(n: number): number { return onlyPublished(n); }
+export function helper(n: number): number { return n; }
 export function diagnostic(n: number): number { return onlyDiagnostic(n); }
 ";
 
-const NAMES: [&str; 4] = ["published", "diagnostic", "onlyPublished", "onlyDiagnostic"];
+const NAMES: [&str; 5] =
+    ["published", "diagnostic", "onlyPublished", "onlyDiagnostic", "helper"];
 
 fn available() -> bool {
     let frontend =
@@ -49,7 +72,8 @@ fn fixture(name: &str, config: Option<&str>) -> PathBuf {
     let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
     let src = root.join("src");
     std::fs::create_dir_all(&src).expect("creating the fixture");
-    std::fs::write(src.join("main.ts"), SOURCE).expect("writing the source");
+    std::fs::write(src.join("main.ts"), ENTRY).expect("writing the entry");
+    std::fs::write(src.join("internal.ts"), INTERNAL).expect("writing the sibling");
     std::fs::write(
         root.join("tsconfig.json"),
         r#"{"compilerOptions":{"target":"ESNext","module":"ESNext","moduleResolution":"bundler","strict":true,"noEmit":false},"include":["src/**/*"]}"#,
@@ -115,7 +139,7 @@ const ONE_PRODUCT: &str = r#"
 import { defineConfig, library } from "@nts/config";
 export default defineConfig({
   products: {
-    addon: library.node({ entry: "./src/main.ts", apiVersion: 8, exports: ["published"] }),
+    addon: library.node({ entry: "./src/main.ts", apiVersion: 8 }),
   },
 });
 "#;
@@ -129,10 +153,18 @@ fn a_config_narrows_what_is_emitted() {
     let project = fixture("config-narrows", Some(ONE_PRODUCT));
     let run = emit(&project, &[]);
     assert!(run.ok, "{}", run.stderr);
+    // `diagnostic` does not survive although it carries `export`, which is the
+    // whole distinction: the `exported` flag is what `EveryExport` roots at and
+    // the entry not re-exporting it is what `EntrySurface` asks.
+    //
+    // `helper` is absent too, and for an unrelated reason worth knowing before
+    // reading it as evidence: the entry *does* call it, and it is `return n`, so
+    // it is inlined and leaves no definition. A trivial function is not a usable
+    // reachability probe. `diagnostic` is, because it has a body no caller.
     assert_eq!(run.kept, names(&["published", "onlyPublished"]));
     // Silent narrowing is indistinguishable from a compiler that lost the
     // function, so it says so.
-    assert!(run.stderr.contains("publishes 1 name"), "{}", run.stderr);
+    assert!(run.stderr.contains("publishes what"), "{}", run.stderr);
 }
 
 /// The arm without which the one above proves nothing.
@@ -182,8 +214,8 @@ fn several_products_refuse_to_be_guessed() {
 import { defineConfig, library } from "@nts/config";
 export default defineConfig({
   products: {
-    addon: library.node({ entry: "./src/main.ts", apiVersion: 8, exports: ["published"] }),
-    sdk: library.native({ targets: [], entry: "./src/main.ts" }),
+    addon: library.node({ entry: "./src/main.ts", apiVersion: 8 }),
+    sdk: library.native({ targets: [], entry: "./src/internal.ts" }),
   },
 });
 "#,
@@ -198,10 +230,21 @@ export default defineConfig({
     assert!(chosen.ok, "{}", chosen.stderr);
     assert_eq!(chosen.kept, names(&["published", "onlyPublished"]));
 
-    // `sdk` declares no `exports`, which is not the same as declaring none.
-    let wide = emit(&project, &["--product", "sdk"]);
-    assert!(wide.ok, "{}", wide.stderr);
-    assert_eq!(wide.kept, names(NAMES.as_slice()));
+    // **The two products differ only in their entry, and publish different
+    // things.** `sdk` roots at `internal.ts`, so `diagnostic` is in its surface
+    // and `published` is not -- which is a claim `--product` has to be carrying
+    // for this to pass, and the surface has to be coming from the entry rather
+    // than from anything global.
+    // `helper` appears here and not above, which is the same fact from the other
+    // side: `internal.ts` is this product's entry, so `helper` is a *root* and a
+    // root is never inlined away.
+    let other = emit(&project, &["--product", "sdk"]);
+    assert!(other.ok, "{}", other.stderr);
+    assert_eq!(other.kept, names(&["diagnostic", "onlyDiagnostic", "helper"]));
+    assert!(
+        chosen.kept.is_disjoint(&other.kept),
+        "two products differing only in `entry` should publish disjoint surfaces",
+    );
 }
 
 /// A config that exists and cannot be read is an error, never a fall-through.

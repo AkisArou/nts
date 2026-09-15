@@ -9,7 +9,7 @@
 //     rather than a crash;
 //   - **symbol visibility** -- everything not exported hidden, or our internals
 //     collide with theirs at load;
-//   - an installable **header**, which is the C equivalent of `exports`;
+//   - an installable **header**, which is the C equivalent of an export list;
 //   - and a `.pc` file, because that is how the search actually happens.
 import { defineConfig, library, target } from "@nts/config";
 
@@ -28,17 +28,10 @@ export default defineConfig({
       // field could express. `src/main.cpp` links `acme_remember` unchanged.
       prefix: "acme_",
 
-      // **A narrower, and the only honest use of it in this fixture.**
-      // `nts/sdk.ts` also exports `dumpState`, because the app's own tests
-      // import it. Naming the two the ABI publishes keeps `dumpState` out of
-      // the header *and* out of the binary: this becomes
-      // `hir::reachable::Roots::Entry`, so anything only it reaches stops being
-      // a root.
-      //
-      // Narrower only. A name here that the source does not export is an error,
-      // and a *wider* list is a missing keyword in the source rather than a
-      // config entry.
-      exports: ["remember", "notify"],
+      // No export list. The ABI is what `nts/sdk.ts` exports, and `dumpState`
+      // -- which the app's own tests use -- lives in `nts/internal.ts` where the
+      // entry does not re-export it. That used to be an `exports: ["remember",
+      // "notify"]` here, restating the entry to subtract one name from it.
     }),
 
     // The same code as an archive, which is what a consumer links when it will
@@ -50,7 +43,6 @@ export default defineConfig({
       entry: "./nts/sdk.ts",
       header: "acme.h",
       prefix: "acme_",
-      exports: ["remember", "notify"],
     }),
   },
   // An `add_custom_command` plus a generated CMake config package, so a

@@ -58,20 +58,19 @@ pub struct Target {
 }
 
 /// One artifact a build emits.
+///
+/// **`entry` is the whole of the surface question.** An `exports: Vec<String>`
+/// sat here for one commit, holding the names that cross the public ABI, and it
+/// was a second statement of what the entry module exports. A product's surface
+/// is what its entry publishes -- `hir::reachable::Roots::EntrySurface` -- so a
+/// helper the entry does not export is not in the artifact, and nothing in the
+/// config has to say so.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct Product {
     pub kind: String,
     pub entry: String,
     #[serde(default)]
     pub targets: Vec<Target>,
-    /// Names crossing the public ABI, when the config narrows them.
-    ///
-    /// **Absent is not the same as empty.** Absent means the entry's exports are
-    /// the surface and reachability keeps all of them; empty would mean a
-    /// library that publishes nothing, which is a different claim and one no
-    /// config has ever wanted to make.
-    #[serde(default)]
-    pub exports: Option<Vec<String>>,
 }
 
 /// A resolved `nts.config.ts`: the value `defineConfig` returned.
@@ -181,18 +180,17 @@ pub fn product<'a>(resolved: &'a Resolved, named: Option<&str>) -> Result<Option
 mod tests {
     use super::*;
 
-    fn with(products: &[(&str, Option<Vec<String>>)]) -> Resolved {
+    fn with(names: &[&str]) -> Resolved {
         Resolved {
-            products: products
+            products: names
                 .iter()
-                .map(|(name, exports)| {
+                .map(|name| {
                     (
                         (*name).to_owned(),
                         Product {
                             kind: "shared-library".to_owned(),
                             entry: "./src/main.ts".to_owned(),
                             targets: Vec::new(),
-                            exports: exports.clone(),
                         },
                     )
                 })
@@ -202,7 +200,7 @@ mod tests {
 
     #[test]
     fn one_product_needs_no_name() {
-        let resolved = with(&[("hello", None)]);
+        let resolved = with(&["hello"]);
         assert_eq!(product(&resolved, None).expect("one product needs no name").map(|(n, _)| n), Some("hello"));
     }
 
@@ -215,7 +213,7 @@ mod tests {
 
     #[test]
     fn several_products_refuse_to_be_guessed() {
-        let resolved = with(&[("sdk", None), ("sdkStatic", None)]);
+        let resolved = with(&["sdk", "sdkStatic"]);
         let why = product(&resolved, None).expect_err("two products cannot be guessed").to_string();
         assert!(why.contains("--product"), "{why}");
         assert!(why.contains("sdkStatic"), "{why}");
@@ -223,24 +221,9 @@ mod tests {
 
     #[test]
     fn a_named_product_that_is_not_there_says_what_is() {
-        let resolved = with(&[("sdk", None)]);
+        let resolved = with(&["sdk"]);
         let why = product(&resolved, Some("addon")).expect_err("no such product").to_string();
         assert!(why.contains("addon") && why.contains("sdk"), "{why}");
     }
 
-    /// Absent and empty are different claims, and `serde(default)` on an
-    /// `Option` collapses them if the field is typed as a bare `Vec`.
-    #[test]
-    fn an_absent_export_list_is_not_an_empty_one() {
-        let absent: Product = serde_json::from_str(
-            r#"{"kind":"node-addon","entry":"./a.ts","targets":[]}"#,
-        )
-        .expect("a product without an export list");
-        assert_eq!(absent.exports, None);
-        let empty: Product = serde_json::from_str(
-            r#"{"kind":"node-addon","entry":"./a.ts","targets":[],"exports":[]}"#,
-        )
-        .expect("a product with an empty export list");
-        assert_eq!(empty.exports, Some(Vec::new()));
-    }
 }

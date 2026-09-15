@@ -364,8 +364,42 @@ fn preamble(request: &Request) -> String {
     text
 }
 
+/// The C compiler that answers questions about headers, and its arguments.
+///
+/// **Two decisions wearing one name, separated here.** The compiler that
+/// *interrogates* headers and the compiler that *compiles the program* are
+/// different roles, and `CC` was doing both. Measured on zig 0.16.0: `zig cc`
+/// exits non-zero whenever a compilation produces no object file, and both of
+/// this module's probe actions guarantee that -- `-fsyntax-only` by definition,
+/// and `-Xclang -ast-dump=json` because the dump replaces the emit. It prints
+/// 386KB of correct JSON on stdout and then fails with `FileNotFound` looking
+/// for the object. `-c -o /dev/null` does not help; there is no spelling that
+/// does.
+///
+/// So a project compiling with zig still binds with clang, and that is not a
+/// workaround: asking a driver to parse without emitting is a different demand
+/// from asking it to build, and a toolchain can be good at one and refuse the
+/// other. `NTS_BIND_CC` names the first, `CC` the second, and the fallback chain
+/// means a project that sets neither is unaffected.
+///
+/// **`CC` is a command line, not a program name.** It was read as
+/// `Command::new(CC)`, which is a file to execute -- so `CC="zig cc"` looked for
+/// a binary spelled with a space in it, and the 22 `build.sh` in this tree have
+/// the same bug written as `"$cc"`. Every toolchain invoked as two words is
+/// unusable through either: `zig cc`, `ccache clang`, `xcrun clang`.
+fn compiler() -> std::process::Command {
+    let spec = std::env::var("NTS_BIND_CC")
+        .or_else(|_| std::env::var("CC"))
+        .unwrap_or_else(|_| "clang".to_owned());
+    let mut words = spec.split_whitespace();
+    let program = words.next().unwrap_or("clang");
+    let mut command = std::process::Command::new(program);
+    command.args(words);
+    command
+}
+
 fn clang(probe: &std::path::Path, extra: &[String], cc1: &[&str]) -> Result<String> {
-    let mut command = std::process::Command::new(std::env::var("CC").unwrap_or("clang".into()));
+    let mut command = compiler();
     command.args(["-std=c11", "-fsyntax-only"]);
     for flag in cc1 {
         command.arg("-Xclang").arg(flag);

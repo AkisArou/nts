@@ -588,9 +588,45 @@ Everything above is about the shape of the config. Nothing read one: `grep -rn
 code. `exports` had been argued from required to optional, given a documented
 default, and audited twice, without ever changing an artifact.
 
-It does now. `nts_build::config` evaluates the file and `exports` becomes
-`hir::reachable::Roots::Entry`, which is the API `reachability.rs` has tested all
-along.
+It does now. `nts_build::config` evaluates the file, and a product's **`entry`**
+becomes `hir::reachable::Roots::EntrySurface` -- the artifact publishes what that
+module exports, and nothing else.
+
+### `exports:` lasted one commit, and removing it was the better fix
+
+It shipped first as a list of names crossing the ABI, wired to `Roots::Entry`.
+That was awkward to write and my user said so, which turned out to be the useful
+signal: **the field only had a question to answer because a default was wrong.**
+
+`Roots::EveryExport` roots at the `export` keyword in *every* module. That is
+right for a TypeScript package a consumer can import any file of, and wider than
+anything this compiler emits -- nothing outside a `.so`, a `.node`, a jar or an
+`.xcframework` can reach an internal module. So a helper exported for a sibling
+stayed a root, and getting it out of the artifact needed a list.
+
+`Roots::EntrySurface` is that default fixed, and then `entry` -- which a product
+must name to be built at all -- says the whole thing and cannot disagree with the
+source. The fixture shows the shape it asks for: `apps/linux-brownfield` moved
+`dumpState` into `nts/internal.ts`, where the entry does not re-export it and the
+tests still import it directly. That is where every ecosystem puts a test-only
+helper.
+
+Measured on two products differing **only** in their entry:
+
+    --product addon  (entry ./src/main.ts)      onlyPublished published
+    --product sdk    (entry ./src/internal.ts)  diagnostic helper onlyDiagnostic
+
+Disjoint surfaces, no list anywhere. `helper` appears in one and not the other
+for a second reason worth knowing before reading a root set as evidence: it is a
+root in `sdk` and an inlined callee in `addon`, and a trivial function reached
+from the entry leaves no definition at all.
+
+**One bug the sweep caught and review would not have.** The first version of the
+variant omitted module initialization, and `examples/library` -- which exports
+`add` and a module-level `const greeting` -- lost `module__init` and the string
+behind it. A two-name library publishing one of them as null: a wrong *answer*,
+not a missing symbol. It was found by diffing all 218 examples against a binary
+built from the parent commit, not by reading the diff.
 
 ### Evaluated, not parsed
 

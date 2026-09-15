@@ -1541,7 +1541,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // Raw lowering stays the default because it is what maps onto the source.
     let want_passes = std::env::args().any(|arg| arg == "--prepared" || arg == "--rc");
     let (program, diagnostics) = if want_passes {
-        let entry = selected_roots(tsconfig)?;
+        let entry = selected_roots();
         let options = hir::Options {
             provider: if std::env::args().any(|arg| arg == "--rc") {
                 hir::Provider::ReferenceCounting
@@ -2212,21 +2212,15 @@ fn requested_product() -> Option<String> {
 /// about this run. The file is not a default the flag overrides so much as the
 /// same statement made durably, and where both are present the transient one is
 /// the one that was meant.
-fn selected_roots(tsconfig: &Utf8Path) -> Result<Option<Vec<String>>> {
+fn selected_roots() -> Option<Vec<String>> {
     let named = entry_names();
     let standalone = std::env::args().any(|arg| arg == "--main");
-    let from_config = if named.is_empty() && !standalone {
-        config_exports(tsconfig)?
-    } else {
-        None
-    };
-    let Some(mut roots) = (match (named.is_empty(), standalone, from_config) {
-        (false, _, _) => Some(named),
-        (true, true, _) => Some(Vec::new()),
-        (true, false, Some(exports)) => Some(exports),
-        (true, false, None) => None,
-    }) else {
-        return Ok(None);
+    let mut roots = match (named.is_empty(), standalone) {
+        (false, _) => named,
+        (true, true) => Vec::new(),
+        // Nothing on the command line names roots. A configured product may
+        // still narrow the surface, which `configured_surface` answers.
+        (true, false) => return None,
     };
     // Module evaluation is a root in the same sense a named entry is: nothing
     // *calls* it, and the program is wrong without it. The no-`--entry` arm has
@@ -2246,35 +2240,71 @@ fn selected_roots(tsconfig: &Utf8Path) -> Result<Option<Vec<String>>> {
     if !roots.iter().any(|name| name == hir::lower::MODULE_INIT) {
         roots.push(hir::lower::MODULE_INIT.to_owned());
     }
-    Ok(Some(roots))
+    Some(roots)
 }
 
-/// The `exports` list of the product this build is for, if a config declares one.
+/// The product this build is for, if a config beside the tsconfig declares one.
 ///
-/// **Absent at every step is not an error.** Most projects have no config, a
-/// config need not declare products, and a product need not narrow its exports
-/// -- those are three different ways of saying "every export is a root", which
-/// is the same answer `Roots::EveryExport` gives. What *is* an error is a config
-/// that exists and cannot be read, or one with several products and no
-/// `--product` to choose between them: emitting an artifact nobody asked for,
-/// under a name that says otherwise, is worse than stopping.
-fn config_exports(tsconfig: &Utf8Path) -> Result<Option<Vec<String>>> {
+/// **Absent at every step is not an error.** Most projects have no config and a
+/// config need not declare products -- both mean "nothing here says what is
+/// being built", which is the case `Roots::EveryExport` is the safe answer to.
+/// What *is* an error is a config that exists and cannot be read, or one with
+/// several products and no `--product` to choose between them: emitting an
+/// artifact nobody asked for, under a name that says otherwise, is worse than
+/// stopping.
+fn configured_product(tsconfig: &Utf8Path) -> Result<Option<(String, nts_build::config::Product)>> {
     let Some(path) = nts_build::config::beside(tsconfig) else { return Ok(None) };
     let resolved = nts_build::config::resolve(&path)?;
     let named = requested_product();
     let Some((name, product)) = nts_build::config::product(&resolved, named.as_deref())? else {
         return Ok(None);
     };
-    let Some(exports) = product.exports.clone() else { return Ok(None) };
-    // Said out loud, because it changes what is emitted and was not asked for on
-    // this command line. A narrowing that happens silently is indistinguishable
-    // from a compiler that lost the function.
-    eprintln!(
-        "{path}: product `{name}` publishes {} name(s); the rest are not roots",
-        exports.len()
-    );
-    Ok(Some(exports))
+    Ok(Some((name.to_owned(), product.clone())))
 }
+
+/// What a configured product contributes to lowering: its entry file, and the
+/// fact that its surface is that entry's.
+///
+/// **This is what `exports: [...]` used to do, without the list.** That field
+/// was a hand-written set of the names crossing the ABI, and it was a second
+/// statement of what the entry module already exports. It only had a question
+/// to answer because the default root set is `EveryExport`, which is wider than
+/// any artifact this compiler emits: a helper exported so a sibling module can
+/// import it stayed a root, and getting it out needed a list. Naming the entry
+/// -- which a product must do anyway, to be built at all -- says the same thing
+/// and cannot disagree with the source.
+///
+/// A `--main` or `--entry` on the command line has already won by the time this
+/// is asked; it returns `None` for an executable, whose roots are its entry
+/// points rather than a published surface.
+fn configured_surface(
+    tsconfig: &Utf8Path,
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+) -> Result<Option<Vec<String>>> {
+    if !entry_names().is_empty() || std::env::args().any(|arg| arg == "--main") {
+        return Ok(None);
+    }
+    let Some((name, product)) = configured_product(tsconfig)? else { return Ok(None) };
+    let directory = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
+    let entry = directory.join(&product.entry);
+    let matched = nts_frontend_ts::entry_uris_for(std::slice::from_ref(&entry), snapshot);
+    if matched.is_empty() {
+        bail!(
+            "product `{name}` names `{}` as its entry and no source in this program is \
+             that file. The tsconfig decides what the program contains; this decides which \
+             of it is the product's surface, so the two have to agree",
+            product.entry
+        );
+    }
+    // Said out loud, because it changes what is emitted and was not asked for on
+    // this command line. A narrowed surface that happens silently is
+    // indistinguishable from a compiler that lost the function.
+    eprintln!("{}: product `{name}` publishes what `{}` exports", FILE_LABEL, product.entry);
+    Ok(Some(matched))
+}
+
+/// What the notice above calls the config, without re-deriving the path.
+const FILE_LABEL: &str = nts_build::config::FILE_NAME;
 
 fn foreign_tables(
     snapshot: &nts_semantic_schema::SemanticSnapshot,
@@ -2331,6 +2361,7 @@ fn emit_options<'a>(
     entry: Option<&'a [String]>,
     entry_files: &'a [String],
     foreign: &'a hir::runtime::ForeignTable,
+    configured: Option<hir::reachable::Roots<'a>>,
 ) -> hir::Options<'a> {
     // **`!entry.is_empty()` was never false.** This read the flags itself and
     // asked `entry.is_empty()`, and the entry list always held at least
@@ -2346,7 +2377,10 @@ fn emit_options<'a>(
     // flags and the config are read.
     hir::Options {
         provider: selected_provider(),
-        roots: entry.map_or(hir::reachable::Roots::EveryExport, hir::reachable::Roots::Entry),
+        roots: entry.map_or_else(
+            || configured.unwrap_or(hir::reachable::Roots::EveryExport),
+            hir::reachable::Roots::Entry,
+        ),
         // Two different questions that both read as "where does it start".
         // `roots` is what reachability keeps and is named in *functions*;
         // this is which source files the project called its product, and it
@@ -2363,11 +2397,17 @@ fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
-    let entry = selected_roots(tsconfig)?;
-    let entry_files = nts_frontend_ts::entry_uris(tsconfig, &snapshot);
+    let entry = selected_roots();
+    // The product's entry replaces the tsconfig's `files` when a config names
+    // one, so `public_api` -- what `Roots::EntrySurface` roots at -- is computed
+    // from the file the build says is the product.
+    let (entry_files, configured) = match configured_surface(tsconfig, &snapshot)? {
+        Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
+        None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), None),
+    };
     let prepared = match hir::prepare_with(
         &snapshot,
-        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot)),
+        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured),
     ) {
         Ok(prepared) => prepared,
         Err(problems) => {
@@ -2409,11 +2449,17 @@ fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<(
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
-    let entry = selected_roots(tsconfig)?;
-    let entry_files = nts_frontend_ts::entry_uris(tsconfig, &snapshot);
+    let entry = selected_roots();
+    // The product's entry replaces the tsconfig's `files` when a config names
+    // one, so `public_api` -- what `Roots::EntrySurface` roots at -- is computed
+    // from the file the build says is the product.
+    let (entry_files, configured) = match configured_surface(tsconfig, &snapshot)? {
+        Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
+        None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), None),
+    };
     let prepared = match hir::prepare_with(
         &snapshot,
-        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot)),
+        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured),
     ) {
         Ok(prepared) => prepared,
         Err(problems) => {
@@ -2523,8 +2569,11 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     // real today: a Node addon is the C backend, so `exports:` in a config --
     // whose whole job is to name fewer roots than the entry exports -- could
     // never have reached the artifact it was written for.
-    let entry = selected_roots(tsconfig)?;
-    let entry_files = nts_frontend_ts::entry_uris(tsconfig, &snapshot);
+    let entry = selected_roots();
+    let (entry_files, configured) = match configured_surface(tsconfig, &snapshot)? {
+        Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
+        None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), None),
+    };
     // **`--main` decides what is written, not what survives**, and the variable
     // it replaced answered both. Those separate here: `emit_options` reads
     // `--main` *or* `--entry` for reachability, and the standalone `main()` and
@@ -2532,7 +2581,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     let standalone = std::env::args().any(|arg| arg == "--main");
     let prepared = match hir::prepare_with(
         &snapshot,
-        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot)),
+        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured),
     ) {
         Ok(prepared) => prepared,
         Err(problems) => {

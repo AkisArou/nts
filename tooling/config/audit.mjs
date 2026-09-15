@@ -70,7 +70,19 @@ let interfacesDeclared = 0;
 for (const f of readdirSync(join(here, "src"))) {
   const src = readFileSync(join(here, "src", f), "utf8");
   interfacesDeclared += (src.match(/^(?:export )?interface /gm) ?? []).length;
-  for (const [, name, body] of src.matchAll(/(?:export )?interface (\w+)[^{]*\{([\s\S]*?)\n\}/g)) {
+  // `{...\n}` or `{}` on one line. The one-line form is not hypothetical: an
+  // interface emptied by a field removal became `interface LibraryBase extends
+  // ProductBase {}`, the old pattern could not terminate on it, and the match
+  // ran on to swallow the *next* interface's body -- so one interface vanished
+  // and another lost its fields. The floor below reported it as "13 of 14",
+  // which is the whole reason that floor is there.
+  // Anchored at a line start and not spanning one, because `[^{]*` matches
+  // newlines: the sentence "an interface that adds nothing reads as structure"
+  // in a doc comment three lines above a real declaration parsed as an
+  // interface named `that`, and it was reported as a field nothing sets.
+  for (const [, name, body] of src.matchAll(
+    /^(?:export )?interface (\w+)[^{\n]*\{(\}|[\s\S]*?\n\})/gm,
+  )) {
     const fields = new Set();
     for (const [, field, opt] of body.matchAll(/^\s*readonly (\w+)(\??):/gm)) fields.add(field + opt);
     declaredFields.set(name, fields);

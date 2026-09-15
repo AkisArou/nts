@@ -58,42 +58,7 @@ export interface AppProduct extends ProductBase {
   readonly id?: string;
 }
 
-interface LibraryBase extends ProductBase {
-  /**
-   * Names crossing the public ABI. Managed objects never do (RFC §27.2).
-   *
-   * **Optional, defaulting to the entry module's exports**, because that is
-   * what it already says. Measured across the workspace fixture before this was
-   * relaxed: eight library configs declared `exports`, and in **eight of eight**
-   * the list was identical to the entry's -- a second statement of one fact,
-   * agreeing today, with nothing keeping it agreeing.
-   *
-   * It is a **narrower**, not a declaration. Naming fewer than the source
-   * exports shrinks the ABI *and* the binary, because this becomes
-   * `hir::reachable::Roots::Entry` and the rest stops being a root.
-   *
-   * **This is the one field a compiler reads**, as of `nts_build::config`.
-   * `nts emit-c` evaluates the config beside the tsconfig, takes this list, and
-   * emits only what those names reach -- so on the probe in
-   * `tooling/cli/tests/config_roots.rs` the addon publishes `published` instead
-   * of `published` and `diagnostic`, and the generated C loses the private
-   * helper the second one called. A `--entry` flag overrides it, and narrowing
-   * prints a line saying it happened, because a silent one is
-   * indistinguishable from a compiler that lost the function.
-   *
-   * It earns its place only where the entry is a barrel that re-exports more
-   * than the artifact should carry.
-   *
-   * Where it disagrees with the source and is *wider*, the source is the one to
-   * change: an `export` that should not be public is a missing keyword, not a
-   * config entry. That is most obvious on a Node addon, where the artifact's
-   * surface is literally the module's exports and there is no visibility
-   * mechanism underneath for a config to select from.
-   */
-  readonly exports?: readonly string[];
-}
-
-export interface AarProduct extends LibraryBase {
+export interface AarProduct extends ProductBase {
   readonly kind: "aar";
   /** Package for the generated classes. `nts.gen` is unacceptable in a shipped artifact. */
   readonly javaPackage: string;
@@ -101,7 +66,7 @@ export interface AarProduct extends LibraryBase {
   readonly consumerProguard?: string;
 }
 
-export interface JarProduct extends LibraryBase {
+export interface JarProduct extends ProductBase {
   readonly kind: "jar";
   readonly javaPackage: string;
 }
@@ -128,7 +93,7 @@ export interface JarProduct extends LibraryBase {
  * and a `.dylib`, exactly as on Linux. A SwiftPM `binaryTarget` or a CocoaPods
  * `vendored_frameworks` wants this.
  */
-export interface XcframeworkProduct extends LibraryBase {
+export interface XcframeworkProduct extends ProductBase {
   readonly kind: "xcframework";
   /** The Swift module a consumer writes `import` for. */
   readonly moduleName: string;
@@ -148,11 +113,11 @@ export interface XcframeworkProduct extends LibraryBase {
  *     find the library hard-codes a path, and a hard-coded path is how a library
  *     stops being redistributable;
  *   - **a module-definition file** is gone entirely. A `.def` is an alternative
- *     way to say which symbols are exported, and we generate the code -- the
- *     export list is `exports`, and having two spellings of it is the duplicate
- *     that field just lost.
+ *     way to say which symbols are exported, and we generate the code, so the
+ *     list follows from the entry's exports. It was a second spelling of a
+ *     field that has since been removed for being a second spelling itself.
  */
-export interface NativeLibraryProduct extends LibraryBase {
+export interface NativeLibraryProduct extends ProductBase {
   readonly kind: "shared-library" | "static-library";
   /**
    * Versioned soname, so an ABI break is a link error rather than a crash.
@@ -197,10 +162,38 @@ export interface NativeLibraryProduct extends LibraryBase {
  * rather than through exported C symbols, so there is no flat namespace for two
  * addons to collide in.
  */
-export interface NodeAddonProduct extends LibraryBase {
+export interface NodeAddonProduct extends ProductBase {
   readonly kind: "node-addon";
 }
 
+/**
+ * An artifact something outside the program links or imports.
+ *
+ * **There is no `exports` field, and removing it is the point.** It was a list
+ * of the names crossing the public ABI -- required at first, then optional with
+ * a documented default, then audited twice -- and it never stopped being a
+ * second statement of what the entry module already exports. Measured across
+ * the workspace fixture before it was relaxed: eight library configs declared
+ * it, and in eight of eight the list was identical to the entry's.
+ *
+ * The one case that survived that audit was a helper the entry exports because
+ * the package's own tests import it, which the ABI should not publish. That case
+ * is real and the field was still the wrong answer to it, because it only
+ * existed through a compiler default: root sets were `EveryExport`, which roots
+ * at the `export` keyword in *every* module, and that is wider than any artifact
+ * here can publish. Nothing outside a `.so`, a `.node`, a jar or an
+ * `.xcframework` can reach an internal module -- there is one entry and its
+ * surface is the ABI.
+ *
+ * So `entry` answers it. A product must name one to be built at all, the
+ * compiler roots at what that module publishes (`Roots::EntrySurface`), and a
+ * helper the entry does not export is not in the artifact. A test-only helper
+ * belongs in a module the entry does not re-export, which is where every other
+ * ecosystem puts it.
+ *
+ * `LibraryBase` went with the field. With no members left it was `ProductBase`
+ * under another name, and an interface that adds nothing reads as structure.
+ */
 export type LibraryProduct =
   | AarProduct
   | JarProduct
