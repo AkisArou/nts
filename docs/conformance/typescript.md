@@ -2361,6 +2361,49 @@ it disagreed with node on **1,257 inputs** over three separate rules. A function
 nothing calls and an example nothing runs are one hazard, and neither reports a
 failure — they report nothing, which reads as coverage.
 
+### What the example comparison can see at all
+
+Stated 2026-09-15, because it never had been, and it bounds every "agrees with
+node" in this file. `tooling/differential`'s admissible types are
+
+    Bool | Int { .. } | Float { .. }        -- `fn scalar`
+    Managed(String)                         -- passed and compared separately
+    Promise<one of the above>               -- driven to settlement
+
+and nothing else. **No example ever compares an object.** Not a field, not a
+prototype, not identity, not an array's contents.
+
+That is not the same as saying object behaviour is unchecked, and the
+distinction is the whole of it: an example can reach *any* behaviour, but only
+by **projecting it onto a scalar itself**. `examples/key-order-follows-the-program`
+is what that costs — to compare an enumeration order it encodes one:
+
+    total = total * 128 + (keys[i] ?? "").charCodeAt(0)
+
+a positional hash, written by hand, so that a difference in order becomes a
+difference in a number. Covering a non-scalar class means somebody thought to
+write the projection.
+
+**So the hazard is a claim about object-shaped behaviour that no example
+projects.** It is unobserved and reads as covered, because the gate reports 209
+of 209 either way. Checked for the obvious one: enumeration order **is**
+projected, by the example above and by `a-for-in-over-an-object`. A zero, and
+the reason it is worth recording is that it took a projection somebody wrote
+years before the question was asked.
+
+The node lane hit the identical shape from the other side the same day, and
+theirs bit. Their differential rendered results with `JSON.stringify`, which
+**cannot see a prototype** — a null-prototype object and a plain one serialise
+alike — so 110,470 comparisons were blind to that entire class, and two real
+defects sat behind it: `url.parse(s, true).query` and `util.parseArgs().values`
+were plain objects where node gives a null prototype, which is what stops
+`?__proto__=x` and `--__proto__` from reaching `Object.prototype`. Fixing the
+renderer was not enough on its own — a spec that returns a *string* flattens it
+again in transit, so three specs had to return the container itself.
+
+An instrument's observational limit is a property of the instrument, not of the
+thing it measures, and it does not appear in its output.
+
 Only the examples and the sweep check **correctness**, and they check it
 differently: an example covers what somebody thought to write down, a sweep
 covers what nobody did. Every correctness bug found here by hand has been one
