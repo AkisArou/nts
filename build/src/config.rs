@@ -289,27 +289,6 @@ pub fn above(file: &Utf8Path) -> Option<Utf8PathBuf> {
     None
 }
 
-/// Whether a config declaring a `workspace` sits above this project.
-///
-/// A monorepo, in other words -- which is the signal that a package this app
-/// does not itself describe may contribute native code. An app's own config
-/// says nothing about its dependencies' C, and should not: `apps/native`
-/// declares no `native:` and its program contains `crypto-core`'s `c:digest`.
-#[must_use]
-pub fn workspace_above(tsconfig: &Utf8Path) -> bool {
-    let mut at = tsconfig.parent().and_then(Utf8Path::parent);
-    while let Some(directory) = at {
-        let candidate = directory.join(FILE_NAME);
-        if candidate.exists()
-            && std::fs::read_to_string(&candidate).is_ok_and(|text| text.contains("workspace:"))
-        {
-            return true;
-        }
-        at = directory.parent();
-    }
-    false
-}
-
 /// The config governing a project, given the tsconfig a command was pointed at.
 ///
 /// Beside it, because that is the relationship the config itself states from the

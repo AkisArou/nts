@@ -2429,10 +2429,7 @@ fn build(rest: &[String]) -> Result<()> {
             // **A workspace member counts too, and not because of its own
             // config.** An app declaring no native code can still import a
             // package that does -- `apps/native` has no `native:` and its
-            // program contains `crypto-core`'s `c:digest`. A config with a
-            // `workspace` above this one says a monorepo, which is the same
-            // signal one level out, and costs the snapshot only there.
-            let in_a_workspace = nts_build::config::workspace_above(&tsconfig);
+            // program contains `crypto-core`'s `c:digest`.
             // **Any native root, not only one with a header.** A header is what
             // a *binding* needs; a `.c` beside it is compiled either way, and
             // its directory is on the include path the witness uses. Gating on
@@ -2468,7 +2465,6 @@ fn build(rest: &[String]) -> Result<()> {
             // alternating on warm state: **0.26s with the cache, 1.5s without**.
             // A number in a comment is a claim with a date on it; this one had
             // no date and outlived the code it described by one commit.
-            let _ = in_a_workspace;
             let config_roots = generate_bindings(&tsconfig, std::slice::from_ref(&target.id))?;
             let native = native_sources(&config_roots, target)?;
             // **At configuration time, naming the package**, which is the whole
