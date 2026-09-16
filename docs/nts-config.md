@@ -713,6 +713,90 @@ that is parsed and never read is the same shape as a config field nothing
 reaches. `targets` is deserialized and unused, which is the one exception, and it
 is there because the next consumer is target selection.
 
+## 6g. `nts build`
+
+`nts` had seventeen subcommands and none of them built anything. `emit-c` wrote
+C, and twenty-two hand-written `build.sh` in this tree each reconstructed the
+rest: compile the runtime beside it, link, package. Each could drift from what
+the compiler emits, and several carried flags a person had to know.
+
+    $ nts build
+    building `hello` for linux-gnu into .nts/build/hello/linux-gnu-x86_64
+    nts.config.ts: product `hello` publishes what `./src/main.ts` exports
+      .nts/build/hello/linux-gnu-x86_64/libhello.so
+    1 artifact(s) under .nts/build
+
+**No flags, because there is nothing left for one to say.** The backend comes
+from the target, the shape from the product's kind, the surface from its entry,
+and the file name from the product. `--product <name>` picks one where a config
+declares several; that is the whole interface.
+
+### What it builds, and what it refuses
+
+| kind | today |
+| --- | --- |
+| `shared-library` | `.so`, `-fPIC`, version script, self-initialising |
+| `static-library` | `.a` through `ar`, same objects |
+| `executable`, `application` | linked against the libuv host, on the C backend |
+| `node-addon` | `.node`, checked for unresolved symbols, loads in node |
+| `jar` | `<name>.jar` plus `nts-runtime.jar` beside it |
+| `aar` | **refused**: the container is a zip of `classes.jar`, a manifest and resources |
+| `xcframework` | **refused**: needs the Apple toolchain |
+| `application` on the JVM | **refused**: an APK needs `aapt2`, `d8`, `apksigner` |
+
+A refusal names the container rather than saying "unsupported", because the
+classes and objects *are* emitted -- `nts emit-jvm --out` writes them -- and the
+gap is the packaging alone. It happens **before the output directory exists**, so
+a build that stops leaves nothing to mistake for a partial result. That is not
+hypothetical: an `aar` product built a `.jar`, which Gradle cannot resolve, under
+a name nothing gives a reader reason to doubt.
+
+### Four things the flags encode that a person had to know
+
+Each was found by the artifact failing, not by reading.
+
+- **`-fPIC` is not a preference.** `nts_env` is thread-local and the default TLS
+  model is local-exec, so a `.so` fails to link at all:
+  `relocation R_X86_64_TPOFF32 ... incompatible with -shared`.
+- **A version script, not `-fvisibility=hidden`.** The emitted headers carry no
+  visibility attributes, so hiding by default would hide the exports too. Without
+  one, a two-function library exported **318** symbols -- every internal of the
+  runtime and of the vendored dtoa.
+- **A library initialises itself.** The version script then hid `module__init`,
+  and a library whose consumer cannot run module evaluation answers with a null
+  pointer rather than failing to link. A generated `.init_array` entry runs it,
+  for `.so` and `.a` and never for an executable, whose `main.c` already does and
+  would otherwise evaluate the module twice. Only when there is something to
+  evaluate: a program that is only declarations emits no `module__init`, and
+  `--no-undefined` caught the reference.
+- **`--gc-sections`, with `-ffunction-sections -fdata-sections`.** The numbers are
+  `write_standalone`'s own: the Unicode tables cost 81 KB linked whole against
+  10 KB stripped, and a `hello` with no Unicode goes 81 KB to 16 KB.
+
+### Two guards, because a linked file is not an artifact
+
+**Unresolved symbols.** `--no-undefined` where it can be used, which is every
+shared library. Not a `.node`: it resolves the `napi_` family out of the host
+process at load, so those are legitimately unresolved at link time. Addons are
+checked after linking instead -- anything undefined, unversioned, and not
+`napi_`. That caught a `.node` that linked, exited zero, and died on `require`
+with `undefined symbol: nts_napi_set_env`.
+
+**The native witness.** Where a program binds something native, `nts bind-c`'s
+witness is compiled before linking. It declares no symbol, includes the real
+headers itself, and fails when what `nts` believes about a struct disagrees with
+them -- which is a silently wrong answer rather than a link error. Sixteen
+`build.sh` do this by hand.
+
+### The config's first readers
+
+`entry` (the published surface), `kind`, `targets`, `soname`, and `javaPackage`.
+That last one's first reader is a **refusal**: `codegen/jvm` hardcodes `nts/gen`,
+so a product asking for `com.acme.sdk` is told what it would have got rather than
+given a jar whose package is not the one requested.
+
+`manifests`, `dependencies` and `integrate` are still read by nothing.
+
 ## 7. Decided, and open
 
 **Decided**
