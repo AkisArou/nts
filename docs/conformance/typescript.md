@@ -2500,6 +2500,62 @@ move that found `undefined | void`. Neither is started; each is recorded with
 what actually stops it, because a rank without a diagnosis is what §15 already
 records itself getting wrong.
 
+#### An object literal supplying an optional property — 87 sites, one modifier
+
+`a X where a Y is wanted, which is a pointer cast between two structs that do
+not agree about where their shared fields are` is the second-largest refusal by
+distinct site: **87**, and the overwhelming majority read `an anonymous type`
+on one side. That is the options-object idiom — `readdir(path, { withFileTypes:
+true })` — and it is one rule.
+
+**It refuses exactly when the literal supplies a value for a `?` property.**
+Measured, one variable at a time, single call, single file:
+
+```text
+  interface has          literal supplies              refusals
+  ---------------------  ----------------------------  --------
+  depth: number          { depth: n }                     0
+  all three required     all three                        0
+  depth, encoding?       { depth: n }                     0   omits it
+  depth?                 { }                              0   omits it
+  depth?                 { depth: n }                     1
+  depth?, encoding?      { depth: n }                     1
+  depth, encoding?       { depth: n, encoding: "u" }      1
+```
+
+**And it is the `?`, not the representation.** The last two rows of the
+discriminator:
+
+```text
+  encoding?: string                { encoding: "u" }     1 refusal
+  encoding?: string                { encoding: undefined } 0
+  encoding: string | undefined     { encoding: "u" }     0 refusals
+```
+
+`encoding?: string` and `encoding: string | undefined` have the **same**
+representation and differ only in the modifier, and only the first refuses. So
+this is not erasure, not field count, and not offset arithmetic in any sense a
+reader would guess from the message — it is `PropertyRecord::optional`.
+
+**The mechanism, and it is this file's recurring one.** `count(o: Options)` is
+not lowered as taking `Options`. It is lowered as `count@0obj8(o:
+managed<obj#8>)` — a **structural copy**, keyed by `structural_instantiations`
+on the *checker's* type of the argument expression. Meanwhile
+`lower_object_literal` builds the literal at its **contextual** type, which is
+the parameter's declared one. Two derivations of "what shape is this argument",
+and they agree until the literal supplies an optional property — at which point
+the checker's type for the literal marks that property **not** optional while
+the declaration marks it optional, and the two layouts differ.
+
+The fix is to make those one derivation, not to teach the cast to work. Which
+side should give is the open question: keying the structural copy on the
+contextual type would make every call to `count` with an `Options`-shaped
+literal share one copy, which is also the answer that produces fewer copies.
+
+Not attempted. Recorded with the control above so the next attempt starts from
+a one-variable reproduction rather than from 87 sites and a message about
+offsets.
+
 #### The largest remaining message is not a cause — 177 sites, two types
 
 `a property X of unrepresentable type (a union of …)` is the biggest single
