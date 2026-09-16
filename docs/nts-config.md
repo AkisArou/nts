@@ -93,7 +93,7 @@ saw it because `target.windows()` was pinned to the llvm backend, which refuses
 before reaching a linker: a bug kept alive by an unrelated refusal, which is the
 second one of those this week.
 
-### Priced, not built: `javaPackage`
+### Built, and the price was 42 rather than 3: `javaPackage`
 
 `nts.gen` is hardcoded in the JVM emitter and `package_jvm` refuses a jar whose
 config asks for anything else, rather than shipping classes somewhere other than
@@ -117,7 +117,24 @@ reaching those two functions on something already threaded -- which is a change
 to what `class_name` takes, and therefore the same 42 sites.
 
 Estimated at 3 sites before the probe and measured at 42, which is the reason to
-run the probe.
+run the probe rather than reason about the seam.
+
+**Built afterwards, and the count was right.** `types::Shape` carries the
+package -- it is already "the program plus the one whole-program fact that
+changes a type's spelling", and a package is exactly that -- so the fifteen
+sites in `ops.rs` came free through `self.shape` and the rest arrived as a
+parameter.
+
+Two things the compiler could not have told me. `widen.rs` builds a
+`(class, field)` key that *looks* pass-internal and is not: `ops.rs` asks
+`widened_fields.contains(&(types::class_name(..), name))`, so a key spelled any
+other way answers `false` for every field and the widening silently stops
+happening. And the last name still hardcoded was the program class itself,
+which showed up as a jar holding `com/acme/sdk/Counter.class` beside
+`nts/gen/Program.class` -- half the program in each package. Then, with the
+paths right, a stale `invokestatic` still threw `NoClassDefFoundError:
+nts/gen/Program`: **listing an archive says nothing about the names inside the
+bytecode**, so the test compiles and runs a Java consumer against the jar.
 
 **The default backend was the refusal.** `target.linux()` defaulted to `llvm`
 and `ios`, `macos` and `windows` were pinned to it, while `app.linux({ backend })`

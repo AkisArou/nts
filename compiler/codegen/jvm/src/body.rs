@@ -33,8 +33,22 @@ use crate::types;
 
 /// Where the runtime's helpers live.
 pub const RUNTIME: &str = "nts/rt/NtsRuntime";
-/// The class every free function becomes a static method on.
+/// The class every free function becomes a static method on, in the default
+/// package.
+///
+/// **Kept as the default rather than the only answer.** A product naming a
+/// `javaPackage` moves its classes, and this one is a class like the others --
+/// it was the last name still hardcoded after the layouts moved, which showed
+/// up as a jar holding `com/acme/sdk/Counter.class` beside
+/// `nts/gen/Program.class`: half the program in each package, and every
+/// `invokestatic` between them crossing a boundary that need not exist.
 pub const PROGRAM: &str = "nts/gen/Program";
+
+/// The program class in a named package.
+#[must_use]
+pub fn program_class(package: &str) -> String {
+    format!("{package}/Program")
+}
 
 /// A refusal, named the way the other backends name theirs.
 ///
@@ -54,16 +68,16 @@ pub fn refuse(func: &Func, what: &str) -> Diagnostic {
 /// Separate from the body walk because a signature is refusable on its own
 /// terms: a parameter type with no descriptor is a refusal whatever the body
 /// does, and saying so here keeps the slot allocation below about slots.
-fn check_signature(program: &Program, func: &Func) -> Result<(), Diagnostic> {
+fn check_signature(package: &str, program: &Program, func: &Func) -> Result<(), Diagnostic> {
     for param in &func.params {
-        if types::descriptor(types::Shape::of(program), &param.ty).is_none() {
+        if types::descriptor(types::Shape::packaged(program, package), &param.ty).is_none() {
             return Err(refuse(
                 func,
                 &format!("a parameter of unrepresentable type: {}", types::describe(&param.ty)),
             ));
         }
     }
-    if types::descriptor(types::Shape::of(program), &func.return_type).is_none() {
+    if types::descriptor(types::Shape::packaged(program, package), &func.return_type).is_none() {
         return Err(refuse(
             func,
             &format!(
@@ -286,7 +300,7 @@ fn held_differently(plans: &Held, value: ValueId) -> Option<nts_jvm_emitter::VTy
         })
 }
 
-fn held_values(program: &Program, func: &Func, plan: &crate::widen::Plan) -> Held {
+fn held_values(package: &str, program: &Program, func: &Func, plan: &crate::widen::Plan) -> Held {
     Held {
         unboxed: crate::unbox::unboxable(func),
         fused: crate::fuse::fused(func),
@@ -301,7 +315,7 @@ fn held_values(program: &Program, func: &Func, plan: &crate::widen::Plan) -> Hel
             }
             held
         },
-        joined: crate::closures::joined(program, func),
+        joined: crate::closures::joined(package, program, func),
         widened: plan.values_in(func),
         widened_fields: plan.fields().clone(),
     }
@@ -347,11 +361,12 @@ pub struct Emitter<'a> {
 impl<'a> Emitter<'a> {
     /// Lay out storage, or refuse a type this slice has no representation for.
     pub fn new(
+        package: &'a str,
         program: &'a Program,
         func: &'a Func,
         plan: &crate::widen::Plan,
     ) -> Result<Self, Diagnostic> {
-        check_signature(program, func)?;
+        check_signature(package, program, func)?;
 
         let order = block_order(func);
 
@@ -363,10 +378,10 @@ impl<'a> Emitter<'a> {
         // Parameters occupy the first slots, in order, whether or not the body
         // reads them: the JVM places arguments there and a gap would shift
         // every later one.
-        let plans = held_values(program, func, plan);
+        let plans = held_values(package, program, func, plan);
         let mut param_slot = Vec::with_capacity(func.params.len());
         for param in &func.params {
-            let Some(vtype) = types::vtype(types::Shape::of(program), &param.ty) else {
+            let Some(vtype) = types::vtype(types::Shape::packaged(program, package), &param.ty) else {
                 return Err(refuse(func, "a parameter with no verification type"));
             };
             param_slot.push(u16::try_from(next).unwrap_or(u16::MAX));
@@ -405,7 +420,7 @@ impl<'a> Emitter<'a> {
                 continue;
             }
             let held = held_differently(&plans, value);
-            let Some(vtype) = held.or_else(|| types::vtype(types::Shape::of(program), ty)) else {
+            let Some(vtype) = held.or_else(|| types::vtype(types::Shape::packaged(program, package), ty)) else {
                 return Err(refuse(
                     func,
                     &format!("a value of unrepresentable type: {}", types::describe(ty)),
@@ -459,7 +474,7 @@ impl<'a> Emitter<'a> {
 
         Ok(Self {
             program,
-            shape: types::Shape::of(program),
+            shape: types::Shape::packaged(program, package),
             func,
             slots,
             locals,
@@ -714,14 +729,14 @@ pub fn method_name(raw: &str) -> String {
 
 /// The descriptor of a function, from its own signature.
 #[must_use]
-pub fn signature(program: &Program, func: &Func) -> Option<String> {
+pub fn signature(package: &str, program: &Program, func: &Func) -> Option<String> {
     let mut params = Vec::with_capacity(func.params.len());
     for param in &func.params {
-        params.push(types::descriptor(types::Shape::of(program), &param.ty)?);
+        params.push(types::descriptor(types::Shape::packaged(program, package), &param.ty)?);
     }
     let borrowed: Vec<&str> = params.iter().map(String::as_str).collect();
     Some(nts_jvm_emitter::descriptor::method(
         &borrowed,
-        &types::descriptor(types::Shape::of(program), &func.return_type)?,
+        &types::descriptor(types::Shape::packaged(program, package), &func.return_type)?,
     ))
 }

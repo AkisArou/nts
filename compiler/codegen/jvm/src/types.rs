@@ -64,7 +64,7 @@ pub const STRING_DESCRIPTOR: &str = "Ljava/lang/String;";
 /// layout, and giving them separate classes would emit two classes that are the
 /// same class and could not be passed to each other.
 #[must_use]
-pub fn class_name(layout: &Layout) -> String {
+pub fn class_name(package: &str, layout: &Layout) -> String {
     // **A bound foreign class is already a binary name and is not ours to
     // rename.** `com/probe/Box` names a class in somebody's jar; putting it
     // under `nts/gen/` and flattening the slashes gives
@@ -76,7 +76,7 @@ pub fn class_name(layout: &Layout) -> String {
     if nts_core::hir::runtime::is_foreign_layout_name(&layout.name) {
         return layout.name.clone();
     }
-    jvm_class_name(&layout.name)
+    jvm_class_name(package, &layout.name)
 }
 
 /// The binary name of the empty subclass one class gets when it shares a
@@ -85,8 +85,12 @@ pub fn class_name(layout: &Layout) -> String {
 /// `A__B` beside `A__A` under the layout's own `A`, which is the C lane's
 /// `NtsObj_A__B` convention so the two artifacts name the same thing.
 #[must_use]
-pub fn identity_class_name(layout: &Layout, class: &nts_core::hir::ClassIdentity) -> String {
-    jvm_class_name(&format!("{}__{}", layout.name, class.name))
+pub fn identity_class_name(
+    package: &str,
+    layout: &Layout,
+    class: &nts_core::hir::ClassIdentity,
+) -> String {
+    jvm_class_name(package, &format!("{}__{}", layout.name, class.name))
 }
 
 /// A promise: a settled-or-not value and the frames waiting on it.
@@ -257,12 +261,29 @@ pub fn is_callback_interface(descriptor: &str) -> bool {
 pub struct Shape<'a> {
     pub program: &'a Program,
     pub grows: bool,
+    /// The package generated classes land in, as a binary-name prefix.
+    ///
+    /// **A whole-program fact that changes a type's spelling, which is what
+    /// this struct is for.** It was `nts/gen` baked into `symbols::
+    /// jvm_class_name`, and `docs/jvm-interop.md` listed that under packaging
+    /// gaps: a shipped library cannot have its classes in `nts.gen`, and
+    /// `package_jvm` refused a jar whose config asked for anything else rather
+    /// than emitting classes somewhere other than where the declaration says.
+    pub package: &'a str,
 }
+
+/// What a program gets when nothing names a package.
+pub const DEFAULT_PACKAGE: &str = "nts/gen";
 
 impl<'a> Shape<'a> {
     #[must_use]
     pub fn of(program: &'a Program) -> Self {
-        Self { program, grows: nts_core::hir::arrays_can_grow(program) }
+        Self::packaged(program, DEFAULT_PACKAGE)
+    }
+
+    #[must_use]
+    pub fn packaged(program: &'a Program, package: &'a str) -> Self {
+        Self { program, grows: nts_core::hir::arrays_can_grow(program), package }
     }
 }
 
@@ -529,7 +550,9 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // The fallback is here rather than at the field, so every `getfield`,
         // `putfield` and signature asks one question and gets one answer.
         HirType::Managed(ManagedType::Object(id)) => nts_jvm_emitter::descriptor::object(
-            &program.layout(*id).map_or_else(|| OBJECT.to_owned(), class_name),
+            &program
+                .layout(*id)
+                .map_or_else(|| OBJECT.to_owned(), |layout| class_name(shape.package, layout)),
         ),
         // UTF-16 code units with a compact one-byte/two-byte representation --
         // which is what `NtsString` implements by hand and what JavaScript's
@@ -740,7 +763,11 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             // The same fallback as `descriptor`, and it has to be the same or the
             // frame and the field would disagree about a slot.
             HirType::Managed(ManagedType::Object(id)) => {
-                VType::Object(program.layout(*id).map_or_else(|| OBJECT.to_owned(), class_name))
+                VType::Object(
+                    program
+                        .layout(*id)
+                        .map_or_else(|| OBJECT.to_owned(), |l| class_name(shape.package, l)),
+                )
             }
             HirType::Managed(ManagedType::Date) => VType::Object(DATE.to_owned()),
             HirType::Managed(ManagedType::Symbol) => VType::Object(SYMBOL.to_owned()),

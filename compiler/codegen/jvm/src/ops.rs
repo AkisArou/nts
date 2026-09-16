@@ -16,7 +16,7 @@ use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::code::{Code, Label};
 use nts_jvm_emitter::{Compare, Kind, Pool, insn};
 
-use crate::body::{Emitter, PROGRAM, Placed, RUNTIME, comparison, refuse};
+use crate::body::{Emitter, Placed, RUNTIME, comparison, refuse};
 use crate::types;
 
 /// A map call re-spelled to take its key unboxed: the arguments to push, and
@@ -1254,7 +1254,7 @@ impl Emitter<'_> {
             OpKind::ClosureStatic => {
                 let class = self.object_class(&op.ty)?;
                 let field = format!("closure${}", class.rsplit('/').next().unwrap_or(&class));
-                code.get_static(&origin, pool, PROGRAM, &field, &format!("L{class};"));
+                code.get_static(&origin, pool, &crate::body::program_class(self.shape.package), &field, &format!("L{class};"));
                 Placed::OnStack
             }
             OpKind::ConstNull | OpKind::ConstUndefined => {
@@ -1367,8 +1367,8 @@ impl Emitter<'_> {
                 // "is it this class" -- the same question only while one class
                 // owns the layout.
                 let wanted = crate::hierarchy::identity_of(self.program, *only)
-                    .map_or_else(|| types::class_name(layout), |class| {
-                        types::identity_class_name(layout, class)
+                    .map_or_else(|| types::class_name(self.shape.package, layout), |class| {
+                        types::identity_class_name(self.shape.package, layout, class)
                     });
                 code.instance_of(&origin, pool, &wanted);
                 Placed::OnStack
@@ -1499,7 +1499,7 @@ impl Emitter<'_> {
             return Ok(Placed::OnStack);
         }
         let Some(stored) = storing else {
-            code.get_static(origin, pool, PROGRAM, &name, &descriptor);
+            code.get_static(origin, pool, &crate::body::program_class(self.shape.package), &name, &descriptor);
             return Ok(Placed::OnStack);
         };
         // The value's type and the global's have to be the same type, and on
@@ -1559,7 +1559,7 @@ impl Emitter<'_> {
             self.assignable_types(&held, &entry.ty)?;
         }
         self.load(code, pool, stored)?;
-        code.put_static(origin, pool, PROGRAM, &name, &descriptor);
+        code.put_static(origin, pool, &crate::body::program_class(self.shape.package), &name, &descriptor);
         Ok(Placed::Stored)
     }
 
@@ -2142,7 +2142,7 @@ impl Emitter<'_> {
                     .program
                     .layouts
                     .iter()
-                    .find(|layout| types::class_name(layout) == class)
+                    .find(|layout| types::class_name(self.shape.package, layout) == class)
             })
             .is_some_and(|layout| {
                 layout.methods.iter().flatten().any(|name| {
@@ -2154,7 +2154,7 @@ impl Emitter<'_> {
                             .iter()
                             .find(|func| &func.name == name)
                             .and_then(|func| {
-                                crate::instance_descriptor(self.shape.program, func)
+                                crate::instance_descriptor(self.shape.package, self.shape.program, func)
                             })
                             .and_then(|descriptor| types::callback_interface(&descriptor))
                             == Some(&want[1..want.len() - 1])
@@ -2230,8 +2230,8 @@ impl Emitter<'_> {
                 return Err(refuse(self.func, "a shared field read over an arm with no layout"));
             };
             let tested = crate::hierarchy::identity_of(self.program, *arm)
-                .map_or_else(|| types::class_name(layout), |class| {
-                    types::identity_class_name(layout, class)
+                .map_or_else(|| types::class_name(self.shape.package, layout), |class| {
+                    types::identity_class_name(self.shape.package, layout, class)
                 });
             self.load(code, pool, receiver)?;
             if erased {
@@ -2383,10 +2383,10 @@ impl Emitter<'_> {
         ) else {
             return Ok(());
         };
-        let wanted = types::class_name(target_layout);
+        let wanted = types::class_name(self.shape.package, target_layout);
         if crate::hierarchy::ancestry(self.program, source_layout)
             .iter()
-            .any(|ancestor| types::class_name(ancestor) == wanted)
+            .any(|ancestor| types::class_name(self.shape.package, ancestor) == wanted)
         {
             return Ok(());
         }
@@ -2451,8 +2451,8 @@ impl Emitter<'_> {
             // layout's class and would have kept answering `true` for a sibling
             // while the single-class arm was already right.
             let wanted = crate::hierarchy::identity_of(self.program, *class)
-                .map_or_else(|| types::class_name(layout), |owner| {
-                    types::identity_class_name(layout, owner)
+                .map_or_else(|| types::class_name(self.shape.package, layout), |owner| {
+                    types::identity_class_name(self.shape.package, layout, owner)
                 });
             code.instance_of(origin, pool, &wanted);
             if at > 0 {
@@ -2736,7 +2736,7 @@ impl Emitter<'_> {
                 ) && let HirType::Managed(ManagedType::Object(id)) = &from
                     && let Some(layout) = self.program.layout(*id)
                 {
-                    let field = crate::erased_field(&types::class_name(layout));
+                    let field = crate::erased_field(&types::class_name(self.shape.package, layout));
                     code.get_static(
                         origin,
                         pool,
@@ -3599,8 +3599,8 @@ impl Emitter<'_> {
         // `instanceof` tests. A parameter or field keeps the base, which is
         // what leaves `readA(new B())` passing.
         Ok(crate::hierarchy::identity_of(self.program, *id)
-            .map_or_else(|| types::class_name(layout), |class| {
-                types::identity_class_name(layout, class)
+            .map_or_else(|| types::class_name(self.shape.package, layout), |class| {
+                types::identity_class_name(self.shape.package, layout, class)
             }))
     }
 
@@ -3701,7 +3701,7 @@ impl Emitter<'_> {
         // A field this backend holds as a `double`; see `widen`. Keyed by the
         // *declaring* class and the field's name, which is the one identity the
         // declaration in `object_class` and this access can both compute.
-        let held = if self.widened_fields.contains(&(types::class_name(owner), entry.name.clone())) {
+        let held = if self.widened_fields.contains(&(types::class_name(self.shape.package, owner), entry.name.clone())) {
             HirType::Float { bits: 64 }
         } else {
             entry.ty.clone()
@@ -3713,7 +3713,7 @@ impl Emitter<'_> {
             ));
         };
         Ok((
-            types::class_name(owner),
+            types::class_name(self.shape.package, owner),
             crate::body::method_name(&entry.name),
             descriptor,
             held,
@@ -4774,7 +4774,7 @@ impl Emitter<'_> {
                     &format!("a virtual call to `{declared}`, which is not in this program"),
                 ));
             };
-            let Some(descriptor) = crate::instance_descriptor(self.program, target) else {
+            let Some(descriptor) = crate::instance_descriptor(self.shape.package, self.program, target) else {
                 return Err(refuse(
                     self.func,
                     &format!("a virtual call to `{declared}`, whose signature has no representation"),
@@ -5582,7 +5582,7 @@ impl Emitter<'_> {
         let Some(layout) = self.program.layout(id) else {
             return Err(refuse(self.func, &format!("`{name}` on a type with no layout")));
         };
-        let owner = types::class_name(crate::hierarchy::root(self.program, layout));
+        let owner = types::class_name(self.shape.package, crate::hierarchy::root(self.program, layout));
         let field = types::PRESENCE;
         match name {
             "nts_presence_has" | "nts_presence_has_fn" => {
@@ -5681,7 +5681,7 @@ impl Emitter<'_> {
                         &format!("a closure call to `{declared}`, which is not in this program"),
                     ));
                 };
-                let Some(descriptor) = crate::instance_descriptor(self.program, target) else {
+                let Some(descriptor) = crate::instance_descriptor(self.shape.package, self.program, target) else {
                     return Err(refuse(
                         self.func,
                         &format!("a closure call to `{declared}`, whose signature has no representation"),
@@ -5764,7 +5764,7 @@ impl Emitter<'_> {
             .filter(|_| crate::hierarchy::member_name(name) == "call")
             .and_then(|receiver| self.joined.get(receiver).cloned());
         if let Some(base) = merged {
-            let Some(descriptor) = crate::instance_descriptor(self.program, target) else {
+            let Some(descriptor) = crate::instance_descriptor(self.shape.package, self.program, target) else {
                 return Err(refuse(
                     self.func,
                     &format!("a closure call to `{name}`, whose signature has no representation"),
@@ -5803,7 +5803,7 @@ impl Emitter<'_> {
                 &format!("a direct call to `{name}`, which is abstract and has no body to call"),
             ));
         }
-        let Some(signature) = crate::body::signature(self.program, target) else {
+        let Some(signature) = crate::body::signature(self.shape.package, self.program, target) else {
             return Err(refuse(self.func, &format!("a call to `{name}`, whose signature has no representation")));
         };
         // Every argument against the parameter it lands in. The IR relates
@@ -5821,7 +5821,7 @@ impl Emitter<'_> {
             self.load(code, pool, arg)?;
         }
         let method = crate::body::method_name(name);
-        code.invoke_static(origin, pool, PROGRAM, &method, &signature);
+        code.invoke_static(origin, pool, &crate::body::program_class(self.shape.package), &method, &signature);
         // The callee's descriptor says what *it* returns; the IR says what this
         // call site gets, and for a method returning `this` those differ. A
         // `Counter.bump()` called on a `Labelled` is typed `Labelled` by the

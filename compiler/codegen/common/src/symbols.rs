@@ -589,8 +589,8 @@ pub fn dex_can_spell(name: &str) -> bool {
 /// generated class can never collide with a platform one however a TypeScript
 /// file is named.
 #[must_use]
-pub fn jvm_class_name(raw: &str) -> String {
-    format!("nts/gen/{}", jvm_member_name(raw))
+pub fn jvm_class_name(package: &str, raw: &str) -> String {
+    format!("{package}/{}", jvm_member_name(raw))
 }
 
 #[cfg(test)]
@@ -657,7 +657,20 @@ mod jvm_tests {
 
     #[test]
     fn a_class_is_packaged_where_nothing_platform_can_collide() {
-        assert_eq!(jvm_class_name("Point"), "nts/gen/Point");
+        assert_eq!(jvm_class_name("nts/gen", "Point"), "nts/gen/Point");
+    }
+
+    /// The package is the caller's, and the member rule still applies inside it.
+    ///
+    /// **Both halves, because the package arriving is not the same as the name
+    /// being mangled.** A product declaring `javaPackage: "com.acme.sdk"` gets
+    /// its classes there, and a TypeScript name needing rescue still gets it --
+    /// passing the package through and dropping the mangling would look correct
+    /// in the common case and emit an unspellable class in the one that matters.
+    #[test]
+    fn a_named_package_carries_the_member_rule_with_it() {
+        assert_eq!(jvm_class_name("com/acme/sdk", "Point"), "com/acme/sdk/Point");
+        assert_eq!(jvm_class_name("com/acme/sdk", "a/b.c"), "com/acme/sdk/a$b$c");
     }
 
     /// A name libc also declares is escaped, and the failure it prevents is a

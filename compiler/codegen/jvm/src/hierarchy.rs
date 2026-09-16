@@ -260,11 +260,11 @@ pub fn root<'a>(program: &'a Program, layout: &'a Layout) -> &'a Layout {
 /// falls out -- a program that never tests an optional property carries no extra
 /// field anywhere.
 #[must_use]
-pub fn holds_presence(program: &Program, layout: &Layout) -> bool {
+pub fn holds_presence(package: &str, program: &Program, layout: &Layout) -> bool {
     if program.base_layout(layout).is_some() {
         return false;
     }
-    let wanted = crate::types::class_name(layout);
+    let wanted = crate::types::class_name(package, layout);
     for func in &program.funcs {
         for op in &func.values {
             let nts_core::hir::OpKind::Call { callee, args, .. } = &op.kind else {
@@ -280,7 +280,7 @@ pub fn holds_presence(program: &Program, layout: &Layout) -> bool {
             else {
                 continue;
             };
-            if program.layout(id).map(|held| crate::types::class_name(root(program, held)))
+            if program.layout(id).map(|held| crate::types::class_name(package, root(program, held)))
                 == Some(wanted.clone())
             {
                 return true;
@@ -354,7 +354,7 @@ pub fn claimed_without_extending(program: &Program, layout: &Layout) -> bool {
 /// byte sequence -- the class file's `interfaces[]` is written in this order and
 /// the jar-drift test compares bytes.
 #[must_use]
-pub fn implemented(program: &Program, layout: &Layout) -> Vec<String> {
+pub fn implemented(package: &str, program: &Program, layout: &Layout) -> Vec<String> {
     layout
         .interfaces
         .iter()
@@ -366,7 +366,7 @@ pub fn implemented(program: &Program, layout: &Layout) -> Vec<String> {
         // interface`, at load rather than at a call. The two halves have to
         // agree, so they ask the same question.
         .filter(|at| is_interface(program, at))
-        .map(crate::types::class_name)
+        .map(|at| crate::types::class_name(package, at))
         .collect()
 }
 

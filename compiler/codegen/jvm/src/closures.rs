@@ -109,7 +109,7 @@ fn edges(terminator: &Terminator) -> Vec<(BlockId, &Vec<ValueId>)> {
 /// share would be a slot type one of them does not widen to, which the verifier
 /// would reject at the store rather than accept quietly.
 #[must_use]
-pub fn joined(program: &Program, func: &Func) -> FxHashMap<ValueId, String> {
+pub fn joined(package: &str, program: &Program, func: &Func) -> FxHashMap<ValueId, String> {
     let mut arriving: FxHashMap<ValueId, FxHashSet<ValueId>> = FxHashMap::default();
     for block in &func.blocks {
         for (target, args) in edges(&block.terminator) {
@@ -128,8 +128,8 @@ pub fn joined(program: &Program, func: &Func) -> FxHashMap<ValueId, String> {
         let Some(base) = base_of(program, declared) else {
             continue;
         };
-        let shared = types::class_name(base);
-        let wanted = types::class_name(declared);
+        let shared = types::class_name(package, base);
+        let wanted = types::class_name(package, declared);
         let mut differs = false;
         let mut agree = true;
         for arg in args {
@@ -137,10 +137,10 @@ pub fn joined(program: &Program, func: &Func) -> FxHashMap<ValueId, String> {
                 agree = false;
                 break;
             };
-            if types::class_name(layout) != wanted {
+            if types::class_name(package, layout) != wanted {
                 differs = true;
             }
-            if base_of(program, layout).map(types::class_name).as_deref() != Some(shared.as_str()) {
+            if base_of(program, layout).map(|l| types::class_name(package, l)).as_deref() != Some(shared.as_str()) {
                 agree = false;
                 break;
             }

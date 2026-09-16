@@ -507,18 +507,22 @@ export default defineConfig({
     assert_eq!(String::from_utf8_lossy(&loaded.stdout), "9");
 }
 
-/// A jar is packaged, runs, and refuses a package it cannot produce.
+/// A jar is packaged, runs, and lands in the package its config names.
 ///
 /// **Two artifacts and not one.** `apps/java-desktop-brownfield` states the
 /// open question: the runtime jar is either shaded in or declared as a
 /// dependency, and "neither is free and the choice is not made". Both are
 /// written, so the decision stays available.
 ///
-/// The refusal is the other half. `javaPackage` had no reader at all, and
-/// `codegen/jvm` hardcodes `nts/gen`; a jar whose classes are somewhere other
-/// than where its config says does not match its own declaration.
+/// **This test asserted a refusal until the refusal stopped being right.**
+/// `javaPackage` had no reader and `codegen/jvm` hardcoded `nts/gen`, so a
+/// config asking for anything else was stopped rather than half-honoured. The
+/// emitter takes a package now, so the same config is built and the classes are
+/// checked where it said they would be -- and `a_java_package_moves_the_classes_and_they_still_link`
+/// carries the part this one cannot, which is a consumer compiling and running
+/// against it.
 #[test]
-fn a_jar_is_packaged_and_an_impossible_package_is_refused() {
+fn a_jar_is_packaged_in_the_package_its_config_names() {
     if !available() {
         eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
         return;
@@ -545,14 +549,21 @@ export default defineConfig({{
         "export function add(a: number, b: number): number { return a + b; }\n",
     )
     .expect("writing the program");
-    let refused = build(&project, &[]);
-    assert!(!refused.ok, "a package the emitter cannot produce should stop the build");
+    let run = build(&project, &[]);
+    assert!(run.ok, "the declared package was not built:\n{}{}", run.stdout, run.stderr);
+    let placed = Command::new("unzip")
+        .arg("-l")
+        .arg(project.join(".nts/build/calc/java-8/calc.jar"))
+        .output()
+        .expect("unzip");
+    let placed = String::from_utf8_lossy(&placed.stdout);
     assert!(
-        refused.stderr.contains("com.acme.sdk") && refused.stderr.contains("nts.gen"),
-        "the refusal named neither package:\n{}",
-        refused.stderr,
+        placed.contains("com/acme/sdk/") && !placed.contains("nts/gen/"),
+        "the classes are not where the config said:\n{placed}"
     );
 
+    // The rest of this asserts the jar itself, which is easier to read against
+    // the default package -- and keeps a case where nothing names one.
     std::fs::write(project.join("nts.config.ts"), config("nts.gen")).expect("rewriting the config");
     let run = build(&project, &[]);
     assert!(run.ok, "{}{}", run.stdout, run.stderr);
@@ -1937,4 +1948,106 @@ fn the_workspace_fixture_still_builds() {
             run.stdout
         );
     }
+}
+
+/// `javaPackage` moves the classes, and a Java consumer can call them.
+///
+/// **`nts.gen` was hardcoded in the emitter and `package_jvm` refused any
+/// config that asked otherwise** -- which is the honest thing to do while the
+/// emitter cannot, and `docs/jvm-interop.md` listed it under packaging gaps
+/// because "`nts.gen` is wrong for a shipped library".
+///
+/// The assertion is a consumer that compiles and runs, because every weaker one
+/// passed while this was broken. Half-done, the jar held
+/// `com/acme/sdk/Counter.class` beside `nts/gen/Program.class` -- the layouts
+/// had moved and the class every free function lives on had not -- and then a
+/// jar with the right paths still threw `NoClassDefFoundError: nts/gen/Program`
+/// from a stale `invokestatic`. Listing the archive says nothing about the
+/// names inside the bytecode.
+#[test]
+fn a_java_package_moves_the_classes_and_they_still_link() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    let tool = |n: &str| Command::new(n).arg("-version").output().is_ok_and(|o| o.status.success());
+    if !frontend || !tool("javac") || !tool("java") {
+        return;
+    }
+    let project = fixture(
+        "build-java-package",
+        r#"
+import { defineConfig, library } from "@nts/config";
+export default defineConfig({
+  products: {
+    sdk: library.jvm({ entry: "./src/main.ts", javaPackage: "com.acme.sdk", release: 8 }),
+  },
+});
+"#,
+    );
+    // A class with a method and a free function that calls it, so both the
+    // layout classes and the program class are exercised.
+    std::fs::write(
+        project.join("src/main.ts"),
+        "export function twice(n: number): number { return n * 2; }\n\
+         export class Counter {\n\
+         \x20 private n: number = 0;\n\
+         \x20 bump(): number { this.n = this.n + 1; return this.n; }\n\
+         }\n\
+         export function drive(c: Counter): number { return c.bump(); }\n",
+    )
+    .expect("entry");
+    std::fs::write(project.join("src/internal.ts"), "export function helper(n: number): number { return n; }\n")
+        .expect("sibling");
+
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+
+    let jar = project.join(".nts/build/sdk/java-8/sdk.jar");
+    let runtime = project.join(".nts/build/sdk/java-8/nts-runtime.jar");
+    let listing = Command::new("unzip").arg("-l").arg(&jar).output().expect("unzip");
+    let listing = String::from_utf8_lossy(&listing.stdout);
+    assert!(listing.contains("com/acme/sdk/Program.class"), "no program class:\n{listing}");
+    assert!(listing.contains("com/acme/sdk/Counter.class"), "no layout class:\n{listing}");
+    assert!(!listing.contains("nts/gen/"), "classes left in the default package:\n{listing}");
+
+    // The consumer, which is what says the *bytecode* agrees with the paths.
+    let consumer = project.join("Use.java");
+    std::fs::write(
+        &consumer,
+        "public final class Use {\n\
+         \x20 public static void main(String[] a) {\n\
+         \x20   com.acme.sdk.Counter c = new com.acme.sdk.Counter();\n\
+         \x20   System.out.println(com.acme.sdk.Program.twice(21) + \" \" + com.acme.sdk.Program.drive(c));\n\
+         \x20 }\n\
+         }\n",
+    )
+    .expect("consumer");
+    let classes = project.join("use");
+    let compiled = Command::new("javac")
+        .arg("-cp")
+        .arg(format!("{}:{}", jar.display(), runtime.display()))
+        .arg("-d")
+        .arg(&classes)
+        .arg(&consumer)
+        .output()
+        .expect("running javac");
+    assert!(
+        compiled.status.success(),
+        "a consumer could not compile against it:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let ran = Command::new("java")
+        .arg("-Xverify:all")
+        .arg("-cp")
+        .arg(format!("{}:{}:{}", classes.display(), jar.display(), runtime.display()))
+        .arg("Use")
+        .output()
+        .expect("running java");
+    let printed = String::from_utf8_lossy(&ran.stdout);
+    assert!(
+        ran.status.success() && printed.trim() == "42.0 1.0",
+        "the consumer did not run: {:?}\n{}{}",
+        printed.trim(),
+        printed,
+        String::from_utf8_lossy(&ran.stderr)
+    );
 }

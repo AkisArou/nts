@@ -3035,20 +3035,6 @@ const C_BRANDS: &str = "c:types";
 /// would look for a file that is not there, reporting a path nobody typed.
 const RUNTIME_JAR: &str = nts_codegen_jvm::RUNTIME_JAR_NAME;
 
-/// The package `codegen/jvm` puts generated classes in. Not configurable yet.
-///
-/// **Read off the class the emitter names, not written down twice.** This was
-/// `"nts.gen"` and the emitter says `"nts/gen/Program"`; the same decision in
-/// two spellings, one of which this crate would never notice changing. It is
-/// load-bearing because `package_jvm` refuses a jar whose config asks for a
-/// different package -- so a stale copy here would accept a jar whose classes
-/// are somewhere other than where its declaration says, which is the exact
-/// thing that refusal exists to prevent.
-fn generated_package() -> String {
-    nts_codegen_jvm::PROGRAM
-        .rsplit_once('/')
-        .map_or_else(String::new, |(package, _)| package.replace('/', "."))
-}
 
 /// Package the emitted classes into the jar the product names.
 ///
@@ -3072,26 +3058,28 @@ fn package_jvm(
     out: &Utf8Path,
     extra: &[String],
 ) -> Result<Utf8PathBuf> {
-    if let Some(wanted) = &product.java_package
-        && *wanted != generated_package()
-    {
-        bail!(
-            "product `{name}` asks for package `{wanted}` and `codegen/jvm` emits \
-             `{}`, which it does not yet take as an option. The jar \
-             would not match the config that declared it; see the packaging gaps in \
-             docs/jvm-interop.md",
-            generated_package()
-        )
-    }
     let artifact = out.join(format!("{name}.jar"));
     let mut command = std::process::Command::new("jar");
     command.arg("--create").arg("--file").arg(artifact.as_str());
-    // `nts` is what the emitter wrote; `extra` is what a package's Java
-    // contributed. Naming them rather than packaging the whole directory,
-    // because `out` also holds the runtime jar, the staging directories and --
-    // for an APK -- a signing key, and an archive assembled by exclusion grows
-    // a new member every time something else is written beside it.
-    for package in std::iter::once(&"nts".to_owned()).chain(extra) {
+    // **The root of the package the emitter wrote into, not the literal `nts`.**
+    // This said `nts` and a product declaring `javaPackage: "com.acme.sdk"`
+    // produced a jar with nothing in it: the classes were on disk under
+    // `com/acme/sdk/` and the archive asked for a directory that no longer
+    // existed. `jar` reports that as success, because `-C out nts` with no
+    // `nts` is not an error it has a name for.
+    //
+    // `extra` is what a package's Java contributed. Naming the roots rather
+    // than packaging the whole directory, because `out` also holds the runtime
+    // jar, the staging directories and -- for an APK -- a signing key, and an
+    // archive assembled by exclusion grows a new member every time something
+    // else is written beside it.
+    let emitted_root = product
+        .java_package
+        .as_deref()
+        .and_then(|named| named.split('.').next())
+        .unwrap_or("nts")
+        .to_owned();
+    for package in std::iter::once(&emitted_root).chain(extra) {
         command.arg("-C").arg(out.as_str()).arg(package);
     }
     let output = command.output().with_context(|| {
@@ -5064,7 +5052,14 @@ fn emit_jvm(
             diagnostic.message
         );
     }
-    let emitted = nts_codegen_jvm::emit(&prepared.program);
+    // **The package the product declares, as a binary-name prefix.** A config
+    // says `com.acme.sdk` because that is how Java spells a package; the class
+    // file wants `com/acme/sdk`, and this is the one place the two meet.
+    let package = emission
+        .product
+        .and_then(|(_, product)| product.java_package.as_deref())
+        .map_or_else(|| nts_codegen_jvm::DEFAULT_PACKAGE.to_owned(), |named| named.replace('.', "/"));
+    let emitted = nts_codegen_jvm::emit_into(&package, &prepared.program);
     for diagnostic in &emitted.diagnostics {
         eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
     }

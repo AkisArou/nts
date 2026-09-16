@@ -148,6 +148,7 @@ fn is_f64(ty: &HirType) -> bool {
 
 /// The layout a field access names, and the field's declared type.
 fn field_of<'a>(
+    package: &str,
     program: &'a Program,
     func: &Func,
     object: ValueId,
@@ -162,7 +163,12 @@ fn field_of<'a>(
     // a prefix of the derived's, so the object's own layout is not always the
     // one that holds them.
     let owner = crate::hierarchy::declares_field(program, layout, index as usize);
-    Some(((crate::types::class_name(owner), field.name.clone()), &field.ty))
+    // **The binary name, because this key leaves the pass.** `body.rs` carries
+    // it into `Emitter::widened_fields` and `ops.rs` asks
+    // `contains(&(types::class_name(..), name))` -- so a key spelled any other
+    // way answers `false` for every field and the widening silently stops
+    // happening. It reads like a pass-internal identity and is not one.
+    Some(((crate::types::class_name(package, owner), field.name.clone()), &field.ty))
 }
 
 /// The functions this backend actually renders.
@@ -196,7 +202,7 @@ fn live_ops(func: &Func) -> Vec<ValueId> {
 
 /// Decide, once, for the whole program.
 #[must_use]
-pub fn plan(program: &Program) -> Plan {
+pub fn plan(package: &str, program: &Program) -> Plan {
     // One index space: every value of every function, then one slot per
     // candidate field. A `getfield` unions its result with the field, so a
     // field and the values that flow through it are refused or kept together.
@@ -216,7 +222,7 @@ pub fn plan(program: &Program) -> Plan {
                 continue;
             };
             let (object, index) = (*object, *field);
-            if let Some((key, ty)) = field_of(program, func, object, index)
+            if let Some((key, ty)) = field_of(package, program, func, object, index)
                 && narrow(ty)
             {
                 let next = u32::try_from(total + field_index.len()).unwrap_or(u32::MAX);
@@ -236,7 +242,7 @@ pub fn plan(program: &Program) -> Plan {
     let mut from_f64: FxHashSet<u32> = FxHashSet::default();
     let mut computed: FxHashSet<u32> = FxHashSet::default();
 
-    unify(program, &mut classes, &offset, &field_index);
+    unify(package, program, &mut classes, &offset, &field_index);
 
     strike_down(
         program,
@@ -409,6 +415,7 @@ fn strike_down(
 /// one without the others would put back exactly the conversion this is trying
 /// to remove.
 fn unify(
+    package: &str,
     program: &Program,
     classes: &mut Classes,
     offset: &FxHashMap<String, usize>,
@@ -444,14 +451,14 @@ fn unify(
                         }
                     }
                     OpKind::FieldGet { object, field } => {
-                        if let Some(slot) = field_of(program, func, *object, *field)
+                        if let Some(slot) = field_of(package, program, func, *object, *field)
                             .and_then(|(key, _)| field_index.get(&key))
                         {
                             classes.union(id(func, value), *slot);
                         }
                     }
                     OpKind::FieldSet { object, field, value: stored } => {
-                        if let Some(slot) = field_of(program, func, *object, *field)
+                        if let Some(slot) = field_of(package, program, func, *object, *field)
                             .and_then(|(key, _)| field_index.get(&key))
                         {
                             classes.union(id(func, *stored), *slot);
