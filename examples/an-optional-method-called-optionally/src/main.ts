@@ -22,14 +22,23 @@
 // silently skips a call that should have happened. `n & 1` picks between them
 // and `seen` reports which ran.
 
-interface Corkable {
-  seen: number;
+// **An abstract class rather than an interface, and the reason is not this
+// subject.** Written with `interface Corkable` first, this agreed with node
+// through C and threw `ClassCastException: Full cannot be cast to Corkable`
+// through the JVM -- and so does a *required* method through an interface, with
+// no `?.` anywhere, which is what separated the two. The JVM backend does not
+// emit the `implements` relationship, so a call through an interface-typed
+// receiver casts and fails; an abstract-class receiver works on both. That is a
+// backend gap of its own and it is recorded where it belongs rather than left
+// to fail here, because a fixture that fails for something other than its
+// subject attributes the failure to the wrong change.
+abstract class Corkable {
+  seen = 0;
   uncork?(): void;
   note?(by: number): void;
 }
 
-class Full implements Corkable {
-  seen = 0;
+class Full extends Corkable {
   uncork(): void {
     this.seen += 1;
   }
@@ -38,8 +47,8 @@ class Full implements Corkable {
   }
 }
 
-class Bare implements Corkable {
-  seen = 100;
+class Bare extends Corkable {
+  override seen = 100;
 }
 
 /** Present on one class, absent on the other. */

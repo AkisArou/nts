@@ -2561,8 +2561,29 @@ separate piece of work: the receiver's present-arm would have to re-enter the
 method desugaring, and the two optional tests then compose rather than nest.
 
 `examples/an-optional-method-called-optionally` is the fixture — **116 cases
-across 4 functions, agreeing with node**, refused by the pre-change binary on
-two members. Both arms of the class test run in every case, which the fixture
+across 4 functions, agreeing with node** through C *and* the JVM, refused by the
+pre-change binary on two members.
+
+**It was written on an `interface` and had to move to an abstract class, and
+what that uncovered is a separate defect.** The interface version agreed with
+node through C and threw through the JVM:
+
+    java.lang.ClassCastException: class nts.gen.Full cannot be cast to
+    class nts.gen.Corkable
+
+That is **not about optional methods**. A *required* method through an
+interface-typed receiver, with no `?.` anywhere, fails identically, and the same
+program with `abstract class Corkable` instead agrees on both backends — two
+arms differing in one word. **The JVM backend does not emit the `implements`
+relationship**, so a call through an interface-typed receiver casts and fails.
+Other examples use `implements` and pass because they never dispatch *through*
+the interface type.
+
+Recorded here rather than left in the fixture: a fixture that fails for
+something other than its subject attributes the failure to the wrong change, and
+this one would have read as "the optional-method desugaring is wrong on the
+JVM". It is not; the lowering is the same on both backends and only one of them
+mis-emits the receiver's type. Handed to the JVM lane with the two-line repro. Both arms of the class test run in every case, which the fixture
 says out loud: a test stuck at `true` calls a method that is not there, and one
 stuck at `false` skips a call that should have happened, and only a `Bare` class
 beside the `Full` one can tell those apart.
