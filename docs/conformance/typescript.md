@@ -2762,9 +2762,11 @@ signature and dispatched through the slot's — had never been reached. Third ti
 in one day that clearing a refusal published a defect standing behind it. Fixed
 first; this landed on top of it.
 
-`examples/an-optional-method-called-optionally` is the fixture — **290 cases
-across 10 functions, agreeing with node**, where the pre-change binary refuses
-ten times. The arms that earn it are the ones where a skipped call and a taken
+`examples/an-optional-method-called-optionally` is the fixture — **406 cases
+across 14 functions, agreeing with node**. Ten refusals on the binary before the
+`!== undefined` work and six more on the binary before the `typeof` work; this
+row said 290 across 10 for a few hours after the second landed, which is the
+stale-claim-as-a-diff this file exists to make visible. The arms that earn it are the ones where a skipped call and a taken
 one differ: `Full.seen` starts at 0 and `note` adds, so a guard that fell the
 wrong way answers 0 where node answers `by`.
 
