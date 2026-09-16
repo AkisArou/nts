@@ -6845,8 +6845,32 @@ fn representation_of(
                     _ => shared = Some(member),
                 }
             }
-            // Nothing left to be: `null | undefined` on its own.
-            let shared = shared?;
+            // Nothing left to be, which is not the same as nothing to represent.
+            //
+            // **`undefined | void` is one absence written twice**, and the loop
+            // above already says so -- `absence_of_member` maps both to
+            // `Absence::Undefined`, and the comment at the top of it says "`void`
+            // and `undefined` are the same value, so a union with both still has
+            // one". Then both members `continue`, nothing sets `shared`, and this
+            // line answered `None` for a type whose representation is `Void`,
+            // exactly as either member alone would have been.
+            //
+            // Where it comes from: `x?.m()` where `m` returns `void`. The optional
+            // call is `undefined` when the receiver is nullish and `void` when it
+            // ran, so the conditional it lowers to has that type and
+            // `lower_branching_value` needs a representation for its merge
+            // parameter. **597 sites over 51 distinct locations, 26 modules**, and
+            // the shape is always the same: `this.#observer?.(size)`,
+            // `controller?.abort()`, `capability?.resolve()`.
+            //
+            // `null | undefined` stays `None`, and the distinction is the whole
+            // reason this is a condition rather than a fallthrough: those are *two*
+            // absences, and with no payload beside them there is nothing to tell
+            // the two apart with. One absence needs no tag; two need a value that
+            // is not here.
+            let Some(shared) = shared else {
+                return (has_undefined && !has_null).then_some(HirType::Void);
+            };
             if matches!(shared, HirType::NativePointer(_)) {
                 return None;
             }
@@ -25759,7 +25783,22 @@ impl<'a> FuncBuilder<'a> {
         if let HirType::Managed(ManagedType::Object(at)) = ty {
             let _ = self.layout_of(id, at);
         }
-        let result = self.push_block_param(merge, ty.clone(), origin.clone());
+        // **A `Void` conditional has no value to merge.** `x?.m()` for a `void`
+        // `m` is `undefined | void`, one absence written twice, which represents
+        // as `Void` -- and the C backend declares no variable for a value of
+        // that type, so a block parameter carrying one is assigned from both
+        // arms and read in the merge as an identifier nothing declared. Seven
+        // `use of undeclared identifier` errors in one example, which is how
+        // this was found: the change that gave the union a representation made
+        // the compiler accept an expression it could not emit.
+        //
+        // The arms are still evaluated -- the call is the point of the
+        // expression -- and only the *value* is dropped. What the expression
+        // yields is `undefined`, which is what a `void` call yields anyway, so
+        // it is materialized in the merge block rather than carried into it.
+        let carries_a_value = !matches!(ty, HirType::Void);
+        let merged_value =
+            carries_a_value.then(|| self.push_block_param(merge, ty.clone(), origin.clone()));
 
         let mut merged = Vec::new();
         for (symbol, entering) in &entry {
@@ -25781,8 +25820,10 @@ impl<'a> FuncBuilder<'a> {
         }
 
         self.switch_to(then_tail);
-        let then_value = self.coerce(then_value, &ty, id)?;
-        let mut args = vec![then_value];
+        let mut args = Vec::new();
+        if carries_a_value {
+            args.push(self.coerce(then_value, &ty, id)?);
+        }
         args.extend(merged.iter().map(|(_, from_then, _)| *from_then));
         self.terminate(Terminator::Jump {
             target: merge,
@@ -25790,8 +25831,10 @@ impl<'a> FuncBuilder<'a> {
         });
 
         self.switch_to(else_tail);
-        let else_value = self.coerce(else_value, &ty, id)?;
-        let mut args = vec![else_value];
+        let mut args = Vec::new();
+        if carries_a_value {
+            args.push(self.coerce(else_value, &ty, id)?);
+        }
         args.extend(merged.iter().map(|(_, _, from_else)| *from_else));
         self.terminate(Terminator::Jump {
             target: merge,
@@ -25803,7 +25846,10 @@ impl<'a> FuncBuilder<'a> {
         for (symbol, param) in params {
             self.bindings.insert(symbol, param);
         }
-        Ok(result)
+        Ok(match merged_value {
+            Some(param) => param,
+            None => self.push(OpKind::ConstUndefined, ty, origin),
+        })
     }
 
     /// Produce a branch's value: either an expression to lower here, or one
@@ -26116,15 +26162,33 @@ impl<'a> FuncBuilder<'a> {
             TypeKind::Union(members) => members.clone(),
             _ => vec![ty],
         };
-        Some(
-            members
-                .iter()
-                .filter_map(|member| match absence_of_member(self.snapshot, *member)? {
-                    Absence::Null => Some(super::tags::NULL),
-                    Absence::Undefined => Some(super::tags::UNDEFINED),
-                })
-                .collect(),
-        )
+        let mut carried: Vec<u32> = members
+            .iter()
+            .filter_map(|member| match absence_of_member(self.snapshot, *member)? {
+                Absence::Null => Some(super::tags::NULL),
+                Absence::Undefined => Some(super::tags::UNDEFINED),
+            })
+            .collect();
+        // **Which absences, not how many members carry them.** `void` and
+        // `undefined` are the same value -- `absence_of_member` maps both to
+        // `Absence::Undefined` -- so `undefined | void` carries *one* absence,
+        // written twice. The union's representation arm states exactly this rule
+        // about itself and this function did not follow it.
+        //
+        // Undeduplicated the list had length two, which is neither "an absence
+        // and nothing else" (`carried.len() == 1`) nor "never absent", so
+        // `absence_the_type_decides` called it a real test and returned `None`.
+        // The comparison then fell through to the *erased* path and emitted
+        // `v22 = v20 == v21` against an `NtsValue`, where `v20` is a `Void` value
+        // the C backend declares nothing for: `use of undeclared identifier`.
+        //
+        // The shape is `x?.m() === undefined` for a `void` `m`, and the answer is
+        // `true` either way -- a void call returns `undefined`, so an optional
+        // one cannot report whether it ran. node agrees, and the fixture asserts
+        // it.
+        carried.sort_unstable();
+        carried.dedup();
+        Some(carried)
     }
 
     /// Whether a lowered value is `null` or `undefined`.

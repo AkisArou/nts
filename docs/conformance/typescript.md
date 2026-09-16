@@ -2493,6 +2493,68 @@ confidently about the wrong thing, which is the day's fourth instrument error
 and the third caught only by looking at the names it returned rather than the
 count.
 
+### `x?.m()` for a `void` m — one absence written twice, 2026-09-16
+
+`a conditional of unrepresentable type (a union of undefined | void)` was 597
+sites over 51 distinct locations, and every one is an **optional call whose
+method returns `void`** — `controller?.abort()`, `capability?.resolve()`,
+`this.#observer?.(size)`. The call is `undefined` when the receiver is nullish
+and `void` when it ran, so the conditional an optional chain lowers to has that
+type, and `lower_branching_value` needs a representation for its merge
+parameter.
+
+**The union arm already knew the answer and threw it away.** Its own comment
+reads "`void` and `undefined` are the same value, so a union with both still has
+one" — then both members are classified as absences, `continue`, nothing sets
+`shared`, and `let shared = shared?` returns `None` for a type whose
+representation is `Void`, exactly as either member alone. `null | undefined`
+stays `None` and the distinction is the point: *two* absences with no payload
+beside them have nothing to tell them apart with; one written twice does not.
+
+**Then the change exposed two more, and the fixture found both — not reasoning.**
+
+A change that makes the compiler accept more can make it emit what it cannot
+compile, which is worse than the refusal it replaced. Giving the union a
+representation produced **seven `use of undeclared identifier` errors** in the
+first run of the example: the C backend declares no variable for a `Void` value,
+so a merge parameter carrying one is assigned from both arms and read in the
+merge. A `Void` conditional has no value to merge — the arms still run, only the
+value is dropped — so the parameter is gone and the `undefined` is materialized
+in the merge block.
+
+That left two, and the second was subtler. `absences_of` collects one tag per
+union *member*, so `undefined | void` came back as two `UNDEFINED`s. Two is
+neither "an absence and nothing else" nor "never absent", so
+`absence_the_type_decides` called it a real test and declined, and the
+comparison fell through to the **erased** path — comparing an `NtsValue` against
+a value nothing declares. The union's representation arm states the rule about
+itself; this function did not follow it. Deduplicated.
+
+| module | before | after |
+|---|---:|---:|
+| `http` | 58 | **0** |
+| `process` | 54 | **0** |
+| `fs` | 54 | **0** |
+| `zlib` | 51 | **0** |
+| `stream` | 51 | **0** |
+| `net` | 39 | **0** |
+
+307 → 0, with total `NTS1001` falling about 38 per module — less than the
+specific count, because some functions advance to a later blocker.
+
+**What it did not move: declined exports, 21/5/123/66/74/11, identical either
+side.** `examples/an-optional-call-that-returns-void` is the justification —
+**116 cases across 4 functions, agreeing with node on every one.** The arm worth
+naming is `whetherItRan`: a void function returns `undefined`, so
+`s?.take(v) === undefined` is `true` whether the call happened or not. **An
+optional call cannot report whether it ran**, and that is the answer the erased
+path was quietly getting wrong.
+
+One shape is deliberately absent from the fixture: a nullable closure written as
+a *conditional expression* is `an object type with no layout`, a separate gap
+this change does not touch. The function-valued **field** form — which is what
+the real sites use — is there and works.
+
 ### The largest refusal text, closed 2026-09-16
 
 ``indexing `X`, which stands for `X` here, which is not an array`` was **299
