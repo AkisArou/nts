@@ -256,6 +256,37 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
                     || program.public_namespaces.iter().any(|(_, properties)| {
                         properties.iter().any(|(_, emitted)| *emitted == func.name)
                     })
+                    // **A published class's members are published with it.**
+                    //
+                    // `public_api` names the class -- `Counter` -- and its
+                    // methods are functions called `Counter#bump`, which match
+                    // none of the tests above. `EveryExport` kept them by the
+                    // `exported` flag, and dropping that flag is the whole point
+                    // of this variant, so removing it took the methods with it:
+                    // a consumer got a class it could construct and could not
+                    // call. `javap` on `ts-from-java` showed
+                    // `- public double bump();` and `- public double hits();`
+                    // against a checked-in capture, which is what that capture
+                    // is for.
+                    //
+                    // Not DCE being right, and the arm that separates them is
+                    // one export: add `drive(c: Counter) { return c.bump(); }`
+                    // and `bump` comes back while an unused sibling stays gone.
+                    // So a member reached through the call graph was already a
+                    // root and a member reachable only *as the class's surface*
+                    // was not -- which is the thing a published class is.
+                    //
+                    // Every member rather than the public ones: HIR carries no
+                    // visibility, and keeping a private method a consumer cannot
+                    // name is what `EveryExport` did anyway. Over-rooting is the
+                    // safe direction here; under-rooting is a jar that does not
+                    // link.
+                    || func.name.split_once('#').is_some_and(|(owner, _)| {
+                        program
+                            .public_api
+                            .iter()
+                            .any(|(emitted, _)| *emitted == owner)
+                    })
             })
             .map(|func| func.name.as_str())
             .collect(),
