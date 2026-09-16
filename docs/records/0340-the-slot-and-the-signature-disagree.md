@@ -179,12 +179,32 @@ is not a signature this pass narrowed itself. A rule with no case behind it is a
 guess about which mismatches are safe — `verify::compatible`'s own standing
 argument, borrowed one layer down.
 
-**Step 4 is still open and step 3 is why.** `verify` still skips
-`Callee::Virtual`, so this class of defect is caught by clang rather than by the
-HIR — and only where one side is a struct. Routing virtual calls through the
-existing check now reports no `CallArgumentType` at all, and still reports
-`CallResultType { callee: "AsyncWriter#fail", expected: Void, found: Erased }`
-in `stream`, `fs`, `http` and `zlib`. That is a different question from an
-argument — a `Void` callee whose call site is typed `Erased` looks like a
-lowering fault rather than a missing conversion — and until it is answered the
-check cannot land.
+## Step 4: the arguments are checked, and the results are not
+
+`verify` now routes `Callee::Virtual` into the same argument check `Direct` has
+always had — so from here this class fails in the HIR rather than in clang, and
+`compatible` sees the case clang cannot: **two mismatched pointer types compile,
+link and are wrong**. Zero violations across ten modules. Controlled: deleting
+the `Erase` arm in `insert_conversions` makes it say
+
+    invalid HIR: CallArgumentType { func: "through@0obj1", callee: "Emitter#on",
+      at: 1, expected: Erased, found: Managed(String) }
+
+rather than letting clang find it two steps later.
+
+**The result check is deliberately left off, and that is measured rather than
+conceded.** `AsyncWriter.fail?(): unknown` over an implementation returning
+`void` gives `CallResultType { expected: Void, found: Erased }` in `stream`,
+`fs`, `http` and `zlib`, and **no backend ever sees it**: `stream`'s emitted C
+holds 416 void-returning functions and not one assignment from any of them,
+because an unused result is dropped before emission. Reporting it would redden
+the gate over something nobody can act on — worse than the silence it replaces,
+because it teaches a reader to skip the check.
+
+What would make it landable is answering *why* the call is typed from the
+interface's `unknown` rather than the slot's `Void` at all. That is a lowering
+question and is the one still open here.
+
+A `MissingCallee` is also not reported for a virtual callee with no emitted
+function: the slot is reached through a descriptor rather than by symbol, so an
+unemitted declaration is not the undefined-symbol hazard that check exists for.

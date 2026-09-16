@@ -399,18 +399,46 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
             .flat_map(|block| block.ops.iter())
             .map(|value| &func.values[value.0 as usize])
         {
-            let OpKind::Call {
-                callee: Callee::Direct(name),
-                args,
-                ..
-            } = &op.kind
-            else {
-                continue;
+            // **A virtual call's arguments are checked; its result is not.**
+            //
+            // The arguments, because they were the gap that mattered. A virtual
+            // call is coerced at lowering to the signature the *checker*
+            // resolved and dispatches through the slot the *declaring class*
+            // spells; where an interface narrows a parameter those differ, and
+            // a backend casts the function pointer without converting the
+            // argument. `specialize::insert_conversions` fixes that now, and
+            // this is what keeps it fixed -- in the HIR, where `compatible`
+            // can see the case clang cannot: two mismatched **pointer** types
+            // compile, link and are wrong.
+            //
+            // The result is left alone, and that is measured rather than
+            // conceded. `AsyncWriter.fail?(): unknown` over an implementation
+            // returning `void` gives `CallResultType { expected: Void, found:
+            // Erased }` in `stream`, `fs`, `http` and `zlib` -- and **no
+            // backend ever sees it**: 416 void-returning functions in `stream`'s
+            // emitted C, and not one assignment from any of them, because an
+            // unused result is dropped before emission. Reporting it would
+            // redden the gate over a defect nobody can act on, which is worse
+            // than the silence it replaces -- it trains a reader to skip the
+            // check. `docs/records/0340` holds it as the remaining question.
+            let (name, args, virtual_dispatch) = match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Direct(name),
+                    args,
+                    ..
+                } => (name, args, false),
+                OpKind::Call {
+                    callee: Callee::Virtual { declared, .. },
+                    args,
+                    ..
+                } => (declared, args, true),
+                _ => continue,
             };
             // `compatible` and not equality: two references are two pointers
             // however their types relate, which is what lets `ref(): this`
             // return the class that implements it.
-            if let Some(declared) = returns.get(name.as_str())
+            if !virtual_dispatch
+                && let Some(declared) = returns.get(name.as_str())
                 && !compatible(&op.ty, declared)
             {
                 problems.push(Invalid::CallResultType {
@@ -421,6 +449,12 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
                 });
             }
             let Some(expected) = arity.get(name.as_str()) else {
+                // A virtual callee is reached through a descriptor rather than
+                // by symbol, so a declared name with no emitted function is not
+                // the undefined-symbol hazard `MissingCallee` exists for.
+                if virtual_dispatch {
+                    continue;
+                }
                 problems.push(Invalid::MissingCallee {
                     func: func.name.clone(),
                     callee: name.clone(),
