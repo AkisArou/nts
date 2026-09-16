@@ -2150,6 +2150,7 @@ fn write_standalone(
     out: &Utf8Path,
     sources: &[&str],
     linking: bool,
+    witness: bool,
 ) -> Result<()> {
     // A program that is only declarations has nothing to evaluate, and calling
     // a function that was never emitted is a link error.
@@ -2168,11 +2169,22 @@ fn write_standalone(
     let main_path = out.join("main.c");
     std::fs::write(&main_path, nts_codegen_c::standalone_main(initializes))
         .with_context(|| format!("writing {main_path}"))?;
+    // Named here for the reason the library path names it: it is the only
+    // output whose value depends on a consumer choosing to include it, and an
+    // artifact nobody is told about reads, later, as one that was never
+    // generated. This path wrote it and did not say so.
+    //
+    // It is written whenever a *reachable* native binding exists, which is not
+    // the same as the program having one: with `--main` a module's exports are
+    // not roots, so a library-shaped program built as an executable prunes every
+    // binding and needs no witness. That difference looked like `--main`
+    // suppressing it until a program that calls one at top level said otherwise.
     println!(
-        "wrote program.c, main.c, {}, {}, {} to {out}",
+        "wrote program.c, main.c, {}, {}, {}{} to {out}",
         sources.join(", "),
         nts_codegen_c::UV_HOST_HEADER_NAME,
         nts_codegen_c::UV_HOST_SOURCE_NAME,
+        if witness { format!(", {}", nts_codegen_c::NATIVE_WITNESS_NAME) } else { String::new() },
     );
     // Every translation unit the program needs, which is not a fixed list: a
     // program that converts case gets `nts_unicode.c` too, and printing a
@@ -2518,7 +2530,43 @@ fn run(mut command: std::process::Command, what: &str) -> Result<()> {
 /// two-function library exported 318 symbols, every internal of the runtime and
 /// of the vendored dtoa among them, which is the collision
 /// `apps/linux-brownfield` describes in a comment and had no field to prevent.
+/// Compile the witness, where the program bound something native.
+///
+/// **Sixteen `build.sh` in this tree do this by hand**, each with its own copy of
+/// `-Wall -Wextra -Werror -fsyntax-only`, and it is the check that makes a
+/// generated binding a claim rather than an assertion: the witness declares no
+/// symbol and defines no function, includes the real headers itself, and fails
+/// to compile when what `nts` believes about a struct disagrees with them.
+///
+/// A build that links a program against a binding it has not checked has skipped
+/// the one step that would catch a wrong offset, and a wrong offset is a silently
+/// wrong answer rather than a link error.
+fn check_witness(name: &str, out: &Utf8Path) -> Result<()> {
+    let witness = out.join(nts_codegen_c::NATIVE_WITNESS_NAME);
+    if !witness.exists() {
+        return Ok(());
+    }
+    let mut command = cc();
+    command
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only"])
+        .arg("-I")
+        .arg(out.as_str())
+        .arg(witness.as_str());
+    let output = command
+        .output()
+        .with_context(|| format!("compiling the native witness for `{name}`"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    bail!(
+        "the binding `{name}` was built against does not match the headers on this \
+         machine:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    )
+}
+
 fn link_c(name: &str, product: &nts_build::config::Product, out: &Utf8Path, wrote: &Wrote) -> Result<Utf8PathBuf> {
+    check_witness(name, out)?;
     let addon = product.kind == "node-addon";
     let shared = product.kind == "shared-library" || addon;
     let library = product.kind == "shared-library" || product.kind == "static-library";
@@ -3290,7 +3338,7 @@ fn write_c_output(
     // comes with it, because a program needs a loop and an embedder with its
     // own supplies a different one.
     if standalone {
-        write_standalone(program, out, &extra, emission.linking)?;
+        write_standalone(program, out, &extra, emission.linking, !emitted.witness.is_empty())?;
         return Ok(Wrote {
             sources: std::iter::once("program.c".to_owned())
                 .chain(extra.iter().map(|name| (*name).to_owned()))

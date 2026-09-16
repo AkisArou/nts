@@ -536,6 +536,89 @@ export default defineConfig({
     );
 }
 
+/// A binding that disagrees with the headers stops the build.
+///
+/// **Sixteen `build.sh` in this tree compile the witness by hand**, each with
+/// its own copy of `-Wall -Wextra -Werror -fsyntax-only`, and it is the step
+/// that makes a generated binding a claim rather than an assertion: the witness
+/// declares no symbol, includes the real headers itself, and fails to compile
+/// when what `nts` believes about a struct disagrees with them. A wrong offset
+/// is a silently wrong answer, not a link error.
+///
+/// The fixture is `examples/interop/native-uname`'s own binding, because a
+/// hand-written one would be testing something `nts bind-c` does not produce.
+#[test]
+fn a_binding_that_disagrees_with_the_headers_stops_the_build() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    // Canonical, because the path lands inside a generated `tsconfig.json` and
+    // `include` entries spelled with `..` resolved to nothing: `c:memory` and
+    // `c:types` came back unfound while the same shape worked by hand.
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("the repository root");
+    let source = repo.join("examples/interop/native-uname");
+    if !source.join("types/utsname.d.ts").exists() {
+        eprintln!("skipping: the native-uname fixture is not here");
+        return;
+    }
+    let project = Path::new(env!("CARGO_TARGET_TMPDIR")).join("build-witness");
+    drop(std::fs::remove_dir_all(&project));
+    std::fs::create_dir_all(project.join("src")).expect("creating the fixture");
+    std::fs::create_dir_all(project.join("types")).expect("creating types");
+    for (from, to) in [("src/main.ts", "src/main.ts"), ("types/utsname.d.ts", "types/utsname.d.ts")] {
+        std::fs::copy(source.join(from), project.join(to)).expect("copying the fixture");
+    }
+    // Top-level use, so the binding is reachable: with `--main` a module's
+    // exports are not roots, and a library-shaped program built as an executable
+    // prunes every binding and needs no witness at all.
+    let mut program = std::fs::read_to_string(project.join("src/main.ts")).expect("the program");
+    program.push_str("\nlet observed = machineFirstByte();\nif (observed < 0) observed = 0;\n");
+    std::fs::write(project.join("src/main.ts"), program).expect("writing the program");
+    std::fs::write(
+        project.join("tsconfig.json"),
+        format!(
+            r#"{{"extends":{:?},"compilerOptions":{{"noEmit":false}},"include":["src","types",{:?}]}}"#,
+            repo.join("tsconfig.fixtures.json").to_string_lossy(),
+            repo.join("runtime/native/libc.d.ts").to_string_lossy(),
+        ),
+    )
+    .expect("tsconfig");
+    let scope = project.join("node_modules").join("@nts");
+    std::fs::create_dir_all(&scope).expect("node_modules");
+    if !scope.join("config").exists() {
+        std::os::unix::fs::symlink(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../config"),
+            scope.join("config"),
+        )
+        .expect("linking @nts/config");
+    }
+    std::fs::write(
+        project.join("nts.config.ts"),
+        "import { defineConfig, app } from \"@nts/config\";\nexport default defineConfig({ products: { probe: app.cli({ entry: \"./src/main.ts\", backend: \"c\" }) } });\n",
+    )
+    .expect("config");
+
+    let good = build(&project, &[]);
+    assert!(good.ok, "the unmodified binding should build:\n{}{}", good.stdout, good.stderr);
+
+    // 65 is what `<sys/utsname.h>` says. One less moves every later offset.
+    let binding = project.join("types/utsname.d.ts");
+    let text = std::fs::read_to_string(&binding).expect("the binding");
+    std::fs::write(&binding, text.replacen("CArray<c_char, 65>", "CArray<c_char, 64>", 1))
+        .expect("corrupting the binding");
+    let bad = build(&project, &[]);
+    assert!(!bad.ok, "a binding that disagrees with the headers should stop the build");
+    assert!(
+        bad.stderr.contains("does not match the headers"),
+        "the refusal did not say what disagreed:\n{}",
+        bad.stderr,
+    );
+}
+
 /// A project with no config is told what is missing, not given a stack trace.
 #[test]
 fn a_project_with_no_config_says_so() {
