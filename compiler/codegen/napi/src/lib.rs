@@ -1323,12 +1323,35 @@ static napi_status nts_to_napi_booleans(napi_env env, const NtsArray *array,
  * class it describes; the message comes from the throw site, because a
  * descriptor records where an object's references are and not what they are
  * called. That is the same split `nts_uncaught` works from. */
-/* Defined in `runtime/node/internal/process.c`, which every addon links.
- * `void *` rather than `napi_env` so the same declaration serves a standalone
+/* `void *` rather than `napi_env` so the same declaration serves a standalone
  * build with no Node-API headers on its include path. Declared here as well as
  * in `nts_node.h` so this translation unit is well-formed on its own rather
- * than only under `build.sh`'s `-include`. */
+ * than only under `build.sh`'s `-include`.
+ *
+ * **"which every addon links" is what this comment used to say, and it stopped
+ * being true.** The real definition is in `runtime/node/internal/process.c`,
+ * which every *node module* links -- and `nts build` now emits addons that link
+ * nothing of `runtime/node`, for which the symbol is simply absent. The failure
+ * is the quiet kind: the `.node` links, the build exits zero, and `require`
+ * dies with `symbol lookup error: undefined symbol: nts_napi_set_env`. Nothing
+ * in this tree had hit it because `tooling/conformance/build.sh` compiles the
+ * C under `runtime/node/internal` alongside, so the symbol was always there.
+ *
+ * So a **weak** no-op default travels with the caller. A standalone addon links
+ * against it and loses nothing: the env exists to let `process.cwd()` and the
+ * warning sink call back into JS, and neither is present without
+ * `runtime/node`. A node module links `process.c`, whose strong definition
+ * replaces this one -- which is the half that has to be verified rather than
+ * assumed, because a weak default winning would leave `nts_host_env` null and
+ * `process.cwd()` silently ignoring a JS-level replacement.
+ *
+ * Guarded because `__attribute__((weak))` is a GNU extension. Where it is
+ * unavailable the addon is exactly as it was, which is to say it needs
+ * `process.c` -- no worse than before, and no silent change of behaviour. */
 void nts_napi_set_env(void *env);
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) void nts_napi_set_env(void *env) { (void)env; }
+#endif
 
 static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
     NtsValue thrown = nts_landing_thrown(landing);
