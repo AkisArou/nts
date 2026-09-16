@@ -2715,6 +2715,28 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
         let mut retyped = Retyped::new();
         let mut spelled = Vec::new();
         for (at, (declared, argument)) in parameters.iter().zip(&arguments).enumerate() {
+            // **An object literal is built to order, so it has no layout to
+            // cast from.** `lower_object_literal` builds one at its *contextual*
+            // type -- the parameter's declared type -- and this pass was keying
+            // the copy on the literal's own checker type. Two derivations of
+            // "what shape is this argument", which agree until the literal
+            // supplies a value for a `?` property: the checker then types that
+            // property as present on the literal and optional on the
+            // declaration, the layouts differ, and the call refuses with
+            // ``a pointer cast between two structs that do not agree about
+            // where their shared fields are``.
+            //
+            // Measured as the modifier and not the representation:
+            // `encoding?: string` given `"u"` refuses, `encoding: string |
+            // undefined` given `"u"` does not, and the two have the same
+            // representation.
+            //
+            // Skipping it here makes the declared type the single answer, which
+            // is also the one that produces fewer copies -- every call passing
+            // an `Options`-shaped literal shares the declaration.
+            if probe.kind_of(*argument) == Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+                continue;
+            }
             let Some(actual) = snapshot.node_types.get(argument).copied() else {
                 continue;
             };

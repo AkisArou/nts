@@ -2500,7 +2500,7 @@ move that found `undefined | void`. Neither is started; each is recorded with
 what actually stops it, because a rank without a diagnosis is what §15 already
 records itself getting wrong.
 
-#### An object literal supplying an optional property — 87 sites, one modifier
+#### An object literal supplying an optional property — 87 sites, one modifier (fixed)
 
 `a X where a Y is wanted, which is a pointer cast between two structs that do
 not agree about where their shared fields are` is the second-largest refusal by
@@ -2547,14 +2547,27 @@ and they agree until the literal supplies an optional property — at which poin
 the checker's type for the literal marks that property **not** optional while
 the declaration marks it optional, and the two layouts differ.
 
-The fix is to make those one derivation, not to teach the cast to work. Which
-side should give is the open question: keying the structural copy on the
-contextual type would make every call to `count` with an `Options`-shaped
-literal share one copy, which is also the answer that produces fewer copies.
+**Fixed 2026-09-16, and the declared type is the side that wins.** A literal is
+built to order and has no prior layout to cast *from*, which is the whole reason
+the structural copy exists; so `structural_instantiations` skips an argument
+that is an object literal and `lower_object_literal`'s contextual type is the
+single answer. One condition. It also produces fewer copies — every call passing
+an `Options`-shaped literal now shares the declaration.
 
-Not attempted. Recorded with the control above so the next attempt starts from
-a one-variable reproduction rather than from 87 sites and a message about
-offsets.
+```text
+  distinct `pointer cast between two structs` refusals
+  stream  47 -> 40     fs  77 -> 61     http  57 -> 50
+```
+
+`examples/an-object-literal-with-optional-properties` is 145 cases across five
+exports agreeing with node, refused six times by the pre-change binary. Its arms
+answer 0, 10, 100 and 110 apart from the value they carry, so a literal built at
+the wrong layout reads a neighbouring field rather than agreeing by accident.
+`addons.sh` 24 of 24, 0 regressed.
+
+What remains under this message is the case the copy is genuinely for: an
+argument that is a *value* of one object type where another is wanted, with no
+literal at the call to build differently.
 
 #### The largest remaining message is not a cause — 177 sites, two types
 
