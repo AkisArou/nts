@@ -323,6 +323,31 @@ pub fn is_interface(program: &Program, layout: &Layout) -> bool {
     declared(program, layout).is_empty() && !extended(program, layout)
 }
 
+/// A layout something claims to implement and does not extend.
+///
+/// **The shape a `checkcast` to it cannot survive.** `interface C { seen:
+/// number; m(): void }` with `class A implements C` is ordinary TypeScript, and
+/// it has no JVM spelling: `C` carries state so it cannot be an interface
+/// (`is_interface` says so and why), and `implements` is not `extends` so
+/// `Layout.base` relates nothing. `A` therefore extends `Object`, and a value
+/// erased from `A` and unerased to `C` is a `checkcast nts/gen/C` that throws.
+///
+/// Distinguished from the case that *is* fine: `interface Tagged extends Error`
+/// records `Error` in `Tagged.interfaces` and `Error` is a class, but there
+/// `Layout.base` does relate them -- so `ancestry` finds it and this is false.
+/// The question is not "is it named as an interface" but "is it named by
+/// something that does not reach it through `base`".
+#[must_use]
+pub fn claimed_without_extending(program: &Program, layout: &Layout) -> bool {
+    if is_interface(program, layout) {
+        return false;
+    }
+    program.layouts.iter().any(|other| {
+        other.interfaces.iter().any(|id| layout.types.contains(id))
+            && !ancestry(program, other).iter().any(|at| std::ptr::eq(*at, layout))
+    })
+}
+
 /// The interfaces this layout declares, as binary class names.
 ///
 /// In `Layout.interfaces` order, which the IR sorts, so one input gives one

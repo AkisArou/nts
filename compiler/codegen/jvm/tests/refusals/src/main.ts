@@ -20,3 +20,39 @@ export class Collides {
 export function reach(it: Collides): number {
   return it["a b"] + it["a-b"];
 }
+
+/// An interface that carries state, dispatched through.
+///
+/// **Ordinary TypeScript with no JVM spelling.** `Stateful` has a property, so
+/// it cannot be a JVM interface -- one has no instance fields -- and `implements`
+/// is not `extends`, so nothing relates `First` to it. Reading an erased `First`
+/// back as a `Stateful` is a `checkcast` that throws.
+///
+/// It reached that cast and threw for as long as the backend has existed. The
+/// refusal exists because a `ClassCastException` at run time is a **wrong
+/// answer**: nothing in the refusal counts can see it, and it took an example
+/// that dispatches through an interface type to surface it at all.
+interface Stateful {
+  seen: number;
+  step(): void;
+}
+
+class First implements Stateful {
+  seen = 0;
+  step(): void {
+    this.seen += 1;
+  }
+}
+
+class Second implements Stateful {
+  seen = 100;
+  step(): void {
+    this.seen += 2;
+  }
+}
+
+export function dispatchThrough(n: number): number {
+  const it: Stateful = (n & 1) === 0 ? new First() : new Second();
+  it.step();
+  return it.seen;
+}

@@ -2315,6 +2315,42 @@ impl Emitter<'_> {
     /// Refused by name rather than emitted. `VerifyError: inconsistent
     /// stackmap frames` names a slot index and a bytecode offset; this names
     /// the two classes.
+    /// A `checkcast` whose target no reaching class can be.
+    ///
+    /// **"Unchecked by construction upstream" is what the call site said, and it
+    /// was a precondition rather than a fact.** `interface C { seen: number;
+    /// m(): void }` with `class A implements C` is ordinary TypeScript and has
+    /// no JVM spelling: `C` carries state so it cannot be an interface, and
+    /// `implements` is not `extends` so `Layout.base` relates nothing. `A`
+    /// extends `Object`, and reading an erased `A` back as `C` compiles, loads,
+    /// and throws `ClassCastException: class nts.gen.A cannot be cast to class
+    /// nts.gen.C`.
+    ///
+    /// A **wrong answer** rather than a refusal, which is the worse kind and is
+    /// invisible to every refusal count in the tree -- so it took a new example
+    /// dispatching through an interface type to surface a gap that had always
+    /// been there.
+    ///
+    /// Asked at both casts. The `unboxed` arm emits one too, and checking only
+    /// the general arm left the failing program failing unchanged -- two sites
+    /// spelling one narrowing, and a guard on one of them is not a guard.
+    fn refuse_impossible_cast(&self, ty: &HirType) -> Result<(), Diagnostic> {
+        let HirType::Managed(ManagedType::Object(id)) = ty else { return Ok(()) };
+        let Some(target) = self.program.layout(*id) else { return Ok(()) };
+        if !crate::hierarchy::claimed_without_extending(self.program, target) {
+            return Ok(());
+        }
+        Err(refuse(
+            self.func,
+            &format!(
+                "reading an erased value back as `{}`, which other classes declare they \
+                 implement without extending -- it carries state, so this backend emits it \
+                 as a class rather than an interface, and the cast would throw",
+                target.name
+            ),
+        ))
+    }
+
     fn assignable(&self, from: ValueId, to: ValueId) -> Result<(), Diagnostic> {
         // A block parameter that merges closures of differing classes is
         // declared as the interface all of them implement, and JVMS 4.10.1.2
@@ -2601,6 +2637,7 @@ impl Emitter<'_> {
                 // The reference is already the value; the narrowing the middle
                 // end proved still has to be spelled for the verifier.
                 self.load(code, pool, *value)?;
+                self.refuse_impossible_cast(ty)?;
                 if let Some(want) = types::descriptor(self.shape, ty) {
                     code.check_cast(origin, pool, &want);
                 }
@@ -2634,8 +2671,9 @@ impl Emitter<'_> {
                         let descriptor = types::descriptor(self.shape, ty).ok_or_else(|| {
                             refuse(self.func, "unerasing to an unrepresentable reference")
                         })?;
-                        // Unchecked by construction upstream, but the verifier
-                        // needs the narrowing spelled: the field is `Object`.
+                        self.refuse_impossible_cast(ty)?;
+                        // The verifier needs the narrowing spelled: the field is
+                        // `Object`.
                         code.check_cast(origin, pool, &descriptor);
                     }
                     other => {
