@@ -2426,11 +2426,20 @@ fn build(rest: &[String]) -> Result<()> {
             // whole class of project. A correctness refusal that runs only
             // sometimes is worth less than what the gate costs.
             //
-            // It is not free -- measured at +0.15s on a trivial project, 0.26
-            // to 0.41, one whole extra `tsgo` snapshot, and the same order as
-            // everything the object cache saves. The fix that makes it free is
-            // one snapshot handed to both this and the emitter; priced, not
-            // built, and now worth more than when it was priced.
+            // **It cost a second `tsgo` snapshot, and then it did not.** This
+            // comment said "+0.15s, 0.26 to 0.41 ... the fix that makes it free
+            // is one snapshot handed to both this and the emitter; priced, not
+            // built" -- and both halves were falsified an hour later by the
+            // author of the sentence. The fix was not threading a snapshot: it
+            // was that `nts build` had been walking past
+            // `nts_frontend_ts::cache::snapshot` at all twelve of its call
+            // sites, so the second snapshot is now a cache hit and the number
+            // measured the wrong thing.
+            //
+            // Current, controlled with `NTS_NO_SNAPSHOT_CACHE=1` on one binary,
+            // alternating on warm state: **0.26s with the cache, 1.5s without**.
+            // A number in a comment is a claim with a date on it; this one had
+            // no date and outlived the code it described by one commit.
             let _ = in_a_workspace;
             let config_roots = generate_bindings(&tsconfig, std::slice::from_ref(&target.id))?;
             let native = native_sources(&config_roots, target)?;

@@ -93,7 +93,7 @@ saw it because `target.windows()` was pinned to the llvm backend, which refuses
 before reaching a linker: a bug kept alive by an unrelated refusal, which is the
 second one of those this week.
 
-### Built, and the price was 42 rather than 3: `javaPackage`
+### Built, and the price was 51 rather than 3: `javaPackage`
 
 `nts.gen` is hardcoded in the JVM emitter and `package_jvm` refuses a jar whose
 config asks for anything else, rather than shipping classes somewhere other than
@@ -105,7 +105,7 @@ is the current fixed name and is wrong for a shipped library".
 **The surface was measured rather than estimated, by making the change and
 letting the compiler count.** Parameterising `symbols::jvm_class_name` breaks
 **3** sites, all in `codegen/jvm/src/types.rs`. But the two functions there --
-`class_name` and `identity_class_name` -- have **42** callers across five files,
+`class_name` and `identity_class_name` -- have **51** callers across five files,
 and they take a `&Layout` rather than anything program-wide, so the package has
 to arrive as a new argument at every one of them.
 
@@ -114,10 +114,19 @@ avoid it are worse: a thread-local is undeclared state a pass would rest on, and
 rewriting the package in finished class bytes means patching constant-pool UTF8
 entries after the fact. The shape that would make it cheap is the package
 reaching those two functions on something already threaded -- which is a change
-to what `class_name` takes, and therefore the same 42 sites.
+to what `class_name` takes, and therefore the same 51 sites.
 
-Estimated at 3 sites before the probe and measured at 42, which is the reason to
-run the probe rather than reason about the seam.
+Estimated at 3 sites before the probe, reported as 42, and actually 51 -- and
+the gap between the last two is its own lesson. **The probe counted compiler
+errors and I wrote them down as call sites**, which are different units: `rustc`
+reports one error per *expression it cannot resolve*, and a line holding two
+calls, a closure passed by name, or a site inside an already-failing expression
+does not contribute one each. 42 was a true count of the wrong thing.
+
+Found on the way out, by counting the call sites after the work rather than
+re-reading the claim. The estimate-to-probe gap is the reason to run a probe;
+the probe-to-actual gap is the reason to check the number a probe gives you
+against the thing you will act on.
 
 **Built afterwards, and the count was right.** `types::Shape` carries the
 package -- it is already "the program plus the one whole-program fact that
