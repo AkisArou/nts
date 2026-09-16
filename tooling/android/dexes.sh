@@ -70,7 +70,11 @@ if [ $# -gt 0 ]; then
   targets=""
   for name in "$@"; do
     if [ -d "$root/benches/cases/$name" ]; then targets="$targets benches/cases/$name"
-    elif [ -d "$root/examples/$name" ]; then targets="$targets examples/$name"
+    elif [ -f "$root/examples/$name/tsconfig.json" ]; then targets="$targets examples/$name"
+    elif [ -d "$root/examples/$name" ]; then
+      echo "$name is a directory of projects rather than one: it has no tsconfig.json" >&2
+      echo "  name one of its members instead" >&2
+      exit 1
     else echo "no such example or case: $name" >&2; exit 1
     fi
   done
@@ -79,7 +83,33 @@ else
   # them.** `invalid` exists to fail typechecking, so the backend declining it
   # is the example working. Counting it made `1 declined` a permanent fixture,
   # and a permanent fixture is what a real decline would have hidden behind.
-  targets=$( (ls -d "$root"/examples/*/ "$root"/benches/cases/*/ 2>/dev/null) \
+  #
+  # **An example is a directory with a `tsconfig.json`, not any directory
+  # under `examples/`.** `examples/interop` and `examples/workspace` are
+  # *containers* -- seventeen projects and four packages -- and the branch below
+  # synthesises a tsconfig that includes the whole tree, so each was compiled as
+  # one giant program. They declined, every run, for reasons that are properties
+  # of being a container rather than of any backend:
+  #
+  #     interop     TS2300 Duplicate identifier 'Drawable'
+  #     workspace   TS2307 Cannot find module '@workspace/notifications'
+  #
+  # Both landed in `declined by the backend`, which is the same bucket a real
+  # refusal lands in, and contributed 0 methods. A bench case genuinely has no
+  # tsconfig and gets a synthesised one, so the test applies to `examples/` only.
+  #
+  # `if` rather than `[ ... ] && printf`: the `&&` form leaves the loop's exit
+  # status at 1 whenever the *last* directory has no tsconfig, which under
+  # `set -e` kills the assignment and the script with it, silently, before
+  # anything is printed. `examples/workspace` sorts last and has no tsconfig,
+  # so this failed on the first run -- the same bug `pinned.sh` carried, written
+  # again by someone who had been told about it that afternoon.
+  examples=$(
+    for dir in "$root"/examples/*/; do
+      if [ -f "$dir/tsconfig.json" ]; then printf '%s\n' "$dir"; fi
+    done
+  )
+  targets=$( (printf '%s\n' $examples; ls -d "$root"/benches/cases/*/ 2>/dev/null) \
     | sed "s|^$root/||;s|/$||" | grep -vE '/(invalid|unsupported)$' | sort)
 fi
 
@@ -207,6 +237,25 @@ printf "%s method(s) across them\n" "$methods"
 # than reasoned about -- the exclusion removes targets, so it cannot leave the
 # count unchanged, and "it only drops the one that declined" was an assumption
 # with a subtraction in it.
+# **A decline is a failure, which until now it only said it was.** The block
+# below explains a *missed floor* in terms of the decline count, and its own
+# words are "where 0 is expected" -- but nothing tested it, because the whole
+# thing sits inside the floor check. Two containers declined on every run for a
+# fortnight and the step was green, because they contributed 0 methods and the
+# floor is a method count.
+#
+# So an expectation written in prose and enforced nowhere, next to a floor that
+# cannot see the thing the prose is about: a refusal by the backend and a target
+# that never compiled are the same number here, and only one of them is news.
+if [ $# -eq 0 ] && [ "$declined" -gt 0 ]; then
+  echo "$declined target(s) were declined by the backend, where 0 is expected" >&2
+  echo "  now that invalid and unsupported are excluded. A decline is a program" >&2
+  echo "  the frontend or the backend would not take, which is a different fault" >&2
+  echo "  from a refusal and is not visible in the method floor -- it lands as" >&2
+  echo "  fewer methods, and a corpus that grew elsewhere hides it." >&2
+  exit 1
+fi
+
 floor=${NTS_DEX_METHOD_FLOOR:-4832}
 if [ $# -eq 0 ] && [ "$methods" -lt "$floor" ]; then
   echo "only $methods method(s) dexed, against a floor of $floor" >&2
