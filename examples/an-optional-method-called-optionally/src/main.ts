@@ -81,3 +81,116 @@ export function whatItReturns(n: number): number {
   const r = c.uncork?.();
   return (r === undefined ? 1 : 0) * 1000 + c.seen;
 }
+
+// ## Doubly optional: `this.socket?.cork?.()`
+//
+// The receiver is optional *and* the method is. This was the remainder after
+// the singly-optional case landed, and it was described as "the two optional
+// tests compose rather than nest". They do better than compose: there is still
+// **one** test.
+//
+// Both absences produce `undefined`, and the class test already answers for
+// both — an absent receiver is an instance of no class, so the arm that calls
+// is exactly the arm where the receiver is present *and* its class has the
+// slot. What the second `?.` adds is not a second branch but a **narrowing**:
+// the receiver arrives erased, and the calling arm has to read the payload back
+// out of the tag before it can dispatch. `present_of` does that, and a
+// singly-optional receiver gives it nothing to do.
+//
+// Held in a field rather than produced by a ternary, because a ternary over
+// `Corkable | undefined` erases at the assignment and refuses for a reason that
+// is not this one.
+class Holder {
+  socket: Corkable | undefined = undefined;
+
+  poke(): void {
+    this.socket?.uncork?.();
+  }
+
+  nudge(by: number): void {
+    this.socket?.note?.(by);
+  }
+}
+
+/** Three states, not two: no receiver, a receiver with the slot, one without. */
+export function doublyOptional(n: number): number {
+  const h = new Holder();
+  if ((n & 2) !== 0) {
+    h.socket = (n & 1) === 0 ? new Full() : new Bare();
+  }
+  h.poke();
+  const s = h.socket;
+  return s === undefined ? -1 : s.seen;
+}
+
+/** The same three states with an argument, so the arity path is covered too. */
+export function doublyWithAnArgument(n: number): number {
+  const h = new Holder();
+  if ((n & 4) !== 0) {
+    h.socket = (n & 1) === 0 ? new Full() : new Bare();
+  }
+  h.nudge(n & 7);
+  const s = h.socket;
+  return s === undefined ? -1 : s.seen;
+}
+
+/** Twice, so a receiver read that consumed its own absence would show. */
+export function doublyTwice(n: number): number {
+  const h = new Holder();
+  if ((n & 8) !== 0) {
+    h.socket = (n & 1) === 0 ? new Full() : new Bare();
+  }
+  h.poke();
+  h.poke();
+  const s = h.socket;
+  return s === undefined ? -1 : s.seen;
+}
+
+// ## The presence test, which is what the corpus actually writes
+//
+// The ledger recorded the remainder after the call form as doubly-optional
+// calls. That was measured by reading and it was wrong. With both call forms
+// lowering, **21 distinct sites** remained across `stream`, `http`, `net` and
+// `fs` and **not one of them was a call**. Nineteen were this:
+//
+//     if (writer.writeSync !== undefined) { writer.writeSync(n); }
+//
+// Which is the same question `w.writeSync?.()` asks, spelled as a test and a
+// call rather than as one operator, and the same question `"writeSync" in w`
+// already answered. Presence of an optional method varies per **class**, so it
+// is one descriptor comparison either way. Lowering the member read instead
+// asks for a slot a method does not have, and refuses with ``a union of a
+// function type | undefined`` — a layout question wearing a representation
+// sentence, which is the same misattribution the call form had.
+//
+// The narrowing is the half a returned value could hide: inside the arm, the
+// call has to actually happen. `Full.seen` starts at 0 and `note` adds, so a
+// skipped call answers 0 where a taken one answers `by` — different for every
+// `by` but zero, and the cases below span more than one.
+
+/** `!== undefined`, then the call in the arm it guards. */
+export function presentThenCalled(n: number): number {
+  const c: Corkable = (n & 1) === 0 ? new Full() : new Bare();
+  if (c.note !== undefined) {
+    c.note(n & 7);
+  }
+  return c.seen;
+}
+
+/** `=== undefined` and an early return, which is the same test read the other
+ *  way and the spelling `destroy.ts` uses. */
+export function absentThenReturns(n: number): number {
+  const c: Corkable = (n & 2) === 0 ? new Full() : new Bare();
+  if (c.note === undefined) {
+    return -1;
+  }
+  c.note(n & 7);
+  return c.seen;
+}
+
+/** The test as a value rather than a condition, so nothing depends on it
+ *  being consumed by an `if`. */
+export function testedAsAValue(n: number): boolean {
+  const c: Corkable = (n & 4) === 0 ? new Full() : new Bare();
+  return c.uncork !== undefined;
+}

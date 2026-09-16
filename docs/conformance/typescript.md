@@ -2563,16 +2563,52 @@ Measured on one tree against a control built from it: `http` 40 → 31, `stream`
 28 → 25, `fs` 28 → 25, `net` and `timers` unchanged. Declined exports identical
 everywhere, as expected.
 
-**What it does not move, which is most of them.** The remainder is
-`this.socket?.cork?.()` — **doubly optional**, the receiver *and* the method.
-The callee there is an optional chain rather than a plain property access, so it
-does not reach this path at all. That is the larger half of the 34 and it is a
-separate piece of work: the receiver's present-arm would have to re-enter the
-method desugaring, and the two optional tests then compose rather than nest.
+**Both remaining halves landed 2026-09-16, and this paragraph had the second one
+wrong.** It read: *"the remainder is `this.socket?.cork?.()` — doubly optional …
+that is the larger half of the 34"*. It is not, and the error is worth keeping
+because of how it was made: the remainder was characterised by **reading the
+sites the first fix did not clear**, and a shape you recognise is the one you
+count.
 
-`examples/an-optional-method-called-optionally` is the fixture — **116 cases
-across 4 functions, agreeing with node** through C *and* the JVM, refused by the
-pre-change binary on two members.
+*Doubly optional* — `this.socket?.cork?.()` — turned out to be the smaller
+problem and not a composition at all. **One test still, not two.** Both absences
+produce `undefined` and the class test already answers for both: an absent
+receiver is an instance of no class, so the arm that calls is exactly the arm
+where the receiver is present *and* its class has the slot. The real work was
+that `declares_an_optional_method` asked an object question of a union — the
+receiver's type has an absence in it — and that the calling arm needs
+`present_of` to read the payload back out of the tag. Twenty-odd lines.
+
+*The presence test* is what the corpus writes, and nothing had counted it.
+With both call forms lowering, **21 distinct sites** remained across `stream`,
+`http`, `net` and `fs`, and **not one was a call**:
+
+```text
+  12  if (writer.writeSync !== undefined) { ... }
+   6  if (typeof stream._construct === "function") { ... }
+   1  if (!this.push(chunk) && stream.pause) { ... }
+```
+
+The same question, spelled as a test and a call rather than as one operator, and
+the same question `"m" in o` has always answered. `!== undefined` and
+`=== undefined` now lower to the class test; **`typeof` and truthiness do not**,
+and are not folded in on the strength of looking similar.
+
+Measured against the gated `27fe1e1e` binary, distinct sites of ``a union of a
+function type | undefined``:
+
+```text
+  stream  21 -> 7     http  26 -> 7     net  12 -> 5     fs  21 -> 7
+```
+
+`addons.sh` gives **24 of 24 still build, 0 regressed**, which is the check that
+matters rather than the fixture — see [[0337]].
+
+`examples/an-optional-method-called-optionally` is the fixture — **290 cases
+across 10 functions, agreeing with node**, where the pre-change binary refuses
+ten times. The arms that earn it are the ones where a skipped call and a taken
+one differ: `Full.seen` starts at 0 and `note` adds, so a guard that fell the
+wrong way answers 0 where node answers `by`.
 
 **It was written on an `interface` and had to move to an abstract class, and
 what that uncovered is a separate defect.** The interface version agreed with

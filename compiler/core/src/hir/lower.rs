@@ -25423,38 +25423,19 @@ impl<'a> FuncBuilder<'a> {
         if !self.declares_an_optional_method(receiver_ty, &key) {
             return Ok(None);
         }
-        // Every type that declares it *always*, which is the set a runtime
-        // value can be one of and still have the slot. Collected over the whole
-        // program for the reason the `in` path collects it there: an object
-        // literal typed by an interface has a layout and no entry in the
-        // hierarchy.
-        let mut declaring: Vec<TypeId> = (0..self.snapshot.types.len())
-            .filter_map(|at| u32::try_from(at).ok().map(TypeId))
-            .filter(|class| matches!(self.declares(*class, &key), Declares::Always))
-            .collect();
-        declaring.sort_unstable_by_key(|ty| ty.0);
-        declaring.dedup();
-        if declaring.is_empty() {
+        let Some((receiver, present)) = self.has_the_slot(id, object, &key)? else {
             return Ok(None);
-        }
-        let receiver = self.lower_expression(object)?;
-        let origin = self.origin(id);
-        let erased = match self.values[receiver.0 as usize].ty {
-            HirType::Erased => receiver,
-            _ => self.push(OpKind::Erase { value: receiver }, HirType::Erased, origin.clone()),
         };
-        let present = self.push(
-            OpKind::InstanceOf {
-                value: erased,
-                classes: declaring,
-            },
-            HirType::Bool,
-            origin,
-        );
+        // `present_of` rather than `None`: where the receiver was itself
+        // optional it arrives erased, and the arm that calls has to read the
+        // payload back out of the tag before it can dispatch. A singly-optional
+        // call's receiver is not erased and this gives `None`, which is what
+        // was written there literally before.
+        let narrowed = self.present_of(object, receiver);
         self.lower_branching_value(
             id,
             present,
-            Branch::MethodOn(receiver, object, member, None),
+            Branch::MethodOn(receiver, object, member, narrowed),
             Branch::Absent,
         )
         .map(Some)
@@ -25468,6 +25449,54 @@ impl<'a> FuncBuilder<'a> {
     /// lowering with a class test.
     fn declares_an_optional_method(&self, ty: TypeId, key: &str) -> bool {
         let ty = super::generics::concrete(self.snapshot, ty);
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return false;
+        };
+        match &record.kind {
+            TypeKind::Object { .. } => self.declares_it_optionally(ty, key),
+            // **`a?.b?.()` — the receiver is optional too.** Its type is then a
+            // union with an absence in it rather than an object, and asking an
+            // object question of a union answered `false`: the callee fell
+            // through to being lowered as a *value*, and the refusal was
+            // ``a union of a function type | undefined``, about the member, for
+            // a program whose difference is in the receiver.
+            //
+            // **One test still, not two.** Both absences produce `undefined`
+            // and the `InstanceOf` below already answers for both: an absent
+            // receiver is an instance of no class, so the arm that calls is
+            // exactly the arm where the receiver is present *and* its class
+            // has the slot. What the second `?.` adds is the narrowing --
+            // `present_of` on the receiver, which a singly-optional call has
+            // nothing to do for and which this one cannot omit.
+            //
+            // **Every** present member has to declare it, not any: a union
+            // where one arm has the method and another does not is a program
+            // whose receiver may be an object with no slot at all, and the
+            // class test would send it to the calling arm.
+            TypeKind::Union(members) => {
+                let present: Vec<TypeId> = members
+                    .iter()
+                    .filter(|member| absence_of_member(self.snapshot, **member).is_none())
+                    .copied()
+                    .collect();
+                !present.is_empty()
+                    && present.iter().all(|member| {
+                        self.declares_it_optionally(
+                            super::generics::concrete(self.snapshot, *member),
+                            key,
+                        )
+                    })
+            },
+            _ => false,
+        }
+    }
+
+    /// Whether this *object* type declares `key` as a method, optionally.
+    ///
+    /// One level, deliberately: a union member that is itself a union is not
+    /// something the checker hands back, and recursing would buy a shape that
+    /// does not occur at the cost of a depth this cannot bound.
+    fn declares_it_optionally(&self, ty: TypeId, key: &str) -> bool {
         let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
             return false;
         };
@@ -33129,6 +33158,12 @@ impl<'a> FuncBuilder<'a> {
         // `v === undefined` on an erased value is a tag test, and neither
         // operand is ever built -- `undefined` has no representation of its
         // own, only a tag.
+        // Before the erased test, because it is the more specific question: the
+        // member is an optional *method*, whose absence is a fact about the
+        // receiver's class rather than a tag on a value that was read.
+        if let Some(result) = self.optional_method_presence(id, token, *lhs_node, *rhs_node) {
+            return result;
+        }
         if let Some(result) = self.erased_absence_test(id, token, *lhs_node, *rhs_node) {
             return result;
         }
@@ -33371,6 +33406,158 @@ impl<'a> FuncBuilder<'a> {
     /// Handled here rather than in `lower_absent`, because `undefined` on its
     /// own has no representation to produce: it is only ever *compared*, and
     /// the comparison is the thing that means something.
+    /// `(receiver, does its class have `key`)`, as one `InstanceOf`.
+    ///
+    /// **One copy, because there are two callers and a third shape coming.**
+    /// `o.m?.()` and `o.m !== undefined` ask the identical question and the
+    /// answer is identical machinery; written twice they would be two chances
+    /// to disagree about which classes count.
+    ///
+    /// The class set is collected over the whole program rather than from the
+    /// receiver's hierarchy, for the reason the `in` path collects it there: an
+    /// object literal typed by an interface has a layout and no entry in the
+    /// hierarchy. `Declares::Always` and not `Optionally` -- the question is
+    /// which classes carry the slot, and a class that declares it optionally
+    /// *and never defines it* does not.
+    ///
+    /// `Ok(None)` when nothing in the program declares it, which leaves the
+    /// caller on whatever path it had.
+    fn has_the_slot(
+        &mut self,
+        id: NodeId,
+        object: NodeId,
+        key: &str,
+    ) -> Result<Option<(ValueId, ValueId)>, Diagnostic> {
+        let mut declaring: Vec<TypeId> = (0..self.snapshot.types.len())
+            .filter_map(|at| u32::try_from(at).ok().map(TypeId))
+            .filter(|class| matches!(self.declares(*class, key), Declares::Always))
+            .collect();
+        declaring.sort_unstable_by_key(|ty| ty.0);
+        declaring.dedup();
+        if declaring.is_empty() {
+            return Ok(None);
+        }
+        let receiver = self.lower_expression(object)?;
+        let origin = self.origin(id);
+        let erased = match self.values[receiver.0 as usize].ty {
+            HirType::Erased => receiver,
+            _ => self.push(
+                OpKind::Erase { value: receiver },
+                HirType::Erased,
+                origin.clone(),
+            ),
+        };
+        let present = self.push(
+            OpKind::InstanceOf {
+                value: erased,
+                classes: declaring,
+            },
+            HirType::Bool,
+            origin,
+        );
+        Ok(Some((receiver, present)))
+    }
+
+    /// `o.m !== undefined` where `m` is an **optional method** on `o`'s type.
+    ///
+    /// # The shape the corpus actually writes
+    ///
+    /// `o.m?.()` was landed first and the ledger recorded the remainder as
+    /// doubly-optional calls -- `this.socket?.cork?.()`. That was measured by
+    /// reading, and it was wrong. With the doubly-optional form also lowering,
+    /// **21 distinct sites** remain across `stream`, `http`, `net` and `fs` and
+    /// **none of them is a call**. Nineteen are this test, in three spellings:
+    ///
+    /// ```text
+    ///   12  if (writer.writeSync !== undefined) { ... }
+    ///    6  if (typeof stream._construct === "function") { ... }
+    ///    1  if (!this.push(chunk) && stream.pause) { ... }
+    /// ```
+    ///
+    /// Which is the same question `o.m?.()` asks and `"m" in o` already
+    /// answers: presence of an optional method varies per **class**, not per
+    /// instance, so it is one descriptor comparison. Lowering the member read
+    /// instead asks for a slot that a method does not have, and refuses with
+    /// ``a union of a function type | undefined`` -- a layout question wearing
+    /// a representation sentence, which is the same misattribution the call
+    /// form had.
+    ///
+    /// This arm takes `!== undefined` and `=== undefined`. The other two
+    /// spellings are their own shapes and are not folded in here on the
+    /// strength of looking similar.
+    fn optional_method_presence(
+        &mut self,
+        id: NodeId,
+        operator: u16,
+        lhs: NodeId,
+        rhs: NodeId,
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        if !matches!(
+            operator,
+            syntax::EQUALS_EQUALS_TOKEN
+                | syntax::EQUALS_EQUALS_EQUALS_TOKEN
+                | syntax::EXCLAMATION_EQUALS_TOKEN
+                | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
+        ) {
+            return None;
+        }
+        // `undefined` only. An optional method is absent by being undefined and
+        // never by being null, so `o.m !== null` is a different question about
+        // a program that would not typecheck.
+        let written = |builder: &Self, node: NodeId| {
+            builder.node(node).text.as_deref() == Some("undefined")
+        };
+        let access = match (written(self, rhs), written(self, lhs)) {
+            (true, _) => lhs,
+            (false, true) => rhs,
+            (false, false) => return None,
+        };
+        if self.kind_of(access) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return None;
+        }
+        let parts = self.children(access);
+        let (Some(&object), Some(&member)) = (parts.first(), parts.last()) else {
+            return None;
+        };
+        if object == member {
+            return None;
+        }
+        let key = self.literal_name(member)?;
+        let receiver_ty = *self.snapshot.node_types.get(&object)?;
+        if !self.declares_an_optional_method(receiver_ty, &key) {
+            return None;
+        }
+        Some((|| {
+            let Some((_, present)) = self.has_the_slot(id, object, &key)? else {
+                // Nothing in the program defines it, so the answer is a
+                // constant -- and the constant is "absent", which is what
+                // `=== undefined` is asking for.
+                let origin = self.origin(id);
+                let absent = matches!(
+                    operator,
+                    syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN
+                );
+                return Ok(self.push(OpKind::ConstBool(absent), HirType::Bool, origin));
+            };
+            // `=== undefined` asks the opposite of what `InstanceOf` answers.
+            if matches!(
+                operator,
+                syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN
+            ) {
+                let origin = self.origin(id);
+                return Ok(self.push(
+                    OpKind::Unary {
+                        op: UnOp::Not,
+                        operand: present,
+                    },
+                    HirType::Bool,
+                    origin,
+                ));
+            }
+            Ok(present)
+        })())
+    }
+
     fn erased_absence_test(
         &mut self,
         id: NodeId,
