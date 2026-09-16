@@ -18,13 +18,32 @@ fi
 
 rm -rf "$here/target"
 mkdir -p "$here/target/classes"
-javac --release 8 -Xlint:all,-options -d "$here/target/classes" \
-  "$here"/java/com/example/ui/*.java "$here"/java/Demo.java
-jar --create --file "$here/target/ui.jar" -C "$here/target/classes" com
+
+# **One command for the library and the TypeScript.** This was a `javac` over
+# `java/com/example/ui` here and an `emit-jvm` forty lines below -- two builds of
+# one artifact. The config declares `native: [sources({ dir:
+# "java/com/example/ui" })]`, so the build compiles the Java, emits the
+# TypeScript, and packages them together.
+#
+# `$here/target/ui.jar` went with it: created here, read by nothing, and
+# superseded by the jar the build produces.
+#
+# Everything below is an assertion rather than a build step, which is why this
+# file is not a one-line call: the demo, the declaration drift check, the
+# consumer and its exact output are what the example is *for*.
+NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$nts" build "$here/tsconfig.json" \
+  --out "$here/target/build" > "$here/target/build.log" 2>&1 \
+  || { cat "$here/target/build.log"; exit 1; }
+built="$here/target/build/api/java-8"
+
+# `Demo` is a consumer in the default package rather than part of the library,
+# so the build does not see it and this compiles it against what the build made.
+javac --release 8 -Xlint:all,-options -cp "$built" -d "$here/target/classes" \
+  "$here"/java/Demo.java
 
 # The demonstration. Its output is the evidence for the sharpest constraint in
 # the interop plan, and it is four lines rather than an argument.
-java -Xverify:all -cp "$here/target/classes" Demo
+java -Xverify:all -cp "$here/target/classes:$built" Demo
 
 # The declarations and the binding table -- see java-from-ts/build.sh for why
 # both come from one invocation.
@@ -37,7 +56,7 @@ java -Xverify:all -cp "$here/target/classes" Demo
 generated="$here/target/com.example.ui.d.ts"
 table="$here/target/com.example.ui.bind"
 ( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" cargo run --release -q \
-    -p nts-cli -- bind --classes "$here/target/classes" --package com.example.ui \
+    -p nts-cli -- bind --classes "$built" --package com.example.ui \
     --out "$here/target" )
 
 if [ "${NTS_REGENERATE:-}" = "1" ]; then
@@ -60,8 +79,7 @@ fi
 # The file was a design sketch that read like a working example. It does work;
 # that was luck rather than evidence, and two of its claims were false when
 # finally run.
-emitted="$here/target/emitted"
-NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$nts" emit-jvm "$here/tsconfig.json" --out "$emitted"
+emitted="$built"
 javac --release 8 -Xlint:all,-options -cp "$emitted:$here/target/classes:$emitted/nts-runtime.jar" \
   -d "$here/target/classes" "$here/java/Run.java"
 got=$(java -Xverify:all -cp "$here/target/classes:$emitted:$emitted/nts-runtime.jar" Run)
