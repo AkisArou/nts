@@ -89,6 +89,31 @@ pub struct Product {
     pub soname: Option<String>,
 }
 
+/// Native sources a package contributes, and the header that describes them.
+///
+/// **Read because a binding has to come from somewhere.** A package's source
+/// says `import { digest32 } from "c:digest"`; this says which header declares
+/// it. Neither alone is enough and neither repeats the other -- the specifier is
+/// the program's, the header is the package's, and `nts bind-c` needs both.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct NativeSources {
+    pub dir: String,
+    /// Targets this root is compiled for. Absent means every target.
+    #[serde(default)]
+    pub targets: Option<Vec<String>>,
+    /// The C header to bind, where the surface is C rather than class files.
+    #[serde(default)]
+    pub header: Option<String>,
+}
+
+impl NativeSources {
+    /// Whether this root is compiled for a target.
+    #[must_use]
+    pub fn covers(&self, id: &str) -> bool {
+        self.targets.as_ref().is_none_or(|ids| ids.iter().any(|it| it == id))
+    }
+}
+
 /// A resolved `nts.config.ts`: the value `defineConfig` returned.
 ///
 /// Deliberately not every field the TypeScript type carries. A field is added
@@ -99,6 +124,31 @@ pub struct Product {
 pub struct Resolved {
     #[serde(default)]
     pub products: BTreeMap<String, Product>,
+    #[serde(default)]
+    pub native: Vec<NativeSources>,
+}
+
+/// The config above a file, if any -- the package that file belongs to.
+///
+/// **Walking up from the file rather than from the project**, because the config
+/// describing a package's native code is the package's own, and the file doing
+/// the `import` is inside it. An app's program contains its dependencies'
+/// sources, so the question "which config describes this `c:` module" is
+/// answered by where the importing file is, not by where the build started.
+///
+/// Stops at a config that declares `workspace`, which is a root and describes
+/// nothing's native code.
+#[must_use]
+pub fn above(file: &Utf8Path) -> Option<Utf8PathBuf> {
+    let mut at = file.parent();
+    while let Some(directory) = at {
+        let candidate = directory.join(FILE_NAME);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+        at = directory.parent();
+    }
+    None
 }
 
 /// The config governing a project, given the tsconfig a command was pointed at.
@@ -198,6 +248,7 @@ mod tests {
 
     fn with(names: &[&str]) -> Resolved {
         Resolved {
+            native: Vec::new(),
             products: names
                 .iter()
                 .map(|name| {

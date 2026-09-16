@@ -626,6 +626,117 @@ fn a_binding_that_disagrees_with_the_headers_stops_the_build() {
     );
 }
 
+/// A `c:` import becomes a binding, and the package's C is compiled with it.
+///
+/// **`native:` had no reader**, and this is the whole of what it is for. The
+/// program says `import { digest_step } from "c:digest"`; the config says which
+/// header declares it; `nts bind-c` needs both and neither repeats the other.
+///
+/// The import list is the binding's surface, because `nts bind-c` binds nothing
+/// unless told what -- `--module` alone produces `declare module "c:digest" {}`
+/// -- and the program has already named the function in the statement a reader
+/// looks at anyway.
+///
+/// The assertion is the answer, not the artifact: the consumer computes the same
+/// digest in C and compares, so a binding that generated and bound the wrong
+/// thing fails here rather than linking quietly.
+#[test]
+fn a_c_import_is_bound_and_the_package_c_is_linked_in() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("the repository root");
+    let project = Path::new(env!("CARGO_TARGET_TMPDIR")).join("build-binding");
+    drop(std::fs::remove_dir_all(&project));
+    for sub in ["src", "native"] {
+        std::fs::create_dir_all(project.join(sub)).expect("creating the fixture");
+    }
+    std::fs::write(
+        project.join("native/digest.h"),
+        "#ifndef PROBE_DIGEST_H\n#define PROBE_DIGEST_H\n#include <stdint.h>\nuint32_t digest_step(uint32_t seed, uint32_t value);\n#endif\n",
+    )
+    .expect("the header");
+    std::fs::write(
+        project.join("native/digest.c"),
+        "#include \"digest.h\"\nuint32_t digest_step(uint32_t seed, uint32_t value) { return (seed ^ value) * 16777619u; }\n",
+    )
+    .expect("the body");
+    std::fs::write(
+        project.join("src/main.ts"),
+        "import { digest_step } from \"c:digest\";\nimport type { c_uint32 } from \"c:types\";\n\nexport function digestOf(value: number): number {\n  return digest_step(2166136261 as c_uint32, value as c_uint32);\n}\n",
+    )
+    .expect("the program");
+    std::fs::write(
+        project.join("tsconfig.json"),
+        format!(
+            r#"{{"extends":{:?},"compilerOptions":{{"noEmit":false}},"include":["src","types",{:?}]}}"#,
+            repo.join("tsconfig.fixtures.json").to_string_lossy(),
+            repo.join("runtime/native/libc.d.ts").to_string_lossy(),
+        ),
+    )
+    .expect("tsconfig");
+    let scope = project.join("node_modules").join("@nts");
+    std::fs::create_dir_all(&scope).expect("node_modules");
+    if !scope.join("config").exists() {
+        std::os::unix::fs::symlink(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../config"),
+            scope.join("config"),
+        )
+        .expect("linking @nts/config");
+    }
+    std::fs::write(
+        project.join("nts.config.ts"),
+        "import { defineConfig, library, sources, target } from \"@nts/config\";\nexport default defineConfig({\n  products: { probe: library.native({ targets: [target.linux({ backend: \"c\" })], entry: \"./src/main.ts\" }) },\n  native: [sources({ dir: \"native\", header: \"native/digest.h\" })],\n});\n",
+    )
+    .expect("config");
+
+    let run = build(&project, &[]);
+    assert!(run.ok, "{}{}", run.stdout, run.stderr);
+    assert!(
+        run.stdout.contains("bound c:digest"),
+        "the build did not say it generated a binding:\n{}",
+        run.stdout,
+    );
+    assert!(
+        project.join("types/c-digest.d.ts").exists(),
+        "no generated binding on disk",
+    );
+
+    let consumer = project.join("use.c");
+    std::fs::write(
+        &consumer,
+        r#"#include <stdio.h>
+#include <stdint.h>
+#include "program.h"
+static uint32_t expected(uint32_t v) { return (2166136261u ^ v) * 16777619u; }
+int main(void) { return (uint32_t)digestOf(7) == expected(7) ? 0 : 1; }
+"#,
+    )
+    .expect("the consumer");
+    let artifact = project.join(".nts/build/probe/linux-gnu-x86_64/libprobe.so");
+    let binary = project.join("use");
+    let compiled = Command::new("clang")
+        .arg("-I")
+        .arg(project.join(".nts/build/probe/linux-gnu-x86_64"))
+        .arg(&consumer)
+        .arg(&artifact)
+        .arg("-o")
+        .arg(&binary)
+        .output()
+        .expect("compiling the consumer");
+    assert!(
+        compiled.status.success(),
+        "the consumer did not link -- the package's C is probably not in the artifact: {}",
+        String::from_utf8_lossy(&compiled.stderr),
+    );
+    let ran = Command::new(&binary).output().expect("running the consumer");
+    assert!(ran.status.success(), "the artifact answered something other than the C does");
+}
+
 /// A project with no config is told what is missing, not given a stack trace.
 #[test]
 fn a_project_with_no_config_says_so() {

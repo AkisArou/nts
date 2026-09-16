@@ -2339,12 +2339,31 @@ fn build(rest: &[String]) -> Result<()> {
             // reason to doubt. Refusing after the output directory exists is
             // also worse than refusing before it.
             refuse_unpackaged(name, &product.kind, target)?;
+            // **Declarations before bodies.** A `c:` module the program imports
+            // has no `.d.ts` until one is generated from the header a config
+            // names, and the program does not typecheck without it -- so this
+            // runs before the emitter sees anything.
+            //
+            // Skipped entirely unless some config in the project declares a
+            // header, which is every project with no native code: the check is a
+            // `stat` and the snapshot it would otherwise cost is not taken.
+            // A cheap guard on an expensive step: generating bindings needs a
+            // snapshot, and taking one to find there is no native code anywhere
+            // would put a frontend run on every build in the tree. Read from the
+            // config this command already resolved rather than resolving it
+            // again, which would be a second `node` for the same answer.
+            let native = if resolved.native.iter().any(|entry| entry.header.is_some()) {
+                let roots = generate_bindings(&tsconfig, target)?;
+                native_sources(&roots, target)?
+            } else {
+                Vec::new()
+            };
             let out = root.join(name).join(target_directory(target));
             println!("building `{name}` for {} into {out}", target.id);
             match target.backend.as_str() {
                 "c" => {
                     let wrote = emit_c(&tsconfig, Some(&out), emission)?;
-                    let artifact = link_c(name, product, &out, &wrote)?;
+                    let artifact = link_c(name, product, &out, &wrote, &native)?;
                     println!("  {artifact}");
                     // Named here as well as on stderr, because a build whose
                     // last line is `1 artifact(s)` has told the reader the
@@ -2384,6 +2403,213 @@ fn build(rest: &[String]) -> Result<()> {
         println!("{built} artifact(s) under {root}");
     }
     Ok(())
+}
+
+/// A `c:` module a program imports and nothing declares, and the file wanting it.
+///
+/// **From the checker's own diagnostics**, which is the only thing that knows
+/// what failed to resolve. A scan of the sources for `from "c:..."` would answer
+/// a different question -- what the text contains -- and would find specifiers
+/// in comments and strings, and miss nothing being wrong with them.
+///
+/// `TS2307` is the code and the module is the quoted half of its message. Both
+/// are the checker's, not ours, which is the cost: a message reworded upstream
+/// is a binding silently not generated. The floor against that is the build
+/// failing on the same unresolved import afterwards, which is what happened
+/// before any of this existed.
+fn unresolved_foreign(
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+) -> Vec<(String, Utf8PathBuf)> {
+    let mut wanted = Vec::new();
+    for diagnostic in &snapshot.diagnostics {
+        if diagnostic.code != "TS2307" {
+            continue;
+        }
+        let Some(module) = diagnostic.message.split('\'').nth(1) else { continue };
+        if !module.starts_with("c:") {
+            continue;
+        }
+        let Some(source) = snapshot.sources.get(diagnostic.primary.file.0 as usize) else {
+            continue;
+        };
+        let at = Utf8PathBuf::from(source.display_path.as_str());
+        if !wanted.iter().any(|(m, f): &(String, Utf8PathBuf)| m == module && f == &at) {
+            wanted.push((module.to_owned(), at));
+        }
+    }
+    wanted
+}
+
+/// The names a file imports from one module.
+///
+/// **The import list is the binding's surface.** `nts bind-c` binds nothing
+/// unless told what -- `--module` alone produces `declare module "c:digest" {}`
+/// -- and the program has already said: `import { digest32 } from "c:digest"`
+/// names the module and the function in one statement, which is where a reader
+/// looks anyway. A config field repeating it would be the duplicate this lane
+/// keeps deleting.
+///
+/// Type-only imports are separated because they are records rather than
+/// functions, and `nts bind-c` takes them as `--record`.
+fn imported_names(file: &Utf8Path, module: &str) -> Result<(Vec<String>, Vec<String>)> {
+    let text = std::fs::read_to_string(file).with_context(|| format!("reading {file}"))?;
+    let mut values = Vec::new();
+    let mut types = Vec::new();
+    for statement in text.split("import ").skip(1) {
+        let Some((clause, rest)) = statement.split_once(" from ") else { continue };
+        let Some(spelled) = rest.split(['"', '\'']).nth(1) else { continue };
+        if spelled != module {
+            continue;
+        }
+        let type_only = clause.trim_start().starts_with("type ");
+        let Some(braced) = clause.split_once('{').and_then(|(_, r)| r.split_once('}')) else {
+            continue;
+        };
+        for name in braced.0.split(',') {
+            let name = name.trim();
+            let (kind, name) = match name.strip_prefix("type ") {
+                Some(rest) => (true, rest.trim()),
+                None => (type_only, name),
+            };
+            // `a as b` renames on import; the binding is asked for `a`.
+            let name = name.split_whitespace().next().unwrap_or(name);
+            if name.is_empty() {
+                continue;
+            }
+            if kind { &mut types } else { &mut values }.push(name.to_owned());
+        }
+    }
+    if values.is_empty() && types.is_empty() {
+        bail!(
+            "`{file}` imports from `{module}` and this could not read which names. \
+             The import list is what a binding is generated from"
+        )
+    }
+    Ok((values, types))
+}
+
+/// Generate the bindings a program's `c:` imports need, before it is compiled.
+///
+/// This is the first phase of the order `docs/nts-config.md` describes and the
+/// config's own comments argue for: **declarations before bodies.** Bind the
+/// native declarations, then typecheck and emit against them, then compile the
+/// native sources. Mutual recursion resolves the same way and for the same
+/// reason.
+///
+/// Returns how many were written. Nothing to do is the overwhelmingly common
+/// case and costs one snapshot, taken only when a config nearby declares a
+/// header at all.
+fn generate_bindings(
+    tsconfig: &Utf8Path,
+    target: &nts_build::config::Target,
+) -> Result<Vec<Utf8PathBuf>> {
+    let tsgo_binary = frontend_binary();
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    // Errors are the point of this snapshot, so they are not reported here.
+    let snapshot = source.snapshot(tsconfig)?;
+    let wanted = unresolved_foreign(&snapshot);
+    // Every package the program's files belong to, whether or not it needed a
+    // binding: a package can contribute native code that only the C side calls
+    // -- a callback implementation -- and that still has to be compiled in.
+    let mut roots: Vec<Utf8PathBuf> = Vec::new();
+    for source in &snapshot.sources {
+        let file = Utf8PathBuf::from(source.display_path.as_str());
+        if let Some(config) = nts_build::config::above(&file)
+            && !roots.contains(&config)
+        {
+            roots.push(config);
+        }
+    }
+    for (module, file) in wanted {
+        bind_one(&module, &file, target)?;
+    }
+    Ok(roots)
+}
+
+/// Generate one binding: the module a file imports, from the header its package
+/// names.
+fn bind_one(module: &str, file: &Utf8Path, target: &nts_build::config::Target) -> Result<()> {
+    {
+        let Some(config_path) = nts_build::config::above(file) else {
+            bail!(
+                "`{file}` imports `{module}` and there is no `{}` above it to say which \
+                 header declares it",
+                nts_build::config::FILE_NAME
+            )
+        };
+        let package = config_path.parent().unwrap_or_else(|| Utf8Path::new("."));
+        let resolved = nts_build::config::resolve(&config_path)?;
+        let headers: Vec<&nts_build::config::NativeSources> = resolved
+            .native
+            .iter()
+            .filter(|entry| entry.header.is_some() && entry.covers(&target.id))
+            .collect();
+        let [entry] = headers.as_slice() else {
+            bail!(
+                "`{module}` is imported by `{file}` and {config_path} declares {} native \
+                 root(s) with a header for {}. One is a binding; several is a question \
+                 only the config can answer",
+                headers.len(),
+                target.id
+            )
+        };
+        let header = package.join(entry.header.as_deref().unwrap_or_default());
+        let (values, types) = imported_names(file, module)?;
+        let out = package.join("types").join(format!("{}.d.ts", module.replace([':', '/'], "-")));
+        std::fs::create_dir_all(out.parent().unwrap_or(package))
+            .with_context(|| format!("creating {out}"))?;
+        let mut command = std::process::Command::new(std::env::current_exe()?);
+        command.arg("bind-c").arg("--module").arg(module);
+        command.arg("--header").arg(header.as_str());
+        for name in &values {
+            command.arg("--fn").arg(name);
+        }
+        for name in &types {
+            command.arg("--record").arg(name);
+        }
+        command.arg("--out").arg(out.as_str());
+        let output = command.output().context("running `nts bind-c`")?;
+        if !output.status.success() {
+            bail!(
+                "generating the binding for `{module}` failed:\n{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        println!("  bound {module} from {} into {out}", entry.header.as_deref().unwrap_or_default());
+    }
+    Ok(())
+}
+
+/// Every native source a program's packages contribute, for one target.
+///
+/// `sources({ dir })` is a directory of C that belongs to a package, and the
+/// package's own config is what says so. A `.c` in it is a translation unit like
+/// any other -- the difference is only that a person wrote it.
+fn native_sources(
+    roots: &[Utf8PathBuf],
+    target: &nts_build::config::Target,
+) -> Result<Vec<(Utf8PathBuf, Utf8PathBuf)>> {
+    let mut found = Vec::new();
+    for config_path in roots {
+        let package = config_path.parent().unwrap_or_else(|| Utf8Path::new("."));
+        let Ok(resolved) = nts_build::config::resolve(config_path) else { continue };
+        for entry in &resolved.native {
+            if !entry.covers(&target.id) {
+                continue;
+            }
+            let directory = package.join(&entry.dir);
+            let Ok(listing) = std::fs::read_dir(&directory) else { continue };
+            for item in listing.flatten() {
+                let path = Utf8PathBuf::from_path_buf(item.path())
+                    .map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
+                if path.extension() == Some("c") {
+                    found.push((directory.clone(), path));
+                }
+            }
+        }
+    }
+    found.sort();
+    Ok(found)
 }
 
 /// Stop at a product kind whose packaging is not built, rather than near it.
@@ -2580,7 +2806,13 @@ fn check_witness(name: &str, out: &Utf8Path) -> Result<()> {
     )
 }
 
-fn link_c(name: &str, product: &nts_build::config::Product, out: &Utf8Path, wrote: &Wrote) -> Result<Utf8PathBuf> {
+fn link_c(
+    name: &str,
+    product: &nts_build::config::Product,
+    out: &Utf8Path,
+    wrote: &Wrote,
+    native: &[(Utf8PathBuf, Utf8PathBuf)],
+) -> Result<Utf8PathBuf> {
     check_witness(name, out)?;
     let addon = product.kind == "node-addon";
     let shared = product.kind == "shared-library" || addon;
@@ -2629,6 +2861,7 @@ fn link_c(name: &str, product: &nts_build::config::Product, out: &Utf8Path, wrot
     }
 
     let mut objects = Vec::new();
+    compile_native(name, out, native, pic, &mut objects)?;
     for source in &sources {
         let object = out.join(format!("{source}.o"));
         let mut command = cc();
@@ -2757,6 +2990,37 @@ fn refuse_unresolved(name: &str, artifact: &Utf8Path) -> Result<()> {
         unresolved.len(),
         unresolved[0]
     )
+}
+
+/// Compile the package's own C alongside the program's.
+///
+/// `sources({ dir })` is a directory of translation units a person wrote, and
+/// the only thing separating them from the generated ones is that. Its own
+/// directory is on the include path, because a header beside a `.c` is how C is
+/// written.
+fn compile_native(
+    name: &str,
+    out: &Utf8Path,
+    native: &[(Utf8PathBuf, Utf8PathBuf)],
+    pic: bool,
+    objects: &mut Vec<Utf8PathBuf>,
+) -> Result<()> {
+    for (directory, source) in native {
+        let object = out.join(format!("{}.o", source.file_name().unwrap_or("native")));
+        let mut command = cc();
+        command
+            .args(["-std=c11", "-O2", "-ffunction-sections", "-fdata-sections", "-I"])
+            .arg(directory.as_str())
+            .arg("-I")
+            .arg(out.as_str());
+        if pic {
+            command.arg("-fPIC");
+        }
+        command.arg("-c").arg(source.as_str()).arg("-o").arg(object.as_str());
+        run(command, &format!("compiling {source} for `{name}`"))?;
+        objects.push(object);
+    }
+    Ok(())
 }
 
 /// What the file is called.
