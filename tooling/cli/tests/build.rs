@@ -505,11 +505,12 @@ export default defineConfig({{
 
 /// A kind with no packaging is refused before anything is written.
 ///
-/// **An `aar` product built a `.jar`.** The classes were right; the container
-/// was not, and Gradle cannot resolve a jar where it expects an AAR. A file of
-/// the wrong format under the right name is the worst of the three outcomes --
-/// worse than no file, and worse than a refusal -- because a reader has no
-/// reason to doubt it.
+/// **An `aar` product built a `.jar`** when this was written. The classes were
+/// right; the container was not, and Gradle cannot resolve a jar where it
+/// expects an AAR. A file of the wrong format under the right name is the worst
+/// of the three outcomes -- worse than no file, and worse than a refusal --
+/// because a reader has no reason to doubt it. AARs are packaged now, so the
+/// case here is the one whose toolchain is genuinely absent.
 ///
 /// The refusal is before the output directory exists, so a build that stops
 /// leaves nothing to mistake for a partial result.
@@ -519,22 +520,30 @@ fn a_kind_with_no_packaging_is_refused_before_it_writes() {
         eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
         return;
     }
+    // An XCFramework rather than an AAR: AARs are packaged now, and the kind
+    // with no container left is the one needing a toolchain this machine does
+    // not have. The test moved rather than being deleted, because "a kind with
+    // no packaging stops before it writes" is the rule and not the example.
     let project = fixture(
-        "build-aar",
+        "build-apple",
         r#"
-import { defineConfig, library } from "@nts/config";
+import { defineConfig, library, target } from "@nts/config";
 export default defineConfig({
   products: {
-    sdk: library.android({ entry: "./src/main.ts", minSdk: 29, javaPackage: "nts.gen" }),
+    sdk: library.xcframework({
+      targets: [target.macos({ minimumVersion: "14.0" })],
+      entry: "./src/main.ts",
+      moduleName: "Probe",
+    }),
   },
 });
 "#,
     );
     let run = build(&project, &[]);
-    assert!(!run.ok, "an AAR with no packaging should stop the build:\n{}", run.stdout);
+    assert!(!run.ok, "a kind with no packaging should stop the build:\n{}", run.stdout);
     assert!(
-        run.stderr.contains("AndroidManifest.xml"),
-        "the refusal did not say what an AAR is:\n{}",
+        run.stderr.contains("xcodebuild"),
+        "the refusal did not say what the container needs:\n{}",
         run.stderr,
     );
     assert!(
@@ -735,6 +744,72 @@ int main(void) { return (uint32_t)digestOf(7) == expected(7) ? 0 : 1; }
     );
     let ran = Command::new(&binary).output().expect("running the consumer");
     assert!(ran.status.success(), "the artifact answered something other than the C does");
+}
+
+/// An AAR carries its classes, its manifest fragment and its R8 rules.
+///
+/// **No Android SDK.** An AAR is a container the *consumer* dexes, so `d8` and
+/// `aapt2` are their build's business. `jar` writes a zip, which is what an AAR
+/// is -- and the thing that made this a refusal before was the container, not
+/// the classes.
+///
+/// `manifests` and `consumerProguard` get their first readers here. The fragment
+/// is *carried*, not merged: AGP has a manifest merger with a specification and
+/// `runtime/jvm/web-platform/android/` already relies on it.
+#[test]
+fn an_aar_carries_its_manifest_and_rules() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    if !Command::new("jar").arg("--version").output().is_ok_and(|o| o.status.success()) {
+        eprintln!("skipping: no `jar` on PATH");
+        return;
+    }
+    let project = fixture(
+        "build-android",
+        r#"
+import { defineConfig, library, manifest } from "@nts/config";
+export default defineConfig({
+  products: {
+    sdk: library.android({
+      entry: "./src/main.ts", minSdk: 29, javaPackage: "nts.gen",
+      consumerProguard: "./proguard-rules.pro",
+    }),
+  },
+  manifests: [manifest({ targets: ["android-29"], path: "manifests/android.xml" })],
+});
+"#,
+    );
+    std::fs::create_dir_all(project.join("manifests")).expect("manifests dir");
+    std::fs::write(
+        project.join("manifests/android.xml"),
+        "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">\n  <uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\" />\n</manifest>\n",
+    )
+    .expect("the fragment");
+    std::fs::write(project.join("proguard-rules.pro"), "-keep class nts.gen.** { *; }\n")
+        .expect("the rules");
+
+    let run = build(&project, &[]);
+    assert!(run.ok, "{}{}", run.stdout, run.stderr);
+    let aar = project.join(".nts/build/sdk/android-29-aarch64/sdk.aar");
+    assert!(aar.exists(), "no AAR at {}", aar.display());
+
+    let listed = Command::new("jar").arg("--list").arg("--file").arg(&aar).output().expect("jar -t");
+    let entries = String::from_utf8_lossy(&listed.stdout);
+    for required in ["classes.jar", "AndroidManifest.xml", "proguard.txt"] {
+        assert!(entries.contains(required), "the AAR has no {required}:\n{entries}");
+    }
+
+    // The manifest is the package's fragment, not a generated stand-in: a
+    // consumer forgetting POST_NOTIFICATIONS gets a silent no-op at run time,
+    // which is the failure the fragment exists to prevent.
+    let staged = project.join(".nts/build/sdk/android-29-aarch64/aar/AndroidManifest.xml");
+    let carried = std::fs::read_to_string(&staged).expect("the staged manifest");
+    assert!(
+        carried.contains("POST_NOTIFICATIONS"),
+        "the AAR carries a generated manifest instead of the declared fragment:\n{carried}",
+    );
 }
 
 /// A project with no config is told what is missing, not given a stack trace.

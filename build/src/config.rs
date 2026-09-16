@@ -71,6 +71,10 @@ pub struct Product {
     pub entry: String,
     #[serde(default)]
     pub targets: Vec<Target>,
+    /// R8 rules an AAR ships to its consumer, so their minifier keeps what
+    /// reflection reaches.
+    #[serde(default, rename = "consumerProguard")]
+    pub consumer_proguard: Option<String>,
     /// The package generated classes land in, for a JVM product.
     ///
     /// Read so a build can refuse a jar that would not match it: the emitter
@@ -87,6 +91,27 @@ pub struct Product {
     /// nothing reaches.
     #[serde(default)]
     pub soname: Option<String>,
+}
+
+/// A manifest fragment a package contributes to its consumer's application.
+///
+/// **Read, not merged.** AGP has a manifest merger with a specification, and
+/// `runtime/jvm/web-platform/android/` already relies on it -- so an AAR carries
+/// the fragment and the consumer's build merges it. Reimplementing XML merging
+/// here would be a second answer to a question the platform already answers.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct Manifest {
+    #[serde(default)]
+    pub targets: Vec<String>,
+    pub path: String,
+}
+
+impl Manifest {
+    /// Whether this fragment is for a target.
+    #[must_use]
+    pub fn covers(&self, id: &str) -> bool {
+        self.targets.is_empty() || self.targets.iter().any(|it| it == id)
+    }
 }
 
 /// Native sources a package contributes, and the header that describes them.
@@ -124,6 +149,9 @@ impl NativeSources {
 pub struct Resolved {
     #[serde(default)]
     pub products: BTreeMap<String, Product>,
+    /// Manifest fragments a package contributes to its consumer.
+    #[serde(default)]
+    pub manifests: Vec<Manifest>,
     /// Target ids a package claims to support.
     ///
     /// A claim rather than a build: a package emits nothing of its own. Read so
@@ -277,6 +305,7 @@ mod tests {
     fn with(names: &[&str]) -> Resolved {
         Resolved {
             native: Vec::new(),
+            manifests: Vec::new(),
             targets: None,
             products: names
                 .iter()
@@ -287,6 +316,7 @@ mod tests {
                             kind: "shared-library".to_owned(),
                             entry: "./src/main.ts".to_owned(),
                             targets: Vec::new(),
+                            consumer_proguard: None,
                             java_package: None,
                             soname: None,
                         },
