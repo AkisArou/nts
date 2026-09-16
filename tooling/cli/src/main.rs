@@ -2324,7 +2324,12 @@ fn build(rest: &[String]) -> Result<()> {
                         );
                     }
                 }
-                "jvm" => emit_jvm(&tsconfig, Some(&out), false, emission)?,
+                "jvm" => {
+                    emit_jvm(&tsconfig, Some(&out), false, emission)?;
+                    let artifact = package_jvm(name, product, &out)?;
+                    println!("  {artifact}");
+                    println!("  {}", out.join(RUNTIME_JAR));
+                }
                 // Named rather than skipped. `emit-llvm` renders to stdout
                 // because its slice is scalar and there is no runtime to place
                 // beside it, so there is nothing here to write yet.
@@ -2345,6 +2350,57 @@ fn build(rest: &[String]) -> Result<()> {
         println!("{built} artifact(s) under {root}");
     }
     Ok(())
+}
+
+/// The runtime `emit-jvm` places beside the classes it writes.
+const RUNTIME_JAR: &str = "nts-runtime.jar";
+
+/// The package `codegen/jvm` puts generated classes in. Not configurable yet.
+const GENERATED_PACKAGE: &str = "nts.gen";
+
+/// Package the emitted classes into the jar the product names.
+///
+/// **Two artifacts, not one, and the choice is deliberate.**
+/// `apps/java-desktop-brownfield` states it: the runtime jar is either shaded in
+/// or declared as a dependency, "shading duplicates it when two nts libraries
+/// meet in one application; declaring it makes the consumer resolve a second
+/// artifact. Neither is free and the choice is not made." So both are reported
+/// and neither is hidden inside the other, which is the option that can still
+/// become either.
+///
+/// **Refuses a package it cannot produce.** `javaPackage` has had no reader
+/// since it was written, and `codegen/jvm` hardcodes `nts/gen` --
+/// `docs/jvm-interop.md` lists that under packaging gaps. A jar whose classes
+/// are somewhere other than where its config says is an artifact that does not
+/// match its own declaration, so a config asking for anything else is told what
+/// it would have got rather than given it.
+fn package_jvm(name: &str, product: &nts_build::config::Product, out: &Utf8Path) -> Result<Utf8PathBuf> {
+    if let Some(wanted) = &product.java_package
+        && wanted != GENERATED_PACKAGE
+    {
+        bail!(
+            "product `{name}` asks for package `{wanted}` and `codegen/jvm` emits \
+             `{GENERATED_PACKAGE}`, which it does not yet take as an option. The jar \
+             would not match the config that declared it; see the packaging gaps in \
+             docs/jvm-interop.md"
+        )
+    }
+    let artifact = out.join(format!("{name}.jar"));
+    let mut command = std::process::Command::new("jar");
+    command
+        .arg("--create")
+        .arg("--file")
+        .arg(artifact.as_str())
+        .arg("-C")
+        .arg(out.as_str())
+        .arg("nts");
+    let output = command.output().with_context(|| {
+        format!("running `jar` to package `{name}`. It ships with the JDK; is one on PATH?")
+    })?;
+    if !output.status.success() {
+        bail!("packaging `{name}` failed:\n{}", String::from_utf8_lossy(&output.stderr));
+    }
+    Ok(artifact)
 }
 
 /// Where `node_api.h` is, for a product that is a Node addon.

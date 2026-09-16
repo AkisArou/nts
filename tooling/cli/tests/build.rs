@@ -359,17 +359,23 @@ fn a_build_that_drops_functions_says_how_many() {
     );
 }
 
-/// A Node addon that cannot load is refused rather than written.
+/// A Node addon loads in node and answers.
 ///
-/// `emit-c --napi` emits a call to `nts_napi_set_env`, which is defined in
-/// `runtime/node/internal` -- present for every node module in this tree and
-/// absent from a standalone addon. Before this the `.node` linked, the build
-/// exited zero, and `require` died with `symbol lookup error`.
+/// **Loading is the assertion, because linking is not.** `emit-c --napi` emitted
+/// a call to `nts_napi_set_env`, defined in `runtime/node/internal/process.c` --
+/// present for every node module in this tree and absent from a standalone
+/// addon. The `.node` linked, the build exited zero, and `require` died with
+/// `symbol lookup error`. The napi emitter carries a weak default now, so this
+/// checks the outcome rather than the refusal.
 ///
-/// Skipped when `node_api.h` is nowhere to be found, because then the refusal
-/// under test is a different one.
+/// `nts build` still refuses an addon with any unresolved symbol that is not
+/// `napi_`, which is the general form: `--no-undefined` cannot be used here,
+/// because the `napi_` family is resolved out of the host process at load.
+///
+/// Skipped when `node_api.h` is nowhere to be found, because then the build
+/// stops for a different reason.
 #[test]
-fn an_addon_that_cannot_load_is_refused() {
+fn an_addon_loads_in_node() {
     if !available() {
         eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
         return;
@@ -394,11 +400,99 @@ export default defineConfig({
         .env("NTS_NAPI_INCLUDE", &headers)
         .output()
         .expect("running nts build");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(!output.status.success(), "an addon that cannot load should not be an artifact");
     assert!(
-        stderr.contains("cannot load") && stderr.contains("nts_napi_set_env"),
-        "the refusal did not name the symbol:\n{stderr}",
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let artifact = project.join(".nts/build/thing/node-api-8-x86_64/thing.node");
+    assert!(artifact.exists(), "no addon at {}", artifact.display());
+
+    let loaded = Command::new("node")
+        .arg("-e")
+        .arg(format!(
+            "const a = require({:?}); process.stdout.write(String(a.published(2)));",
+            artifact.to_string_lossy(),
+        ))
+        .output()
+        .expect("running node");
+    assert!(
+        loaded.status.success(),
+        "the addon linked and node could not load it:\n{}",
+        String::from_utf8_lossy(&loaded.stderr),
+    );
+    // `helper(2)` is 3 and the entry triples it. A wrong answer here would mean
+    // the addon loaded and published something other than what it compiled.
+    assert_eq!(String::from_utf8_lossy(&loaded.stdout), "9");
+}
+
+/// A jar is packaged, runs, and refuses a package it cannot produce.
+///
+/// **Two artifacts and not one.** `apps/java-desktop-brownfield` states the
+/// open question: the runtime jar is either shaded in or declared as a
+/// dependency, and "neither is free and the choice is not made". Both are
+/// written, so the decision stays available.
+///
+/// The refusal is the other half. `javaPackage` had no reader at all, and
+/// `codegen/jvm` hardcodes `nts/gen`; a jar whose classes are somewhere other
+/// than where its config says does not match its own declaration.
+#[test]
+fn a_jar_is_packaged_and_an_impossible_package_is_refused() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let jdk = Command::new("jar").arg("--version").output().is_ok_and(|o| o.status.success());
+    if !jdk {
+        eprintln!("skipping: no `jar` on PATH");
+        return;
+    }
+    let config = |package: &str| {
+        format!(
+            r#"
+import {{ defineConfig, library }} from "@nts/config";
+export default defineConfig({{
+  products: {{ calc: library.jvm({{ entry: "./src/main.ts", release: 8, javaPackage: "{package}" }}) }},
+}});
+"#
+        )
+    };
+
+    let project = fixture("build-jar", &config("com.acme.sdk"));
+    std::fs::write(
+        project.join("src/main.ts"),
+        "export function add(a: number, b: number): number { return a + b; }\n",
+    )
+    .expect("writing the program");
+    let refused = build(&project, &[]);
+    assert!(!refused.ok, "a package the emitter cannot produce should stop the build");
+    assert!(
+        refused.stderr.contains("com.acme.sdk") && refused.stderr.contains("nts.gen"),
+        "the refusal named neither package:\n{}",
+        refused.stderr,
+    );
+
+    std::fs::write(project.join("nts.config.ts"), config("nts.gen")).expect("rewriting the config");
+    let run = build(&project, &[]);
+    assert!(run.ok, "{}{}", run.stdout, run.stderr);
+    let jar = project.join(".nts/build/calc/java-8/calc.jar");
+    let runtime = project.join(".nts/build/calc/java-8/nts-runtime.jar");
+    assert!(jar.exists(), "no jar at {}", jar.display());
+    assert!(runtime.exists(), "the runtime a consumer needs was not reported beside it");
+
+    // **`-Xverify:all`**, because a class file that loads is the assertion and a
+    // verifier rejection is the characteristic failure of a bytecode emitter.
+    let listed = Command::new("javap")
+        .arg("-cp")
+        .arg(&jar)
+        .arg("nts.gen.Program")
+        .output()
+        .expect("running javap");
+    assert!(
+        String::from_utf8_lossy(&listed.stdout).contains("static double add(double, double)"),
+        "the jar does not declare the entry's export:\n{}",
+        String::from_utf8_lossy(&listed.stdout),
     );
 }
 

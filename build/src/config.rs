@@ -71,6 +71,14 @@ pub struct Product {
     pub entry: String,
     #[serde(default)]
     pub targets: Vec<Target>,
+    /// The package generated classes land in, for a JVM product.
+    ///
+    /// Read so a build can refuse a jar that would not match it: the emitter
+    /// hardcodes `nts/gen`, and `docs/jvm-interop.md` lists that under packaging
+    /// gaps. A jar whose classes are somewhere other than where its config says
+    /// is an artifact that does not match its declaration.
+    #[serde(default, rename = "javaPackage")]
+    pub java_package: Option<String>,
     /// Versioned soname, where a library must match a name it did not choose.
     ///
     /// Read because the linker takes it. Deserialized fields are added when
@@ -199,6 +207,7 @@ mod tests {
                             kind: "shared-library".to_owned(),
                             entry: "./src/main.ts".to_owned(),
                             targets: Vec::new(),
+                            java_package: None,
                             soname: None,
                         },
                     )
