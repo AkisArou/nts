@@ -805,12 +805,49 @@ headers itself, and fails when what `nts` believes about a struct disagrees with
 them -- which is a silently wrong answer rather than a link error. Sixteen
 `build.sh` do this by hand.
 
+### `native:`, and where each half of a binding already lives
+
+A `c:` module a program imports has no `.d.ts` until one is generated, and
+`nts bind-c` needs three things: the module, the header, and the names to bind.
+The interop `bind.sh` scripts pass all three by hand, and the obvious move was a
+config field for each.
+
+**The specifier is the program's.** `import { digest_step } from "c:digest"` says
+which module, and the checker's `TS2307` says which ones failed to resolve and in
+which file. A scan of the sources for `from "c:..."` would answer a different
+question -- what the text contains -- finding specifiers in comments and missing
+nothing being wrong with them.
+
+**The header is the package's**, and the package is the one *above the importing
+file* rather than the one the build started in. An app's program contains its
+dependencies' sources, so "which config describes this `c:` module" is answered
+by where the file is. That also disposes of the rule this nearly shipped with:
+`c:notifications` is declared by `scheduler.h`, so the header's stem is not the
+module name and never was.
+
+**The names are the import list.** `nts bind-c` binds nothing unless told what --
+`--module` alone produces `declare module "c:digest" {}` -- and the program has
+named the function already, in the statement a reader looks at anyway. Type-only
+imports are separated, because those are records rather than functions.
+
+So `native:` carries what only it knows -- where the C is -- and nothing else.
+The build binds, typechecks and emits against the bindings, then compiles the
+native bodies: **declarations before bodies**, which is the order this document
+and `native.ts`'s own comments argue for, now running rather than described.
+
+A package that declares native code and needs no binding still gets it compiled.
+A callback implementation is called from C and imported by nobody, so the roots
+are every package the program's files belong to rather than only those a binding
+came from.
+
 ### The config's first readers
 
 `entry` (the published surface), `kind`, `targets`, `soname`, and `javaPackage`.
 That last one's first reader is a **refusal**: `codegen/jvm` hardcodes `nts/gen`,
 so a product asking for `com.acme.sdk` is told what it would have got rather than
 given a jar whose package is not the one requested.
+
+`native` is read too, for the bindings and the C described above.
 
 `manifests`, `dependencies` and `integrate` are still read by nothing.
 
