@@ -172,6 +172,7 @@ pub(super) fn emit(
             Err(problem) => diagnostics.push(problem),
         }
     }
+    published_values(&mut writer, &mut names, program, diagnostics);
     writer.line(origin, "#endif /* NTS_PROGRAM_H */");
     writer.text().to_owned()
 }
@@ -260,6 +261,60 @@ fn emit_next(
     writer.line(origin, "    return true;");
     writer.line(origin, "}");
     Ok(())
+}
+
+/// **A published value is an export too, and this header did not say so.**
+/// `public_api` holds every export; the loop above looks each one up among
+/// `funcs` and `continue`s when there is none, so `export const greeting`
+/// was dropped in silence -- no diagnostic, and a header that looks complete.
+///
+/// `program.c` emits it with external linkage and its own comment says why:
+/// "external linkage *is* a reader, and the whole point of publishing a
+/// constant is that something outside this translation unit names it". Then
+/// the header that consumer includes did not name it, so naming it meant
+/// writing the `extern` by hand. The build lane's test for
+/// `examples/library` does exactly that, which is how this surfaced -- a
+/// consumer working around the header rather than a compiler error.
+///
+/// **After `module__init`'s declaration, deliberately.** A module-level
+/// initializer is what assigns these, so the note about calling it first is
+/// the thing a reader needs *before* being handed a name to read.
+fn published_values(
+    writer: &mut CodeWriter,
+    names: &mut FxHashSet<String>,
+    program: &Program,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for (internal, published) in &program.public_api {
+        let Some(global) = program
+            .globals
+            .iter()
+            .find(|global| global.exported && global.name == *internal)
+        else {
+            continue;
+        };
+        let symbol = c_global(&global.name, program.funcs.iter().map(|f| f.name.as_str()));
+        let result = (|| -> Result<(), Diagnostic> {
+            let ty = boundary_type(
+                writer,
+                names,
+                program,
+                &global.ty,
+                &global.origin,
+                &format!("{published}_t"),
+            )?;
+            let display = published.escape_default().to_string().replace("*/", "* /");
+            writer.line(
+                &global.origin,
+                format!("/* Export: {display}. C symbol: {symbol}. A value, not a function: it holds what `module__init` assigned. */"),
+            );
+            writer.line(&global.origin, format!("extern {ty} {symbol};"));
+            Ok(())
+        })();
+        if let Err(problem) = result {
+            diagnostics.push(problem);
+        }
+    }
 }
 
 fn boundary_type(
