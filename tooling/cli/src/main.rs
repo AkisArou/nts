@@ -2599,6 +2599,27 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
 /// names.
 fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) -> Result<()> {
     {
+        // **`c:types` is the compiler's, and no header declares it.** It holds
+        // the scalar brands -- `c_int`, `c_uint32`, `c_double` -- that say how a
+        // TypeScript number crosses to C, and every generated binding imports
+        // from it. Binding it from a package's header is the wrong question, and
+        // asking it produced `no complete definition of \`c_uint32\` in these
+        // headers`: a true sentence naming something the reader cannot act on,
+        // about a module their package was never supposed to declare.
+        //
+        // The fix is a path, so the message is the path. Nothing distributes
+        // this file yet -- every tsconfig in the tree that uses a `c:` module
+        // lists it by hand -- which is a gap in its own right, and naming it
+        // here is the least this can do until it closes.
+        if module == C_BRANDS {
+            bail!(
+                "`{file}` imports `{C_BRANDS}`, which is the compiler's scalar brand \
+                 module rather than one a package declares -- so no header can define \
+                 it. Add `runtime/native/libc.d.ts` to this project's tsconfig, in \
+                 `files` or `include`, the way every other `c:` consumer in the tree \
+                 does"
+            )
+        }
         let Some(config_path) = nts_build::config::above(file) else {
             bail!(
                 "`{file}` imports `{module}` and there is no `{}` above it to say which \
@@ -2919,6 +2940,9 @@ fn refuse_unpackaged(name: &str, kind: &str, target: &nts_build::config::Target)
         ),
     }
 }
+
+/// The compiler's scalar brand module, which no package declares.
+const C_BRANDS: &str = "c:types";
 
 /// The runtime `emit-jvm` places beside the classes it writes.
 const RUNTIME_JAR: &str = "nts-runtime.jar";
@@ -3818,19 +3842,11 @@ fn link_c(
         }
     } else {
         {
-            let script = out.join("exports.map");
-            std::fs::write(&script, version_script(&wrote.published))
-                .with_context(|| format!("writing {script}"))?;
             let mut command = cc();
             if shared {
                 command.arg("-shared");
-                // **An addon gets no version script.** What it publishes is
-                // `napi_register_module_v1`, which node looks up by name after
-                // `dlopen`; the TypeScript exports are reached through the
-                // registration rather than as symbols. Hiding everything but the
-                // entry's exports would hide exactly the one that matters.
                 if !addon {
-                    command.arg(format!("-Wl,--version-script={script}"));
+                    hide_all_but_the_exports(&mut command, out, wrote)?;
                 }
                 if let Some(soname) = &product.soname {
                     command.arg(format!("-Wl,-soname,{soname}"));
@@ -4133,8 +4149,63 @@ fn artifact_name(name: &str, product: &nts_build::config::Product) -> String {
     }
 }
 
+/// Narrow a shared library's dynamic symbol table to what the entry exports.
+///
+/// **An addon is not given this treatment**, which is why the caller decides
+/// rather than this function. What an addon publishes is
+/// `napi_register_module_v1`, which node looks up by name after `dlopen`; its
+/// TypeScript exports are reached through the registration rather than as
+/// symbols, so hiding everything but the entry's exports would hide exactly the
+/// one that matters.
+fn hide_all_but_the_exports(
+    command: &mut std::process::Command,
+    out: &Utf8Path,
+    wrote: &Wrote,
+) -> Result<()> {
+    let script = out.join("exports.map");
+    std::fs::write(&script, version_script(&wrote.published))
+        .with_context(|| format!("writing {script}"))?;
+    command.arg(format!("-Wl,--version-script={script}"));
+    // **A name in the script that no symbol answers to is an error, not a
+    // no-op.** By default `ld` accepts an unmatched pattern silently, which is
+    // how `global: Counter;` and a doubled `global: stdin_;` both went
+    // unnoticed: the script looked like it published two things, `local: *` hid
+    // the real symbol, and the `.so` came out short with no message. This turns
+    // the next such disagreement into a link failure naming the symbol.
+    //
+    // It catches a name nothing answers to. It cannot catch a name answering to
+    // the *wrong* symbol -- `stdin_` for a global whose symbol is `stdin__` --
+    // because both exist; that one is closed by `published` coming from the
+    // emitter, which is the same place the header's "C symbol:" comment does.
+    command.arg("-Wl,--no-undefined-version");
+    // **Said out loud, because from the outside it looks like an export.** The
+    // product's manifest promises "publishes what `./src/main.ts` exports" and
+    // the header carries the name; only the symbol table disagrees, and nobody
+    // reads that.
+    //
+    // Reported from here rather than beside the emission: a static archive does
+    // keep a class's methods as symbols, so there the name is undeclared rather
+    // than absent. It is this branch, where `local: *` is about to hide
+    // everything unnamed, that turns "no declaration" into "not in the artifact".
+    for name in &wrote.published_without_a_symbol {
+        println!(
+            "  `{name}` is exported but crosses no C symbol: \
+             the header carries its layout, not a way to call it"
+        );
+    }
+    Ok(())
+}
+
 /// A version script naming exactly what crosses the ABI.
 fn version_script(published: &[String]) -> String {
+    // **An empty `global:` is a syntax error, not an empty set.** `ld` reads
+    // `global:` immediately followed by `local:` as a malformed script and says
+    // `syntax error in VERSION script` naming the `local:` line, which is not
+    // where the problem is. A program whose every export lowering refused has
+    // nothing to publish and still has to link.
+    if published.is_empty() {
+        return String::from("{\n  local:\n    *;\n};\n");
+    }
     let mut text = String::from("{\n  global:\n");
     for symbol in published {
         text.push_str("    ");
@@ -4593,6 +4664,17 @@ struct Wrote {
     /// found out by `--no-undefined` catching `undefined reference to
     /// module__init` on a fixture whose only function was refused.
     initializes: bool,
+    /// Published API names that cross no C symbol, so nothing outside can reach
+    /// them.
+    ///
+    /// **A build that publishes nothing for an export must say so.** An
+    /// exported *class* is the whole of this set today: `program.h` emits its
+    /// layout and its `_Static_assert`s and declares not one function, because
+    /// its methods take `NtsObj_X *` -- a pointer to a struct the boundary hands
+    /// out the definition of but no way to obtain. Before this field the name
+    /// went into the linker version script as though it were a symbol, where it
+    /// matched nothing and read, from the outside, exactly like an export.
+    published_without_a_symbol: Vec<String>,
     /// Functions lowering refused, which are absent from the artifact.
     ///
     /// **Counted because a build that drops functions must say so.** `emit-c`
@@ -4678,17 +4760,23 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
         .iter()
         .filter(|d| d.code.starts_with("NTS1"))
         .count();
-    let published: Vec<String> = program
-        .public_api
-        .iter()
-        .map(|(emitted_name, _)| nts_codegen_c::c_identifier(emitted_name))
-        .collect();
+    // **From the emitter, not re-derived here.** This was
+    // `c_identifier(emitted_name)` over `public_api`, which is a second
+    // derivation of a fact `emit` already had -- and the two disagreed in both
+    // directions. A program exporting `function stdin` and `const stdin_` gets
+    // the symbols `stdin_` and `stdin__`, because a global whose spelling a
+    // function already holds takes the trailing underscore (`c_global`); the old
+    // expression wrote `stdin_` twice and never named `stdin__`, so `local: *`
+    // hid the exported constant while `program.h` went on declaring it. In the
+    // other direction an exported *class* has no C symbol at all -- the header
+    // publishes its layout and nothing callable -- so the script named `Counter`,
+    // which nothing answers to.
     let Some(out) = out else {
         print!("{}", emitted.writer.text());
         return Ok(Wrote { initializes, refused, ..Wrote::default() });
     };
 
-    write_c_output(&program, &emitted, out, emission, published, refused, initializes)
+    write_c_output(&program, &emitted, out, emission, refused, initializes)
 }
 
 /// Write the program, its runtime, and whatever the product's shape adds.
@@ -4701,10 +4789,14 @@ fn write_c_output(
     emitted: &nts_codegen_c::Emitted,
     out: &Utf8Path,
     emission: Emission,
-    published: Vec<String>,
     refused: usize,
     initializes: bool,
 ) -> Result<Wrote> {
+    // Read off `emitted` rather than taken as parameters. They were threaded in
+    // from the caller for one revision, which is how the fact got two owners in
+    // the first place.
+    let published = emitted.exported_symbols.clone();
+    let published_without_a_symbol = emitted.published_without_a_symbol.clone();
     // **`--main` decides what is written, not what survives**, and the variable
     // it replaced answered both. Reachability read `--main` or `--entry` above;
     // the standalone `main()` and its libuv host below are a `--main` question
@@ -4740,6 +4832,7 @@ fn write_c_output(
                 .chain(["main.c".to_owned(), nts_codegen_c::UV_HOST_SOURCE_NAME.to_owned()])
                 .collect(),
             published,
+            published_without_a_symbol,
             refused,
             initializes,
         });
@@ -4768,6 +4861,7 @@ fn write_c_output(
                 .chain(std::iter::once(nts_codegen_napi::ADDON_SOURCE_NAME.to_owned()))
                 .collect(),
             published,
+            published_without_a_symbol,
             refused,
             initializes,
         });
@@ -4799,6 +4893,7 @@ fn write_c_output(
             .chain(extra.iter().map(|name| (*name).to_owned()))
             .collect(),
         published,
+        published_without_a_symbol,
         refused,
         initializes,
     })

@@ -816,6 +816,28 @@ Each was found by the artifact failing, not by reading.
   visibility attributes, so hiding by default would hide the exports too. Without
   one, a two-function library exported **318** symbols -- every internal of the
   runtime and of the vendored dtoa.
+- **The script names symbols, and a published name is not one.** It was spelled
+  `c_identifier(emitted)` over `public_api` -- a second derivation of something
+  `emit` already knew and reports in the header's `/* C symbol: */` comment, and
+  the two disagreed in both directions. A program exporting `function stdin` and
+  `const stdin_` gets the symbols `stdin_` and `stdin__`, because `c_global`
+  yields file scope to the function; the script wrote `stdin_` **twice** and
+  never named `stdin__`, so `local: *` hid an exported constant the header went
+  on declaring. In the other direction an exported class has no symbol at all, so
+  the script said `global: Counter;` -- which `ld` accepts silently, matching
+  nothing. `Wrote::published` now comes from `Emitted::exported_symbols`, and
+  `-Wl,--no-undefined-version` makes the next such name a link error rather than
+  a quiet omission. That flag catches a name nothing answers to; it cannot catch
+  a name answering to the *wrong* symbol, which is closed only by there being one
+  derivation.
+- **An exported class crosses nothing, and the build says so.** `program.h` emits
+  its layout, its offsets and its `_Static_assert`s and declares no function,
+  because a method takes `NtsObj_X *` and the boundary hands out no way to obtain
+  one. Those names are `Emitted::published_without_a_symbol` and a shared-library
+  build prints each one. Kept apart from a *refusal*, which is also an export
+  with no symbol and is already counted by `Wrote::refused`: one sentence for the
+  two would report every refusal twice and leave the class message meaning
+  nothing.
 - **A library initialises itself.** The version script then hid `module__init`,
   and a library whose consumer cannot run module evaluation answers with a null
   pointer rather than failing to link. A generated `.init_array` entry runs it,

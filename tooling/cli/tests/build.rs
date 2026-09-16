@@ -364,6 +364,71 @@ fn a_build_that_drops_functions_says_how_many() {
         "the summary line claimed an artifact with nothing missing:\n{}",
         run.stdout,
     );
+    // **A refusal is not "published without a symbol".** Both end with an
+    // exported name absent from the symbol table, and one sentence for the two
+    // would report every refusal twice while making the other message mean
+    // nothing. This export was refused; the class message is for a name that
+    // compiled and still crosses nothing.
+    assert!(
+        !run.stdout.contains("crosses no C symbol"),
+        "a refused export was reported as though it had compiled:\n{}",
+        run.stdout,
+    );
+}
+
+/// An exported class is named as publishing nothing, and the link still narrows.
+///
+/// # Two absences that look alike from the symbol table
+///
+/// `program.h` emits `struct NtsObj_Counter` with its fields, its offsets and
+/// its `_Static_assert`s -- and not one function, because `bump` takes
+/// `NtsObj_Counter *` and the boundary hands out no way to obtain one. So the
+/// class is in `public_api`, the artifact has nothing it can answer to, and for
+/// a shared library `local: *` then hides the methods that do exist.
+///
+/// The version script used to be spelled `c_identifier` over `public_api`, which
+/// wrote `global: Counter;` -- a name nothing answers to. `ld` accepts an
+/// unmatched pattern silently by default, so the `.so` came out publishing only
+/// the loose function and no message said so.
+#[test]
+fn a_published_class_is_named_as_crossing_no_symbol() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let project = fixture("build-classless-abi", SHARED);
+    std::fs::write(
+        project.join("src/main.ts"),
+        "export class Counter {\n  private n: number = 0;\n  bump(): number { this.n = this.n + 1; return this.n; }\n}\nexport function published(x: number): number { return x + 1; }\n",
+    )
+    .expect("writing the program");
+    let run = build(&project, &[]);
+    assert!(run.ok, "{}{}", run.stdout, run.stderr);
+    assert!(
+        run.stdout.contains("`Counter` is exported but crosses no C symbol"),
+        "the build published a class silently:\n{}",
+        run.stdout,
+    );
+    // The control, and the half that is not about wording: `published` still
+    // crosses. A version script that named nothing would also never print the
+    // sentence above, and would pass a test that only looked for it.
+    let artifact = project
+        .join(".nts/build/acme/linux-gnu-x86_64")
+        .join("libacme.so");
+    let listed = std::process::Command::new("nm")
+        .args(["-D", "--defined-only"])
+        .arg(&artifact)
+        .output()
+        .expect("nm");
+    let symbols = String::from_utf8_lossy(&listed.stdout);
+    assert!(
+        symbols.lines().any(|line| line.ends_with(" published")),
+        "the loose function stopped crossing too:\n{symbols}",
+    );
+    assert!(
+        !symbols.lines().any(|line| line.ends_with(" Counter")),
+        "something now answers to `Counter`; the message above needs revisiting:\n{symbols}",
+    );
 }
 
 /// A Node addon loads in node and answers.
@@ -1377,5 +1442,58 @@ fn an_apk_refuses_to_silently_drop_a_package_fragment() {
     assert!(
         badging.contains("android.permission.CAMERA"),
         "the app's own manifest did not reach the APK:\n{badging}"
+    );
+}
+
+/// `c:types` is the compiler's, and the refusal says where to get it.
+///
+/// **The message it replaced was true and unusable.** Trying to bind the brand
+/// module from a package's header failed with ``no complete definition of
+/// `c_uint32` in these headers`` -- a correct sentence about a symbol the reader
+/// never asked for, in a module their package was never supposed to declare.
+/// `examples/workspace/apps/node-brownfield` sat behind it, and the thing to do
+/// was add one path to a tsconfig.
+#[test]
+fn the_scalar_brand_module_is_not_bound_from_a_header() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    if !frontend {
+        return;
+    }
+    let project = fixture(
+        "build-c-brands",
+        r#"
+import { defineConfig, library, sources, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    lib: library.native({ targets: [target.linux({ backend: "c" })], entry: "./src/main.ts" }),
+  },
+  native: [sources({ dir: "native", header: "native/thing.h" })],
+});
+"#,
+    );
+    std::fs::create_dir_all(project.join("native")).expect("native dir");
+    std::fs::write(project.join("native/thing.h"), "int thing(int n);\n").expect("header");
+    // Imports the brands and does not put `libc.d.ts` in the program, which is
+    // the whole of the mistake being reported.
+    std::fs::write(
+        project.join("src/main.ts"),
+        "import type { c_int } from 'c:types';\n\
+         export function one(n: c_int): number { return n as unknown as number; }\n",
+    )
+    .expect("entry");
+
+    let run = build(&project, &[]);
+    assert!(!run.ok, "it bound the brand module anyway:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("libc.d.ts") && run.stderr.contains("c:types"),
+        "the refusal does not name the module and the file to add:\n{}",
+        run.stderr
+    );
+    // And not the old message, which named a symbol nobody wrote.
+    assert!(
+        !run.stderr.contains("no complete definition"),
+        "it still reports the header question:\n{}",
+        run.stderr
     );
 }

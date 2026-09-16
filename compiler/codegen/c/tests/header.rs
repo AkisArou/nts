@@ -412,3 +412,91 @@ int main(void) {
         true,
     );
 }
+
+/// Every name `Emitted::exported_symbols` gives is defined by the object file,
+/// and every published name that is not is named as such.
+///
+/// # Checked against `nm`, not against a list written here
+///
+/// The defect this covers was a *second derivation* of one fact. `nts build`
+/// spelled the linker version script `c_identifier(emitted_name)` over
+/// `public_api`, while the header's "C symbol:" comment came from the emitter;
+/// they disagreed in both directions and nothing compared them. A test asserting
+/// `["stdin_", "stdin__"]` would be a third spelling of the same guess. Asking
+/// the assembler what the translation unit actually defines is the only arm here
+/// whose answer does not come from the code under test.
+fn defined_symbols(dir: &Utf8Path) -> Vec<String> {
+    let object = dir.join("symbols.o");
+    let compiled = Command::new("clang")
+        .current_dir(dir)
+        .args(["-std=c11", "-O0", "-I.", "-c", "program.c", "-o", "symbols.o"])
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let listed = Command::new("nm").args(["--defined-only", object.as_str()]).output().unwrap();
+    assert!(listed.status.success(), "nm failed");
+    String::from_utf8_lossy(&listed.stdout)
+        .lines()
+        .filter_map(|line| line.split_whitespace().nth(2).map(str::to_owned))
+        .collect()
+}
+
+#[test]
+fn a_global_whose_spelling_a_function_holds_keeps_its_own_symbol() {
+    let Some(tsgo) = toolchain() else {
+        return;
+    };
+    // `stdin` is a <stdio.h> macro, so the function takes `stdin_`; the global
+    // then takes `stdin__` because `c_global` yields file scope to the function.
+    // Two exports, two distinct symbols -- and one name if both are spelled with
+    // `c_identifier`, which is what the version script used to do. The artifact
+    // came out with `stdin_` named twice, `stdin__` named never, and `local: *`
+    // hiding an exported constant the header still declared.
+    let (dir, emitted) = emit(
+        &tsgo,
+        "colliding-global",
+        "export function stdin(): number { return 7; }\nexport const stdin_: number = 11;\n",
+    );
+    let defined = defined_symbols(&dir);
+    assert_eq!(emitted.exported_symbols.len(), 2, "{:?}", emitted.exported_symbols);
+    for symbol in &emitted.exported_symbols {
+        assert!(
+            defined.contains(symbol),
+            "`{symbol}` is published but the object defines none of {defined:?}"
+        );
+    }
+    assert!(
+        emitted.published_without_a_symbol.is_empty(),
+        "both exports cross: {:?}",
+        emitted.published_without_a_symbol
+    );
+}
+
+#[test]
+fn a_published_class_is_reported_as_crossing_no_symbol() {
+    let Some(tsgo) = toolchain() else {
+        return;
+    };
+    let (dir, emitted) = emit(
+        &tsgo,
+        "published-class",
+        "export class Counter {\n  private n: number = 0;\n  bump(): number { this.n = this.n + 1; return this.n; }\n}\nexport function published(x: number): number { return x + 1; }\n",
+    );
+    // The class is in `public_api` and the header carries its layout, its field
+    // offsets and its `_Static_assert`s -- and declares nothing to call, because
+    // `bump` takes `NtsObj_Counter *` and the boundary hands out no way to
+    // obtain one. So there is no symbol to publish, and saying so is the whole
+    // of what this backend can honestly report.
+    assert_eq!(emitted.published_without_a_symbol, vec!["Counter".to_owned()]);
+    assert_eq!(emitted.exported_symbols, vec!["published".to_owned()]);
+    // The control: `Counter` is not merely absent from the list, it is absent
+    // from the object under that name. Were the class to grow a C entry point,
+    // this is the assertion that has to be revisited rather than the list above.
+    let defined = defined_symbols(&dir);
+    assert!(!defined.contains(&"Counter".to_owned()), "{defined:?}");
+    assert!(defined.contains(&"published".to_owned()), "{defined:?}");
+}

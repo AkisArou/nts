@@ -284,6 +284,32 @@ pub struct Emitted {
     /// module being far away when it is one function's body, and the honest
     /// version is a decline naming the function before the link is attempted.
     pub refused: Vec<String>,
+    /// The C symbols an artifact built from this program should export, for a
+    /// linker version script.
+    ///
+    /// **A published *name* is not a symbol**, and the difference has been
+    /// invisible because nothing looked. A version script built from
+    /// `public_api` named `Counter` for an exported class; no symbol answers to
+    /// that, so `nm` on the `.so` found neither `Counter` nor the construction
+    /// hole -- the hole is emitted, marked `local` by a script looking for a
+    /// differently-named symbol, and removed. `construction_hole`'s own doc
+    /// calls it "the only symbol among these that leaves the translation unit",
+    /// which described an intention rather than the artifact.
+    pub exported_symbols: Vec<String>,
+    /// Published names that contribute no exported symbol at all.
+    ///
+    /// A class is the case. Its methods take `NtsObj_X *`, a layout the
+    /// consumer does not have and this boundary deliberately does not hand out,
+    /// and the construction hole returns an opaque `NtsHeader *` -- so a C
+    /// caller can allocate one and call nothing on it. The hole exists for a
+    /// *wrapper* linked into the same artifact, which is why it has external
+    /// linkage and is still not part of the published ABI.
+    ///
+    /// Reported rather than silently dropped: a product that publishes a class
+    /// into a shared library is asking for something this boundary does not do,
+    /// and a version script that quietly names nothing is how that went
+    /// unnoticed.
+    pub published_without_a_symbol: Vec<String>,
     /// Assertions about foreign types and functions, for a translation unit
     /// that includes the real headers to accept or refuse. Empty when the
     /// program names no foreign declaration, and then no file is written:
@@ -428,6 +454,70 @@ fn drop_orphaned_bodies(
     }
 }
 
+impl Emitted {
+    /// A program with no functions at all: nothing to emit and nothing to
+    /// export, but still a well-formed answer rather than an error.
+    fn empty(
+        writer: CodeWriter,
+        diagnostics: Vec<Diagnostic>,
+        unicode: bool,
+        refused: Vec<String>,
+    ) -> Self {
+        Self {
+            writer,
+            header: header::empty(),
+            diagnostics,
+            unicode,
+            refused,
+            exported_symbols: Vec::new(),
+            published_without_a_symbol: Vec::new(),
+            witness: String::new(),
+        }
+    }
+}
+
+/// The C symbols an artifact exports, and the published names that have none.
+///
+/// A published name is not a symbol. A function's is its mangled name and a
+/// value export's is its global; a **class has neither**, and a version script
+/// built from `public_api` named `Counter` for one -- a symbol nothing answers
+/// to, which the linker then used to mark the real ones local.
+fn published_symbols(program: &Program) -> (Vec<String>, Vec<String>) {
+    let mut symbols = Vec::new();
+    let mut without = Vec::new();
+    for (emitted, published) in &program.public_api {
+        if program.funcs.iter().any(|func| func.name == *emitted) {
+            symbols.push(c_identifier(emitted));
+        } else if program
+            .globals
+            .iter()
+            .any(|global| global.exported && global.name == *emitted)
+        {
+            symbols.push(c_global(
+                emitted,
+                program.funcs.iter().map(|func| func.name.as_str()),
+            ));
+        } else if !refused_by_lowering(program, emitted) {
+            without.push(published.clone());
+        }
+    }
+    (symbols, without)
+}
+
+/// Whether lowering declined this name, as opposed to compiling it to nothing.
+///
+/// **Two different absences, and only one of them is news.** A refused export
+/// has no symbol because it was never compiled -- `Wrote::refused` counts it and
+/// the build already prints the diagnostic. A *class* has no symbol although
+/// everything about it compiled. Folding them together would report every
+/// refusal twice under a sentence about layouts, and would leave nothing that
+/// means what `published_without_a_symbol` is for.
+fn refused_by_lowering(program: &Program, emitted: &str) -> bool {
+    program.uncompiled.iter().any(|(name, _)| {
+        name == emitted || name.split_once('#').is_some_and(|(owner, _)| owner == emitted)
+    })
+}
+
 #[must_use]
 pub fn emit(program: &Program) -> Emitted {
     let mut writer = CodeWriter::new();
@@ -436,14 +526,7 @@ pub fn emit(program: &Program) -> Emitted {
 
     let mut refused = Vec::new();
     let Some(first) = program.funcs.first() else {
-        return Emitted {
-            writer,
-            header: header::empty(),
-            diagnostics,
-            unicode,
-            refused,
-            witness: String::new(),
-        };
+        return Emitted::empty(writer, diagnostics, unicode, refused);
     };
     let origin = first.origin.clone();
 
@@ -586,12 +669,15 @@ pub fn emit(program: &Program) -> Emitted {
 
     let witness = witness_file(program, &origin, &mut diagnostics);
 
+    let (exported_symbols, published_without_a_symbol) = published_symbols(program);
     Emitted {
         writer,
         header,
         diagnostics,
         unicode,
         refused,
+        exported_symbols,
+        published_without_a_symbol,
         witness,
     }
 }
