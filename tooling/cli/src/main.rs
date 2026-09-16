@@ -2371,9 +2371,13 @@ fn build(rest: &[String]) -> Result<()> {
             // `workspace` above this one says a monorepo, which is the same
             // signal one level out, and costs the snapshot only there.
             let in_a_workspace = nts_build::config::workspace_above(&tsconfig);
-            let native = if resolved.native.iter().any(|entry| entry.header.is_some())
-                || in_a_workspace
-            {
+            // **Any native root, not only one with a header.** A header is what
+            // a *binding* needs; a `.c` beside it is compiled either way, and
+            // its directory is on the include path the witness uses. Gating on
+            // the header meant `native-copy` -- which declares `sources({ dir })`
+            // and no header -- had neither, and its witness failed to find
+            // `point.h` for a reason that is not what a witness checks.
+            let native = if !resolved.native.is_empty() || in_a_workspace {
                 let roots = generate_bindings(&tsconfig, std::slice::from_ref(&target.id))?;
                 native_sources(&roots, &target.id)?
             } else {
@@ -2893,7 +2897,11 @@ fn run(mut command: std::process::Command, what: &str) -> Result<()> {
 /// A build that links a program against a binding it has not checked has skipped
 /// the one step that would catch a wrong offset, and a wrong offset is a silently
 /// wrong answer rather than a link error.
-fn check_witness(name: &str, out: &Utf8Path) -> Result<()> {
+fn check_witness(
+    name: &str,
+    out: &Utf8Path,
+    native: &[(Utf8PathBuf, Utf8PathBuf)],
+) -> Result<()> {
     let witness = out.join(nts_codegen_c::NATIVE_WITNESS_NAME);
     if !witness.exists() {
         return Ok(());
@@ -2902,8 +2910,20 @@ fn check_witness(name: &str, out: &Utf8Path) -> Result<()> {
     command
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only"])
         .arg("-I")
-        .arg(out.as_str())
-        .arg(witness.as_str());
+        .arg(out.as_str());
+    // **The package's own headers too.** The witness includes what the binding
+    // named, and a binding over a package's own header names a file in that
+    // package -- `native_witness.c` for `native-copy` includes `point.h`, which
+    // is beside `point.c`. Only the generated headers were on the path, so the
+    // check failed to compile for a reason that was not what it checks.
+    let mut seen: Vec<&Utf8Path> = Vec::new();
+    for (directory, _) in native {
+        if !seen.contains(&directory.as_path()) {
+            command.arg("-I").arg(directory.as_str());
+            seen.push(directory.as_path());
+        }
+    }
+    command.arg(witness.as_str());
     let output = command
         .output()
         .with_context(|| format!("compiling the native witness for `{name}`"))?;
@@ -2925,7 +2945,7 @@ fn link_c(
     native: &[(Utf8PathBuf, Utf8PathBuf)],
     cache_dir: Option<&Utf8Path>,
 ) -> Result<Utf8PathBuf> {
-    check_witness(name, out)?;
+    check_witness(name, out, native)?;
     let addon = product.kind == "node-addon";
     let shared = product.kind == "shared-library" || addon;
     let library = product.kind == "shared-library" || product.kind == "static-library";
@@ -2991,6 +3011,12 @@ fn link_c(
                 .map(|flag| (*flag).to_owned())
                 .collect();
         arguments.push(out.to_string());
+        // The package's own headers: the *generated* program includes them too,
+        // because a binding over `point.h` lowers to `#include "point.h"`.
+        for directory in native.iter().map(|(directory, _)| directory).collect::<Vec<_>>() {
+            arguments.push("-I".to_owned());
+            arguments.push(directory.to_string());
+        }
         if pic {
             arguments.push("-fPIC".to_owned());
         }

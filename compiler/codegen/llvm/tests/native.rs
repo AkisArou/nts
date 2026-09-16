@@ -879,7 +879,7 @@ fn native_poll_calls_libc_and_matches_the_platform_header() {
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
         for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-        std::fs::write(dir.join("caller.c"), include_str!("../../../../examples/interop/native-poll/native/caller.c")).unwrap();
+        std::fs::write(dir.join("caller.c"), include_str!("../../../../examples/interop/native-poll/consumer/caller.c")).unwrap();
         std::fs::write(dir.join("layout.c"), include_str!("../../../../examples/interop/native-poll/native/layout.c")).unwrap();
         // The check, compiled and never linked. It used to live inside
         // `layout.c`, which also defines the functions `caller.c` prints from;
@@ -1095,7 +1095,7 @@ fn c_calls_a_typescript_function_through_a_bridge() {
         }
         std::fs::write(
             dir.join("caller.c"),
-            include_str!("../../../../examples/interop/native-callback/native/caller.c"),
+            include_str!("../../../../examples/interop/native-callback/consumer/caller.c"),
         )
         .unwrap();
         std::fs::write(
