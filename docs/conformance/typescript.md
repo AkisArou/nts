@@ -2500,6 +2500,65 @@ move that found `undefined | void`. Neither is started; each is recorded with
 what actually stops it, because a rank without a diagnosis is what §15 already
 records itself getting wrong.
 
+#### The iteration family is 255 sites behind two *designed* decisions
+
+`Iterable`, `AsyncIterable`, `Iterator`, `AsyncIterator`, `IterableIterator` and
+`AsyncIterableIterator` name **255 distinct sites** between them — the largest
+single cause in the tree by a wide margin, ahead of `SharedArrayBuffer`'s 94 and
+`WeakRef`'s 66. Every one of them reaches `IteratorResult<T, TReturn>` through
+`next()`, so the family has one root.
+
+**What the root is.** `IteratorResult` is
+`IteratorYieldResult<T> | IteratorReturnResult<TReturn>`, and both arms were
+unrepresentable *because they are library types*: `decompose.rs`'s `is_carried`
+list has one entry, `PromiseWithResolvers`. An identical hand-written
+`{ done, value }` pair represents today, which is what says the shape was never
+the problem. Adding the two arms to that list was tried and measured: **2 to 4
+distinct sites per module**, because everything downstream stops immediately on
+one of the two things below. Reverted rather than committed — a name-list entry
+that clears nothing is a claim the list does not support.
+
+**Blocker one: `any`, and it is not a gap.** `IteratorResult<T>` defaults
+`TReturn` to `any`, so the return arm is `value: any`. `docs/any-unknown.md` is
+the contract: *"`any` is not a Native TypeScript runtime type … no `any` type
+may reach HIR or MIR … there is no fallback to a universal `any` value."*
+Representing it as `Erased` — the obvious one-line move, and exactly what
+`unknown` does — would violate that in writing. What the document specifies
+instead is a `NeedsRepresentation` analysis over evidence and requirements, with
+declaration provenance retained, and that is a design to build rather than
+approximate.
+
+Measured while finding this: `any` is refused in **every** position — parameter,
+property, return — while `unknown` is representable in all three. So the gap is
+the whole of `any`, not a corner of it.
+
+**Blocker two: the arms disagree about `done`, and it is the optional modifier.**
+
+```text
+  interface IteratorYieldResult<T>   { done?: false; value: T; }
+  interface IteratorReturnResult<R>  { done: true;   value: R; }
+```
+
+`shared_field` reads a member from a union only where every arm places it
+identically as a **prefix** — same name, index and representation. Reproduced
+one variable at a time on hand-written arms:
+
+```text
+  done: false / done: true, both required   compiles
+  value types differing, done agreeing      compiles
+  one arm `done?: boolean`                  refused
+```
+
+`done?: false` is `false | undefined`, and a bool has no room for an absence, so
+it represents as `Erased` while `done: true` is `bool`. The arms genuinely
+differ. This is [[0291]]'s territory — an optional property having a third state
+— rather than anything about iteration.
+
+**So the honest statement of this row is: 255 sites, one root, and the root is
+two design decisions rather than a missing feature.** Neither is a thing to
+sneak past; both are worth building properly. Recorded here so the next attempt
+starts from that rather than from the size of the number.
+
 #### An object literal supplying an optional property — 87 sites, one modifier (fixed)
 
 `a X where a Y is wanted, which is a pointer cast between two structs that do
