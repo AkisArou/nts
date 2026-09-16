@@ -240,6 +240,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_presence_has_value", returns: "zeroext i1", params: &["i32", "i64", "i32"], attributes: &[] },
     Signature { name: "nts_presence_init_fn", returns: "void", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_presence_set_fn", returns: "void", params: &["ptr", "i32"], attributes: &[] },
+    Signature { name: "nts_promise_adopt", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_promise_all", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_promise_fulfill_number", returns: "void", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_promise_fulfill_reference", returns: "void", params: &["ptr", "ptr"], attributes: &[] },

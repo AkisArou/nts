@@ -15252,25 +15252,44 @@ impl<'a> FuncBuilder<'a> {
         result: &AsyncResult,
         value: Option<ValueId>,
     ) -> Result<ValueId, Diagnostic> {
-        // Settling a promise *with* a promise is adoption: the outer one
-        // subscribes to the inner, waits, and takes its value -- two extra
-        // ticks that a program can see through any interleaving. Storing the
-        // inner promise in the payload slot instead would be a different value
-        // of a different type.
+        // **Settling a promise with a promise is adoption**, and it is a
+        // runtime operation rather than a copy here. The outer one does not
+        // take the inner *promise* as its payload -- that would be a different
+        // value of a different type -- it takes the inner's eventual
+        // settlement, two microtasks later, and both halves are observable
+        // through interleaving.
         //
-        // It was already an error, but the C compiler's: `NtsPromise *` does
-        // not go where a `double` is wanted, so `return g(n)` from an `async`
-        // function reported a clang diagnostic against generated code. That
-        // reads as a compiler defect rather than as a construct this does not
-        // implement, and only the number payload was loud -- a reference
-        // payload would have compiled and settled with the wrong object.
+        // The two hops are the specification's two jobs:
+        // `NewPromiseResolveThenableJob` subscribes, and the subscription's
+        // reaction settles. Measured against node before this was built, with a
+        // chain of eight microtasks to count against, a `return g()` whose
+        // `g()` has already settled lands exactly one tick after a
+        // `return await g()` would. `nts_promise_adopt` carries that argument
+        // in all three runtimes and they have to stay the same number of hops.
         if let Some(value) = value
-            && matches!(
-                self.values[value.0 as usize].ty,
-                HirType::Managed(ManagedType::Promise(_))
-            )
+            && let HirType::Managed(ManagedType::Promise(inner)) =
+                self.values[value.0 as usize].ty.clone()
         {
-            return Err(self.unsupported(id, "a promise settled with another promise"));
+            // **The payloads have to agree**, and the checker is not enough to
+            // say so: `Promise<Buffer>` and `Promise<unknown>` are assignable
+            // in TypeScript and are a pointer and a tagged value here. The
+            // forward copies one `NtsValue` across, so a disagreement would put
+            // the inner's spelling in a slot the outer's readers unpack
+            // differently -- which is the shape the comment this replaced was
+            // written about, one layer along.
+            if *inner != result.payload {
+                return Err(self.unsupported(
+                    id,
+                    "a promise settled with a promise whose payload is represented differently",
+                ));
+            }
+            let origin = self.origin(id);
+            return Ok(self.runtime_call(
+                "nts_promise_adopt",
+                vec![result.promise, value],
+                HirType::Void,
+                origin,
+            ));
         }
         // At the payload's own type before the helper is chosen from it. The
         // two were read independently, so a `Promise<Buffer>` settled from a

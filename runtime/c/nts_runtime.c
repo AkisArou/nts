@@ -7666,6 +7666,80 @@ NtsPromise *nts_promise_race(NtsArray *promises) {
   return nts_combinator_new(promises, 0);
 }
 
+/* --- Adoption: a promise settled with another promise ----------------------
+ *
+ * `async function f() { return g(); }`. The outer promise does not take the
+ * inner *promise* as its value; it takes the inner's eventual settlement, and
+ * it takes it two microtasks later. Both halves are observable, which is why
+ * this is a runtime operation rather than a copy at the settle site.
+ *
+ * **Two hops, and the specification says which two.** Resolving a promise with
+ * a thenable enqueues `NewPromiseResolveThenableJob`, which is the first; that
+ * job subscribes, and the subscription's reaction is the second. So a `return
+ * g()` whose `g()` has already settled still resolves one tick after a `return
+ * await g()` would -- measured against node before this was written, with a
+ * chain of eight microtasks to count against:
+ *
+ *     tick0 tick1 AWAIT tick2 ADOPT tick3 ...
+ *
+ * Collapsing the two into one subscription would resolve a tick early, which is
+ * the same mistake `nts_promise_subscribe` documents itself against for an
+ * already-settled promise. */
+typedef struct NtsAdoption {
+  NtsHeader header;
+  NtsPromise *outer;
+  NtsPromise *inner;
+} NtsAdoption;
+
+static const uint32_t nts_adoption_offsets[] = {
+    (uint32_t)offsetof(NtsAdoption, outer),
+    (uint32_t)offsetof(NtsAdoption, inner),
+};
+
+static const NtsDescriptor nts_desc_adoption = {NTS_KIND_OBJECT,
+                                                (uint32_t)sizeof(NtsAdoption),
+                                                2u,
+                                                1u,
+                                                nts_adoption_offsets,
+                                                0,
+                                                "Adoption",
+                                                0u,
+                                                0,
+                                                NTS_ARRAY_UNKNOWN};
+
+static void nts_adoption_drop(void *state) { nts_release((NtsHeader *)state); }
+
+/* The inner settled: copy it across. `nts_promise_forward` is the same payload
+ * copy `race` makes, and for the same reason -- there is one payload and the
+ * rejected arm is the only one that needs telling apart. */
+static void nts_adoption_settled(void *state) {
+  NtsAdoption *adoption = (NtsAdoption *)state;
+  nts_promise_forward(adoption->outer, adoption->inner);
+  /* The reaction's reference, given back by running. */
+  nts_release((NtsHeader *)adoption);
+}
+
+/* The first hop. Subscribing here rather than in `nts_promise_adopt` is the
+ * whole of the tick this costs, and the reference the queue held passes
+ * straight to the subscription. */
+static void nts_adoption_begin(void *state) {
+  NtsAdoption *adoption = (NtsAdoption *)state;
+  nts_promise_subscribe(
+      adoption->inner,
+      (NtsTask){nts_adoption_settled, nts_adoption_drop, adoption});
+}
+
+void nts_promise_adopt(NtsPromise *outer, NtsPromise *inner) {
+  nts_promise_require_owner("nts_promise_adopt");
+  NtsAdoption *adoption = (NtsAdoption *)nts_object_new(&nts_desc_adoption);
+  adoption->outer = outer;
+  nts_retain((NtsHeader *)outer);
+  adoption->inner = inner;
+  nts_retain((NtsHeader *)inner);
+  nts_enqueue_microtask(
+      (NtsTask){nts_adoption_begin, nts_adoption_drop, adoption});
+}
+
 /* --- Timers, as a program calls them (docs/async.md 8, phase C) -------------
  *
  * `setTimeout` and its family are a *capability*, not part of the host

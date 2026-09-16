@@ -656,6 +656,9 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         "nts_promise_reject_with" => {
             (types::PROMISE, "rejectWith", "(Lnts/rt/NtsPromise;Lnts/rt/NtsPromise;)V")
         }
+        "nts_promise_adopt" => {
+            (types::PROMISE, "adopt", "(Lnts/rt/NtsPromise;Lnts/rt/NtsPromise;)V")
+        }
         "nts_promise_is_rejected" => (types::PROMISE, "isRejected", "(Lnts/rt/NtsPromise;)Z"),
         "nts_promise_number" => (types::PROMISE, "number", "(Lnts/rt/NtsPromise;)D"),
         "nts_promise_reference" => {

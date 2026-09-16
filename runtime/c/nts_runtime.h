@@ -2726,6 +2726,9 @@ NtsPromiseJoinResult nts_promise_join(const NtsPromise *promise);
  * carries one -- and if one did, rejecting with nothing is what a rejection
  * with no reason already means. */
 void nts_promise_reject_value(NtsPromise *promise, NtsValue reason);
+/* Settle `outer` with whatever `inner` settles to, two microtasks later.
+ * `async function f() { return g(); }` -- see the definition for why two. */
+void nts_promise_adopt(NtsPromise *outer, NtsPromise *inner);
 
 /* --- Combinators (docs/async.md 5b) ----------------------------------------
  *

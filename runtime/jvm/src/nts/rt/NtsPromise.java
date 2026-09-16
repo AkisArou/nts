@@ -81,6 +81,61 @@ public final class NtsPromise {
     public static void rejectWith(NtsPromise result, NtsPromise source) {
         settle(result, REJECTED, source.settled);
     }
+
+    /**
+     * Settle {@code outer} with whatever {@code inner} settles to, two
+     * microtasks later.
+     *
+     * <p>{@code async function f() { return g(); }}. The outer promise does not
+     * take the inner <em>promise</em> as its value; it takes the inner's
+     * eventual settlement, and it takes it two microtasks later. Both halves are
+     * observable through interleaving, which is why this is a runtime operation
+     * rather than a copy at the settle site.
+     *
+     * <p><b>Two hops, and the specification says which two.</b> Resolving a
+     * promise with a thenable enqueues {@code NewPromiseResolveThenableJob},
+     * which is the first; that job subscribes, and the subscription's reaction
+     * is the second. Measured against node before this was written: a
+     * {@code return g()} whose {@code g()} has already settled resolves one tick
+     * after a {@code return await g()} would. {@code runtime/c} carries the same
+     * note beside {@code nts_promise_adopt}, and the two must stay the same
+     * number of hops or the backends disagree about a tick.
+     */
+    public static void adopt(NtsPromise outer, NtsPromise inner) {
+        NtsEnv.microtask(NtsEnv.current(), new AdoptionBegin(outer, inner));
+    }
+
+    /** The first hop: subscribe. */
+    private static final class AdoptionBegin implements NtsResumable {
+        private final NtsPromise outer;
+        private final NtsPromise inner;
+
+        AdoptionBegin(NtsPromise outer, NtsPromise inner) {
+            this.outer = outer;
+            this.inner = inner;
+        }
+
+        @Override
+        public void resume() {
+            subscribe(inner, new AdoptionSettled(outer, inner));
+        }
+    }
+
+    /** The second hop: the inner settled, so copy it across. */
+    private static final class AdoptionSettled implements NtsResumable {
+        private final NtsPromise outer;
+        private final NtsPromise inner;
+
+        AdoptionSettled(NtsPromise outer, NtsPromise inner) {
+            this.outer = outer;
+            this.inner = inner;
+        }
+
+        @Override
+        public void resume() {
+            settle(outer, inner.state, inner.settled);
+        }
+    }
     public static boolean isRejected(NtsPromise promise) { return promise.state == REJECTED; }
     public static boolean isSettled(NtsPromise promise) { return promise.state != PENDING; }
     public static double number(NtsPromise promise) { return promise.settled.num; }
