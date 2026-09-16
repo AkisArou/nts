@@ -23,11 +23,22 @@ if [ ! -x "$nts" ]; then
   exit 0
 fi
 
-classes="$here/target/classes"
 rm -rf "$here/target"
-mkdir -p "$classes" "$here/target/java"
+mkdir -p "$here/target/java"
 
-NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$nts" emit-jvm "$here/tsconfig.json" --out "$classes" > /dev/null
+# **One command, and it reads `nts.config.ts`.** This was `emit-jvm --out`, which
+# is the emitter rather than the build: it says where to put class files and
+# nothing about what the product is. The config says `library.jvm`, so the build
+# knows the artifact is a jar, which target it is for, and which package the
+# classes have to land in -- and refuses if the emitter and the declaration
+# disagree about the last one.
+#
+# Everything below this line is an assertion rather than a build step, which is
+# why this file is not a one-line call to `nts build`: the javap capture, the
+# consumer, and running it are what the example is *for*.
+NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$nts" build "$here/tsconfig.json" \
+  --out "$here/target/build" > /dev/null
+classes="$here/target/build/api/java-8"
 
 # The published API, as Java sees it. `nts/gen` only -- the consumer's own
 # class is not part of what we publish.
