@@ -2583,7 +2583,25 @@ Recorded here rather than left in the fixture: a fixture that fails for
 something other than its subject attributes the failure to the wrong change, and
 this one would have read as "the optional-method desugaring is wrong on the
 JVM". It is not; the lowering is the same on both backends and only one of them
-mis-emits the receiver's type. Handed to the JVM lane with the two-line repro. Both arms of the class test run in every case, which the fixture
+mis-emits the receiver's type.
+
+**It refuses by name now rather than throwing** — the JVM lane took it the same
+day. `refuse_impossible_cast` fires at both `Unerase` sites where a receiver is
+read back as a layout that other classes "declare they implement without
+extending", and the first version guarded only one of the two, which left the
+probe throwing unchanged: *two sites spelling one narrowing, and a guard on one
+of them is not a guard.* Bounded rather than assumed — the `abstract class` form
+of the same program still agrees at 29 cases, `examples/declared-wider` at 174,
+the `jvm` step at 210 of 210 — and sabotaged: forcing the predicate false fails
+exactly the new test and with a different code.
+
+**The underlying gap is unchanged and is still the work.** `nts layouts` shows
+the IR is complete — `A implements C` is there — so this is entirely the
+emitter: `C` comes out `public abstract class` with a `double seen` field, `A`
+and `B` come out `public final class` with no superclass, and the `checkcast`
+cannot succeed. Emitting the relationship properly needs `inherited`,
+`declared_member` and the `<init>` super chain to agree. What changed is only
+that a program which compiled, loaded and threw now says so at compile time. Both arms of the class test run in every case, which the fixture
 says out loud: a test stuck at `true` calls a method that is not there, and one
 stuck at `false` skips a call that should have happened, and only a `Bare` class
 beside the `Full` one can tell those apart.
