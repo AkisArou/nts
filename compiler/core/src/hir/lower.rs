@@ -11177,6 +11177,92 @@ impl<'a> FuncBuilder<'a> {
             .map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX)))
     }
 
+    /// Why a captured name holding a closure has no layout, where that is so.
+    ///
+    /// Only one shape reaches here, and it is the one [`Self::closure_bound_to`]
+    /// declines: a **reassignable** variable holding an arrow. Two arrows are
+    /// two layouts, so no single field type describes the slot, and clang says
+    /// as much directly -- `assigning to 'NtsObj_Closure2 *' from
+    /// 'NtsObj_Closure3 *'` -- which is the same argument `closure_typed_global`
+    /// makes for a module-scope `const`.
+    ///
+    /// **Said here rather than left to the backend.** Without this the capture
+    /// was typed from the checker and the C emitter refused with `an object
+    /// type with no layout: type 4` -- a true sentence naming an internal id,
+    /// for a program whose problem is one `let`. The export is dropped either
+    /// way; only the reader's chance of acting on it differs.
+    fn why_the_closure_cannot_be_captured(&self, symbol: u32) -> Option<&'static str> {
+        let declaration = self
+            .snapshot
+            .symbols
+            .get(symbol as usize)?
+            .declarations
+            .iter()
+            .copied()
+            .find(|node| self.kind_of(*node) == Some(syntax::VARIABLE_DECLARATION))?;
+        if self.declaration_kind(declaration) == nts_semantic_schema::VariableKind::Const {
+            return None;
+        }
+        self.children(declaration)
+            .into_iter()
+            .any(|child| self.kind_of(child) == Some(syntax::ARROW_FUNCTION))
+            .then_some(
+                "a closure captured through a reassignable variable, where a second arrow \
+                 would be a second layout",
+            )
+    }
+
+    /// The representation of a name bound to a `const` arrow, where it is one.
+    ///
+    /// **The same answer the creating side gives**, which is the whole of why
+    /// this exists. A closure's captures are typed twice: the enclosing
+    /// function stores the value and takes `self.values[value].ty`, and the
+    /// body reads it back and took `type_of(capture.at)` -- the *checker's*
+    /// type, which for a captured arrow is its function type and has no layout.
+    /// One closure capturing another therefore emitted
+    ///
+    /// ```text
+    ///     field.set %2.0 = %1            managed<closure#0>   the store
+    ///     %1 = field.get %0.0            managed<obj#4>       the read
+    /// ```
+    ///
+    /// and the C backend said `an object type with no layout: type 4`. The two
+    /// sides' `Field` lists are merged by `collect_layouts`, which the comment
+    /// there calls "the check that the two sides agree"; it merged them without
+    /// noticing, because a field's *name* and index agreed and only its type did
+    /// not.
+    ///
+    /// `const` only, and the soundness argument is
+    /// [`closure_typed_global`]'s word for word: a slot typed by a closure holds
+    /// exactly the closure it was typed by, and a `let` may be reassigned with a
+    /// different arrow, which is a different layout. A `let` falls through to
+    /// the checker's type and is refused there as it was before.
+    fn closure_bound_to(&self, symbol: u32) -> Option<HirType> {
+        let declaration = self
+            .snapshot
+            .symbols
+            .get(symbol as usize)?
+            .declarations
+            .iter()
+            .copied()
+            .find(|node| self.kind_of(*node) == Some(syntax::VARIABLE_DECLARATION))?;
+        if self.declaration_kind(declaration) != nts_semantic_schema::VariableKind::Const {
+            return None;
+        }
+        let initializer = self
+            .children(declaration)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::ARROW_FUNCTION))?;
+        // A refused closure has no layout to name, so this answers `None` and
+        // the capture is refused with that closure's own reason rather than
+        // with a missing layout.
+        let index = self
+            .closures
+            .iter()
+            .position(|closure| closure.node == initializer && closure.refusal.is_none())?;
+        Some(HirType::Managed(ManagedType::Object(closure_type(index))))
+    }
+
     /// Read a closure's captures back out of its object and bind them.
     ///
     /// Returns the fields, which the layout is then built from -- and the
@@ -11190,8 +11276,12 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<Vec<Field>, Diagnostic> {
         let mut fields = Vec::new();
         for (at, capture) in info.captures.iter().enumerate() {
+            if let Some(reason) = self.why_the_closure_cannot_be_captured(capture.symbol) {
+                return Err(self.unsupported(capture.at, reason));
+            }
             let held = self
-                .type_of(capture.at)
+                .closure_bound_to(capture.symbol)
+                .or_else(|| self.type_of(capture.at))
                 .ok_or_else(|| self.unrepresentable(capture.at, "a captured variable"))?;
             // By reference, the field holds the *cell* rather than the value,
             // and the binding below is the cell -- so every read and write of
