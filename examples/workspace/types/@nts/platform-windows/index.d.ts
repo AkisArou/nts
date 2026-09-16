@@ -12,4 +12,21 @@
 // Empty rather than sketched: a surface with three invented declarations in it
 // would be a claim about an API nobody has read. The declarations arrive from
 // `nts bind` over the platform's own metadata.
+//
+// **The standard C surface, which every one of these platforms has.**
+// `runtime/native/libc.d.ts` declares `c:types`, `c:memory`, `c:stdint`,
+// `c:stddef`, `c:stdbool`, `c:stdlib` and `c:math` -- all of them standard C
+// rather than anything glibc-specific -- and the native lane already compiles
+// against it. Referencing the file that ships beats inventing a second copy,
+// which is the duplicate this fixture exists to argue against.
+//
+// A published `@nts/platform-*` would carry it rather than point at it; the path
+// is what a workspace inside this repository can do.
+//
+// **What is still absent is the platform-specific half**, which is the surface
+// this package is named for: the Android framework, UIKit, Win32. Those come
+// from `nts bind` over each platform's own metadata, and until then this
+// declares exactly what it can stand behind.
+/// <reference path="../../../../../runtime/native/libc.d.ts" />
+
 export {};

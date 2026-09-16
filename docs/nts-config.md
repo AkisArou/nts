@@ -509,13 +509,30 @@ part of its claim. The surfaces are now placeholder packages under
 `types/@nts/`, deliberately empty rather than sketched, because a surface with
 three invented declarations is a claim about an API nobody has read.
 
-Seven errors remain and are counted rather than fixed: `c:digest`,
-`java:com.example.notifications`, `swift:Notifications`,
+Five errors remain and are counted rather than fixed: `c:digest`,
+`c:notifications`, `java:com.example.notifications`, `swift:Notifications`,
 `winrt:Example.Notifications`. Those are the binding modules the compiler
 generates from `native: [...]`, and they cannot resolve before `nts` runs. That
 is the build order the `integrate` hooks exist to enforce -- bind, typecheck,
 emit, then compile the native bodies -- so it is a fact about the pipeline rather
 than a defect, and the audit fails on any error that is not one of them.
+
+It was seven, and the two that went were not bindings at all. **`c:types` was
+unresolved because the platform surfaces were empty and `crypto-core` named
+none.** The seven modules `runtime/native/libc.d.ts` declares -- `c:types`,
+`c:memory`, `c:stdint`, `c:stddef`, `c:stdbool`, `c:stdlib`, `c:math` -- are
+standard C rather than anything glibc-specific, so every platform here has them
+and each surface package now references the file that already ships. Inventing a
+second copy would have been the duplicate this document keeps deleting.
+
+`crypto-core`'s tsconfig named no surfaces while its config claimed six targets,
+which is the same disagreement one level up: the config says what a package
+supports and the tsconfig decides what its program is, and those two had never
+been made to agree for that package.
+
+So the unresolved set is now exactly "what `nts bind` would generate", which is
+the honest statement of the gap rather than a mixture of that and a fixture
+oversight.
 
 #### What the coverage questions turned up
 
