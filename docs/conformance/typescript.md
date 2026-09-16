@@ -2543,6 +2543,30 @@ type. The types are identical either way — `nts types` shows
 `Function(SignatureId(4))` and `Undefined` for both spellings — so this is a
 layout question wearing a representation sentence.
 
+**Done 2026-09-16, and worth less than the 34 suggested.** `o.m?.()` is
+desugared to the `InstanceOf` over the classes that declare `m` and the ordinary
+method call in the present arm — the same test `in` emits, which is what made
+`if ("uncork" in c) { c.uncork(); }` compile all along. No representation and no
+storage: a class either has the slot or does not.
+
+Measured on one tree against a control built from it: `http` 40 → 31, `stream`
+28 → 25, `fs` 28 → 25, `net` and `timers` unchanged. Declined exports identical
+everywhere, as expected.
+
+**What it does not move, which is most of them.** The remainder is
+`this.socket?.cork?.()` — **doubly optional**, the receiver *and* the method.
+The callee there is an optional chain rather than a plain property access, so it
+does not reach this path at all. That is the larger half of the 34 and it is a
+separate piece of work: the receiver's present-arm would have to re-enter the
+method desugaring, and the two optional tests then compose rather than nest.
+
+`examples/an-optional-method-called-optionally` is the fixture — **116 cases
+across 4 functions, agreeing with node**, refused by the pre-change binary on
+two members. Both arms of the class test run in every case, which the fixture
+says out loud: a test stuck at `true` calls a method that is not there, and one
+stuck at `false` skips a call that should have happened, and only a `Bare` class
+beside the `Full` one can tell those apart.
+
 **And the route is already open.** Presence of an optional method varies per
 *class*, not per instance, which is exactly what `in` answers, and
 

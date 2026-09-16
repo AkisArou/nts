@@ -25181,10 +25181,124 @@ impl<'a> FuncBuilder<'a> {
     /// where that one has a member read. `f` is a *value* here, so the call in
     /// the present arm is the indirect one through the closure -- the third way
     /// [`Self::call_through_closure`] is come by.
+    /// `o.m?.()` where `m` is an **optional method** on `o`'s type.
+    ///
+    /// Without this the callee is lowered as a *value*: an optional method's
+    /// type is `(() => void) | undefined`, a method gets a vtable entry rather
+    /// than a field, and the member read finds no slot -- so the refusal is
+    /// `` `uncork`, declared by `C` with a type that has no representation (a
+    /// union of a function type | undefined) ``, which is a layout question
+    /// wearing a representation sentence. **34 distinct sites**, every one of
+    /// this shape: `previous.uncork?.()`, `socket.setKeepAlive?.(true, ms)`,
+    /// `this.socket?.setNoDelay?.(enable)`.
+    ///
+    /// The declaration form is the whole difference, and only one of the four
+    /// spellings was refused:
+    ///
+    /// ```text
+    /// uncork(): void        required method    compiled
+    /// uncork?: () => void   optional property  compiled
+    /// uncork?(): void       optional method    refused
+    /// ```
+    ///
+    /// **Presence of an optional method varies per class, not per instance**,
+    /// which is what `in` already answers -- and
+    /// `if ("uncork" in c) { c.uncork(); }` compiles today. So this is that,
+    /// desugared: the same `InstanceOf` over the classes that declare it, and
+    /// the ordinary method call in the arm where it is present. No new
+    /// representation and no storage: a class either has the slot or does not.
+    ///
+    /// `None` rather than a refusal for every other shape, so an optional
+    /// *property* holding a closure keeps the path it already had.
+    fn optional_method_call(
+        &mut self,
+        id: NodeId,
+        callee: NodeId,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        if self.kind_of(callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return Ok(None);
+        }
+        let parts = self.children(callee);
+        let (Some(&object), Some(&member)) = (parts.first(), parts.last()) else {
+            return Ok(None);
+        };
+        if object == member {
+            return Ok(None);
+        }
+        let Some(key) = self.literal_name(member) else {
+            return Ok(None);
+        };
+        let Some(&receiver_ty) = self.snapshot.node_types.get(&object) else {
+            return Ok(None);
+        };
+        if !self.declares_an_optional_method(receiver_ty, &key) {
+            return Ok(None);
+        }
+        // Every type that declares it *always*, which is the set a runtime
+        // value can be one of and still have the slot. Collected over the whole
+        // program for the reason the `in` path collects it there: an object
+        // literal typed by an interface has a layout and no entry in the
+        // hierarchy.
+        let mut declaring: Vec<TypeId> = (0..self.snapshot.types.len())
+            .filter_map(|at| u32::try_from(at).ok().map(TypeId))
+            .filter(|class| matches!(self.declares(*class, &key), Declares::Always))
+            .collect();
+        declaring.sort_unstable_by_key(|ty| ty.0);
+        declaring.dedup();
+        if declaring.is_empty() {
+            return Ok(None);
+        }
+        let receiver = self.lower_expression(object)?;
+        let origin = self.origin(id);
+        let erased = match self.values[receiver.0 as usize].ty {
+            HirType::Erased => receiver,
+            _ => self.push(OpKind::Erase { value: receiver }, HirType::Erased, origin.clone()),
+        };
+        let present = self.push(
+            OpKind::InstanceOf {
+                value: erased,
+                classes: declaring,
+            },
+            HirType::Bool,
+            origin,
+        );
+        self.lower_branching_value(
+            id,
+            present,
+            Branch::MethodOn(receiver, object, member, None),
+            Branch::Absent,
+        )
+        .map(Some)
+    }
+
+    /// Whether `ty` declares `key` as a method *and* optionally.
+    ///
+    /// Both halves matter. A required method is a plain virtual call and never
+    /// reaches here; an optional **property** holding a closure is a field with
+    /// a representation already, and stealing it would replace a working
+    /// lowering with a class test.
+    fn declares_an_optional_method(&self, ty: TypeId, key: &str) -> bool {
+        let ty = super::generics::concrete(self.snapshot, ty);
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return false;
+        };
+        let TypeKind::Object { properties } = &record.kind else {
+            return false;
+        };
+        properties.iter().any(|property| {
+            property.name == key
+                && property.optional
+                && property.kind == nts_semantic_schema::MemberKind::Method
+        })
+    }
+
     fn lower_optional_call(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let Some(&callee_node) = self.children(id).first() else {
             return Err(self.unsupported(id, "an optional call with no callee"));
         };
+        if let Some(result) = self.optional_method_call(id, callee_node)? {
+            return Ok(result);
+        }
         let callee = self.lower_expression(callee_node)?;
         let Some(absent) = self.absence_of(callee_node, callee) else {
             // A callee with no room for an absence is always there, so this is
