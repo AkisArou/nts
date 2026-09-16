@@ -160,10 +160,25 @@ fn named_project(rest: &[String]) -> Result<Utf8PathBuf> {
     {
         bail!("`{bad}` is not an option this command takes; did you mean `--out`?");
     }
+    let named_one = found.is_some();
     let path = found.unwrap_or_else(|| Utf8PathBuf::from("tsconfig.json"));
     let path = if path.is_dir() { path.join("tsconfig.json") } else { path };
     if !path.is_file() {
-        bail!("`{path}` is not a tsconfig: name the project's tsconfig.json");
+        // **Missing and wrong-shaped are different mistakes**, and one message
+        // for both sends a person to check a file's contents when the file is
+        // not there. `nts build` in a directory without one answered
+        // "`tsconfig.json` is not a tsconfig", which reads as a complaint about
+        // a file they can see.
+        if path.exists() {
+            bail!("`{path}` is not a file: name the project's tsconfig.json");
+        }
+        if !named_one {
+            bail!(
+                "no `tsconfig.json` here. Run this in a project directory, or name \
+                 the tsconfig: `nts <command> path/to/tsconfig.json`"
+            );
+        }
+        bail!("`{path}` does not exist: name the project's tsconfig.json");
     }
     Ok(path)
 }
@@ -2284,7 +2299,7 @@ fn build(rest: &[String]) -> Result<()> {
         )
     };
     let resolved = nts_build::config::resolve(&config_path)?;
-    let named = requested_product();
+    let named = requested_product()?;
     let chosen: Vec<(&str, &nts_build::config::Product)> = match named.as_deref() {
         // One product by name, and `product` reports what a config declares when
         // the name is not one of them.
@@ -2812,12 +2827,19 @@ impl Emission<'_> {
 }
 
 /// The name a `--product` flag selects, when a config declares more than one.
-fn requested_product() -> Option<String> {
+fn requested_product() -> Result<Option<String>> {
     let args: Vec<String> = std::env::args().collect();
-    args.iter()
-        .position(|arg| arg == "--product")
-        .and_then(|at| args.get(at + 1))
-        .cloned()
+    let Some(at) = args.iter().position(|arg| arg == "--product") else {
+        return Ok(None);
+    };
+    // **A flag with no value is a mistake, not a default.** `--product` at the
+    // end of the line selected nothing and the build quietly did every product,
+    // which is the shape this lane keeps finding: a flag that parses, does
+    // nothing, and reports success.
+    match args.get(at + 1) {
+        Some(name) if !name.starts_with("--") => Ok(Some(name.clone())),
+        _ => bail!("`--product` needs the name of a product to build"),
+    }
 }
 
 /// The reachability roots this invocation names, or `None` for every export.
@@ -2880,7 +2902,7 @@ fn selected_roots(shape: Shape) -> Option<Vec<String>> {
 fn configured_product(tsconfig: &Utf8Path) -> Result<Option<(String, nts_build::config::Product)>> {
     let Some(path) = nts_build::config::beside(tsconfig) else { return Ok(None) };
     let resolved = nts_build::config::resolve(&path)?;
-    let named = requested_product();
+    let named = requested_product()?;
     let Some((name, product)) = nts_build::config::product(&resolved, named.as_deref())? else {
         return Ok(None);
     };
