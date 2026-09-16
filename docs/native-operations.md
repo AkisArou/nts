@@ -1061,6 +1061,40 @@ keyword back fails it, and so does an unemptied set: a signal that was never
 added must not be a member, which is the arm that passes over a set saying yes
 to everything.
 
+### An opaque tag needs a forward declaration, and one example never checked
+
+Found 2026-09-16 by the build lane, while converting `build.sh` scripts to
+`nts build`. `examples/interop/c-from-ts` binds an opaque `struct Counter`, and
+its witness read
+
+    extern int counter_bump(struct Counter *, int);
+
+with nothing declaring the tag, so the file did not compile:
+*declaration of 'struct Counter' will not be visible outside of this function*.
+
+**`pointee_is_foreign` lets an opaque pointee through on a stated premise** —
+"an opaque tag names one the declaration authored, **a header defines it or the
+witness will say so**". What the witness says when no header does is
+`-Wvisibility`, which is a complaint about C scoping rather than a disagreement
+about a layout, and is the failure this file exists to distinguish from.
+
+**And it said nothing at all for as long as the example existed.**
+`c-from-ts` is the one of sixteen whose `build.sh` has no `-fsyntax-only` line,
+so its witness was emitted and compiled by nothing. The conversion added the
+check and it failed immediately — an artifact nobody reads, found by giving it a
+reader, which is the third instance of that shape recorded in this tree.
+
+A **forward declaration** is the answer rather than a workaround. An opaque type
+is reached only through a pointer and `struct X;` is exactly what licenses that;
+and it stays legal where a header *does* complete the struct, since a tag may be
+declared any number of times before it is defined. So it costs nothing in the
+case that already worked, which the sweep confirms: all eleven interop witnesses
+compile under `-Wall -Wextra -Werror`, seven of them against real system
+headers.
+
+The control is the line itself — delete `struct Counter;` from the emitted file
+and clang gives the original error back.
+
 ### A prototype check needs the header to declare the symbol first
 
 **Found 2026-09-15 by building the control rather than by reading the code**,

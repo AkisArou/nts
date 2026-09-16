@@ -444,10 +444,14 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     }
     let mut declared: std::collections::BTreeMap<&str, (bool, String)> =
         std::collections::BTreeMap::new();
+    let mut opaque: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
             let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
             if !target.parameters.iter().chain(std::iter::once(&target.result)).all(names_only_foreign) { continue; }
+            for ty in target.parameters.iter().chain(std::iter::once(&target.result)) {
+                collect_opaque_tags(ty, &mut opaque);
+            }
             declared.entry(target.name.as_str()).or_insert_with(|| {
                 (
                     target.declared_at.is_some(),
@@ -455,6 +459,29 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 )
             });
         }
+    }
+    // **A forward declaration for every opaque tag a prototype names.**
+    //
+    // `pointee_is_foreign` lets an opaque pointee through on the stated ground
+    // that it "names one the declaration authored -- a header defines it or the
+    // witness will say so". What the witness actually says when no header does
+    // is `-Wvisibility`: *declaration of 'struct Counter' will not be visible
+    // outside of this function*, a complaint about C scoping rather than a
+    // disagreement about anything, and the file does not compile.
+    //
+    // `examples/interop/c-from-ts` binds an opaque `struct Counter` and is the
+    // one example of sixteen whose `build.sh` has no `-fsyntax-only` line, so
+    // its witness had been emitted and compiled by nothing for as long as it
+    // existed. The build lane found it by adding the check.
+    //
+    // A forward declaration is the right answer rather than a workaround: an
+    // opaque type is reached only through a pointer, which is exactly what
+    // `struct X;` licenses, and it stays legal where a header *does* define the
+    // struct -- a tag may be declared any number of times before it is
+    // completed. So this costs nothing in the case that already worked.
+    for tag in &opaque {
+        writer.line(origin, format!("struct {tag};"));
+        wrote = true;
     }
     for (name, (names_a_header, prototype)) in &declared {
         // **The probe goes above the declaration, and that is the whole of
@@ -504,6 +531,52 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
 /// A prototype mentioning a layout invented for this program would name a tag
 /// no header declares, and the witness would fail to compile for a reason that
 /// is not a disagreement about anything.
+/// Every opaque struct tag a type names, including through a function pointer.
+///
+/// The witness has to declare these before it mentions them; see the loop that
+/// writes them out for why a forward declaration is the whole of what an opaque
+/// type needs.
+fn collect_opaque_tags<'a>(ty: &'a Type, into: &mut std::collections::BTreeSet<&'a str>) {
+    match ty {
+        Type::Pointer(pointee) => collect_opaque_pointee(pointee, into),
+        Type::FnPointer(signature) => {
+            for ty in signature
+                .parameters
+                .iter()
+                .chain(std::iter::once(&*signature.result))
+            {
+                collect_opaque_tags(ty, into);
+            }
+        }
+        Type::Scalar(_) | Type::Bool | Type::Void | Type::Managed(_) | Type::Erased
+        | Type::BigInt => {}
+    }
+}
+
+fn collect_opaque_pointee<'a>(
+    pointee: &'a Pointee,
+    into: &mut std::collections::BTreeSet<&'a str>,
+) {
+    match pointee {
+        Pointee::Opaque(name) => {
+            into.insert(name.as_str());
+        }
+        Pointee::FnPointer(signature) => {
+            for ty in signature
+                .parameters
+                .iter()
+                .chain(std::iter::once(&*signature.result))
+            {
+                collect_opaque_tags(ty, into);
+            }
+        }
+        Pointee::Pointer(inner) | Pointee::Const(inner) | Pointee::Unaligned(inner)
+        | Pointee::Flexible(inner) => collect_opaque_pointee(inner, into),
+        Pointee::Array { element, .. } => collect_opaque_pointee(element, into),
+        Pointee::Scalar(_) | Pointee::Void | Pointee::Bits { .. } | Pointee::Record(_) => {}
+    }
+}
+
 fn names_only_foreign(ty: &Type) -> bool {
     match ty {
         Type::Pointer(pointee) => pointee_is_foreign(pointee),
