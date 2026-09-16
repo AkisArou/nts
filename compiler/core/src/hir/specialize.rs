@@ -1075,6 +1075,42 @@ fn reconcile_edges(func: &mut Func) -> usize {
     count
 }
 
+/// What a call argument has to become, if anything, for its parameter.
+///
+/// Three rules and a deliberate absence.
+///
+/// An integer parameter takes the integer: `hir::signatures` may have narrowed
+/// it, in which case the argument converts to *that* rather than being widened
+/// back to a double, and it is sound to do so because that narrowing was
+/// decided from the facts at this very call.
+///
+/// **A reference into an erased parameter erases.** `convert` already knows how
+/// -- it emits `Erase` rather than a cast, because `(NtsValue)p` is not C -- and
+/// nothing reached it for an argument, because the integer rule was the only one
+/// that looked at the target at all. The C backend casts the *function pointer*
+/// of a virtual call and leaves the arguments alone, so an `NtsString *` went
+/// where a sixteen-byte struct belongs and clang was the only objection.
+///
+/// An integer argument widens to a double for everything else, because that is
+/// the ABI a declaration promises. A managed reference crosses as itself: it has
+/// one representation, and coercing it to a double would be a cast from a
+/// pointer rather than a conversion.
+///
+/// **Unerasing is not here.** An argument that is already erased, whose callee
+/// wants something concrete, is the mirror of the second rule and nothing has
+/// produced one that is not a signature this pass narrowed itself. A rule with
+/// no case behind it is a guess about which mismatches are safe, which is
+/// `verify::compatible`'s own standing argument borrowed one layer down.
+fn argument_conversion(func: &Func, arg: ValueId, target: Option<&HirType>) -> Option<HirType> {
+    let found = &func.values[arg.0 as usize].ty;
+    match target {
+        Some(ty @ HirType::Int { .. }) => Some(ty.clone()),
+        Some(ty @ HirType::Erased) if *found != HirType::Erased => Some(ty.clone()),
+        _ if matches!(found, HirType::Int { .. }) => Some(HirType::NUMBER),
+        _ => None,
+    }
+}
+
 fn insert_conversions(
     func: &mut Func,
     analysis: &Analysis,
@@ -1175,8 +1211,24 @@ fn insert_conversions(
                     // itself either way: it has one representation, and
                     // coercing it to a double would be a cast from a pointer
                     // rather than a conversion.
+                    // **A virtual callee too, and it had no entry at all.**
+                    // `Callee::Virtual` names the method the slot declares --
+                    // the same kind of name `Direct` carries and the same key
+                    // into `Expected` -- so the only reason its signature was
+                    // not consulted is that nothing asked. A call whose
+                    // arguments were coerced at lowering to the signature the
+                    // *checker* resolved then dispatched through a slot the
+                    // *declaring class* spells, and where an interface narrows
+                    // a parameter the two differ.
+                    //
+                    // This is the layer that can fix it and lowering is not:
+                    // `unerase` and `specialize` narrow parameters after
+                    // lowering, so the declaration is not the final signature
+                    // and `Expected` is.
                     let wanted = match &callee {
-                        Callee::Direct(name) => expected.get(name),
+                        Callee::Direct(name) | Callee::Virtual { declared: name, .. } => {
+                            expected.get(name)
+                        },
                         _ => None,
                     };
                     let args = args
@@ -1184,16 +1236,9 @@ fn insert_conversions(
                         .enumerate()
                         .map(|(at, arg)| {
                             let target = wanted.and_then(|params| params.get(at));
-                            match target {
-                                Some(ty @ HirType::Int { .. }) => coerce(func, arg, ty),
-                                _ if matches!(
-                                    func.values[arg.0 as usize].ty,
-                                    HirType::Int { .. }
-                                ) =>
-                                {
-                                    coerce(func, arg, &HirType::NUMBER)
-                                }
-                                _ => arg,
+                            match argument_conversion(func, arg, target) {
+                                Some(ty) => coerce(func, arg, &ty),
+                                None => arg,
                             }
                         })
                         .collect();

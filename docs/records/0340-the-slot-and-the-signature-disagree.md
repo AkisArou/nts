@@ -1,4 +1,4 @@
-# A virtual call coerces to one signature and dispatches through another
+# A virtual call coerced to one signature and dispatched through another
 
 `emit-c` writes C that clang rejects:
 
@@ -152,6 +152,39 @@ and `buffer` are clean, four modules are not.
    fails in the HIR instead of in clang — including the two-pointer case clang
    cannot see.
 
-None of that is done. What is done is that the defect has a fixture, the two
-shortcuts are known to be shortcuts for measured reasons, and the tree is
-exactly where it was.
+## Steps 1 and 2 are done; the check is not
+
+`insert_conversions` now looks up `Callee::Virtual { declared }` in `Expected`
+— the same key `Direct` uses, and the only reason it was not consulted is that
+nothing asked — and its argument rule has a reference arm beside the integer
+one. `convert` already knew how to emit the `Erase`: it has said since it was
+written that *"crossing the erased boundary is not a coercion"* and emits
+`Erase` rather than a cast, and nothing reached it for a call argument because
+the only rule that looked at the target asked about integers.
+
+Two matches widened. The fix is smaller than the diagnosis by an order of
+magnitude, which is the usual ratio when the diagnosis is the work.
+
+    blocker               emitted C compiles, and `blockers-check.mjs`
+                          reports `guard ok` rather than `reproduces`
+    addons.sh             24 of 24, 0 regressed
+    nts-core              359 passed
+
+Controlled: deleting the one arm makes the guard say *"the emitted C stopped
+compiling"* and quote the clang error, so it is a check that can fail.
+
+**Unerasing is deliberately absent.** An argument already erased whose callee
+wants something concrete is the mirror rule, and nothing has produced one that
+is not a signature this pass narrowed itself. A rule with no case behind it is a
+guess about which mismatches are safe — `verify::compatible`'s own standing
+argument, borrowed one layer down.
+
+**Step 4 is still open and step 3 is why.** `verify` still skips
+`Callee::Virtual`, so this class of defect is caught by clang rather than by the
+HIR — and only where one side is a struct. Routing virtual calls through the
+existing check now reports no `CallArgumentType` at all, and still reports
+`CallResultType { callee: "AsyncWriter#fail", expected: Void, found: Erased }`
+in `stream`, `fs`, `http` and `zlib`. That is a different question from an
+argument — a `Void` callee whose call site is typed `Erased` looks like a
+lowering fault rather than a missing conversion — and until it is answered the
+check cannot land.

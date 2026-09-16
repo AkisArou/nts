@@ -194,3 +194,59 @@ export function testedAsAValue(n: number): boolean {
   const c: Corkable = (n & 4) === 0 ? new Full() : new Bare();
   return c.uncork !== undefined;
 }
+
+// ## `typeof o.m === "function"`, the second spelling of the same test
+//
+// Six of the nineteen presence tests are written this way — `destroy.ts` alone
+// has four — and it is the same question again: a method that is there is a
+// function and one that is not is `undefined`, so the answer is the class test
+// and neither operand needs to exist.
+//
+// Four comparisons map to it, and they are not symmetric in the obvious way:
+// `=== "function"` and `!== "undefined"` both ask for *present*, the other two
+// for absent. `typeof o.m === "object"` and the rest are constantly false for a
+// method and are deliberately **not** folded here — answering them would be
+// answering a question this was not asked.
+//
+// The literal's value is read off its type, which is where a string literal's
+// value lives. Reading `node.text` instead matched nothing and left every site
+// refused exactly as before, with no sign that a new path had been added.
+
+/** `=== "function"`, and the call in the arm it guards. */
+export function typeofFunction(n: number): number {
+  const c: Corkable = (n & 1) === 0 ? new Full() : new Bare();
+  if (typeof c.note === "function") {
+    c.note(n & 7);
+  }
+  return c.seen;
+}
+
+/** `!== "function"` with an early return, which is `destroy.ts`'s spelling. */
+export function typeofNotFunction(n: number): number {
+  const c: Corkable = (n & 2) === 0 ? new Full() : new Bare();
+  if (typeof c.note !== "function") {
+    return -1;
+  }
+  c.note(n & 7);
+  return c.seen;
+}
+
+/** `=== "undefined"`, which asks for absent through the same operator. */
+export function typeofUndefined(n: number): number {
+  const c: Corkable = (n & 4) === 0 ? new Full() : new Bare();
+  if (typeof c.note === "undefined") {
+    return -2;
+  }
+  c.note(n & 7);
+  return c.seen;
+}
+
+/** The literal on the left, because a comparison has two orders and only one
+ *  of them is the one anybody writes. */
+export function typeofReversed(n: number): number {
+  const c: Corkable = (n & 8) === 0 ? new Full() : new Bare();
+  if ("function" === typeof c.uncork) {
+    c.uncork();
+  }
+  return c.seen;
+}

@@ -33485,6 +33485,60 @@ impl<'a> FuncBuilder<'a> {
     /// This arm takes `!== undefined` and `=== undefined`. The other two
     /// spellings are their own shapes and are not folded in here on the
     /// strength of looking similar.
+    /// Which member a presence test is about, and whether it asks for present.
+    ///
+    /// Three spellings of one question, and the two `typeof` ones are here
+    /// rather than folded into the `undefined` arm because they are not the
+    /// same comparison: `typeof o.m === "function"` compares a *string* to a
+    /// string and would have to be recognised as a presence test before either
+    /// side is lowered, which is exactly what this does.
+    ///
+    /// `typeof o.m === "object"` and the rest are **not** presence tests --
+    /// they are constantly false for a method -- and fall through to the
+    /// ordinary path rather than being folded to `false` here. Folding them
+    /// would be answering a question this function was not asked.
+    ///
+    /// `value` is the side that might be the member, `against` the side that
+    /// might be what it is compared to.
+    fn presence_operand(
+        &self,
+        value: NodeId,
+        against: NodeId,
+        positive: bool,
+    ) -> Option<(NodeId, bool)> {
+        // `o.m !== undefined`. An optional method is absent by being undefined
+        // and never by being null, so `o.m !== null` is a different question
+        // about a program that would not typecheck.
+        if self.node(against).text.as_deref() == Some("undefined")
+            && self.kind_of(value) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+        {
+            return Some((value, !positive));
+        }
+        if self.kind_of(value) != Some(syntax::TYPE_OF_EXPRESSION) {
+            return None;
+        }
+        // **Off the literal's type, the way `lower_string` reads one.** A
+        // string literal's value is `TypeKind::Literal(LiteralValue::String)`;
+        // `node.text` is not it, and reading it there matched nothing and
+        // silently left every `typeof` site refused exactly as before.
+        let named = self
+            .snapshot
+            .node_types
+            .get(&against)
+            .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
+            .and_then(|record| match &record.kind {
+                TypeKind::Literal(LiteralValue::String(text)) => Some(text.as_str()),
+                _ => None,
+            })?;
+        let present = match named {
+            "function" => positive,
+            "undefined" => !positive,
+            _ => return None,
+        };
+        let operand = *self.children(value).first()?;
+        Some((operand, present))
+    }
+
     fn optional_method_presence(
         &mut self,
         id: NodeId,
@@ -33501,17 +33555,15 @@ impl<'a> FuncBuilder<'a> {
         ) {
             return None;
         }
-        // `undefined` only. An optional method is absent by being undefined and
-        // never by being null, so `o.m !== null` is a different question about
-        // a program that would not typecheck.
-        let written = |builder: &Self, node: NodeId| {
-            builder.node(node).text.as_deref() == Some("undefined")
-        };
-        let access = match (written(self, rhs), written(self, lhs)) {
-            (true, _) => lhs,
-            (false, true) => rhs,
-            (false, false) => return None,
-        };
+        let positive = matches!(
+            operator,
+            syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN
+        );
+        // Either order: `o.m !== undefined` and `undefined !== o.m` ask the
+        // same thing, as do both orders of the `typeof` form.
+        let (access, present) = self
+            .presence_operand(lhs, rhs, positive)
+            .or_else(|| self.presence_operand(rhs, lhs, positive))?;
         if self.kind_of(access) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
             return None;
         }
@@ -33527,34 +33579,32 @@ impl<'a> FuncBuilder<'a> {
         if !self.declares_an_optional_method(receiver_ty, &key) {
             return None;
         }
+        // **`present` and not the operator from here on.** Four comparisons
+        // reach this and two of each pair mean the same thing, so the token was
+        // being normalised back into a token and re-read twice -- one fact with
+        // three spellings inside twenty lines, which is the shape of every
+        // defect found today.
         Some((|| {
-            let Some((_, present)) = self.has_the_slot(id, object, &key)? else {
-                // Nothing in the program defines it, so the answer is a
-                // constant -- and the constant is "absent", which is what
-                // `=== undefined` is asking for.
+            let Some((_, has_it)) = self.has_the_slot(id, object, &key)? else {
+                // Nothing in the program defines it, so no runtime value can
+                // carry the slot and the answer is a constant: absent.
                 let origin = self.origin(id);
-                let absent = matches!(
-                    operator,
-                    syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN
-                );
-                return Ok(self.push(OpKind::ConstBool(absent), HirType::Bool, origin));
+                return Ok(self.push(OpKind::ConstBool(!present), HirType::Bool, origin));
             };
-            // `=== undefined` asks the opposite of what `InstanceOf` answers.
-            if matches!(
-                operator,
-                syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN
-            ) {
+            // `InstanceOf` answers *present*, so a test asking for absent is
+            // its negation.
+            if !present {
                 let origin = self.origin(id);
                 return Ok(self.push(
                     OpKind::Unary {
                         op: UnOp::Not,
-                        operand: present,
+                        operand: has_it,
                     },
                     HirType::Bool,
                     origin,
                 ));
             }
-            Ok(present)
+            Ok(has_it)
         })())
     }
 

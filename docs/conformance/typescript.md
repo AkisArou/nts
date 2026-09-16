@@ -2590,19 +2590,41 @@ With both call forms lowering, **21 distinct sites** remained across `stream`,
 ```
 
 The same question, spelled as a test and a call rather than as one operator, and
-the same question `"m" in o` has always answered. `!== undefined` and
-`=== undefined` now lower to the class test; **`typeof` and truthiness do not**,
-and are not folded in on the strength of looking similar.
+the same question `"m" in o` has always answered. `!== undefined`,
+`=== undefined` and the four `typeof` comparisons all lower to the class test
+now — `=== "function"` and `!== "undefined"` ask for present, the other two for
+absent. **`typeof o.m === "object"` and the rest are not folded in**: they are
+constantly false for a method, and answering them would be answering a question
+this was not asked.
+
+**Truthiness — `if (o.m)` — is the one shape left**, and it is exactly **one
+distinct site** in all 24 modules: `web-platform/src/streams/readable.ts:919`,
+`if (!this.push(chunk) && stream.pause)`. Not done, and the reason is a trade
+rather than a difficulty: the fix is a `lower_condition` helper replacing
+`lower_expression` + `truthy` at five call sites, and five call sites for one
+site is the wrong direction for a file this size. Counted across every module
+before deciding, because the last characterisation of "what is left here" was
+made by reading and was wrong in both halves.
 
 Measured against the gated `27fe1e1e` binary, distinct sites of ``a union of a
 function type | undefined``:
 
 ```text
-  stream  21 -> 7     http  26 -> 7     net  12 -> 5     fs  21 -> 7
+  after `!== undefined`   stream 21 -> 7    http 26 -> 7   net 12 -> 5   fs 21 -> 7
+  after `typeof`          stream  7 -> 1    http  7 -> 1   net  5 -> 1   fs  7 -> 1
 ```
 
+All four converge on the same single shared site, which is a stronger signal
+that the remainder is one shape than any reading of it would be.
+
 `addons.sh` gives **24 of 24 still build, 0 regressed**, which is the check that
-matters rather than the fixture — see [[0337]].
+matters rather than the fixture — see [[0337]]. It did **not**, at first: the
+`typeof` half took it to 17 of 24, and the cause was not the change.
+`stream/src/legacy.ts:72` had never been lowered, so the virtual call inside it
+had never been emitted, so [[0340]] — a virtual call coerced to the resolved
+signature and dispatched through the slot's — had never been reached. Third time
+in one day that clearing a refusal published a defect standing behind it. Fixed
+first; this landed on top of it.
 
 `examples/an-optional-method-called-optionally` is the fixture — **290 cases
 across 10 functions, agreeing with node**, where the pre-change binary refuses
