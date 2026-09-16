@@ -961,6 +961,29 @@ fn a_body_that_only_throws_is_not_evidence() {
 ///
 /// Skips without a JDK holding `java.base`, because the SDK cannot supply this:
 /// `android.jar` has no bodies at all, which is the point of the test beside it.
+/// Removes the extracted `java.base` on every exit, including the ones that skip.
+///
+/// The test below extracts the whole of `java.base.jmod` -- about 7,800 files --
+/// and did not delete it. Four other tests in this file call `remove_dir_all`;
+/// this one did not, and the difference shows up as a failure nowhere.
+///
+/// What it cost: 122 of these accumulated under `/tmp` at ~7,800 inodes each,
+/// about 956K of the filesystem's 1M, and `/tmp` ran out of **inodes** while
+/// `df -h` still reported 4.4G free. A gate then failed on `could not create
+/// parent directories`, which reads as a race or a permission problem and is
+/// neither. `du -s --inodes /tmp/* | sort -rn` named it in one command.
+///
+/// A guard rather than a call at the end, because the early returns are the
+/// paths that leaked: three of that test's six exits are `SKIP`s, and a machine
+/// without `jmod` takes the one that has already created the directory.
+struct Extracted(PathBuf);
+
+impl Drop for Extracted {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 #[test]
 fn an_unmodelled_instruction_fails_closed() {
     let Some(java_home) = std::env::var("JAVA_HOME").ok().map(PathBuf::from) else {
@@ -972,6 +995,10 @@ fn an_unmodelled_instruction_fails_closed() {
         return;
     };
     let out = std::env::temp_dir().join(format!("nts-jb-{}", std::process::id()));
+    // The `exists()` check is kept and is now only ever false: the path carries
+    // this process's pid, so it could never be reused across runs, and within
+    // one run this is the only test that names it.
+    let _extracted = Extracted(out.clone());
     if !out.join("classes/java/io/FilterOutputStream.class").exists() {
         let _ = std::fs::create_dir_all(&out);
         let extracted = Command::new(&jmod)
