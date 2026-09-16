@@ -93,6 +93,32 @@ saw it because `target.windows()` was pinned to the llvm backend, which refuses
 before reaching a linker: a bug kept alive by an unrelated refusal, which is the
 second one of those this week.
 
+### Priced, not built: `javaPackage`
+
+`nts.gen` is hardcoded in the JVM emitter and `package_jvm` refuses a jar whose
+config asks for anything else, rather than shipping classes somewhere other than
+where the declaration says. Two fixtures sit behind it --
+`apps/android-brownfield` and `apps/java-desktop-brownfield`, both asking for
+`com.acme.sdk` -- and the fixture's own comment says why it matters: "`nts.gen`
+is the current fixed name and is wrong for a shipped library".
+
+**The surface was measured rather than estimated, by making the change and
+letting the compiler count.** Parameterising `symbols::jvm_class_name` breaks
+**3** sites, all in `codegen/jvm/src/types.rs`. But the two functions there --
+`class_name` and `identity_class_name` -- have **42** callers across five files,
+and they take a `&Layout` rather than anything program-wide, so the package has
+to arrive as a new argument at every one of them.
+
+That is mechanical rather than hard, and it is not small. The alternatives that
+avoid it are worse: a thread-local is undeclared state a pass would rest on, and
+rewriting the package in finished class bytes means patching constant-pool UTF8
+entries after the fact. The shape that would make it cheap is the package
+reaching those two functions on something already threaded -- which is a change
+to what `class_name` takes, and therefore the same 42 sites.
+
+Estimated at 3 sites before the probe and measured at 42, which is the reason to
+run the probe.
+
 **The default backend was the refusal.** `target.linux()` defaulted to `llvm`
 and `ios`, `macos` and `windows` were pinned to it, while `app.linux({ backend })`
 defaulted to `c` -- two answers to one question, disagreeing, and the one that
