@@ -359,6 +359,49 @@ fn a_build_that_drops_functions_says_how_many() {
     );
 }
 
+/// A Node addon that cannot load is refused rather than written.
+///
+/// `emit-c --napi` emits a call to `nts_napi_set_env`, which is defined in
+/// `runtime/node/internal` -- present for every node module in this tree and
+/// absent from a standalone addon. Before this the `.node` linked, the build
+/// exited zero, and `require` died with `symbol lookup error`.
+///
+/// Skipped when `node_api.h` is nowhere to be found, because then the refusal
+/// under test is a different one.
+#[test]
+fn an_addon_that_cannot_load_is_refused() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let headers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/node/src");
+    if !headers.join("node_api.h").exists() {
+        eprintln!("skipping: no node_api.h to build an addon against");
+        return;
+    }
+    let project = fixture(
+        "build-addon",
+        r#"
+import { defineConfig, library } from "@nts/config";
+export default defineConfig({
+  products: { thing: library.node({ entry: "./src/main.ts", apiVersion: 8 }) },
+});
+"#,
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("build")
+        .arg(project.join("tsconfig.json"))
+        .env("NTS_NAPI_INCLUDE", &headers)
+        .output()
+        .expect("running nts build");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "an addon that cannot load should not be an artifact");
+    assert!(
+        stderr.contains("cannot load") && stderr.contains("nts_napi_set_env"),
+        "the refusal did not name the symbol:\n{stderr}",
+    );
+}
+
 /// A project with no config is told what is missing, not given a stack trace.
 #[test]
 fn a_project_with_no_config_says_so() {

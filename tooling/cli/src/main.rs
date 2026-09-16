@@ -2347,6 +2347,36 @@ fn build(rest: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// Where `node_api.h` is, for a product that is a Node addon.
+///
+/// **Searched, then refused by name.** A `.node` is a shared object that node
+/// dlopens, and its one link-time dependency is that header -- there is no
+/// library to link against, because the symbols resolve out of the host process
+/// at load. So the only way this fails is the header being absent, and the fix
+/// is one of two things a message can name.
+///
+/// Upward from the project, because `node-api-headers` is an ordinary
+/// dependency of a project that builds an addon and lands in a `node_modules`
+/// at or above it.
+fn napi_include(project: &Utf8Path) -> Option<Utf8PathBuf> {
+    if let Ok(named) = std::env::var("NTS_NAPI_INCLUDE") {
+        return Some(Utf8PathBuf::from(named));
+    }
+    let mut at = Some(project);
+    while let Some(directory) = at {
+        let candidate = directory
+            .join("node_modules")
+            .join("node-api-headers")
+            .join("include");
+        if candidate.join("node_api.h").exists() {
+            return Some(candidate);
+        }
+        at = directory.parent();
+    }
+    let system = Utf8PathBuf::from("/usr/include/node");
+    system.join("node_api.h").exists().then_some(system)
+}
+
 /// The translation unit that runs module evaluation when a library loads.
 const AUTO_INIT_NAME: &str = "nts_auto_init.c";
 
@@ -2388,9 +2418,26 @@ fn run(mut command: std::process::Command, what: &str) -> Result<()> {
 /// of the vendored dtoa among them, which is the collision
 /// `apps/linux-brownfield` describes in a comment and had no field to prevent.
 fn link_c(name: &str, product: &nts_build::config::Product, out: &Utf8Path, wrote: &Wrote) -> Result<Utf8PathBuf> {
-    let shared = product.kind == "shared-library";
-    let library = shared || product.kind == "static-library";
-    let pic = library || product.kind == "node-addon";
+    let addon = product.kind == "node-addon";
+    let shared = product.kind == "shared-library" || addon;
+    let library = product.kind == "shared-library" || product.kind == "static-library";
+    let pic = library || addon;
+    // An addon needs one header and no library. Asked before anything is
+    // compiled, so a missing toolchain is a message rather than forty
+    // `node_api.h: No such file` lines.
+    let napi = if addon {
+        let directory = out.parent().and_then(Utf8Path::parent).and_then(Utf8Path::parent);
+        let project = directory.and_then(Utf8Path::parent).unwrap_or_else(|| Utf8Path::new("."));
+        Some(napi_include(project).ok_or_else(|| {
+            anyhow!(
+                "product `{name}` is a Node addon and `node_api.h` was not found. It is a \
+                 build dependency: add `node-api-headers` to the project, or set \
+                 NTS_NAPI_INCLUDE to a directory holding it"
+            )
+        })?)
+    } else {
+        None
+    };
 
     // **A library initialises itself.**
     //
@@ -2405,7 +2452,7 @@ fn link_c(name: &str, product: &nts_build::config::Product, out: &Utf8Path, wrot
     // executable does not get one: `main.c` already calls it, and two calls
     // would evaluate the module twice.
     let mut sources = wrote.sources.clone();
-    if library {
+    if library && wrote.initializes {
         let initialiser = out.join(AUTO_INIT_NAME);
         std::fs::write(
             &initialiser,
@@ -2435,6 +2482,9 @@ fn link_c(name: &str, product: &nts_build::config::Product, out: &Utf8Path, wrot
         if pic {
             command.arg("-fPIC");
         }
+        if let Some(napi) = &napi {
+            command.arg("-I").arg(napi.as_str());
+        }
         command.arg("-c").arg(out.join(source).as_str()).arg("-o").arg(object.as_str());
         run(command, &format!("compiling {source} for `{name}`"))?;
         objects.push(object);
@@ -2458,7 +2508,14 @@ fn link_c(name: &str, product: &nts_build::config::Product, out: &Utf8Path, wrot
             let mut command = cc();
             if shared {
                 command.arg("-shared");
-                command.arg(format!("-Wl,--version-script={script}"));
+                // **An addon gets no version script.** What it publishes is
+                // `napi_register_module_v1`, which node looks up by name after
+                // `dlopen`; the TypeScript exports are reached through the
+                // registration rather than as symbols. Hiding everything but the
+                // entry's exports would hide exactly the one that matters.
+                if !addon {
+                    command.arg(format!("-Wl,--version-script={script}"));
+                }
                 if let Some(soname) = &product.soname {
                     command.arg(format!("-Wl,-soname,{soname}"));
                 }
@@ -2473,11 +2530,69 @@ fn link_c(name: &str, product: &nts_build::config::Product, out: &Utf8Path, wrot
             if sources.iter().any(|s| s == nts_codegen_c::UV_HOST_SOURCE_NAME) {
                 command.arg("-luv");
             }
+            // **`--no-undefined` where it can be used**, which is the earliest
+            // an unresolved symbol can be caught and the cheapest place to say
+            // so. Not for an addon: a `.node` resolves `napi_*` out of the host
+            // process at load, so those are legitimately unresolved at link time
+            // and there is no library to satisfy them from.
+            if shared && !addon {
+                command.arg("-Wl,--no-undefined");
+            }
             command.arg("-o").arg(artifact.as_str());
             run(command, &format!("linking `{name}`"))?;
+            if addon {
+                refuse_unresolved(name, &artifact)?;
+            }
         }
     }
     Ok(artifact)
+}
+
+/// An addon that would fail to load is not an artifact.
+///
+/// The linker cannot enforce this one -- see above -- so it is checked after the
+/// fact, and it is worth checking rather than trusting: `emit-c --napi` emits a
+/// call to `nts_napi_set_env`, which is **defined in `runtime/node/internal`**
+/// and so is present for every node module in this tree and absent from a
+/// standalone addon. The `.node` linked, exited zero, and died on `require` with
+/// `symbol lookup error: undefined symbol: nts_napi_set_env`.
+///
+/// A build that writes a file nothing can load has half-emitted, which is the
+/// one thing this command must not do.
+fn refuse_unresolved(name: &str, artifact: &Utf8Path) -> Result<()> {
+    let Ok(listed) = std::process::Command::new("nm").args(["-D", "-u"]).arg(artifact.as_str()).output()
+    else {
+        // No `nm` is not a build failure. It is one fewer check, said once.
+        eprintln!("no `nm`, so `{name}` was not checked for unresolved symbols");
+        return Ok(());
+    };
+    let text = String::from_utf8_lossy(&listed.stdout);
+    let unresolved: Vec<&str> = text
+        .lines()
+        .filter_map(|line| line.split_whitespace().nth(1))
+        // A versioned symbol names the library it comes from, so it is resolved.
+        // The `napi_` family comes from the host, and the rest are the weak
+        // symbols every shared object on this platform carries.
+        .filter(|symbol| {
+            !symbol.contains('@')
+                && !symbol.starts_with("napi_")
+                && !symbol.starts_with("node_api")
+                && !symbol.starts_with("__")
+                && !symbol.starts_with("_ITM_")
+                && !symbol.starts_with("_Jv_")
+                && !symbol.starts_with("_Unwind")
+        })
+        .collect();
+    if unresolved.is_empty() {
+        return Ok(());
+    }
+    bail!(
+        "`{name}` links but cannot load: {} unresolved symbol(s), starting with `{}`. \
+         A `.node` resolves the `napi_` family out of the host process; anything else \
+         undefined is missing from the build",
+        unresolved.len(),
+        unresolved[0]
+    )
 }
 
 /// What the file is called.
@@ -2925,6 +3040,15 @@ struct Wrote {
     sources: Vec<String>,
     /// C symbols the artifact publishes.
     published: Vec<String>,
+    /// Whether the program has module-level code to evaluate.
+    ///
+    /// **A program that is only declarations has nothing to evaluate**, so
+    /// `module__init` is never emitted and referencing it is a link error --
+    /// which `write_standalone` has always known and passes to
+    /// `standalone_main`. The library initialiser needs the same fact, and
+    /// found out by `--no-undefined` catching `undefined reference to
+    /// module__init` on a fixture whose only function was refused.
+    initializes: bool,
     /// Functions lowering refused, which are absent from the artifact.
     ///
     /// **Counted because a build that drops functions must say so.** `emit-c`
@@ -3001,6 +3125,10 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
     }
     refuse_if_the_emitter_declined(&emitted.diagnostics)?;
 
+    let initializes = program
+        .funcs
+        .iter()
+        .any(|func| func.name == hir::lower::MODULE_INIT);
     let refused = prepared
         .diagnostics
         .iter()
@@ -3013,10 +3141,10 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
         .collect();
     let Some(out) = out else {
         print!("{}", emitted.writer.text());
-        return Ok(Wrote { refused, ..Wrote::default() });
+        return Ok(Wrote { initializes, refused, ..Wrote::default() });
     };
 
-    write_c_output(&program, &emitted, out, emission, published, refused)
+    write_c_output(&program, &emitted, out, emission, published, refused, initializes)
 }
 
 /// Write the program, its runtime, and whatever the product's shape adds.
@@ -3031,6 +3159,7 @@ fn write_c_output(
     emission: Emission,
     published: Vec<String>,
     refused: usize,
+    initializes: bool,
 ) -> Result<Wrote> {
     // **`--main` decides what is written, not what survives**, and the variable
     // it replaced answered both. Reachability read `--main` or `--entry` above;
@@ -3068,6 +3197,7 @@ fn write_c_output(
                 .collect(),
             published,
             refused,
+            initializes,
         });
     }
 
@@ -3095,6 +3225,7 @@ fn write_c_output(
                 .collect(),
             published,
             refused,
+            initializes,
         });
     }
 
@@ -3125,6 +3256,7 @@ fn write_c_output(
             .collect(),
         published,
         refused,
+        initializes,
     })
 }
 
