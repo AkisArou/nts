@@ -3026,10 +3026,28 @@ fn refuse_unpackaged(name: &str, kind: &str, target: &nts_build::config::Target)
 const C_BRANDS: &str = "c:types";
 
 /// The runtime `emit-jvm` places beside the classes it writes.
-const RUNTIME_JAR: &str = "nts-runtime.jar";
+///
+/// **Asked of the emitter rather than spelled again.** This was its own
+/// `"nts-runtime.jar"`, identical to `nts_codegen_jvm::RUNTIME_JAR_NAME` --
+/// which is the name the emitter actually *writes*, three lines from where this
+/// packaged what it *reads*. One fact with two owners: rename it there and `d8`
+/// would look for a file that is not there, reporting a path nobody typed.
+const RUNTIME_JAR: &str = nts_codegen_jvm::RUNTIME_JAR_NAME;
 
 /// The package `codegen/jvm` puts generated classes in. Not configurable yet.
-const GENERATED_PACKAGE: &str = "nts.gen";
+///
+/// **Read off the class the emitter names, not written down twice.** This was
+/// `"nts.gen"` and the emitter says `"nts/gen/Program"`; the same decision in
+/// two spellings, one of which this crate would never notice changing. It is
+/// load-bearing because `package_jvm` refuses a jar whose config asks for a
+/// different package -- so a stale copy here would accept a jar whose classes
+/// are somewhere other than where its declaration says, which is the exact
+/// thing that refusal exists to prevent.
+fn generated_package() -> String {
+    nts_codegen_jvm::PROGRAM
+        .rsplit_once('/')
+        .map_or_else(String::new, |(package, _)| package.replace('/', "."))
+}
 
 /// Package the emitted classes into the jar the product names.
 ///
@@ -3054,13 +3072,14 @@ fn package_jvm(
     extra: &[String],
 ) -> Result<Utf8PathBuf> {
     if let Some(wanted) = &product.java_package
-        && wanted != GENERATED_PACKAGE
+        && *wanted != generated_package()
     {
         bail!(
             "product `{name}` asks for package `{wanted}` and `codegen/jvm` emits \
-             `{GENERATED_PACKAGE}`, which it does not yet take as an option. The jar \
+             `{}`, which it does not yet take as an option. The jar \
              would not match the config that declared it; see the packaging gaps in \
-             docs/jvm-interop.md"
+             docs/jvm-interop.md",
+            generated_package()
         )
     }
     let artifact = out.join(format!("{name}.jar"));
