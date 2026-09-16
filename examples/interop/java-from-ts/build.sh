@@ -22,9 +22,23 @@ fi
 
 out="$here/target"
 rm -rf "$out"
-mkdir -p "$out/classes"
-javac --release 8 -Xlint:all,-options -d "$out/classes" "$here"/java/com/example/*.java
-jar --create --file "$out/catalog.jar" -C "$out/classes" .
+mkdir -p "$out"
+
+# **One command for both halves.** This was a `javac` over `java/com/example`
+# and, sixty lines below, an `emit-jvm` over the TypeScript -- two builds of one
+# artifact, in a script that had to know the classpath relating them. The config
+# declares `native: [sources({ dir: "java" })]`, so the build compiles the Java,
+# emits the TypeScript and packages them together.
+#
+# `$out/catalog.jar` went with it: it was created here and read by nothing, and
+# the jar the build produces supersedes it.
+#
+# Everything below is an assertion rather than a build step, which is why this
+# file is not a one-line call: the declaration drift check, the consumer, its
+# exact output, and the refusal check are what the example is *for*.
+NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$nts" build "$here/tsconfig.json" \
+  --out "$out/build" > "$out/build.log" 2>&1 || { cat "$out/build.log"; exit 1; }
+built="$out/build/api/java-8"
 
 # The declarations and the binding table, from the class files rather than from
 # the source. That is the point: this reads `android.jar`, where there is no
@@ -39,7 +53,7 @@ jar --create --file "$out/catalog.jar" -C "$out/classes" .
 generated="$out/com.example.d.ts"
 table="$out/com.example.bind"
 ( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" cargo run --release -q \
-    -p nts-cli -- bind --classes "$out/classes" --package com.example --out "$out" \
+    -p nts-cli -- bind --classes "$built" --package com.example --out "$out" \
     --overrides "$here/bind.overrides.json" )
 
 if [ "${NTS_REGENERATE:-}" = "1" ]; then
@@ -60,17 +74,16 @@ fi
 # Catalog("widgets")`, the first line of `src/main.ts`, was refused for an
 # unknown length of time under a comment reading "This file compiles, and
 # lowers", and nothing here would ever have said so.
-emitted="$out/classes-ts"
-# `|| true`, because `set -e` otherwise kills the script on a typecheck
-# failure *before* the grep below can print why -- which is how a `TS2339`
-# surfaced as a bare non-zero exit and an empty log.
-NTS_BACKEND=jvm "$nts" emit-jvm "$here/tsconfig.json" --out "$emitted" --entry main > "$out/emit.log" 2>&1 || true
-if grep -qE "^TS[0-9]{4}|does not typecheck" "$out/emit.log"; then
+emitted="$built"
+# The build above already emitted; this reads its log. A `TS2339` used to
+# surface as a bare non-zero exit and an empty log, which is why the log is
+# captured and grepped rather than left on the terminal.
+if grep -qE "^TS[0-9]{4}|does not typecheck" "$out/build.log"; then
   echo "java-from-ts: the program does not typecheck:"
   sed 's/^/    /' "$out/emit.log"
   exit 1
 fi
-if grep -qE "NTS[0-9]{4}" "$out/emit.log"; then
+if grep -qE "NTS[0-9]{4}" "$out/build.log"; then
   echo "java-from-ts: the program did not lower:"
   sed 's/^/    /' "$out/emit.log"
   exit 1
@@ -82,7 +95,7 @@ public final class Driver {
 }
 DRIVER
 javac -cp "$emitted:$emitted/nts-runtime.jar" -d "$out" "$out/Driver.java"
-answer=$(java -Xverify:all -cp "$out:$emitted:$out/classes:$emitted/nts-runtime.jar" Driver)
+answer=$(java -Xverify:all -cp "$out:$emitted:$emitted/nts-runtime.jar" Driver)
 echo "java-from-ts: $answer"
 
 
