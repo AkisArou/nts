@@ -2412,30 +2412,33 @@ fn build(rest: &[String]) -> Result<()> {
             // and no header -- had neither, and its witness failed to find
             // `point.h` for a reason that is not what a witness checks.
             //
-            // **And always on the JVM, where skipping it is silent.** A
-            // dependency's contribution -- its Java, its manifest fragment --
-            // is invisible unless its config is among these, and an app that
-            // declares no native of its own and sits in no workspace got an
-            // empty list. On the C lane that hole is loud: an uncompiled `.c`
-            // is an undefined symbol at link, or a missing binding is a
-            // typecheck failure. On the JVM it is an APK that installs and
-            // crashes, which is the asymmetry that makes this worth paying for
-            // on one lane and not the other.
+            // **Unconditional, and it took three narrowings to get here.** This
+            // was gated on the project declaring native code, then on that or
+            // being in a workspace, then on either or targeting the JVM -- each
+            // widening prompted by finding something the narrower rule had been
+            // silently dropping: a package's Java, its manifest fragment, and
+            // finally its `targets` claim.
+            //
+            // The claim is what settles it. A package declaring what it
+            // supports exists so a consumer outside that set fails *here*
+            // rather than at link time with a missing symbol, and a heuristic
+            // deciding whether to look means the refusal does not fire for a
+            // whole class of project. A correctness refusal that runs only
+            // sometimes is worth less than what the gate costs.
             //
             // It is not free -- measured at +0.15s on a trivial project, 0.26
-            // to 0.41, which is one whole extra `tsgo` snapshot and the same
-            // order as everything the object cache saves. The real fix is to
-            // take one snapshot and hand it to both this and the emitter,
-            // which is a larger change than this hole deserves today.
-            let config_roots = if !resolved.native.is_empty()
-                || in_a_workspace
-                || target.backend == "jvm"
-            {
-                generate_bindings(&tsconfig, std::slice::from_ref(&target.id))?
-            } else {
-                Vec::new()
-            };
+            // to 0.41, one whole extra `tsgo` snapshot, and the same order as
+            // everything the object cache saves. The fix that makes it free is
+            // one snapshot handed to both this and the emitter; priced, not
+            // built, and now worth more than when it was priced.
+            let _ = in_a_workspace;
+            let config_roots = generate_bindings(&tsconfig, std::slice::from_ref(&target.id))?;
             let native = native_sources(&config_roots, target)?;
+            // **At configuration time, naming the package**, which is the whole
+            // point of a package declaring what it supports: the alternative is
+            // a link error about a symbol, in a file the reader did not write,
+            // for a platform the package never claimed.
+            refuse_unclaimed_target(name, &config_roots, target, &tsconfig)?;
             let out = root.join(name).join(target_directory(target));
             println!("building `{name}` for {} into {out}", target.id);
             match target.backend.as_str() {
@@ -4452,6 +4455,75 @@ fn chosen_products(
         // building all of them is what "build this project" means.
         None => resolved.products.iter().map(|(k, v)| (k.as_str(), v)).collect(),
     })
+}
+
+/// Stop where a package this product depends on does not claim the target.
+fn refuse_unclaimed_target(
+    name: &str,
+    config_roots: &[Utf8PathBuf],
+    target: &nts_build::config::Target,
+    tsconfig: &Utf8Path,
+) -> Result<()> {
+    let unsatisfied = unsatisfied_claims(config_roots, target, tsconfig);
+    if unsatisfied.is_empty() {
+        return Ok(());
+    }
+    bail!(
+        "product `{name}` targets {} and {} package(s) it depends on do not claim it: \
+         {}. A package's `targets` is what it says it supports, so either this product \
+         is not for that platform or the package's claim is out of date",
+        target.id,
+        unsatisfied.len(),
+        unsatisfied.join("; ")
+    )
+}
+
+/// A package whose support claim does not cover the target being built.
+///
+/// **The check `tooling/config`'s own doc promised and nobody wrote.**
+/// `Config.targets` is "a claim rather than a preference -- there is no
+/// biometric prompt on a Linux server. A consumer whose target is outside this
+/// set should fail at *configuration* time, naming the package and the target,
+/// rather than at link time with a missing symbol." It was read in exactly one
+/// place, to decide which bindings to generate for a package building itself.
+///
+/// `examples/workspace` is built around this: `biometrics` claims
+/// `android-29` and `ios-17` only, `apps/linux` depends on it, and that is
+/// described in the fixture as the constraint being *violated* there. Nothing
+/// said so.
+///
+/// Compared with `claim_covers`, the same rule the native roots and the
+/// manifests use -- a versioned claim is a floor -- so a package claiming
+/// `android-29` covers an app compiling against `android-36` with a floor of 29
+/// and does not cover one running back to 21.
+fn unsatisfied_claims(
+    config_roots: &[Utf8PathBuf],
+    target: &nts_build::config::Target,
+    tsconfig: &Utf8Path,
+) -> Vec<String> {
+    let own = nts_build::config::beside(tsconfig);
+    let mut found = Vec::new();
+    for config_path in config_roots {
+        if own.as_ref() == Some(config_path) {
+            continue;
+        }
+        let Ok(resolved) = nts_build::config::resolve(config_path) else { continue };
+        // No claim is a package that runs anywhere, which is most of them.
+        let Some(claims) = resolved.targets.as_ref().filter(|it| !it.is_empty()) else { continue };
+        if claims.iter().any(|claim| {
+            nts_build::config::claim_covers(
+                claim,
+                &target.id,
+                target.minimum_version.as_deref(),
+            )
+        }) {
+            continue;
+        }
+        let package = config_path.parent().unwrap_or_else(|| Utf8Path::new("."));
+        found.push(format!("{package} claims {}", claims.join(", ")));
+    }
+    found.sort();
+    found
 }
 
 /// The targets of a product this run should build.

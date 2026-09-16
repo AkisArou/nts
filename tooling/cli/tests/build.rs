@@ -2109,3 +2109,82 @@ export default defineConfig({
         String::from_utf8_lossy(&ran.stderr)
     );
 }
+
+/// A package whose claim does not cover the target refuses at configuration time.
+///
+/// **`tooling/config`'s doc promised this and nothing did it.**
+/// `Config.targets` is "a claim rather than a preference … A consumer whose
+/// target is outside this set should fail at *configuration* time, naming the
+/// package and the target, rather than at link time with a missing symbol." It
+/// was read in one place, to decide which bindings a package generates for
+/// itself.
+///
+/// **No fixture violates a claim, which is why this is a test and not an
+/// example.** `examples/workspace` is careful: `apps/linux` says "deliberately
+/// not biometrics" and `apps/macos` says "no biometrics -- `biometrics`
+/// declares", so every app respects every claim and the check would never have
+/// fired there. A constraint nothing violates is a constraint nothing tests.
+///
+/// Both arms, because a refusal that fires on everything is not a check: the
+/// second package claims the target and must not be named.
+#[test]
+fn a_package_claim_that_excludes_the_target_is_refused() {
+    if !available() {
+        skip("node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let project = fixture(
+        "build-claim",
+        r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    acme: library.native({ targets: [target.linux()], entry: "./src/main.ts" }),
+  },
+});
+"#,
+    );
+    // Two packages: one that claims Android only, one that claims Linux too.
+    for (dir, claims) in [("mobile", r#""android-29""#), ("portable", r#""android-29", "linux-gnu""#)] {
+        let pkg = project.join(dir);
+        std::fs::create_dir_all(&pkg).expect("package dir");
+        std::fs::write(pkg.join("lib.ts"), format!("export function {dir}(): number {{ return 1; }}\n"))
+            .expect("package source");
+        std::fs::write(
+            pkg.join("nts.config.ts"),
+            format!("import {{ defineConfig }} from \"@nts/config\";\nexport default defineConfig({{ targets: [{claims}] }});\n"),
+        )
+        .expect("package config");
+    }
+    std::fs::write(
+        project.join("src/main.ts"),
+        "import { mobile } from '../mobile/lib.js';\n\
+         import { portable } from '../portable/lib.js';\n\
+         export function published(): number { return mobile() + portable(); }\n",
+    )
+    .expect("entry");
+
+    let run = build(&project, &[]);
+    assert!(!run.ok, "a claim that excludes the target did not stop it:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("mobile") && run.stderr.contains("android-29"),
+        "the refusal names neither the package nor its claim:\n{}",
+        run.stderr
+    );
+    // The one that does claim Linux must not be named, or the refusal is
+    // firing on "has a claim" rather than on "the claim excludes this".
+    assert!(
+        !run.stderr.contains("portable"),
+        "a package that claims this target was named too:\n{}",
+        run.stderr
+    );
+
+    // --- and with the claim widened, it builds -------------------------------
+    std::fs::write(
+        project.join("mobile/nts.config.ts"),
+        "import { defineConfig } from \"@nts/config\";\nexport default defineConfig({ targets: [\"android-29\", \"linux-gnu\"] });\n",
+    )
+    .expect("widened claim");
+    let run = build(&project, &[]);
+    assert!(run.ok, "widening the claim did not let it build:\n{}{}", run.stdout, run.stderr);
+}
