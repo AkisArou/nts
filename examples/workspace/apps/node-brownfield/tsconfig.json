@@ -4,7 +4,9 @@
     "noEmit": true
   },
   "include": [
-    "nts"
+    "nts",
+    "types",
+    "../../../../runtime/native/libc.d.ts"
   ],
   "references": [
     {
@@ -14,5 +16,7 @@
       "path": "../../packages/storage"
     }
   ],
+  "//types": "`types/` holds the `.d.ts` that `nts build` generates from the headers a package names, and it has to be in the program or the binding it writes is a file nothing reads -- the build then regenerates it every run and the import stays unresolved.",
+  "//libc": "`c:types` carries the scalar brands every generated binding imports. Nothing distributes it yet, so every tsconfig in the tree that uses a `c:` module names this path by hand; the build refuses with this exact instruction when it is missing.",
   "//": "Our sources live in nts/, not src/. In a brownfield project the host owns the conventional layout -- src/main/java is Android's and Maven's, src/ is CMake's and npm's -- and we are the guest."
 }
