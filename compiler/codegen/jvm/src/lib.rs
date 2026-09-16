@@ -60,6 +60,19 @@ use nts_jvm_emitter::{Class, ClassBuilder, Kind, Pool, VType};
 
 pub use body::{PROGRAM, RUNTIME};
 
+/// The static a standalone program's launcher calls.
+///
+/// **Named here rather than spelled at the caller.** Module evaluation is what
+/// an executable's entry *is* -- `write_standalone` says so for the C lane, and
+/// this is the same fact one mangling away. A launcher that wrote
+/// `module$init` as a literal would be a second derivation of
+/// `symbols::jvm_member_name`, and the failure is a `NoSuchMethodError` at
+/// launch rather than anything a build reports.
+#[must_use]
+pub fn module_init_method() -> String {
+    nts_codegen_common::symbols::jvm_member_name(nts_core::hir::lower::MODULE_INIT)
+}
+
 /// The runtime, as a jar.
 ///
 /// Embedded rather than built: `nts` compiles TypeScript to class files with no

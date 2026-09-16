@@ -1101,3 +1101,93 @@ fn an_apk_with_no_android_sdk_names_the_variable() {
         "the refusal does not name the variable:\n{stderr}"
     );
 }
+
+const JVM_EXECUTABLE: &str = r#"
+import { defineConfig, app, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    tool: app({
+      kind: "executable",
+      entry: "./src/main.ts",
+      targets: [target.jvm({ release: 17 })],
+    }),
+  },
+});
+"#;
+
+/// A desktop JVM executable is a runnable jar, and it is not an APK.
+///
+/// **The regression this pins.** `t.android` and `t.jvm` are the same backend
+/// and different platforms, and the first version of the APK path keyed on the
+/// backend -- so `target.jvm({ release: 17 })` was sent to the Android packager
+/// and refused with `sdkmanager "platforms;java-17"`, naming a platform that
+/// does not exist for a product that has nothing to do with Android.
+///
+/// **Both arms, because the interesting failure is silent.** An empty `main`
+/// exits zero, so "it ran" cannot be read off the status of a program that
+/// prints nothing -- and `console.log` is unsupported in this lowering, so
+/// nothing here can print. The positive arm's module evaluation therefore
+/// *throws*: `nts: uncaught` on stderr and a non-zero status is proof the
+/// launcher called it. The negative arm has nothing to evaluate and must exit
+/// zero, which is what separates "it ran" from "the assertion is about the JVM
+/// starting up".
+#[test]
+fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    let tool = |name: &str| {
+        Command::new(name).arg("-version").output().is_ok_and(|o| o.status.success())
+    };
+    if !frontend || !tool("javac") || !tool("java") {
+        return;
+    }
+
+    // --- it ran --------------------------------------------------------------
+    let project = fixture("build-jvm-exe", JVM_EXECUTABLE);
+    std::fs::write(
+        project.join("src/main.ts"),
+        "function boom(n: number): number { if (n > 0) { throw new Error('evaluated'); } return n; }\n\
+         const answer = boom(1);\n\
+         export function unused(): number { return answer; }\n",
+    )
+    .expect("entry");
+    std::fs::write(project.join("src/internal.ts"), "export function helper(n: number): number { return n; }\n")
+        .expect("sibling");
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+
+    let artifact = project.join(".nts/build/tool/java-17/tool.jar");
+    assert!(artifact.is_file(), "no jar at {}:\n{}", artifact.display(), run.stdout);
+
+    let ran = Command::new("java").arg("-jar").arg(&artifact).output().expect("running java");
+    let stderr = String::from_utf8_lossy(&ran.stderr);
+    assert!(
+        stderr.contains("nts: uncaught") && stderr.contains("evaluated"),
+        "module evaluation did not run:\nstatus {:?}\n{stderr}",
+        ran.status.code()
+    );
+
+    // --- nothing to evaluate -------------------------------------------------
+    // A launcher that called `module$init` unconditionally fails here, and the
+    // sabotage says where: `javac` refuses with `cannot find symbol`, because
+    // the launcher is compiled against the emitted classes. That is the build
+    // catching what would otherwise be a `NoSuchMethodError` on the machine
+    // that ran the jar.
+    let quiet = fixture("build-jvm-exe-quiet", JVM_EXECUTABLE);
+    std::fs::write(
+        quiet.join("src/main.ts"),
+        "export function twice(n: number): number { return n * 2; }\n",
+    )
+    .expect("entry");
+    std::fs::write(quiet.join("src/internal.ts"), "export function helper(n: number): number { return n; }\n")
+        .expect("sibling");
+    let run = build(&quiet, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+    let empty = quiet.join(".nts/build/tool/java-17/tool.jar");
+    let ran = Command::new("java").arg("-jar").arg(&empty).output().expect("running java");
+    assert!(
+        ran.status.success(),
+        "a program with nothing to evaluate did not exit cleanly:\n{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+}
