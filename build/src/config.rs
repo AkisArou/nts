@@ -338,6 +338,21 @@ pub fn resolve(config: &Utf8Path) -> Result<Resolved> {
     let absolute = config
         .canonicalize_utf8()
         .with_context(|| format!("resolving {config}"))?;
+    // **Evaluated once per path per process.** A build asks this from eight
+    // call sites -- the products, the native roots, the manifests a package
+    // contributes, the ones it does not, its support claim -- and once per
+    // target, so `apps/android` spawned **35** `node` processes to answer six
+    // distinct questions. Counted with a `node` shim on PATH, after the first
+    // shim broke the build and reported 1, which was a true count of a run that
+    // did not happen.
+    //
+    // Keyed on the canonicalised path and nothing else: within one process a
+    // config file does not change, and a key that tried to notice would be
+    // claiming to support something this does not do. A *new* process re-reads
+    // it, which is when a config can have changed.
+    if let Some(known) = cached(&absolute) {
+        return Ok(known);
+    }
     let node = std::env::var("NTS_NODE").unwrap_or_else(|_| "node".to_owned());
     let output = Command::new(&node)
         .args(["--input-type=module", "-e", EVALUATE, "--"])
@@ -363,8 +378,31 @@ pub fn resolve(config: &Utf8Path) -> Result<Resolved> {
         bail!("evaluating {config} failed:\n\n{why}");
     }
     let text = String::from_utf8(output.stdout).context("config output is not UTF-8")?;
-    serde_json::from_str(&text)
-        .with_context(|| format!("{config} resolved to something this does not understand"))
+    let resolved: Resolved = serde_json::from_str(&text)
+        .with_context(|| format!("{config} resolved to something this does not understand"))?;
+    remember(&absolute, &resolved);
+    Ok(resolved)
+}
+
+/// What this process has already evaluated.
+///
+/// A `Mutex` rather than a `RefCell` because `resolve` is a free function with
+/// no owner to hang a cell off, and poisoning is not a concern: nothing here
+/// panics while holding it.
+fn evaluated() -> &'static std::sync::Mutex<BTreeMap<Utf8PathBuf, Resolved>> {
+    static SEEN: std::sync::OnceLock<std::sync::Mutex<BTreeMap<Utf8PathBuf, Resolved>>> =
+        std::sync::OnceLock::new();
+    SEEN.get_or_init(|| std::sync::Mutex::new(BTreeMap::new()))
+}
+
+fn cached(absolute: &Utf8Path) -> Option<Resolved> {
+    evaluated().lock().ok()?.get(absolute).cloned()
+}
+
+fn remember(absolute: &Utf8Path, resolved: &Resolved) {
+    if let Ok(mut seen) = evaluated().lock() {
+        seen.insert(absolute.to_owned(), resolved.clone());
+    }
 }
 
 /// The one product a command should build, given an optional `--product` name.
