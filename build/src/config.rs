@@ -93,6 +93,22 @@ pub struct Product {
     pub soname: Option<String>,
 }
 
+/// Build settings a root config carries.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+pub struct BuildSettings {
+    #[serde(default)]
+    pub cache: Option<CacheSettings>,
+}
+
+/// Where compiled objects are kept between builds.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct CacheSettings {
+    #[serde(default)]
+    pub local: Option<bool>,
+    #[serde(default)]
+    pub directory: Option<String>,
+}
+
 /// A manifest fragment a package contributes to its consumer's application.
 ///
 /// **Read, not merged.** AGP has a manifest merger with a specification, and
@@ -149,6 +165,13 @@ impl NativeSources {
 pub struct Resolved {
     #[serde(default)]
     pub products: BTreeMap<String, Product>,
+    /// Where compiled objects are kept between builds.
+    ///
+    /// Root config only, and `§34` already reserved it. Read because 87% of a
+    /// build of `examples/library` was recompiling the runtime, which is the
+    /// same translation unit every time.
+    #[serde(default)]
+    pub build: Option<BuildSettings>,
     /// Manifest fragments a package contributes to its consumer.
     #[serde(default)]
     pub manifests: Vec<Manifest>,
@@ -305,6 +328,7 @@ mod tests {
     fn with(names: &[&str]) -> Resolved {
         Resolved {
             native: Vec::new(),
+            build: None,
             manifests: Vec::new(),
             targets: None,
             products: names

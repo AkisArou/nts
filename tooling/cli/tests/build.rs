@@ -635,6 +635,63 @@ fn a_binding_that_disagrees_with_the_headers_stops_the_build() {
     );
 }
 
+/// A project whose own C the build must bind and compile.
+///
+/// `DIGEST_PRIME` is in the header rather than the `.c` on purpose: it makes the
+/// header a dependency whose *value* reaches the artifact, which is what a cache
+/// invalidation test needs. A header nothing depends on for its answer cannot
+/// tell a reused object from a recompiled one.
+fn native_fixture(name: &str) -> PathBuf {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("the repository root");
+    let project = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+    drop(std::fs::remove_dir_all(&project));
+    for sub in ["src", "native"] {
+        std::fs::create_dir_all(project.join(sub)).expect("creating the fixture");
+    }
+    std::fs::write(
+        project.join("native/digest.h"),
+        "#ifndef PROBE_DIGEST_H\n#define PROBE_DIGEST_H\n#include <stdint.h>\n#define DIGEST_PRIME 16777619u\nuint32_t digest_step(uint32_t seed, uint32_t value);\n#endif\n",
+    )
+    .expect("the header");
+    std::fs::write(
+        project.join("native/digest.c"),
+        "#include \"digest.h\"\nuint32_t digest_step(uint32_t seed, uint32_t value) { return (seed ^ value) * DIGEST_PRIME; }\n",
+    )
+    .expect("the body");
+    std::fs::write(
+        project.join("src/main.ts"),
+        "import { digest_step } from \"c:digest\";\nimport type { c_uint32 } from \"c:types\";\n\nexport function digestOf(value: number): number {\n  return digest_step(2166136261 as c_uint32, value as c_uint32);\n}\n",
+    )
+    .expect("the program");
+    std::fs::write(
+        project.join("tsconfig.json"),
+        format!(
+            r#"{{"extends":{:?},"compilerOptions":{{"noEmit":false}},"include":["src","types",{:?}]}}"#,
+            repo.join("tsconfig.fixtures.json").to_string_lossy(),
+            repo.join("runtime/native/libc.d.ts").to_string_lossy(),
+        ),
+    )
+    .expect("tsconfig");
+    let scope = project.join("node_modules").join("@nts");
+    std::fs::create_dir_all(&scope).expect("node_modules");
+    if !scope.join("config").exists() {
+        std::os::unix::fs::symlink(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../config"),
+            scope.join("config"),
+        )
+        .expect("linking @nts/config");
+    }
+    std::fs::write(
+        project.join("nts.config.ts"),
+        "import { defineConfig, library, sources, target } from \"@nts/config\";\nexport default defineConfig({\n  products: { probe: library.native({ targets: [target.linux({ backend: \"c\" })], entry: \"./src/main.ts\" }) },\n  native: [sources({ dir: \"native\", header: \"native/digest.h\" })],\n});\n",
+    )
+    .expect("config");
+    project
+}
+
 /// A `c:` import becomes a binding, and the package's C is compiled with it.
 ///
 /// **`native:` had no reader**, and this is the whole of what it is for. The
@@ -659,21 +716,7 @@ fn a_c_import_is_bound_and_the_package_c_is_linked_in() {
         .join("../..")
         .canonicalize()
         .expect("the repository root");
-    let project = Path::new(env!("CARGO_TARGET_TMPDIR")).join("build-binding");
-    drop(std::fs::remove_dir_all(&project));
-    for sub in ["src", "native"] {
-        std::fs::create_dir_all(project.join(sub)).expect("creating the fixture");
-    }
-    std::fs::write(
-        project.join("native/digest.h"),
-        "#ifndef PROBE_DIGEST_H\n#define PROBE_DIGEST_H\n#include <stdint.h>\nuint32_t digest_step(uint32_t seed, uint32_t value);\n#endif\n",
-    )
-    .expect("the header");
-    std::fs::write(
-        project.join("native/digest.c"),
-        "#include \"digest.h\"\nuint32_t digest_step(uint32_t seed, uint32_t value) { return (seed ^ value) * 16777619u; }\n",
-    )
-    .expect("the body");
+    let project = native_fixture("build-binding");
     std::fs::write(
         project.join("src/main.ts"),
         "import { digest_step } from \"c:digest\";\nimport type { c_uint32 } from \"c:types\";\n\nexport function digestOf(value: number): number {\n  return digest_step(2166136261 as c_uint32, value as c_uint32);\n}\n",
@@ -809,6 +852,65 @@ export default defineConfig({
     assert!(
         carried.contains("POST_NOTIFICATIONS"),
         "the AAR carries a generated manifest instead of the declared fragment:\n{carried}",
+    );
+}
+
+/// Objects are reused between builds, and not when a header they read changed.
+///
+/// **Measured before built.** A build of `examples/library` was 1.10s, of which
+/// compiling `nts_runtime.c` was 0.96s -- the emit 0.06, the config evaluation
+/// 0.02, the program's own compile 0.02, the link 0.02. Caching the runtime was
+/// the whole problem, and a general action cache would have been the wrong
+/// shape. Cold 1.09s, unchanged 0.15s, and **0.14s after a one-line edit**.
+///
+/// **The header has to change the answer**, and the first version of this test
+/// is why that is spelled out. It broke the *recorded* hashes while leaving the
+/// files alone, so serving the stale object produced exactly the right artifact
+/// and the test passed with the dependency check disabled. A cached object only
+/// proves stale if a fresh compile would differ.
+///
+/// So `DIGEST_PRIME` lives in the header and the `.c` uses it: change the
+/// constant and the artifact must answer differently. The build does not rewrite
+/// a package's own header, which is what makes it usable as a dependency at all
+/// -- everything in the output directory is regenerated identically every time.
+#[test]
+fn objects_are_reused_but_never_when_a_header_changed() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let project = native_fixture("build-cache");
+    let artifact = project.join(".nts/build/probe/linux-gnu-x86_64/libprobe.so");
+
+    let first = build(&project, &[]);
+    assert!(first.ok, "{}{}", first.stdout, first.stderr);
+    let cache = project.join(".nts/cache");
+    let objects = || {
+        std::fs::read_dir(&cache)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|item| item.path().extension().is_some_and(|it| it == "o"))
+            .count()
+    };
+    assert!(objects() > 0, "nothing was cached; the default is supposed to be on");
+
+    // Reusing must not change the artifact.
+    let before = std::fs::read(&artifact).expect("the artifact");
+    assert!(build(&project, &[]).ok, "the cached build failed");
+    assert_eq!(std::fs::read(&artifact).expect("the artifact"), before, "a reused build differs");
+
+    // **The direction that matters.** A header the object was compiled against
+    // has changed, so the object is wrong and must not be handed back.
+    let header = project.join("native/digest.h");
+    let text = std::fs::read_to_string(&header).expect("the header");
+    std::fs::write(&header, text.replace("16777619u", "2166136261u")).expect("editing the header");
+    let after = build(&project, &[]);
+    assert!(after.ok, "{}{}", after.stdout, after.stderr);
+    assert_ne!(
+        std::fs::read(&artifact).expect("the artifact"),
+        before,
+        "a changed header was served from the cache: the artifact still computes the old digest",
     );
 }
 

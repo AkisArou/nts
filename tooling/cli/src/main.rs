@@ -2337,6 +2337,7 @@ fn build(rest: &[String]) -> Result<()> {
         .unwrap_or_else(|| Utf8Path::new("."))
         .join(".nts")
         .join("build");
+    let cache_dir = cache_directory(&tsconfig, &resolved);
     let mut built = 0usize;
     let mut refused = 0usize;
     for (name, product) in chosen {
@@ -2387,7 +2388,7 @@ fn build(rest: &[String]) -> Result<()> {
             match target.backend.as_str() {
                 "c" => {
                     let wrote = emit_c(&tsconfig, Some(&out), emission)?;
-                    let artifact = link_c(name, product, &out, &wrote, &native)?;
+                    let artifact = link_c(name, product, &out, &wrote, &native, cache_dir.as_deref())?;
                     println!("  {artifact}");
                     // Named here as well as on stderr, because a build whose
                     // last line is `1 artifact(s)` has told the reader the
@@ -2926,6 +2927,7 @@ fn link_c(
     out: &Utf8Path,
     wrote: &Wrote,
     native: &[(Utf8PathBuf, Utf8PathBuf)],
+    cache_dir: Option<&Utf8Path>,
 ) -> Result<Utf8PathBuf> {
     check_witness(name, out)?;
     let addon = product.kind == "node-addon";
@@ -2974,11 +2976,11 @@ fn link_c(
         sources.push(AUTO_INIT_NAME.to_owned());
     }
 
+    let cache = ObjectCache::new(cache_dir);
     let mut objects = Vec::new();
-    compile_native(name, out, native, pic, &mut objects)?;
+    compile_native(name, out, native, pic, &mut objects, &cache)?;
     for source in &sources {
         let object = out.join(format!("{source}.o"));
-        let mut command = cc();
         // `--gc-sections` is not a micro-optimisation, and the numbers are
         // `write_standalone`'s own: the Unicode tables are one library's worth
         // of data of which a program uses the part it calls, and the linker is
@@ -2987,17 +2989,22 @@ fn link_c(
         // 81 KB to 16 KB, because most of the runtime is unreachable from any
         // one program. It needs the two `-f` flags at compile time to have
         // sections to drop.
-        command
-            .args(["-std=c11", "-O2", "-ffunction-sections", "-fdata-sections", "-I"])
-            .arg(out.as_str());
+        let mut arguments: Vec<String> =
+            ["-std=c11", "-O2", "-ffunction-sections", "-fdata-sections", "-I"]
+                .iter()
+                .map(|flag| (*flag).to_owned())
+                .collect();
+        arguments.push(out.to_string());
         if pic {
-            command.arg("-fPIC");
+            arguments.push("-fPIC".to_owned());
         }
         if let Some(napi) = &napi {
-            command.arg("-I").arg(napi.as_str());
+            arguments.push("-I".to_owned());
+            arguments.push(napi.to_string());
         }
-        command.arg("-c").arg(out.join(source).as_str()).arg("-o").arg(object.as_str());
-        run(command, &format!("compiling {source} for `{name}`"))?;
+        let from = out.join(source);
+        arguments.extend(["-c".to_owned(), from.to_string(), "-o".to_owned(), object.to_string()]);
+        compile_one(&cache, &from, &object, &arguments, &format!("compiling {source} for `{name}`"))?;
         objects.push(object);
     }
 
@@ -3106,6 +3113,163 @@ fn refuse_unresolved(name: &str, artifact: &Utf8Path) -> Result<()> {
     )
 }
 
+
+/// Where compiled objects are kept between builds.
+///
+/// **On unless turned off**, which is the opposite of how this started. `§34`
+/// reserved `build.cache` and nothing read it, so a config declaring nothing got
+/// no cache -- and the common project paid 0.96s per build to recompile a
+/// runtime that had not changed. A build tool whose caching is opt-in is one
+/// whose default is the slow one.
+///
+/// `local: false` turns it off, which is what a build that must not reuse
+/// anything needs.
+fn cache_directory(
+    tsconfig: &Utf8Path,
+    resolved: &nts_build::config::Resolved,
+) -> Option<Utf8PathBuf> {
+    let settings = resolved.build.as_ref().and_then(|build| build.cache.as_ref());
+    (settings.and_then(|cache| cache.local) != Some(false)).then(|| {
+        tsconfig
+            .parent()
+            .unwrap_or_else(|| Utf8Path::new("."))
+            .join(settings.and_then(|cache| cache.directory.as_deref()).unwrap_or(".nts/cache"))
+    })
+}
+
+/// A compiled object kept between builds, and what decides it is still valid.
+///
+/// **Measured before built.** A build of `examples/library` is 1.10s, of which
+/// compiling `nts_runtime.c` is **0.96s** -- the emit is 0.06, the config
+/// evaluation 0.02, the program's own compile 0.02 and the link 0.02. The
+/// runtime is the same translation unit on every build of every project, and
+/// recompiling it was the whole cost. Nothing else here was worth caching, and a
+/// general action cache would have been the wrong shape for what the numbers
+/// said.
+///
+/// # What makes an entry valid
+///
+/// The key is the source, the command line, and the compiler's version string,
+/// which stands for the system headers. **Not the project's headers**, and the
+/// first version's mistake was including them: it hashed every `.h` beside the
+/// output, so adding one function to `main.ts` changed `program.h`, changed the
+/// key of *every* object, and recompiled a runtime that does not include
+/// `program.h` at all. A rebuild after a one-line edit cost the full 1.14s.
+///
+/// So validity is a **dependency list**, recorded beside the entry the first
+/// time it is built: `-MMD` names exactly the headers that translation unit
+/// read, and the entry is good while each still hashes to what it did. That is
+/// the question "has anything this file reads changed", asked of the files it
+/// actually reads.
+struct ObjectCache {
+    directory: Option<Utf8PathBuf>,
+    /// The compiler's version string, standing in for the system headers.
+    compiler: u64,
+}
+
+/// One cached compile: where the object is, and what it was built against.
+struct Entry {
+    object: Utf8PathBuf,
+    deps: Utf8PathBuf,
+}
+
+fn hash_of(bytes: &[u8]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = rustc_hash::FxHasher::default();
+    bytes.hash(&mut hasher);
+    hasher.finish()
+}
+
+impl ObjectCache {
+    fn new(enabled: Option<&Utf8Path>) -> Self {
+        let compiler = cc()
+            .arg("--version")
+            .output()
+            .map_or(0, |output| hash_of(&output.stdout));
+        Self { directory: enabled.map(Utf8Path::to_path_buf), compiler }
+    }
+
+    fn entry(&self, source: &Utf8Path, arguments: &[String]) -> Option<Entry> {
+        use std::hash::{Hash, Hasher};
+        let directory = self.directory.as_ref()?;
+        let mut hasher = rustc_hash::FxHasher::default();
+        self.compiler.hash(&mut hasher);
+        std::fs::read(source).ok()?.hash(&mut hasher);
+        arguments.hash(&mut hasher);
+        let key = format!("{:016x}", hasher.finish());
+        Some(Entry {
+            object: directory.join(format!("{key}.o")),
+            deps: directory.join(format!("{key}.deps")),
+        })
+    }
+
+    /// Whether every file the entry was built against still hashes the same.
+    fn current(entry: &Entry) -> bool {
+        let Ok(recorded) = std::fs::read_to_string(&entry.deps) else { return false };
+        recorded.lines().all(|line| {
+            line.split_once(' ').is_some_and(|(hash, path)| {
+                std::fs::read(path).is_ok_and(|bytes| format!("{:016x}", hash_of(&bytes)) == hash)
+            })
+        })
+    }
+
+    /// Record what a compile read, from the depfile `-MMD` wrote.
+    fn record(entry: &Entry, depfile: &Utf8Path) {
+        let Ok(text) = std::fs::read_to_string(depfile) else { return };
+        // Make syntax: `target: a b \<newline> c`. The target half is before
+        // the first colon and is not a dependency.
+        let listed = text.split_once(':').map_or("", |(_, rest)| rest);
+        let mut recorded = String::new();
+        for path in listed.split_whitespace().filter(|word| *word != "\\") {
+            if let Ok(bytes) = std::fs::read(path) {
+                use std::fmt::Write;
+                let _ = writeln!(recorded, "{:016x} {path}", hash_of(&bytes));
+            }
+        }
+        drop(std::fs::create_dir_all(entry.object.parent().unwrap_or(Utf8Path::new("."))));
+        drop(std::fs::write(&entry.deps, recorded));
+    }
+}
+
+/// Compile one translation unit, reusing the object when nothing it reads has
+/// changed.
+///
+/// A hit is a copy rather than a hardlink: a hardlinked object shares inodes
+/// with the cache, and a later build writing through the link would corrupt an
+/// entry every other project reads.
+fn compile_one(
+    cache: &ObjectCache,
+    source: &Utf8Path,
+    object: &Utf8Path,
+    arguments: &[String],
+    what: &str,
+) -> Result<()> {
+    let entry = cache.entry(source, arguments);
+    if let Some(entry) = &entry
+        && entry.object.exists()
+        && ObjectCache::current(entry)
+    {
+        std::fs::copy(&entry.object, object).with_context(|| format!("reusing {}", entry.object))?;
+        return Ok(());
+    }
+    let depfile = Utf8PathBuf::from(format!("{object}.d"));
+    let mut command = cc();
+    command.args(arguments);
+    if entry.is_some() {
+        command.args(["-MMD", "-MF"]).arg(depfile.as_str());
+    }
+    run(command, what)?;
+    if let Some(entry) = &entry {
+        drop(std::fs::create_dir_all(entry.object.parent().unwrap_or(Utf8Path::new("."))));
+        // A cache that cannot be written is not a build failure. It is the
+        // build it would have been without one.
+        if std::fs::copy(object, &entry.object).is_ok() {
+            ObjectCache::record(entry, &depfile);
+        }
+    }
+    Ok(())
+}
+
 /// Compile the package's own C alongside the program's.
 ///
 /// `sources({ dir })` is a directory of translation units a person wrote, and
@@ -3118,20 +3282,24 @@ fn compile_native(
     native: &[(Utf8PathBuf, Utf8PathBuf)],
     pic: bool,
     objects: &mut Vec<Utf8PathBuf>,
+    cache: &ObjectCache,
 ) -> Result<()> {
+
     for (directory, source) in native {
         let object = out.join(format!("{}.o", source.file_name().unwrap_or("native")));
-        let mut command = cc();
-        command
-            .args(["-std=c11", "-O2", "-ffunction-sections", "-fdata-sections", "-I"])
-            .arg(directory.as_str())
-            .arg("-I")
-            .arg(out.as_str());
+        let mut arguments: Vec<String> = ["-std=c11", "-O2", "-ffunction-sections", "-fdata-sections"]
+            .iter()
+            .map(|flag| (*flag).to_owned())
+            .collect();
+        arguments.push("-I".to_owned());
+        arguments.push(directory.to_string());
+        arguments.push("-I".to_owned());
+        arguments.push(out.to_string());
         if pic {
-            command.arg("-fPIC");
+            arguments.push("-fPIC".to_owned());
         }
-        command.arg("-c").arg(source.as_str()).arg("-o").arg(object.as_str());
-        run(command, &format!("compiling {source} for `{name}`"))?;
+        arguments.extend(["-c".to_owned(), source.to_string(), "-o".to_owned(), object.to_string()]);
+        compile_one(cache, source, &object, &arguments, &format!("compiling {source} for `{name}`"))?;
         objects.push(object);
     }
     Ok(())
