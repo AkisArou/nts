@@ -228,7 +228,21 @@ printf "%s method(s) across them\n" "$methods"
 # codegen change that prunes more and drops this is indistinguishable *here*
 # from the defect it guards, and that is the point: a drop owes an explanation
 # and then a new number, rather than fitting under a margin somebody chose.
-# **4832**, measured 2026-09-13: 268 dexed, 0 refused, **0 declined**.
+# **5115**, measured 2026-09-16 at `af3e3ebc`: 281 dexed, 0 refused, 0 declined.
+#
+# Raised because the *target set changed* -- the two container directories are
+# no longer dexed -- and the paragraph below is the rule for exactly that: "a
+# floor taken from a run of a different target set is not a floor". They
+# contributed 0 methods, so the count did not move for that reason; it moved
+# because the corpus grew between 09-13 and now.
+#
+# **Taken from the gated commit and not from a working tree.** The same sweep
+# over my checkout said 5119, four methods higher, because another session had
+# an uncommitted `lower.rs` and an edited example in it. Four methods is a
+# small enough difference to have written down without noticing where it came
+# from, and a floor is the one number that must not be.
+#
+# Was **4832**, measured 2026-09-13: 268 dexed, 0 refused, **0 declined**.
 #
 # Set to 4848 first, from the run *before* `invalid` and `unsupported` were
 # excluded, and that was wrong by the 16 methods `unsupported` contributes. A
@@ -256,7 +270,7 @@ if [ $# -eq 0 ] && [ "$declined" -gt 0 ]; then
   exit 1
 fi
 
-floor=${NTS_DEX_METHOD_FLOOR:-4832}
+floor=${NTS_DEX_METHOD_FLOOR:-5115}
 if [ $# -eq 0 ] && [ "$methods" -lt "$floor" ]; then
   echo "only $methods method(s) dexed, against a floor of $floor" >&2
   # **Which of the two it is, said here rather than left to the reader.** This
