@@ -93,7 +93,26 @@ done
 # cannot be read stops the build rather than being ignored. So the copy below is
 # still load-bearing; `backend_examples` would count its absence as a plain
 # failure with thirty other names beside it, exactly as before.
-for modules in node_modules examples/library/node_modules runtime/node/node_modules; do
+# **The list here went stale the moment a fourth appeared.** It named three, and
+# `examples/interop` then grew an `nts.config.ts` per example: the worktree could
+# not resolve `@nts/config`, every interop example died with
+# `ERR_MODULE_NOT_FOUND`, and the gate blamed `interop` for a change in the C
+# emitter. A fixed enumeration that was complete when it was written.
+#
+# Derived now, from the only thing that knows which directories are workspace
+# packages: a **tracked** directory whose `node_modules` holds an `@nts` link.
+# Tracked is doing real work -- a bare `find` for `node_modules/@nts` returns
+# forty-odd `target/tmp` build fixtures with exactly that shape, none of which
+# belongs in a pinned tree. That was measured before this rule was chosen.
+workspace_modules=$(
+  git -C "$root" ls-files --directory |
+    awk -F/ 'NF > 1 { print $1 "/" $2 }' |
+    sort -u |
+    while read -r package; do
+      [ -d "$root/$package/node_modules/@nts" ] && printf '%s/node_modules\n' "$package"
+    done
+)
+for modules in node_modules runtime/node/node_modules $workspace_modules; do
   [ -d "$root/$modules" ] || continue
   # **Copied rather than linked where a workspace link lives inside it.**
   #
