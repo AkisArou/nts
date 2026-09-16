@@ -37,6 +37,38 @@ export function helper(n: number): number { return n + 1; }
 export function notPublished(n: number): number { return n - 1; }
 ";
 
+/// Say what is missing, because a test that returns quietly reports `ok`.
+///
+/// **Sixteen tests here skipped in silence**, every one written on 2026-09-16,
+/// in a file whose older tests all print a reason. A suite goes green over
+/// tooling that was never installed and the count says `ok` either way --
+/// `examples/interop/java-from-ts/build.sh` states the rule: "a skip that
+/// prints nothing is indistinguishable from a pass".
+///
+/// **And printing it is not enough, which is the part that took a measurement.**
+/// `cargo test` captures a passing test's output, so an `eprintln!` from a test
+/// that skipped is discarded -- the message exists only under `--nocapture`,
+/// which is not how `tooling/gate/all.sh` runs the suite. The older tests in
+/// this file have followed that convention for as long as they have existed and
+/// **none of their messages has ever been seen by the gate.** Verified by
+/// shadowing `zig` with a stub that exits 1: `test result: ok`, zero output,
+/// and the line appears the moment `--nocapture` is added.
+///
+/// So the announcement is kept for a person debugging, and
+/// `NTS_TESTS_REQUIRE_TOOLING=1` turns every skip into a failure -- which is
+/// the form a CI image or a gate step can actually act on, because a panic is
+/// the one thing `cargo test` does not swallow.
+#[track_caller]
+fn skip(needs: &str) {
+    let at = std::panic::Location::caller();
+    assert!(
+        std::env::var_os("NTS_TESTS_REQUIRE_TOOLING").is_none(),
+        "skipped {at} for want of {needs}, and NTS_TESTS_REQUIRE_TOOLING says this \
+         machine should have it"
+    );
+    eprintln!("skipping {at}: needs {needs}");
+}
+
 fn available() -> bool {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
@@ -1068,8 +1100,12 @@ export default defineConfig({
 fn an_android_application_is_a_signed_installable_apk() {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    let Some((tools, _)) = android_sdk() else { return };
+    let Some((tools, _)) = android_sdk() else {
+        skip("an Android SDK with build-tools and platform 36");
+        return;
+    };
     if !frontend {
+        skip("the tsgo frontend");
         return;
     }
     let project = fixture("build-apk", ANDROID_APP);
@@ -1133,6 +1169,7 @@ fn an_apk_without_an_application_id_is_refused_by_name() {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     if !frontend || android_sdk().is_none() {
+        skip("the tsgo frontend and an Android SDK");
         return;
     }
     let project = fixture(
@@ -1168,6 +1205,7 @@ fn an_apk_with_no_android_sdk_names_the_variable() {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     if !frontend {
+        skip("the tsgo frontend");
         return;
     }
     let project = fixture("build-apk-no-sdk", ANDROID_APP);
@@ -1225,6 +1263,7 @@ fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
         Command::new(name).arg("-version").output().is_ok_and(|o| o.status.success())
     };
     if !frontend || !tool("javac") || !tool("java") {
+        skip("the tsgo frontend and a JDK");
         return;
     }
 
@@ -1291,6 +1330,7 @@ fn java_a_package_contributes_is_compiled_into_the_jar() {
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     let javac = Command::new("javac").arg("-version").output().is_ok_and(|o| o.status.success());
     if !frontend || !javac {
+        skip("the tsgo frontend and javac");
         return;
     }
     let project = fixture(
@@ -1340,6 +1380,7 @@ fn a_jvm_native_root_with_no_java_is_refused() {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     if !frontend {
+        skip("the tsgo frontend");
         return;
     }
     let project = fixture(
@@ -1381,6 +1422,7 @@ fn an_apk_refuses_to_silently_drop_a_package_fragment() {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     if !frontend || android_sdk().is_none() {
+        skip("the tsgo frontend and an Android SDK");
         return;
     }
     let project = fixture("build-apk-fragment", ANDROID_APP);
@@ -1480,6 +1522,7 @@ fn the_scalar_brand_module_is_not_bound_from_a_header() {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     if !frontend {
+        skip("the tsgo frontend");
         return;
     }
     let project = fixture(
@@ -1548,6 +1591,7 @@ fn a_windows_target_produces_a_windows_dll() {
     // On a Windows host this is not a cross build and the toolchain question is
     // a different one; the assertions below are about the cross path.
     if !frontend || !zig || cfg!(target_os = "windows") {
+        skip("the tsgo frontend and zig, on a non-Windows host");
         return;
     }
     let project = fixture("build-win-cross", WINDOWS_LIB);
@@ -1585,6 +1629,7 @@ fn cross_compiling_to_apple_is_refused_by_name() {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     if !frontend || cfg!(target_os = "macos") {
+        skip("the tsgo frontend, on a non-Apple host");
         return;
     }
     let project = fixture(
@@ -1623,6 +1668,7 @@ export default defineConfig({
 #[test]
 fn a_project_can_be_named_by_directory_config_or_tsconfig() {
     if !available() {
+        skip("node, the tsgo frontend, clang and nm");
         return;
     }
     let project = fixture("build-naming", SHARED);
@@ -1695,10 +1741,12 @@ fn a_cmake_consumer(project: &Path, hook: &Path) -> PathBuf {
 #[test]
 fn the_cmake_hook_builds_a_consumer_and_declares_its_inputs() {
     if !available() {
+        skip("node, the tsgo frontend, clang and nm");
         return;
     }
     let cmake = Command::new("cmake").arg("--version").output().is_ok_and(|o| o.status.success());
     if !cmake {
+        skip("cmake");
         return;
     }
     let project = fixture(
@@ -1793,6 +1841,7 @@ export default defineConfig({
 #[test]
 fn an_integration_with_no_adapter_is_refused_by_name() {
     if !available() {
+        skip("node, the tsgo frontend, clang and nm");
         return;
     }
     let project = fixture(
@@ -1826,6 +1875,7 @@ export default defineConfig({
 #[test]
 fn the_npm_hook_runs_and_builds_for_the_host() {
     if !available() {
+        skip("node, the tsgo frontend, clang and nm");
         return;
     }
     let project = fixture(
@@ -1887,10 +1937,12 @@ export default defineConfig({
 #[test]
 fn the_workspace_fixture_still_builds() {
     if !available() {
+        skip("node, the tsgo frontend, clang and nm");
         return;
     }
     let apps = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/workspace/apps");
     if !apps.is_dir() {
+        skip("examples/workspace to be present");
         return;
     }
     let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("workspace-build");
@@ -1973,6 +2025,7 @@ fn a_java_package_moves_the_classes_and_they_still_link() {
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     let tool = |n: &str| Command::new(n).arg("-version").output().is_ok_and(|o| o.status.success());
     if !frontend || !tool("javac") || !tool("java") {
+        skip("the tsgo frontend and a JDK");
         return;
     }
     let project = fixture(
