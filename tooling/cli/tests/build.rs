@@ -159,8 +159,11 @@ fn a_backend_that_cannot_write_is_refused_by_name() {
         eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
         return;
     }
-    // `target.linux()` defaults to llvm, whose slice is scalar and which renders
-    // to stdout -- so there is nothing for a build to write.
+    // **`backend: "llvm"` is said out loud, and that is the point of the test.**
+    // It used to arrive by default, which meant this asserted the refusal *and*
+    // silently asserted that the default was unbuildable. The default is now
+    // `c`, so a config has to ask for llvm to get this message -- and asking
+    // for it is a thing somebody might legitimately do.
     // Not `build-llvm`: the assertion below looks for "llvm" in the message, and
     // a directory named for it would put it in every path printed. See
     // `a_build_that_drops_functions_says_how_many`, where that mistake made a
@@ -170,7 +173,12 @@ fn a_backend_that_cannot_write_is_refused_by_name() {
         r#"
 import { defineConfig, library, target } from "@nts/config";
 export default defineConfig({
-  products: { acme: library.native({ targets: [target.linux()], entry: "./src/main.ts" }) },
+  products: {
+    acme: library.native({
+      targets: [target.linux({ backend: "llvm" })],
+      entry: "./src/main.ts",
+    }),
+  },
 });
 "#,
     );
@@ -1496,4 +1504,133 @@ export default defineConfig({
         "it still reports the header question:\n{}",
         run.stderr
     );
+}
+
+const WINDOWS_LIB: &str = r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    sdk: library.native({ targets: [target.windows()], entry: "./src/main.ts" }),
+  },
+});
+"#;
+
+/// A Windows target cross-compiles to a Windows artifact, not a host one.
+///
+/// **The bug this pins produced `libsdk.so` -- an ELF shared object under a
+/// Linux name -- for a Windows product.** `link_c` never read `target.os` and
+/// `artifact_name` hardcoded `.so`, and neither was visible while
+/// `target.windows()` defaulted to the llvm backend and refused before reaching
+/// the linker. Fixing the default exposed it, which is the ordinary way a bug
+/// kept alive by an unrelated refusal comes out.
+///
+/// `file` is the assertion, because every intermediate step succeeds on the
+/// wrong platform: the C compiles, the objects link, and the artifact exists.
+#[test]
+fn a_windows_target_produces_a_windows_dll() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    let zig = Command::new("zig").arg("version").output().is_ok_and(|o| o.status.success());
+    // On a Windows host this is not a cross build and the toolchain question is
+    // a different one; the assertions below are about the cross path.
+    if !frontend || !zig || cfg!(target_os = "windows") {
+        return;
+    }
+    let project = fixture("build-win-cross", WINDOWS_LIB);
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+
+    let dll = project.join(".nts/build/sdk/windows-x86_64/sdk.dll");
+    assert!(dll.is_file(), "no DLL at {}:\n{}", dll.display(), run.stdout);
+    assert!(
+        !project.join(".nts/build/sdk/windows-x86_64/libsdk.so").exists(),
+        "a host-shaped artifact was written beside it"
+    );
+
+    let kind = Command::new("file").arg("-b").arg(&dll).output().expect("running file");
+    let kind = String::from_utf8_lossy(&kind.stdout);
+    assert!(
+        kind.contains("PE32+") && kind.contains("DLL"),
+        "not a Windows DLL -- `file` says: {kind}"
+    );
+
+    // The import library, which is the half a Windows consumer links against.
+    // Unnamed, the linker calls it after the first object -- `program.c.lib`,
+    // beside `sdk.dll`, under a name nobody could guess.
+    let implib = project.join(".nts/build/sdk/windows-x86_64/sdk.lib");
+    assert!(implib.is_file(), "no import library at {}", implib.display());
+    assert!(
+        !project.join(".nts/build/sdk/windows-x86_64/program.c.lib").exists(),
+        "the import library is still named after an object"
+    );
+}
+
+/// Apple is refused by name, with the reason that was measured rather than guessed.
+#[test]
+fn cross_compiling_to_apple_is_refused_by_name() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    if !frontend || cfg!(target_os = "macos") {
+        return;
+    }
+    let project = fixture(
+        "build-apple-cross",
+        r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    mac: library.native({
+      targets: [target.macos({ minimumVersion: "14.0" })],
+      entry: "./src/main.ts",
+    }),
+  },
+});
+"#,
+    );
+    let run = build(&project, &[]);
+    assert!(!run.ok, "it produced something for macOS:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("SDK") && run.stderr.contains("macos-14"),
+        "the refusal names neither the target nor what is missing:\n{}",
+        run.stderr
+    );
+}
+
+/// Naming the config means naming the project it describes.
+///
+/// **Three spellings of one request, and one of them did something else.** A
+/// directory already resolved to the `tsconfig.json` in it; naming the config
+/// file -- the one a person has open -- made the *config* the program, and
+/// `examples/library` failed with four `TS5097`s about `@nts/config`'s
+/// `package.json`. The sources were fine and the other two spellings built it.
+///
+/// All three are asserted together, because the bug is a disagreement between
+/// them rather than a property of any one.
+#[test]
+fn a_project_can_be_named_by_directory_config_or_tsconfig() {
+    if !available() {
+        return;
+    }
+    let project = fixture("build-naming", SHARED);
+    let artifact = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
+    for spelling in [
+        project.clone(),
+        project.join("tsconfig.json"),
+        project.join("nts.config.ts"),
+    ] {
+        drop(std::fs::remove_file(&artifact));
+        let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+            .arg("build")
+            .arg(&spelling)
+            .output()
+            .expect("running nts build");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "`{}` failed:\n{stdout}{stderr}", spelling.display());
+        assert!(
+            artifact.is_file(),
+            "`{}` built no artifact:\n{stdout}",
+            spelling.display()
+        );
+    }
 }

@@ -163,6 +163,26 @@ fn named_project(rest: &[String]) -> Result<Utf8PathBuf> {
     let named_one = found.is_some();
     let path = found.unwrap_or_else(|| Utf8PathBuf::from("tsconfig.json"));
     let path = if path.is_dir() { path.join("tsconfig.json") } else { path };
+    // **Naming the config means naming the project it describes.** A directory
+    // already resolves to the `tsconfig.json` in it, and `nts build
+    // path/to/nts.config.ts` is the same request spelled the other obvious way
+    // -- it is the file a person has open. Taken literally it made the *config*
+    // the program, and `examples/library` then failed with four `TS5097 An
+    // import path can only end with a '.ts' extension`, about
+    // `@nts/config`'s own `package.json` mapping `"."` to `./src/index.ts`.
+    //
+    // Four messages naming a TypeScript option, for a project whose sources are
+    // fine and which builds through either of the other two spellings. Nothing
+    // in the tree ran this one, so it had no observer -- `examples/library` is
+    // the RFC's first vertical slice and the gate reads its config without
+    // building it.
+    let path = if path.file_name() == Some(nts_build::config::FILE_NAME) {
+        path.parent()
+            .filter(|parent| !parent.as_str().is_empty())
+            .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), |dir| dir.join("tsconfig.json"))
+    } else {
+        path
+    };
     if !path.is_file() {
         // **Missing and wrong-shaped are different mistakes**, and one message
         // for both sends a person to check a file's contents when the file is
@@ -2425,7 +2445,8 @@ fn build(rest: &[String]) -> Result<()> {
             match target.backend.as_str() {
                 "c" => {
                     let wrote = emit_c(&tsconfig, Some(&out), emission)?;
-                    let artifact = link_c(name, product, &out, &wrote, &native, cache_dir.as_deref())?;
+                    let artifact =
+                        link_c(name, product, &out, &wrote, &native, cache_dir.as_deref(), target)?;
                     println!("  {artifact}");
                     // Named here as well as on stderr, because a build whose
                     // last line is `1 artifact(s)` has told the reader the
@@ -2776,6 +2797,67 @@ fn build_jvm(
             println!("  {classes}");
             println!("  {}", out.join(RUNTIME_JAR));
         }
+    }
+    Ok(())
+}
+
+/// Compile the translation units the emitter wrote.
+///
+/// Lifted out of `link_c` because that function was over a hundred lines and
+/// clippy says so: deciding *what* to compile and deciding *how to link it* are
+/// two steps, and the flags below belong to the first.
+#[allow(clippy::too_many_arguments)]
+fn compile_program(
+    name: &str,
+    out: &Utf8Path,
+    sources: &[String],
+    native: &[(Utf8PathBuf, Utf8PathBuf)],
+    pic: bool,
+    napi: Option<&Utf8Path>,
+    cache: &ObjectCache,
+    tools: &Toolchain,
+    objects: &mut Vec<Utf8PathBuf>,
+) -> Result<()> {
+    for source in sources {
+        let object = out.join(format!("{source}.o"));
+        // `--gc-sections` is not a micro-optimisation, and the numbers are
+        // `write_standalone`'s own: the Unicode tables are one library's worth
+        // of data of which a program uses the part it calls, and the linker is
+        // what knows which part. Measured there at 81 KB linked whole against
+        // 10 KB after stripping, and a `hello` with no Unicode at all from
+        // 81 KB to 16 KB, because most of the runtime is unreachable from any
+        // one program. It needs the two `-f` flags at compile time to have
+        // sections to drop.
+        let mut arguments: Vec<String> =
+            ["-std=c11", "-O2", "-ffunction-sections", "-fdata-sections", "-I"]
+                .iter()
+                .map(|flag| (*flag).to_owned())
+                .collect();
+        arguments.push(out.to_string());
+        // The package's own headers: the *generated* program includes them too,
+        // because a binding over `point.h` lowers to `#include "point.h"`.
+        for directory in native.iter().map(|(directory, _)| directory).collect::<Vec<_>>() {
+            arguments.push("-I".to_owned());
+            arguments.push(directory.to_string());
+        }
+        if pic {
+            arguments.push("-fPIC".to_owned());
+        }
+        if let Some(napi) = napi {
+            arguments.push("-I".to_owned());
+            arguments.push(napi.to_string());
+        }
+        let from = out.join(source);
+        arguments.extend(["-c".to_owned(), from.to_string(), "-o".to_owned(), object.to_string()]);
+        compile_one(
+            cache,
+            tools,
+            &from,
+            &object,
+            &arguments,
+            &format!("compiling {source} for `{name}`"),
+        )?;
+        objects.push(object);
     }
     Ok(())
 }
@@ -3649,17 +3731,125 @@ fn napi_include(project: &Utf8Path) -> Option<Utf8PathBuf> {
 /// The translation unit that runs module evaluation when a library loads.
 const AUTO_INIT_NAME: &str = "nts_auto_init.c";
 
-/// The C compiler that builds a program, and its leading arguments.
+/// The host this build is running on, as the config spells an `os`.
+fn host_os() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
+    }
+}
+
+fn host_arch() -> &'static str {
+    if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" }
+}
+
+/// Whether a target is the machine we are standing on.
+fn is_host(target: &nts_build::config::Target) -> bool {
+    target.os == host_os() && target.arch.as_deref().unwrap_or(host_arch()) == host_arch()
+}
+
+/// The LLVM triple `zig cc -target` takes for a target.
+fn zig_triple(target: &nts_build::config::Target) -> Option<String> {
+    let arch = target.arch.as_deref().unwrap_or(host_arch());
+    let rest = match target.os.as_str() {
+        "linux" => "linux-gnu",
+        "windows" => "windows-gnu",
+        _ => return None,
+    };
+    Some(format!("{arch}-{rest}"))
+}
+
+/// The C compiler for a target, and the refusal where there is none.
 ///
-/// `CC` split on whitespace, for the reason `bind.rs` states: it is a command
-/// line and not a program name, so `zig cc`, `ccache clang` and `xcrun clang`
-/// are all unusable when it is read as a file to execute.
-fn cc() -> std::process::Command {
-    let spec = std::env::var("CC").unwrap_or_else(|_| "clang".to_owned());
-    let mut words = spec.split_whitespace();
-    let mut command = std::process::Command::new(words.next().unwrap_or("clang"));
-    command.args(words);
-    command
+/// **Measured before it was written, because the goal said to.** `zig cc` is a
+/// drop-in for `clang` on the host -- `examples/library` builds the same
+/// artifact through either -- and it cross-compiles *this compiler's generated
+/// C*, which is the question that matters and is not the same as whether zig
+/// cross-compiles. Run against `program.c` and `nts_runtime.c`:
+///
+///     x86_64-windows-gnu    PE32+ executable for MS Windows (DLL)
+///     x86_64-linux-musl     ELF 64-bit LSB shared object
+///     aarch64-linux-gnu     ELF 64-bit LSB shared object, ARM aarch64
+///     aarch64-macos-none    FAILED: unknown type name `malloc_zone_t`
+///
+/// So Apple is the one it cannot reach: the runtime includes headers that come
+/// from Apple's SDK rather than from zig's bundled libc, and no flag fixes
+/// that. Named rather than attempted, because the alternative is a page of
+/// `unknown type name` from a tool the reader did not invoke.
+///
+/// **An explicit `CC` wins, including for a cross target.** Somebody who sets
+/// `CC=x86_64-w64-mingw32-gcc` has chosen; second-guessing them would be this
+/// deciding something the environment already decided.
+/// A compiler, resolved once and spawnable many times.
+///
+/// `std::process::Command` is not `Clone` and the probe for `zig` is a process
+/// spawn, so resolving per object file would fork once per translation unit to
+/// re-answer a question that cannot change during a build.
+#[derive(Clone)]
+struct Toolchain {
+    program: String,
+    leading: Vec<String>,
+}
+
+impl Toolchain {
+    fn command(&self) -> std::process::Command {
+        let mut command = std::process::Command::new(&self.program);
+        command.args(&self.leading);
+        command
+    }
+
+    /// What the object cache keys on, so a target change is a cache miss.
+    fn key(&self) -> String {
+        format!("{} {}", self.program, self.leading.join(" "))
+    }
+}
+
+fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolchain> {
+    if is_host(target) || std::env::var_os("CC").is_some() {
+        // `CC` split on whitespace, for the reason `bind.rs` states: it is a
+        // command line and not a program name, so `zig cc`, `ccache clang` and
+        // `xcrun clang` are all unusable when it is read as a file to execute.
+        let spec = std::env::var("CC").unwrap_or_else(|_| "clang".to_owned());
+        let mut words = spec.split_whitespace();
+        return Ok(Toolchain {
+            program: words.next().unwrap_or("clang").to_owned(),
+            leading: words.map(str::to_owned).collect(),
+        });
+    }
+    if matches!(target.os.as_str(), "macos" | "ios") {
+        bail!(
+            "product `{name}` targets {} and this is a {} machine. Cross-compiling to \
+             Apple needs its SDK -- the runtime uses headers `zig cc` does not bundle, \
+             and it stops at `unknown type name 'malloc_zone_t'`. Build it on a Mac, or \
+             set CC to a cross compiler that has the SDK",
+            target.id,
+            host_os()
+        )
+    }
+    let Some(triple) = zig_triple(target) else {
+        bail!(
+            "product `{name}` targets {} and this is a {} machine, and there is no \
+             cross compiler configured for that pair. Set CC to one",
+            target.id,
+            host_os()
+        )
+    };
+    if std::process::Command::new("zig").arg("version").output().is_err() {
+        bail!(
+            "product `{name}` targets {} and this is a {} machine, so it has to be \
+             cross-compiled. `zig` is what this uses and it is not on PATH -- install \
+             it, or set CC to a cross compiler for {triple}",
+            target.id,
+            host_os()
+        )
+    }
+    Ok(Toolchain {
+        program: "zig".to_owned(),
+        leading: vec!["cc".to_owned(), "-target".to_owned(), triple],
+    })
 }
 
 fn run(mut command: std::process::Command, what: &str) -> Result<()> {
@@ -3701,12 +3891,13 @@ fn check_witness(
     name: &str,
     out: &Utf8Path,
     native: &[(Utf8PathBuf, Utf8PathBuf)],
+    tools: &Toolchain,
 ) -> Result<()> {
     let witness = out.join(nts_codegen_c::NATIVE_WITNESS_NAME);
     if !witness.exists() {
         return Ok(());
     }
-    let mut command = cc();
+    let mut command = tools.command();
     command
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only"])
         .arg("-I")
@@ -3744,8 +3935,13 @@ fn link_c(
     wrote: &Wrote,
     native: &[(Utf8PathBuf, Utf8PathBuf)],
     cache_dir: Option<&Utf8Path>,
+    target: &nts_build::config::Target,
 ) -> Result<Utf8PathBuf> {
-    check_witness(name, out, native)?;
+    // **Before the witness, because the witness is compiled too.** A native
+    // root is checked against the headers of the platform it will run on, and
+    // doing that with the host compiler asks the wrong question.
+    let tools = toolchain_for(name, target)?;
+    check_witness(name, out, native, &tools)?;
     let addon = product.kind == "node-addon";
     let shared = product.kind == "shared-library" || addon;
     let library = product.kind == "shared-library" || product.kind == "static-library";
@@ -3792,45 +3988,12 @@ fn link_c(
         sources.push(AUTO_INIT_NAME.to_owned());
     }
 
-    let cache = ObjectCache::new(cache_dir);
+    let cache = ObjectCache::new(cache_dir, &tools);
     let mut objects = Vec::new();
-    compile_native(name, out, native, pic, &mut objects, &cache)?;
-    for source in &sources {
-        let object = out.join(format!("{source}.o"));
-        // `--gc-sections` is not a micro-optimisation, and the numbers are
-        // `write_standalone`'s own: the Unicode tables are one library's worth
-        // of data of which a program uses the part it calls, and the linker is
-        // what knows which part. Measured there at 81 KB linked whole against
-        // 10 KB after stripping, and a `hello` with no Unicode at all from
-        // 81 KB to 16 KB, because most of the runtime is unreachable from any
-        // one program. It needs the two `-f` flags at compile time to have
-        // sections to drop.
-        let mut arguments: Vec<String> =
-            ["-std=c11", "-O2", "-ffunction-sections", "-fdata-sections", "-I"]
-                .iter()
-                .map(|flag| (*flag).to_owned())
-                .collect();
-        arguments.push(out.to_string());
-        // The package's own headers: the *generated* program includes them too,
-        // because a binding over `point.h` lowers to `#include "point.h"`.
-        for directory in native.iter().map(|(directory, _)| directory).collect::<Vec<_>>() {
-            arguments.push("-I".to_owned());
-            arguments.push(directory.to_string());
-        }
-        if pic {
-            arguments.push("-fPIC".to_owned());
-        }
-        if let Some(napi) = &napi {
-            arguments.push("-I".to_owned());
-            arguments.push(napi.to_string());
-        }
-        let from = out.join(source);
-        arguments.extend(["-c".to_owned(), from.to_string(), "-o".to_owned(), object.to_string()]);
-        compile_one(&cache, &from, &object, &arguments, &format!("compiling {source} for `{name}`"))?;
-        objects.push(object);
-    }
+    compile_native(name, out, native, pic, &mut objects, &cache, &tools)?;
+    compile_program(name, out, &sources, native, pic, napi.as_deref(), &cache, &tools, &mut objects)?;
 
-    let artifact = out.join(artifact_name(name, product));
+    let artifact = out.join(artifact_name(name, product, target));
     if product.kind == "static-library" {
         {
             let mut command = std::process::Command::new("ar");
@@ -3842,9 +4005,22 @@ fn link_c(
         }
     } else {
         {
-            let mut command = cc();
+            let mut command = tools.command();
             if shared {
                 command.arg("-shared");
+                // **A Windows DLL is half an artifact without its import
+                // library.** The linker emits one either way; unnamed, it takes
+                // the first object's name -- this produced `program.c.lib`
+                // beside `sdk.dll`, which is the file a consumer links against
+                // under a name they could not guess. Named here so the two
+                // agree, and reported below because an output nobody is told
+                // about reads later as one that was never generated.
+                if target.os == "windows" {
+                    command.arg(format!(
+                        "-Wl,--out-implib={}",
+                        out.join(format!("{name}.lib"))
+                    ));
+                }
                 if !addon {
                     hide_all_but_the_exports(&mut command, out, wrote)?;
                 }
@@ -4012,11 +4188,19 @@ fn hash_of(bytes: &[u8]) -> u64 {
 }
 
 impl ObjectCache {
-    fn new(enabled: Option<&Utf8Path>) -> Self {
-        let compiler = cc()
+    /// **Keyed on the toolchain's identity as well as its version banner.**
+    /// `zig cc -target x86_64-windows-gnu --version` and `zig cc -target
+    /// aarch64-linux-gnu --version` print the same string, so hashing the
+    /// banner alone would let an object built for Windows answer for Linux --
+    /// a cache hit across platforms, which is the worst kind because the
+    /// artifact links and is wrong.
+    fn new(enabled: Option<&Utf8Path>, tools: &Toolchain) -> Self {
+        let banner = tools
+            .command()
             .arg("--version")
             .output()
             .map_or(0, |output| hash_of(&output.stdout));
+        let compiler = banner ^ hash_of(tools.key().as_bytes());
         Self { directory: enabled.map(Utf8Path::to_path_buf), compiler }
     }
 
@@ -4070,6 +4254,7 @@ impl ObjectCache {
 /// entry every other project reads.
 fn compile_one(
     cache: &ObjectCache,
+    tools: &Toolchain,
     source: &Utf8Path,
     object: &Utf8Path,
     arguments: &[String],
@@ -4084,7 +4269,7 @@ fn compile_one(
         return Ok(());
     }
     let depfile = Utf8PathBuf::from(format!("{object}.d"));
-    let mut command = cc();
+    let mut command = tools.command();
     command.args(arguments);
     if entry.is_some() {
         command.args(["-MMD", "-MF"]).arg(depfile.as_str());
@@ -4114,6 +4299,7 @@ fn compile_native(
     pic: bool,
     objects: &mut Vec<Utf8PathBuf>,
     cache: &ObjectCache,
+    tools: &Toolchain,
 ) -> Result<()> {
 
     for (directory, source) in native {
@@ -4130,7 +4316,7 @@ fn compile_native(
             arguments.push("-fPIC".to_owned());
         }
         arguments.extend(["-c".to_owned(), source.to_string(), "-o".to_owned(), object.to_string()]);
-        compile_one(cache, source, &object, &arguments, &format!("compiling {source} for `{name}`"))?;
+        compile_one(cache, tools, source, &object, &arguments, &format!("compiling {source} for `{name}`"))?;
         objects.push(object);
     }
     Ok(())
@@ -4140,11 +4326,35 @@ fn compile_native(
 ///
 /// `soname` overrides it where a library must match a name it did not choose;
 /// otherwise it is derived, which is what that field's documentation promises.
-fn artifact_name(name: &str, product: &nts_build::config::Product) -> String {
+/// **The extension is the target's, not the host's.** A `windows` product built
+/// here used to come out `libsdk.so` -- an ELF shared object under a Linux
+/// name, for a platform that loads neither. That was invisible while
+/// `target.windows()` defaulted to the llvm backend and refused before reaching
+/// this, which is the shape of a bug kept alive by an unrelated refusal.
+///
+/// `soname` still wins where it is given: a library that must match a name it
+/// did not choose is exactly what that field is for.
+fn artifact_name(
+    name: &str,
+    product: &nts_build::config::Product,
+    target: &nts_build::config::Target,
+) -> String {
+    let windows = target.os == "windows";
+    let apple = matches!(target.os.as_str(), "macos" | "ios");
     match product.kind.as_str() {
-        "shared-library" => product.soname.clone().unwrap_or_else(|| format!("lib{name}.so")),
+        "shared-library" => product.soname.clone().unwrap_or_else(|| {
+            if windows {
+                format!("{name}.dll")
+            } else if apple {
+                format!("lib{name}.dylib")
+            } else {
+                format!("lib{name}.so")
+            }
+        }),
+        "static-library" if windows => format!("{name}.lib"),
         "static-library" => format!("lib{name}.a"),
         "node-addon" => format!("{name}.node"),
+        _ if windows => format!("{name}.exe"),
         _ => name.to_owned(),
     }
 }

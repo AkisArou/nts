@@ -64,6 +64,44 @@ packages them. So the APK is read back through `apksigner verify` and `aapt2
 dump badging`, the contributed Java through the jar's listing, and the shared
 library through `nm`.
 
+### Measured: does `zig cc` substitute for `clang`
+
+Asked because assuming either way is expensive, and answered on **this
+compiler's generated C** rather than on zig's own claims -- which is not the
+same question, and is the one that decides anything.
+
+`zig cc` is a drop-in on the host: `examples/library` builds the same artifact
+through `CC=clang` and `CC="zig cc"`. Cross-compiling `program.c` and
+`nts_runtime.c`, with `file` reading the result:
+
+| target | result |
+| --- | --- |
+| `x86_64-windows-gnu` | PE32+ executable for MS Windows (DLL) |
+| `x86_64-linux-musl` | ELF 64-bit LSB shared object |
+| `aarch64-linux-gnu` | ELF 64-bit LSB shared object, ARM aarch64 |
+| `aarch64-macos-none` | **FAILED** -- `unknown type name 'malloc_zone_t'` |
+
+So Apple is the one it cannot reach: the runtime includes headers that come from
+Apple's SDK rather than from zig's bundled libc, and no flag fixes that. It is
+refused by name with that reason rather than attempted, because the alternative
+is a page of `unknown type name` from a tool the reader did not invoke.
+
+**What this was hiding.** `link_c` never read `target.os` and `artifact_name`
+hardcoded `.so`, so a `windows` product built on Linux produced `libsdk.so` -- an
+ELF shared object under a Linux name, for a platform that loads neither. Nothing
+saw it because `target.windows()` was pinned to the llvm backend, which refuses
+before reaching a linker: a bug kept alive by an unrelated refusal, which is the
+second one of those this week.
+
+**The default backend was the refusal.** `target.linux()` defaulted to `llvm`
+and `ios`, `macos` and `windows` were pinned to it, while `app.linux({ backend })`
+defaulted to `c` -- two answers to one question, disagreeing, and the one that
+lost cannot write a program. `examples/library` carried a comment about saying
+`backend: "c"` out loud, which is what a broken default looks like from inside a
+config: the workaround gets written down instead of the default getting fixed.
+All of them now read one `NATIVE_DEFAULT`, which is `c` because that is the
+backend that produces an artifact, and moves when the llvm lane grows an `--out`.
+
 ---
 
 ## 2. Where configuration is required -- and where it is not

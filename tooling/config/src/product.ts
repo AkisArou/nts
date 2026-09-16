@@ -256,7 +256,9 @@ export const app = Object.assign(appBase, {
   /** No UI host: a CLI. The narrowest artifact here. */
   cli: (o: AppOpts & { readonly backend?: NativeBackend }): AppProduct => {
     const { backend, ...rest } = o;
-    return { kind: "executable", targets: [t.linux({ backend: backend ?? "c" })], ...rest };
+    // `backend` passes through: `target.linux` owns the default, and this
+    // having its own was two answers to one question that disagreed.
+    return { kind: "executable", targets: [t.linux({ backend })], ...rest };
   },
 });
 

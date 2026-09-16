@@ -270,11 +270,37 @@ ask(
   "unions the package exports that this audit has no field to read coverage from",
   [...unions.keys()].filter((n) => !["ProductKind", "TargetId", "NativeBackend"].includes(n) && !(n in unionPath)),
 );
+// Members the config language offers that no fixture selects **on purpose**,
+// each with the reason. This is not a way to quiet the check: the guard below
+// turns a stale entry into a finding, so an excuse that stops being true fails
+// the audit rather than sitting here.
+//
+// `llvm` had accidental coverage until 2026-09-16: it was `target.linux()`'s
+// default, so fixtures selected it by not choosing. Making the default `c` --
+// because `c` is the backend that produces an artifact -- took the coverage
+// with it and revealed that no config had ever *asked* for llvm. A fixture
+// that did would refuse at build time, and a fixture that cannot build is a
+// worse thing to add than this is to write down.
+// Keyed by the union the loop below reports, which is `Backend` -- the first
+// version of this said `NativeBackend`, the name the *config* spells, and the
+// key matched nothing. The finding survived rather than being quietly excused,
+// which is the direction a lookup miss should fail in.
+const DELIBERATELY_UNSELECTED = {
+  Backend: {
+    llvm: "selecting it cannot produce an artifact -- `emit-llvm` renders to stdout, so `nts build` refuses the target by name",
+  },
+};
+
 for (const [name, members] of unions) {
   if (!(name in unionPath)) continue;
   const seen = new Set(configs.flatMap((c) => unionPath[name](c)).filter(Boolean));
+  const excused = DELIBERATELY_UNSELECTED[name] ?? {};
   ask(`\`${name}\` members no fixture selects (${seen.size}/${members.length} covered)`,
-      members.filter((m) => !seen.has(m)), (m) => `${name}.${m}`);
+      members.filter((m) => !seen.has(m) && !(m in excused)), (m) => `${name}.${m}`);
+  // The half that keeps the list above honest.
+  ask(`\`${name}\` members excused as unselected that a fixture now selects`,
+      Object.keys(excused).filter((m) => seen.has(m)),
+      (m) => `${name}.${m} -- remove it from DELIBERATELY_UNSELECTED`);
 }
 
 // --- 6. shapes that should not be sayable ----------------------------------

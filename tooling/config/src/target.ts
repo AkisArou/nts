@@ -87,6 +87,28 @@ export interface Target {
 }
 
 /** `"17.0"` and `"17"` name one SDK. The id takes the major. */
+/**
+ * The backend a native target gets when the config does not name one.
+ *
+ * **`c`, because it is the one that produces an artifact.** This was `llvm`,
+ * and the llvm lane renders to stdout -- its slice is scalar and there is no
+ * runtime to place beside it -- so every native target that did not say
+ * `backend: "c"` out loud refused at build time. `examples/library` carries a
+ * comment about having to say it, which is the shape of a default that does not
+ * work: the workaround gets written down instead of the default getting fixed.
+ * `target.windows()`, `ios()` and `macos()` did not even take the option, so a
+ * Windows or Apple product could not be built at all.
+ *
+ * **It was also two answers to one question.** `app.linux({ backend })`
+ * defaulted to `c` and `target.linux()` to `llvm`, so the same omission meant
+ * different things depending on which constructor a config happened to use.
+ * Both now read this.
+ *
+ * Absent is not an error, and a default that refuses is one. When the llvm lane
+ * grows an `--out`, this moves and nothing else has to.
+ */
+const NATIVE_DEFAULT: NativeBackend = "c";
+
 const major = (version: string): number => Number.parseInt(version, 10);
 
 /**
@@ -127,11 +149,12 @@ export const target = {
     readonly minimumVersion: string;
     readonly sdk?: number;
     readonly arch?: Arch;
+    readonly backend?: NativeBackend;
   }): Target => ({
     id: `ios-${o.sdk ?? major(o.minimumVersion)}`,
     os: "ios",
     arch: o.arch ?? "aarch64",
-    backend: "llvm",
+    backend: o.backend ?? NATIVE_DEFAULT,
     minimumVersion: o.minimumVersion,
   }),
 
@@ -139,11 +162,12 @@ export const target = {
     readonly minimumVersion: string;
     readonly sdk?: number;
     readonly arch?: Arch;
+    readonly backend?: NativeBackend;
   }): Target => ({
     id: `macos-${o.sdk ?? major(o.minimumVersion)}`,
     os: "macos",
     arch: o.arch ?? "aarch64",
-    backend: "llvm",
+    backend: o.backend ?? NATIVE_DEFAULT,
     minimumVersion: o.minimumVersion,
   }),
 
@@ -151,14 +175,16 @@ export const target = {
     id: "linux-gnu",
     os: "linux",
     arch: o.arch ?? "x86_64",
-    backend: o.backend ?? "llvm",
+    backend: o.backend ?? NATIVE_DEFAULT,
   }),
 
-  windows: (o: { readonly arch?: Arch } = {}): Target => ({
+  windows: (
+    o: { readonly arch?: Arch; readonly backend?: NativeBackend } = {},
+  ): Target => ({
     id: "windows",
     os: "windows",
     arch: o.arch ?? "x86_64",
-    backend: "llvm",
+    backend: o.backend ?? NATIVE_DEFAULT,
   }),
 
   /**
