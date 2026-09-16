@@ -492,6 +492,24 @@ satisfaction rule.** A package declaring `"android-29"` is claiming it needs API
 it. So a claim is compared by family, and its version against the consumer's
 floor.
 
+**That paragraph was true of the audit and false of the build for as long as it
+took to build an APK.** `NativeSources::covers` and `Manifest::covers` were both
+`it == id`, so `nts build examples/workspace/apps/android` produced two signed,
+installable APKs carrying neither `notifications`' Java nor `biometrics`'
+`USE_BIOMETRIC` permission, and reported nothing about either -- while
+`apps/android-brownfield`, which differs in one word (no `compileSdk`, so its id
+is `android-29`), refused by name on the same package. Two arms, one word apart,
+and the silent one is the *recommended* Android configuration.
+
+The rule was written down here and the code was a second derivation of it that
+disagreed, which is the failure this document exists to prevent. Both now route
+through `nts_build::config::claim_covers`, and the second thing that fixing it
+exposed is that **the floor is not the surface**: an app with `compileSdk: 36`
+and `minSdk: 21` is a real configuration where a claim of `android-29` is *not*
+satisfied, and the first implementation compared against the id and said it was.
+That case is `the_claim_is_measured_against_the_floor_and_not_the_surface`, and
+nothing else in the suite separates the two readings.
+
 **`Integration` was covered 0 of 6, and the first instrument said 2 of 6.** It
 collected every string in every config into one bag, and `"gradle"` and
 `"swiftpm"` are `Resolver` members too -- so one union's coverage answered for

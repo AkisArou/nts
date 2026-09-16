@@ -2350,6 +2350,17 @@ fn build(rest: &[String]) -> Result<()> {
             // reason to doubt. Refusing after the output directory exists is
             // also worse than refusing before it.
             refuse_unpackaged(name, &product.kind, target)?;
+            // **Before the emitter, not before the packager.** The SDK is the
+            // one input to an APK that a machine can simply not have, and
+            // discovering that after a full compile and a packaged jar spends
+            // the whole build to deliver a message that was available in a
+            // `stat`. It is also what makes the refusal testable: with no SDK
+            // the run has to fail *here*, and it used to fail one step later
+            // inside `jar`, reporting nothing.
+            let android = (target.backend == "jvm"
+                && matches!(product.kind.as_str(), "application" | "executable"))
+            .then(|| android_sdk(name, target))
+            .transpose()?;
             // **Declarations before bodies.** A `c:` module the program imports
             // has no `.d.ts` until one is generated from the header a config
             // names, and the program does not typecheck without it -- so this
@@ -2377,12 +2388,12 @@ fn build(rest: &[String]) -> Result<()> {
             // the header meant `native-copy` -- which declares `sources({ dir })`
             // and no header -- had neither, and its witness failed to find
             // `point.h` for a reason that is not what a witness checks.
-            let native = if !resolved.native.is_empty() || in_a_workspace {
-                let roots = generate_bindings(&tsconfig, std::slice::from_ref(&target.id))?;
-                native_sources(&roots, &target.id)?
+            let config_roots = if !resolved.native.is_empty() || in_a_workspace {
+                generate_bindings(&tsconfig, std::slice::from_ref(&target.id))?
             } else {
                 Vec::new()
             };
+            let native = native_sources(&config_roots, target)?;
             let out = root.join(name).join(target_directory(target));
             println!("building `{name}` for {} into {out}", target.id);
             match target.backend.as_str() {
@@ -2402,17 +2413,16 @@ fn build(rest: &[String]) -> Result<()> {
                         );
                     }
                 }
-                "jvm" => {
-                    emit_jvm(&tsconfig, Some(&out), false, emission)?;
-                    let classes = package_jvm(name, product, &out)?;
-                    if product.kind == "aar" {
-                        let artifact = package_aar(name, product, &out, &classes, target, &tsconfig)?;
-                        println!("  {artifact}");
-                    } else {
-                        println!("  {classes}");
-                        println!("  {}", out.join(RUNTIME_JAR));
-                    }
-                }
+                "jvm" => build_jvm(
+                    name,
+                    product,
+                    &out,
+                    target,
+                    &tsconfig,
+                    emission,
+                    &config_roots,
+                    android.as_ref(),
+                )?,
                 // Named rather than skipped. `emit-llvm` renders to stdout
                 // because its slice is scalar and there is no runtime to place
                 // beside it, so there is nothing here to write yet.
@@ -2576,7 +2586,10 @@ fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) 
             .native
             .iter()
             .filter(|entry| {
-                entry.header.is_some() && targets.iter().any(|id| entry.covers(id))
+                // **No floor, because there is no consumer here.** These are
+                // the package's own declared ids, bound so it typechecks in
+                // isolation; the id is both the surface and the floor.
+                entry.header.is_some() && targets.iter().any(|id| entry.covers(id, None))
             })
             .collect();
         let [entry] = headers.as_slice() else {
@@ -2628,14 +2641,14 @@ fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) 
 /// any other -- the difference is only that a person wrote it.
 fn native_sources(
     roots: &[Utf8PathBuf],
-    target: &str,
+    target: &nts_build::config::Target,
 ) -> Result<Vec<(Utf8PathBuf, Utf8PathBuf)>> {
     let mut found = Vec::new();
     for config_path in roots {
         let package = config_path.parent().unwrap_or_else(|| Utf8Path::new("."));
         let Ok(resolved) = nts_build::config::resolve(config_path) else { continue };
         for entry in &resolved.native {
-            if !entry.covers(target) {
+            if !entry.covers(&target.id, target.minimum_version.as_deref()) {
                 continue;
             }
             let directory = package.join(&entry.dir);
@@ -2653,6 +2666,101 @@ fn native_sources(
     Ok(found)
 }
 
+/// Emit, package and report one JVM product.
+///
+/// Lifted out of `build` rather than inlined there because the three JVM kinds
+/// diverge after packaging while the C ones do not -- and a `match` inside a
+/// `match` inside the product-and-target loop reads as one shape when it is
+/// two.
+#[allow(clippy::too_many_arguments)]
+fn build_jvm(
+    name: &str,
+    product: &nts_build::config::Product,
+    out: &Utf8Path,
+    target: &nts_build::config::Target,
+    tsconfig: &Utf8Path,
+    emission: Emission<'_>,
+    config_roots: &[Utf8PathBuf],
+    sdk: Option<&AndroidSdk>,
+) -> Result<()> {
+    emit_jvm(tsconfig, Some(out), false, emission)?;
+    // **Named before the classes are packaged, because the artifact would not
+    // say it.** A JVM target's `native:` roots are Java and JNI, and neither
+    // this nor `emit-jvm` compiles them -- so an APK built from a config
+    // declaring them would be missing the half its TypeScript calls into, and
+    // would fail at the first call across the boundary rather than at build
+    // time.
+    //
+    // It reads the *declared* roots and not `native_sources`, which collects
+    // `.c` files: a package contributing a directory of Java produces an empty
+    // list there and reads as having no native code at all.
+    let declared = declared_native_roots(config_roots, target);
+    if !declared.is_empty() {
+        bail!(
+            "product `{name}` targets {} and its packages declare {} native source \
+             root(s) for it, which on this backend is Java or JNI. Compiling those into \
+             the artifact is not built, and shipping one without them produces a program \
+             that links and then fails at its first call across the boundary with a \
+             `NoClassDefFoundError`. The roots: {}",
+            target.id,
+            declared.len(),
+            declared.join(", ")
+        )
+    }
+    let classes = package_jvm(name, product, out)?;
+    match product.kind.as_str() {
+        "aar" => println!("  {}", package_aar(name, product, out, &classes, target, tsconfig)?),
+        "application" | "executable" => {
+            let sdk = sdk.expect("an APK's SDK is resolved before the emitter runs");
+            println!("  {}", package_apk(name, product, out, &classes, target, tsconfig, sdk)?);
+            println!(
+                "  signed with the debug key at {}, which is not a release key",
+                out.join("debug.keystore")
+            );
+            // **Said because the directory name implies otherwise.** A product
+            // declaring `arch: ["aarch64", "armv7"]` gets one build per target
+            // and, with no native code in it, the two dex files are byte for
+            // byte the same -- checked, not assumed. Per-ABI APKs exist to
+            // carry `lib/<abi>/`, and an APK that carries none is one program
+            // under two names. A JVM target whose packages declare native
+            // roots refuses above, so today that is every APK this builds.
+            println!("  no native libraries, so every `arch` of it is the same program");
+        }
+        _ => {
+            println!("  {classes}");
+            println!("  {}", out.join(RUNTIME_JAR));
+        }
+    }
+    Ok(())
+}
+
+/// The native roots a target's packages *declare*, whether or not they hold C.
+///
+/// **Declared, not discovered, and the difference is the whole point.**
+/// `native_sources` collects `.c` files, because that is what the C backend
+/// compiles -- so a package contributing a directory of Java for `android-29`
+/// produces an empty list there and reads as "no native code". On the JVM
+/// backend that is exactly backwards: the roots are Java and JNI, they are the
+/// half the program calls into, and an artifact built without them is missing
+/// something no file extension in this tree announces.
+fn declared_native_roots(
+    config_roots: &[Utf8PathBuf],
+    target: &nts_build::config::Target,
+) -> Vec<String> {
+    let mut found = Vec::new();
+    for config_path in config_roots {
+        let package = config_path.parent().unwrap_or_else(|| Utf8Path::new("."));
+        let Ok(resolved) = nts_build::config::resolve(config_path) else { continue };
+        for entry in &resolved.native {
+            if entry.covers(&target.id, target.minimum_version.as_deref()) {
+                found.push(package.join(&entry.dir).to_string());
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
 /// Stop at a product kind whose packaging is not built, rather than near it.
 ///
 /// **The kind and the backend together**, because neither decides alone: an
@@ -2668,13 +2776,7 @@ fn refuse_unpackaged(name: &str, kind: &str, target: &nts_build::config::Target)
             "shared-library" | "static-library" | "node-addon" | "application" | "executable",
             false,
         )
-        | ("jar" | "aar", true) => Ok(()),
-        ("application" | "executable", true) => bail!(
-            "product `{name}` is an application on the jvm backend, which is an APK. \
-             Packaging one needs the Android SDK -- `aapt2`, `d8`, `apksigner` -- and \
-             this build does not do it yet. The classes it would contain are emitted by \
-             `nts emit-jvm --out`"
-        ),
+        | ("jar" | "aar" | "application" | "executable", true) => Ok(()),
         ("xcframework", _) => bail!(
             "product `{name}` is an XCFramework, which needs the Apple toolchain to \
              build and `xcodebuild -create-xcframework` to assemble. Not available here"
@@ -2767,12 +2869,7 @@ fn package_aar(
         .with_context(|| format!("copying {classes} into the AAR"))?;
 
     let project = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
-    let declared = nts_build::config::beside(tsconfig)
-        .and_then(|path| nts_build::config::resolve(&path).ok())
-        .map(|resolved| resolved.manifests)
-        .unwrap_or_default();
-    let fragments: Vec<&nts_build::config::Manifest> =
-        declared.iter().filter(|entry| entry.covers(&target.id)).collect();
+    let fragments = android_manifest_fragments(target, tsconfig);
     let manifest = staged.join("AndroidManifest.xml");
     match fragments.as_slice() {
         [] => std::fs::write(
@@ -2814,6 +2911,361 @@ fn package_aar(
         bail!("packaging `{name}` failed:\n{}", String::from_utf8_lossy(&output.stderr));
     }
     Ok(artifact)
+}
+
+/// The four Android SDK tools an APK needs, found once and named when absent.
+///
+/// **Found rather than configured.** Every one of these has exactly one
+/// conventional location under the SDK root, and a config field naming a path
+/// to `d8` would be a second statement of something `ANDROID_HOME` already
+/// says. What a person can get wrong is having no SDK, or an SDK missing a
+/// component -- both of which are one message naming the component and the
+/// `sdkmanager` line that installs it.
+struct AndroidSdk {
+    build_tools: Utf8PathBuf,
+    platform_jar: Utf8PathBuf,
+}
+
+impl AndroidSdk {
+    fn tool(&self, name: &str) -> std::process::Command {
+        std::process::Command::new(self.build_tools.join(name))
+    }
+}
+
+/// Newest first, so the search below takes the newest usable one.
+///
+/// Sorted numerically per component rather than lexically: `36.1.0` is newer
+/// than `36.0.0` and both are newer than `9.0.0`, which a string sort gets
+/// backwards on the last pair.
+fn build_tools_versions(root: &Utf8Path) -> Vec<Utf8PathBuf> {
+    let Ok(entries) = std::fs::read_dir(root.join("build-tools")) else { return Vec::new() };
+    let mut found: Vec<(Vec<u64>, Utf8PathBuf)> = entries
+        .filter_map(|entry| Utf8PathBuf::from_path_buf(entry.ok()?.path()).ok())
+        .filter(|path| path.is_dir())
+        .map(|path| {
+            let parts = path
+                .file_name()
+                .unwrap_or_default()
+                .split('.')
+                .map(|part| part.parse().unwrap_or(0))
+                .collect();
+            (parts, path)
+        })
+        .collect();
+    found.sort_by(|a, b| b.0.cmp(&a.0));
+    found.into_iter().map(|(_, path)| path).collect()
+}
+
+/// The tools this packaging runs, in the order it runs them.
+const APK_TOOLS: [&str; 3] = ["aapt2", "d8", "apksigner"];
+
+fn android_sdk(name: &str, target: &nts_build::config::Target) -> Result<AndroidSdk> {
+    // **A variable that is set and points nowhere is an error, and the one the
+    // default guess must not paper over.** A stale `ANDROID_HOME` in a shell
+    // profile is the likeliest way this goes wrong, and falling through to
+    // `~/Android/Sdk` would build against an SDK the person did not name --
+    // then report a missing component under a path they never typed. Absent is
+    // not an error; unreadable is.
+    let named = ["ANDROID_HOME", "ANDROID_SDK_ROOT"]
+        .into_iter()
+        .find_map(|var| Some((var, std::env::var(var).ok().filter(|v| !v.is_empty())?)));
+    let root = if let Some((var, value)) = named {
+        let path = Utf8PathBuf::from(value);
+        if !path.is_dir() {
+            bail!(
+                "product `{name}` is an APK and `{var}` is set to {path}, which is not a \
+                 directory. Point it at an Android SDK, or unset it to look in \
+                 ~/Android/Sdk"
+            )
+        }
+        path
+    } else {
+        let guess =
+            Utf8PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Android/Sdk");
+        if !guess.is_dir() {
+            bail!(
+                "product `{name}` is an APK and no Android SDK was found. Set \
+                 `ANDROID_HOME` to one, or install it at {guess}"
+            )
+        }
+        guess
+    };
+
+    let versions = build_tools_versions(&root);
+    // **The newest one that is complete, not simply the newest.** A partial
+    // `build-tools` directory is an ordinary state -- an interrupted
+    // `sdkmanager`, or a version installed for one tool -- and stopping at the
+    // newest would refuse while a usable one sits beside it.
+    let build_tools = versions
+        .iter()
+        .find(|dir| APK_TOOLS.iter().all(|tool| dir.join(tool).is_file()))
+        .cloned();
+    let build_tools = match (build_tools, versions.first()) {
+        (Some(dir), _) => dir,
+        (None, Some(newest)) => {
+            let missing: Vec<&str> =
+                APK_TOOLS.iter().copied().filter(|tool| !newest.join(tool).is_file()).collect();
+            bail!(
+                "product `{name}` is an APK and no complete `build-tools` was found \
+                 under {root}. The newest, {}, is missing {}. Install a complete one \
+                 with: sdkmanager \"build-tools;36.0.0\"",
+                newest.file_name().unwrap_or_default(),
+                missing.join(", ")
+            )
+        }
+        (None, None) => bail!(
+            "product `{name}` is an APK and {root} has no `build-tools` at all. \
+             Install one with: sdkmanager \"build-tools;36.0.0\""
+        ),
+    };
+
+    // **The target id *is* the platform directory name.** `t.android` builds it
+    // as `android-${compileSdk}` and the SDK lays platforms out under the same
+    // string, so this is a lookup rather than a translation -- and a target
+    // whose surface the SDK does not have installed is the same fact as a
+    // missing `android.jar`.
+    let platform_jar = root.join("platforms").join(&target.id).join("android.jar");
+    if !platform_jar.is_file() {
+        bail!(
+            "product `{name}` compiles against {} and {platform_jar} does not exist. \
+             Install that platform with: sdkmanager \"platforms;{}\"",
+            target.id,
+            target.id
+        )
+    }
+    Ok(AndroidSdk { build_tools, platform_jar })
+}
+
+/// Run one SDK tool, naming it rather than the step when it fails.
+fn run_tool(mut command: std::process::Command, tool: &str, what: &str) -> Result<()> {
+    let output = command
+        .output()
+        .with_context(|| format!("running `{tool}` to {what}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // `aapt2` reports on stdout and `apksigner` on stderr, so a message
+        // taking only one of them is empty for half of these tools -- which is
+        // the failure that reads as "it failed for no reason".
+        bail!("`{tool}` failed to {what}:\n{}{}", stderr.trim_end(), stdout.trim_end());
+    }
+    Ok(())
+}
+
+/// The API level the artifact runs back to.
+///
+/// `minimumVersion` where the target declares one, which `t.android` always
+/// does. A hand-written target literal need not, and the honest reading of "no
+/// floor declared" is the surface it compiles against -- so the id's number,
+/// which is `compileSdk`. That is minSdk == compileSdk, a legitimate
+/// configuration, rather than a guess at a lower number nobody wrote down.
+fn android_min_api(target: &nts_build::config::Target) -> u32 {
+    target
+        .minimum_version
+        .as_deref()
+        .and_then(|version| version.parse().ok())
+        .or_else(|| target.id.rsplit('-').next()?.parse().ok())
+        .unwrap_or(1)
+}
+
+/// Package the emitted classes into an installable, signed APK.
+///
+/// **Six tools in a row, and the ordering is not a preference.** `aapt2` writes
+/// the container and the binary manifest; `d8` turns class files into the one
+/// bytecode ART loads; the dex is added to the container afterwards because
+/// `aapt2` has no way to take one; `zipalign` must run before signing, because
+/// aligning rewrites offsets and would invalidate a signature; and `apksigner`
+/// must be last for the same reason.
+///
+/// **It is signed with a debug key, and the output says so.** An unsigned APK
+/// cannot be installed, so refusing to sign would make the product unbuildable
+/// for the thing an APK is for. A release key is a secret and there is no
+/// config surface naming one, so inventing a field for it here would be a
+/// decision made in the wrong place -- what this does instead is name the
+/// keystore it used, so nobody ships one believing otherwise.
+#[allow(clippy::too_many_arguments)]
+fn package_apk(
+    name: &str,
+    product: &nts_build::config::Product,
+    out: &Utf8Path,
+    classes: &Utf8Path,
+    target: &nts_build::config::Target,
+    tsconfig: &Utf8Path,
+    sdk: &AndroidSdk,
+) -> Result<Utf8PathBuf> {
+    let min_api = android_min_api(target);
+    let staged = out.join("apk");
+    drop(std::fs::remove_dir_all(&staged));
+    std::fs::create_dir_all(&staged).with_context(|| format!("creating {staged}"))?;
+
+    let manifest = staged.join("AndroidManifest.xml");
+    match android_manifest_fragments(target, tsconfig).as_slice() {
+        [] => {
+            let id = product.application_id.as_deref().with_context(|| {
+                format!(
+                    "product `{name}` is an APK and declares no `id`. An APK's manifest \
+                     must name a package and this cannot invent one: two apps sharing an \
+                     id cannot be installed side by side. Add `id: \"com.example.{name}\"` \
+                     to the product, or declare a manifest fragment of your own"
+                )
+            })?;
+            std::fs::write(
+                &manifest,
+                format!(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\
+                     <!-- Generated by nts from the product's `id`, `minSdk` and target. \
+                     Declare a manifest fragment to own this file. -->\n\
+                     <manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"\n\
+                     \x20         package=\"{id}\">\n\
+                     \x20 <uses-sdk android:minSdkVersion=\"{min_api}\" />\n\
+                     \x20 <application android:label=\"{name}\" />\n\
+                     </manifest>\n"
+                ),
+            )
+            .with_context(|| format!("writing {manifest}"))?;
+        }
+        [one] => {
+            let project = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
+            std::fs::copy(project.join(&one.path), &manifest)
+                .with_context(|| format!("copying {} into the APK", one.path))?;
+        }
+        // **Refused rather than merged.** AGP's manifest merger is a
+        // specification -- node ordering, `tools:` markers, attribute conflict
+        // rules -- and `build/src/config.rs` already says a fragment is carried
+        // and merged by the consumer's build. A partial merger here would be a
+        // second answer to that, and the half it got wrong would ship silently
+        // in an artifact nobody re-reads.
+        several => bail!(
+            "product `{name}` has {} manifest fragments covering {}. An APK carries one \
+             `AndroidManifest.xml` and merging them is AGP's manifest merger, which this \
+             does not reimplement. Declare one fragment for the application that states \
+             what the others would have contributed",
+            several.len(),
+            target.id
+        ),
+    }
+
+    // **The runtime jar goes in, and this is where it stops being optional.**
+    // A jar consumer resolves the runtime as a dependency; an APK has no
+    // resolver at install time, so every class the program loads has to be in
+    // the dex or the app dies at its first call with a `NoClassDefFoundError`.
+    let runtime = out.join(RUNTIME_JAR);
+    let mut d8 = sdk.tool("d8");
+    d8.arg("--release")
+        .arg("--min-api")
+        .arg(min_api.to_string())
+        .arg("--output")
+        .arg(staged.as_str())
+        .arg(classes.as_str())
+        .arg(runtime.as_str());
+    run_tool(d8, "d8", "convert the class files to dex")?;
+
+    let unsigned = staged.join("unsigned.apk");
+    let mut aapt2 = sdk.tool("aapt2");
+    aapt2
+        .arg("link")
+        .arg("-o")
+        .arg(unsigned.as_str())
+        .arg("-I")
+        .arg(sdk.platform_jar.as_str())
+        .arg("--manifest")
+        .arg(manifest.as_str())
+        .arg("--min-sdk-version")
+        .arg(min_api.to_string())
+        .arg("--target-sdk-version")
+        .arg(target.id.rsplit('-').next().unwrap_or("36"));
+    run_tool(aapt2, "aapt2", "link the APK")?;
+
+    // `jar --update` rather than a zip library, for the same reason
+    // `package_jvm` and `package_aar` shell out to `jar`: the JDK is already a
+    // hard requirement of this backend, and a second zip implementation in the
+    // tree is a second set of answers about compression and alignment.
+    let mut add = std::process::Command::new("jar");
+    add.arg("--update")
+        .arg("--file")
+        .arg(unsigned.as_str())
+        .arg("-C")
+        .arg(staged.as_str())
+        .arg("classes.dex");
+    run_tool(add, "jar", "add classes.dex to the APK")?;
+
+    let aligned = staged.join("aligned.apk");
+    let mut zipalign = sdk.tool("zipalign");
+    zipalign.arg("-p").arg("-f").arg("4").arg(unsigned.as_str()).arg(aligned.as_str());
+    run_tool(zipalign, "zipalign", "align the APK")?;
+
+    let keystore = debug_keystore(out)?;
+    let artifact = out.join(format!("{name}.apk"));
+    let mut sign = sdk.tool("apksigner");
+    sign.arg("sign")
+        .arg("--ks")
+        .arg(keystore.as_str())
+        .arg("--ks-pass")
+        .arg("pass:android")
+        .arg("--ks-key-alias")
+        .arg("androiddebugkey")
+        .arg("--key-pass")
+        .arg("pass:android")
+        .arg("--out")
+        .arg(artifact.as_str())
+        .arg(aligned.as_str());
+    run_tool(sign, "apksigner", "sign the APK")?;
+    Ok(artifact)
+}
+
+/// The manifest fragments a target's packages contribute.
+///
+/// Shared by the AAR and APK paths because it is one question -- which
+/// fragments are for this target -- and two readings of it would be two answers
+/// the first time `covers` changes.
+fn android_manifest_fragments(
+    target: &nts_build::config::Target,
+    tsconfig: &Utf8Path,
+) -> Vec<nts_build::config::Manifest> {
+    let declared = nts_build::config::beside(tsconfig)
+        .and_then(|path| nts_build::config::resolve(&path).ok())
+        .map(|resolved| resolved.manifests)
+        .unwrap_or_default();
+    declared
+        .into_iter()
+        .filter(|entry| entry.covers(&target.id, target.minimum_version.as_deref()))
+        .collect()
+}
+
+/// The debug key an APK is signed with, generated once and kept.
+///
+/// **Generated rather than required.** An absent keystore is the ordinary state
+/// of a machine that has never built an Android app, and "absent is not an
+/// error" -- Gradle makes the same one for the same reason. It is kept beside
+/// the artifact rather than in `~/.android` so that deleting a build directory
+/// deletes it: a key under `$HOME` outlives every project that used it, and a
+/// *debug* key that outlives its project is one somebody eventually ships.
+fn debug_keystore(out: &Utf8Path) -> Result<Utf8PathBuf> {
+    let keystore = out.join("debug.keystore");
+    if keystore.is_file() {
+        return Ok(keystore);
+    }
+    let mut keytool = std::process::Command::new("keytool");
+    keytool
+        .arg("-genkeypair")
+        .arg("-keystore")
+        .arg(keystore.as_str())
+        .arg("-storepass")
+        .arg("android")
+        .arg("-keypass")
+        .arg("android")
+        .arg("-alias")
+        .arg("androiddebugkey")
+        .arg("-keyalg")
+        .arg("RSA")
+        .arg("-keysize")
+        .arg("2048")
+        .arg("-validity")
+        .arg("10950")
+        .arg("-dname")
+        .arg("CN=Android Debug, O=Android, C=US");
+    run_tool(keytool, "keytool", "generate a debug signing key")?;
+    Ok(keystore)
 }
 
 /// Where `node_api.h` is, for a product that is a Node addon.

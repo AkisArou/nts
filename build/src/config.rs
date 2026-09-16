@@ -83,6 +83,15 @@ pub struct Product {
     /// is an artifact that does not match its declaration.
     #[serde(default, rename = "javaPackage")]
     pub java_package: Option<String>,
+    /// Reverse-DNS application identifier, where the platform needs one.
+    ///
+    /// Read because an APK's manifest must declare a package name and one
+    /// cannot be invented: two apps sharing an id cannot be installed side by
+    /// side, and a wrong one silently replaces somebody else's app on the
+    /// device. So a generated manifest without this is a refusal rather than a
+    /// default, and a project supplying its own fragment does not need it.
+    #[serde(default, rename = "id")]
+    pub application_id: Option<String>,
     /// Versioned soname, where a library must match a name it did not choose.
     ///
     /// Read because the linker takes it. Deserialized fields are added when
@@ -125,9 +134,64 @@ pub struct Manifest {
 impl Manifest {
     /// Whether this fragment is for a target.
     #[must_use]
-    pub fn covers(&self, id: &str) -> bool {
-        self.targets.is_empty() || self.targets.iter().any(|it| it == id)
+    pub fn covers(&self, id: &str, floor: Option<&str>) -> bool {
+        self.targets.is_empty() || self.targets.iter().any(|it| claim_covers(it, id, floor))
     }
+}
+
+/// Whether a package's support claim covers the target being built.
+///
+/// **A versioned claim is a floor, not an equality, and this was exact string
+/// comparison.** `targets: ["android-29"]` says "needs API 29 at run time" --
+/// that is what `minSdk` means and what makes a claim useful, since a package
+/// cannot enumerate every SDK that will ever ship. An app compiling against the
+/// `android-36` surface with a floor of 29 is the *recommended* Android
+/// configuration, and under equality it matched nothing: `apps/android` built
+/// two signed APKs carrying neither `notifications`' Java nor `biometrics`'
+/// `USE_BIOMETRIC` permission, and said nothing about either.
+///
+/// It was found by an A/B rather than by reading, and the arms differed in one
+/// word: `apps/android-brownfield` declares no `compileSdk`, so its id is
+/// `android-29`, and it refused by name on the same package the other one
+/// dropped. A fragment whose own comment reads "without it the prompt throws
+/// rather than returning false, so a consumer that omits it sees a crash and
+/// not a denial" is the cost of the silent half.
+///
+/// **The claim is compared against the consumer's floor, not against its
+/// surface**, and the first version of this got that wrong in a way that has a
+/// real case: an app with `compileSdk: 36` and `minSdk: 21` compiles against a
+/// surface newer than the claim and still runs on devices older than it, so a
+/// package needing API 29 is *not* satisfied and comparing against the id would
+/// have said it was. `docs/nts-config.md` states the rule, which is the half
+/// that was already written down -- the audit derived it and the build did not
+/// read it back.
+///
+/// **Split at the last `-`, and only when the suffix is a number.** `linux-gnu`
+/// and `windows` have no version to order, so they stay exact; `node-api-8`,
+/// `java-8` and `ios-17` are floors for the same reason `android-29` is. The
+/// direction matters and only one way round is sound: a claim of 29 is met by a
+/// floor of 36, and a claim of 36 is not met by a floor of 29.
+#[must_use]
+pub fn claim_covers(claim: &str, id: &str, floor: Option<&str>) -> bool {
+    fn split(value: &str) -> Option<(&str, u64)> {
+        let (platform, version) = value.rsplit_once('-')?;
+        Some((platform, version.parse().ok()?))
+    }
+    let (Some((claimed, needs)), Some((wanted, surface))) = (split(claim), split(id)) else {
+        // Nothing to order: an unversioned id is its own whole answer, and
+        // `linux-gnu` against `linux-musl` is two C libraries rather than a
+        // floor and a ceiling.
+        return claim == id;
+    };
+    if claimed != wanted {
+        return false;
+    }
+    // **Absent means the surface, which is `minSdk == compileSdk`.** Every
+    // target `tooling/config` builds carries `minimumVersion`; a hand-written
+    // target literal need not, and the honest reading of "no floor declared" is
+    // the one it compiles against rather than a lower number nobody wrote.
+    let have = floor.and_then(|value| value.split('.').next()?.parse().ok()).unwrap_or(surface);
+    needs <= have
 }
 
 /// Native sources a package contributes, and the header that describes them.
@@ -150,8 +214,8 @@ pub struct NativeSources {
 impl NativeSources {
     /// Whether this root is compiled for a target.
     #[must_use]
-    pub fn covers(&self, id: &str) -> bool {
-        self.targets.as_ref().is_none_or(|ids| ids.iter().any(|it| it == id))
+    pub fn covers(&self, id: &str, floor: Option<&str>) -> bool {
+        self.targets.as_ref().is_none_or(|ids| ids.iter().any(|it| claim_covers(it, id, floor)))
     }
 }
 
@@ -342,6 +406,7 @@ mod tests {
                             targets: Vec::new(),
                             consumer_proguard: None,
                             java_package: None,
+                            application_id: None,
                             soname: None,
                         },
                     )
@@ -378,4 +443,91 @@ mod tests {
         assert!(why.contains("addon") && why.contains("sdk"), "{why}");
     }
 
+    /// The A/B that found this: two arms differing in one word.
+    ///
+    /// `apps/android` declares `compileSdk: 36` and `apps/android-brownfield`
+    /// does not, so their target ids are `android-36` and `android-29` -- and
+    /// under exact comparison the first matched no package claim at all while
+    /// the second matched every one. Both directions are here because a test of
+    /// the permissive one alone cannot fail when the comparison is wrong in the
+    /// other.
+    #[test]
+    fn a_version_claim_is_met_by_the_floor_and_only_in_one_direction() {
+        let floor = Some("29");
+        // What was broken: the recommended configuration, compiling against a
+        // newer surface than the floor a package claims.
+        assert!(claim_covers("android-29", "android-36", floor));
+        assert!(claim_covers("ios-17", "ios-18", Some("17.0")));
+        assert!(claim_covers("node-api-8", "node-api-9", Some("9")));
+        assert!(claim_covers("java-8", "java-17", Some("17")));
+
+        // The direction that must not hold. A package needing the API 36
+        // surface cannot be built into an app running back to 29, and a
+        // comparison that merely ordered the pair would say it could.
+        assert!(!claim_covers("android-36", "android-29", floor));
+        assert!(!claim_covers("ios-18", "ios-17", Some("17.0")));
+
+        // Equality still holds, which is the case every existing config uses.
+        assert!(claim_covers("android-29", "android-29", floor));
+        assert!(claim_covers("linux-gnu", "linux-gnu", None));
+        assert!(claim_covers("windows", "windows", None));
+
+        // A platform is never another platform, whatever the numbers do.
+        assert!(!claim_covers("android-29", "ios-18", Some("18")));
+        assert!(!claim_covers("linux-gnu", "windows", None));
+
+        // An unversioned suffix is not a number and is not ordered: `gnu` and
+        // `musl` are different C libraries, not a floor and a ceiling.
+        assert!(!claim_covers("linux-gnu", "linux-musl", None));
+        assert!(!claim_covers("linux-musl", "linux-gnu", None));
+    }
+
+    /// **The surface is not the floor**, which the first version of this
+    /// conflated and `docs/nts-config.md` had already written down.
+    ///
+    /// An app compiling against API 36 and running back to 21 is a real
+    /// configuration, and a package needing API 29 is not satisfied by it --
+    /// the app would install on a device the package cannot run on. Comparing
+    /// the claim against the id would answer yes, so this is the case that
+    /// separates the two readings, and nothing else here does.
+    #[test]
+    fn the_claim_is_measured_against_the_floor_and_not_the_surface() {
+        assert!(!claim_covers("android-29", "android-36", Some("21")));
+        assert!(claim_covers("android-29", "android-36", Some("29")));
+
+        // No floor declared reads as `minSdk == compileSdk` -- the surface --
+        // rather than as a lower number nobody wrote.
+        assert!(claim_covers("android-29", "android-36", None));
+
+        // A floor with a minor version, which is how every Apple target spells
+        // it: `minimumVersion: "17.0"` against a claim of `ios-17`.
+        assert!(claim_covers("ios-17", "ios-18", Some("17.0")));
+        assert!(!claim_covers("ios-17", "ios-18", Some("16.4")));
+    }
+
+    /// The two call sites, because routing them through one function is the
+    /// claim and a test of the function alone does not check it.
+    #[test]
+    fn both_manifests_and_native_read_the_claim_as_a_floor() {
+        let fragment = Manifest {
+            targets: vec!["android-29".to_owned()],
+            path: "manifests/android.xml".to_owned(),
+        };
+        assert!(fragment.covers("android-36", Some("29")), "the USE_BIOMETRIC fragment was dropped");
+        assert!(!fragment.covers("android-36", Some("21")));
+
+        let sources = NativeSources {
+            dir: "native/android".to_owned(),
+            targets: Some(vec!["android-29".to_owned()]),
+            header: None,
+        };
+        assert!(sources.covers("android-36", Some("29")), "the Java half was dropped");
+        assert!(!sources.covers("ios-18", Some("18.0")));
+
+        // No claim is every target, which is the other half of `covers` and is
+        // untouched by any of this.
+        let everywhere =
+            NativeSources { dir: "native".to_owned(), targets: None, header: None };
+        assert!(everywhere.covers("windows", None));
+    }
 }

@@ -927,3 +927,177 @@ fn a_project_with_no_config_says_so() {
     assert!(!run.ok, "a build with nothing to build should stop");
     assert!(run.stderr.contains("nts.config.ts"), "{}", run.stderr);
 }
+
+/// The Android SDK components an APK needs, or `None` to skip.
+///
+/// Separate from `available()` because the two answer different questions: that
+/// one gates the C lane on `clang` and `nm`, and an APK needs neither. A test
+/// that skipped on a missing `clang` would be silent on a machine with a full
+/// Android SDK and no C compiler, which is a plausible CI image.
+fn android_sdk() -> Option<(PathBuf, PathBuf)> {
+    let root = ["ANDROID_HOME", "ANDROID_SDK_ROOT"]
+        .into_iter()
+        .find_map(|var| std::env::var(var).ok().filter(|v| !v.is_empty()))
+        .map(PathBuf::from)
+        .or_else(|| Some(PathBuf::from(std::env::var("HOME").ok()?).join("Android/Sdk")))
+        .filter(|path| path.is_dir())?;
+    let mut versions: Vec<PathBuf> = std::fs::read_dir(root.join("build-tools"))
+        .ok()?
+        .filter_map(|entry| Some(entry.ok()?.path()))
+        .collect();
+    versions.sort();
+    let tools = versions
+        .into_iter()
+        .rev()
+        .find(|dir| ["aapt2", "d8", "apksigner", "zipalign"].iter().all(|t| dir.join(t).is_file()))?;
+    let platform = root.join("platforms/android-36/android.jar");
+    platform.is_file().then_some((tools, platform))
+}
+
+const ANDROID_APP: &str = r#"
+import { defineConfig, app } from "@nts/config";
+export default defineConfig({
+  products: {
+    demo: app.android({
+      entry: "./src/main.ts",
+      id: "dev.nts.buildtest",
+      minSdk: 29,
+      compileSdk: 36,
+    }),
+  },
+});
+"#;
+
+/// An APK that a device would install, asserted through the platform's own tools.
+///
+/// **Six tools run and the file existing proves none of them worked.** `aapt2`
+/// writes a container whether or not a dex was ever added; `jar --update` will
+/// happily produce a zip ART cannot load; and an unsigned APK is a file of the
+/// right shape that no device accepts. So every assertion here is a question
+/// put to the toolchain rather than to the filesystem: does `apksigner` verify
+/// it, does the dex exist inside, and does the manifest say what the config
+/// said. Checking `artifact.exists()` would have passed on the first draft,
+/// which wrote an APK with no `classes.dex` in it at all.
+#[test]
+fn an_android_application_is_a_signed_installable_apk() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    let Some((tools, _)) = android_sdk() else { return };
+    if !frontend {
+        return;
+    }
+    let project = fixture("build-apk", ANDROID_APP);
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+
+    let artifact = project.join(".nts/build/demo/android-36-aarch64/demo.apk");
+    assert!(artifact.is_file(), "no APK at {}:\n{}", artifact.display(), run.stdout);
+
+    // The signature, which is what makes it installable rather than merely
+    // well formed. `apksigner verify` exits non-zero on an unsigned APK.
+    let verified = Command::new(tools.join("apksigner"))
+        .arg("verify")
+        .arg(&artifact)
+        .output()
+        .expect("running apksigner");
+    assert!(
+        verified.status.success(),
+        "apksigner rejected it:\n{}",
+        String::from_utf8_lossy(&verified.stderr)
+    );
+
+    // The dex, because an APK without one installs and then dies at launch --
+    // and every step before `d8` would have succeeded regardless.
+    let listing = Command::new("unzip").arg("-l").arg(&artifact).output().expect("running unzip");
+    let listing = String::from_utf8_lossy(&listing.stdout);
+    assert!(listing.contains("classes.dex"), "no dex in the APK:\n{listing}");
+
+    // The manifest, read back through `aapt2` rather than as the XML we wrote:
+    // the generated file is compiled to binary and a package name that failed
+    // to survive that would be invisible in the source.
+    let badging = Command::new(tools.join("aapt2"))
+        .args(["dump", "badging"])
+        .arg(&artifact)
+        .output()
+        .expect("running aapt2");
+    let badging = String::from_utf8_lossy(&badging.stdout);
+    assert!(badging.contains("name='dev.nts.buildtest'"), "wrong package name:\n{badging}");
+    assert!(badging.contains("minSdkVersion:'29'"), "the declared minSdk was lost:\n{badging}");
+
+    // `compileSdk` and `minSdk` are two numbers and the fixture makes them
+    // differ, because a build that used one for both would agree with a test
+    // that set them equal.
+    assert!(badging.contains("compileSdkVersion='36'"), "wrong compileSdk:\n{badging}");
+
+    // Named in the output, so nobody ships an APK believing it is release-signed.
+    assert!(
+        run.stdout.contains("debug key") && run.stdout.contains("not a release key"),
+        "the debug key was not disclosed:\n{}",
+        run.stdout
+    );
+}
+
+/// No `id`, and the refusal names the field rather than failing inside `aapt2`.
+///
+/// Runs without an SDK: the check is before any tool, which is the point --
+/// a message from `aapt2` about a malformed manifest names neither the config
+/// field that was missing nor the file to add it to.
+#[test]
+fn an_apk_without_an_application_id_is_refused_by_name() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    if !frontend || android_sdk().is_none() {
+        return;
+    }
+    let project = fixture(
+        "build-apk-no-id",
+        r#"
+import { defineConfig, app } from "@nts/config";
+export default defineConfig({
+  products: {
+    demo: app.android({ entry: "./src/main.ts", minSdk: 29, compileSdk: 36 }),
+  },
+});
+"#,
+    );
+    let run = build(&project, &[]);
+    assert!(!run.ok, "a product with no id built anyway:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("`id`") && run.stderr.contains("side by side"),
+        "the refusal does not name the field:\n{}",
+        run.stderr
+    );
+}
+
+/// No SDK, and the message names the variable that would find one.
+///
+/// **Needs no SDK to run, which is why it is worth having.** The refusals a
+/// person actually meets are the ones on a machine that is missing something,
+/// and those are exactly the paths a test on a fully-provisioned machine never
+/// reaches. `ANDROID_HOME` and `HOME` are both pointed at a directory that does
+/// not exist, because the search falls back to `~/Android/Sdk` and a test that
+/// only cleared the first would pass here and fail on a developer's laptop.
+#[test]
+fn an_apk_with_no_android_sdk_names_the_variable() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    if !frontend {
+        return;
+    }
+    let project = fixture("build-apk-no-sdk", ANDROID_APP);
+    let nowhere = project.join("no-sdk-here");
+    let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("build")
+        .arg(project.join("tsconfig.json"))
+        .env("ANDROID_HOME", &nowhere)
+        .env("ANDROID_SDK_ROOT", &nowhere)
+        .env("HOME", &nowhere)
+        .output()
+        .expect("running nts build");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "it built with no SDK");
+    assert!(
+        stderr.contains("ANDROID_HOME"),
+        "the refusal does not name the variable:\n{stderr}"
+    );
+}
