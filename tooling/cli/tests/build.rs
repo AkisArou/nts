@@ -161,8 +161,12 @@ fn a_backend_that_cannot_write_is_refused_by_name() {
     }
     // `target.linux()` defaults to llvm, whose slice is scalar and which renders
     // to stdout -- so there is nothing for a build to write.
+    // Not `build-llvm`: the assertion below looks for "llvm" in the message, and
+    // a directory named for it would put it in every path printed. See
+    // `a_build_that_drops_functions_says_how_many`, where that mistake made a
+    // test pass for two hours without checking anything.
     let project = fixture(
-        "build-llvm",
+        "build-backend-refusal",
         r#"
 import { defineConfig, library, target } from "@nts/config";
 export default defineConfig({
@@ -259,6 +263,99 @@ int main(void) { printf("%s\n", label ? "initialised" : "NULL"); return label ? 
         ran.status.success(),
         "the library loaded without evaluating its module: `label` is null.\nstdout: {}",
         String::from_utf8_lossy(&ran.stdout),
+    );
+}
+
+/// An executable links its host and terminates.
+///
+/// **A compiled program has nothing to print with**, which `examples/standalone`
+/// states and is why the assertion is termination *and* exit zero. The two
+/// pending timers are the point: a program that exits before they run has a loop
+/// that gave up early, and one that never exits has a handle nothing will close.
+///
+/// It also covers a link that the library cases cannot. `main.c` calls
+/// `nts_uv_host_run` and `nts_uv_host_shutdown`, which live in a translation
+/// unit `write_standalone` writes and the first version of this build did not
+/// compile -- an undefined reference, caught here rather than by a person.
+#[test]
+fn an_executable_links_its_host_and_terminates() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let project = fixture(
+        "build-exe",
+        r#"
+import { defineConfig, app } from "@nts/config";
+export default defineConfig({ products: { runner: app.cli({ entry: "./src/main.ts" }) } });
+"#,
+    );
+    // Top-level code, because that is what an executable runs. An exported
+    // function nothing calls is not a root for one and would be pruned.
+    std::fs::write(
+        project.join("src/main.ts"),
+        "let ticks = 0;\nfunction record(): void { ticks = ticks + 1; }\nsetTimeout(record, 1);\nsetTimeout(record, 2);\n",
+    )
+    .expect("writing the program");
+    let run = build(&project, &[]);
+    assert!(run.ok, "{}{}", run.stdout, run.stderr);
+    assert!(
+        !run.stdout.contains("cc -std=c11"),
+        "the build printed a compile command it had already run:\n{}",
+        run.stdout,
+    );
+
+    let binary = project.join(".nts/build/runner/linux-gnu-x86_64/runner");
+    assert!(binary.exists(), "no executable at {}", binary.display());
+    let ran = Command::new(&binary).output().expect("running the program");
+    assert!(
+        ran.status.success(),
+        "the program did not terminate cleanly: {:?}\n{}",
+        ran.status,
+        String::from_utf8_lossy(&ran.stderr),
+    );
+}
+
+/// A build that drops functions says so, rather than reporting an artifact.
+///
+/// `emit-c` prints each refusal and exits zero on purpose -- most are declines,
+/// and the program that remains is the one the tree builds. But a build whose
+/// last line is `1 artifact(s)` has told the reader the opposite of what
+/// happened: a probe emitted an executable whose only statement was refused,
+/// and it compiled, linked, ran, exited zero and did nothing.
+#[test]
+fn a_build_that_drops_functions_says_how_many() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    // **Not named after what it tests.** The directory was `build-refused`, and
+    // every path `nts build` prints contains it -- so `stdout.contains("refused")`
+    // was true for the fixture's own name, the test passed with the reporting
+    // deleted, and it had never once checked anything. A check whose answer does
+    // not depend on its input is not a check.
+    let project = fixture("build-dropped", SHARED);
+    // `console.log` is a global with no definition here, and lowering refuses
+    // it by name.
+    std::fs::write(
+        project.join("src/main.ts"),
+        "export function published(): void { console.log('x'); }\n",
+    )
+    .expect("writing the program");
+    let run = build(&project, &[]);
+    assert!(run.ok, "{}{}", run.stdout, run.stderr);
+    // The count, not the word: the phrasing carries a number, and a build that
+    // merely mentioned refusals without saying how many would still be hiding
+    // the size of what it dropped.
+    assert!(
+        run.stdout.contains("1 function(s) refused"),
+        "the build reported an artifact and not the functions missing from it:\n{}",
+        run.stdout,
+    );
+    assert!(
+        run.stdout.contains("missing 1 refused function(s)"),
+        "the summary line claimed an artifact with nothing missing:\n{}",
+        run.stdout,
     );
 }
 

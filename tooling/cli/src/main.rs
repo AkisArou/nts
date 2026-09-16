@@ -2145,7 +2145,12 @@ fn where_it_is(snapshot: &nts_semantic_schema::SemanticSnapshot, at: &Location) 
 /// Both are a *choice* rather than part of the runtime: an embedder with its
 /// own loop supplies its own host and links none of this, and a library product
 /// has no loop at all (RFC §26.1).
-fn write_standalone(program: &hir::Program, out: &Utf8Path, sources: &[&str]) -> Result<()> {
+fn write_standalone(
+    program: &hir::Program,
+    out: &Utf8Path,
+    sources: &[&str],
+    linking: bool,
+) -> Result<()> {
     // A program that is only declarations has nothing to evaluate, and calling
     // a function that was never emitted is a link error.
     let initializes = program
@@ -2180,11 +2185,13 @@ fn write_standalone(program: &hir::Program, out: &Utf8Path, sources: &[&str]) ->
     // stripping. The same flags take a `hello` with no Unicode at all from
     // 81 KB to 16 KB, because most of the runtime is unreachable from any one
     // program too.
-    println!(
+    if !linking {
+        println!(
         "  cc -std=c11 -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c program.c {} {} -luv -lm -o program",
         sources.join(" "),
         nts_codegen_c::UV_HOST_SOURCE_NAME
-    );
+        );
+    }
     Ok(())
 }
 
@@ -2290,11 +2297,13 @@ fn build(rest: &[String]) -> Result<()> {
         .join(".nts")
         .join("build");
     let mut built = 0usize;
+    let mut refused = 0usize;
     for (name, product) in chosen {
         if product.targets.is_empty() {
             bail!("product `{name}` names no targets, so there is nothing to build it for")
         }
-        let emission = Emission { shape: Shape::of(&product.kind), product: Some((name, product)) };
+        let emission =
+            Emission { shape: Shape::of(&product.kind), product: Some((name, product)), linking: true };
         for target in &product.targets {
             let out = root.join(name).join(target_directory(target));
             println!("building `{name}` for {} into {out}", target.id);
@@ -2303,6 +2312,17 @@ fn build(rest: &[String]) -> Result<()> {
                     let wrote = emit_c(&tsconfig, Some(&out), emission)?;
                     let artifact = link_c(name, product, &out, &wrote)?;
                     println!("  {artifact}");
+                    // Named here as well as on stderr, because a build whose
+                    // last line is `1 artifact(s)` has told the reader the
+                    // opposite of what happened.
+                    if wrote.refused > 0 {
+                        refused += wrote.refused;
+                        println!(
+                            "  {} function(s) refused and are absent from it; \
+                             each is named above",
+                            wrote.refused
+                        );
+                    }
                 }
                 "jvm" => emit_jvm(&tsconfig, Some(&out), false, emission)?,
                 // Named rather than skipped. `emit-llvm` renders to stdout
@@ -2319,7 +2339,11 @@ fn build(rest: &[String]) -> Result<()> {
             built += 1;
         }
     }
-    println!("{built} artifact(s) under {root}");
+    if refused > 0 {
+        println!("{built} artifact(s) under {root}, missing {refused} refused function(s)");
+    } else {
+        println!("{built} artifact(s) under {root}");
+    }
     Ok(())
 }
 
@@ -2397,7 +2421,17 @@ fn link_c(name: &str, product: &nts_build::config::Product, out: &Utf8Path, wrot
     for source in &sources {
         let object = out.join(format!("{source}.o"));
         let mut command = cc();
-        command.args(["-std=c11", "-O2", "-I"]).arg(out.as_str());
+        // `--gc-sections` is not a micro-optimisation, and the numbers are
+        // `write_standalone`'s own: the Unicode tables are one library's worth
+        // of data of which a program uses the part it calls, and the linker is
+        // what knows which part. Measured there at 81 KB linked whole against
+        // 10 KB after stripping, and a `hello` with no Unicode at all from
+        // 81 KB to 16 KB, because most of the runtime is unreachable from any
+        // one program. It needs the two `-f` flags at compile time to have
+        // sections to drop.
+        command
+            .args(["-std=c11", "-O2", "-ffunction-sections", "-fdata-sections", "-I"])
+            .arg(out.as_str());
         if pic {
             command.arg("-fPIC");
         }
@@ -2432,7 +2466,7 @@ fn link_c(name: &str, product: &nts_build::config::Product, out: &Utf8Path, wrot
             for object in &objects {
                 command.arg(object.as_str());
             }
-            command.arg("-lm");
+            command.args(["-Wl,--gc-sections", "-lm"]);
             // The libuv host is a translation unit like any other, so its
             // presence in what was written is the question -- not the product
             // kind, and not a flag somebody remembers.
@@ -2497,12 +2531,19 @@ struct Emission<'a> {
     shape: Shape,
     /// The product and the name it is declared under, when a build chose it.
     product: Option<(&'a str, &'a nts_build::config::Product)>,
+    /// Whether the caller goes on to compile and link what is written.
+    ///
+    /// `emit-c --out` ends by printing the `cc` command a person now has to
+    /// run, which is right for `emit-c` and is noise from `nts build` -- it
+    /// prints a command it has already run, and a reader who pastes it gets a
+    /// second, differently-flagged copy of the artifact they already have.
+    linking: bool,
 }
 
 impl Emission<'_> {
     /// A bare `emit-*`: the flags are all it has to go on.
     fn from_flags() -> Self {
-        Self { shape: Shape::from_flags(), product: None }
+        Self { shape: Shape::from_flags(), product: None, linking: false }
     }
 }
 
@@ -2884,6 +2925,16 @@ struct Wrote {
     sources: Vec<String>,
     /// C symbols the artifact publishes.
     published: Vec<String>,
+    /// Functions lowering refused, which are absent from the artifact.
+    ///
+    /// **Counted because a build that drops functions must say so.** `emit-c`
+    /// prints each refusal to stderr and exits zero on purpose -- most are
+    /// declines, and "the program that remains is the one the tree builds",
+    /// which twenty-four node modules depend on. But a build whose last line is
+    /// `1 artifact(s)` has told the reader the opposite of what happened. A
+    /// probe here emitted an executable whose only statement was refused: it
+    /// compiled, linked, ran, exited zero and did nothing.
+    refused: usize,
 }
 
 fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Result<Wrote> {
@@ -2950,6 +3001,11 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
     }
     refuse_if_the_emitter_declined(&emitted.diagnostics)?;
 
+    let refused = prepared
+        .diagnostics
+        .iter()
+        .filter(|d| d.code.starts_with("NTS1"))
+        .count();
     let published: Vec<String> = program
         .public_api
         .iter()
@@ -2957,10 +3013,10 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
         .collect();
     let Some(out) = out else {
         print!("{}", emitted.writer.text());
-        return Ok(Wrote::default());
+        return Ok(Wrote { refused, ..Wrote::default() });
     };
 
-    write_c_output(&program, &emitted, out, emission, published)
+    write_c_output(&program, &emitted, out, emission, published, refused)
 }
 
 /// Write the program, its runtime, and whatever the product's shape adds.
@@ -2974,6 +3030,7 @@ fn write_c_output(
     out: &Utf8Path,
     emission: Emission,
     published: Vec<String>,
+    refused: usize,
 ) -> Result<Wrote> {
     // **`--main` decides what is written, not what survives**, and the variable
     // it replaced answered both. Reachability read `--main` or `--entry` above;
@@ -3003,13 +3060,14 @@ fn write_c_output(
     // comes with it, because a program needs a loop and an embedder with its
     // own supplies a different one.
     if standalone {
-        write_standalone(program, out, &extra)?;
+        write_standalone(program, out, &extra, emission.linking)?;
         return Ok(Wrote {
             sources: std::iter::once("program.c".to_owned())
                 .chain(extra.iter().map(|name| (*name).to_owned()))
-                .chain(std::iter::once("main.c".to_owned()))
+                .chain(["main.c".to_owned(), nts_codegen_c::UV_HOST_SOURCE_NAME.to_owned()])
                 .collect(),
             published,
+            refused,
         });
     }
 
@@ -3036,6 +3094,7 @@ fn write_c_output(
                 .chain(std::iter::once(nts_codegen_napi::ADDON_SOURCE_NAME.to_owned()))
                 .collect(),
             published,
+            refused,
         });
     }
 
@@ -3065,6 +3124,7 @@ fn write_c_output(
             .chain(extra.iter().map(|name| (*name).to_owned()))
             .collect(),
         published,
+        refused,
     })
 }
 
