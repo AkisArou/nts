@@ -2188,3 +2188,85 @@ export default defineConfig({
     let run = build(&project, &[]);
     assert!(run.ok, "widening the claim did not let it build:\n{}{}", run.stdout, run.stderr);
 }
+
+/// `Config.tsconfig` names the program, and a named file still wins over it.
+///
+/// **The field parsed and did nothing.** Its own documentation calls it "the
+/// program's source of truth … optional, defaulting to `./tsconfig.json` beside
+/// this file … named only when it differs" -- and a config naming
+/// `./program.json` was ignored, the build failing on a `tsconfig.json` its
+/// author had deliberately not written.
+///
+/// Three arms, because the rule is a precedence and one arm cannot show one.
+/// The third is the interesting one: naming a file explicitly is the caller
+/// being specific and has to beat the config, or a project can never be built
+/// against anything but what its config says.
+#[test]
+fn the_config_names_the_program_unless_a_file_is_named() {
+    if !available() {
+        skip("node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let project = fixture(
+        "build-tsconfig-field",
+        r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  tsconfig: "./program.json",
+  products: {
+    acme: library.native({ targets: [target.linux()], entry: "./src/main.ts" }),
+  },
+});
+"#,
+    );
+    // The program the config names, and a *different* one beside it. Neither is
+    // `tsconfig.json`: the default must not be what makes this pass.
+    let options = r#"{"compilerOptions":{"target":"ESNext","module":"ESNext","moduleResolution":"bundler","strict":true,"noEmit":false}"#;
+    std::fs::write(project.join("program.json"), format!("{options},\"include\":[\"src/**/*\"]}}"))
+        .expect("program.json");
+    std::fs::write(project.join("other.json"), format!("{options},\"files\":[\"src/only.ts\"]}}"))
+        .expect("other.json");
+    std::fs::write(project.join("src/only.ts"), "export function onlyOne(): number { return 1; }\n")
+        .expect("only.ts");
+    drop(std::fs::remove_file(project.join("tsconfig.json")));
+
+    let artifact = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
+
+    // `build()` appends `tsconfig.json` to what it is given, so the arms that
+    // name a file go straight to the binary.
+    let named = |path: &Path| -> Run {
+        let out = Command::new(env!("CARGO_BIN_EXE_nts"))
+            .arg("build")
+            .arg(path)
+            .output()
+            .expect("running nts build");
+        Run {
+            ok: out.status.success(),
+            stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+        }
+    };
+
+    // 1. the config file names the project it describes
+    drop(std::fs::remove_file(&artifact));
+    let run = named(&project.join("nts.config.ts"));
+    assert!(run.ok, "naming the config ignored its `tsconfig`:\n{}{}", run.stdout, run.stderr);
+    assert!(artifact.is_file(), "no artifact:\n{}", run.stdout);
+
+    // 2. so does the directory
+    drop(std::fs::remove_file(&artifact));
+    let run = named(&project);
+    assert!(run.ok, "the directory ignored the config's `tsconfig`:\n{}{}", run.stdout, run.stderr);
+    assert!(artifact.is_file(), "no artifact:\n{}", run.stdout);
+
+    // 3. **a named file wins.** `other.json` holds only `src/only.ts`, so the
+    // product's entry is not in that program and the build says exactly that --
+    // which is the proof the field did *not* override what was asked for.
+    let run = named(&project.join("other.json"));
+    assert!(!run.ok, "the config's `tsconfig` overrode a file the caller named:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("./src/main.ts") && run.stderr.contains("no source in this program"),
+        "the mismatch is not what was reported:\n{}",
+        run.stderr
+    );
+}

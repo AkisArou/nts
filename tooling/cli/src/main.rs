@@ -125,6 +125,40 @@ fn acquire(tsconfig: &Utf8Path) -> Result<Utf8PathBuf> {
 /// Returns an error rather than a path so that naming something that is not a
 /// project fails here instead of downstream as an empty program -- which is
 /// indistinguishable from a program that legitimately has nothing in it.
+/// The program a project directory describes.
+///
+/// **`Config.tsconfig` is what a config says its program is, and nothing read
+/// it.** Its own documentation calls it "the program's source of truth ...
+/// optional, defaulting to `./tsconfig.json` beside this file ... named only
+/// when it differs" -- and a config naming `./program.json` was ignored, the
+/// build failing on a `tsconfig.json` its author had deliberately not written.
+/// A field that parses and does nothing.
+///
+/// **Naming the config means naming the project it describes.** A directory
+/// already resolved to the `tsconfig.json` in it, and `nts build
+/// path/to/nts.config.ts` is the same request spelled the other obvious way --
+/// it is the file a person has open. Taken literally it made the *config* the
+/// program, and `examples/library` failed with four `TS5097 An import path can
+/// only end with a '.ts' extension`, about `@nts/config`'s own `package.json`.
+/// Nothing in the tree built that example, so it had no observer.
+///
+/// **A config that will not evaluate falls through to the default rather than
+/// reporting here.** `build` resolves it again a moment later and says why with
+/// context this has no room for, and two messages for one fault is worse than a
+/// late one. `resolve` is memoised per process, so asking twice costs one
+/// `node`.
+fn program_of(dir: &Utf8Path) -> Utf8PathBuf {
+    let default = dir.join("tsconfig.json");
+    let config = dir.join(nts_build::config::FILE_NAME);
+    if !config.is_file() {
+        return default;
+    }
+    nts_build::config::resolve(&config)
+        .ok()
+        .and_then(|resolved| resolved.tsconfig)
+        .map_or(default, |named| dir.join(named))
+}
+
 fn named_project(rest: &[String]) -> Result<Utf8PathBuf> {
     let mut skip_next = false;
     let mut found = None;
@@ -164,27 +198,21 @@ fn named_project(rest: &[String]) -> Result<Utf8PathBuf> {
     }
     let named_one = found.is_some();
     let path = found.unwrap_or_else(|| Utf8PathBuf::from("tsconfig.json"));
-    let path = if path.is_dir() { path.join("tsconfig.json") } else { path };
-    // **Naming the config means naming the project it describes.** A directory
-    // already resolves to the `tsconfig.json` in it, and `nts build
-    // path/to/nts.config.ts` is the same request spelled the other obvious way
-    // -- it is the file a person has open. Taken literally it made the *config*
-    // the program, and `examples/library` then failed with four `TS5097 An
-    // import path can only end with a '.ts' extension`, about
-    // `@nts/config`'s own `package.json` mapping `"."` to `./src/index.ts`.
-    //
-    // Four messages naming a TypeScript option, for a project whose sources are
-    // fine and which builds through either of the other two spellings. Nothing
-    // in the tree ran this one, so it had no observer -- `examples/library` is
-    // the RFC's first vertical slice and the gate reads its config without
-    // building it.
-    let path = if path.file_name() == Some(nts_build::config::FILE_NAME) {
-        path.parent()
-            .filter(|parent| !parent.as_str().is_empty())
-            .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), |dir| dir.join("tsconfig.json"))
+    // A directory and the config file are the same request -- "the project
+    // here" -- and both have to ask the config which program it describes. An
+    // explicitly named file is the caller being specific, and wins outright.
+    let here = if path.is_dir() {
+        Some(path.clone())
+    } else if path.file_name() == Some(nts_build::config::FILE_NAME) {
+        Some(
+            path.parent()
+                .filter(|parent| !parent.as_str().is_empty())
+                .map_or_else(|| Utf8PathBuf::from("."), Utf8Path::to_path_buf),
+        )
     } else {
-        path
+        None
     };
+    let path = here.map_or(path, |dir| program_of(&dir));
     if !path.is_file() {
         // **Missing and wrong-shaped are different mistakes**, and one message
         // for both sends a person to check a file's contents when the file is

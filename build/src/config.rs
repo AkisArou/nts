@@ -227,6 +227,14 @@ impl NativeSources {
 /// and never read is the same shape as a config field nothing reaches.
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 pub struct Resolved {
+    /// The program this config describes, where it is not `./tsconfig.json`.
+    ///
+    /// Read because something now honours it. It is documented as "the
+    /// program's source of truth ... named only when it differs", and until
+    /// this existed a config naming `./program.json` was ignored and the build
+    /// demanded a file its author had deliberately not written.
+    #[serde(default)]
+    pub tsconfig: Option<String>,
     #[serde(default)]
     pub products: BTreeMap<String, Product>,
     /// Where compiled objects are kept between builds.
@@ -437,6 +445,7 @@ mod tests {
 
     fn with(names: &[&str]) -> Resolved {
         Resolved {
+            tsconfig: None,
             native: Vec::new(),
             integrate: Vec::new(),
             build: None,
