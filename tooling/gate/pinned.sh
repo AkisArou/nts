@@ -109,7 +109,14 @@ workspace_modules=$(
     awk -F/ 'NF > 1 { print $1 "/" $2 }' |
     sort -u |
     while read -r package; do
-      [ -d "$root/$package/node_modules/@nts" ] && printf '%s/node_modules\n' "$package"
+      # `if` rather than `[ ... ] && printf`: the `&&` form leaves the loop's
+      # exit status at 1 whenever the *last* package has no link, which under
+      # `set -e` kills the assignment and the script with it -- silently, since
+      # nothing has been printed yet. The gate then exits 1 with an empty log,
+      # which reads as "queued behind a lock" and is not.
+      if [ -d "$root/$package/node_modules/@nts" ]; then
+        printf '%s/node_modules\n' "$package"
+      fi
     done
 )
 for modules in node_modules runtime/node/node_modules $workspace_modules; do
