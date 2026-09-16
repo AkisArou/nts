@@ -293,7 +293,18 @@ fn c_type(ty: &HirType) -> String {
         HirType::Float { bits: 32 } => "float",
         HirType::Float { .. } => "double",
         // An `async` function hands back the fixed runtime type whatever it
-        // settles with; `show_settled` reads the payload out.
+        // settles with; `nts_check_show_settled` reads the payload out.
+        //
+        // **Every name this harness puts in scope carries `nts_check_`.**
+        // They were `show`, `show_string`, `show_settled` and a local
+        // `held`, and the harness `#include`s `program.h` -- so a program
+        // exporting a function called `held` could not be checked at all.
+        // `examples/promise-with-resolvers` had one, and clang answered
+        // `called object type 'NtsPromise *' is not a function`, which is
+        // a sentence about the harness pointed at the program. It fails
+        // loudly rather than answering wrongly, so this is about the
+        // message rather than the result -- but the message named the
+        // wrong file.
         HirType::Managed(nts_core::hir::ManagedType::Promise(_)) => "NtsPromise *",
         // Neither is drivable -- `drivable` gates what reaches here -- but a
         // wrong *spelling* would be a wrong C declaration rather than a
@@ -757,7 +768,7 @@ const HARNESS_PRELUDE: &str =
           * string is. Printing them beats printing the text: it needs no\n\
           * escaping rules, and a surrogate pair shows up as the two units\n\
           * `length` counts rather than as one character. */\n\
-         static void show_string(const char *name, int at, const NtsString *s) {\n\
+         static void nts_check_show_string(const char *name, int at, const NtsString *s) {\n\
          \x20   printf(\"%s %d str %u\", name, at, s->length);\n\
          \x20   for (uint32_t i = 0; i < s->length; i++) {\n\
          \x20       printf(\",%u\", (unsigned)nts_str_char_code_at(s, (double)i));\n\
@@ -765,7 +776,7 @@ const HARNESS_PRELUDE: &str =
          \x20   printf(\"\\n\");\n\
          \x20   fflush(stdout);\n\
          }\n\n\
-         static void show(const char *name, int at, double value) {\n\
+         static void nts_check_show(const char *name, int at, double value) {\n\
          \x20   uint64_t bits;\n\
          \x20   /* Every NaN is the same NaN as far as JavaScript can tell: there\n\
          \x20    * is no way to observe the sign or payload from the language, so\n\
@@ -784,7 +795,7 @@ const HARNESS_PRELUDE: &str =
           * settles with once the loop has nothing left to run. The budget is a\n\
           * bound rather than a guess: a program that starves the loop fails\n\
           * here instead of hanging the run. */\n\
-         static void show_settled(const char *name, int at, NtsPromise *p) {\n\
+         static void nts_check_show_settled(const char *name, int at, NtsPromise *p) {\n\
          \x20   /* Until it settles, not until the loop falls quiet. `await` on\n\
          \x20    * node returns when its promise does, and the two differ as\n\
          \x20    * soon as timers exist: a program that left another timer\n\
@@ -801,12 +812,12 @@ const HARNESS_PRELUDE: &str =
          \x20   }\n\
          \x20   if (p->state == NTS_PROMISE_FULFILLED\n\
          \x20       && nts_value_tag(p->value) == NTS_TAG_NUMBER) {\n\
-         \x20       show(name, at, nts_value_number(p->value));\n\
+         \x20       nts_check_show(name, at, nts_value_number(p->value));\n\
          \x20       return;\n\
          \x20   }\n\
          \x20   if (p->state == NTS_PROMISE_FULFILLED\n\
          \x20       && NTS_TAG_IS_REFERENCE(nts_value_tag(p->value))) {\n\
-         \x20       show_string(name, at,\n\
+         \x20       nts_check_show_string(name, at,\n\
          \x20                   (const NtsString *)nts_value_reference(p->value));\n\
          \x20       return;\n\
          \x20   }\n\
@@ -894,18 +905,20 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
             // program's leak. It did, until this line existed.
             let show = if settles_with(&one.returns).is_some() {
                 format!(
-                    "{{ NtsPromise *held = {call}; show_settled(\"{}\", {at}, held); \
-                     nts_release((NtsHeader *)held); }}",
+                    "{{ NtsPromise *nts_check_held = {call}; \
+                     nts_check_show_settled(\"{}\", {at}, nts_check_held); \
+                     nts_release((NtsHeader *)nts_check_held); }}",
                     one.name
                 )
             } else if is_string(&one.returns) {
                 format!(
-                    "{{ NtsString *held = {call}; show_string(\"{}\", {at}, held); \
-                     nts_release((NtsHeader *)held); }}",
+                    "{{ NtsString *nts_check_held = {call}; \
+                     nts_check_show_string(\"{}\", {at}, nts_check_held); \
+                     nts_release((NtsHeader *)nts_check_held); }}",
                     one.name
                 )
             } else {
-                format!("show(\"{}\", {at}, (double){call});", one.name)
+                format!("nts_check_show(\"{}\", {at}, (double){call});", one.name)
             };
             let _ = writeln!(
                 main,

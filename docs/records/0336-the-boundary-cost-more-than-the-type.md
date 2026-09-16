@@ -21,7 +21,7 @@ And resolving the placeholder in that message gave one type. In `fs`:
     194  PromiseWithResolvers | null
      44  PromiseWithResolvers | undefined
 
-238 sites, one name. `blockers/promise-with-resolvers` had already recorded it —
+238 sites, one name. `blockers/a-function-value-called-with-no-closures` had already recorded it —
 *"292 of `fs`'s 2,078 refusals are this one type … the largest single blocker in
 the module by a wide margin"* — which is corroboration arrived at from the other
 end rather than a rediscovery I can claim.

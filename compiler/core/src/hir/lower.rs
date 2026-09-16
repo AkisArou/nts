@@ -6575,6 +6575,29 @@ fn provided_representation(
         return Some(HirType::Managed(ManagedType::Promise(Box::new(payload))));
     }
 
+    // `PromiseWithResolvers<T>` is *represented as* `Promise<T>`, because it
+    // holds nothing else. The interface is `{ promise, resolve, reject }`, and
+    // `resolve` and `reject` are derivable from the promise alone -- they are
+    // the two settles the runtime already has, with the promise as the
+    // receiver. So the capability object needs no layout, no allocation and no
+    // closure: it *is* the promise, and `.promise` is the identity.
+    //
+    // This is what made the feature look hard. `new Promise(executor)` avoids
+    // closures by inlining the executor, and reading `withResolvers` as the
+    // same problem without that escape hatch says it needs real first-class
+    // `resolve` values. It does not, as long as the three members are reached
+    // through the object -- and 23 of the 25 sites in `runtime/node` keep the
+    // object rather than destructuring it, in a local, a reassigned `let` or a
+    // private field. Those are exactly the sites a closure would have been for.
+    if named(snapshot, ty) == Some("PromiseWithResolvers") {
+        let argument = *snapshot
+            .type_arguments
+            .get(&ty)
+            .and_then(|arguments| arguments.first())?;
+        let payload = representation_within(snapshot, argument, path, subst)?;
+        return Some(HirType::Managed(ManagedType::Promise(Box::new(payload))));
+    }
+
     // `Map<K, V>` and `Set<T>`, recognized the same way and stopping at the
     // library boundary for the same reason -- decomposing one would pull in
     // `forEach`, `entries` and the rest of a type this compiler represents
@@ -7162,6 +7185,16 @@ struct Settler {
     result: AsyncResult,
     /// `reject` rather than `resolve`.
     rejects: bool,
+}
+
+/// What one slot of a destructured promise capability binds.
+///
+/// `read` is the value for `promise` and `None` for `resolve` and `reject`,
+/// which bind a [`Settler`] instead and have no value at all. A bare
+/// `Option<ValueId>` would have said "no binding" and "a binding of nothing"
+/// with the same word.
+struct CapabilityBinding {
+    read: Option<ValueId>,
 }
 
 /// An array method that is a loop with the callback's body inlined.
@@ -14823,6 +14856,9 @@ impl<'a> FuncBuilder<'a> {
         if let Some(decided) = self.lower_decided_static(id, callee, arguments) {
             return Some(decided);
         }
+        if let Some(settled) = self.lower_capability_call(id, callee, arguments) {
+            return Some(settled);
+        }
         self.lower_promise_static(id, callee, arguments)
     }
 
@@ -14849,6 +14885,7 @@ impl<'a> FuncBuilder<'a> {
             "reject" => self.settled_promise(id, arguments, true),
             "all" => self.combinator(id, arguments, true),
             "race" => self.combinator(id, arguments, false),
+            "withResolvers" => self.promise_capability(id, arguments),
             _ => return None,
         })
     }
@@ -14931,6 +14968,108 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.runtime_call("nts_promise_all", vec![promises, values], ty, origin))
     }
 
+    /// Whether this expression is a `PromiseWithResolvers<T>`.
+    ///
+    /// Asked of the **checker's** type rather than the representation, because
+    /// the representation is deliberately the same as a plain `Promise<T>` --
+    /// that is the whole trick -- and telling the two apart is exactly what
+    /// decides whether `.resolve` is a member to settle through or a name this
+    /// compiler does not have.
+    fn names_a_promise_capability(&self, node: NodeId) -> bool {
+        self.snapshot
+            .node_types
+            .get(&node)
+            .is_some_and(|ty| named(self.snapshot, *ty) == Some("PromiseWithResolvers"))
+    }
+
+    /// `Promise.withResolvers<T>()`, which allocates a promise and nothing else.
+    fn promise_capability(
+        &mut self,
+        id: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        if !arguments.is_empty() {
+            return Err(self.unsupported(id, "a `Promise.withResolvers` with arguments"));
+        }
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "a `Promise.withResolvers` result"))?;
+        // The representation rule above is what makes this a promise. If it
+        // did not fire -- an un-annotated `withResolvers()` whose payload the
+        // checker never pinned -- refusing is the answer, for the reason
+        // `Promise<T>` gives one argument up there: a guessed payload settles
+        // into a slot of the wrong kind and the collector follows it.
+        if !matches!(ty, HirType::Managed(ManagedType::Promise(_))) {
+            return Err(self.unrepresentable(id, "a `Promise.withResolvers` result"));
+        }
+        let origin = self.origin(id);
+        Ok(self.runtime_call("nts_promise_new", Vec::new(), ty, origin))
+    }
+
+    /// `capability.resolve(v)` and `capability.reject(e)`.
+    ///
+    /// Not a method call: there is no object with a `resolve` slot in it, so
+    /// [`Self::lower_method_call`] would look for a layout that does not exist.
+    /// The receiver *is* the promise, and these are the two settles the runtime
+    /// already performs for an `async` function's `return` and for
+    /// `Promise.reject`.
+    fn lower_capability_call(
+        &mut self,
+        id: NodeId,
+        callee: NodeId,
+        arguments: &[NodeId],
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        if self.kind_of(callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return None;
+        }
+        let parts = self.children(callee);
+        let [object, member] = parts.as_slice() else {
+            return None;
+        };
+        let (object, member) = (*object, *member);
+        if !self.names_a_promise_capability(object) {
+            return None;
+        }
+        let rejecting = match self.node(member).text.as_deref() {
+            Some("resolve") => false,
+            Some("reject") => true,
+            _ => return None,
+        };
+        Some(self.settle_capability(id, object, arguments, rejecting))
+    }
+
+    /// The body of [`Self::lower_capability_call`], once the member is known.
+    fn settle_capability(
+        &mut self,
+        id: NodeId,
+        object: NodeId,
+        arguments: &[NodeId],
+        rejecting: bool,
+    ) -> Result<ValueId, Diagnostic> {
+        let ty = self
+            .type_of(object)
+            .ok_or_else(|| self.unrepresentable(object, "a promise capability"))?;
+        let HirType::Managed(ManagedType::Promise(payload)) = ty else {
+            return Err(self.unrepresentable(object, "a promise capability"));
+        };
+        let promise = self.lower_expression(object)?;
+        let value = match arguments {
+            [] => None,
+            [only] => Some(self.lower_expression(*only)?),
+            _ => {
+                return Err(self.unsupported(id, "a settle with this many arguments"));
+            },
+        };
+        if rejecting {
+            return self.reject_with(id, promise, value);
+        }
+        let result = AsyncResult {
+            promise,
+            payload: *payload,
+        };
+        self.settle(id, &result, value)
+    }
+
     /// The body of [`Self::lower_promise_static`], once the shape is known.
     fn settled_promise(
         &mut self,
@@ -14954,15 +15093,10 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let promise = self.runtime_call("nts_promise_new", Vec::new(), ty, origin);
         if rejecting {
-            let reason =
-                value.ok_or_else(|| self.unsupported(id, "a `Promise.reject` with no reason"))?;
-            let origin = self.origin(id);
-            self.runtime_call(
-                "nts_promise_reject",
-                vec![promise, reason],
-                HirType::Void,
-                origin,
-            );
+            // Through `reject_with`, which is the one place that knows an
+            // erased reason takes a different helper. This was the fourth copy
+            // of that decision and the second that got it wrong.
+            self.reject_with(id, promise, value)?;
             return Ok(promise);
         }
         let result = AsyncResult {
@@ -24204,26 +24338,58 @@ impl<'a> FuncBuilder<'a> {
             return self.settle(id, &settler.result, value).map(Some);
         }
 
-        // A rejection reason is `any`, and the runtime takes a reference:
-        // `reject(new Error(m))` and `reject("text")` are both one, and
-        // `reject(7)` is not. Refused rather than boxed, because a number
-        // written into the reason slot is a pointer the collector would follow.
+        self.reject_with(id, settler.result.promise, value).map(Some)
+    }
+
+    /// Reject `promise` with `reason`, or refuse.
+    ///
+    /// **One rejection path, because there were two and they disagreed.** A
+    /// rejection reason is `any` and the runtime takes a reference:
+    /// `reject(new Error(m))` and `reject("text")` are both one, and `reject(7)`
+    /// is not. Refused rather than boxed, because a number written into the
+    /// reason slot is a pointer the collector would follow.
+    ///
+    /// `Promise.withResolvers`'s settle was written as a second copy of this
+    /// and left the check out. It did not refuse and it did not box: it emitted
+    /// `nts_promise_reject(p, (NtsHeader *)v)` over a `NtsValue`, and clang said
+    /// `operand of type 'NtsValue' where arithmetic or pointer type is
+    /// required` -- eleven of them in `assert`, which is a module that does not
+    /// write `withResolvers` at all and reaches one through `web-platform`.
+    fn reject_with(
+        &mut self,
+        id: NodeId,
+        promise: ValueId,
+        reason: Option<ValueId>,
+    ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
-        let Some(reason) = value else {
+        let Some(reason) = reason else {
             return Err(self.unsupported(id, "a `reject` with no reason"));
         };
-        if !matches!(
-            self.values[reason.0 as usize].ty,
-            HirType::Managed(_) | HirType::Erased
-        ) {
-            return Err(self.unsupported(id, "a `reject` with a reason that is not a reference"));
-        }
-        Ok(Some(self.runtime_call(
-            "nts_promise_reject",
-            vec![settler.result.promise, reason],
-            HirType::Void,
-            origin,
-        )))
+        // **`Erased` needs the other helper, and saying so was missing here.**
+        // `nts_promise_reject` takes an `NtsHeader *`; an erased value is an
+        // `NtsValue`, a sixteen-byte tagged struct, and the emitter cast one to
+        // the other -- `operand of type 'NtsValue' where arithmetic or pointer
+        // type is required`, from clang, on C that `emit-c` had already exited
+        // zero over. `nts_promise_reject_value` reads the reference out of the
+        // tag, which is what an `async` function's `throw` of a rethrown
+        // `catch (e)` has always done; this path listed `Erased` as acceptable
+        // and then emitted the wrong call for it.
+        //
+        // Reachable before `Promise.withResolvers` existed, and measured on the
+        // pinned binary: `Promise.reject(x)` and `new Promise((_, r) => r(x))`
+        // with an `unknown` reason both emit C clang refuses. Nothing in the
+        // corpus got that far, because `web-platform`'s streams -- where every
+        // such reason lives -- were refused earlier for a different reason.
+        let helper = match self.values[reason.0 as usize].ty {
+            HirType::Erased => "nts_promise_reject_value",
+            HirType::Managed(_) => "nts_promise_reject",
+            _ => {
+                return Err(
+                    self.unsupported(id, "a `reject` with a reason that is not a reference")
+                );
+            },
+        };
+        Ok(self.runtime_call(helper, vec![promise, reason], HirType::Void, origin))
     }
 
     /// `xs[i]`, as a read. Writes are handled by the assignment lowering.
@@ -24994,6 +25160,29 @@ impl<'a> FuncBuilder<'a> {
                 ),
             ));
         };
+        // **A promise capability's three members.** `PromiseWithResolvers<T>` is
+        // represented as the promise itself, so `.promise` is the identity and
+        // the other two are only reachable as calls -- which
+        // `lower_capability_call` has already taken, before the receiver was
+        // lowered. Reaching here with one of those names means it was used as a
+        // *value*: `const r = d.resolve`, or `queue.push(d.reject)`. That needs
+        // a real closure over the promise and this says so, rather than falling
+        // through to a message about a layout with no `resolve` field in it.
+        if self.names_a_promise_capability(*object) {
+            match self.node(*member).text.as_deref() {
+                Some("promise") => return self.lower_expression(*object),
+                Some(name @ ("resolve" | "reject")) => {
+                    return Err(self.unsupported(
+                        id,
+                        &format!(
+                            "a promise capability's `{name}` used as a value rather than called"
+                        ),
+                    ));
+                },
+                _ => {},
+            }
+        }
+
         // **A `static` field, which is storage rather than a member.**
         //
         // `EventEmitter.errorMonitor` has no object to read from: a static field
@@ -27027,6 +27216,29 @@ impl<'a> FuncBuilder<'a> {
                 }
             };
 
+            // **A promise capability has no fields to read.** `{ promise,
+            // resolve, reject }` over a `PromiseWithResolvers<T>` destructures
+            // something represented as the promise itself, so `read_for_pattern`
+            // would ask for a layout that does not exist and say "destructuring
+            // something with no fields" -- true of the representation and
+            // useless about the program.
+            //
+            // `promise` binds the value. The other two bind a [`Settler`],
+            // which is the same thing a `new Promise` executor's parameters
+            // bind: not a value, a *meaning* for calls to that name. The
+            // executor saves and restores the map because its bindings end with
+            // its body; these end with their scope, and a binding's symbol is
+            // unique to it, so an entry that outlives the scope can never be
+            // reached by a different `resolve`.
+            if object
+                && self.names_a_promise_capability(pattern)
+                && let Some(bound) = self.bind_capability_member(element, property, binding, value)?
+            {
+                if let (Some(symbol), Some(read)) = (symbol, bound.read) {
+                    self.bindings.insert(symbol.0, read);
+                }
+                continue;
+            }
             let read = self.read_for_pattern(element, property, value, position, object)?;
             // `{ a = d }`: the default stands in where the read is `undefined`,
             // and only there.
@@ -27057,6 +27269,55 @@ impl<'a> FuncBuilder<'a> {
             }
         }
         Ok(())
+    }
+
+    /// One slot of `const { promise, resolve, reject } = Promise.withResolvers()`.
+    ///
+    /// `Ok(None)` when the name is not one of the three, which is a program the
+    /// checker would already have rejected -- handled rather than assumed, so
+    /// that a future member of this interface refuses by the ordinary route
+    /// instead of being silently dropped.
+    ///
+    /// `read` is `Some` only for `promise`; the other two bind no value.
+    fn bind_capability_member(
+        &mut self,
+        element: NodeId,
+        property: NodeId,
+        binding: NodeId,
+        value: ValueId,
+    ) -> Result<Option<CapabilityBinding>, Diagnostic> {
+        let Some(name) = self.literal_name(property) else {
+            return Ok(None);
+        };
+        let rejects = match name.as_str() {
+            "promise" => return Ok(Some(CapabilityBinding { read: Some(value) })),
+            "resolve" => false,
+            "reject" => true,
+            _ => return Ok(None),
+        };
+        let HirType::Managed(ManagedType::Promise(payload)) =
+            self.values[value.0 as usize].ty.clone()
+        else {
+            return Err(self.unrepresentable(element, "a promise capability"));
+        };
+        // A renaming binds the *new* name: `const { resolve: settle } = ...`
+        // means calls to `settle`, and `binding` is the identifier that
+        // declares it -- the same node `bind_pattern` would have taken the
+        // symbol from.
+        let Some(symbol) = self.node(binding).symbol else {
+            return Err(self.unsupported(element, "an unresolved binding"));
+        };
+        self.settlers.insert(
+            symbol.0,
+            Settler {
+                result: AsyncResult {
+                    promise: value,
+                    payload: *payload,
+                },
+                rejects,
+            },
+        );
+        Ok(Some(CapabilityBinding { read: None }))
     }
 
     /// Whether this identifier is the name `element` *declares*.

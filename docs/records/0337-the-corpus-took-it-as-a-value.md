@@ -114,3 +114,54 @@ disagree about which route is dead, and this one is right.
 
 What `Promise.withResolvers` actually needs is synthetic closures. That is a
 real piece of work in `collect_closures` and it is not what I did.
+
+## 2026-09-16: the lesson stands, the conclusion does not
+
+The representation is right. It is landed, and the corpus check that refuted it
+here passes: **24 of 24 addons build, 0 regressed**, controlled against the
+pinned `072a53e7` binary which gives the same 24 of 24.
+
+What refuted it in this record was not the representation. It was a latent defect
+in `nts_promise_reject` that the representation made *reachable*, and I found it
+the same way — by not believing my own example and running `addons.sh`, which
+came back `12 of 24 still build, 12 regressed`, the identical number.
+
+`nts_promise_reject` takes an `NtsHeader *`. An **erased** reason is an
+`NtsValue`, a sixteen-byte tagged struct, and the emitter cast one to the other:
+
+    error: operand of type 'NtsValue' where arithmetic or pointer type is
+    required
+        nts_promise_reject(v13, (NtsHeader *)v1);
+
+`nts_promise_reject_value` reads the reference out of the tag and has existed all
+along — an `async` function's `throw` of a rethrown `catch (e)` calls it. There
+were **four** places that decided which helper a rejection takes. Two were right,
+two emitted the wrong one, and no fixture reached either: `Promise.reject(x)` and
+`new Promise((_, r) => r(x))` with an `unknown` reason both emit C that clang
+refuses, **on this record's own binary**, with no `withResolvers` anywhere. Every
+such reason in the corpus lives in `web-platform`'s streams, which were refused
+earlier for a different reason — so the bug sat behind the refusal it would later
+be blamed on. The four are one function now.
+
+So the regression was real, was mine, and was not about first-class members.
+
+**`broadcast.ts` is still right about what it needs, and it is not fatal.** Five
+distinct sites take `.resolve` or `.reject` as a value, and they refuse by name:
+
+    a promise capability's `resolve` used as a value rather than called
+
+Against 22 distinct sites that now lower. A refusal at five sites drops those
+functions; it does not stop a module building, which is the thing this record
+measured and the thing that came back clean. "The one shape the representation
+cannot answer" was accurate and the inference from it — that the representation
+must therefore go — skipped the step of asking what the shape actually costs.
+
+**What I want kept from this record is untouched**, and it is what let me find
+this: *an example written by the author of the change, after the change, from the
+change's own model of the problem, cannot fail.* Mine could not either. It agreed
+with node on 203 cases across 7 functions and that was worth nothing until
+`addons.sh` had run. The corpus is still the only thing here not written by
+whoever is currently wrong — and this time it convicted a different defendant.
+
+A synthetic closure is still what the five sites need, and [[0336]]'s decomposed
+form is still where that goes. It is no longer in the way of anything.

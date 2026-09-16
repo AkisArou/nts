@@ -15,8 +15,15 @@
 //
 // What is refused is an executor that is not an arrow written at the call, and
 // a `resolve` used as a value rather than called -- `new Promise(r => { saved =
-// r })`, the deferred pattern. Both need a real closure over the promise, and
-// both say so.
+// r })`. Both need a real closure over the promise, and both say so.
+//
+// **The deferred pattern itself is not refused**, and this comment said it was.
+// `Promise.withResolvers()` is the standard spelling of it and lowers without a
+// closure, for a reason that is about the type rather than about the syntax: the
+// capability holds nothing besides the promise, so it is *represented as* the
+// promise. See `examples/promise-with-resolvers`. What survives from the
+// sentence above is narrower -- a `resolve` taken out of the capability and
+// stored, which five sites in `runtime/node` do.
 
 export function later(n: number): Promise<number> {
   return new Promise<number>((resolve) => {
