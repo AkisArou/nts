@@ -2345,6 +2345,7 @@ fn build(rest: &[String]) -> Result<()> {
     }
 
     let root = output_root(rest, &tsconfig);
+    refuse_unwritable_integrations(&resolved)?;
     let only_os = rest
         .windows(2)
         .find(|pair| pair[0] == "--os")
@@ -4523,15 +4524,38 @@ fn emit_integrations(
         let written = match hook.as_str() {
             "cmake" => write_cmake_hook(resolved, project, root)?,
             "npm" => write_npm_hook(project, root)?,
-            other => bail!(
-                "this project's `integrate` names `{other}`, and the adapter for it is \
-                 not written. Emitting one that nobody here can run is how a generated \
-                 file that does not work gets shipped -- `cmake` and `npm` are the two \
-                 this emits. Remove it from `integrate`, or invoke `nts build` from \
-                 your {other} build directly"
-            ),
+            // Unreachable: `refuse_unwritable_integrations` runs before the
+            // emitter and stops on exactly this. Kept rather than made
+            // `unreachable!()` so the two cannot drift into disagreeing about
+            // which hooks exist.
+            other => bail!("no adapter for `{other}`"),
         };
         println!("  hook: {written}");
+    }
+    Ok(())
+}
+
+/// Stop at a hook this cannot write, **before anything is emitted**.
+///
+/// `emit_integrations` runs after the products, because a hook names the
+/// artifacts they produce. That is the wrong place to *refuse* from: with the
+/// check there, `apps/windows-brownfield` cross-compiled a DLL and then failed
+/// on its `msbuild` hook, which is a build that half-emitted and said so
+/// afterwards -- the thing `refuse_unpackaged` exists to prevent one layer up.
+///
+/// Deciding is cheap and writing is not, so they separate cleanly.
+fn refuse_unwritable_integrations(resolved: &nts_build::config::Resolved) -> Result<()> {
+    for hook in &resolved.integrate {
+        if matches!(hook.as_str(), "cmake" | "npm") {
+            continue;
+        }
+        bail!(
+            "this project's `integrate` names `{hook}`, and the adapter for it is not \
+             written. Emitting one that nobody here can run is how a generated file \
+             that does not work gets shipped -- `cmake` and `npm` are the two this \
+             emits, and they are the two whose host is here to run them. Remove it \
+             from `integrate`, or invoke `nts build` from your {hook} build directly"
+        )
     }
     Ok(())
 }

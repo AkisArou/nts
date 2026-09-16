@@ -1857,3 +1857,84 @@ export default defineConfig({
     );
     assert!(artifact.is_file(), "the hook ran and built nothing at {}", artifact.display());
 }
+
+/// The workspace fixture builds, which nothing in the tree checked.
+///
+/// **`examples/workspace` is the config language's only multi-package fixture
+/// and it had no observer.** The gate's `config` step typechecks its nineteen
+/// configs and builds none of them, which is how `examples/library` carried a
+/// broken `nts build` invocation for an unknown length of time -- and how the
+/// APK path, cross-compilation and the `integrate` hooks would rot next, since
+/// every one of them is exercised only here.
+///
+/// One app per lane, and each is skipped only for a *toolchain* it needs, never
+/// for a refusal: a refusal is the thing under test everywhere else in this
+/// file, and skipping one here would hide exactly what the others assert.
+#[test]
+fn the_workspace_fixture_still_builds() {
+    if !available() {
+        return;
+    }
+    let apps = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/workspace/apps");
+    if !apps.is_dir() {
+        return;
+    }
+    let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("workspace-build");
+    drop(std::fs::remove_dir_all(&out));
+
+    let build_app = |app: &str, extra: &[&str], env: &[(&str, String)]| -> Run {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_nts"));
+        command.arg("build").arg(apps.join(app)).arg("--out").arg(out.join(app)).args(extra);
+        for (key, value) in env {
+            command.env(key, value);
+        }
+        let output = command.output().expect("running nts build");
+        Run {
+            ok: output.status.success(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        }
+    };
+
+    // The C lane, plus the CMake hook this app declares.
+    let run = build_app("linux-brownfield", &[], &[]);
+    assert!(run.ok, "linux-brownfield:\n{}{}", run.stdout, run.stderr);
+    assert!(
+        out.join("linux-brownfield/nts.cmake").is_file(),
+        "no CMake hook for the app that declares one:\n{}",
+        run.stdout
+    );
+
+    // **`windows-brownfield` refuses, and refuses before writing.** It declares
+    // `integrate: ["msbuild"]`, whose adapter is not written -- and the check
+    // for that runs before the emitter, so a project that cannot be finished
+    // does not leave half of itself on disk. The cross-compilation this app
+    // would otherwise cover is asserted by `a_windows_target_produces_a_windows_dll`
+    // against a fixture, which does not carry an unrelated hook.
+    let run = build_app("windows-brownfield", &[], &[]);
+    assert!(!run.ok, "the msbuild hook was not refused:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("msbuild") && run.stderr.contains("not written"),
+        "the refusal does not name the hook:\n{}",
+        run.stderr
+    );
+    assert!(
+        !out.join("windows-brownfield").exists(),
+        "it emitted before refusing, which is the half-build this check exists to stop"
+    );
+
+    // The addon lane and the npm hook. `--os` because the product declares four
+    // machines and a Linux box can build one of them.
+    let headers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/node/src");
+    if headers.join("node_api.h").exists() {
+        let env = [("NTS_NAPI_INCLUDE".to_owned(), headers.display().to_string())];
+        let env: Vec<(&str, String)> = env.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+        let run = build_app("node-brownfield", &["--os", "linux"], &env);
+        assert!(run.ok, "node-brownfield:\n{}{}", run.stdout, run.stderr);
+        assert!(
+            out.join("node-brownfield/nts-prepare.mjs").is_file(),
+            "no npm hook for the app that declares one:\n{}",
+            run.stdout
+        );
+    }
+}
