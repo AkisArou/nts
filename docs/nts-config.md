@@ -34,16 +34,35 @@ wrong thing to say.
 
 ### Measured: what exists today
 
-- Three backends, `Backend::{C, Llvm, Jvm}`.
-- Real artifacts: C source, textual LLVM IR, JVM class files, a **Node addon**
-  (`emit-c --napi`), and DEX via `d8` in `tooling/android`.
-- Jars and test APKs are produced today by hand-written scripts --
-  `examples/interop/*/build.sh`, `tooling/android/proxy-app.sh` -- not by the
-  compiler. **AARs, app bundles, `.dylib` and Windows packages are produced by
-  nothing at all**; they exist only in the RFC.
+**This section was three paragraphs of "produced by nothing at all" for longer
+than it was true, which is the hazard a document like this has instead of a
+failing test.** Rewritten 2026-09-16 against `tooling/cli/tests/build.rs`, which
+is where each claim below is asserted.
 
-So the pipeline below is mostly not built. What is built is every *backend* it
-would dispatch to, which is the harder half.
+- Three backends, `Backend::{C, Llvm, Jvm}`.
+- **`nts build` produces every product kind but one**, from the config, with no
+  other command: `shared-library`, `static-library`, `executable` and
+  `application` on C; a **Node addon**; a `jar`; an `aar`; a **signed,
+  installable APK**; and a **runnable jar** for a desktop JVM target, whose
+  entry is module evaluation because that is what an executable's entry is on
+  the C lane too.
+- `xcframework` is the one that is not, and it refuses by name saying which
+  Apple tools it would need. A missing Android SDK, a missing component, a
+  stale `ANDROID_HOME`, a product with no `id`, a JVM native root holding no
+  `.java`, and a package manifest fragment that would be silently dropped are
+  each one message naming the thing and the fix.
+- A package's **Java is compiled into the artifact** -- a JVM target's `native:`
+  roots are Java, and they are the half the program calls into.
+- All 16 `examples/interop/*/build.sh` build their product with one `nts build`.
+  What toolchain invocations remain in them compile *consumers* -- a C caller, a
+  Java driver -- or guard on a tool being installed.
+
+The assertions are about artifacts rather than exit status, because the failures
+here are quiet: `aapt2` writes a container whether or not a dex was added, and
+`javac` writes classes into the output directory whether or not anything
+packages them. So the APK is read back through `apksigner verify` and `aapt2
+dump badging`, the contributed Java through the jar's listing, and the shared
+library through `nm`.
 
 ---
 
