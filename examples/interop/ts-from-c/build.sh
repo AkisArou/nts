@@ -1,22 +1,21 @@
 #!/bin/sh
-# Build and run the C program. Verified working.
+# Build the library and the C program that calls into it.
 #
-# The `quickjs/*.c` sources are deliberately NOT on the command line:
-# `nts_runtime.c` already includes them, and compiling them separately gives
-# `multiple definition of js_dtoa` and forty more like it. That is a two-minute
-# mistake the first time and the reason this script exists.
+# **The pipeline is `nts build`.** What is left is what an interop example is
+# for: a separately compiled C consumer, and running it.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 out=${1:-"$root/target/interop-ts-from-c"}
 cc=${CC:-clang}
-# `NTS_BIN`, like every other interop script: the gate builds the compiler into
-# its own worktree and this one reached past it to `$root/target`, which in a
-# fresh worktree does not exist. It was the one script of nine that did not, so
-# it was also the one the new interop step failed on first.
 nts=${NTS_BIN:-"$root/target/release/nts"}
-"$nts" emit-c "$root/examples/interop/ts-from-c" --out "$out"
-"$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$out" -c \
-   "$root/examples/interop/ts-from-c/native/caller.c" -o "$out/caller.o"
-"$cc" -std=c11 -O2 -I"$out" -o "$out/caller" "$out/caller.o" \
-   "$out/program.c" "$out/nts_runtime.c" -lm
+source="$root/examples/interop/ts-from-c"
+mkdir -p "$out"
+
+"$nts" build "$source/tsconfig.json" --out "$out"
+built="$out/lib/linux-gnu-x86_64"
+
+# The consumer. `-Werror` is this example's own standard, not the build's.
+"$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$built" \
+  -c "$source/native/caller.c" -o "$out/caller.o"
+"$cc" "$out/caller.o" "$built/liblib.a" -lm -o "$out/caller"
 "$out/caller"

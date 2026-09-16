@@ -15,6 +15,7 @@
     }
   },
   "files": [
+    "c-from-ts/nts.config.ts",
     "native-buffer/nts.config.ts",
     "native-callback/nts.config.ts",
     "native-copy/nts.config.ts",
@@ -25,6 +26,7 @@
     "native-poll/nts.config.ts",
     "native-rusage/nts.config.ts",
     "native-stat/nts.config.ts",
-    "native-uname/nts.config.ts"
+    "native-uname/nts.config.ts",
+    "ts-from-c/nts.config.ts"
   ]
 }
