@@ -236,17 +236,24 @@ fn a_library_initialises_itself_on_load() {
     assert!(run.ok, "{}{}", run.stdout, run.stderr);
     let artifact = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
 
+    // **Through the generated header**, with no `extern` written by hand. That
+    // is the point of the check as much as the initialiser is: `program.h`'s
+    // export loop used to walk `public_api`, look each name up among `funcs`,
+    // and skip a published *value* in silence -- so a header that looked
+    // complete dropped `label`, and a consumer had to declare it themselves.
     let consumer = project.join("use.c");
     std::fs::write(
         &consumer,
         r#"#include <stdio.h>
-extern void *label;
+#include "program.h"
 int main(void) { printf("%s\n", label ? "initialised" : "NULL"); return label ? 0 : 1; }
 "#,
     )
     .expect("writing the consumer");
     let binary = project.join("use");
     let compiled = Command::new("clang")
+        .arg("-I")
+        .arg(project.join(".nts/build/acme/linux-gnu-x86_64"))
         .arg(&consumer)
         .arg(&artifact)
         .arg("-o")
