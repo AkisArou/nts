@@ -2539,6 +2539,26 @@ sites under a message that does not mention it. `AsyncIterableIterator` is the
 async iterator protocol row, which sizes itself at 63 and is really 85 here plus
 whatever the second message holds.
 
+**And `SharedArrayBuffer` has a cheap fix that should not be taken.**
+`ArrayBuffer` is one line in `provided_representation` — `named(…) ==
+Some("ArrayBuffer")` → `ManagedType::Buffer` — and adding a second name to that
+condition clears all 58 sites in one character's worth of thought.
+
+It is the wrong trade, and the reason is the direction of the failure. The two
+types would then be one at run time: a value declared `SharedArrayBuffer`
+crosses the napi boundary as an `ArrayBuffer`, and node is told a different
+thing than the program said. `instanceof` stays refused either way, so nothing
+would report it — the 58 sites would clear, the corpus would agree, and the
+error would live at the boundary where this tree has the least coverage.
+Silently permissive is what a shortcut here buys, and it looks like the best
+result of the week.
+
+The correct shape is a distinct `ManagedType` with its own descriptor, so
+`instanceof` can tell them apart and the boundary can carry which one it has.
+That is a runtime struct, a descriptor, a constructor and `grow`/`growable`
+against `resize`/`resizable` — more than a line, and the only version that is
+not a wrong answer waiting for a test.
+
 **Why this belongs in the ledger rather than in an instrument.** Every census
 this tree takes over diagnostics has the same defect and it is stated in
 `tooling/conformance/gates.mjs`: the compiler reports one blocker at a time, so
