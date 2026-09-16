@@ -234,6 +234,14 @@ pub struct Resolved {
     /// Root config only, and `§34` already reserved it. Read because 87% of a
     /// build of `examples/library` was recompiling the runtime, which is the
     /// same translation unit every time.
+    /// Build-system hooks to emit for a brownfield consumer.
+    ///
+    /// Read now that something emits them. A host build system has a "run this
+    /// before compiling" step and every one of them is different; the adapter
+    /// stays thin -- it invokes the compiler and declares its inputs and
+    /// outputs -- or there are N implementations of the build.
+    #[serde(default)]
+    pub integrate: Vec<String>,
     #[serde(default)]
     pub build: Option<BuildSettings>,
     /// Manifest fragments a package contributes to its consumer.
@@ -392,6 +400,7 @@ mod tests {
     fn with(names: &[&str]) -> Resolved {
         Resolved {
             native: Vec::new(),
+            integrate: Vec::new(),
             build: None,
             manifests: Vec::new(),
             targets: None,

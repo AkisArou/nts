@@ -38,6 +38,9 @@ export type Backend = "c" | "llvm" | "jvm";
  */
 export type NativeBackend = Exclude<Backend, "jvm">;
 
+/** The platform families a target can name. One spelling each. */
+export type Os = "linux" | "macos" | "windows" | "ios" | "android" | "jvm";
+
 /**
  * Architectures a native target can be built for.
  *
@@ -74,7 +77,18 @@ export type TargetId =
 export interface Target {
   /** Stable name of the type surface: the prelude package, the cache key. */
   readonly id: TargetId;
-  readonly os: string;
+  /**
+   * The platform family, in one vocabulary.
+   *
+   * **`macos` and `windows`, not `darwin` and `win32`.** `target.node` took a
+   * free `string` and `apps/node-brownfield` spelled its machines npm's way,
+   * so the same field held two vocabularies depending on which constructor a
+   * config used -- and anything reading it had to know both, or silently work
+   * for some targets and not others. Cross-compilation was where that bit:
+   * `win32` matched no platform, so a Windows addon reported "no cross
+   * compiler configured for that pair" about a pair that is ordinary.
+   */
+  readonly os: Os;
   readonly arch?: Arch;
   readonly backend: Backend;
   /**
@@ -199,7 +213,7 @@ export const target = {
    */
   node: (o: {
     readonly apiVersion?: number;
-    readonly os?: string;
+    readonly os?: Os;
     readonly arch?: Arch;
   } = {}): Target => ({
     id: `node-api-${o.apiVersion ?? 8}`,

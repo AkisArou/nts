@@ -23,10 +23,10 @@ export default defineConfig({
       // field beside a `targets` field that said x86_64 -- two spellings of one
       // axis, already disagreeing.
       platforms: [
-        { os: "darwin", arch: "aarch64" },
-        { os: "darwin", arch: "x86_64" },
+        { os: "macos", arch: "aarch64" },
+        { os: "macos", arch: "x86_64" },
         { os: "linux", arch: "x86_64" },
-        { os: "win32", arch: "x86_64" },
+        { os: "windows", arch: "x86_64" },
       ],
     }),
   },

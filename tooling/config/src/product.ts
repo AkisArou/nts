@@ -32,7 +32,7 @@
  * None of this is a judgement about the RFC; it is day-one text, and these are
  * the parts that had not met an implementation yet.
  */
-import type { Arch, NativeBackend, Target } from "./target.ts";
+import type { Arch, NativeBackend, Os, Target } from "./target.ts";
 import { target as t } from "./target.ts";
 
 /** Everything a build can emit. Each value is produced by a constructor below. */
@@ -338,7 +338,7 @@ export const library = {
   node: (
     o: Omit<NodeAddonProduct, "kind" | "targets"> & {
       readonly apiVersion?: number;
-      readonly platforms?: readonly { readonly os: string; readonly arch: Arch }[];
+      readonly platforms?: readonly { readonly os: Os; readonly arch: Arch }[];
     },
   ): NodeAddonProduct => {
     const { apiVersion, platforms, ...rest } = o;

@@ -265,6 +265,11 @@ const unionPath = {
   Integration: ({ config }) => config.integrate ?? [],
   Backend: () => allTargets.map((t) => t.backend),
   Arch: () => allTargets.map((t) => t.arch),
+  // Added with the union itself. `os` was a free `string` until the vocabulary
+  // was unified, and a union with no path here is reported rather than
+  // silently uncovered -- which is how this one was noticed the moment it
+  // existed.
+  Os: () => allTargets.map((t) => t.os),
 };
 ask(
   "unions the package exports that this audit has no field to read coverage from",

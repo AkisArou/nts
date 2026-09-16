@@ -7,6 +7,8 @@
 
 mod bind;
 
+use std::fmt::Write as _;
+
 use anyhow::{Context, Result, anyhow, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir::facts;
@@ -32,7 +34,7 @@ use nts_semantic_schema::SCHEMA_VERSION;
 /// proj` took `published` as the tsconfig and failed with "`published` is not a
 /// tsconfig" -- flag order deciding whether a command works, which is the shape
 /// the comment in `named_project` records twice already.
-const TAKES_A_VALUE: [&str; 3] = ["--out", "--entry", "--product"];
+const TAKES_A_VALUE: [&str; 4] = ["--out", "--entry", "--product", "--os"];
 
 /// The tsconfig a command was pointed at, *and* its dependencies acquired.
 ///
@@ -2320,18 +2322,7 @@ fn build(rest: &[String]) -> Result<()> {
         )
     };
     let resolved = nts_build::config::resolve(&config_path)?;
-    let named = requested_product()?;
-    let chosen: Vec<(&str, &nts_build::config::Product)> = match named.as_deref() {
-        // One product by name, and `product` reports what a config declares when
-        // the name is not one of them.
-        Some(_) => nts_build::config::product(&resolved, named.as_deref())?
-            .into_iter()
-            .collect(),
-        // Every product. A config with several is the normal case -- a shared
-        // library beside a static archive of the same code is two -- and
-        // building all of them is what "build this project" means.
-        None => resolved.products.iter().map(|(k, v)| (k.as_str(), v)).collect(),
-    };
+    let chosen = chosen_products(&resolved)?;
     if chosen.is_empty() {
         // **A package is not nothing to build.** It contributes sources to its
         // consumers, and if any of them import a `c:` module it cannot
@@ -2354,6 +2345,10 @@ fn build(rest: &[String]) -> Result<()> {
     }
 
     let root = output_root(rest, &tsconfig);
+    let only_os = rest
+        .windows(2)
+        .find(|pair| pair[0] == "--os")
+        .map(|pair| pair[1].clone());
     let cache_dir = cache_directory(&tsconfig, &resolved);
     let mut built = 0usize;
     let mut refused = 0usize;
@@ -2363,7 +2358,7 @@ fn build(rest: &[String]) -> Result<()> {
         }
         let emission =
             Emission { shape: Shape::of(&product.kind), product: Some((name, product)), linking: true };
-        for target in &product.targets {
+        for target in targets_for(name, product, only_os.as_deref())? {
             // **Before anything is written.** A kind whose packaging does not
             // exist would otherwise emit, compile, and produce a file of the
             // wrong format under the right name -- an `aar` product built a
@@ -2484,6 +2479,10 @@ fn build(rest: &[String]) -> Result<()> {
             built += 1;
         }
     }
+    // **After the artifacts, because a hook names them.** The `CMake` package
+    // points at paths this loop just produced, and emitting it first would
+    // write a file describing an artifact that might never have appeared.
+    emit_integrations(&resolved, &tsconfig, &root)?;
     if refused > 0 {
         println!("{built} artifact(s) under {root}, missing {refused} refused function(s)");
     } else {
@@ -3754,6 +3753,11 @@ fn is_host(target: &nts_build::config::Target) -> bool {
 /// The LLVM triple `zig cc -target` takes for a target.
 fn zig_triple(target: &nts_build::config::Target) -> Option<String> {
     let arch = target.arch.as_deref().unwrap_or(host_arch());
+    // One vocabulary, because the config has one: `Os` is
+    // `linux | macos | windows | ios | android | jvm`. `target.node` used to
+    // take a free string and a fixture spelled its machines npm's way, so
+    // `win32` reached here and matched nothing -- reported as "no cross
+    // compiler configured for that pair" about an ordinary pair.
     let rest = match target.os.as_str() {
         "linux" => "linux-gnu",
         "windows" => "windows-gnu",
@@ -4424,6 +4428,243 @@ fn version_script(published: &[String]) -> String {
     }
     text.push_str("  local:\n    *;\n};\n");
     text
+}
+
+/// The products this run builds: one by name, or all of them.
+fn chosen_products(
+    resolved: &nts_build::config::Resolved,
+) -> Result<Vec<(&str, &nts_build::config::Product)>> {
+    let named = requested_product()?;
+    Ok(match named.as_deref() {
+        // One product by name, and `product` reports what a config declares when
+        // the name is not one of them.
+        Some(_) => nts_build::config::product(resolved, named.as_deref())?.into_iter().collect(),
+        // Every product. A config with several is the normal case -- a shared
+        // library beside a static archive of the same code is two -- and
+        // building all of them is what "build this project" means.
+        None => resolved.products.iter().map(|(k, v)| (k.as_str(), v)).collect(),
+    })
+}
+
+/// The targets of a product this run should build.
+///
+/// **`--os` names the machine, because one product can declare several and a
+/// machine can only build its own.** `apps/node-brownfield` fans an addon over
+/// macOS, Linux and Windows; on a Linux box the macOS target is a refusal, and
+/// that refusal is right -- but with no way to say which one you meant, the
+/// correct refusal makes the whole product unbuildable everywhere.
+///
+/// A filter rather than skipping what cannot be built: silently dropping a
+/// target reports success for an artifact that does not exist, and the count at
+/// the end would be a true number about a smaller question.
+fn targets_for<'a>(
+    name: &str,
+    product: &'a nts_build::config::Product,
+    only_os: Option<&str>,
+) -> Result<Vec<&'a nts_build::config::Target>> {
+    let Some(os) = only_os else { return Ok(product.targets.iter().collect()) };
+    let wanted: Vec<&nts_build::config::Target> =
+        product.targets.iter().filter(|target| target.os == os).collect();
+    if wanted.is_empty() {
+        let available: Vec<&str> = product.targets.iter().map(|t| t.os.as_str()).collect();
+        bail!(
+            "product `{name}` has no target for `--os {os}`. It declares: {}",
+            available.join(", ")
+        )
+    }
+    Ok(wanted)
+}
+
+/// Emit the build-system hooks a config's `integrate` names.
+///
+/// **A hook is an adapter, and it has to declare inputs and outputs.** Every
+/// ecosystem has a "run this before compiling" step and every one of them is
+/// different; what they share is that a host which is not told what the step
+/// consumes and produces re-runs it on every build. `apps/node-brownfield` says
+/// so about its own: "`prepare` runs on install, there is no input/output
+/// declaration, so every install rebuilds" -- which is a property of npm rather
+/// than of this, and is written down rather than papered over.
+///
+/// **Two are emitted and five are refused by name.** `cmake` and `npm` are the
+/// two whose host is installed here, so they are the two whose output could be
+/// *run* rather than merely written. Emitting an adapter nobody can execute is
+/// how a generated file that does not work gets shipped -- this lane has
+/// already found one of those in a `.so` this month -- so the rest say they are
+/// not written rather than producing text that looks like an answer.
+fn emit_integrations(
+    resolved: &nts_build::config::Resolved,
+    tsconfig: &Utf8Path,
+    root: &Utf8Path,
+) -> Result<()> {
+    if resolved.integrate.is_empty() {
+        return Ok(());
+    }
+    let project = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
+    for hook in &resolved.integrate {
+        let written = match hook.as_str() {
+            "cmake" => write_cmake_hook(resolved, project, root)?,
+            "npm" => write_npm_hook(project, root)?,
+            other => bail!(
+                "this project's `integrate` names `{other}`, and the adapter for it is \
+                 not written. Emitting one that nobody here can run is how a generated \
+                 file that does not work gets shipped -- `cmake` and `npm` are the two \
+                 this emits. Remove it from `integrate`, or invoke `nts build` from \
+                 your {other} build directly"
+            ),
+        };
+        println!("  hook: {written}");
+    }
+    Ok(())
+}
+
+/// An absolute, normalised path, for a file a *different* build system reads.
+///
+/// **Measured, not predicted.** The first `CMake` hook wrote the paths as this
+/// build saw them -- `examples/workspace/apps/linux-brownfield/./nts/sdk.ts` --
+/// and `CMake` resolves a relative path against its own build directory. It
+/// *configured* cleanly and failed at build with `No rule to make target`,
+/// which is the exact shape of an adapter that was written and never run.
+///
+/// `canonicalize` also removes the `./` a joined `entry` leaves behind.
+fn absolute(path: &Utf8Path) -> Utf8PathBuf {
+    // **The empty path is the current directory, not nothing.** `nts build
+    // tsconfig.json` gives a parent of `""`, `canonicalize("")` fails, and the
+    // fallback wrote an empty project into the hook -- so `CMake` ran `nts build
+    // --out ...` with no project, in its own build directory, and got "no
+    // `tsconfig.json` here". Found by running the test with a relative path,
+    // which is the only reason it was reachable at all.
+    let path = if path.as_str().is_empty() { Utf8Path::new(".") } else { path };
+    std::fs::canonicalize(path)
+        .ok()
+        .and_then(|p| Utf8PathBuf::from_path_buf(p).ok())
+        .unwrap_or_else(|| path.to_owned())
+}
+
+/// A `CMake` config package, so a consumer writes `find_package` and not a path.
+///
+/// `apps/linux-brownfield` states the shape: "an `add_custom_command` plus a
+/// generated `CMake` config package, so a consumer writes `find_package(Acme)`
+/// rather than a path". Both halves matter -- the imported target is what a
+/// consumer links, and the custom command is what makes their build re-run ours
+/// when a source changes instead of once at configure time.
+///
+/// **`DEPENDS` on the TypeScript, `OUTPUT` on the artifact**, which is the
+/// input/output declaration the adapter exists to carry. Without it `CMake` has
+/// no reason to re-run anything and a consumer's incremental build silently
+/// compiles stale TypeScript.
+fn write_cmake_hook(
+    resolved: &nts_build::config::Resolved,
+    project: &Utf8Path,
+    root: &Utf8Path,
+) -> Result<Utf8PathBuf> {
+    let project = absolute(project);
+    let root = absolute(root);
+    let mut text = String::from(
+        "# Generated by nts. Include this from your CMakeLists.txt:\n\
+         #     include(${CMAKE_CURRENT_LIST_DIR}/nts.cmake)\n\
+         # then link the targets it defines.\n\
+         #\n\
+         # Regenerated by `nts build`; edit the nts.config.ts instead.\n\n\
+         find_program(NTS_EXECUTABLE nts REQUIRED)\n\n",
+    );
+    // **One rule per (product, target), not per product.** Taking
+    // `targets.first()` names one artifact for a product that declares
+    // several, so a consumer linking the second one would find a rule that
+    // never builds it -- and `CMake` would report the missing file rather than
+    // the missing rule. `apps/node-brownfield` declares four machines for one
+    // addon, which is the ordinary case rather than the exotic one.
+    for (name, product) in &resolved.products {
+        for target in &product.targets {
+        let artifact = root.join(name).join(target_directory(target)).join(artifact_name(
+            name,
+            product,
+            target,
+        ));
+        // **The plain name where it is unambiguous.** `apps/linux-brownfield`
+        // asks for a consumer writing `find_package(Acme)` rather than a path,
+        // and `nts::sdk_linux_gnu_x86_64` is a path with underscores. A product
+        // with one target gets `nts::sdk`; one with several has to say which,
+        // because two targets cannot both answer to one name.
+        let label = if product.targets.len() == 1 {
+            name.clone()
+        } else {
+            format!("{name}_{}", target_directory(target).replace(['-', '.'], "_"))
+        };
+        let entry = absolute(&project.join(&product.entry));
+        let kind = match product.kind.as_str() {
+            "static-library" => "STATIC",
+            _ => "SHARED",
+        };
+        // `IMPORTED GLOBAL` so a consumer can link it from any directory, and
+        // the custom target is what carries the dependency: an imported target
+        // cannot itself have a build rule.
+        let _ = write!(
+            text,
+            "# --- {name} for {} ---\n\
+             add_custom_command(\n\
+             \x20 OUTPUT {artifact}\n\
+             \x20 COMMAND ${{NTS_EXECUTABLE}} build {project} --out {root}\n\
+             \x20 DEPENDS {entry}\n\
+             \x20 COMMENT \"nts: building {name}\"\n\
+             \x20 VERBATIM)\n\
+             add_custom_target(nts_{label}_build DEPENDS {artifact})\n\
+             add_library(nts::{label} {kind} IMPORTED GLOBAL)\n\
+             set_target_properties(nts::{label} PROPERTIES IMPORTED_LOCATION {artifact})\n\
+             add_dependencies(nts::{label} nts_{label}_build)\n\n",
+            target.id
+        );
+        }
+    }
+    let path = root.join("nts.cmake");
+    std::fs::create_dir_all(&root).with_context(|| format!("creating {root}"))?;
+    std::fs::write(&path, text).with_context(|| format!("writing {path}"))?;
+    Ok(path)
+}
+
+/// An npm lifecycle script, and the line to add to `package.json`.
+///
+/// **The weakest of the seven, and the fixture says so**: `prepare` runs on
+/// install and npm has nowhere to declare inputs and outputs, so every install
+/// rebuilds. That is a property of npm rather than of this, and writing it into
+/// the generated file is better than a consumer discovering it.
+fn write_npm_hook(project: &Utf8Path, root: &Utf8Path) -> Result<Utf8PathBuf> {
+    // Absolute for the same reason `CMake`'s are: npm runs `prepare` with the
+    // package root as the cwd, which is not where this build was invoked from.
+    let project = absolute(project);
+    let root = absolute(root);
+    let path = root.join("nts-prepare.mjs");
+    std::fs::create_dir_all(&root).with_context(|| format!("creating {root}"))?;
+    std::fs::write(
+        &path,
+        format!(
+            "// Generated by nts. Add to package.json:\n\
+             //     \"scripts\": {{ \"prepare\": \"node {path}\" }}\n\
+             //\n\
+             // npm has nowhere to declare what this consumes or produces, so it runs\n\
+             // on every install rather than when a source changed. That is npm's\n\
+             // limitation and not one this can fix from here.\n\
+             import {{ spawnSync }} from \"node:child_process\";\n\
+             const nts = process.env.NTS_BIN ?? \"nts\";\n\
+             // `prepare` runs on the machine installing the package, and a\n\
+             // node addon is declared for several. node spells two of them its\n\
+             // own way, so this is where that vocabulary is translated -- once,\n\
+             // at the boundary where it arrives.\n\
+             const here = {{ darwin: \"macos\", win32: \"windows\" }}[process.platform]\n\
+             \x20 ?? process.platform;\n\
+             const done = spawnSync(\n\
+             \x20 nts,\n\
+             \x20 [\"build\", {project:?}, \"--out\", {root:?}, \"--os\", here],\n\
+             \x20 {{ stdio: \"inherit\" }},\n\
+             );\n\
+             if (done.error) {{\n\
+             \x20 console.error(`nts: could not run ${{nts}} -- is it on PATH?`);\n\
+             \x20 process.exit(1);\n\
+             }}\n\
+             process.exit(done.status ?? 1);\n"
+        ),
+    )
+    .with_context(|| format!("writing {path}"))?;
+    Ok(path)
 }
 
 /// Where one target's output goes, under a product's directory.

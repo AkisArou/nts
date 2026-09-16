@@ -1634,3 +1634,226 @@ fn a_project_can_be_named_by_directory_config_or_tsconfig() {
         );
     }
 }
+
+/// A `CMake` project that includes the hook and links what it defines.
+fn a_cmake_consumer(project: &Path, hook: &Path) -> PathBuf {
+    let consumer = project.join("consumer");
+    std::fs::create_dir_all(&consumer).expect("consumer dir");
+    std::fs::write(
+        consumer.join("CMakeLists.txt"),
+        format!(
+            "cmake_minimum_required(VERSION 3.20)\n\
+             project(consumer C)\n\
+             include({})\n\
+             add_executable(consumer main.c)\n\
+             target_link_libraries(consumer PRIVATE nts::acme)\n",
+            hook.display()
+        ),
+    )
+    .expect("CMakeLists");
+    std::fs::write(consumer.join("main.c"), "int main(void){return 0;}\n").expect("main.c");
+
+    let nts = env!("CARGO_BIN_EXE_nts");
+    let configured = Command::new("cmake")
+        .args(["-S", ".", "-B", "build"])
+        .arg(format!("-DNTS_EXECUTABLE={nts}"))
+        .current_dir(&consumer)
+        .output()
+        .expect("running cmake");
+    assert!(
+        configured.status.success(),
+        "cmake could not configure:\n{}",
+        String::from_utf8_lossy(&configured.stderr)
+    );
+    consumer
+}
+
+/// The `CMake` hook configures, builds through us, and re-runs only on a change.
+///
+/// **Running it is the assertion, and the first version proves why.** That one
+/// wrote the paths as this build saw them -- relative -- and `CMake` resolves a
+/// relative path against its own build directory. It *configured* cleanly and
+/// failed at build with `No rule to make target`, which is exactly what an
+/// adapter that was generated and never executed looks like.
+///
+/// The incremental half is the reason the adapter exists at all: a host that is
+/// not told what the step consumes and produces re-runs it on every build.
+#[test]
+fn the_cmake_hook_builds_a_consumer_and_declares_its_inputs() {
+    if !available() {
+        return;
+    }
+    let cmake = Command::new("cmake").arg("--version").output().is_ok_and(|o| o.status.success());
+    if !cmake {
+        return;
+    }
+    let project = fixture(
+        "build-cmake-hook",
+        r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    acme: library.native({ targets: [target.linux()], entry: "./src/main.ts" }),
+  },
+  integrate: ["cmake"],
+});
+"#,
+    );
+    // **Invoked with a relative path, on purpose.** `CARGO_TARGET_TMPDIR` is
+    // absolute, so building the usual way makes `absolute()` a no-op and the
+    // relative-path bug cannot reproduce -- the first version of this test
+    // passed with that call removed, which is the definition of not checking.
+    let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["build", "tsconfig.json", "--out", ".nts/build"])
+        .current_dir(&project)
+        .output()
+        .expect("running nts build");
+    let run = Run {
+        ok: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    };
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+    let hook = project.join(".nts/build/nts.cmake");
+    assert!(hook.is_file(), "no hook at {}:\n{}", hook.display(), run.stdout);
+    assert!(run.stdout.contains("hook:"), "the hook was not reported:\n{}", run.stdout);
+
+    // Every path in it must be absolute, because `CMake` reads it from its own
+    // build directory. This is the assertion the relative version passed.
+    let text = std::fs::read_to_string(&hook).expect("reading the hook");
+    for line in text.lines().filter(|l| l.contains("DEPENDS ") || l.contains("OUTPUT ")) {
+        let path = line.split_whitespace().last().unwrap_or("");
+        assert!(path.starts_with('/'), "a relative path in the hook: {line}");
+    }
+
+    let consumer = a_cmake_consumer(&project, &hook);
+
+    // Delete the artifact so the custom command has to run.
+    drop(std::fs::remove_file(project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so")));
+    let built = Command::new("cmake")
+        .args(["--build", "build"])
+        .current_dir(&consumer)
+        .output()
+        .expect("running cmake --build");
+    assert!(
+        built.status.success(),
+        "cmake could not build through the hook:\n{}{}",
+        String::from_utf8_lossy(&built.stdout),
+        String::from_utf8_lossy(&built.stderr)
+    );
+    assert!(consumer.join("build/consumer").is_file(), "no consumer executable");
+
+    // **The inputs and outputs, both directions.** "Nothing changed, nothing
+    // re-runs" is also what a rule with *no* inputs does -- dropping `DEPENDS`
+    // entirely passes that assertion -- so the arm that discriminates is the
+    // other one: touch the entry and the hook must run.
+    let rebuild = |what: &str| -> String {
+        let out = Command::new("cmake")
+            .args(["--build", "build"])
+            .current_dir(&consumer)
+            .output()
+            .unwrap_or_else(|e| panic!("running cmake --build {what}: {e}"));
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let quiet = rebuild("with nothing changed");
+    assert!(
+        !quiet.contains("nts: building"),
+        "the hook re-ran with nothing changed:\n{quiet}"
+    );
+
+    // `cmake` compares mtimes at second granularity, so a touch in the same
+    // second as the build reads as unchanged.
+    let entry = project.join("src/main.ts");
+    let source = std::fs::read_to_string(&entry).expect("reading the entry");
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    std::fs::write(&entry, source).expect("touching the entry");
+    let after = rebuild("after touching the entry");
+    assert!(
+        after.contains("nts: building"),
+        "the entry changed and the hook did not re-run, so its `DEPENDS` names \
+         nothing that matters:\n{after}"
+    );
+}
+
+/// A hook nobody here can run is refused rather than written.
+#[test]
+fn an_integration_with_no_adapter_is_refused_by_name() {
+    if !available() {
+        return;
+    }
+    let project = fixture(
+        "build-hook-refusal",
+        r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    acme: library.native({ targets: [target.linux()], entry: "./src/main.ts" }),
+  },
+  integrate: ["gradle"],
+});
+"#,
+    );
+    let run = build(&project, &[]);
+    assert!(!run.ok, "it emitted an adapter it cannot run:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("gradle") && run.stderr.contains("not written"),
+        "the refusal does not name the hook:\n{}",
+        run.stderr
+    );
+}
+
+/// The npm hook is a script that runs, and builds for the machine running it.
+///
+/// **`prepare` runs on the installing machine**, which is why the generated
+/// script resolves the platform at run time rather than baking in whichever one
+/// generated it. That is also the one place node's vocabulary is translated:
+/// `darwin` and `win32` are npm's spellings and `macos` and `windows` are the
+/// config's, and the boundary where the first arrives is where it converts.
+#[test]
+fn the_npm_hook_runs_and_builds_for_the_host() {
+    if !available() {
+        return;
+    }
+    let project = fixture(
+        "build-npm-hook",
+        r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    acme: library.native({ targets: [target.linux()], entry: "./src/main.ts" }),
+  },
+  integrate: ["npm"],
+});
+"#,
+    );
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+    let hook = project.join(".nts/build/nts-prepare.mjs");
+    assert!(hook.is_file(), "no hook at {}:\n{}", hook.display(), run.stdout);
+
+    let text = std::fs::read_to_string(&hook).expect("reading the hook");
+    assert!(
+        text.contains("process.platform") && text.contains("\"--os\""),
+        "the hook does not resolve the installing machine:\n{text}"
+    );
+    // npm's names translated here and nowhere else.
+    assert!(text.contains("darwin") && text.contains("macos"), "no vocabulary bridge:\n{text}");
+
+    // Delete the artifact and let the script rebuild it, which is the whole
+    // claim: this file is an adapter that runs, not a file that looks like one.
+    let artifact = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
+    drop(std::fs::remove_file(&artifact));
+    let node = std::env::var("NTS_NODE").unwrap_or_else(|_| "node".to_owned());
+    let ran = Command::new(node)
+        .arg(&hook)
+        .env("NTS_BIN", env!("CARGO_BIN_EXE_nts"))
+        .output()
+        .expect("running the hook");
+    assert!(
+        ran.status.success(),
+        "the hook failed:\n{}{}",
+        String::from_utf8_lossy(&ran.stdout),
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert!(artifact.is_file(), "the hook ran and built nothing at {}", artifact.display());
+}
