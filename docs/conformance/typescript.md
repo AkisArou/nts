@@ -2500,6 +2500,53 @@ move that found `undefined | void`. Neither is started; each is recorded with
 what actually stops it, because a rank without a diagnosis is what §15 already
 records itself getting wrong.
 
+#### The largest remaining message is not a cause — 177 sites, two types
+
+`a property X of unrepresentable type (a union of …)` is the biggest single
+refusal left by distinct site: **177** across `stream`, `fs`, `http`, `net`,
+`zlib` and `util`, against 83 for the next one. Read as a cause it says the
+compiler cannot represent unions, and the work it suggests is union
+representation.
+
+It is not that. Grouping the 177 by *which* union:
+
+```text
+   85  `AsyncIterableIterator` | undefined
+   58  `ArrayBufferView` | `ArrayBuffer` | `SharedArrayBuffer` | undefined
+   15  `Iterable` | an object | undefined
+    5  `WeakRef` | null
+    4  `ReadableStream` | null
+   10  eight others, one to three each
+```
+
+and then asking which *member* is the blocker, by building the union without it:
+
+```text
+  ArrayBuffer | undefined                        0 refusals
+  ArrayBufferView | undefined                    0 refusals
+  ArrayBufferView | ArrayBuffer | undefined      0 refusals
+  SharedArrayBuffer | undefined                  2 refusals
+  ArrayBuffer | SharedArrayBuffer | undefined    2 refusals
+  AsyncIterableIterator<number> (no union)       1 refusal
+```
+
+**143 of the 177 are two missing types**, and the union is doing nothing except
+carrying them into the message. `SharedArrayBuffer` is already named as the
+cause in the `instanceof` row — *"has no class, and it is what refuses the two
+`value instanceof ArrayBuffer || value instanceof SharedArrayBuffer` sites that
+read as `ArrayBuffer` failures"* — and this is the same type costing 58 more
+sites under a message that does not mention it. `AsyncIterableIterator` is the
+async iterator protocol row, which sizes itself at 63 and is really 85 here plus
+whatever the second message holds.
+
+**Why this belongs in the ledger rather than in an instrument.** Every census
+this tree takes over diagnostics has the same defect and it is stated in
+`tooling/conformance/gates.mjs`: the compiler reports one blocker at a time, so
+a rank by message is a rank by diagnostic *reach*. This is the other half —
+even at one site, the message names the **shape** the refusal was filed under
+and not the thing that has to be built. Two minutes of building the union
+without each member answered it; no amount of grouping the messages would have.
+
 #### `Promise.withResolvers` — landed 2026-09-16
 
 **This section concluded the wrong thing and is kept for the shape of the error.**
