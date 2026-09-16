@@ -1,0 +1,30 @@
+{
+  "//": "Typechecks every nts.config.ts in the interop examples against the real @nts/config. Named tsconfig.configs.json and not tsconfig.json for the reason examples/workspace states: the gate globs every tsconfig.json one level under examples/, and a second one here would enrol these twice.",
+  "//why": "`tooling/config/audit.mjs` fails on a config no tsconfig enrols, and it found these eleven the moment they existed. A config file nothing typechecks is prose that happens to be valid TypeScript.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@nts/config": [
+        "../../tooling/config/src/index.ts"
+      ]
+    }
+  },
+  "files": [
+    "native-buffer/nts.config.ts",
+    "native-callback/nts.config.ts",
+    "native-copy/nts.config.ts",
+    "native-epoll/nts.config.ts",
+    "native-fd/nts.config.ts",
+    "native-inet/nts.config.ts",
+    "native-open/nts.config.ts",
+    "native-poll/nts.config.ts",
+    "native-rusage/nts.config.ts",
+    "native-stat/nts.config.ts",
+    "native-uname/nts.config.ts"
+  ]
+}

@@ -192,7 +192,11 @@ ask(
 // --- 2. is every config typechecked by something? --------------------------
 
 const enrolled = new Set();
-for (const tc of ["examples/workspace/tsconfig.configs.json", "examples/library/tsconfig.config.json"]) {
+for (const tc of [
+  "examples/workspace/tsconfig.configs.json",
+  "examples/library/tsconfig.config.json",
+  "examples/interop/tsconfig.configs.json",
+]) {
   const json = JSON.parse(readFileSync(join(repo, tc), "utf8").replace(/^\s*\/\/.*$/gm, ""));
   for (const f of [...(json.files ?? []), ...(json.include ?? [])]) {
     enrolled.add(relative(repo, resolve(repo, dirname(tc), f)));
