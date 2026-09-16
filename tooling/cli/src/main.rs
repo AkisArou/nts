@@ -937,7 +937,7 @@ fn frontend_binary() -> String {
 fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
     }
@@ -1063,7 +1063,7 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
 fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
     }
@@ -1077,7 +1077,7 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
 fn dump_facts(tsconfig: &Utf8Path, prepared: bool) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
     }
@@ -1171,7 +1171,7 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) 
         source = source.with_constant_folding(Budget::DEFAULT);
     }
 
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     let stats = source.stats();
 
     println!("files            {}", stats.files);
@@ -1280,7 +1280,7 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
 
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     let erasure = nts_core::erasure::classify(&snapshot);
     // The control. Judging each site by its own uses alone is what a
     // per-signature rule could do; the difference between the two columns is
@@ -1384,7 +1384,7 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
 fn dump_modules(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
 
     let mut roots: Vec<(u32, usize)> = snapshot
         .modules
@@ -1564,7 +1564,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // Call resolution is not optional here: without it a call site has no known
     // target and lowering refuses it.
     let mut source = TsgoApi::for_compilation(tsgo_binary);
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
 
     // Warnings are printed whether or not the program typechecks. A partial
     // type graph (NTS0002) makes every refusal below it suspect, so a consumer
@@ -2103,7 +2103,7 @@ const fn render_bin(op: BinOp) -> &'static str {
 fn print_types(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     for (index, record) in snapshot.types.iter().enumerate() {
         let named = record
             .symbol
@@ -2598,7 +2598,7 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     // Errors are the point of this snapshot, so they are not reported here.
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     let project = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
     let wanted = unresolved_foreign(&snapshot);
     // Every package the program's files belong to, whether or not it needed a
@@ -5034,7 +5034,7 @@ fn emit_options<'a>(
 fn emit_llvm(tsconfig: &Utf8Path, emission: Emission) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     report_snapshot_diagnostics(&snapshot)?;
     let entry = selected_roots(emission.shape);
     // The product's entry replaces the tsconfig's `files` when a config names
@@ -5094,7 +5094,7 @@ fn emit_jvm(
 ) -> Result<bool> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     report_snapshot_diagnostics(&snapshot)?;
     let entry = selected_roots(emission.shape);
     // The product's entry replaces the tsconfig's `files` when a config names
@@ -5251,7 +5251,7 @@ struct Wrote {
 fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Result<Wrote> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     report_snapshot_diagnostics(&snapshot)?;
 
     // **Through `emit_options`, like the other two emitters.**
