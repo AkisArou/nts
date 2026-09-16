@@ -27,7 +27,12 @@ export default defineConfig({
     // No memory provider either: it is a `--rc` flag rather than configuration,
     // because of the two the compiler has, exactly one is shippable.
     hello: library.native({
-      targets: [target.linux()],
+      // **`backend: "c"` is said out loud**, because `target.linux()` defaults
+      // to llvm and the llvm backend cannot write a program yet -- its slice is
+      // scalar and there is no runtime to place beside it. `nts build` refuses
+      // that target by name rather than skipping it, so this is the difference
+      // between an artifact and a message saying why there is none.
+      targets: [target.linux({ backend: "c" })],
       entry: "./src/main.ts",
     }),
   },

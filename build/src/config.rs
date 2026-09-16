@@ -71,6 +71,14 @@ pub struct Product {
     pub entry: String,
     #[serde(default)]
     pub targets: Vec<Target>,
+    /// Versioned soname, where a library must match a name it did not choose.
+    ///
+    /// Read because the linker takes it. Deserialized fields are added when
+    /// something consumes them, not when the TypeScript type grows one: a
+    /// member that is parsed and never read is the same shape as a config field
+    /// nothing reaches.
+    #[serde(default)]
+    pub soname: Option<String>,
 }
 
 /// A resolved `nts.config.ts`: the value `defineConfig` returned.
@@ -191,6 +199,7 @@ mod tests {
                             kind: "shared-library".to_owned(),
                             entry: "./src/main.ts".to_owned(),
                             targets: Vec::new(),
+                            soname: None,
                         },
                     )
                 })

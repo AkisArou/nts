@@ -26,7 +26,13 @@ use nts_semantic_schema::SCHEMA_VERSION;
 /// emitted a class containing nothing but its constructor, and the command
 /// printed "wrote 1 class(es)" and exited zero. An hour went into looking for
 /// the emitter bug that had lost every method.
-const TAKES_A_VALUE: [&str; 1] = ["--out"];
+/// Flags whose *value* is not the project path.
+///
+/// `--entry` and `--product` were missing, so `nts emit-c --entry published
+/// proj` took `published` as the tsconfig and failed with "`published` is not a
+/// tsconfig" -- flag order deciding whether a command works, which is the shape
+/// the comment in `named_project` records twice already.
+const TAKES_A_VALUE: [&str; 3] = ["--out", "--entry", "--product"];
 
 /// The tsconfig a command was pointed at, *and* its dependencies acquired.
 ///
@@ -335,6 +341,7 @@ fn main() -> Result<()> {
             let tsconfig = project(&rest)?;
             frontend(&tsconfig, decompose, calls, constants)
         }
+        Some("build") => build(&args.collect::<Vec<String>>()),
         Some("check") => check(&args.collect::<Vec<String>>()),
         // `bind-c`, not `bind`: `bind` is the Java binding generator below, and
         // an arm added above it silently shadowed that command. Named for what
@@ -358,14 +365,14 @@ fn main() -> Result<()> {
                 .position(|a| a == "--out")
                 .and_then(|at| rest.get(at + 1))
                 .map(Utf8PathBuf::from);
-            emit_c(&tsconfig, out.as_deref())
+            emit_c(&tsconfig, out.as_deref(), Emission::from_flags()).map(|_| ())
         }
         // The second backend, reading the same HIR. Textual, so it can be read
         // the way `program.c` can -- which is how three bugs were found in the
         // week before it existed.
         Some("emit-llvm") => {
             let rest: Vec<String> = args.collect();
-            emit_llvm(&project(&rest)?)
+            emit_llvm(&project(&rest)?, Emission::from_flags())
         }
         // The third backend. Not textual, so `--text` renders the listing that
         // stands in for reading `program.c` -- disassembled from the bytes
@@ -382,6 +389,7 @@ fn main() -> Result<()> {
                 &project(&rest)?,
                 out.as_deref(),
                 rest.iter().any(|arg| arg == "--text"),
+                Emission::from_flags(),
             )
         }
         // Every type the frontend resolved, as the schema records it. A
@@ -1541,7 +1549,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // Raw lowering stays the default because it is what maps onto the source.
     let want_passes = std::env::args().any(|arg| arg == "--prepared" || arg == "--rc");
     let (program, diagnostics) = if want_passes {
-        let entry = selected_roots();
+        let entry = selected_roots(Shape::from_flags());
         let options = hir::Options {
             provider: if std::env::args().any(|arg| arg == "--rc") {
                 hir::Provider::ReferenceCounting
@@ -2185,6 +2193,319 @@ fn write_standalone(program: &hir::Program, out: &Utf8Path, sources: &[&str]) ->
 ///
 /// Prints rather than writes: the slice it renders is scalar, so there is no
 /// runtime to place beside it yet and a file would suggest otherwise.
+/// What this build is producing.
+///
+/// **One value, computed once, because it was four reads of
+/// `std::env::args()`.** `--main` was asked in `selected_roots`, again in
+/// `configured_surface`, and again in `emit_c` -- where it decided both which
+/// functions survive and whether to write a `main()`. `--napi` was a fourth. A
+/// question asked in four places is four places to answer it differently, which
+/// is how `emit-c` came to accept `--entry` and ignore it.
+///
+/// It also gives a configured product somewhere to say the same thing. A
+/// `node-addon` product *is* `--napi` and an `application` *is* `--main`, so
+/// `nts build` does not synthesize flags to pass to itself.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Shape {
+    /// A program with an entry point: module evaluation, then the loop.
+    Executable,
+    /// A Node addon: a library to its host, published through Node-API.
+    Addon,
+    /// A library, or a bare emit that claims to be neither.
+    Library,
+}
+
+impl Shape {
+    /// From the command line, which is what a bare `emit-*` has to go on.
+    fn from_flags() -> Self {
+        let args: Vec<String> = std::env::args().collect();
+        if args.iter().any(|arg| arg == "--main") {
+            Self::Executable
+        } else if args.iter().any(|arg| arg == "--napi") {
+            Self::Addon
+        } else {
+            Self::Library
+        }
+    }
+
+    /// From a configured product's kind, which is the same claim written down.
+    fn of(kind: &str) -> Self {
+        match kind {
+            "application" | "executable" => Self::Executable,
+            "node-addon" => Self::Addon,
+            _ => Self::Library,
+        }
+    }
+}
+
+/// `nts build [<project>] [--product <name>]` — every artifact the config declares.
+///
+/// **The command that was missing.** `nts` had seventeen subcommands and none of
+/// them built anything: `emit-c` wrote C, and then twenty-two hand-written
+/// `build.sh` in this tree each reconstructed the rest of the pipeline. A person
+/// had to know which emitter their target wanted, that `--napi` goes with a Node
+/// addon and `--main` with a program, and which compiler flags come next. Every
+/// one of those is written down in `nts.config.ts` already.
+///
+/// So this asks the config and nothing else. The backend comes from the target,
+/// the shape from the product's kind, the surface from its entry. There are no
+/// flags to get right because there is nothing left for a flag to say.
+///
+/// **Refuses by name.** A target whose backend cannot yet write a program is
+/// named, with the backend, rather than skipped -- a build that silently omits
+/// one of three targets is worse than one that stops, because the missing
+/// artifact is discovered by whoever links against it.
+fn build(rest: &[String]) -> Result<()> {
+    let tsconfig = project(rest)?;
+    let Some(config_path) = nts_build::config::beside(&tsconfig) else {
+        bail!(
+            "no `{}` beside {tsconfig}. `nts build` builds what a config declares; \
+             without one there is nothing that says what the artifacts are",
+            nts_build::config::FILE_NAME
+        )
+    };
+    let resolved = nts_build::config::resolve(&config_path)?;
+    let named = requested_product();
+    let chosen: Vec<(&str, &nts_build::config::Product)> = match named.as_deref() {
+        // One product by name, and `product` reports what a config declares when
+        // the name is not one of them.
+        Some(_) => nts_build::config::product(&resolved, named.as_deref())?
+            .into_iter()
+            .collect(),
+        // Every product. A config with several is the normal case -- a shared
+        // library beside a static archive of the same code is two -- and
+        // building all of them is what "build this project" means.
+        None => resolved.products.iter().map(|(k, v)| (k.as_str(), v)).collect(),
+    };
+    if chosen.is_empty() {
+        bail!(
+            "{config_path} declares no products. A package that only contributes \
+             sources to its consumers has nothing of its own to build"
+        )
+    }
+
+    let root = tsconfig
+        .parent()
+        .unwrap_or_else(|| Utf8Path::new("."))
+        .join(".nts")
+        .join("build");
+    let mut built = 0usize;
+    for (name, product) in chosen {
+        if product.targets.is_empty() {
+            bail!("product `{name}` names no targets, so there is nothing to build it for")
+        }
+        let emission = Emission { shape: Shape::of(&product.kind), product: Some((name, product)) };
+        for target in &product.targets {
+            let out = root.join(name).join(target_directory(target));
+            println!("building `{name}` for {} into {out}", target.id);
+            match target.backend.as_str() {
+                "c" => {
+                    let wrote = emit_c(&tsconfig, Some(&out), emission)?;
+                    let artifact = link_c(name, product, &out, &wrote)?;
+                    println!("  {artifact}");
+                }
+                "jvm" => emit_jvm(&tsconfig, Some(&out), false, emission)?,
+                // Named rather than skipped. `emit-llvm` renders to stdout
+                // because its slice is scalar and there is no runtime to place
+                // beside it, so there is nothing here to write yet.
+                "llvm" => bail!(
+                    "product `{name}` targets {} on the llvm backend, which cannot write a \
+                     program yet -- `nts emit-llvm` renders to stdout. Build it on the c \
+                     backend, or wait for the llvm lane to grow an `--out`",
+                    target.id
+                ),
+                other => bail!("product `{name}` names backend `{other}`, which is not one of c, llvm, jvm"),
+            }
+            built += 1;
+        }
+    }
+    println!("{built} artifact(s) under {root}");
+    Ok(())
+}
+
+/// The translation unit that runs module evaluation when a library loads.
+const AUTO_INIT_NAME: &str = "nts_auto_init.c";
+
+/// The C compiler that builds a program, and its leading arguments.
+///
+/// `CC` split on whitespace, for the reason `bind.rs` states: it is a command
+/// line and not a program name, so `zig cc`, `ccache clang` and `xcrun clang`
+/// are all unusable when it is read as a file to execute.
+fn cc() -> std::process::Command {
+    let spec = std::env::var("CC").unwrap_or_else(|_| "clang".to_owned());
+    let mut words = spec.split_whitespace();
+    let mut command = std::process::Command::new(words.next().unwrap_or("clang"));
+    command.args(words);
+    command
+}
+
+fn run(mut command: std::process::Command, what: &str) -> Result<()> {
+    let output = command.output().with_context(|| {
+        format!("running the C compiler for {what}. Set CC to name one")
+    })?;
+    if !output.status.success() {
+        bail!("{what} failed:\n{}", String::from_utf8_lossy(&output.stderr));
+    }
+    Ok(())
+}
+
+/// Compile and link what `emit_c` wrote into the artifact the product names.
+///
+/// **The flags are the product's, not a person's.** A shared library needs
+/// `-fPIC` and this is not a preference: `nts_env` is thread-local, the default
+/// TLS model is local-exec, and linking that into a `.so` fails with
+/// `relocation R_X86_64_TPOFF32 ... local-exec is incompatible with -shared`.
+/// Twenty-two `build.sh` in this tree each carry their own answer to that.
+///
+/// The published surface becomes a linker version script rather than
+/// `-fvisibility=hidden`, because the emitted headers carry no visibility
+/// attributes -- hiding by default would hide the exports too. Without it a
+/// two-function library exported 318 symbols, every internal of the runtime and
+/// of the vendored dtoa among them, which is the collision
+/// `apps/linux-brownfield` describes in a comment and had no field to prevent.
+fn link_c(name: &str, product: &nts_build::config::Product, out: &Utf8Path, wrote: &Wrote) -> Result<Utf8PathBuf> {
+    let shared = product.kind == "shared-library";
+    let library = shared || product.kind == "static-library";
+    let pic = library || product.kind == "node-addon";
+
+    // **A library initialises itself.**
+    //
+    // Module-level state is set by `module__init`, and a library that leaves
+    // that to its consumer has an ABI whose first rule is unenforceable: forget
+    // the call and `greeting` is null, which is a wrong answer rather than a
+    // link error. The version script below then makes it worse by hiding the
+    // symbol, so the consumer could not call it even knowing to.
+    //
+    // `.init_array` is what the platform provides for exactly this, it runs
+    // before any consumer code, and it works the same in an archive. An
+    // executable does not get one: `main.c` already calls it, and two calls
+    // would evaluate the module twice.
+    let mut sources = wrote.sources.clone();
+    if library {
+        let initialiser = out.join(AUTO_INIT_NAME);
+        std::fs::write(
+            &initialiser,
+            "/* Generated by nts. Runs module evaluation when the library loads. */\n\
+             extern void module__init(void);\n\
+             __attribute__((constructor)) static void nts_auto_init(void) { module__init(); }\n",
+        )
+        .with_context(|| format!("writing {initialiser}"))?;
+        sources.push(AUTO_INIT_NAME.to_owned());
+    }
+
+    let mut objects = Vec::new();
+    for source in &sources {
+        let object = out.join(format!("{source}.o"));
+        let mut command = cc();
+        command.args(["-std=c11", "-O2", "-I"]).arg(out.as_str());
+        if pic {
+            command.arg("-fPIC");
+        }
+        command.arg("-c").arg(out.join(source).as_str()).arg("-o").arg(object.as_str());
+        run(command, &format!("compiling {source} for `{name}`"))?;
+        objects.push(object);
+    }
+
+    let artifact = out.join(artifact_name(name, product));
+    if product.kind == "static-library" {
+        {
+            let mut command = std::process::Command::new("ar");
+            command.arg("rcs").arg(artifact.as_str());
+            for object in &objects {
+                command.arg(object.as_str());
+            }
+            run(command, &format!("archiving `{name}`"))?;
+        }
+    } else {
+        {
+            let script = out.join("exports.map");
+            std::fs::write(&script, version_script(&wrote.published))
+                .with_context(|| format!("writing {script}"))?;
+            let mut command = cc();
+            if shared {
+                command.arg("-shared");
+                command.arg(format!("-Wl,--version-script={script}"));
+                if let Some(soname) = &product.soname {
+                    command.arg(format!("-Wl,-soname,{soname}"));
+                }
+            }
+            for object in &objects {
+                command.arg(object.as_str());
+            }
+            command.arg("-lm");
+            // The libuv host is a translation unit like any other, so its
+            // presence in what was written is the question -- not the product
+            // kind, and not a flag somebody remembers.
+            if sources.iter().any(|s| s == nts_codegen_c::UV_HOST_SOURCE_NAME) {
+                command.arg("-luv");
+            }
+            command.arg("-o").arg(artifact.as_str());
+            run(command, &format!("linking `{name}`"))?;
+        }
+    }
+    Ok(artifact)
+}
+
+/// What the file is called.
+///
+/// `soname` overrides it where a library must match a name it did not choose;
+/// otherwise it is derived, which is what that field's documentation promises.
+fn artifact_name(name: &str, product: &nts_build::config::Product) -> String {
+    match product.kind.as_str() {
+        "shared-library" => product.soname.clone().unwrap_or_else(|| format!("lib{name}.so")),
+        "static-library" => format!("lib{name}.a"),
+        "node-addon" => format!("{name}.node"),
+        _ => name.to_owned(),
+    }
+}
+
+/// A version script naming exactly what crosses the ABI.
+fn version_script(published: &[String]) -> String {
+    let mut text = String::from("{\n  global:\n");
+    for symbol in published {
+        text.push_str("    ");
+        text.push_str(symbol);
+        text.push_str(";\n");
+    }
+    text.push_str("  local:\n    *;\n};\n");
+    text
+}
+
+/// Where one target's output goes, under a product's directory.
+///
+/// The id and the architecture, because the id alone does not separate them: a
+/// Node addon for darwin-arm64 and one for linux-x64 share `node-api-8`, which
+/// is the point of that id and exactly why it cannot be the directory name.
+fn target_directory(target: &nts_build::config::Target) -> String {
+    match &target.arch {
+        Some(arch) => format!("{}-{arch}", target.id),
+        None => target.id.clone(),
+    }
+}
+
+/// What one emitter invocation has been told to produce.
+///
+/// **The product is passed, not re-derived.** `nts build` iterates a config's
+/// products and calls an emitter for each; if the emitter then resolved the
+/// config again and picked by `--product`, it would pick a *different* one --
+/// or refuse as ambiguous -- while the loop thought it had said which. Two
+/// answers to "which product", one of them wrong, in the same process.
+///
+/// `None` is a bare `emit-*`, which has no product and asks the config itself.
+#[derive(Clone, Copy)]
+struct Emission<'a> {
+    shape: Shape,
+    /// The product and the name it is declared under, when a build chose it.
+    product: Option<(&'a str, &'a nts_build::config::Product)>,
+}
+
+impl Emission<'_> {
+    /// A bare `emit-*`: the flags are all it has to go on.
+    fn from_flags() -> Self {
+        Self { shape: Shape::from_flags(), product: None }
+    }
+}
+
 /// The name a `--product` flag selects, when a config declares more than one.
 fn requested_product() -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
@@ -2212,10 +2533,9 @@ fn requested_product() -> Option<String> {
 /// about this run. The file is not a default the flag overrides so much as the
 /// same statement made durably, and where both are present the transient one is
 /// the one that was meant.
-fn selected_roots() -> Option<Vec<String>> {
+fn selected_roots(shape: Shape) -> Option<Vec<String>> {
     let named = entry_names();
-    let standalone = std::env::args().any(|arg| arg == "--main");
-    let mut roots = match (named.is_empty(), standalone) {
+    let mut roots = match (named.is_empty(), shape == Shape::Executable) {
         (false, _) => named,
         (true, true) => Vec::new(),
         // Nothing on the command line names roots. A configured product may
@@ -2280,11 +2600,17 @@ fn configured_product(tsconfig: &Utf8Path) -> Result<Option<(String, nts_build::
 fn configured_surface(
     tsconfig: &Utf8Path,
     snapshot: &nts_semantic_schema::SemanticSnapshot,
+    emission: Emission,
 ) -> Result<Option<Vec<String>>> {
-    if !entry_names().is_empty() || std::env::args().any(|arg| arg == "--main") {
+    if !entry_names().is_empty() || emission.shape == Shape::Executable {
         return Ok(None);
     }
-    let Some((name, product)) = configured_product(tsconfig)? else { return Ok(None) };
+    // Told, or asked. `nts build` has already chosen; a bare `emit-*` has not.
+    let chosen = match emission.product {
+        Some((name, product)) => Some((name.to_owned(), product.clone())),
+        None => configured_product(tsconfig)?,
+    };
+    let Some((name, product)) = chosen else { return Ok(None) };
     let directory = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
     let entry = directory.join(&product.entry);
     let matched = nts_frontend_ts::entry_uris_for(std::slice::from_ref(&entry), snapshot);
@@ -2392,16 +2718,16 @@ fn emit_options<'a>(
     }
 }
 
-fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
+fn emit_llvm(tsconfig: &Utf8Path, emission: Emission) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
-    let entry = selected_roots();
+    let entry = selected_roots(emission.shape);
     // The product's entry replaces the tsconfig's `files` when a config names
     // one, so `public_api` -- what `Roots::EntrySurface` roots at -- is computed
     // from the file the build says is the product.
-    let (entry_files, configured) = match configured_surface(tsconfig, &snapshot)? {
+    let (entry_files, configured) = match configured_surface(tsconfig, &snapshot, emission)? {
         Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
         None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), None),
     };
@@ -2444,16 +2770,16 @@ fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
 /// run anything: `java -cp <dir>:<dir>/nts-runtime.jar nts.gen.Program`.
 /// Without it nothing is written, because a class file is bytes and printing
 /// them to a terminal helps nobody -- `--text` is what to read instead.
-fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<()> {
+fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool, emission: Emission) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
-    let entry = selected_roots();
+    let entry = selected_roots(emission.shape);
     // The product's entry replaces the tsconfig's `files` when a config names
     // one, so `public_api` -- what `Roots::EntrySurface` roots at -- is computed
     // from the file the build says is the product.
-    let (entry_files, configured) = match configured_surface(tsconfig, &snapshot)? {
+    let (entry_files, configured) = match configured_surface(tsconfig, &snapshot, emission)? {
         Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
         None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), None),
     };
@@ -2543,7 +2869,24 @@ fn refuse_if_the_emitter_declined(diagnostics: &[nts_diagnostics::Diagnostic]) -
     )
 }
 
-fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
+/// What a C emission produced, for whoever has to compile it.
+///
+/// **Returned rather than re-derived.** A build has to know which `.c` files to
+/// compile and which symbols the artifact publishes, and both are decided here:
+/// `support_files` is already "the one list, so that the several places which
+/// build a program agree about it", and the published names are
+/// `program.public_api`. The alternative is a linker script built by parsing
+/// `program.h`, which is a second reading of something this function had in
+/// hand.
+#[derive(Debug, Default)]
+struct Wrote {
+    /// Translation units to compile, relative to the output directory.
+    sources: Vec<String>,
+    /// C symbols the artifact publishes.
+    published: Vec<String>,
+}
+
+fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Result<Wrote> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
@@ -2569,16 +2912,11 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     // real today: a Node addon is the C backend, so `exports:` in a config --
     // whose whole job is to name fewer roots than the entry exports -- could
     // never have reached the artifact it was written for.
-    let entry = selected_roots();
-    let (entry_files, configured) = match configured_surface(tsconfig, &snapshot)? {
+    let entry = selected_roots(emission.shape);
+    let (entry_files, configured) = match configured_surface(tsconfig, &snapshot, emission)? {
         Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
         None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), None),
     };
-    // **`--main` decides what is written, not what survives**, and the variable
-    // it replaced answered both. Those separate here: `emit_options` reads
-    // `--main` *or* `--entry` for reachability, and the standalone `main()` and
-    // its libuv host below are a `--main` question only.
-    let standalone = std::env::args().any(|arg| arg == "--main");
     let prepared = match hir::prepare_with(
         &snapshot,
         &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured),
@@ -2612,11 +2950,36 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     }
     refuse_if_the_emitter_declined(&emitted.diagnostics)?;
 
+    let published: Vec<String> = program
+        .public_api
+        .iter()
+        .map(|(emitted_name, _)| nts_codegen_c::c_identifier(emitted_name))
+        .collect();
     let Some(out) = out else {
         print!("{}", emitted.writer.text());
-        return Ok(());
+        return Ok(Wrote::default());
     };
 
+    write_c_output(&program, &emitted, out, emission, published)
+}
+
+/// Write the program, its runtime, and whatever the product's shape adds.
+///
+/// Split out of `emit_c` because that function was 112 lines and clippy says so
+/// at 100. The seam is real rather than arbitrary: everything above decides
+/// *what* the program is, and everything here decides what lands on disk.
+fn write_c_output(
+    program: &hir::Program,
+    emitted: &nts_codegen_c::Emitted,
+    out: &Utf8Path,
+    emission: Emission,
+    published: Vec<String>,
+) -> Result<Wrote> {
+    // **`--main` decides what is written, not what survives**, and the variable
+    // it replaced answered both. Reachability read `--main` or `--entry` above;
+    // the standalone `main()` and its libuv host below are a `--main` question
+    // only.
+    let standalone = emission.shape == Shape::Executable;
     // The runtime is a translation unit of its own, so a buildable output is
     // three files rather than one.
     std::fs::create_dir_all(out).with_context(|| format!("creating {out}"))?;
@@ -2640,15 +3003,22 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     // comes with it, because a program needs a loop and an embedder with its
     // own supplies a different one.
     if standalone {
-        return write_standalone(&program, out, &extra);
+        write_standalone(program, out, &extra)?;
+        return Ok(Wrote {
+            sources: std::iter::once("program.c".to_owned())
+                .chain(extra.iter().map(|name| (*name).to_owned()))
+                .chain(std::iter::once("main.c".to_owned()))
+                .collect(),
+            published,
+        });
     }
 
     // `--napi` adds the Node-API wrapper, which is what makes the compiled
     // program callable from JavaScript -- and therefore what lets node's own
     // test suite run against it. Node is a harness here, not a runtime: nothing
     // this writes enters a shipped binary.
-    if std::env::args().any(|arg| arg == "--napi") {
-        let addon = nts_codegen_napi::emit_with(&program, &emitted.refused);
+    if emission.shape == Shape::Addon {
+        let addon = nts_codegen_napi::emit_with(program, &emitted.refused);
         let addon_path = out.join(nts_codegen_napi::ADDON_SOURCE_NAME);
         std::fs::write(&addon_path, &addon.source)
             .with_context(|| format!("writing {addon_path}"))?;
@@ -2660,7 +3030,13 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
             extra.join(", "),
             nts_codegen_napi::ADDON_SOURCE_NAME
         );
-        return Ok(());
+        return Ok(Wrote {
+            sources: std::iter::once("program.c".to_owned())
+                .chain(extra.iter().map(|name| (*name).to_owned()))
+                .chain(std::iter::once(nts_codegen_napi::ADDON_SOURCE_NAME.to_owned()))
+                .collect(),
+            published,
+        });
     }
 
     // The witness is named rather than written silently. It is the only output
@@ -2684,7 +3060,12 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     if selected_provider() == hir::Provider::ReferenceCounting {
         println!("compile the runtime with -DNTS_PROVIDER_RC");
     }
-    Ok(())
+    Ok(Wrote {
+        sources: std::iter::once("program.c".to_owned())
+            .chain(extra.iter().map(|name| (*name).to_owned()))
+            .collect(),
+        published,
+    })
 }
 
 /// `nts deps`: acquire dependency source, and report on what was not acquired.
