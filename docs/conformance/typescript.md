@@ -2493,6 +2493,66 @@ confidently about the wrong thing, which is the day's fourth instrument error
 and the third caught only by looking at the names it returned rather than the
 count.
 
+### Two candidates diagnosed to their blockers, 2026-09-16
+
+Both were reached by breaking a *category* down until it named a construct — the
+move that found `undefined | void`. Neither is started; each is recorded with
+what actually stops it, because a rank without a diagnosis is what §15 already
+records itself getting wrong.
+
+#### `Promise.withResolvers` — 322 sites, 22 distinct, six modules
+
+The largest single missing global by a factor of seven: `Object.getPrototypeOf`
+is 43, `Object.defineProperty` 33, `Date.UTC` 28. It is used as
+`Promise.withResolvers<void>()` in `zlib`, `fs`, `stream`, `process`, `http` and
+`util`.
+
+**It is not a sibling of `Promise.resolve`.** That dispatch —
+`resolve`/`reject`/`all`/`race` — is four lines and adding a fifth is where this
+starts, but `withResolvers` must *return* the settle functions, and they are not
+values here. `new Promise(f)` lowers `f`'s body at the construction site and
+treats `resolve` as a syntactic settle, which its own comment states: "the
+executor runs synchronously, so its body is lowered at the construction site and
+these two names are not values at all". Written directly, the refusal says so:
+
+    `resolve` used as a value rather than called, which needs the executor
+    to be a real closure over the promise
+
+**So the blocker is a promise capability as a first-class value**, which is 10
+sites and 2 distinct on its own — small only because everything that would need
+it reaches for `withResolvers` and is refused a layer earlier. What it needs is
+a closure capturing the promise whose call is `nts_promise_fulfill_*`; the
+runtime side is four plain functions and the compiler has closures, but the body
+would be *synthesized* rather than lowered from source, which is new machinery.
+
+#### An optional method on an interface — 34 distinct
+
+`a union of a function type | undefined`, and every site is an optional method
+called optionally: `previous.uncork?.()`, `socket.setKeepAlive?.(…)`,
+`this.socket?.setNoDelay?.(enable)`.
+
+**The declaration form is the whole difference**, isolated on four arms:
+
+    uncork(): void        required method    compiles
+    uncork?: () => void   optional property  compiles
+    uncork?(): void       optional method    refused
+
+A method gets a vtable entry rather than a field, so the optional call lowers
+its callee as a *value*, finds no slot, and `absent_member` reports the member's
+type. The types are identical either way — `nts types` shows
+`Function(SignatureId(4))` and `Undefined` for both spellings — so this is a
+layout question wearing a representation sentence.
+
+**And the route is already open.** Presence of an optional method varies per
+*class*, not per instance, which is exactly what `in` answers, and
+
+    if ("uncork" in c) { c.uncork(); }
+
+**compiles clean today.** So `c.uncork?.()` is that, desugared:
+`lower_in_over_every_class` for the test and the ordinary virtual call in the
+present arm. No new representation, no synthesized closure — which is why this
+one is the better first move of the two despite being a tenth the size.
+
 ### `x?.m()` for a `void` m — one absence written twice, 2026-09-16
 
 `a conditional of unrepresentable type (a union of undefined | void)` was 597
