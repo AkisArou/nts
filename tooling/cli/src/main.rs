@@ -2312,6 +2312,20 @@ fn build(rest: &[String]) -> Result<()> {
         None => resolved.products.iter().map(|(k, v)| (k.as_str(), v)).collect(),
     };
     if chosen.is_empty() {
+        // **A package is not nothing to build.** It contributes sources to its
+        // consumers, and if any of them import a `c:` module it cannot
+        // typecheck on its own until the binding exists -- which made every
+        // package with native code uncheckable in isolation, in an editor or in
+        // `tsc -b`. Generating them is the build this project has.
+        //
+        // Into the package, because here the package *is* the project. That is
+        // the same rule as everywhere else rather than an exception to it.
+        let ids: Vec<String> = resolved.targets.clone().unwrap_or_default();
+        if resolved.native.iter().any(|entry| entry.header.is_some()) && !ids.is_empty() {
+            generate_bindings(&tsconfig, &ids)?;
+            println!("{config_path} declares no products; bound what its sources import");
+            return Ok(());
+        }
         bail!(
             "{config_path} declares no products. A package that only contributes \
              sources to its consumers has nothing of its own to build"
@@ -2352,9 +2366,19 @@ fn build(rest: &[String]) -> Result<()> {
             // would put a frontend run on every build in the tree. Read from the
             // config this command already resolved rather than resolving it
             // again, which would be a second `node` for the same answer.
-            let native = if resolved.native.iter().any(|entry| entry.header.is_some()) {
-                let roots = generate_bindings(&tsconfig, target)?;
-                native_sources(&roots, target)?
+            //
+            // **A workspace member counts too, and not because of its own
+            // config.** An app declaring no native code can still import a
+            // package that does -- `apps/native` has no `native:` and its
+            // program contains `crypto-core`'s `c:digest`. A config with a
+            // `workspace` above this one says a monorepo, which is the same
+            // signal one level out, and costs the snapshot only there.
+            let in_a_workspace = nts_build::config::workspace_above(&tsconfig);
+            let native = if resolved.native.iter().any(|entry| entry.header.is_some())
+                || in_a_workspace
+            {
+                let roots = generate_bindings(&tsconfig, std::slice::from_ref(&target.id))?;
+                native_sources(&roots, &target.id)?
             } else {
                 Vec::new()
             };
@@ -2499,14 +2523,17 @@ fn imported_names(file: &Utf8Path, module: &str) -> Result<(Vec<String>, Vec<Str
 /// Returns how many were written. Nothing to do is the overwhelmingly common
 /// case and costs one snapshot, taken only when a config nearby declares a
 /// header at all.
-fn generate_bindings(
-    tsconfig: &Utf8Path,
-    target: &nts_build::config::Target,
-) -> Result<Vec<Utf8PathBuf>> {
+/// `targets` is a set rather than one, because a package is built for all of
+/// them at once: `notifications` declares five, and the header for
+/// `c:notifications` exists under exactly one. Refusing per target reported "0
+/// native roots with a header for android-29" for a module only `linux.ts`
+/// imports, which is a true sentence about the wrong question.
+fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8PathBuf>> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     // Errors are the point of this snapshot, so they are not reported here.
     let snapshot = source.snapshot(tsconfig)?;
+    let project = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
     let wanted = unresolved_foreign(&snapshot);
     // Every package the program's files belong to, whether or not it needed a
     // binding: a package can contribute native code that only the C side calls
@@ -2521,14 +2548,14 @@ fn generate_bindings(
         }
     }
     for (module, file) in wanted {
-        bind_one(&module, &file, target)?;
+        bind_one(&module, &file, targets, project)?;
     }
     Ok(roots)
 }
 
 /// Generate one binding: the module a file imports, from the header its package
 /// names.
-fn bind_one(module: &str, file: &Utf8Path, target: &nts_build::config::Target) -> Result<()> {
+fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) -> Result<()> {
     {
         let Some(config_path) = nts_build::config::above(file) else {
             bail!(
@@ -2542,7 +2569,9 @@ fn bind_one(module: &str, file: &Utf8Path, target: &nts_build::config::Target) -
         let headers: Vec<&nts_build::config::NativeSources> = resolved
             .native
             .iter()
-            .filter(|entry| entry.header.is_some() && entry.covers(&target.id))
+            .filter(|entry| {
+                entry.header.is_some() && targets.iter().any(|id| entry.covers(id))
+            })
             .collect();
         let [entry] = headers.as_slice() else {
             bail!(
@@ -2550,13 +2579,19 @@ fn bind_one(module: &str, file: &Utf8Path, target: &nts_build::config::Target) -
                  root(s) with a header for {}. One is a binding; several is a question \
                  only the config can answer",
                 headers.len(),
-                target.id
+                targets.join(", ")
             )
         };
         let header = package.join(entry.header.as_deref().unwrap_or_default());
         let (values, types) = imported_names(file, module)?;
-        let out = package.join("types").join(format!("{}.d.ts", module.replace([':', '/'], "-")));
-        std::fs::create_dir_all(out.parent().unwrap_or(package))
+        // **Into the project being built, not into the package.** The binding
+        // is an artifact of *this* build: writing it under a dependency would
+        // mutate somebody else's source tree, and the app's program does not
+        // reach there anyway -- it resolves the package through `paths` and its
+        // own `include` is what governs. Two apps depending on one package each
+        // get their own, which is what self-contained means.
+        let out = into.join("types").join(format!("{}.d.ts", module.replace([':', '/'], "-")));
+        std::fs::create_dir_all(out.parent().unwrap_or(into))
             .with_context(|| format!("creating {out}"))?;
         let mut command = std::process::Command::new(std::env::current_exe()?);
         command.arg("bind-c").arg("--module").arg(module);
@@ -2587,14 +2622,14 @@ fn bind_one(module: &str, file: &Utf8Path, target: &nts_build::config::Target) -
 /// any other -- the difference is only that a person wrote it.
 fn native_sources(
     roots: &[Utf8PathBuf],
-    target: &nts_build::config::Target,
+    target: &str,
 ) -> Result<Vec<(Utf8PathBuf, Utf8PathBuf)>> {
     let mut found = Vec::new();
     for config_path in roots {
         let package = config_path.parent().unwrap_or_else(|| Utf8Path::new("."));
         let Ok(resolved) = nts_build::config::resolve(config_path) else { continue };
         for entry in &resolved.native {
-            if !entry.covers(&target.id) {
+            if !entry.covers(target) {
                 continue;
             }
             let directory = package.join(&entry.dir);

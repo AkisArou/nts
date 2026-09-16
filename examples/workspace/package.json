@@ -1,0 +1,11 @@
+{
+  "//": "A workspace member so `@nts/config` resolves the way it would for a user: as a dependency, through node's own resolution, rather than through a tsconfig path or a loader hook. `nts build` evaluates `nts.config.ts` with node, and node has no `paths`.",
+  "//hoisted": "One package.json at the root of the fixture rather than twenty. Node walks up from `apps/native/nts.config.ts` through `apps/node_modules` to this one, which is what a monorepo with a hoisted dependency looks like -- and is why the apps and packages need none of their own.",
+  "name": "@nts-examples/workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@nts/config": "workspace:*"
+  }
+}

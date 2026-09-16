@@ -9,13 +9,25 @@
     "strict": true,
     "declaration": true,
     "declarationMap": true,
-    "typeRoots": ["./types"],
+    "typeRoots": [
+      "./types"
+    ],
     "paths": {
-      "@workspace/notifications": ["./packages/notifications/src/index.ts"],
-      "@workspace/biometrics": ["./packages/biometrics/src/index.ts"],
-      "@workspace/crypto-core": ["./packages/crypto-core/src/index.ts"],
-      "@workspace/storage": ["./packages/storage/src/index.ts"],
-      "@workspace/telemetry": ["./packages/telemetry/src/index.ts"]
+      "@workspace/notifications": [
+        "./packages/notifications/src/index.ts"
+      ],
+      "@workspace/biometrics": [
+        "./packages/biometrics/src/index.ts"
+      ],
+      "@workspace/crypto-core": [
+        "./packages/crypto-core/src/index.ts"
+      ],
+      "@workspace/storage": [
+        "./packages/storage/src/index.ts"
+      ],
+      "@workspace/telemetry": [
+        "./packages/telemetry/src/index.ts"
+      ]
     }
   }
 }

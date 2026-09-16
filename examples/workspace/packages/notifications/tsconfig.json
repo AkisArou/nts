@@ -1,5 +1,4 @@
 {
-  "//": "A composite project, so apps can reference it and tsc can build the graph incrementally.",
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
@@ -15,6 +14,9 @@
     ]
   },
   "include": [
-    "src"
-  ]
+    "src",
+    "types"
+  ],
+  "//": "A composite project, so tsc can build the graph incrementally.",
+  "//include": "`types` is where `nts build` writes the bindings this package's own sources import. Without it the package cannot typecheck in isolation -- in an editor, or in `tsc -b` -- because `c:` modules have no declaration until one is generated."
 }

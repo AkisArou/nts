@@ -1,6 +1,16 @@
+/* The libnotify shim. A stub here: the fixture is about the build graph, and
+   linking real libnotify would make this example need a system package.
+
+   Scalars only -- see `scheduler.h` for why the text stays in TypeScript. */
 #include "scheduler.h"
 
-/* Stand-in. The fixture is about the build graph, not the notification. */
-void schedule_at(const char *id, const char *title, const char *body, double delay_millis) { (void)id; (void)title; (void)body; (void)delay_millis; }
-void cancel_by_id(const char *id) { (void)id; }
-void set_tap_handler(notification_tap_fn handler) { (void)handler; }
+static notification_tap_fn tap_handler;
+
+void schedule_at(int32_t id, double delay_millis) {
+    (void)id;
+    (void)delay_millis;
+}
+
+void cancel_by_id(int32_t id) { (void)id; }
+
+void set_tap_handler(notification_tap_fn handler) { tap_handler = handler; }

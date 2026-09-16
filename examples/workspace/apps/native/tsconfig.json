@@ -1,15 +1,16 @@
 {
-  "//": "References are the dependency graph, and they live here rather than in nts.config.ts because tsconfig is the source of truth. The nts config says what to build; this says what the program is made of.",
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    "types": [
+      "@nts/platform-linux-gnu"
+    ]
   },
   "include": [
-    "src"
+    "src",
+    "types"
   ],
-  "references": [
-    {
-      "path": "../../packages/crypto-core"
-    }
-  ]
+  "//": "No `references`. A referenced project must be *built* before its importer typechecks (TS6305), so its source never enters the program -- and nts compiles a whole program. `paths` in tsconfig.base.json resolves the package to its source instead, which is what a whole-program compiler needs and what `tsc -b` on the solution still checks.",
+  "//types": "The platform surface this app targets. It pulls package sources in through `paths`, so its own `types` list is what governs -- a package's list does not carry across.",
+  "//include": "`types` is where `nts build` writes the bindings it generates for this program's `c:` imports. It is a build artifact rather than source, and it belongs to the project being built rather than to the package whose header it came from."
 }

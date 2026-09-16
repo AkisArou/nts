@@ -26,7 +26,13 @@ importers:
 
   examples/library:
     dependencies:
-      '@native-typescript/config':
+      '@nts/config':
+        specifier: workspace:*
+        version: link:../../tooling/config
+
+  examples/workspace:
+    dependencies:
+      '@nts/config':
         specifier: workspace:*
         version: link:../../tooling/config
 
