@@ -282,10 +282,35 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
                     // safe direction here; under-rooting is a jar that does not
                     // link.
                     || func.name.split_once('#').is_some_and(|(owner, _)| {
-                        program
-                            .public_api
-                            .iter()
-                            .any(|(emitted, _)| *emitted == owner)
+                        // **A published *class*, not anything with a `#` in its
+                        // name.** The first version asked only whether the owner
+                        // was in `public_api`, and `eachUpTo#Closure0` -- a
+                        // closure *specialization* of an exported function --
+                        // has owner `eachUpTo`, which is. Rooting those kept
+                        // specializations alive past the point their call sites
+                        // had been rewritten, and the verifier reported
+                        // `Unreachable { func: "eachUpTo", block: BlockId(6) }`
+                        // for the original and its clone alike.
+                        //
+                        // The tell that it was not the root *list*: for
+                        // `native-buffer` the list into `prune` is
+                        // `["uppercaseAscii"]` either way, because
+                        // specializations do not exist yet when pruning runs.
+                        // They exist at the later `analyze_program` calls, which
+                        // take the same root set through `root_names` -- so the
+                        // damage was downstream of the list I had instrumented
+                        // and identical to it.
+                        //
+                        // A class has a layout and is not itself a function;
+                        // `eachUpTo` is a function and has no layout. Both
+                        // halves, because a specialization of a published class's
+                        // method would satisfy the first alone.
+                        program.layouts.iter().any(|layout| layout.name == owner)
+                            && !program.funcs.iter().any(|func| func.name == owner)
+                            && program
+                                .public_api
+                                .iter()
+                                .any(|(emitted, _)| *emitted == owner)
                     })
             })
             .map(|func| func.name.as_str())

@@ -43,3 +43,25 @@ export function buildsAHidden(x: number): number {
   const hidden = new Hidden();
   return x + (hidden === null ? 1 : 0);
 }
+
+// **A callback-taking export and a caller that passes one**, which together are
+// what produce an `eachUpTo#Closure0` specialization. The first version of the
+// fix rooted anything whose name had a `#` and whose owner was published --
+// which is true of that specialization, since `eachUpTo` is exported -- and
+// keeping it past the point its call sites were rewritten left the verifier
+// reporting `Unreachable` on both the original and the clone.
+//
+// Either half alone is fine, so both are here.
+export function eachUpTo(n: number, f: (x: number) => void): void {
+  for (let i = 0; i < n; i++) {
+    f(i);
+  }
+}
+
+export function triangle(n: number): number {
+  let total = 0;
+  eachUpTo(n, (x: number): void => {
+    total = total + x;
+  });
+  return total;
+}

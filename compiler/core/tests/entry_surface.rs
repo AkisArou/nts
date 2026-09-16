@@ -16,7 +16,22 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, reachable::Roots};
+use nts_semantic_schema::SemanticSnapshot;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
+
+fn snapshot() -> Option<SemanticSnapshot> {
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/entry-surface")
+        .join("tsconfig.json")
+        .canonicalize_utf8()
+        .expect("tests/programs/entry-surface is checked in");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed");
+    assert!(!snapshot.has_errors(), "fixture must typecheck");
+    Some(snapshot)
+}
 
 fn lowered() -> Option<hir::Program> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
@@ -51,5 +66,31 @@ fn a_published_class_keeps_its_members_and_a_hidden_one_does_not() {
     // `EntrySurface` exists to replace.
     for dropped in ["Hidden#secret", "unreachable"] {
         assert!(!names.contains(&dropped), "{dropped} should be pruned: {names:?}");
+    }
+}
+
+/// The whole pipeline under `EntrySurface`, which is where the first version of
+/// the fix broke.
+///
+/// `prune` alone cannot see it: a closure *specialization* does not exist when
+/// pruning runs, and the root list into `prune` is identical either way. It is
+/// the later `analyze_program` calls that take the same roots and do see them,
+/// so the damage was downstream of the list the unit test above checks.
+///
+/// The observable claim is simply that the program verifies. `Unreachable` is
+/// not a wrong answer, so no differential would have caught it.
+#[test]
+fn the_entry_surface_pipeline_produces_valid_hir() {
+    let Some(snapshot) = snapshot() else {
+        eprintln!("SKIP entry surface: tsgo is required");
+        return;
+    };
+    let options = hir::Options {
+        roots: Roots::EntrySurface,
+        ..hir::Options::default()
+    };
+    let prepared = hir::prepare_unverified(&snapshot, &options);
+    if let Err(problems) = hir::verify::verify(&prepared.program) {
+        panic!("EntrySurface produced invalid HIR: {problems:?}");
     }
 }
