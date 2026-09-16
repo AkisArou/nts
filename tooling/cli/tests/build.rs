@@ -1191,3 +1191,191 @@ fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
         String::from_utf8_lossy(&ran.stderr)
     );
 }
+
+/// Java a package contributes is compiled into the artifact, not left beside it.
+///
+/// **The assertion is the archive, because the build directory lies.** `javac`
+/// writes `com/example/Helper.class` into the output directory whether or not
+/// anything packages it, and `package_jvm` archives `nts` by name -- so the
+/// first version compiled the Java, printed that it had, and shipped a jar
+/// without it. Everything on disk looked right.
+#[test]
+fn java_a_package_contributes_is_compiled_into_the_jar() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    let javac = Command::new("javac").arg("-version").output().is_ok_and(|o| o.status.success());
+    if !frontend || !javac {
+        return;
+    }
+    let project = fixture(
+        "build-java-root",
+        r#"
+import { defineConfig, library, sources } from "@nts/config";
+export default defineConfig({
+  products: {
+    api: library.jvm({ entry: "./src/main.ts", javaPackage: "nts.gen", release: 8 }),
+  },
+  native: [sources({ dir: "java" })],
+});
+"#,
+    );
+    let pkg = project.join("java/com/example");
+    std::fs::create_dir_all(&pkg).expect("java dir");
+    std::fs::write(
+        pkg.join("Helper.java"),
+        "package com.example;\npublic final class Helper { public static int two() { return 2; } }\n",
+    )
+    .expect("java source");
+
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+    assert!(run.stdout.contains("compiled 1 Java package"), "not reported:\n{}", run.stdout);
+
+    let artifact = project.join(".nts/build/api/java-8/api.jar");
+    let listing = Command::new("unzip").arg("-l").arg(&artifact).output().expect("unzip");
+    let listing = String::from_utf8_lossy(&listing.stdout);
+    assert!(
+        listing.contains("com/example/Helper.class"),
+        "the contributed Java is not in the jar:\n{listing}"
+    );
+    // And the emitted classes are still there, because naming two roots is
+    // where one of them gets dropped.
+    assert!(listing.contains("nts/gen/"), "the emitted classes went missing:\n{listing}");
+}
+
+/// A root declared for a JVM target that holds no Java is refused by name.
+///
+/// `native_sources` collects `.c` and would report nothing here, so without
+/// this the root is declared, contributes nothing, and the build says so
+/// nowhere -- the same silence twice.
+#[test]
+fn a_jvm_native_root_with_no_java_is_refused() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    if !frontend {
+        return;
+    }
+    let project = fixture(
+        "build-java-empty-root",
+        r#"
+import { defineConfig, library, sources } from "@nts/config";
+export default defineConfig({
+  products: {
+    api: library.jvm({ entry: "./src/main.ts", javaPackage: "nts.gen", release: 8 }),
+  },
+  native: [sources({ dir: "java" })],
+});
+"#,
+    );
+    let pkg = project.join("java");
+    std::fs::create_dir_all(&pkg).expect("java dir");
+    std::fs::write(pkg.join("Helper.kt"), "class Helper\n").expect("kotlin source");
+
+    let run = build(&project, &[]);
+    assert!(!run.ok, "a root with no Java built anyway:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("holds") && run.stderr.contains("`.java`"),
+        "the refusal does not name what is wrong:\n{}",
+        run.stderr
+    );
+}
+
+/// An APK refuses to generate a manifest that would drop a package's fragment.
+///
+/// **The case is the silent one, so the test has to build the silence.** A
+/// package contributing `<uses-permission>` and an app declaring no manifest of
+/// its own produces, without this, a signed installable APK missing the
+/// permission -- which installs, launches, and crashes at the call. That is why
+/// the refusal is scoped to an app with *no* fragment: one that declares its own
+/// owns its manifest, and the second arm here proves the refusal does not fire
+/// then.
+#[test]
+fn an_apk_refuses_to_silently_drop_a_package_fragment() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    if !frontend || android_sdk().is_none() {
+        return;
+    }
+    let project = fixture("build-apk-fragment", ANDROID_APP);
+    // A package beside the app, with a config of its own. `config_roots` is
+    // every config above a file in the program, so importing one file from it
+    // is what puts it in scope -- the same mechanism `examples/workspace` uses.
+    let pkg = project.join("pkg");
+    std::fs::create_dir_all(pkg.join("manifests")).expect("package dir");
+    std::fs::write(pkg.join("lib.ts"), "export function two(): number { return 2; }\n")
+        .expect("package source");
+    std::fs::write(
+        pkg.join("manifests/android.xml"),
+        "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">\n\
+         \x20 <uses-permission android:name=\"android.permission.CAMERA\" />\n\
+         </manifest>\n",
+    )
+    .expect("fragment");
+    std::fs::write(
+        pkg.join("nts.config.ts"),
+        "import { defineConfig, manifest } from \"@nts/config\";\n\
+         export default defineConfig({\n\
+         \x20 targets: [\"android-29\"],\n\
+         \x20 manifests: [manifest({ targets: [\"android-29\"], path: \"manifests/android.xml\" })],\n\
+         });\n",
+    )
+    .expect("package config");
+    std::fs::write(
+        project.join("src/main.ts"),
+        "import { two } from '../pkg/lib.js';\nexport function main(): number { return two(); }\n",
+    )
+    .expect("entry");
+
+    let run = build(&project, &[]);
+    assert!(!run.ok, "the fragment was silently dropped:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("manifest") && run.stderr.contains("android.xml"),
+        "the refusal does not name the fragment:\n{}",
+        run.stderr
+    );
+
+    // --- and it does not fire once the app owns its manifest -----------------
+    std::fs::create_dir_all(project.join("manifests")).expect("app manifests");
+    std::fs::write(
+        project.join("manifests/android.xml"),
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\
+         <manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"\n\
+         \x20         package=\"dev.nts.buildtest\">\n\
+         \x20 <uses-sdk android:minSdkVersion=\"29\" />\n\
+         \x20 <uses-permission android:name=\"android.permission.CAMERA\" />\n\
+         \x20 <application android:label=\"demo\" />\n\
+         </manifest>\n",
+    )
+    .expect("app manifest");
+    let config = std::fs::read_to_string(project.join("nts.config.ts")).expect("config");
+    std::fs::write(
+        project.join("nts.config.ts"),
+        config
+            .replace(
+                "import { defineConfig, app } from \"@nts/config\";",
+                "import { defineConfig, app, manifest } from \"@nts/config\";",
+            )
+            .replace(
+                "});",
+                "  manifests: [manifest({ targets: [\"android-29\"], path: \"manifests/android.xml\" })],\n});",
+            ),
+    )
+    .expect("config with manifest");
+
+    let run = build(&project, &[]);
+    assert!(run.ok, "an app that owns its manifest was refused:\n{}{}", run.stdout, run.stderr);
+    // The permission is the app's, read back through the platform rather than
+    // off the file we wrote.
+    let (tools, _) = android_sdk().expect("checked above");
+    let artifact = project.join(".nts/build/demo/android-36-aarch64/demo.apk");
+    let badging = Command::new(tools.join("aapt2"))
+        .args(["dump", "badging"])
+        .arg(&artifact)
+        .output()
+        .expect("running aapt2");
+    let badging = String::from_utf8_lossy(&badging.stdout);
+    assert!(
+        badging.contains("android.permission.CAMERA"),
+        "the app's own manifest did not reach the APK:\n{badging}"
+    );
+}

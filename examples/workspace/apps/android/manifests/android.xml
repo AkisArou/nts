@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The application's own manifest, which is what an APK carries one of.
+
+     **Written by hand because the build refuses to guess.** `biometrics` and
+     `notifications` each contribute a fragment, and merging them is AGP's
+     manifest merger with a specification this does not reimplement. What it
+     will not do is generate a manifest carrying none of them: `biometrics`'
+     fragment says omitting `USE_BIOMETRIC` means "a consumer sees a crash and
+     not a denial", and `notifications`' says omitting `POST_NOTIFICATIONS`
+     gives "a silent no-op at runtime". Both are the failure that reaches a
+     device rather than a build.
+
+     So the app states them, where the person shipping it can see them. That is
+     also what a real Android app does: permissions are the app's declaration,
+     not a dependency's, because the user is asked in the app's name. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="dev.example.workspace">
+  <uses-sdk android:minSdkVersion="29" />
+  <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <application android:label="workspace">
+    <receiver android:name="com.example.notifications.TapReceiver"
+              android:exported="false" />
+  </application>
+</manifest>

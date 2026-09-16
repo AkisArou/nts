@@ -2395,7 +2395,26 @@ fn build(rest: &[String]) -> Result<()> {
             // the header meant `native-copy` -- which declares `sources({ dir })`
             // and no header -- had neither, and its witness failed to find
             // `point.h` for a reason that is not what a witness checks.
-            let config_roots = if !resolved.native.is_empty() || in_a_workspace {
+            //
+            // **And always on the JVM, where skipping it is silent.** A
+            // dependency's contribution -- its Java, its manifest fragment --
+            // is invisible unless its config is among these, and an app that
+            // declares no native of its own and sits in no workspace got an
+            // empty list. On the C lane that hole is loud: an uncompiled `.c`
+            // is an undefined symbol at link, or a missing binding is a
+            // typecheck failure. On the JVM it is an APK that installs and
+            // crashes, which is the asymmetry that makes this worth paying for
+            // on one lane and not the other.
+            //
+            // It is not free -- measured at +0.15s on a trivial project, 0.26
+            // to 0.41, which is one whole extra `tsgo` snapshot and the same
+            // order as everything the object cache saves. The real fix is to
+            // take one snapshot and hand it to both this and the emitter,
+            // which is a larger change than this hole deserves today.
+            let config_roots = if !resolved.native.is_empty()
+                || in_a_workspace
+                || target.backend == "jvm"
+            {
                 generate_bindings(&tsconfig, std::slice::from_ref(&target.id))?
             } else {
                 Vec::new()
@@ -2691,30 +2710,20 @@ fn build_jvm(
     sdk: Option<&AndroidSdk>,
 ) -> Result<()> {
     let initializes = emit_jvm(tsconfig, Some(out), false, emission)?;
-    // **Named before the classes are packaged, because the artifact would not
-    // say it.** A JVM target's `native:` roots are Java and JNI, and neither
-    // this nor `emit-jvm` compiles them -- so an APK built from a config
-    // declaring them would be missing the half its TypeScript calls into, and
-    // would fail at the first call across the boundary rather than at build
-    // time.
+    // **Compiled before the classes are packaged, because the artifact would
+    // not say it was missing.** A JVM target's `native:` roots are Java, and
+    // they are the half the program calls into -- an artifact built without
+    // them links and then dies at the first call across the boundary with a
+    // `NoClassDefFoundError`.
     //
     // It reads the *declared* roots and not `native_sources`, which collects
     // `.c` files: a package contributing a directory of Java produces an empty
     // list there and reads as having no native code at all.
-    let declared = declared_native_roots(config_roots, target);
-    if !declared.is_empty() {
-        bail!(
-            "product `{name}` targets {} and its packages declare {} native source \
-             root(s) for it, which on this backend is Java or JNI. Compiling those into \
-             the artifact is not built, and shipping one without them produces a program \
-             that links and then fails at its first call across the boundary with a \
-             `NoClassDefFoundError`. The roots: {}",
-            target.id,
-            declared.len(),
-            declared.join(", ")
-        )
+    let java = compile_java_roots(name, config_roots, target, sdk, out)?;
+    if !java.is_empty() {
+        println!("  compiled {} Java package(s) in: {}", java.len(), java.join(", "));
     }
-    let classes = package_jvm(name, product, out)?;
+    let classes = package_jvm(name, product, out, &java)?;
     match product.kind.as_str() {
         "aar" => println!("  {}", package_aar(name, product, out, &classes, target, tsconfig)?),
         // **Not every JVM application is an APK.** `t.android` and `t.jvm` are
@@ -2725,7 +2734,10 @@ fn build_jvm(
         }
         "application" | "executable" => {
             let sdk = sdk.expect("an APK's SDK is resolved before the emitter runs");
-            println!("  {}", package_apk(name, product, out, &classes, target, tsconfig, sdk)?);
+            println!(
+                "  {}",
+                package_apk(name, product, out, &classes, target, tsconfig, sdk, config_roots)?
+            );
             println!(
                 "  signed with the debug key at {}, which is not a release key",
                 out.join("debug.keystore")
@@ -2745,6 +2757,114 @@ fn build_jvm(
         }
     }
     Ok(())
+}
+
+/// Compile the Java a target's packages contribute, into the artifact.
+///
+/// **The library Java never references the emitted classes, which is what makes
+/// the ordering simple.** Measured rather than assumed: across
+/// `examples/interop/java-from-ts` and `android-shape`, every `.java` in a
+/// declared root has zero `nts.gen` references -- the files that do are test
+/// consumers living outside any root. So a root compiles against the platform
+/// and the runtime, and nothing here has to be built twice.
+///
+/// The emitted classes are on the classpath anyway, because they exist by now
+/// and a root that *did* call back into TypeScript would otherwise fail for a
+/// reason the message could not name.
+///
+/// Returns the top-level package directories it produced, which is what
+/// `package_jvm` has to add to the archive: it packages `nts` and nothing else,
+/// so a `com/example` compiled beside it would be absent from the artifact and
+/// present in the build directory -- the shape that looks like it worked.
+fn compile_java_roots(
+    name: &str,
+    config_roots: &[Utf8PathBuf],
+    target: &nts_build::config::Target,
+    sdk: Option<&AndroidSdk>,
+    out: &Utf8Path,
+) -> Result<Vec<String>> {
+    let declared = declared_native_roots(config_roots, target);
+    if declared.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut sources: Vec<Utf8PathBuf> = Vec::new();
+    for root in &declared {
+        let root = Utf8Path::new(root);
+        let mut found = java_files(root)?;
+        if found.is_empty() {
+            // **Refused rather than skipped.** A root declared for a JVM target
+            // that holds no Java is contributing something this does not
+            // compile -- Kotlin, a `.so`, a `.kt` beside the `.java` somebody
+            // meant to add -- and the artifact would be missing it with nothing
+            // said. `native_sources` would also report nothing here, because it
+            // collects `.c`, so the silence is doubled.
+            bail!(
+                "product `{name}` targets {} and `{root}` is declared for it, but holds \
+                 no `.java`. On this backend a native root is Java; a root of anything \
+                 else is not compiled into the artifact and this will not ship one that \
+                 is missing it",
+                target.id
+            )
+        }
+        sources.append(&mut found);
+    }
+
+    let mut classpath = vec![out.to_string(), out.join(RUNTIME_JAR).to_string()];
+    if let Some(sdk) = sdk {
+        classpath.push(sdk.platform_jar.to_string());
+    }
+    let mut javac = std::process::Command::new("javac");
+    javac
+        .arg("--release")
+        .arg("8")
+        .arg("-nowarn")
+        .arg("-classpath")
+        .arg(classpath.join(":"))
+        .arg("-d")
+        .arg(out.as_str());
+    for file in &sources {
+        javac.arg(file.as_str());
+    }
+    run_tool(javac, "javac", "compile the Java a package contributes")?;
+
+    // The top-level directory of each compiled class, read from the *package*
+    // the file declares rather than from its path: a root is a directory a
+    // config named, and `native/android/com/example/ui` names a package four
+    // segments in, so the path says nothing about where `com` begins.
+    let mut packages: Vec<String> = Vec::new();
+    for file in &sources {
+        let text = std::fs::read_to_string(file).with_context(|| format!("reading {file}"))?;
+        let Some(first) = text
+            .lines()
+            .map(str::trim)
+            .find_map(|line| line.strip_prefix("package ")?.split(';').next())
+            .and_then(|declared| declared.trim().split('.').next().map(str::to_owned))
+        else {
+            continue;
+        };
+        if !packages.contains(&first) {
+            packages.push(first);
+        }
+    }
+    packages.sort();
+    Ok(packages)
+}
+
+/// Every `.java` under a root, at any depth, because a package is directories.
+fn java_files(root: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
+    let mut found = Vec::new();
+    let Ok(listing) = std::fs::read_dir(root) else { return Ok(found) };
+    for item in listing.flatten() {
+        let path = Utf8PathBuf::from_path_buf(item.path())
+            .map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
+        if path.is_dir() {
+            found.append(&mut java_files(&path)?);
+        } else if path.extension() == Some("java") {
+            found.push(path);
+        }
+    }
+    found.sort();
+    Ok(found)
 }
 
 /// The native roots a target's packages *declare*, whether or not they hold C.
@@ -2822,7 +2942,12 @@ const GENERATED_PACKAGE: &str = "nts.gen";
 /// are somewhere other than where its config says is an artifact that does not
 /// match its own declaration, so a config asking for anything else is told what
 /// it would have got rather than given it.
-fn package_jvm(name: &str, product: &nts_build::config::Product, out: &Utf8Path) -> Result<Utf8PathBuf> {
+fn package_jvm(
+    name: &str,
+    product: &nts_build::config::Product,
+    out: &Utf8Path,
+    extra: &[String],
+) -> Result<Utf8PathBuf> {
     if let Some(wanted) = &product.java_package
         && wanted != GENERATED_PACKAGE
     {
@@ -2835,13 +2960,15 @@ fn package_jvm(name: &str, product: &nts_build::config::Product, out: &Utf8Path)
     }
     let artifact = out.join(format!("{name}.jar"));
     let mut command = std::process::Command::new("jar");
-    command
-        .arg("--create")
-        .arg("--file")
-        .arg(artifact.as_str())
-        .arg("-C")
-        .arg(out.as_str())
-        .arg("nts");
+    command.arg("--create").arg("--file").arg(artifact.as_str());
+    // `nts` is what the emitter wrote; `extra` is what a package's Java
+    // contributed. Naming them rather than packaging the whole directory,
+    // because `out` also holds the runtime jar, the staging directories and --
+    // for an APK -- a signing key, and an archive assembled by exclusion grows
+    // a new member every time something else is written beside it.
+    for package in std::iter::once(&"nts".to_owned()).chain(extra) {
+        command.arg("-C").arg(out.as_str()).arg(package);
+    }
     let output = command.output().with_context(|| {
         format!("running `jar` to package `{name}`. It ships with the JDK; is one on PATH?")
     })?;
@@ -3105,58 +3232,13 @@ fn package_apk(
     target: &nts_build::config::Target,
     tsconfig: &Utf8Path,
     sdk: &AndroidSdk,
+    config_roots: &[Utf8PathBuf],
 ) -> Result<Utf8PathBuf> {
     let min_api = android_min_api(target);
     let staged = out.join("apk");
     drop(std::fs::remove_dir_all(&staged));
     std::fs::create_dir_all(&staged).with_context(|| format!("creating {staged}"))?;
-
-    let manifest = staged.join("AndroidManifest.xml");
-    match android_manifest_fragments(target, tsconfig).as_slice() {
-        [] => {
-            let id = product.application_id.as_deref().with_context(|| {
-                format!(
-                    "product `{name}` is an APK and declares no `id`. An APK's manifest \
-                     must name a package and this cannot invent one: two apps sharing an \
-                     id cannot be installed side by side. Add `id: \"com.example.{name}\"` \
-                     to the product, or declare a manifest fragment of your own"
-                )
-            })?;
-            std::fs::write(
-                &manifest,
-                format!(
-                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\
-                     <!-- Generated by nts from the product's `id`, `minSdk` and target. \
-                     Declare a manifest fragment to own this file. -->\n\
-                     <manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"\n\
-                     \x20         package=\"{id}\">\n\
-                     \x20 <uses-sdk android:minSdkVersion=\"{min_api}\" />\n\
-                     \x20 <application android:label=\"{name}\" />\n\
-                     </manifest>\n"
-                ),
-            )
-            .with_context(|| format!("writing {manifest}"))?;
-        }
-        [one] => {
-            let project = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
-            std::fs::copy(project.join(&one.path), &manifest)
-                .with_context(|| format!("copying {} into the APK", one.path))?;
-        }
-        // **Refused rather than merged.** AGP's manifest merger is a
-        // specification -- node ordering, `tools:` markers, attribute conflict
-        // rules -- and `build/src/config.rs` already says a fragment is carried
-        // and merged by the consumer's build. A partial merger here would be a
-        // second answer to that, and the half it got wrong would ship silently
-        // in an artifact nobody re-reads.
-        several => bail!(
-            "product `{name}` has {} manifest fragments covering {}. An APK carries one \
-             `AndroidManifest.xml` and merging them is AGP's manifest merger, which this \
-             does not reimplement. Declare one fragment for the application that states \
-             what the others would have contributed",
-            several.len(),
-            target.id
-        ),
-    }
+    let manifest = write_android_manifest(name, product, &staged, target, tsconfig, config_roots, min_api)?;
 
     // **The runtime jar goes in, and this is where it stops being optional.**
     // A jar consumer resolves the runtime as a dependency; an APK has no
@@ -3333,6 +3415,126 @@ fn package_runnable_jar(
     std::fs::rename(&assembled, &artifact)
         .with_context(|| format!("moving the executable jar to {artifact}"))?;
     Ok(artifact)
+}
+
+/// The one `AndroidManifest.xml` an APK carries, and what it refuses to guess.
+#[allow(clippy::too_many_arguments)]
+fn write_android_manifest(
+    name: &str,
+    product: &nts_build::config::Product,
+    staged: &Utf8Path,
+    target: &nts_build::config::Target,
+    tsconfig: &Utf8Path,
+    config_roots: &[Utf8PathBuf],
+    min_api: u32,
+) -> Result<Utf8PathBuf> {
+    // **An APK is the last artifact, so there is no consumer left to merge.**
+    // `build/src/config.rs` says a fragment is "read, not merged" because an
+    // AAR carries it and the consumer's Gradle merges it -- and here we *are*
+    // that build. So either this merges them or it refuses, and a partial
+    // merger would ship the half it got wrong inside an artifact nobody
+    // re-reads. `biometrics` is the case: its fragment declares
+    // `USE_BIOMETRIC`, and its own comment says omitting it means "a consumer
+    // sees a crash and not a denial".
+    let contributed = contributed_manifest_fragments(config_roots, target, tsconfig);
+    let own = android_manifest_fragments(target, tsconfig);
+    let manifest = staged.join("AndroidManifest.xml");
+    match own.as_slice() {
+        // **Refused only where it would otherwise be silent.** An app that
+        // declares its own fragment owns its manifest, and whether it covers
+        // what its packages need is the author's call -- visible in a file they
+        // wrote. An app that declares none gets a generated manifest, and
+        // generating one while a package needed a permission is the case that
+        // ships an APK which installs and then crashes: `biometrics`' fragment
+        // says so itself, "a consumer that omits it sees a crash and not a
+        // denial".
+        [] if !contributed.is_empty() => bail!(
+            "product `{name}` targets {} and {} package(s) contribute a manifest \
+             fragment: {}. This would otherwise generate a manifest that silently \
+             carries none of them, and merging them is AGP's manifest merger, which \
+             this does not reimplement. Declare an `AndroidManifest.xml` for the app \
+             stating what they need, where the person shipping it can see it",
+            target.id,
+            contributed.len(),
+            contributed.join(", ")
+        ),
+        [] => {
+            let id = product.application_id.as_deref().with_context(|| {
+                format!(
+                    "product `{name}` is an APK and declares no `id`. An APK's manifest \
+                     must name a package and this cannot invent one: two apps sharing an \
+                     id cannot be installed side by side. Add `id: \"com.example.{name}\"` \
+                     to the product, or declare a manifest fragment of your own"
+                )
+            })?;
+            std::fs::write(
+                &manifest,
+                format!(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\
+                     <!-- Generated by nts from the product's `id`, `minSdk` and target. \
+                     Declare a manifest fragment to own this file. -->\n\
+                     <manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"\n\
+                     \x20         package=\"{id}\">\n\
+                     \x20 <uses-sdk android:minSdkVersion=\"{min_api}\" />\n\
+                     \x20 <application android:label=\"{name}\" />\n\
+                     </manifest>\n"
+                ),
+            )
+            .with_context(|| format!("writing {manifest}"))?;
+        }
+        [one] => {
+            let project = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
+            std::fs::copy(project.join(&one.path), &manifest)
+                .with_context(|| format!("copying {} into the APK", one.path))?;
+        }
+        // **Refused rather than merged.** AGP's manifest merger is a
+        // specification -- node ordering, `tools:` markers, attribute conflict
+        // rules -- and `build/src/config.rs` already says a fragment is carried
+        // and merged by the consumer's build. A partial merger here would be a
+        // second answer to that, and the half it got wrong would ship silently
+        // in an artifact nobody re-reads.
+        several => bail!(
+            "product `{name}` has {} manifest fragments covering {}. An APK carries one \
+             `AndroidManifest.xml` and merging them is AGP's manifest merger, which this \
+             does not reimplement. Declare one fragment for the application that states \
+             what the others would have contributed",
+            several.len(),
+            target.id
+        ),
+    }
+    Ok(manifest)
+}
+
+/// Manifest fragments contributed by packages *other than* the project itself.
+///
+/// **A different question from `android_manifest_fragments`, not a second
+/// answer to it.** That one asks which fragment this project declares, and an
+/// AAR's answer is its own: a library ships its fragment for the consumer's
+/// build to merge, which is what `build/src/config.rs` means by "read, not
+/// merged". An APK has no consumer downstream, so it has to ask the other
+/// question -- what did everything I depend on need -- and the two lists are
+/// genuinely different rather than the same list read twice.
+fn contributed_manifest_fragments(
+    config_roots: &[Utf8PathBuf],
+    target: &nts_build::config::Target,
+    tsconfig: &Utf8Path,
+) -> Vec<String> {
+    let own = nts_build::config::beside(tsconfig);
+    let mut found = Vec::new();
+    for config_path in config_roots {
+        if own.as_ref() == Some(config_path) {
+            continue;
+        }
+        let package = config_path.parent().unwrap_or_else(|| Utf8Path::new("."));
+        let Ok(resolved) = nts_build::config::resolve(config_path) else { continue };
+        for entry in &resolved.manifests {
+            if entry.covers(&target.id, target.minimum_version.as_deref()) {
+                found.push(package.join(&entry.path).to_string());
+            }
+        }
+    }
+    found.sort();
+    found
 }
 
 /// The manifest fragments a target's packages contribute.
