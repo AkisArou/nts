@@ -551,11 +551,13 @@ export default defineConfig({{
     .expect("writing the program");
     let run = build(&project, &[]);
     assert!(run.ok, "the declared package was not built:\n{}{}", run.stdout, run.stderr);
-    let placed = Command::new("unzip")
-        .arg("-l")
-        .arg(project.join(".nts/build/calc/java-8/calc.jar"))
-        .output()
-        .expect("unzip");
+    // **The archive exists, as its own statement.** `unzip` on a missing file
+    // prints nothing and every `contains` below is then false -- so "the classes
+    // are not where the config said" would be the message for "there is no jar",
+    // which is the pair a check must never merge.
+    let named = project.join(".nts/build/calc/java-8/calc.jar");
+    assert!(named.is_file(), "no jar at {}:\n{}", named.display(), run.stdout);
+    let placed = Command::new("unzip").arg("-l").arg(&named).output().expect("unzip");
     let placed = String::from_utf8_lossy(&placed.stdout);
     assert!(
         placed.contains("com/acme/sdk/") && !placed.contains("nts/gen/"),
@@ -1316,6 +1318,7 @@ export default defineConfig({
     assert!(run.stdout.contains("compiled 1 Java package"), "not reported:\n{}", run.stdout);
 
     let artifact = project.join(".nts/build/api/java-8/api.jar");
+    assert!(artifact.is_file(), "no jar at {}:\n{}", artifact.display(), run.stdout);
     let listing = Command::new("unzip").arg("-l").arg(&artifact).output().expect("unzip");
     let listing = String::from_utf8_lossy(&listing.stdout);
     assert!(
@@ -2003,6 +2006,8 @@ export default defineConfig({
 
     let jar = project.join(".nts/build/sdk/java-8/sdk.jar");
     let runtime = project.join(".nts/build/sdk/java-8/nts-runtime.jar");
+    assert!(jar.is_file(), "no jar at {}:\n{}", jar.display(), run.stdout);
+    assert!(runtime.is_file(), "no runtime jar beside it:\n{}", run.stdout);
     let listing = Command::new("unzip").arg("-l").arg(&jar).output().expect("unzip");
     let listing = String::from_utf8_lossy(&listing.stdout);
     assert!(listing.contains("com/acme/sdk/Program.class"), "no program class:\n{listing}");
