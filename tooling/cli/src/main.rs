@@ -2305,6 +2305,13 @@ fn build(rest: &[String]) -> Result<()> {
         let emission =
             Emission { shape: Shape::of(&product.kind), product: Some((name, product)), linking: true };
         for target in &product.targets {
+            // **Before anything is written.** A kind whose packaging does not
+            // exist would otherwise emit, compile, and produce a file of the
+            // wrong format under the right name -- an `aar` product built a
+            // `.jar`, which Gradle cannot resolve and which a reader has no
+            // reason to doubt. Refusing after the output directory exists is
+            // also worse than refusing before it.
+            refuse_unpackaged(name, &product.kind, target)?;
             let out = root.join(name).join(target_directory(target));
             println!("building `{name}` for {} into {out}", target.id);
             match target.backend.as_str() {
@@ -2350,6 +2357,44 @@ fn build(rest: &[String]) -> Result<()> {
         println!("{built} artifact(s) under {root}");
     }
     Ok(())
+}
+
+/// Stop at a product kind whose packaging is not built, rather than near it.
+///
+/// **The kind and the backend together**, because neither decides alone: an
+/// `application` is an executable on the C backend and an APK on the JVM one,
+/// and the second has no packaging here. What the classes contain is right in
+/// both cases; what is missing is the container, and a container of the wrong
+/// format under the right name is the worst of the three outcomes.
+fn refuse_unpackaged(name: &str, kind: &str, target: &nts_build::config::Target) -> Result<()> {
+    let jvm = target.backend == "jvm";
+    match (kind, jvm) {
+        // Everything with a packaging path below, native and JVM alike.
+        (
+            "shared-library" | "static-library" | "node-addon" | "application" | "executable",
+            false,
+        )
+        | ("jar", true) => Ok(()),
+        ("application" | "executable", true) => bail!(
+            "product `{name}` is an application on the jvm backend, which is an APK. \
+             Packaging one needs the Android SDK -- `aapt2`, `d8`, `apksigner` -- and \
+             this build does not do it yet. The classes it would contain are emitted by \
+             `nts emit-jvm --out`"
+        ),
+        ("aar", _) => bail!(
+            "product `{name}` is an AAR, which is a zip of `classes.jar`, an \
+             `AndroidManifest.xml` and optional resources. The classes are emitted; the \
+             container is not built yet, and a `.jar` in its place is something Gradle \
+             cannot resolve"
+        ),
+        ("xcframework", _) => bail!(
+            "product `{name}` is an XCFramework, which needs the Apple toolchain to \
+             build and `xcodebuild -create-xcframework` to assemble. Not available here"
+        ),
+        (other, _) => bail!(
+            "product `{name}` has kind `{other}`, which this build has no packaging for"
+        ),
+    }
 }
 
 /// The runtime `emit-jvm` places beside the classes it writes.

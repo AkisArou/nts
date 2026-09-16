@@ -496,6 +496,46 @@ export default defineConfig({{
     );
 }
 
+/// A kind with no packaging is refused before anything is written.
+///
+/// **An `aar` product built a `.jar`.** The classes were right; the container
+/// was not, and Gradle cannot resolve a jar where it expects an AAR. A file of
+/// the wrong format under the right name is the worst of the three outcomes --
+/// worse than no file, and worse than a refusal -- because a reader has no
+/// reason to doubt it.
+///
+/// The refusal is before the output directory exists, so a build that stops
+/// leaves nothing to mistake for a partial result.
+#[test]
+fn a_kind_with_no_packaging_is_refused_before_it_writes() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let project = fixture(
+        "build-aar",
+        r#"
+import { defineConfig, library } from "@nts/config";
+export default defineConfig({
+  products: {
+    sdk: library.android({ entry: "./src/main.ts", minSdk: 29, javaPackage: "nts.gen" }),
+  },
+});
+"#,
+    );
+    let run = build(&project, &[]);
+    assert!(!run.ok, "an AAR with no packaging should stop the build:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("AndroidManifest.xml"),
+        "the refusal did not say what an AAR is:\n{}",
+        run.stderr,
+    );
+    assert!(
+        !project.join(".nts").exists(),
+        "the build wrote an output directory for a product it refused",
+    );
+}
+
 /// A project with no config is told what is missing, not given a stack trace.
 #[test]
 fn a_project_with_no_config_says_so() {
