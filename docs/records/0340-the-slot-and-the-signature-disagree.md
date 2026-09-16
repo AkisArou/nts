@@ -23,8 +23,9 @@ parameter relative to the implementing class, those differ:
   Emitter#on(type: string | symbol, …)        the slot takes erased
 ```
 
-`hir::verify` does not compare a call's argument types against its callee's
-parameters, so `--prepared` prints
+`hir::verify` **does** compare a call's argument types against its callee's
+parameters — and only for `Callee::Direct`. A virtual call is `continue`d over
+before the check is reached, so `--prepared` prints
 
     %5 = call.virtual[51] EventEmitter#prependListener(%0, %1, %2)
 
@@ -100,7 +101,57 @@ shared file at the end of a long session. The `typeof` work that exposed it is
 held back with it, as a patch rather than a commit, because landing it alone
 regresses 7 addons.
 
-A cheaper guard worth having either way: `hir::verify` comparing each call's
-argument types against its callee's declared parameters would have caught this
-in the HIR, before any backend, and would catch the pointer-to-pointer case that
-clang cannot.
+## Both obvious fixes were tried and both are wrong, which is the map
+
+**Coercing at lowering is the wrong layer.** `lower_object_method` decides the
+callee before it lowers the arguments, so the information is in hand and in the
+right order, and the declaring type's parameters are one `hierarchy.declaring`
+plus a `TypeKind::Function` away. Written that way it produces
+
+    invalid HIR: CallArgumentType { func: "Closure726#call",
+      callee: "EventEmitter#off", at: 2,
+      expected: Managed(Object(TypeId(12153))), found: Erased }
+
+and `fs` stops building. The checker's declaration is not the emitted
+signature: `unerase` and `specialize` narrow parameters *after* lowering, so
+coercing to what the checker says erases an argument the final function takes
+concretely. **The target has to be the final signature, which means the
+conversion belongs where `specialize::insert_conversions` already puts the
+integer ones** — it runs with `signatures::Expected`, and it currently looks up
+`Callee::Direct` only.
+
+**Extending the verifier is right and does not stand alone.** `compatible`
+already holds exactly the rule this needs: two references are interchangeable
+*unless either is `Erased`*, which is the pointer-versus-tagged-value
+distinction the C backend cannot express as a cast. Routing `Callee::Virtual`
+through the same check reports the blocker precisely —
+
+    CallArgumentType { func: "through@0obj1", callee: "Emitter#on", at: 1,
+      expected: Erased, found: Managed(String) }
+
+— and immediately surfaces a **second, different** class of pre-existing
+mismatch in `stream`, `fs`, `http` and `zlib`:
+
+    CallResultType { func: "Closure422#call", callee: "AsyncWriter#fail",
+      expected: Void, found: Erased }
+
+So the check cannot land before the conversions do, and the conversions are two
+kinds rather than one. Measured rather than estimated: `net`, `util`, `events`
+and `buffer` are clean, four modules are not.
+
+**The order the work has to go in**, from here:
+
+1. `insert_conversions` looks up `Callee::Virtual { declared }` in `Expected`,
+   the way it already does for `Direct`.
+2. It gains a reference arm — `Managed(..)` into an `Erased` parameter is an
+   `Erase`, and the reverse is an `Unerase` — beside the integer one.
+3. The result mismatches are triaged; a `Void` callee whose call site is typed
+   `Erased` is a different question from an argument and may be a lowering
+   fault rather than a missing conversion.
+4. Only then does `verify` take `Callee::Virtual`, and from then on this class
+   fails in the HIR instead of in clang — including the two-pointer case clang
+   cannot see.
+
+None of that is done. What is done is that the defect has a fixture, the two
+shortcuts are known to be shortcuts for measured reasons, and the tree is
+exactly where it was.
