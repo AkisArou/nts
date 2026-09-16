@@ -1,0 +1,11 @@
+{
+  "//": "One package.json for all sixteen interop examples, so `@nts/config` resolves the way it would for a user: as a dependency, through node's own resolution. `nts build` evaluates `nts.config.ts` with node, and node has no tsconfig `paths`.",
+  "//hoisted": "Node walks up from `<example>/nts.config.ts` through `<example>/node_modules` to this one, which is what a monorepo with a hoisted dependency looks like -- and is why the examples need none of their own.",
+  "name": "@nts-examples/interop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@nts/config": "workspace:*"
+  }
+}

@@ -3,6 +3,7 @@ packages:
   - libraries/*
   - examples/library
   - examples/workspace
+  - examples/interop
 
 catalog:
   '@types/node': 24.13.3

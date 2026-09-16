@@ -1,24 +1,26 @@
 #!/bin/sh
+# Build the library and the C program that links it.
+#
+# **The pipeline is `nts build`.** This wrote out emit, witness, runtime
+# compile, program compile and link -- none of which is this example's subject,
+# and all of which were written the same way in sixteen places. What is left is
+# what an interop example is for: a separately compiled C consumer, and running
+# it.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 out=${1:-"$root/target/interop-native-fd"}
 cc=${CC:-clang}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/examples/interop/native-fd"
-"$nts" emit-c "$source" --out "$out"
-# The witness is a check, not code: it declares no symbol and defines no
-# function, so it is compiled for its assertions and never linked. It includes
-# the real headers itself -- the binding names them -- so nothing here decides
-# what it is compared against.
-"$cc" -std=c11 -Wall -Wextra -Werror -fsyntax-only "$out/native_witness.c"
-for file in caller; do
-  "$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$out" \
-    -c "$source/native/$file.c" -o "$out/$file.o"
-done
-for file in program nts_runtime; do
-  "$cc" -std=c11 -O2 -I"$out" -c "$out/$file.c" -o "$out/$file.o"
-done
-# The runtime is linked because converting a count to a 64-bit C integer is a
-# runtime call: `size_t` and `nfds_t` are bigint-branded on this target.
-"$cc" "$out/nts_runtime.o" "$out/program.o" "$out/caller.o" -lm -o "$out/caller"
+mkdir -p "$out"
+
+# Emits, checks the binding against the real headers with `native_witness.c`,
+# compiles and archives. `--out` because this script's caller chose where.
+"$nts" build "$source/tsconfig.json" --out "$out"
+built="$out/lib/linux-gnu-x86_64"
+
+# The consumer. `-Werror` is this example's own standard, not the build's.
+"$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$built" \
+  -c "$source/native/caller.c" -o "$out/caller.o"
+"$cc" "$out/caller.o" "$built/liblib.a" -lm -o "$out/caller"
 "$out/caller"

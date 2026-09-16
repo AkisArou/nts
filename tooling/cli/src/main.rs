@@ -2332,11 +2332,26 @@ fn build(rest: &[String]) -> Result<()> {
         )
     }
 
-    let root = tsconfig
-        .parent()
-        .unwrap_or_else(|| Utf8Path::new("."))
-        .join(".nts")
-        .join("build");
+    // `--out <dir>` overrides where artifacts land. **Where output goes is the
+    // caller's business** in a way that backend, shape and surface are not:
+    // every `build.sh` in this tree takes an output directory as `$1` so a gate
+    // run can put one example's results somewhere of its own, and a build tool
+    // that insisted on `.nts/build` would be telling the caller where its own
+    // scratch space is.
+    let root = rest
+        .iter()
+        .position(|arg| arg == "--out")
+        .and_then(|at| rest.get(at + 1))
+        .map_or_else(
+            || {
+                tsconfig
+                    .parent()
+                    .unwrap_or_else(|| Utf8Path::new("."))
+                    .join(".nts")
+                    .join("build")
+            },
+            Utf8PathBuf::from,
+        );
     let cache_dir = cache_directory(&tsconfig, &resolved);
     let mut built = 0usize;
     let mut refused = 0usize;
