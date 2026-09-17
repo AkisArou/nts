@@ -16910,6 +16910,57 @@ impl<'a> FuncBuilder<'a> {
     /// renames, nesting and all. It was refused here only because this returned
     /// names in order, and an order is the one thing an object pattern does not
     /// have.
+    /// The binding pattern of a `for...of` head, of the kind asked for.
+    ///
+    /// One lookup, because [`Self::for_of_head`] finds it to read the names out
+    /// and the caller finds it again to hand the whole pattern over when the
+    /// sequence turns out not to be a `Map`.
+    fn for_of_pattern(&self, initializer: NodeId, kind: u16) -> Option<NodeId> {
+        self.children(initializer)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::VARIABLE_DECLARATION))
+            .into_iter()
+            .flat_map(|declaration| self.children(declaration))
+            .find(|part| self.kind_of(*part) == Some(kind))
+    }
+
+    /// Which of `[a, b]`'s two readings this sequence asks for.
+    ///
+    /// **Over a `Map` the names are a key and a value**: the walk produces two
+    /// values per step and there is no pair object to take apart, which is what
+    /// [`Head::InOrder`] says. **Over an array of tuples** the walk produces one
+    /// value per step and the brackets are an ordinary destructuring of it,
+    /// exactly as `const [a, b] = pair` is.
+    ///
+    /// [`Self::for_of_head`] cannot tell them apart -- the pattern is identical
+    /// in both and the difference is entirely in what is being walked -- so it
+    /// is asked here, of the *lowered* sequence, which is also after
+    /// `m.entries()` has been folded back to `m`. Before this the second reading
+    /// was refused as ``a `for...of` binding 2 names over this sequence``: a
+    /// true sentence, about the first.
+    fn head_for_the_sequence(
+        &mut self,
+        head: Head,
+        initializer: NodeId,
+        sequence: ValueId,
+    ) -> Head {
+        let Head::InOrder(names) = &head else {
+            return head;
+        };
+        if names.len() < 2
+            || matches!(
+                self.values[sequence.0 as usize].ty,
+                HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_))
+            )
+        {
+            return head;
+        }
+        match self.for_of_pattern(initializer, syntax::ARRAY_BINDING_PATTERN) {
+            Some(pattern) => Head::Pattern(pattern),
+            None => head,
+        }
+    }
+
     fn for_of_head(&self, initializer: NodeId) -> Result<Head, Diagnostic> {
         let declaration = self
             .children(initializer)
@@ -17043,29 +17094,9 @@ impl<'a> FuncBuilder<'a> {
         let (initializer, sequence, body) = (*initializer, *sequence, *body);
 
         // What the head binds: one name, the two of `[key, value]`, or a
-        // pattern taken apart from the single value the walk produces.
+        // pattern taken apart from the single value the walk produces. Refined
+        // below, once the sequence is in hand.
         let head = self.for_of_head(initializer)?;
-        let mut element_symbols = Vec::new();
-        if let Head::InOrder(names) = &head {
-            for name in names {
-                let Some(name) = *name else {
-                    element_symbols.push(None);
-                    continue;
-                };
-                element_symbols.push(Some(
-                    self.node(name)
-                        .symbol
-                        .ok_or_else(|| self.unsupported(name, "a `for...of` name with no symbol"))?
-                        .0,
-                ));
-            }
-        }
-        // A pattern reads one value and takes it apart; the names in it are not
-        // what the walk hands over.
-        let wanted = match &head {
-            Head::InOrder(names) => names.len(),
-            Head::Pattern(_) => 1,
-        };
 
         // `for (const k of m.keys())` reads the table directly. Lowering the
         // call would build an iterator object, step it once per element and
@@ -17101,6 +17132,28 @@ impl<'a> FuncBuilder<'a> {
             Over::Keys => self
                 .decide_object_keys(id, sequence)
                 .map_err(|_| self.unsupported(id, "a `for...in` over something without named fields"))?,
+        };
+        let head = self.head_for_the_sequence(head, initializer, sequence_value);
+        let mut element_symbols = Vec::new();
+        if let Head::InOrder(names) = &head {
+            for name in names {
+                let Some(name) = *name else {
+                    element_symbols.push(None);
+                    continue;
+                };
+                element_symbols.push(Some(
+                    self.node(name)
+                        .symbol
+                        .ok_or_else(|| self.unsupported(name, "a `for...of` name with no symbol"))?
+                        .0,
+                ));
+            }
+        }
+        // A pattern reads one value and takes it apart; the names in it are not
+        // what the walk hands over.
+        let wanted = match &head {
+            Head::InOrder(names) => names.len(),
+            Head::Pattern(_) => 1,
         };
         let walk = self.walk_of(sequence, sequence_value, forced, wanted)?;
         // **`for await` over a synchronous iterable awaits each element**, and
@@ -21507,6 +21560,11 @@ impl<'a> FuncBuilder<'a> {
         {
             self.layout_of(id, *at)?;
         }
+        // Kept before `ty` is handed to the allocation below, which moves it.
+        let wanted_element = match &ty {
+            HirType::Managed(ManagedType::Array(element)) => Some((**element).clone()),
+            _ => None,
+        };
 
         #[allow(clippy::cast_precision_loss)]
         let count = elements.len() as f64;
@@ -21520,8 +21578,20 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
 
-        for (index, element) in elements.iter().enumerate() {
-            let value = self.lower_expression(*element)?;
+        for (index, element_node) in elements.iter().enumerate() {
+            // **At the element type, not at the array's.** Nothing narrowed
+            // `expecting` here, so a nested literal saw the *outer* array's
+            // type in the slot: `const xs: number[][] = [[1, 2]]` built the
+            // inner `[1, 2]` as a `number[][]`, because the literal's own
+            // `number[]` is discarded above when it disagrees with the slot,
+            // and the slot it was compared against was the wrong one.
+            //
+            // `verify` reported it as a `StoreType` -- after `emit-c` had
+            // refused nothing, which is the only reason it stayed reachable.
+            let value = match &wanted_element {
+                Some(element) => self.lower_expecting(*element_node, element)?,
+                None => self.lower_expression(*element_node)?,
+            };
             #[allow(clippy::cast_precision_loss)]
             let position = index as f64;
             let index = self.push(

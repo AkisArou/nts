@@ -2545,6 +2545,46 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### Destructuring in a `for...of`, and the nested literal behind it (fixed)
+
+`for (const [a, b] of pairs)` over an array of **tuples** was refused as ``a
+`for...of` binding 2 names over this sequence`` — a true sentence, about a
+different reading.
+
+**`[a, b]` has two readings and the sequence decides which.** Over a `Map` the
+names are a key and a value: the walk produces two values per step and there is
+no pair object to take apart. Over an array of tuples the walk produces one
+value per step and the brackets are an ordinary destructuring of it, exactly as
+`const [a, b] = pair` is. The head was read before the sequence, so only the
+first reading existed. It is refined after the sequence is lowered now — which
+is also after `m.entries()` has been folded back to `m`, so the fold and the
+reading agree.
+
+##### The invalid HIR behind it
+
+Writing the fixture's data at module scope produced **invalid HIR**, and
+`emit-c` refused nothing: `verify` reported three `StoreType`s, an array element
+where `number[]` was expected and a `number[][]` was found. It reproduces on the
+pre-change binary with none of this applied.
+
+An array literal is built at the type of the slot it is going into — that is
+what makes an annotation work, so `readonly EventName[]` builds its strings as
+`EventName` rather than rejecting them a line later. Lowering an **element** has
+to narrow that expectation to the element type, and nothing did, so the inner
+`[1, 2]` was built against the outer slot.
+
+**Inside a function the same declaration was always fine**, which is exactly
+what hid it: there nothing sets an expectation, the literal keeps its own type,
+and every level is right by default. The bug needed a slot with an annotation on
+it, and a module-scope `const` is where TypeScript programs put those.
+
+`examples/a-nested-array-literal` is 6 exports over a grid, tuples, three levels,
+an array of objects, an array of strings and the lengths — three levels because
+a fix narrowing one level passes the two above it. `examples/destructuring-in-a-for-of`
+is 6 more covering both readings, a hole, mixed tuple types, an object pattern,
+and a `Map` written both ways. Both agree with node on all three backends and
+both fail on the pre-change binary.
+
 #### A class's own `toString` (fixed)
 
 `${o}`, `"" + o` and `String(o)` all convert through the object's `toString` —
