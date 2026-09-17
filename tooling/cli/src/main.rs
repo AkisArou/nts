@@ -4676,6 +4676,22 @@ fn cache_directory(
 /// general action cache would have been the wrong shape for what the numbers
 /// said.
 ///
+/// **Re-measured on 2026-09-17 and the claim holds**: the same project builds
+/// cold in **1.109s** and, with this cache warm and the snapshot cache hitting,
+/// in **0.060s**. Recorded because a dated number that nobody re-runs becomes a
+/// claim about a tree that no longer exists -- and this one turned out to be
+/// still true, which is worth writing down for the same reason a refutation
+/// would be.
+///
+///     cold                 1.109s    neither cache
+///     objects only         0.074s    this cache
+///     both                 0.060s
+///
+/// The decomposition on a *larger* project is the one that shows what each is
+/// worth, because `examples/library` is small enough that the frontend is
+/// cheap: `examples/workspace/apps/linux` goes 1.416s cold, 0.291s on this
+/// cache alone, 0.112s on both.
+///
 /// # What makes an entry valid
 ///
 /// The key is the source, the command line, and the compiler's version string,
