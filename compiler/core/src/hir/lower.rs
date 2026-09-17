@@ -20404,6 +20404,32 @@ impl<'a> FuncBuilder<'a> {
             // reached the moment `typeof v === "symbol"` on an `unknown`
             // stopped being refused, which is `determineSpecificType`'s next
             // link in `runtime/node/internal/errors.ts`.
+            // **A class's own `toString`.** `${o}`, `"" + o` and `String(o)`
+            // all convert through it -- `ToPrimitive` with hint string calls
+            // it -- so the receiver's class decides what the conversion means,
+            // and the conversion is a call.
+            //
+            // Only where a class in the hierarchy declares one. An object with
+            // no `toString` converts to `"[object Object]"`, a constant this
+            // could emit and deliberately does not: it would make a missing
+            // method look like a working one, and every `${o}` that meant
+            // something would print the same eight characters instead of
+            // saying which method the program is missing.
+            HirType::Managed(ManagedType::Object(ty))
+                if self.hierarchy.declaring(ty, "toString").is_some() =>
+            {
+                let callee = self.callee_for(from, ty, "toString")?;
+                let origin = self.origin(from);
+                Ok(self.push(
+                    OpKind::Call {
+                        callee,
+                        args: vec![value],
+                        frame: None,
+                    },
+                    HirType::Managed(ManagedType::String),
+                    origin,
+                ))
+            }
             HirType::Managed(ManagedType::Symbol) => {
                 let origin = self.origin(from);
                 Ok(self.push(

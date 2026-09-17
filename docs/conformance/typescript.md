@@ -2545,6 +2545,30 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### A class's own `toString` (fixed)
+
+`${o}`, `"" + o` and `String(o)` all convert through the object's `toString` —
+`ToPrimitive` with hint string calls it — so the **receiver's class** decides
+what the conversion means, and the conversion is a call.
+
+The lowering had an arm for every conversion whose answer is fixed by the source
+type: a number, a boolean, a bigint, a symbol, a string, an erased value that
+spells itself. An object is the one whose answer the *program* writes, and it
+fell through to ``a conversion to string from `A```.
+
+`examples/a-class-with-its-own-tostring` is 5 exports over a template, a
+concatenation, `String(…)`, an override reached through the base type, and two
+objects converted in one expression. **5 refusals** on the pre-change binary.
+
+**A class with no `toString` still refuses, deliberately.** node's answer is
+`"[object Object]"`, a constant this could emit in one line — and then every
+`${o}` that meant something would print those eight characters, look like it
+worked, and give nobody a reason to write the method. A wrong answer that looks
+like an answer is worse than a refusal, and this is the cheapest possible
+instance of that trade: the refusal costs one diagnostic and names the method to
+add. `blockers/a-tostring-nobody-declared` holds it, and says what would change
+if the decision is revisited — this comment and one arm, no machinery.
+
 #### A computed key that is a constant (fixed)
 
 `const k = "step"` and then `{ [k]: 4 }`, or `class A { [k]() { … } }`. Refused
