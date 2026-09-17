@@ -451,6 +451,45 @@ docs/nts-config.md for what it declares.",
     );
 }
 
+/// Which binary this is, so "am I holding a stale one" has an answer.
+///
+/// **Identity, not provenance, and the difference is the whole of it.** This
+/// cannot say which commit produced the binary -- nothing here records that --
+/// so it does not pretend to. What it can say is *when this file was linked*,
+/// which answers the question that actually gets asked: is what I am running
+/// older than the change I am looking for?
+///
+/// It cost an hour of one session to not have. A probe reproduced a defect that
+/// had been fixed, on a binary built before the fix, and reading it as a
+/// regression in someone else's change took a `git merge-base` to rule out --
+/// an answer only available to somebody standing in the repository.
+///
+/// Epoch seconds rather than a formatted date, because the comparison a person
+/// makes is against `git log -1 --format=%ct <commit>`, and a date they have to
+/// parse back is one more step between them and the answer. The line says so.
+///
+/// **And it is sound in one direction only, which the line also says.** Linked
+/// *before* a commit proves the binary predates it. Linked *after* proves
+/// nothing -- a rebuild without a pull gives a fresh mtime over old source. The
+/// first version of this line read "older ... means stale", which is the true
+/// half stated as though it were both.
+fn binary_identity() {
+    let Ok(exe) = std::env::current_exe() else { return };
+    println!("binary {}", exe.display());
+    let linked = exe
+        .metadata()
+        .and_then(|at| at.modified())
+        .ok()
+        .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|since| since.as_secs());
+    if let Some(linked) = linked {
+        println!(
+            "linked {linked} -- below `git log -1 --format=%ct <commit>` means it \
+             predates that commit; above proves nothing, a rebuild is not a pull"
+        );
+    }
+}
+
 /// What was asked for, or `None` when the answer was the usage.
 ///
 /// **`--help` anywhere, not only alone.** `nts build --help` treated `--help`
@@ -607,6 +646,7 @@ fn main() -> Result<()> {
             println!("nts {}", env!("CARGO_PKG_VERSION"));
             println!("snapshot schema v{SCHEMA_VERSION}");
             println!("pinned tsgo {}", tsgo::PINNED_TSGO);
+            binary_identity();
             Ok(())
         }
         // **`nts` alone used to print the version banner and exit zero**, which
