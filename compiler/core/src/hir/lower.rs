@@ -9927,18 +9927,7 @@ impl<'a> FuncBuilder<'a> {
                 .map(|record| record.name.clone())
                 // No symbol: a literal in an index position, where the type is
                 // the constant. Read from the same place `lower_string` reads.
-                .or_else(|| {
-                    match &self
-                        .snapshot
-                        .types
-                        .get(self.snapshot.node_types.get(&name)?.0 as usize)?
-                        .kind
-                    {
-                        TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
-                        TypeKind::Literal(LiteralValue::Number(value)) => Some(value.to_string()),
-                        _ => None,
-                    }
-                }),
+                .or_else(|| self.constant_member_name(name)),
             // A *literal* child only, and checked here rather than by
             // recursing: an identifier in brackets is a variable, not a name.
             // Reading `[kTag]` as the name `kTag` would put it in the same slot
@@ -9953,8 +9942,38 @@ impl<'a> FuncBuilder<'a> {
                 {
                     self.literal_name(*only)
                 }
+                // **A `const` whose type *is* the string it holds.**
+                // `const k = "step"` is typed `"step"` rather than `string`, so
+                // `[k]` names exactly one property and the checker has already
+                // said which -- the brackets suggest a decision at run time and
+                // there is none, the same observation `symbol_member_name`
+                // makes about `[Symbol.iterator]`.
+                //
+                // Annotating it, `const k: string = "step"`, widens the type and
+                // this correctly stops answering: then the name really is
+                // decided at run time, and TypeScript itself stops resolving
+                // `o[k]` to a single member.
+                [only] => self.constant_member_name(*only),
                 _ => None,
             },
+            _ => None,
+        }
+    }
+
+    /// The name a node's *type* spells, where the type is a literal.
+    ///
+    /// One derivation for two callers that each want the same fact: a string or
+    /// numeric literal the decoder gave no text to, and a `const` standing in
+    /// for one inside `[ ]`.
+    fn constant_member_name(&self, node: NodeId) -> Option<String> {
+        match &self
+            .snapshot
+            .types
+            .get(self.snapshot.node_types.get(&node)?.0 as usize)?
+            .kind
+        {
+            TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+            TypeKind::Literal(LiteralValue::Number(value)) => Some(value.to_string()),
             _ => None,
         }
     }

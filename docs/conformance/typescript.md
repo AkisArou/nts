@@ -2545,6 +2545,32 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### A computed key that is a constant (fixed)
+
+`const k = "step"` and then `{ [k]: 4 }`, or `class A { [k]() { … } }`. Refused
+as *a computed property name* and *a member whose name the program computes* —
+which is the one thing the program does not do.
+
+**`const k = "step"` is typed `"step"`, not `string`.** So `[k]` names exactly
+one property, the checker has already said which, and the brackets suggest a
+decision at run time that nothing makes. `symbol_member_name` states the same
+observation for `[Symbol.iterator]`: not a name the program decides at run time,
+*"however much the brackets suggest it"* — and `literal_name` already answered
+`["step"]` written out, by reading the literal's **type** where the decoder
+carries no text. The `const` case is that question one indirection away, and it
+arrived at the same function with the answer already in reach.
+
+The check stays honest at the boundary: annotating the constant,
+`const w: string = "step"`, widens its type and this stops answering — which is
+also where TypeScript stops resolving `o[w]` to a single member.
+
+`examples/a-computed-key-that-is-constant` is 7 exports over data and methods,
+string and numeric keys, a key read back through the same constant, and the
+widened annotation. **8 refusals** on the pre-change binary, agreeing with node
+on all three backends. `methodTwice` calls one method by both spellings with
+state between them, so a lowering emitting two functions would differ in the
+value rather than only in a count.
+
 #### A bracketed method call (fixed)
 
 `o["twice"]()` was refused as **a computed method name**, for a name the program
