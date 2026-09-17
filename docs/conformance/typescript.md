@@ -2608,9 +2608,23 @@ picks a method by reading the array's type, so it only ever had the base name.
 
 **`["a", "b"].slice(0, 1)` declined on the JVM for want of a table row**, with
 nothing to do with this feature. `reverse` was the same. Both now name their
-`_ref` spelling beside the base one. Six more reference helpers — `extend`,
-`pop`, `push`, `shift`, `splice`, `unshift` — are missing their `Object[]` Java
-method as well as the row, which is a larger piece of work and is left alone.
+`_ref` spelling beside the base one.
+
+Six more reference helpers — `extend`, `pop`, `push`, `shift`, `splice`,
+`unshift` — have neither a row nor an `Object[]` Java method, and this row first
+said that was "a larger piece of work". **It is no work at all**, and the JVM
+lane's argument for it is better than the observation that produced the list:
+`changes_array_length` matches by `starts_with`, so `nts_array_push_ref` matches
+`nts_array_push`; a program emitting any mutating `_ref` helper therefore has
+`arrays_can_grow`, its arrays are `NtsArrayL` wrappers, and the backend calls
+`NtsArrayL.push` rather than the extern. Confirmed in bytecode on `P[]` and
+`string[]`, growing and shrinking.
+
+`slice` and `reverse` are the only two of the eight that **do not change
+length**, which is why they alone reached a bare `Object[]` and wanted a row.
+That is the rule and not a coincidence in a list — and `extend` is absent from
+`changes_array_length` on purpose, because `nts_array_extend` is a spread into a
+larger literal whose destination never has to grow.
 
 `examples/split-with-a-limit` is 7 exports over a limit, zero, a negative, one
 larger than the result, none at all, a computed one so the differential's own
