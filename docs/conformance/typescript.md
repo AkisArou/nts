@@ -2500,6 +2500,40 @@ move that found `undefined | void`. Neither is started; each is recorded with
 what actually stops it, because a rank without a diagnosis is what §15 already
 records itself getting wrong.
 
+#### `{}` — a type that erases and a value that does not (fixed)
+
+An empty object literal was refused as `an object literal that is not an
+object`, which is a true sentence about the *type* and the wrong one about the
+value.
+
+`{}` as a type is every value except `null` and `undefined` — a number is
+assignable to it — so `representation_within` gives it `Erased`, and its comment
+says why: representing it as a layout made `const x: {} = n` fail with a number
+where an object was wanted, the checker being right and the representation
+disagreeing. **That rule is correct and is untouched.**
+
+The literal is a different question. `{}` written down is an object with no
+fields, and the slot it goes into may well be erased — so it is now built as the
+object it is and erased afterwards, which is exactly the two steps the
+union-member arm beside it already took.
+
+```text
+  distinct NTS1001, against the gated b701ba20
+  stream  948 -> 939    fs  1353 -> 1339    http  1150 -> 1136    net  842 -> 828
+```
+
+`examples/an-empty-object-literal` is 203 cases across seven exports agreeing
+with node on all three backends, six refusals on the pre-change binary. Two arms
+carry the weight: `distinct` holds that `{} === {}` is **false**, which a
+representation folding both to one constant would get wrong and which is what
+makes `identity` mean anything; and `numberInAnEmptySlot` is the control for the
+type rule this change must not break.
+
+`options = {}` is node's sentinel for "no options were passed" and sits under
+`net.createServer` at 91 of 148 failing files and `http.createServer` at 241 of
+405 — a number from the node lane's axis rather than from refusals, so it is a
+statement about reach rather than about what this alone publishes.
+
 #### The iteration family is 255 sites behind two *designed* decisions
 
 `Iterable`, `AsyncIterable`, `Iterator`, `AsyncIterator`, `IterableIterator` and

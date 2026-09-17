@@ -21299,6 +21299,34 @@ impl<'a> FuncBuilder<'a> {
         Some(only)
     }
 
+    /// The literal's own type, where the literal is `{}` and nothing else says
+    /// what it is.
+    ///
+    /// **A type that erases and a value that does not.** `{}` as a *type* is
+    /// every value except `null` and `undefined` -- a number is assignable to
+    /// it -- so `representation_within` gives it `Erased`, and it says why:
+    /// representing it as a layout made `const x: {} = n` fail with a number
+    /// where an object was wanted, the checker being right and the
+    /// representation disagreeing. That rule is correct and stays.
+    ///
+    /// The *literal* is not that. `{}` written down is an object with no
+    /// fields, and the slot it goes into may well be erased -- so it is built
+    /// as the object it is and erased afterwards, which is exactly the two
+    /// steps the union arm beside this one takes, for exactly the same reason.
+    ///
+    /// Only a literal with **no properties**: one with properties and an erased
+    /// type is the union case above, where which member it matches is the whole
+    /// question.
+    fn empty_object_literal(&self, id: NodeId) -> Option<TypeId> {
+        if !self.children(id).is_empty() {
+            return None;
+        }
+        let ty = *self.snapshot.node_types.get(&id)?;
+        let record = self.snapshot.types.get(ty.0 as usize)?;
+        matches!(&record.kind, TypeKind::Object { properties } if properties.is_empty())
+            .then_some(ty)
+    }
+
     fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         if matches!(self.contextual_type(id, 0), Some(HirType::NativePointer(_)))
             || matches!(self.type_of(id), Some(HirType::NativePointer(_)))
@@ -21359,7 +21387,13 @@ impl<'a> FuncBuilder<'a> {
         let (ty, erase_afterwards) = match ty {
             HirType::Erased => match self.contextual_union_member(id) {
                 Some(member) => (HirType::Managed(ManagedType::Object(member)), true),
-                None => (HirType::Erased, false),
+                // `{}` with nothing to say about it. Built as the object it is
+                // and erased after, which is the same two steps the union arm
+                // above takes for the same reason.
+                None => match self.empty_object_literal(id) {
+                    Some(own) => (HirType::Managed(ManagedType::Object(own)), true),
+                    None => (HirType::Erased, false),
+                },
             },
             other => (other, false),
         };
