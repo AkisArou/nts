@@ -17080,6 +17080,29 @@ impl<'a> FuncBuilder<'a> {
     /// What it will not do is guess at a value it cannot print. `throw x` where
     /// `x` is an object would need the object's `message`, which means knowing
     /// it has one.
+    /// A value as an erased one, which for an already-erased value is itself.
+    ///
+    /// **`Erase` of an `Erased` is the identity**, and saying so once is the
+    /// point. Five sites wrote the `match` out and the sixth -- `throw` --
+    /// did not, so `catch (e) { throw e; }` emitted an `Erase` over a value
+    /// that already carried its tag. The C backend refuses that: `erased_tag`
+    /// has no tag for "already erased", so it read as the unimplemented
+    /// reference case and answered
+    ///
+    /// ```text
+    /// NTS2008 a value of type Erased cannot be erased yet
+    /// ```
+    ///
+    /// -- a true sentence about a conversion this was not asking for. A plain
+    /// rethrow out of a function was refused by every backend, which is
+    /// ordinary error handling.
+    fn erased(&mut self, value: ValueId, origin: &Origin) -> ValueId {
+        if self.values[value.0 as usize].ty == HirType::Erased {
+            return value;
+        }
+        self.push(OpKind::Erase { value }, HirType::Erased, origin.clone())
+    }
+
     fn lower_throw(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         let thrown = *self
             .children(id)
@@ -17103,7 +17126,7 @@ impl<'a> FuncBuilder<'a> {
         let value = self.lower_expression(thrown)?;
         let thrown_ty = self.values[value.0 as usize].ty.clone();
 
-        let erased = self.push(OpKind::Erase { value }, HirType::Erased, origin.clone());
+        let erased = self.erased(value, &origin);
         self.throw_erased(id, value, erased, &thrown_ty)
     }
 
@@ -17652,10 +17675,7 @@ impl<'a> FuncBuilder<'a> {
         }
         let value = self.lower_expression(rhs)?;
         let origin = self.origin(id);
-        let value = match self.values[value.0 as usize].ty {
-            HirType::Erased => value,
-            _ => self.push(OpKind::Erase { value }, HirType::Erased, origin.clone()),
-        };
+        let value = self.erased(value, &origin);
         // The classes first, and the natives folded onto it.
         //
         // A constant when no class declares the name, rather than an
@@ -18108,10 +18128,7 @@ impl<'a> FuncBuilder<'a> {
         // Erased first, for the reason `lower_instanceof` gives: the operation
         // asks an object for its class, and a value that might not be one has
         // to say so.
-        let value = match self.values[value.0 as usize].ty {
-            HirType::Erased => value,
-            _ => self.push(OpKind::Erase { value }, HirType::Erased, origin.clone()),
-        };
+        let value = self.erased(value, &origin);
         Ok(self.push(
             OpKind::InstanceOf {
                 value,
@@ -18321,10 +18338,7 @@ impl<'a> FuncBuilder<'a> {
         };
         let value = self.lower_expression(lhs)?;
         let origin = self.origin(id);
-        let erased = match self.values[value.0 as usize].ty {
-            HirType::Erased => value,
-            _ => self.push(OpKind::Erase { value }, HirType::Erased, origin.clone()),
-        };
+        let erased = self.erased(value, &origin);
         let mut args = vec![erased];
         if let Some(kind) = kind {
             args.push(self.push(
@@ -18436,10 +18450,7 @@ impl<'a> FuncBuilder<'a> {
         // for its class, and a value that might not be an object has to say so
         // -- which is what a tag is. An erase of something already known to be
         // an object is one inline word.
-        let value = match self.values[value.0 as usize].ty {
-            HirType::Erased => value,
-            _ => self.push(OpKind::Erase { value }, HirType::Erased, origin.clone()),
-        };
+        let value = self.erased(value, &origin);
         Ok(self.push(OpKind::InstanceOf { value, classes }, HirType::Bool, origin))
     }
 

@@ -2540,6 +2540,37 @@ are 0 to 3. None is a designed deferral, and none has a row of its own —
 recorded together because **a missing row is worse than a ✗**: a ✗ has been
 looked at, and an absence has not.
 
+#### `catch (e) { … ; throw e; }` (fixed)
+
+Rethrowing the caught value was refused, by the **backend**:
+
+```text
+NTS2008 a value of type Erased cannot be erased yet; a reference payload needs
+retain and release that switch on the tag
+```
+
+A true sentence about a conversion nobody was asking for. A caught value is
+already erased — it carries its own tag — so erasing it is the identity, and
+`erased_tag` having no tag for "already erased" made it read as the
+unimplemented reference case.
+
+**Five sites in lowering already wrote that identity out as a `match`, and
+`throw` was the sixth.** It is `FuncBuilder::erased` now, said once.
+
+`examples/a-rethrow-of-a-caught-value` is 116 cases across four exports on all
+three backends, two refusals on the pre-change binary. `selective` is the arm the
+idiom exists for — recognise a kind, rethrow the rest, and let an outer handler
+tell them apart, so a rethrow that lost the value's identity answers 30 where
+node answers 20. `freshInstead` is the control that says this was about the
+*caught* value.
+
+NTS2008 across `stream`, `fs` and `http`: 1/2/1 to 0.
+
+**A rethrow that leaves the function still refuses**, and for an unrelated
+reason: an exception does not cross a call boundary here — `a call inside a
+`try`, whose `throw` would not reach this handler` — which is a runtime design
+rather than a lowering gap.
+
 #### `super.x` on an accessor (fixed)
 
 `super.m()` was answered by `lower_super` from the call path. `super.x` where
