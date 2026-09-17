@@ -31899,6 +31899,90 @@ impl<'a> FuncBuilder<'a> {
     /// three are defined over Unicode, not over ASCII, and an ASCII version
     /// would be right for most inputs and quietly wrong for the rest. Refusing
     /// beats that.
+    /// The string calls whose n-ary form is a fold, and the empty one.
+    ///
+    /// `None` where the helper is neither, which is every other one: the arity
+    /// check is right about those, and the refusal it produces names the method.
+    fn fold_string_call(
+        &mut self,
+        helper: &str,
+        args: &[ValueId],
+        ty: &HirType,
+        origin: &Origin,
+    ) -> Option<ValueId> {
+        // **`s.split(sep, limit)` splits and then truncates.**
+        //
+        // Exact for a string separator: the specification stops early and a
+        // truncation of the whole result is the same list, because a separator
+        // that is not a regular expression cannot make the earlier elements
+        // depend on how many are wanted.
+        //
+        // The limit goes through `ToUint32` first, and that is not decoration.
+        // `split(",", -1)` means *no* limit -- `ToUint32(-1)` is 4294967295 --
+        // while slicing to `-1` counts from the end and would drop the last
+        // element.
+        //
+        // `UnOp::ToUint32` and not the `>>> 0` that spells it in source. The
+        // idiom is two operands and a coercion on each, which the binary path
+        // inserts and a hand-built op does not: writing the shift here gave
+        // LLVM a raw double where it wanted a converted one, and `-1` came back
+        // as a negative index that dropped the last element. The operation the
+        // specification names is the one op this needs.
+        if helper == "nts_str_split" && args.len() == 3 {
+            let whole = self.runtime_call(
+                "nts_str_split",
+                vec![args[0], args[1]],
+                ty.clone(),
+                origin.clone(),
+            );
+            let limit = self.push(
+                OpKind::Unary {
+                    op: UnOp::ToUint32,
+                    operand: args[2],
+                },
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            let from = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+            return Some(self.runtime_call(
+                "nts_array_slice_ref",
+                vec![whole, from, limit],
+                ty.clone(),
+                origin.clone(),
+            ));
+        }
+
+        // **`s.concat()` is `s`.** With no arguments there is nothing to join,
+        // and the arity check would otherwise pad the missing one -- with a
+        // *number*, because the filler does not know this parameter is a
+        // string. That emitted `nts_concat(v0, v1)` with a `double` in the
+        // second slot, which clang rejects, on the gated binary, with no
+        // diagnostic from this compiler at all.
+        if helper == "nts_concat" && args.len() == 1 {
+            return Some(args[0]);
+        }
+
+        // **`s.concat(a, b, c)` is the fold**, for the reason
+        // `String.fromCharCode` folds: concatenation is associative and exact
+        // on strings, so pairing them left to right gives the string the n-ary
+        // call gives. The runtime offers two at a time and the arity check
+        // would otherwise refuse anything else as `a string method with this
+        // many arguments`, which is true of the helper and not of the method.
+        if helper == "nts_concat" && args.len() > 2 {
+            let mut folded = args[0];
+            for value in args.iter().skip(1) {
+                folded = self.runtime_call(
+                    "nts_concat",
+                    vec![folded, *value],
+                    ty.clone(),
+                    origin.clone(),
+                );
+            }
+            return Some(folded);
+        }
+        None
+    }
+
     fn lower_string_method(
         &mut self,
         id: NodeId,
@@ -32014,30 +32098,9 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(id);
 
-        // **`s.concat(a, b, c)` is the fold**, for the reason
-        // `String.fromCharCode` folds two screens up: concatenation is
-        // associative and exact on strings, so pairing them left to right gives
-        // the string the n-ary call gives. The runtime offers two at a time and
-        // the arity check below would otherwise refuse anything else as `a
-        // string method with this many arguments`, which is true of the helper
-        // and not of the method.
-        // **`s.concat()` is `s`.** With no arguments there is nothing to join,
-        // and the arity check below would otherwise pad the missing one -- with
-        // a *number*, because the filler does not know this parameter is a
-        // string. That emitted `nts_concat(v0, v1)` with a `double` in the
-        // second slot, which clang rejects, on the gated binary, with no
-        // diagnostic from this compiler at all.
-        if helper == "nts_concat" && args.len() == 1 {
-            return Ok(receiver);
-        }
-        if helper == "nts_concat" && args.len() > 2 {
-            let mut folded = args[0];
-            for value in args.into_iter().skip(1) {
-                folded = self.runtime_call("nts_concat", vec![folded, value], ty.clone(), origin.clone());
-            }
+        if let Some(folded) = self.fold_string_call(helper, &args, &ty, &origin) {
             return Ok(folded);
         }
-
         // A count `repeat` will not accept throws before the helper is
         // reached. See `guard_repeat_count`.
         if helper == "nts_str_repeat" && args.len() == 2 {

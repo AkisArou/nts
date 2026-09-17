@@ -2560,8 +2560,8 @@ and the third-largest cause in the corpus.
   JSON.stringify, JSON.parse, Object.freeze      a global member with no definition here
   Object.assign, Math.max(...xs)                 a global member, or a *spread* into an intrinsic
   xs.sort(cmp), xs.flatMap(f)                    an array method that is not one of the eight
-  n.toFixed(2), s.at(0), "abc".split(",", 2)     a string or number method, or an arity of one
-  s.startsWith("a", 1)                           …and an arity a runtime helper does not take
+  n.toFixed(2), s.at(0)                          a string or number method this compiler lacks
+  s.startsWith("a", 1)                           an arity a runtime helper does not take
 ```
 
 None is a designed deferral, and none has a row of its own — recorded together
@@ -2576,6 +2576,46 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 *in one position*, and the row as written sent a reader to build something that
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
+
+#### `split` with a limit, and the JVM rows behind it (fixed)
+
+`s.split(sep, limit)` was *a string method with this many arguments*, which is
+true of `nts_str_split` and not of `String.prototype.split`. The runtime splits
+and the limit truncates, which is **exact for a string separator**: the
+specification stops early, and a truncation of the whole result is the same
+list, because a separator that is not a regular expression cannot make the
+earlier elements depend on how many are wanted.
+
+**The limit goes through `ToUint32`, and that is the whole subtlety.**
+`split(",", -1)` means *no* limit — `ToUint32(-1)` is 4294967295 — while slicing
+to `-1` counts from the end and drops the last element.
+
+The first version wrote that as `>>> 0`, the idiom, and **C agreed while LLVM
+did not**: the binary path inserts a `ToUint32`/`ToInt32` coercion on each
+operand, which a hand-built `Binary` op does not, so LLVM got a raw double and
+`-1` came back as a negative index. `UnOp::ToUint32` is the operation the
+specification names and the one op this needs — the idiom was two operands and
+two coercions standing in for it.
+
+##### Two JVM table rows that had been missing all along
+
+Then the JVM declined it: *a call to `nts_array_slice_ref`, which this backend
+has no name for* — and the diagnostic goes on, *"the helper may exist in
+`runtime/jvm` already and be missing from the tables `external` consults"*.
+It did. `arraySlice(Object[], double, double)` is in `NtsRuntime.java`; the C
+name for the reference variant is `nts_array_slice_ref`, and the JVM's table
+picks a method by reading the array's type, so it only ever had the base name.
+
+**`["a", "b"].slice(0, 1)` declined on the JVM for want of a table row**, with
+nothing to do with this feature. `reverse` was the same. Both now name their
+`_ref` spelling beside the base one. Six more reference helpers — `extend`,
+`pop`, `push`, `shift`, `splice`, `unshift` — are missing their `Object[]` Java
+method as well as the row, which is a larger piece of work and is left alone.
+
+`examples/split-with-a-limit` is 7 exports over a limit, zero, a negative, one
+larger than the result, none at all, a computed one so the differential's own
+inputs reach it, and a multi-character separator. **6 refusals** on the
+pre-change binary.
 
 #### `typeof null` and `typeof undefined` (fixed)
 

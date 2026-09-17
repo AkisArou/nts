@@ -252,7 +252,18 @@ pub fn array_external(name: &str, element: &str) -> Option<(&'static str, &'stat
         "nts_array_at_ref" => {
             (RUNTIME, "arrayAtRef", format!("({array}D)Ljava/lang/Object;"))
         }
-        "nts_array_slice" => (RUNTIME, "arraySlice", format!("({array}DD){result}")),
+        // **The `_ref` spelling too, which is the same Java method.** C has one
+        // entry point per element width and names the reference one
+        // `nts_array_slice_ref`; this table picks the method by reading the
+        // array's type, so it wants the base name -- and never saw the other.
+        // `arraySlice(Object[], double, double)` has existed all along, so
+        // `["a"].slice(0, 1)` declined on this backend for want of a table row,
+        // which is what the diagnostic predicts in so many words: "the helper
+        // may exist in `runtime/jvm` already and be missing from the tables
+        // `external` consults".
+        "nts_array_slice" | "nts_array_slice_ref" => {
+            (RUNTIME, "arraySlice", format!("({array}DD){result}"))
+        }
         // All three widths, and one method each. The bare path had no concat at
         // all until `nts_array_concat_value` arrived on a program that grows no
         // array -- so `_ref` and the plain form were refused here too, and had
@@ -260,7 +271,10 @@ pub fn array_external(name: &str, element: &str) -> Option<(&'static str, &'stat
         "nts_array_concat" | "nts_array_concat_ref" | "nts_array_concat_value" => {
             (RUNTIME, "arrayConcat", format!("({array}{array}){result}"))
         }
-        "nts_array_reverse" => (RUNTIME, "arrayReverse", format!("({array}){result}")),
+        // The same, and `arrayReverse(Object[])` was likewise already there.
+        "nts_array_reverse" | "nts_array_reverse_ref" => {
+            (RUNTIME, "arrayReverse", format!("({array}){result}"))
+        }
         "nts_array_join_str" => (
             RUNTIME,
             "arrayJoinStr",
