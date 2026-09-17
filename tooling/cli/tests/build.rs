@@ -2714,3 +2714,48 @@ fn two_projects_built_from_their_own_directories_do_not_share_a_snapshot() {
         "the second project was compiled from the first's sources"
     );
 }
+
+const APPLE_WITH_UNREADABLE_DEPENDENCY: &str = r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    sdk: library.native({ targets: [target.macos({ minimumVersion: "14.0" })], entry: "./src/main.ts" }),
+  },
+  dependencies: {
+    "macos-14": { from: "cocoapods", lockfile: "./deps/Podfile.lock" },
+  },
+});
+"#;
+
+/// When two things are wrong, the one you can act on is reported.
+///
+/// **A refusal that stops hides the cause behind it.** `apps/ios` reported that
+/// a package declares a `CocoaPods` claim this build cannot read -- true, and not
+/// the reason the build was never going to work on Linux, which is that there
+/// is no Apple SDK here. Reading the dependency first put the smaller fact in
+/// front of the larger one, and the larger one is the only one with a fix the
+/// reader can carry out.
+#[test]
+fn a_missing_toolchain_is_reported_before_a_dependency_it_would_never_reach() {
+    if !available() || host_is_apple() {
+        skip("a non-Apple host with the tsgo frontend and clang");
+        return;
+    }
+    let project = fixture("build-apple-before-deps", APPLE_WITH_UNREADABLE_DEPENDENCY);
+    let run = build(&project, &[]);
+    assert!(!run.ok, "an Apple target built on this machine:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("Cross-compiling to Apple needs its SDK"),
+        "the toolchain is not what it reported:\n{}",
+        run.stderr
+    );
+    assert!(
+        !run.stderr.contains("CocoaPods"),
+        "the dependency refusal is still standing in front of it:\n{}",
+        run.stderr
+    );
+}
+
+fn host_is_apple() -> bool {
+    std::env::consts::OS == "macos"
+}

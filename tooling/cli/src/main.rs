@@ -2472,6 +2472,18 @@ fn build(rest: &[String]) -> Result<()> {
             // a link error about a symbol, in a file the reader did not write,
             // for a platform the package never claimed.
             refuse_unclaimed_target(name, &config_roots, target, &tsconfig)?;
+            // **The toolchain before the dependencies**, because a machine
+            // that cannot build for this target at all is the fact to act on.
+            //
+            // `apps/ios` reported that `packages/notifications` declares a
+            // SwiftPM claim this cannot read -- true, and not the reason the
+            // build was never going to work on Linux, which is that there is no
+            // Apple SDK here. The dependency refusal was standing in front of
+            // it. Asking first costs one `zig version` on a cross build and
+            // returns the same answer `link_c` will get.
+            if target.backend == "c" {
+                toolchain_for(name, target)?;
+            }
             // **Before the output directory is announced**, because an
             // unsatisfiable claim is a configuration error and printing
             // `building ...` first says a build started that never could.
