@@ -892,6 +892,58 @@ impl<'a> Decomposer<'a> {
                 }
             }) {
                 let member_node = &snapshot.nodes[member.0 as usize];
+                // **A parameter property is a member and is not a child of the
+                // class.** `constructor(public code: number)` declares `code`
+                // from inside the constructor's parameter list, one level
+                // deeper than this walk reached — so it was never `own`, and a
+                // class descending from a *provided* one keeps only its own
+                // members. `class MyError extends Error { constructor(public
+                // code: number) }` lost the field, and the read then refused as
+                // "`code`, declared by `MyError` with a type that has no
+                // representation" — a sentence about the type, for a `number`.
+                //
+                // Only a parameter carrying an accessibility or `readonly`
+                // modifier declares anything; a plain one is just a parameter.
+                if member_node.kind == NodeKind::Syntax(syntax::CONSTRUCTOR) {
+                    // Flattening a `List` here as well, for the reason the outer
+                    // loop does: the parameters hang off one, so walking the
+                    // constructor's children directly finds the list and not the
+                    // parameters — the same one-level-shallow mistake this block
+                    // exists to fix, made again inside the fix.
+                    let parameters: Vec<_> = member_node
+                        .children
+                        .iter()
+                        .flat_map(|child| {
+                            let node = &snapshot.nodes[child.0 as usize];
+                            if node.kind == NodeKind::List {
+                                node.children.clone()
+                            } else {
+                                vec![*child]
+                            }
+                        })
+                        .collect();
+                    for parameter in &parameters {
+                        let parameter = &snapshot.nodes[parameter.0 as usize];
+                        if parameter.kind != NodeKind::Syntax(syntax::PARAMETER) {
+                            continue;
+                        }
+                        let a_member = parameter.modifiers.contains(DeclarationModifiers::PUBLIC)
+                            || parameter.modifiers.contains(DeclarationModifiers::PRIVATE)
+                            || parameter.modifiers.contains(DeclarationModifiers::PROTECTED)
+                            || parameter.modifiers.contains(DeclarationModifiers::READONLY);
+                        if !a_member {
+                            continue;
+                        }
+                        if let Some(name) = parameter
+                            .children
+                            .iter()
+                            .find_map(|c| snapshot.nodes[c.0 as usize].text.clone())
+                        {
+                            names.insert(name);
+                        }
+                    }
+                    continue;
+                }
                 let is_member = matches!(
                     member_node.kind,
                     NodeKind::Syntax(

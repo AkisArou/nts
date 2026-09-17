@@ -34511,9 +34511,8 @@ impl<'a> FuncBuilder<'a> {
         });
         let base = match declaring.and_then(|ty| self.hierarchy.name.get(&ty)) {
             Some(name) => name.clone(),
-            // Nothing above declares it. For a constructor that is ordinary --
-            // a base class with only methods has none, and `super()` in a
-            // derived one has nothing to run. The receiver stands in as the
+            // Nothing above *declares* it, which is not the same as nothing
+            // above having anything to run. The receiver stands in as the
             // expression's value, which no `super()` statement looks at.
             //
             // Except when the base is a class this compiler *provides*: there
@@ -34527,6 +34526,36 @@ impl<'a> FuncBuilder<'a> {
                 };
                 if let Some(provided) = provided {
                     self.initialize_error(id, receiver, &provided, arguments)?;
+                }
+                // **A base with no constructor still has field initialisers,
+                // and they are what `super()` was supposed to run.** The
+                // comment here used to say "a base class with only methods has
+                // none, and `super()` in a derived one has nothing to run",
+                // which is true of a base with only methods and false of every
+                // base whose fields have defaults:
+                //
+                //     class Base { tag = 1 }
+                //     class Derived extends Base { constructor() { super() } }
+                //     new Derived().tag        // 1 in node, 0 here
+                //
+                // A **silent wrong answer**, on every backend, and only when the
+                // derived class writes a constructor: without one it gets a
+                // synthesised constructor that walks the whole chain, which is
+                // why `class Derived extends Base {}` was right and this was
+                // not. Giving the base an explicit constructor also hid it,
+                // because then `hierarchy.constructor` finds one and this arm is
+                // never reached.
+                //
+                // Every ancestor, base-first, because that is the order
+                // JavaScript runs them in and because *none* of them has a
+                // constructor — `hierarchy.constructor` walks up, so reaching
+                // here means the whole chain above is constructorless.
+                let ancestors = self.constructorless_ancestors(above);
+                if !ancestors.is_empty()
+                    && let HirType::Managed(ManagedType::Object(class)) =
+                        self.values[receiver.0 as usize].ty
+                {
+                    self.initialize_fields(id, receiver, class, &ancestors)?;
                 }
                 self.initialize_own_fields(id, receiver)?;
                 return Ok(receiver);
@@ -34575,6 +34604,32 @@ impl<'a> FuncBuilder<'a> {
     /// than whatever subclass is being built, and that is what makes the field
     /// index right: the index comes from this class's layout, and base-first
     /// layout makes it the same index in every subclass's.
+    /// The classes above this one, outermost first, when none of them declares
+    /// a constructor.
+    ///
+    /// Only called from the arm that established that: `Hierarchy::constructor`
+    /// walks up, so a `None` from it means the whole chain is constructorless
+    /// and every one of their field initialisers is this `super()`'s to run.
+    ///
+    /// Outermost first because that is the order the constructors would have
+    /// run in, and a derived initialiser is allowed to read what a base one
+    /// stored.
+    fn constructorless_ancestors(&self, base: Option<TypeId>) -> Vec<TypeId> {
+        let mut chain = Vec::new();
+        let mut at = base;
+        // The same bound `Hierarchy::constructor` uses, and for the same reason:
+        // a cycle in the chain is a malformed program rather than a deep one.
+        for _ in 0..64 {
+            let Some(here) = at else {
+                break;
+            };
+            chain.push(here);
+            at = self.hierarchy.base.get(&here).copied();
+        }
+        chain.reverse();
+        chain
+    }
+
     fn initialize_own_fields(&mut self, id: NodeId, receiver: ValueId) -> Result<(), Diagnostic> {
         let HirType::Managed(ManagedType::Object(class)) = self.values[receiver.0 as usize].ty
         else {
