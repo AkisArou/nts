@@ -207,6 +207,7 @@ name = "nts-codegen-jvm"
 version = "0.0.0"
 dependencies = [
  "camino",
+ "nts-build",
  "nts-codegen-common",
  "nts-core",
  "nts-diagnostics",
