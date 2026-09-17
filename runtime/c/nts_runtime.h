@@ -1470,6 +1470,17 @@ NtsString *nts_str_char_at_into(NtsHeader *into, const NtsString *s, double at);
 /* `s[i]`: one unit, and a checked index. See the note beside the definition for
  * why this is not `charAt`. */
 NtsString *nts_str_at(const NtsString *s, double at);
+/* `s.at(i)`: the one-unit string there, or NULL for `undefined`. A negative
+ * index counts from the end, which is what separates this from `charAt`.
+ *
+ * `NTS_ALLOCATES_OR_NULL` and not `NTS_ALLOCATES`, for the reason that macro
+ * gives two screens up: `returns_nonnull` is a promise to the optimiser, and a
+ * caller's null check is dead code the moment it is made. This returns null on
+ * purpose, and the `?? ` around it is the check that must survive. `-Werror`
+ * catches the mistake at the `return NULL` -- which is the loud half; the quiet
+ * half is a null test compiled away and an `undefined` that never arrives. */
+NTS_ALLOCATES_OR_NULL NtsString *nts_str_relative_at(const NtsString *s,
+                                                     double at);
 NtsString *nts_str_at_into(NtsHeader *into, const NtsString *s, double at);
 NtsString *nts_str_slice_into(NtsHeader *into, const NtsString *s, double from,
                               double to);

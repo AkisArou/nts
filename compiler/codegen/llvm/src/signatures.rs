@@ -285,6 +285,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_str_pad_start", returns: "ptr", params: &["ptr", "double", "ptr"], attributes: &[] },
     Signature { name: "nts_str_point_width", returns: "double", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_str_raw", returns: "ptr", params: &["i32", "i32"], attributes: &[] },
+    Signature { name: "nts_str_relative_at", returns: "noalias ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_str_repeat", returns: "ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_str_replace", returns: "ptr", params: &["ptr", "ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_str_replace_all", returns: "ptr", params: &["ptr", "ptr", "ptr"], attributes: &[] },

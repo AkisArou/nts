@@ -32031,6 +32031,15 @@ impl<'a> FuncBuilder<'a> {
             "includes" => ("nts_str_includes", 1, HirType::Bool),
             "startsWith" => ("nts_str_starts_with", 1, HirType::Bool),
             "endsWith" => ("nts_str_ends_with", 1, HirType::Bool),
+            // **`s.at(i)` is neither `s[i]` nor `s.charAt(i)`**, and the
+            // runtime keeps all three apart because the language does: `charAt`
+            // answers `""` for an index that is not there, `s[i]` stops the
+            // program the way an out-of-range array index does, and `at`
+            // answers `undefined` -- the null pointer, which is what a
+            // `string | undefined` is. `at` is also the only one of the three
+            // that counts a negative index from the end, which is why it
+            // exists.
+            "at" => ("nts_str_relative_at", 1, string.clone()),
             "charAt" => ("nts_str_char_at", 1, string.clone()),
             "repeat" => ("nts_str_repeat", 1, string.clone()),
             "slice" => ("nts_str_slice", 2, string.clone()),

@@ -2577,6 +2577,34 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### `String.prototype.at` (C and LLVM; the JVM row follows)
+
+**Three spellings and three answers for an index that is not there**, and the
+language means a different one each time: `charAt` gives `""`, `s[i]` stops the
+program the way an out-of-range array index does, and `at` gives `undefined` —
+the null pointer, which is what a `string | undefined` is. `at` is also the only
+one of the three that counts a negative index from the end, which is why the
+method exists.
+
+The relative index is one rule over two containers, so `nts_relative_offset` is
+shared with `nts_array_offset` rather than written twice.
+
+**The C declaration is `NTS_ALLOCATES_OR_NULL`, and that is the subtlety.**
+`NTS_ALLOCATES` carries `returns_nonnull`, and that macro's own comment says
+what it costs: *"a promise to the optimiser, and a caller's null check is dead
+code the moment the promise is made"*. `-Werror` rejects the `return NULL`
+outright — the loud half, and the JVM lane hit it running their suite before I
+did. The quiet half would have been a `??` compiled away and an `undefined` that
+never arrives.
+
+**The JVM half is the lane's and is one table row.** Their `strAt` already had
+`String.prototype.at` semantics — relative indexing, `null` for absent — and
+`ops.rs` was pointing `nts_str_at` at it, which is how `"abc"[5]` threw a
+`NullPointerException` there while declining on the other two. They have split
+that (`nts_str_at` → a new `strIndex` that stops) and the jar carries both
+methods; naming `nts_str_relative_at` is what remains. `examples/string-at` is
+written and agrees with node on C and LLVM, and lands with that row.
+
 #### An export that answers `undefined` crashed the differential (fixed)
 
 ```ts

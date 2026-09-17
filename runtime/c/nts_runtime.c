@@ -1708,14 +1708,24 @@ NtsArray *nts_array_new_uninitialized(const NtsDescriptor *descriptor,
   return array;
 }
 
+/* Where a relative index lands, or -1 for out of range. Negative counts from
+ * the end.
+ *
+ * A length rather than a container, because `Array.prototype.at` and
+ * `String.prototype.at` are one rule over two things -- and a rule written
+ * twice is a rule that will disagree with itself once. */
+static double nts_relative_offset(double at, uint32_t length) {
+  at = nts_to_integer(at);
+  if (at < 0) {
+    at += (double)length;
+  }
+  return (at < 0 || at >= (double)length) ? -1.0 : at;
+}
+
 /* Where an index lands, or -1 for out of range. Negative counts from the end.
  */
 static double nts_array_offset(const NtsArray *a, double at) {
-  at = nts_to_integer(at);
-  if (at < 0) {
-    at += (double)a->header.length;
-  }
-  return (at < 0 || at >= (double)a->header.length) ? -1.0 : at;
+  return nts_relative_offset(at, a->header.length);
 }
 
 /* Make room for one more element, whatever its width.
@@ -2653,6 +2663,25 @@ NtsString *nts_str_at_into(NtsHeader *into, const NtsString *s, double at) {
 
 NtsString *nts_str_at(const NtsString *s, double at) {
   return nts_str_at_into(NULL, s, at);
+}
+
+/* `s.at(i)`, which is neither `s[i]` nor `s.charAt(i)`.
+ *
+ * **Three spellings and three answers for an index that is not there**, and the
+ * language means a different one each time: `charAt` gives `""`, `s[i]` stops
+ * the program the way an out-of-range array index does, and `at` gives
+ * `undefined` -- which for a reference is the null pointer, the same answer
+ * `nts_array_at_ref` gives for the same reason.
+ *
+ * And `at` is the only one of the three that counts a negative index from the
+ * end, which is the reason the method exists at all. */
+NtsString *nts_str_relative_at(const NtsString *s, double at) {
+  double offset = nts_relative_offset(at, s->length);
+  if (offset < 0) {
+    return NULL;
+  }
+  uint32_t index = (uint32_t)offset;
+  return nts_str_range(NULL, s, index, index + 1u);
 }
 
 NtsString *nts_str_repeat(const NtsString *s, double times) {
