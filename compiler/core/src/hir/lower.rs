@@ -22254,6 +22254,19 @@ impl<'a> FuncBuilder<'a> {
         if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
             return Err(self.unsupported(id, "an empty array literal that is not an array"));
         }
+        // **The element type comes from the annotation and nothing else will
+        // mention it.** `[]` has no elements to lay out, so a
+        // `const fs: (() => number)[] = []` filled by `push` and then called
+        // reached the backend with a signature no layout answered for:
+        // `NTS2006 an object type with no layout`, at the call rather than at
+        // the declaration. The non-empty literal works because its elements are
+        // materialized on the way in, and a *parameter* of the same type works
+        // because parameters are materialized too — this is the one position
+        // where the type is written down and nothing walks it.
+        //
+        // Through `materialize`, so an array of arrays of signatures is reached
+        // as well: it walks containers for exactly this reason.
+        self.materialize(id, &ty)?;
         let origin = self.origin(id);
         let length = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         Ok(self.push(

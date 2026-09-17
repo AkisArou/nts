@@ -1,4 +1,26 @@
-// expect: lacks-c collected
+// expect: emits-c collected
+//
+// **Landed 2026-09-17, and the guard is turned around rather than deleted.** It
+// was `lacks-c collected`, with a line saying "when this lands, the function
+// appears and the guard fails, which is what a guard is for". It did, and it
+// did. `emits-c` is the same assertion from the other side: this fixture now
+// says the function is emitted, so a regression removes it again and this says
+// so.
+//
+// The fix was one line and not in the representation family this file guessed
+// at. `lower_empty_array` takes its type from the annotation and nothing else
+// mentions it, so the element type was never materialised — a non-empty literal
+// works because its elements are materialised on the way in, and the same array
+// as a *parameter* works because parameters are too. An empty literal is the
+// one position where the type is written down and nothing walks it.
+//
+// **The 61 occurrences across 36 locations below did not move, and that is the
+// honest measurement.** Re-run after the fix: 475 occurrences, 35 distinct,
+// unchanged. Those sites are a different shape wearing the same diagnostic — a
+// generic over a rest tuple, `once<A extends unknown[]>(fn: (...args: A) =>
+// void)`, which refuses as ``A`, captured above its own declaration`. The
+// paragraph below was right that `Fifo<T>` is "this fixture's problem one level
+// of generality up"; it was wrong that closing this would reach it.
 //
 // `const fs: (() => number)[] = []` and then `fs.push(() => n)` — a list of
 // callbacks, which is how any program collects listeners.

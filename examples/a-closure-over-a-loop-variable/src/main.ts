@@ -109,3 +109,41 @@ export function forOfLet(n: number): number {
   }
   return total;
 }
+
+/**
+ * The same capture, held in an array **declared empty** and called back out.
+ *
+ * `sumOfCaptures` above calls each closure as it is made, which is what makes
+ * this a different arm rather than a longer one: here the closures outlive the
+ * loop, are stored in a `(() => number)[]`, and are called afterwards.
+ *
+ * It refused until 2026-09-17 — `NTS2006 an object type with no layout`, at the
+ * **call** rather than at the declaration. `[]` has no elements to lay out, so
+ * the element type written in the annotation was mentioned by nothing, and a
+ * signature nothing lays out is a call no backend can emit. The non-empty
+ * literal worked because its elements are materialised on the way in, and the
+ * same array as a *parameter* worked because parameters are materialised too;
+ * an empty literal is the one position where the type is written down and
+ * nothing walks it.
+ *
+ * The values are the same three the arms above assert, which is deliberate: if
+ * per-iteration capture ever regressed, this would fail for that reason rather
+ * than for its own.
+ */
+export function heldInAnEmptyArray(n: number): number {
+  const made: (() => number)[] = [];
+  for (let i = 0; i < 3; i++) {
+    made.push(() => i);
+  }
+  return made[0]!() * 100 + made[1]!() * 10 + made[2]!() + n * 0;
+}
+
+/** The same through a `for...of` binding, which gets a fresh binding per
+ *  iteration for the same reason `let` does. */
+export function forOfHeldInAnEmptyArray(n: number): number {
+  const made: (() => number)[] = [];
+  for (const v of [1, 2, 3]) {
+    made.push(() => v);
+  }
+  return made[0]!() * 100 + made[1]!() * 10 + made[2]!() + n * 0;
+}
