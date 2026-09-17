@@ -2653,8 +2653,20 @@ NtsString *nts_str_char_at(const NtsString *s, double at) {
  * bargain rather than inventing a third answer: an index outside the string
  * stops the program where an index outside an array would. */
 NtsString *nts_str_at_into(NtsHeader *into, const NtsString *s, double at) {
-  at = nts_to_integer(at);
-  if (!(at >= 0.0 && at < (double)s->length)) {
+  /* **Not `nts_to_integer` first.** A property key is an *index* only when it
+   * is a non-negative integer, so node answers `undefined` for `s[1.7]` and
+   * `s[NaN]`: `"1.7"` and `"NaN"` are property names that are not there.
+   * Converting first made both of them a character -- `"abc"[1.7]` answered
+   * `"b"` and `"abc"[NaN]` answered `"a"` -- which is a *wrong answer* rather
+   * than the stop this is documented to give, and the comment above is about
+   * an index outside the string while neither of these is an index at all.
+   *
+   * The array path has been right about this by construction: `xs[i]` lowers
+   * to a bounds test on the unconverted value, and `NaN` fails every
+   * comparison. This is that test written out, which is also why `at !=
+   * nts_to_integer(at)` is the second half rather than the whole of it -- a
+   * `NaN` fails the first half and a fraction passes it. */
+  if (!(at >= 0.0 && at < (double)s->length) || at != nts_to_integer(at)) {
     nts_bounds(at, s->length);
   }
   uint32_t index = (uint32_t)at;

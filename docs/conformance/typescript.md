@@ -2577,6 +2577,40 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### `s[1.7]` and `s[NaN]` answered a character (fixed)
+
+A **wrong answer**, on the shipping compiler, on all three backends: `"abc"[1.7]`
+came back `"b"` and `"abc"[NaN]` came back `"a"`, where node answers `undefined`
+for both. Found by the JVM lane's differential run on
+`const i = n < 0 ? -n : n; return s[i % 5]` — 8 of 29 cases, identically
+everywhere, so not a backend gap.
+
+`nts_str_at_into` called `nts_to_integer` **first** and then tested the bounds.
+`ToInteger(NaN)` is `0` and `ToInteger(1.7)` is `1`, so both landed inside the
+string and were read. The comment beside it argues for stopping on an index
+*outside* the string — and neither of these is an index at all: a property key
+is an index only when it is a non-negative integer, which is exactly why node
+says `undefined`. It was the coercion answering a question that should not have
+been asked.
+
+**The array path has always been right, by construction.** `xs[i]` lowers to a
+bounds test on the *unconverted* value, and `NaN` fails every comparison — so
+`xs[NaN]` and `xs[1.7]` stop, which is the documented bargain. The string helper
+is that test written out now, and `at != nts_to_integer(at)` is its second half
+rather than the whole: a `NaN` fails the first half and a fraction passes it.
+
+`charAt` and `at` still convert, and must — `"abc".charAt(1.7)` is `"b"` and
+`"abc".at(1.7)` is `"b"` in node, because both are specified as
+`ToIntegerOrInfinity`. Three methods, three rules, and only the subscript is
+strict about what an index is.
+
+**The JVM mirrors the old rule and now differs.** `strIndex` was written to
+follow `nts_str_at_into` call for call, so `s[1.7]` answers a character there
+while C and LLVM decline. Nothing in the tree indexes a string with a
+non-integer — every example and all 24 addon modules agree on all three backends
+— so this is a divergence in programs that do not exist yet, reported to the
+lane that owns the method.
+
 #### `String.prototype.at` (fixed)
 
 **Three spellings and three answers for an index that is not there**, and the
