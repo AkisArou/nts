@@ -3122,7 +3122,26 @@ fn an_addon_finds_its_headers_without_being_told_where_they_are() {
         skip("the vendored node headers this discovers");
         return;
     }
-    let project = fixture("build-addon-discovers", ADDON);
+    // **The headers are staged in an ancestor the test owns, not found by
+    // being inside the checkout.** The first version relied on the fixture
+    // living under a `CARGO_TARGET_DIR` inside the repository, which is true
+    // locally and false in the gate -- there it is `~/.cache/nts-gate/target`,
+    // so the upward walk never reached `third_party` and the test failed for a
+    // reason that was about the layout rather than the code. It passed here and
+    // failed there, which is the only way that difference ever shows up.
+    //
+    // In the *parent* rather than in the project, because the project directory
+    // is also the working directory: a candidate inside it would be found even
+    // by the un-fixed walk, which starts at `.`.
+    let project = fixture("addon-discovery/project", ADDON);
+    let vendored = project
+        .parent()
+        .expect("the fixture's parent")
+        .join("third_party/node");
+    drop(std::fs::remove_dir_all(&vendored));
+    std::fs::create_dir_all(&vendored).expect("staging a vendored node");
+    std::os::unix::fs::symlink(&headers, vendored.join("src")).expect("linking the headers");
+
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .arg("build")
         .current_dir(&project)
