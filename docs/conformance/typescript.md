@@ -2576,6 +2576,30 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### A labelled block (fixed)
+
+`outer: { … break outer … }` — a label on a block rather than on a loop, where
+the `break` is a forward jump to the end of it. Refused, and the refusal said
+exactly why: it *"needs a breakable with an exit and no latch, which is a block
+this does not build"*.
+
+A `switch` **is** a breakable with an exit and no latch. The two differ only in
+what sits between the push and the pop, so the block needed no machinery — it
+needed the shape that was already there, built where the label is read rather
+than in `lower_statement`, because the breakable has to carry the label and a
+block is not a construct that takes one.
+
+Falling off the end is the same jump a `break` makes. That is what allocates the
+exit when no `break` was written, and what leaves it unallocated when the block
+always returns — an exit no edge reaches is invalid SSA rather than merely dead
+code, which the verifier says and has said before.
+
+`examples/a-labelled-block` is 6 exports: the plain shape, a name assigned on
+both paths so the exit takes a parameter, a **nested** pair where the inner
+`break` names the outer label, a block inside a loop, a block every path returns
+from, and a block declaring its own `const`. **6 refusals** on the pre-change
+binary.
+
 #### An `await` of a plain value (fixed)
 
 `await 1` is legal TypeScript and means `Promise.resolve(1)` — **a suspension of

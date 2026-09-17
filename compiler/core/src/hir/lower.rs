@@ -19105,12 +19105,83 @@ impl<'a> FuncBuilder<'a> {
     /// label and the loop, the next construct to push is always the one the
     /// label was written on, and the name cannot land on a loop nested inside
     /// something else.
+    /// `outer: { … break outer … }`.
+    ///
+    /// A breakable with an exit and **no latch**, which is what a labelled block
+    /// is: `break outer` is a forward jump to the end of it and there is nothing
+    /// to continue. A `switch` pushes the same shape, and the two differ only in
+    /// what sits between the push and the pop.
+    ///
+    /// **Falling off the end is the same jump.** A `break` reaches the exit and
+    /// so does running out of statements, so the last thing here is the jump
+    /// `lower_break` would have made -- which is also what allocates the exit at
+    /// all when no `break` was written, and what leaves it unallocated when the
+    /// block always returns.
+    fn lower_labeled_block(
+        &mut self,
+        id: NodeId,
+        label: String,
+        block: NodeId,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let mut carried = Vec::new();
+        let mut declared = Vec::new();
+        self.assigned_symbols(block, &mut carried);
+        self.declared_symbols(block, &mut declared);
+        // A name the block declares is the block's own and cannot be carried
+        // out of it, the same rule `lower_switch` applies to a clause.
+        carried.retain(|symbol| !declared.contains(symbol));
+        let exit_types: Vec<HirType> = self
+            .carried_now(&carried)
+            .into_iter()
+            .map(|value| self.values[value.0 as usize].ty.clone())
+            .collect();
+
+        let depth = self.breakables.len();
+        self.breakables.push(Breakable {
+            exit: None,
+            exit_types,
+            origin,
+            latch: None,
+            carried: carried.clone(),
+            label: Some(label),
+            exits_at: self.exits.len(),
+        });
+        let lowered = self.lower_block(block);
+        if lowered.is_ok() && !self.is_terminated() {
+            let args = self.carried_now(&carried);
+            let (exit, _) = self.exit_of(depth);
+            self.terminate(Terminator::Jump { target: exit, args });
+        }
+        let left = self.breakables[depth].exit.clone();
+        self.breakables.pop();
+        lowered?;
+        if let Some((exit, params)) = left {
+            self.switch_to(exit);
+            for (symbol, param) in carried.iter().zip(&params) {
+                self.bindings.insert(*symbol, *param);
+            }
+        }
+        Ok(())
+    }
+
     fn lower_labeled(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         let children = self.children(id);
         let [name, statement] = children.as_slice() else {
             return Err(self.unsupported(id, "a labelled statement of unexpected shape"));
         };
         let (name, statement) = (*name, *statement);
+        let Some(text) = self.node(name).text.clone() else {
+            return Err(self.unsupported(name, "a label with no name"));
+        };
+        // `outer: { … break outer … }` -- a labelled *block*, where the `break`
+        // is a forward jump to the end of it. It has an exit and no latch,
+        // which is the same shape a `switch` pushes, so it is built here rather
+        // than by `lower_statement`: the breakable has to carry the label, and
+        // a block is not a construct that takes one.
+        if self.kind_of(statement) == Some(syntax::BLOCK) {
+            return self.lower_labeled_block(id, text, statement);
+        }
         if !matches!(
             self.kind_of(statement),
             Some(
@@ -19123,9 +19194,6 @@ impl<'a> FuncBuilder<'a> {
         ) {
             return Err(self.unsupported(id, "a label on something that is not a loop"));
         }
-        let Some(text) = self.node(name).text.clone() else {
-            return Err(self.unsupported(name, "a label with no name"));
-        };
         self.pending_label = Some(text);
         let lowered = self.lower_statement(statement);
         // Cleared whatever happened: a loop that refused never took it, and a
