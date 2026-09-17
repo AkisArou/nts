@@ -32820,6 +32820,36 @@ impl<'a> FuncBuilder<'a> {
         // for exactly this reason, having been caught by a benchmark that
         // returned -512 for 4864. This is the same rule from the other side:
         // an array that arrived narrow does not reach one.
+        // **Two causes, and one sentence was naming only the first.** An
+        // element that is not a double, a reference or a bool is *either* a
+        // narrow integer — a typed array, which is what the paragraph above is
+        // about — or an **erased** value, which is an array of a union, of
+        // `unknown`, or of a type parameter nothing pinned. Those are different
+        // shapes needing different work, and `on a typed array` was false for
+        // every one of the second kind.
+        //
+        // It was false for **27 of the 29** distinct sites in the profile,
+        // counted by splitting the message and re-running rather than by
+        // reading them: `ctx.seen.includes(value)` in `util/inspect`,
+        // `names.map(…)` in `internal/errors`, `enqueue(value: T)` in
+        // `streams/fifo`. Two are genuinely typed arrays. A reader sent to look
+        // for a typed array in the other twenty-seven finds nothing and has no
+        // next step.
+        //
+        // What the erased case needs is the `_value` family — `nts_array_at_value`,
+        // `_pop_value`, `_shift_value`, `_concat_value` and `_set_length_value`
+        // exist; `push`, `slice`, `reverse`, `join`, `splice`, `fill`,
+        // `index_of` and `includes` do not — so the message names that rather
+        // than a shape the program does not have.
+        if matches!(element, HirType::Erased) {
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "`{name}` on an array of erased elements, which needs a `_value` helper this \
+                     runtime does not have"
+                ),
+            ));
+        }
         if !matches!(
             element,
             HirType::Float { bits: 64 } | HirType::Managed(_) | HirType::Bool
