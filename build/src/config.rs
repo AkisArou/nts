@@ -227,10 +227,13 @@ impl NativeSources {
 ///
 /// **That sentence used to name `manifests`, `dependencies` and `integrate` as
 /// the three nothing consumed, and it went stale one field at a time without
-/// anything noticing.** All three are read now. What is left of the rule is the
-/// rule itself: `workspace` and `build.cache.local` are still shaped by the
-/// TypeScript and absent here, and they are absent *because* nothing reads
-/// them.
+/// anything noticing.** All three are read now, and so is `build.cache` -- which
+/// the replacement for that sentence wrongly listed as unread on the same day
+/// it was written, so the correction needed correcting.
+///
+/// `workspace` is the one field the TypeScript shapes and this does not
+/// deserialize. It is absent *because* nothing reads it: `above` finds a root by
+/// finding a config, not by reading that field.
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 pub struct Resolved {
     /// The program this config describes, where it is not `./tsconfig.json`.
@@ -287,8 +290,23 @@ pub struct Resolved {
 /// sources, so the question "which config describes this `c:` module" is
 /// answered by where the importing file is, not by where the build started.
 ///
-/// Stops at a config that declares `workspace`, which is a root and describes
-/// nothing's native code.
+/// **It does not stop at a workspace root, and the comment here used to say it
+/// did.** That would be right for one of this function's two callers and wrong
+/// for the other, which is the reason to write the distinction down rather than
+/// implement the sentence.
+///
+/// `bind_one` asks "which config declares this `c:` module's header", and for
+/// that a root genuinely describes nothing -- attributing a package's native
+/// code to the monorepo root is a wrong answer.
+///
+/// `generate_bindings` asks "which configs are in play for this program", and
+/// for *that* the root is a legitimate answer: `examples/workspace/packages/storage`
+/// has no config of its own, so every source in it walks up to the root -- which
+/// is how a root-level `dependencies` or `manifests` reaches a build at all.
+/// Skipping roots here would silently drop them.
+///
+/// So both callers get the nearest config and the one that cares filters
+/// afterwards, on the field it actually needs.
 #[must_use]
 pub fn above(file: &Utf8Path) -> Option<Utf8PathBuf> {
     let mut at = file.parent();
