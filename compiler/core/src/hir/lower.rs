@@ -34282,6 +34282,34 @@ impl<'a> FuncBuilder<'a> {
                 "`null` or `undefined` where what it stands in for is not a reference",
             ));
         };
+        // A **signature** taken from a context is one nothing has laid out.
+        //
+        // Everywhere else a function type acquires its layout from a
+        // declaration -- a parameter, a field, a variable's annotation -- and
+        // `materialize` is called there. This arm invents a type from where the
+        // literal *sits*, so no declaration was consulted and none will be:
+        //
+        //     const g: ((x: number) => number) | undefined =
+        //       n > 0 ? (x) => x * 2 : undefined;
+        //
+        // The annotation is one type id and the union's function member is
+        // another -- `signature_name` exists because two ids for one written
+        // signature are ordinary here -- and only the annotation's was
+        // materialized. So the `undefined` was pushed at a type no layout
+        // answered for and the C backend refused the whole function with
+        // `NTS2006 an object type with no layout`, naming the type rather than
+        // the literal that produced it. `collect_layouts` merges the two by
+        // name once both exist.
+        //
+        // Signatures only, and that is a totality argument rather than a
+        // preference: `layout_of` answers unconditionally for a function type,
+        // where for anything else it can refuse -- and refusing *here* would
+        // stop a program whose value the later passes go on to eliminate.
+        if let HirType::Managed(ManagedType::Object(object)) = ty
+            && self.is_a_signature(object)
+        {
+            self.layout_of(id, object)?;
+        }
         let origin = self.origin(id);
         Ok(self.push(literal, ty, origin))
     }
