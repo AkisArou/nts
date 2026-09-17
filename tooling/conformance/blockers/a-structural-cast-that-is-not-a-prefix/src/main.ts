@@ -1,4 +1,16 @@
-// expect: an array of
+// expect: a `Thing` where a `Named` is wanted
+//
+// **The expectation moved on 2026-09-17, and it moved forward.** It was
+// `an array of`, because `const xs: Named[] = [new Thing(n)]` used to build the
+// literal at *its own* element type and then fail to convert the finished
+// array: `an array of Managed(Object(…)) where an array of Managed(Object(…))
+// is wanted`. An array literal is now built at the type of the slot it is
+// filling, so there is no array to convert and the element store is what
+// refuses — naming the actual cast, `a `Thing` where a `Named` is wanted`,
+// with the two type names rather than two `Managed(Object(TypeId(…)))`.
+//
+// Same program, same refusal, one layer in. The array message was a true
+// sentence about a conversion the compiler had made for itself.
 //
 // **The parameter case closed on 2026-09-11 and this is what is left.** Passing
 // a class where a structural interface is wanted is now specialised -- a copy of

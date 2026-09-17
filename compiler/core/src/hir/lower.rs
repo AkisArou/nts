@@ -21579,9 +21579,32 @@ impl<'a> FuncBuilder<'a> {
         match self.kind_of(id) {
             Some(syntax::RETURN_STATEMENT) => {
                 let expression = self.children(id).first().copied();
-                let value = match expression {
-                    Some(expression) => Some(self.lower_expression(expression)?),
-                    None => None,
+                // **At the type the signature declares**, where that is this
+                // function's own return. A local declaration lowers its
+                // initializer at its annotation and a call argument at its
+                // parameter, and a `return` did neither -- so
+                // `function make(): Opts[] { return [{ a: 1 }] }` built the
+                // literal at its *own* element type and met `coerce` one line
+                // later, refused as *an array of ... where an array of ... is
+                // wanted*: a cast this never had to make.
+                //
+                // Decided **before** lowering rather than at the coercion below,
+                // because the three destinations a `return` can have want three
+                // different types. A callback return hands the value to an
+                // iteration's accumulator and an `async` settle hands it to a
+                // promise; only the plain path wants `self.returns`, and both of
+                // the others are knowable here. `Void` is excluded for the same
+                // reason the arm below drops the value entirely.
+                let want = (self.callback_returns.last().is_none()
+                    && self.async_result.is_none()
+                    && !matches!(self.returns, HirType::Void))
+                .then(|| self.returns.clone());
+                let value = match (expression, &want) {
+                    (Some(expression), Some(want)) => {
+                        Some(self.lower_expecting(expression, want)?)
+                    }
+                    (Some(expression), None) => Some(self.lower_expression(expression)?),
+                    (None, _) => None,
                 };
                 if let Some(target) = self.callback_returns.last().copied() {
                     // Only the `try`s inside the callback. A `return` here means
@@ -22210,7 +22233,7 @@ impl<'a> FuncBuilder<'a> {
             let value = self.erased_for_table(value, origin);
             return Ok((key, value));
         }
-        let (name, value) = self.property_parts(property)?;
+        let (name, value) = self.property_parts(property, None)?;
         let key = self.push(
             OpKind::ConstString(name),
             HirType::Managed(ManagedType::String),
@@ -22422,6 +22445,32 @@ impl<'a> FuncBuilder<'a> {
                 self.contextual_union_member(id)
                     .map(|member| HirType::Managed(ManagedType::Object(member)))
             })
+            // **The slot the enclosing expression is filling.** `expecting` is
+            // the channel `lower_array_literal` and `lower_absent` already take
+            // their type from, and this was the one literal that never looked
+            // at it -- so an object literal *inside* an array literal took its
+            // own checker type however the array had been typed:
+            //
+            //     function takes(xs: Opts[]): number { … }
+            //     takes([{ a: 1 }, { a: 2, b: 3 }]);
+            //
+            // built `obj#13` and `obj#14`, one field each, and stored both into
+            // an array of `obj#1`, which has two. Nothing refused it. `takes`
+            // read field 1 off a one-field object and answered 2 where node
+            // answers 105 -- a **silent wrong answer on the shipping compiler**,
+            // not a refusal, which is why no census could see it.
+            //
+            // After `contextual_type`, because that is the syntactic question
+            // and answers first where it can; before the literal's own type,
+            // because that is the thing being corrected.
+            .or_else(|| {
+                self.expecting.clone().filter(|ty| {
+                    matches!(
+                        ty,
+                        HirType::Managed(ManagedType::Object(_) | ManagedType::Table(_, _))
+                    )
+                })
+            })
             .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "an object literal"))?;
         // `const table: Record<string, number> = {}` is an allocation of a
@@ -22474,14 +22523,17 @@ impl<'a> FuncBuilder<'a> {
             ) {
                 continue;
             }
-            let (name, value) = self.property_parts(property)?;
+            // The name first, then the slot, then the value. At the field's
+            // type, like every other slot a value meets: an optional field is
+            // erased -- its absence is a tag -- so a literal that supplies one
+            // erases on the way in, and a literal that *is* one is built at the
+            // field's type rather than at its own and cast.
+            let name = self.property_name(property)?;
             let Some(field) = layout.index_of(&name) else {
                 return Err(self.unsupported(property, "a property the type does not declare"));
             };
-            // At the field's type, like every other slot a value meets. An
-            // optional field is erased -- its absence is a tag -- so a literal
-            // that supplies one erases on the way in.
             let want = layout.fields[field as usize].ty.clone();
+            let (_, value) = self.property_parts(property, Some(&want))?;
             let value = self.coerce(value, &want, property)?;
             self.field_set(object, field, value, &origin);
         }
@@ -22542,17 +22594,71 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The name and value of one property in an object literal.
-    fn property_parts(&mut self, id: NodeId) -> Result<(String, ValueId), Diagnostic> {
+    /// The name a property writes, without lowering anything.
+    ///
+    /// Split out so a caller can find the **slot before the value**: the name
+    /// says which field this is, and the field's type is what the value should
+    /// be built at. An object literal used to lower the value first and coerce
+    /// it afterwards, which is the wrong order for any literal that decides
+    /// nothing on its own — `{ cells: [{ a: 1 }] }` built the inner array at
+    /// its own element type and met a cast it never had to make.
+    ///
+    /// [`Self::property_parts`] calls this rather than re-deriving the name, so
+    /// the two cannot answer differently, and every shape refusal lives here.
+    fn property_name(&self, id: NodeId) -> Result<String, Diagnostic> {
+        let children = self.children(id);
+        match self.kind_of(id) {
+            Some(syntax::PROPERTY_ASSIGNMENT) => {
+                let [name, _] = children.as_slice() else {
+                    return Err(self.unsupported(id, "a property of unexpected shape"));
+                };
+                self.literal_name(*name)
+                    .ok_or_else(|| self.unsupported(*name, "a computed property name"))
+            }
+            Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => {
+                let [name] = children.as_slice() else {
+                    return Err(self.unsupported(id, "a shorthand property of unexpected shape"));
+                };
+                self.node(*name)
+                    .text
+                    .clone()
+                    .ok_or_else(|| self.unsupported(*name, "a shorthand without a name"))
+            }
+            // Named, for the reason the statement dispatch is: a spread, an
+            // accessor and a method are three features, and one message over
+            // all of them ranks none.
+            _ => {
+                let what = self
+                    .kind_of(id)
+                    .and_then(nts_semantic_schema::syntax::name_of)
+                    .map_or_else(
+                        || "this kind of property".to_owned(),
+                        |name| format!("a `{name}` in an object literal"),
+                    );
+                Err(self.unsupported(id, &what))
+            }
+        }
+    }
+
+    /// The name and the value, with the value built at `want` where the caller
+    /// knows the slot. A table literal passes `None`: its values are erased on
+    /// the way in and there is no declared field to build one at.
+    fn property_parts(
+        &mut self,
+        id: NodeId,
+        want: Option<&HirType>,
+    ) -> Result<(String, ValueId), Diagnostic> {
+        let text = self.property_name(id)?;
         match self.kind_of(id) {
             Some(syntax::PROPERTY_ASSIGNMENT) => {
                 let children = self.children(id);
-                let [name, initializer] = children.as_slice() else {
+                let [_, initializer] = children.as_slice() else {
                     return Err(self.unsupported(id, "a property of unexpected shape"));
                 };
-                let text = self
-                    .literal_name(*name)
-                    .ok_or_else(|| self.unsupported(*name, "a computed property name"))?;
-                let value = self.lower_expression(*initializer)?;
+                let value = match want {
+                    Some(want) => self.lower_expecting(*initializer, want)?,
+                    None => self.lower_expression(*initializer)?,
+                };
                 Ok((text, value))
             }
             // `{ x }` — one node serving as both the field name and a reference
@@ -22572,34 +22678,21 @@ impl<'a> FuncBuilder<'a> {
             // `{ first: first }` compiled; and a module-scope function was not
             // found at all, so `{ lowers }` read as naming nothing in scope for
             // a function declared in the same file.
+            // A shorthand names an existing value, so there is no expression
+            // to build at the slot -- `{ x }` hands over whatever `x` already
+            // is, and `coerce` at the caller is what reconciles it.
             Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => {
                 let children = self.children(id);
                 let [name] = children.as_slice() else {
                     return Err(self.unsupported(id, "a shorthand property of unexpected shape"));
                 };
-                let text = self
-                    .node(*name)
-                    .text
-                    .clone()
-                    .ok_or_else(|| self.unsupported(*name, "a shorthand without a name"))?;
-
                 let symbol = self.shorthand_value_symbol(*name, &text)?;
                 let value = self.lower_named_value(*name, symbol)?;
                 Ok((text, value))
             }
-            // Named, for the reason the statement dispatch is: a spread, an
-            // accessor and a method are three features, and one message over
-            // all of them ranks none.
-            _ => {
-                let what = self
-                    .kind_of(id)
-                    .and_then(nts_semantic_schema::syntax::name_of)
-                    .map_or_else(
-                        || "this kind of property".to_owned(),
-                        |name| format!("a `{name}` in an object literal"),
-                    );
-                Err(self.unsupported(id, &what))
-            }
+            // `property_name` refuses every other kind above, so this cannot be
+            // reached -- and saying so is what keeps the refusal in one place.
+            _ => unreachable!("`property_name` refuses every other kind of property"),
         }
     }
     /// The trailing arguments a string method's call owes the runtime.
@@ -28379,7 +28472,9 @@ impl<'a> FuncBuilder<'a> {
             // name, `!`, type, initializer — the annotation is a child too, so
             // `const scale: number = 3` has three where `const scale = 3` has
             // two. Destructuring positionally refused every annotated local.
-            let Some([Some(name), _, _, initializer]) = self.child_slots::<4>(declaration) else {
+            let Some([Some(name), _, annotation, initializer]) =
+                self.child_slots::<4>(declaration)
+            else {
                 return Err(self.unsupported(declaration, "a declaration of unexpected shape"));
             };
             // **A class is not a value here.** `const C = class { … }`
@@ -28414,7 +28509,35 @@ impl<'a> FuncBuilder<'a> {
                         .ok_or_else(|| self.unrepresentable(declaration, "an empty array"))?;
                     self.lower_empty_array(initializer, declared)?
                 }
-                Some(initializer) => self.lower_expression(initializer)?,
+                // **At the annotation, the way module scope has always done it.**
+                // `lower_module_binding` lowers a deferred initializer
+                // *expecting* the global's type -- "because some literals decide
+                // nothing on their own and take their shape from the slot" --
+                // and a local declaration lowered its initializer and then
+                // coerced. Two derivations of one fact, and the local one was
+                // the wrong half:
+                //
+                //     interface Opts { a: number; b?: number }
+                //     const xs: Opts[] = [{ a: 1 }];        // module scope: fine
+                //     function f() { const xs: Opts[] = [{ a: 1 }]; }   // refused
+                //
+                // The literal's own element type is `{ a: number }`, the slot's
+                // is `Opts`, and with an optional property the two are not the
+                // same shape -- so the finished array met `coerce` and was
+                // refused as *an array of ... where an array of ... is wanted*,
+                // which is a true sentence about a cast this never had to make.
+                // `lower_array_literal` already prefers the expected type over
+                // its own; it was never given one here.
+                //
+                // Only where an annotation was **written**. Without one,
+                // `type_of(name)` is the checker's inference, which is what the
+                // expression produces anyway -- passing it as a contextual type
+                // would be this deciding a literal's shape from a type the
+                // literal itself decided, which is a loop rather than a slot.
+                Some(initializer) => match annotation.and_then(|_| self.type_of(name)) {
+                    Some(declared) => self.lower_expecting(initializer, &declared)?,
+                    None => self.lower_expression(initializer)?,
+                },
                 None => self.unwritten(name, declaration)?,
             };
             // `const { a, b } = o` and `const [a, b] = xs`: one initializer,
@@ -32485,10 +32608,10 @@ impl<'a> FuncBuilder<'a> {
         // `push` returns the new length, which is what the expression is worth
         // in JavaScript, and takes as many elements as it was given.
         if name == "push" {
-            return self.lower_pushes(id, "nts_array_push", receiver, arguments);
+            return self.lower_pushes(id, "nts_array_push", receiver, arguments, &HirType::NUMBER);
         }
         if name == "unshift" {
-            return self.lower_pushes(id, "nts_array_unshift", receiver, arguments);
+            return self.lower_pushes(id, "nts_array_unshift", receiver, arguments, &HirType::NUMBER);
         }
 
         // `join`, which is not in `numeric_array_method` because its one
@@ -32550,17 +32673,28 @@ impl<'a> FuncBuilder<'a> {
     /// this is a loop here rather than a variadic there. The value of the
     /// expression is the length after the last, which is what the last call
     /// returns.
+    /// `element` is what the array holds, and each argument is built at it.
+    ///
+    /// **The JVM is what said so.** `xs.push({ a: 1 })` into an `Opts[]` built
+    /// the literal at its own one-field type and handed it to
+    /// `nts_array_push_ref`, which takes a pointer and asks nothing. C and LLVM
+    /// stored it and read field 1 off an object that has no field 1; the JVM
+    /// relates classes by name and threw
+    /// `ClassCastException: nts.gen.Type67 cannot be cast to nts.gen.Opts`.
+    /// Two backends agreeing is not evidence when what they agree about is
+    /// something neither of them looks at.
     fn lower_pushes(
         &mut self,
         id: NodeId,
         helper: &str,
         receiver: ValueId,
         arguments: &[NodeId],
+        element: &HirType,
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         let mut length = None;
         for argument in arguments {
-            let value = self.lower_expression(*argument)?;
+            let value = self.lower_expecting(*argument, element)?;
             length = Some(self.push(
                 OpKind::Call {
                     callee: Callee::External(helper.to_owned()),
@@ -32608,10 +32742,10 @@ impl<'a> FuncBuilder<'a> {
         let array = HirType::Managed(ManagedType::Array(Box::new(of_element.clone())));
         let text = matches!(element, ManagedType::String);
         if name == "push" {
-            return self.lower_pushes(id, "nts_array_push_ref", receiver, arguments);
+            return self.lower_pushes(id, "nts_array_push_ref", receiver, arguments, &of_element);
         }
         if name == "unshift" {
-            return self.lower_pushes(id, "nts_array_unshift_ref", receiver, arguments);
+            return self.lower_pushes(id, "nts_array_unshift_ref", receiver, arguments, &of_element);
         }
         // `join`, whose separator defaults to a comma rather than to the
         // infinity the arity filling below supplies. Only on strings here:
