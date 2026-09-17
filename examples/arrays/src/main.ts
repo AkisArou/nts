@@ -97,3 +97,18 @@ export function reversedHead(): number {
 export function slicedLength(from: number, to: number): number {
   return digits().slice(from, to).length;
 }
+
+/**
+ * `toReversed()`, which is `reverse()` on a copy — and the copy is the whole
+ * claim. `reverse` returns the same array it reversed, so `reversedHead` above
+ * cannot tell the two apart; this reads the *source* back afterwards, which is
+ * the only thing that fails if `toReversed` were wired to the in-place helper.
+ *
+ * Composed from `slice` and `reverse` rather than given a helper of its own, so
+ * there is no second place deciding what copying and reversing mean.
+ */
+export function reversedCopyLeavesTheSource(n: number): number {
+  const source = digits();
+  const copy = source.toReversed();
+  return copy[0]! * 1000 + copy[7]! * 100 + source[0]! * 10 + source[7]! + n * 0;
+}

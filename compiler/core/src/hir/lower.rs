@@ -32778,6 +32778,9 @@ impl<'a> FuncBuilder<'a> {
                 &origin,
             ));
         }
+        if name == "toReversed" {
+            return Ok(self.lower_to_reversed(id, receiver, &array, false));
+        }
 
         let Some((helper, arity, ty)) = numeric_array_method(&name, absent_result, &array) else {
             return Err(self.unsupported(member, "this array method"));
@@ -32860,6 +32863,42 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// `toReversed()` — `reverse()` on a copy, which is what the specification
+    /// says it is: *a new array with the elements in reverse order*.
+    ///
+    /// Composed from the two helpers that already exist rather than given a
+    /// third of its own. A `nts_array_to_reversed` would be a second place that
+    /// decides what copying and reversing mean, and the two could then disagree
+    /// about a sparse array, a view, or a reference element — the shape this
+    /// file has been bitten by repeatedly. It also costs no runtime surface, so
+    /// C, LLVM and the JVM answer for it the day it lands instead of two of them
+    /// answering and the third red-gating.
+    ///
+    /// `slice` takes a start and an end and its arity filling supplies the
+    /// infinity for "to the end", so the copy is the whole array.
+    fn lower_to_reversed(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        ty: &HirType,
+        references: bool,
+    ) -> ValueId {
+        let origin = self.origin(id);
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let end = self.push(
+            OpKind::ConstFloat(f64::INFINITY),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let (slice, reverse) = if references {
+            ("nts_array_slice_ref", "nts_array_reverse_ref")
+        } else {
+            ("nts_array_slice", "nts_array_reverse")
+        };
+        let copy = self.call_runtime(slice, vec![receiver, zero, end], ty.clone(), &origin);
+        self.call_runtime(reverse, vec![copy], ty.clone(), &origin)
+    }
+
     /// An array method where the elements are references.
     ///
     /// The same shape as the numeric family and a different set of helpers,
@@ -32892,6 +32931,9 @@ impl<'a> FuncBuilder<'a> {
         }
         if name == "unshift" {
             return self.lower_pushes(id, "nts_array_unshift_ref", receiver, arguments, &of_element);
+        }
+        if name == "toReversed" {
+            return Ok(self.lower_to_reversed(id, receiver, &array, true));
         }
         // `join`, whose separator defaults to a comma rather than to the
         // infinity the arity filling below supplies. Only on strings here:

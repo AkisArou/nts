@@ -109,3 +109,14 @@ export function joinedText(n: number): string {
     String(wide.join("—").length)
   );
 }
+
+/**
+ * `toReversed()` on an array of references, where the copy is of pointers. The
+ * source is read back afterwards for the reason the numeric fixture gives: it
+ * is the only arm that fails if the copy is not made.
+ */
+export function reversedCopyOfWords(n: number): string {
+  const source = words(n);
+  const copy = source.toReversed();
+  return copy[0]! + copy[2]! + source[0]! + source[2]!;
+}

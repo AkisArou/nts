@@ -111,7 +111,7 @@ fn the_report_counts_what_was_removed_and_what_remains() {
     let Some(prepared) = prepared("arrays") else {
         return;
     };
-    // Four checks remain across the fixture, and each is a place there is no
+    // Eight checks remain across the fixture, and each is a place there is no
     // proof to be had:
     //
     // - `at` and `readAt` index with a number nothing constrains.
@@ -119,10 +119,17 @@ fn the_report_counts_what_was_removed_and_what_remains() {
     //   analysis knows nothing about what a runtime call returns -- `fill` and
     //   `reverse` hand back the array they were given, but saying so needs a
     //   summary for each of them rather than a rule.
+    // - `reversedCopyLeavesTheSource` indexes two arrays neither of which has a
+    //   provable length: `toReversed()`'s result for the same reason as above,
+    //   and `digits()`'s because the analysis does not look through a call into
+    //   the literal it returns. Four reads, four checks.
     //
-    // The last two are the honest cost of adding array methods as opaque calls,
-    // and are what a `[0]` on a returned array costs until they are not opaque.
-    assert_eq!(prepared.checks_kept, 4, "only the unprovable ones remain");
+    // The last six are the honest cost of array methods being opaque calls, and
+    // are what a `[0]` on a returned array costs until they are not. **The
+    // number moving is this test working**: an arm added to the fixture that
+    // indexes a returned array has to show up here, or the count is measuring
+    // nothing.
+    assert_eq!(prepared.checks_kept, 8, "only the unprovable ones remain");
     assert!(
         prepared.checks_removed >= 15,
         "the literal stores and both loops should all be proven, got {}",
