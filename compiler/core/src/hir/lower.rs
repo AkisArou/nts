@@ -31432,10 +31432,15 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
+        // [`Self::literal_name`] rather than the node's text, because the
+        // decoder carries none on a literal: `o["twice"]()` names its method
+        // with a `STRING_LITERAL`, and reading `.text` there answered `None`
+        // for a name the program spells in full. Three call paths -- a string's
+        // methods, an array's and an object's -- each read it the same wrong
+        // way, so a bracketed method call was refused as "a computed method
+        // name" on every receiver there is.
         let name = self
-            .node(member)
-            .text
-            .clone()
+            .literal_name(member)
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
 
         // (runtime function, how many arguments after the receiver, result)
@@ -31587,10 +31592,15 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
+        // [`Self::literal_name`] rather than the node's text, because the
+        // decoder carries none on a literal: `o["twice"]()` names its method
+        // with a `STRING_LITERAL`, and reading `.text` there answered `None`
+        // for a name the program spells in full. Three call paths -- a string's
+        // methods, an array's and an object's -- each read it the same wrong
+        // way, so a bracketed method call was refused as "a computed method
+        // name" on every receiver there is.
         let name = self
-            .node(member)
-            .text
-            .clone()
+            .literal_name(member)
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
 
         // The runtime's array helpers read the block at one width:
@@ -32760,10 +32770,15 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
+        // [`Self::literal_name`] rather than the node's text, because the
+        // decoder carries none on a literal: `o["twice"]()` names its method
+        // with a `STRING_LITERAL`, and reading `.text` there answered `None`
+        // for a name the program spells in full. Three call paths -- a string's
+        // methods, an array's and an object's -- each read it the same wrong
+        // way, so a bracketed method call was refused as "a computed method
+        // name" on every receiver there is.
         let member_name = self
-            .node(member)
-            .text
-            .clone()
+            .literal_name(member)
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
 
         // A method nothing in the hierarchy declares. Falling back to the

@@ -2545,6 +2545,33 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### A bracketed method call (fixed)
+
+`o["twice"]()` was refused as **a computed method name**, for a name the program
+spells in full, on every receiver there is.
+
+Three call paths — a string's methods, an array's and an object's — each read
+the member's name as `node.text`, and **the decoder carries no text on a
+literal**. The name of `o["twice"]` lives on the literal's symbol, or in its type
+where it has no symbol. `literal_name` is the function that knows that and says
+so in its own comment — *"`"quoted"`, `["bracketed"]` and `[0]` all name a symbol
+called what they say"* — and it was written for the **read** path. None of the
+three call paths asked it. Each is one line now.
+
+It is not only a spelling. A member whose name is not an identifier has no
+dotted form at all, so `o["a-b"]()` is the *only* way to call one, and that was
+refused as computing a name the source writes as a constant.
+
+`examples/a-bracketed-method-call` is 5 exports over a class, a literal, an
+interface receiver, a name with no dotted form, and both spellings of one method
+in one function — 6 refusals on the pre-change binary, agreeing with node on all
+three backends.
+
+**Still refused, and differently:** `s["indexOf"]("a")` and `a["indexOf"](2)` on
+a string or an array. Those reach the element path rather than the member path —
+indexing a string is a character — and the refusal says *a call of something
+that is not a function*, which is at least about what the lowering did.
+
 #### `static get` / `static set`, and `super` in a static member (fixed)
 
 Two gaps that a sweep found and a census could not, because **neither refusal
