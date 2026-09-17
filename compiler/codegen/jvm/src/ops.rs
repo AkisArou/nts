@@ -275,6 +275,11 @@ pub fn array_external(name: &str, element: &str) -> Option<(&'static str, &'stat
         "nts_array_reverse" | "nts_array_reverse_ref" => {
             (RUNTIME, "arrayReverse", format!("({array}){result}"))
         }
+        // Only ever reached with a string array: the lowering refuses every
+        // other element type by name, because the default order converts each
+        // element to a string first and that conversion is the identity only
+        // here.
+        "nts_array_sort_str" => (RUNTIME, "arraySortStr", format!("({array}){result}")),
         "nts_array_join_str" => (
             RUNTIME,
             "arrayJoinStr",

@@ -1812,6 +1812,22 @@ NtsString *nts_array_join_str(const NtsArray *a, const NtsString *sep);
 NtsString *nts_array_join_num(const NtsArray *a, const NtsString *sep);
 NtsString *nts_view_join(const NtsView *view, const NtsString *sep);
 NtsArray *nts_array_reverse_ref(NtsArray *a);
+
+/* `xs.sort()` on an array of strings, with **no comparator**.
+ *
+ * The default comparison is the specification's and not a natural one: every
+ * element is converted to a string and the strings are compared by UTF-16 code
+ * unit. For an array that already holds strings the conversion is the identity,
+ * which is why this is the only element type answered here -- the numeric case
+ * would sort `[3, 1, 10]` to `[1, 10, 3]`, and building that means a string per
+ * element rather than a different comparison.
+ *
+ * **Stable**, which the specification has required since ES2019. A merge sort
+ * rather than `qsort`, whose order among equal elements is unspecified and
+ * differs between libcs -- so the same program would answer differently on two
+ * machines, and the differential would find it on one of them. Sorts in place
+ * and hands back the array it was given, as `reverse` does. */
+NtsArray *nts_array_sort_str(NtsArray *a);
 NTS_READS_ONLY double nts_array_index_of(const NtsArray *a, double needle);
 NTS_READS_ONLY double nts_array_last_index_of(const NtsArray *a, double needle);
 NTS_READS_ONLY bool nts_array_includes(const NtsArray *a, double needle);

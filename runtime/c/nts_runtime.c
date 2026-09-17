@@ -3290,6 +3290,64 @@ void nts_array_keep_first(NtsArray *a, double count) {
   }
 }
 
+/* One merge pass over `[from, mid)` and `[mid, to)`, writing into `into`.
+ *
+ * `<=` on the left-hand element rather than `<`, which is the whole of what
+ * makes this stable: where two compare equal the earlier one is taken first. */
+static void nts_merge_strings(NtsString **items, NtsString **into,
+                              uint32_t from, uint32_t mid, uint32_t to) {
+  uint32_t left = from;
+  uint32_t right = mid;
+  for (uint32_t at = from; at < to; at++) {
+    if (left < mid &&
+        (right >= to || nts_string_cmp(items[left], items[right]) <= 0)) {
+      into[at] = items[left++];
+    } else {
+      into[at] = items[right++];
+    }
+  }
+}
+
+NtsArray *nts_array_sort_str(NtsArray *a) {
+  uint32_t length = a->header.length;
+  if (length < 2u) {
+    return nts_array_same(a);
+  }
+  NtsString **items = NTS_ITEMS(a, NtsString *);
+  /* Aborts on failure, the way every other allocation here does. Returning the
+   * array unsorted would be the permissive direction: a silent wrong answer in
+   * the one situation where the program cannot notice. */
+  NtsString **scratch =
+      (NtsString **)malloc((size_t)length * sizeof(NtsString *));
+  if (!scratch) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  /* Bottom-up, so there is no recursion and no stack depth to bound: widths
+   * double until one run covers the array, and the two buffers swap roles each
+   * pass. An odd number of passes would leave the answer in `scratch`, so the
+   * result is copied back when it does. */
+  NtsString **from = items;
+  NtsString **into = scratch;
+  for (uint32_t width = 1u; width < length; width *= 2u) {
+    for (uint32_t at = 0; at < length; at += width * 2u) {
+      uint32_t mid = at + width < length ? at + width : length;
+      uint32_t end = at + width * 2u < length ? at + width * 2u : length;
+      nts_merge_strings(from, into, at, mid, end);
+    }
+    NtsString **swap = from;
+    from = into;
+    into = swap;
+  }
+  if (from != items) {
+    for (uint32_t at = 0; at < length; at++) {
+      items[at] = from[at];
+    }
+  }
+  free(scratch);
+  return nts_array_same(a);
+}
+
 NtsArray *nts_array_reverse_ref(NtsArray *a) {
   void **items = NTS_ITEMS(a, void *);
   for (uint32_t at = 0; at * 2u + 1u < a->header.length; at++) {

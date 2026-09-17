@@ -1457,6 +1457,32 @@ public final class NtsRuntime {
         for (int i = 0, j = a.length - 1; i < j; ++i, --j) { Object t = a[i]; a[i] = a[j]; a[j] = t; }
         return a;
     }
+    /** `xs.sort()` on an array of strings, with no comparator.
+     *
+     * The default order is the specification's: every element converted to a
+     * string and compared by UTF-16 code unit. `String.compareTo` is exactly
+     * that order, and the place the two could disagree is a surrogate pair
+     * against U+E000 — code *point* order puts U+E000 first and code *unit*
+     * order puts the pair first, and Java and node both put the pair first.
+     *
+     * `Arrays.sort(Object[])` is TimSort, which is stable, so the requirement
+     * the specification has made since ES2019 is met by the library here; the C
+     * side writes its own merge sort for the same reason, since `qsort` leaves
+     * the order among equal elements to the libc.
+     *
+     * Elements are `String` because only a string array reaches this — the
+     * lowering refuses every other element type by name. Were it ever widened,
+     * `undefined` would need partitioning to the end *without being compared*,
+     * which is what JavaScript does and what would make `compareTo` throw. */
+    public static Object[] arraySortStr(Object[] a) {
+        /* Natural ordering, which for `String` is `compareTo`. A comparator
+         * would have been a lambda, and a lambda is `invokedynamic` through
+         * `LambdaMetafactory` — which `runtime_jar.rs` rejects outright, because
+         * at the Android floor the bootstrap runs at first execution and one
+         * instance is not promised. The test said so before the jar shipped. */
+        Arrays.sort(a);
+        return a;
+    }
     public static String arrayJoinStr(double[] a, String separator) {
         StringBuilder out = new StringBuilder(NtsArrays.joinCapacity(a.length, separator, 3));
         for (int i = 0; i < a.length; ++i) { if (i != 0) { out.append(separator); } appendNumber(out, a[i]); }

@@ -32673,32 +32673,7 @@ impl<'a> FuncBuilder<'a> {
         // and `reduce`. All three are compiled as the loop. See
         // [`Self::lower_iteration`].
         if let Some(walked) = iteration_method(&name) {
-            let (callback, seed) = match (walked.kind, arguments) {
-                (Iteration::Reduce, [callback, seed]) => (*callback, Some(*seed)),
-                (
-                    Iteration::ForEach
-                    | Iteration::Map
-                    | Iteration::Any
-                    | Iteration::All
-                    | Iteration::FindIndex
-                    | Iteration::Filter
-                    | Iteration::Find
-                    // **`reduce` with no initial value belongs in this list**,
-                    // which is not obvious: it starts from the first element
-                    // and throws on an empty array, so it is a different loop
-                    // and a different failure. But the difference is made in
-                    // `lower_iteration`, where the loop is built -- here it is
-                    // one more kind arriving with a callback and no seed, and
-                    // saying so twice would be two arms with one body.
-                    | Iteration::Reduce,
-                    [callback],
-                ) => (*callback, None),
-                _ => {
-                    return Err(
-                        self.unsupported(id, &format!("a `{name}` call with this many arguments"))
-                    );
-                }
-            };
+            let (callback, seed) = self.iteration_arguments(id, &name, walked, arguments)?;
             if self.kind_of(callback) != Some(syntax::ARROW_FUNCTION) {
                 // `xs.map(f)` where `f` is a name is a genuine dispatch: which
                 // body runs is not written at the call. Monomorphization is the
@@ -32780,6 +32755,12 @@ impl<'a> FuncBuilder<'a> {
         }
         if name == "toReversed" {
             return Ok(self.lower_to_reversed(id, receiver, &array, false));
+        }
+        // Refused here rather than falling through to `this array method is not
+        // supported`, which says nothing about why a numeric `sort()` is a
+        // different question from a string one.
+        if matches!(name.as_str(), "sort" | "toSorted") {
+            return self.lower_sort(id, (member, &name), (receiver, &array, false), arguments);
         }
 
         let Some((helper, arity, ty)) = numeric_array_method(&name, absent_result, &array) else {
@@ -32863,6 +32844,107 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// The callback a compiled array method takes, and its seed where it has
+    /// one.
+    ///
+    /// **`reduce` with no initial value is in the one-argument list**, which is
+    /// not obvious: it starts from the first element and throws on an empty
+    /// array, so it is a different loop and a different failure. But the
+    /// difference is made in [`Self::lower_iteration`], where the loop is built
+    /// — here it is one more kind arriving with a callback and no seed, and
+    /// saying so twice would be two arms with one body.
+    fn iteration_arguments(
+        &self,
+        id: NodeId,
+        name: &str,
+        walked: Walked,
+        arguments: &[NodeId],
+    ) -> Result<(NodeId, Option<NodeId>), Diagnostic> {
+        match (walked.kind, arguments) {
+            (Iteration::Reduce, [callback, seed]) => Ok((*callback, Some(*seed))),
+            (
+                Iteration::ForEach
+                | Iteration::Map
+                | Iteration::Any
+                | Iteration::All
+                | Iteration::FindIndex
+                | Iteration::Filter
+                | Iteration::Find
+                | Iteration::Reduce,
+                [callback],
+            ) => Ok((*callback, None)),
+            _ => Err(self.unsupported(id, &format!("a `{name}` call with this many arguments"))),
+        }
+    }
+
+    /// `sort()` and `toSorted()`, with **no comparator**.
+    ///
+    /// The default comparison is the specification's and not a natural one:
+    /// every element is converted to a string and the strings are compared by
+    /// UTF-16 code unit. For an array that already holds strings that
+    /// conversion is the identity, which is the only case answered here.
+    ///
+    /// **A numeric array is refused by name rather than sorted numerically.**
+    /// `[3, 1, 10].sort()` is `[1, 10, 3]` in JavaScript, and answering
+    /// `[1, 3, 10]` would be a wrong answer where this is a missing one —
+    /// which is the more expensive of the two. Building the right one means a
+    /// string per element, which is a different helper rather than a different
+    /// comparison, and nothing in the profile asks for it: all three sites are
+    /// over strings.
+    ///
+    /// **A comparator is refused too**, and separately, because it is a
+    /// different feature: the callback would have to be reached from inside the
+    /// sort, which is neither the inlined-into-a-loop shape every other array
+    /// callback takes nor something a C function pointer can carry once the
+    /// arrow captures anything.
+    ///
+    /// `toSorted` is `sort` on a copy, composed from `slice` for the same
+    /// reason `toReversed` is: no second place deciding what copying means, and
+    /// no runtime surface for three backends to catch up with.
+    fn lower_sort(
+        &mut self,
+        id: NodeId,
+        at: (NodeId, &str),
+        receiver: (ValueId, &HirType, bool),
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let (member, name) = at;
+        let (receiver, ty, text) = receiver;
+        if !arguments.is_empty() {
+            return Err(self.unsupported(
+                member,
+                &format!("a `{name}` with a comparator, which would have to call back into it"),
+            ));
+        }
+        if !text {
+            return Err(self.unsupported(
+                member,
+                &format!(
+                    "a `{name}` with no comparator on an array that does not hold strings, \
+                     whose default order is by the string each element converts to"
+                ),
+            ));
+        }
+        let origin = self.origin(id);
+        let target = if name == "toSorted" {
+            let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+            let end = self.push(
+                OpKind::ConstFloat(f64::INFINITY),
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            self.call_runtime(
+                "nts_array_slice_ref",
+                vec![receiver, zero, end],
+                ty.clone(),
+                &origin,
+            )
+        } else {
+            receiver
+        };
+        Ok(self.call_runtime("nts_array_sort_str", vec![target], ty.clone(), &origin))
+    }
+
     /// `toReversed()` — `reverse()` on a copy, which is what the specification
     /// says it is: *a new array with the elements in reverse order*.
     ///
@@ -32934,6 +33016,9 @@ impl<'a> FuncBuilder<'a> {
         }
         if name == "toReversed" {
             return Ok(self.lower_to_reversed(id, receiver, &array, true));
+        }
+        if matches!(name, "sort" | "toSorted") {
+            return self.lower_sort(id, (member, name), (receiver, &array, text), arguments);
         }
         // `join`, whose separator defaults to a comma rather than to the
         // infinity the arity filling below supplies. Only on strings here:
