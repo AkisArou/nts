@@ -625,6 +625,64 @@ mod tests {
         assert!(said.contains("./deps/apple.resolved"), "does not name the file:\n{said}");
     }
 
+    /// npm is read and counted, and the root entry is not one of its own
+    /// dependencies.
+    ///
+    /// **The fixture in this tree pins zero packages**, so every run of this
+    /// path so far has been over an empty map -- a count that is right for the
+    /// wrong reason until something non-empty goes through it. npm writes the
+    /// root project as its own entry under the empty key.
+    #[test]
+    fn npm_counts_the_packages_and_not_the_root_entry() {
+        let directory = std::env::temp_dir().join("nts-npm-count-test");
+        std::fs::create_dir_all(&directory).expect("a directory to read from");
+        let directory = Utf8PathBuf::from_path_buf(directory).expect("a UTF-8 temporary");
+        std::fs::write(
+            directory.join("package-lock.json"),
+            r#"{"lockfileVersion":3,"packages":{
+                 "":{"name":"root"},
+                 "node_modules/left-pad":{"version":"1.3.0"},
+                 "node_modules/ms":{"version":"2.1.3"}}}"#,
+        )
+        .expect("a lockfile");
+        let mut declared = BTreeMap::new();
+        declared.insert(
+            "node-api-8".to_owned(),
+            Dependencies {
+                from: Resolver::Npm,
+                lockfile: Some("./package-lock.json".to_owned()),
+                packages: None,
+            },
+        );
+        let found = resolve(&directory, &declared, "node-api-8", None).expect("npm is read");
+        assert!(found.classpath.is_empty(), "npm contributed a classpath");
+        assert!(found.libs.is_empty() && found.cflags.is_empty(), "npm contributed flags");
+        assert_eq!(found.notes.len(), 1, "the claim was read and said nothing");
+        assert!(
+            found.notes[0].contains("2 npm package(s)"),
+            "the root entry was counted as a dependency: {}",
+            found.notes[0]
+        );
+    }
+
+    /// Named and unreadable is an error, everywhere here.
+    #[test]
+    fn a_lockfile_that_is_named_and_absent_is_an_error() {
+        let mut declared = BTreeMap::new();
+        declared.insert(
+            "node-api-8".to_owned(),
+            Dependencies {
+                from: Resolver::Npm,
+                lockfile: Some("./nothing-is-here.json".to_owned()),
+                packages: None,
+            },
+        );
+        let said = resolve(Utf8Path::new("."), &declared, "node-api-8", None)
+            .expect_err("a named lockfile that is absent is an error")
+            .to_string();
+        assert!(said.contains("npm lockfile"), "wrong reason: {said}");
+    }
+
     /// pkg-config has no lockfile, so the package names are the whole claim.
     #[test]
     fn pkg_config_with_no_packages_says_what_is_missing() {

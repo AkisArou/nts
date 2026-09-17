@@ -138,7 +138,18 @@ pub fn snapshot<S: SemanticSource>(
     }
 
     let snapshot = source.snapshot(tsconfig)?;
-    let configs = config_chain(tsconfig);
+    // **The canonical path here too.** This read `tsconfig` while the check
+    // above reads `canonical`, so a relative invocation stored
+    // `["tsconfig.json"]` and compared it against `["/abs/.../tsconfig.json"]`
+    // -- never equal, so the entry was rewritten on every run and the cache
+    // never hit at all. Introduced by the canonicalisation that fixed the key:
+    // one of the two derivations moved.
+    //
+    // Found by measuring. The cache and no-cache arms came back identical --
+    // 0.445s against 0.442s -- which is exactly what a cache that never hits
+    // looks like, and is why the null result was worth chasing rather than
+    // reporting.
+    let configs = config_chain(&canonical);
     let wanted = snapshot.sources.len() + configs.len();
     let recorded = configs.clone();
     let read: Vec<(String, u128)> = snapshot

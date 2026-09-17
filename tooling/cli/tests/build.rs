@@ -11,7 +11,7 @@
 //! lane keeps finding one layer up, and `nts build` exited zero on one for as
 //! long as it took to run `nm` on the result.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -3003,5 +3003,80 @@ fn the_bare_command_and_the_usual_help_spellings_all_print_usage() {
     assert!(
         String::from_utf8_lossy(&wrong.stderr).contains("nts help"),
         "the error does not point at the listing"
+    );
+}
+
+/// The snapshot cache hits on a second run, which nothing checked.
+///
+/// **A cache that never hits is invisible.** The tests around this asserted
+/// *correctness* -- that two projects do not share an entry -- and nothing
+/// asserted *effect*. So when the canonicalisation that fixed the key left the
+/// entry's `configs` field derived from the un-canonicalised path, the stored
+/// chain was `["tsconfig.json"]` and the compared chain was the absolute one:
+/// never equal, the entry rewritten on every run, and the whole cache dead. Every
+/// test still passed, because a build that recomputes everything is a correct
+/// build.
+///
+/// It was found by measuring -- cache and no-cache came back at 0.445s against
+/// 0.442s, which is what a cache that never hits looks like from outside.
+///
+/// Asserted by *writes*, not by timing: an entry rewritten is a miss, and a
+/// timing assertion on a half-second build would be a flake.
+#[test]
+fn a_second_build_hits_the_snapshot_cache_rather_than_rewriting_it() {
+    if !available() {
+        skip("node, the tsgo frontend and clang");
+        return;
+    }
+    let project = fixture("build-snapshot-hit", SHARED);
+    let cache = project.join("snapshots");
+    drop(std::fs::remove_dir_all(&cache));
+    // **Invoked with a relative path, from the project directory.** The first
+    // version of this test passed an absolute one and *passed the sabotage* --
+    // with an absolute path the two derivations of the config chain agree, so
+    // the bug it was written for cannot reproduce. That is the same blind spot,
+    // in the same session, in a test written for exactly that blind spot: every
+    // fixture path is absolute unless someone deliberately reaches for the
+    // other case.
+    let build_once = || {
+        Command::new(env!("CARGO_BIN_EXE_nts"))
+            .args(["build", "tsconfig.json"])
+            .current_dir(&project)
+            .env("NTS_SNAPSHOT_CACHE", &cache)
+            .output()
+            .expect("running nts build")
+    };
+    let stamps = || -> BTreeMap<PathBuf, std::time::SystemTime> {
+        std::fs::read_dir(&cache)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|entry| {
+                let at = entry.metadata().ok()?.modified().ok()?;
+                Some((entry.path(), at))
+            })
+            .collect()
+    };
+
+    let first = build_once();
+    assert!(first.status.success(), "{}", String::from_utf8_lossy(&first.stderr));
+    let after_first = stamps();
+    assert!(!after_first.is_empty(), "the first build wrote no cache entry at all");
+
+    // A second apart, so a rewrite is visible in the timestamp.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let second = build_once();
+    assert!(second.status.success(), "{}", String::from_utf8_lossy(&second.stderr));
+    let after_second = stamps();
+
+    let rewritten: Vec<&PathBuf> = after_second
+        .iter()
+        .filter(|(path, at)| after_first.get(*path).is_none_or(|was| was != *at))
+        .map(|(path, _)| path)
+        .collect();
+    assert!(
+        rewritten.is_empty(),
+        "the second build rewrote {} entr(ies), so the cache did not hit: {rewritten:?}",
+        rewritten.len()
     );
 }
