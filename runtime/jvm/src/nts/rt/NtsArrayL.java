@@ -235,6 +235,22 @@ public final class NtsArrayL {
         Arrays.fill(a.items, 0, a.length, value);
         return a;
     }
+    /** `xs.sort()` with no comparator, on a **growable** array of strings.
+     *
+     * The same answer as `NtsRuntime.arraySortStr(Object[])` and a separate
+     * method because a growable array is a class with a backing store and a
+     * length, not a Java array: sorting `items` whole would order the unused
+     * tail in with the live elements. `Arrays.sort(a, from, to)` takes the
+     * bounds, and is TimSort either way, so stability is the library's here
+     * exactly as it is there.
+     *
+     * Elements are `String` because only a string array reaches this — the
+     * lowering refuses every other element type by name. */
+    public static NtsArrayL sortStr(NtsArrayL a) {
+        java.util.Arrays.sort(a.items, 0, a.length);
+        return a;
+    }
+
     public static NtsArrayL reverse(NtsArrayL a) {
         Object[] items = a.items;
         for (int i = 0, j = a.length - 1; i < j; i++, j--) {

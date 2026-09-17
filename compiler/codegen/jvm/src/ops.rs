@@ -173,6 +173,14 @@ pub fn growable_external(name: &str, holds: &str) -> Option<(String, &'static st
         // the dropped slots.
         "set_length" | "set_length_ref" => ("setLength", format!("(L{class};D)V")),
         "reverse" | "reverse_ref" => ("reverse", format!("(L{class};)L{class};")),
+        // **A growable array's `sort` needs its own row, and that is the whole
+        // finding.** `array_external` gained `nts_array_sort_str` when the
+        // helper landed and this table did not, so `xs.sort()` worked and
+        // `xs.push(v); xs.sort()` declined — and, worse, so did a program that
+        // pushed a *different* reference array anywhere, because growability is
+        // decided for reference arrays together. The JVM is the only backend
+        // that names its methods, so it is the only one that could say so.
+        "sort_str" => ("sortStr", format!("(L{class};)L{class};")),
         "slice" | "slice_ref" => ("slice", format!("(L{class};DD)L{class};")),
         // `_value` joins the two above rather than needing a third method:
         // the class comes from what the array *holds*, and an `NtsValue` is a
