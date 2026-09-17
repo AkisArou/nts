@@ -2557,12 +2557,20 @@ and the third-largest cause in the corpus.
   new.target                                     a meta property
   accessor v = 3                                 the `accessor` keyword
   [[1],[2]].flat()                               `flat` on an array of references
-  JSON.stringify, JSON.parse, Object.freeze      a global member with no definition here
-  Object.assign, Math.max(...xs)                 a global member, or a *spread* into an intrinsic
+  JSON.stringify, JSON.parse                     a global member with no definition here
+  Object.assign, Object.freeze                   …and two more of them
+  Math.max(...xs)                                a spread element
   xs.sort(cmp), xs.flatMap(f)                    an array method that is not one of the eight
-  n.toFixed(2), s.at(0)                          a string or number method this compiler lacks
-  s.startsWith("a", 1)                           an arity a runtime helper does not take
+  xs.reduce(f) with no seed                      …and an arity of one that is a different loop
+  n.toFixed(2), n.toPrecision(3)                 a number method this compiler lacks
+  s.startsWith("a", 1), s.localeCompare(t)       a string method, or an arity a helper lacks
 ```
+
+**Every line re-probed on 2026-09-17**, after three of the previous list's rows
+had gone stale without anyone noticing: a module-scope object-literal method,
+`s.at(0)` and `Math.max(a, b, c)` were all listed as refused while working. A row
+here is a claim with a date on it, and the only thing that finds a stale one is
+running it — which takes a minute for the whole block.
 
 None is a designed deferral, and none has a row of its own — recorded together
 because **a missing row is worse than a ✗**: a ✗ has been looked at, and an
