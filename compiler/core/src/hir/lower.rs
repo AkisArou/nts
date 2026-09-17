@@ -20948,7 +20948,20 @@ impl<'a> FuncBuilder<'a> {
             // by the walk rather than here: lowered on its own it has a free
             // name, and "`base`, a name from an enclosing scope" says which.
             // That is a closure, and this is not the path that builds one.
-            Some(syntax::EMPTY_STATEMENT) => Ok(()),
+            // **Two statements that declare no value and do nothing at run
+            // time.** An empty statement is obvious; a class declaration inside
+            // a function is not, and needs nothing done here for a reason worth
+            // writing down: the driver walks *every* `CLASS_DECLARATION` node
+            // wherever it sits, so the layout and the members are already
+            // lowered, and `new L()` resolves through the checker's type rather
+            // than through a binding. The same reason `bind_nested_function`
+            // answers `Ok(())` for a function nothing captures.
+            //
+            // A method that reads an enclosing local is not answered by this and
+            // is not meant to be: the member is lowered by a builder with no
+            // enclosing bindings, so it refuses inside the method and names the
+            // name. `blockers/a-class-capturing-its-enclosing-scope` holds it.
+            Some(syntax::EMPTY_STATEMENT | syntax::CLASS_DECLARATION) => Ok(()),
             Some(syntax::FUNCTION_DECLARATION) => self.bind_nested_function(id),
             Some(syntax::THROW_STATEMENT) => self.lower_throw(id),
             Some(syntax::TRY_STATEMENT) => self.lower_try(id),

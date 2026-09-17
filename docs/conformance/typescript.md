@@ -2540,6 +2540,30 @@ are 0 to 3. None is a designed deferral, and none has a row of its own —
 recorded together because **a missing row is worse than a ✗**: a ✗ has been
 looked at, and an absence has not.
 
+#### A class declared inside a function (fixed)
+
+`function f() { class L { … } … }` was refused as `a class declaration is not
+supported by this lowering yet` — the generic fallthrough for a statement kind
+nothing handled — and the whole enclosing function went with it.
+
+Nothing had to be built. The driver walks **every** `CLASS_DECLARATION` node
+wherever it sits, so the layout and the members were already lowered, and
+`new L()` resolves through the checker's type rather than through a binding. The
+statement declares no value, which is the same reason `bind_nested_function`
+answers `Ok(())` for a function nothing captures — the two share an arm now.
+
+`examples/a-class-declared-inside-a-function` is 116 cases across four exports on
+all three backends, four refusals on the pre-change binary. `twoInOneFunction`
+declares two and they answer differently, so a layout shared between them would
+show in the value rather than only in a count.
+
+**A member that reads an enclosing local is not answered and should not be.** It
+refuses inside the method, naming the name — a class that closes over its scope
+needs the capture machinery an arrow has, and a class has nowhere to put the
+captures: its instances are the user's, one per `new`, while a closure's
+environment is one per *creation of the closure*.
+`blockers/a-class-capturing-its-enclosing-scope` holds it.
+
 #### `catch (e) { … ; throw e; }` (fixed)
 
 Rethrowing the caught value was refused, by the **backend**:
