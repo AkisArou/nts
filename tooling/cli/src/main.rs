@@ -4104,16 +4104,33 @@ fn napi_include(project: &Utf8Path) -> Option<Utf8PathBuf> {
     if let Ok(named) = std::env::var("NTS_NAPI_INCLUDE") {
         return Some(Utf8PathBuf::from(named));
     }
-    let mut at = Some(project);
-    while let Some(directory) = at {
-        let candidate = directory
-            .join("node_modules")
-            .join("node-api-headers")
-            .join("include");
-        if candidate.join("node_api.h").exists() {
-            return Some(candidate);
+    // **The pinned clone before the npm package**, which is the order
+    // `tooling/conformance/build.sh` already chose and states the reason for:
+    //
+    // > `third_party/node/src` first, because it is the only candidate that is
+    // > *pinned*: the clone is at the tag in `.tool-versions`, so `node_api.h`
+    // > there and `deps/uv/include/uv.h` beside it are the same commit as the
+    // > `lib` being ported. `node-api-headers` does not carry `uv.h` at all,
+    // > which is how the system one used to get in -- and libuv is not
+    // > ABI-stable, so a version match by luck is what that was.
+    //
+    // This function was a second, narrower answer to that question: it knew
+    // only about `node_modules/node-api-headers` and the system directory, so
+    // in a checkout that vendors the headers it reported *none* and every
+    // `node-addon` product in this tree refused to build. Two derivations of
+    // one fact, and the narrower one was the guard.
+    //
+    // Each candidate is looked for at every ancestor, because the project may
+    // be an example several directories inside the checkout.
+    for relative in ["third_party/node/src", "node_modules/node-api-headers/include"] {
+        let mut at = Some(project);
+        while let Some(directory) = at {
+            let candidate = directory.join(relative);
+            if candidate.join("node_api.h").exists() {
+                return Some(candidate);
+            }
+            at = directory.parent();
         }
-        at = directory.parent();
     }
     let system = Utf8PathBuf::from("/usr/include/node");
     system.join("node_api.h").exists().then_some(system)
@@ -4355,7 +4372,17 @@ fn link_c(
     // compiled, so a missing toolchain is a message rather than forty
     // `node_api.h: No such file` lines.
     let napi = if addon {
-        let directory = out.parent().and_then(Utf8Path::parent).and_then(Utf8Path::parent);
+        // **Absolute before walking up**, because this climbs four levels out of
+        // the output directory to find the project, and `nts build` with no
+        // argument makes that `.nts/build/<product>/<target>` -- whose fourth
+        // parent is `""`, not the project. So the search for `node_api.h` began
+        // and ended in the current directory, and every addon in this tree
+        // refused with "add `node-api-headers` to the project" on a checkout
+        // that vendors the headers. The same build with an absolute project
+        // path worked, which is the fourth time tonight that sentence has been
+        // the diagnosis.
+        let from = absolute(out);
+        let directory = from.parent().and_then(Utf8Path::parent).and_then(Utf8Path::parent);
         let project = directory.and_then(Utf8Path::parent).unwrap_or_else(|| Utf8Path::new("."));
         Some(napi_include(project).ok_or_else(|| {
             anyhow!(

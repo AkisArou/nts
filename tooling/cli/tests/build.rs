@@ -3080,3 +3080,64 @@ fn a_second_build_hits_the_snapshot_cache_rather_than_rewriting_it() {
         rewritten.len()
     );
 }
+
+const ADDON: &str = r#"
+import { defineConfig, library } from "@nts/config";
+export default defineConfig({
+  products: {
+    addon: library.node({ entry: "./src/main.ts", apiVersion: 8 }),
+  },
+});
+"#;
+
+/// The build finds `node_api.h` itself, from a project directory, with no help.
+///
+/// **`an_addon_loads_in_node` sets `NTS_NAPI_INCLUDE`**, which returns on the
+/// first line of `napi_include` -- so the discovery underneath it had never been
+/// run by any test. The test handed the answer to the thing under test, and two
+/// defects lived behind that:
+///
+///   - `napi_include` knew only about `node_modules/node-api-headers` and
+///     `/usr/include/node`, while `tooling/conformance/build.sh` had long
+///     preferred the *pinned* `third_party/node/src` for a stated reason. Two
+///     derivations of one question, and the narrower one was in the build.
+///   - the project it searched from is four parents above the output directory,
+///     and `nts build` with no argument makes that `.nts/build/<p>/<t>`, whose
+///     fourth parent is `""`. So the search began and ended in the current
+///     directory.
+///
+/// Together: every `node-addon` in this tree refused with "add
+/// `node-api-headers` to the project" on a checkout that vendors the headers.
+///
+/// So this sets nothing and passes no path. It runs from the project directory
+/// because that is the invocation that failed.
+#[test]
+fn an_addon_finds_its_headers_without_being_told_where_they_are() {
+    if !available() {
+        skip("node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let headers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/node/src");
+    if !headers.join("node_api.h").exists() {
+        skip("the vendored node headers this discovers");
+        return;
+    }
+    let project = fixture("build-addon-discovers", ADDON);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("build")
+        .current_dir(&project)
+        .env_remove("NTS_NAPI_INCLUDE")
+        .output()
+        .expect("running nts build");
+    assert!(
+        run.status.success(),
+        "the build could not find headers this checkout vendors:\n{}{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(
+        project.join(".nts/build/addon/node-api-8-x86_64/addon.node").is_file(),
+        "no addon:\n{}",
+        String::from_utf8_lossy(&run.stdout)
+    );
+}
