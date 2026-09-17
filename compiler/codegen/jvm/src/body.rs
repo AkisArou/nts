@@ -22,7 +22,7 @@
 use nts_codegen_common::symbols::jvm_member_name;
 use nts_codegen_common::{Copy, block_order, destruct, edge_copies};
 use nts_core::hir::{
-    BinOp, BlockId, Func, HirType, ManagedType, OpKind, Program, Terminator, UnOp, ValueId,
+    BinOp, BlockId, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId,
 };
 use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::code::{Code, Label};
@@ -555,20 +555,38 @@ impl<'a> Emitter<'a> {
                     OpKind::Unary { op: UnOp::Truthy, operand } => {
                         !matches!(self.ty(*operand), HirType::Bool)
                     }
-                    // A managed value converted to a boolean is truthiness,
-                    // which branches and rejoins and so needs the same slot for
-                    // the same reason -- `Code` counts one linear depth, and an
-                    // arm that pushes on both sides of a join is counted twice.
-                    // A string is excluded here because `ops::convert` refuses
-                    // it: its truthiness is `length != 0` and nothing has
-                    // produced one.
+                    // Anything converted to a boolean is truthiness, which
+                    // branches and rejoins and so needs the slot -- `Code`
+                    // counts one linear depth, and an arm that pushes on both
+                    // sides of a join is counted twice.
+                    //
+                    // **The same condition `ops::convert` uses, and it has to
+                    // be.** This asked whether the operand was `Managed` and
+                    // not `String`; the emitter asks `to == Bool && from !=
+                    // Bool` and calls `materialize_truth` for every one of
+                    // them. Two derivations of "does this function need a
+                    // scratch slot", and the gap was a `f64`:
+                    //
+                    //     async function g(): Promise<boolean> { return true; }
+                    //     export async function f(): Promise<boolean> {
+                    //       return await g();
+                    //     }
+                    //
+                    // `f__resume` reads the payload as an `f64` and emits
+                    // `convert %13 : bool`, which this did not count, so no
+                    // slot was reserved and the whole function declined with
+                    // *a truthiness test with no scratch slot*.
+                    //
+                    // `Promise.resolve(b)` is clean because it reaches the
+                    // payload another way and the lowering emits `truthy`
+                    // there, which the arm above already counts -- the same
+                    // job, two ops, and only one of them was known here.
+                    //
+                    // Over-reserving costs one `int` local in a function that
+                    // does not use it. Under-reserving refuses the function.
                     OpKind::Convert(operand) => {
                         matches!(self.func.values[value.0 as usize].ty, HirType::Bool)
-                            && matches!(
-                                self.ty(*operand),
-                                HirType::Managed(managed)
-                                    if !matches!(managed, ManagedType::String)
-                            )
+                            && !matches!(self.ty(*operand), HirType::Bool)
                     }
                     // An `instanceof` chain with a join; see `crossing_values`.
                     // It needs no scratch slot -- the result goes to the value's

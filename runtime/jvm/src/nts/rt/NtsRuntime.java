@@ -850,6 +850,25 @@ public final class NtsRuntime {
         } while (at >= 0);
         return out.append(s, from, s.length()).toString();
     }
+    /**
+     * `s[i]` -- a subscript, which stops outside the string.
+     *
+     * <p>Not {@link #strAt}, which is `String.prototype.at`: relative indexing
+     * and `undefined` outside. `ops.rs` pointed `nts_str_at` at that one, so
+     * `"abc"[5]` returned `null` on this backend, the null reached
+     * `String.length()`, and the program died with a `NullPointerException`
+     * where C and LLVM declined the case. One HIR name meaning two things.
+     *
+     * <p>C's `nts_str_at_into` is the contract: `nts_to_integer`, then a bounds
+     * stop. Its own comment says why -- `s[i]` answers `undefined` in
+     * JavaScript, so rather than invent a third answer it stops, as an index
+     * outside an array does. This mirrors it call for call.
+     */
+    public static String strIndex(String s, double index) {
+        return String.valueOf(s.charAt(bounds(s.length(), toInteger(index))));
+    }
+
+    /** `String.prototype.at`: relative, and `null` -- undefined -- outside. */
     public static String strAt(String s, double index) {
         int at = NtsArrays.offset(index, s.length());
         return at < 0 ? null : String.valueOf(s.charAt(at));

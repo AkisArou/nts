@@ -576,7 +576,12 @@ fn math_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         "nts_bool_to_string" => (RUNTIME, "boolToString", "(Z)Ljava/lang/String;"),
         "nts_tag_name" => (RUNTIME, "tagName", "(I)Ljava/lang/String;"),
 
-        "nts_str_at" => (RUNTIME, "strAt", STRING_D_TO_STRING),
+        // `s[i]`, which stops outside the string. **Not `strAt`**, which is
+        // `String.prototype.at` -- relative indexing and `null` outside -- and
+        // which this named until `"abc"[5]` returned a null that reached
+        // `String.length()` and killed the program, where C and LLVM declined
+        // the case. One HIR name, two meanings, and the JVM had the other one.
+        "nts_str_at" => (RUNTIME, "strIndex", STRING_D_TO_STRING),
         "nts_str_char_at" => (RUNTIME, "strCharAt", STRING_D_TO_STRING),
         "nts_str_code_point_at" => (RUNTIME, "strCodePointAt", "(Ljava/lang/String;D)D"),
         "nts_str_index_of_from" => (
