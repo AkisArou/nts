@@ -1,4 +1,18 @@
-// expect: an object literal that is not an object
+// expect: compiles
+//
+// **A regression guard, as of 2026-09-17.** This was a blocker: an empty object
+// literal was refused as `an object literal that is not an object`, which is a
+// true sentence about the *type* and the wrong one about the value.
+//
+// `{}` as a type is every value except `null` and `undefined` -- a number is
+// assignable to it -- so it represents as `Erased`, and that rule is correct
+// and untouched: `examples/an-empty-object-literal`'s `numberInAnEmptySlot` is
+// the control for it. The literal is a different question, and is now built as
+// the object it is and erased afterwards.
+//
+// The four controls below are what established that, and they read the same way
+// now with the verdict flipped: one field was the whole difference, which is
+// what said the problem was the *layout* rather than the type.
 //
 // `{}` with no members. `internal/async-hooks.ts:199` is
 // `const topLevelResource: object = {};` -- a sentinel whose only job is to be

@@ -379,6 +379,17 @@ fn generic_classes(
 /// existed, `sink.write(v)` on a `Sink`-typed receiver found no declaration in
 /// the hierarchy and was refused -- 739 occurrences across the corpus and the
 /// most frequent single shape in two other lanes' inventories.
+/// Whether a member's declaration is one with a body, rather than a signature.
+///
+/// The three kinds [`members_of`] lowers. A `METHOD_SIGNATURE` -- what a type
+/// literal or an interface declares -- is a shape and has no function behind it.
+fn implemented_member(probe: &FuncBuilder, node: NodeId) -> bool {
+    matches!(
+        probe.kind_of(node),
+        Some(syntax::METHOD_DECLARATION | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR)
+    )
+}
+
 /// Anonymous object types that declare methods, so a call through one resolves.
 ///
 /// `{ v: 1, twice() { return this.v * 2 } }` is an object with a method, and
@@ -422,7 +433,11 @@ fn is_anonymous_shape(name: &str) -> bool {
     matches!(name, "__object" | "__type")
 }
 
-fn collect_anonymous_objects(snapshot: &SemanticSnapshot, hierarchy: &mut Hierarchy) {
+fn collect_anonymous_objects(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    hierarchy: &mut Hierarchy,
+) {
     for (index, record) in snapshot.types.iter().enumerate() {
         let TypeKind::Object { properties } = &record.kind else {
             continue;
@@ -437,6 +452,26 @@ fn collect_anonymous_objects(snapshot: &SemanticSnapshot, hierarchy: &mut Hierar
         }
         let mut declared = Vec::new();
         for property in properties {
+            // **Only a member with a body.** An anonymous object type is made
+            // by the checker for two different things: an object *literal*,
+            // whose members are lowered as functions, and a *type literal* --
+            // `(e: { emit(s: string): boolean })` -- whose members are a shape
+            // and nothing else. Registering the second makes `declaring`
+            // resolve a call to a function nobody wrote, turning a refusal that
+            // named the receiver's shape into a cascade naming `Type11#emit`.
+            //
+            // The property record tells them apart by where it was declared: a
+            // literal's member is a `METHOD_DECLARATION` or an accessor, a type
+            // literal's is a `METHOD_SIGNATURE`. And the widened type a
+            // `const` takes carries the *same* declaration node as the literal
+            // it came from, which is what lets both be registered from one
+            // rule.
+            if !property
+                .declaration
+                .is_some_and(|node| implemented_member(probe, node))
+            {
+                continue;
+            }
             // The same three keys `accessor_callee` and `callee_for` build, and
             // the record says exactly which apply: a method is its bare name,
             // an accessor is `get `/`set ` and carries which of the two it
@@ -661,7 +696,7 @@ fn collect_hierarchy(
     }
 
     collect_interfaces(snapshot, &probe, &mut hierarchy);
-    collect_anonymous_objects(snapshot, &mut hierarchy);
+    collect_anonymous_objects(snapshot, &probe, &mut hierarchy);
 
     // A slot for every method something overrides, numbered against the class
     // that first declares it. A method nothing overrides gets none, which is why
