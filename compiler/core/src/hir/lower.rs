@@ -7426,17 +7426,79 @@ fn numeric_array_method(
     })
 }
 
-fn iteration_method(name: &str) -> Option<Iteration> {
-    Some(match name {
-        "forEach" => Iteration::ForEach,
-        "map" => Iteration::Map,
-        "reduce" => Iteration::Reduce,
-        "some" => Iteration::Any,
-        "every" => Iteration::All,
-        "findIndex" => Iteration::FindIndex,
-        "filter" => Iteration::Filter,
-        "find" => Iteration::Find,
+/// Which end of the array a walk starts from.
+///
+/// `findLast`, `findLastIndex` and `reduceRight` are `find`, `findIndex` and
+/// `reduce` **walking the other way and nothing else**: same callback shape,
+/// same delivery, same result, same seed. A variant of [`Iteration`] apiece
+/// would have made every match on it three arms longer to say that they are not
+/// different.
+///
+/// So the loop reads this in exactly three places -- where the cursor starts,
+/// what stops it, and how it moves -- and everything else is blind to it, which
+/// is the claim being made.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    Forward,
+    Backward,
+}
+
+/// The names one iteration of a compiled array method binds.
+#[derive(Clone, Copy)]
+struct StepNames {
+    /// The synthetic cursor the loop carries.
+    index: u32,
+    /// The callback's element parameter.
+    element: u32,
+    /// Its index parameter, where the callback took one.
+    position: Option<u32>,
+    /// A fold's accumulator and the callback's name for it.
+    fold: Option<(u32, u32)>,
+}
+
+/// Where a fold's cursor begins.
+///
+/// Two booleans about one question -- which element the accumulator starts as
+/// and which end the walk runs from -- so they travel together rather than as
+/// two positional flags a caller can swap.
+#[derive(Clone, Copy)]
+struct ReduceStart {
+    /// No initial value was written, so the outermost element *becomes* the
+    /// accumulator and the walk starts one step in from it.
+    from_first: bool,
+    backwards: bool,
+}
+
+/// An array method compiled as a loop.
+#[derive(Clone, Copy)]
+struct Walked {
+    kind: Iteration,
+    direction: Direction,
+    /// What the source called it. `findLast` is `find` reversed, and a
+    /// diagnostic saying `find` would send a reader to a call they did not
+    /// write.
+    method: &'static str,
+}
+
+fn iteration_method(name: &str) -> Option<Walked> {
+    let (kind, direction, method) = match name {
+        "forEach" => (Iteration::ForEach, Direction::Forward, "forEach"),
+        "map" => (Iteration::Map, Direction::Forward, "map"),
+        "reduce" => (Iteration::Reduce, Direction::Forward, "reduce"),
+        "reduceRight" => (Iteration::Reduce, Direction::Backward, "reduceRight"),
+        "some" => (Iteration::Any, Direction::Forward, "some"),
+        "every" => (Iteration::All, Direction::Forward, "every"),
+        "findIndex" => (Iteration::FindIndex, Direction::Forward, "findIndex"),
+        "findLastIndex" => (Iteration::FindIndex, Direction::Backward, "findLastIndex"),
+        "filter" => (Iteration::Filter, Direction::Forward, "filter"),
+        "find" => (Iteration::Find, Direction::Forward, "find"),
+        "findLast" => (Iteration::Find, Direction::Backward, "findLast"),
         _ => return None,
+    };
+    Some(Walked {
+        kind,
+        direction,
+        method,
     })
 }
 
@@ -7453,8 +7515,13 @@ enum Step {
     None,
     /// A source expression, as `for (;; i++)` writes it.
     Expression(NodeId),
-    /// One added to a carried name, for a loop this compiler synthesized.
-    Increment(u32),
+    /// A carried name moved by a constant, for a loop this compiler
+    /// synthesized.
+    ///
+    /// The delta rather than a `Decrement` beside this, because `reduceRight`
+    /// and the two `findLast`s are the same loop walking the other way and a
+    /// second variant would be these four lines with one operator changed.
+    Count { name: u32, by: f64 },
     /// The cursor of a `for...of`, advanced the way its walk requires.
     ///
     /// In the latch rather than at the end of the body, which is the whole
@@ -7523,21 +7590,6 @@ enum Iteration {
 }
 
 impl Iteration {
-    /// What the source calls it, for a diagnostic that names the method the
-    /// author wrote rather than the shape this compiler turned it into.
-    const fn name(self) -> &'static str {
-        match self {
-            Self::ForEach => "forEach",
-            Self::Map => "map",
-            Self::Reduce => "reduce",
-            Self::Any => "some",
-            Self::All => "every",
-            Self::FindIndex => "findIndex",
-            Self::Filter => "filter",
-            Self::Find => "find",
-        }
-    }
-
     /// How many callback parameters this lowering binds.
     ///
     /// The index and the array are the ones every callback of these *may*
@@ -14040,20 +14092,20 @@ impl<'a> FuncBuilder<'a> {
                     let next = self.advance(&walk, sequence, at, &origin);
                     self.bindings.insert(cursor, next);
                 }
-                Step::Increment(symbol) => {
+                Step::Count { name, by } => {
                     let origin = self.breakables[record.depth].origin.clone();
-                    let at = self.bindings[&symbol];
-                    let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+                    let at = self.bindings[&name];
+                    let delta = self.push(OpKind::ConstFloat(by), HirType::NUMBER, origin.clone());
                     let next = self.push(
                         OpKind::Binary {
                             op: BinOp::Add,
                             lhs: at,
-                            rhs: one,
+                            rhs: delta,
                         },
                         HirType::NUMBER,
                         origin,
                     );
-                    self.bindings.insert(symbol, next);
+                    self.bindings.insert(name, next);
                 }
             }
             let stepped = self.carried_now(&record.carried);
@@ -14537,7 +14589,18 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Err(self.unsupported(id, "an `Array.from` that does not build an array"));
         };
-        self.lower_iteration(id, built, &element_ty, callback, Iteration::Map, None)
+        self.lower_iteration(
+            id,
+            built,
+            &element_ty,
+            callback,
+            Walked {
+                kind: Iteration::Map,
+                direction: Direction::Forward,
+                method: "map",
+            },
+            None,
+        )
     }
 
     fn lower_array_from(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
@@ -32609,8 +32672,8 @@ impl<'a> FuncBuilder<'a> {
         // `xs.forEach(v => ...)` is a loop written as a call, and so are `map`
         // and `reduce`. All three are compiled as the loop. See
         // [`Self::lower_iteration`].
-        if let Some(kind) = iteration_method(&name) {
-            let (callback, seed) = match (kind, arguments) {
+        if let Some(walked) = iteration_method(&name) {
+            let (callback, seed) = match (walked.kind, arguments) {
                 (Iteration::Reduce, [callback, seed]) => (*callback, Some(*seed)),
                 (
                     Iteration::ForEach
@@ -32650,7 +32713,7 @@ impl<'a> FuncBuilder<'a> {
                 Some(seed) => Some(self.lower_expression(seed)?),
                 None => None,
             };
-            return self.lower_iteration(id, receiver, element, callback, kind, seed);
+            return self.lower_iteration(id, receiver, element, callback, walked, seed);
         }
 
         // `fill` is the one method whose element type does not have to be a
@@ -33162,6 +33225,77 @@ impl<'a> FuncBuilder<'a> {
     /// The seed is read with the same `ArrayGet` the body reads every other
     /// element with, so the accumulator's first value and its later ones cannot
     /// disagree about what an element is.
+    /// Bind what one iteration gives the callback: the element, the position
+    /// where the callback asked for one, and the accumulator where there is
+    /// one. Returns the element, which the delivery also needs.
+    ///
+    /// The position is the **same value** the element was just read with, so
+    /// the body sees the index it is looking at rather than a second count that
+    /// could drift from it. The refusal this replaced said the index "would
+    /// need the loop counter's identity to survive into the body, and this has
+    /// no test for that yet"; it survives, because `at` is read from the
+    /// bindings *inside* the body block, after `begin_loop` has made the
+    /// carried names block parameters.
+    fn bind_step(
+        &mut self,
+        receiver: ValueId,
+        element_ty: &HirType,
+        names: StepNames,
+        origin: &Origin,
+    ) -> ValueId {
+        let at = self.bindings[&names.index];
+        let value = self.push(
+            OpKind::ArrayGet {
+                array: receiver,
+                index: at,
+                checked: true,
+            },
+            element_ty.clone(),
+            origin.clone(),
+        );
+        self.bindings.insert(names.element, value);
+        if let Some(position) = names.position {
+            self.bindings.insert(position, at);
+        }
+        if let Some((accumulator, name)) = names.fold {
+            self.bindings.insert(name, self.bindings[&accumulator]);
+        }
+        value
+    }
+
+    /// Whether a counted walk has an element left, from whichever end it runs.
+    ///
+    /// Forwards the cursor stops at the length; backwards it stops below zero.
+    /// `Ge` against a fresh zero rather than `Gt` against minus one, because the
+    /// second spells the same test in the constant that also means "not found"
+    /// three functions down, and a reader meeting `-1` in this file should find
+    /// one meaning for it.
+    fn still_walking(
+        &mut self,
+        at: ValueId,
+        length: ValueId,
+        backwards: bool,
+        origin: &Origin,
+    ) -> ValueId {
+        let (op, limit) = if backwards {
+            (
+                BinOp::Ge,
+                self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
+            )
+        } else {
+            (BinOp::Lt, length)
+        };
+        self.push(
+            OpKind::Binary {
+                op,
+                lhs: at,
+                rhs: limit,
+            },
+            HirType::Bool,
+            origin.clone(),
+        )
+    }
+
     fn reduce_start(
         &mut self,
         id: NodeId,
@@ -33169,26 +33303,63 @@ impl<'a> FuncBuilder<'a> {
         element_ty: &HirType,
         length: ValueId,
         seed: Option<ValueId>,
-        from_first: bool,
+        start: ReduceStart,
     ) -> Result<(ValueId, Option<ValueId>), Diagnostic> {
+        let ReduceStart {
+            from_first,
+            backwards,
+        } = start;
         let origin = self.origin(id);
+        // The end the walk begins at: the first element going forwards, the last
+        // going back. `reduceRight` starting anywhere else is the whole of what
+        // makes it a different answer rather than a different spelling.
+        let outermost = |lower: &mut Self| {
+            if backwards {
+                let one = lower.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+                lower.push(
+                    OpKind::Binary {
+                        op: BinOp::Sub,
+                        lhs: length,
+                        rhs: one,
+                    },
+                    HirType::NUMBER,
+                    origin.clone(),
+                )
+            } else {
+                lower.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone())
+            }
+        };
         if !from_first {
-            let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin);
-            return Ok((zero, seed));
+            let start = outermost(self);
+            return Ok((start, seed));
         }
         self.guard_reduce_has_elements(id, length, &origin)?;
-        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let edge = outermost(self);
         let first = self.push(
             OpKind::ArrayGet {
                 array: receiver,
-                index: zero,
+                index: edge,
                 checked: true,
             },
             element_ty.clone(),
             origin.clone(),
         );
-        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin);
-        Ok((one, Some(first)))
+        // One step in from the element that became the accumulator.
+        let step = self.push(
+            OpKind::ConstFloat(if backwards { -1.0 } else { 1.0 }),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let next = self.push(
+            OpKind::Binary {
+                op: BinOp::Add,
+                lhs: edge,
+                rhs: step,
+            },
+            HirType::NUMBER,
+            origin,
+        );
+        Ok((next, Some(first)))
     }
 
     fn lower_iteration(
@@ -33197,11 +33368,16 @@ impl<'a> FuncBuilder<'a> {
         receiver: ValueId,
         element_ty: &HirType,
         callback: NodeId,
-        kind: Iteration,
+        walked: Walked,
         seed: Option<ValueId>,
     ) -> Result<ValueId, Diagnostic> {
-        let method = kind.name();
-        let (parameters, body) = self.callback_shape(callback, kind)?;
+        let Walked {
+            kind,
+            direction,
+            method,
+        } = walked;
+        let backwards = direction == Direction::Backward;
+        let (parameters, body) = self.callback_shape(callback, kind, method)?;
         let names = parameters.as_slice();
         // Where the element is, which is not "the last one" once an index may
         // follow it. `reduce` takes the accumulator first, everything else
@@ -33223,7 +33399,17 @@ impl<'a> FuncBuilder<'a> {
         let from_first = matches!(kind, Iteration::Reduce) && seed.is_none();
         let index = self.synthetic_symbol();
         let length = self.push(OpKind::Length(receiver), HirType::NUMBER, origin.clone());
-        let (start, seed) = self.reduce_start(id, receiver, element_ty, length, seed, from_first)?;
+        let (start, seed) = self.reduce_start(
+            id,
+            receiver,
+            element_ty,
+            length,
+            seed,
+            ReduceStart {
+                from_first,
+                backwards,
+            },
+        )?;
         self.bindings.insert(index, start);
 
         // What the loop carries: the index always, the accumulator when there
@@ -33245,48 +33431,19 @@ impl<'a> FuncBuilder<'a> {
         let record = self.begin_loop(id, &carried, true, &origin)?;
 
         let at = self.bindings[&index];
-        let cond = self.push(
-            OpKind::Binary {
-                op: BinOp::Lt,
-                lhs: at,
-                rhs: length,
-            },
-            HirType::Bool,
-            origin.clone(),
-        );
+        let cond = self.still_walking(at, length, backwards, &origin);
         self.test_loop(cond, &record);
         self.switch_to(record.body);
 
-        let at = self.bindings[&index];
-        let value = self.push(
-            OpKind::ArrayGet {
-                array: receiver,
-                index: at,
-                checked: true,
-            },
-            element_ty.clone(),
-            origin.clone(),
-        );
-        self.bindings.insert(element_symbol, value);
-        // The counter itself, under the name the callback gave it. It is the
-        // same value the `ArrayGet` above just indexed with, so the body sees
-        // the position it is looking at rather than a second count that could
-        // drift from it.
-        //
-        // The refusal this replaces said the index "would need the loop
-        // counter's identity to survive into the body, and this has no test for
-        // that yet". It survives: `at` is read from `self.bindings[&index]`
-        // *inside* the body block, after `begin_loop` has made the carried
-        // names block parameters, so it is the current iteration's value and
-        // not the one the loop started with.
-        if let Some(index_symbol) = index_symbol {
-            self.bindings.insert(index_symbol, at);
-        }
-        if let (Iteration::Reduce, Some(accumulator), Some(name)) =
-            (kind, accumulator, names.first())
-        {
-            self.bindings.insert(*name, self.bindings[&accumulator]);
-        }
+        let step_names = StepNames {
+            index,
+            element: element_symbol,
+            position: index_symbol,
+            fold: matches!(kind, Iteration::Reduce)
+                .then(|| accumulator.zip(names.first().copied()))
+                .flatten(),
+        };
+        let value = self.bind_step(receiver, element_ty, step_names, &origin);
 
         let result =
             Self::iteration_delivery(kind, produced, accumulator, index, value, element_ty);
@@ -33319,8 +33476,32 @@ impl<'a> FuncBuilder<'a> {
                 &format!("a `{method}` callback that can finish without returning a value"),
             ));
         }
-        self.end_loop(&record, Step::Increment(index))?;
+        self.end_loop(
+            &record,
+            Step::Count {
+                name: index,
+                by: if backwards { -1.0 } else { 1.0 },
+            },
+        )?;
 
+        self.iteration_result(id, receiver, kind, produced, accumulator, origin)
+    }
+
+    /// What the whole call evaluates to, once the loop has run.
+    ///
+    /// Split out of [`Self::lower_iteration`] because it is a question about the
+    /// *method* rather than about the loop -- every arm reads what the loop
+    /// left behind and none of them can see how it walked, which is the claim
+    /// `Direction` depends on.
+    fn iteration_result(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        kind: Iteration,
+        produced: Option<ValueId>,
+        accumulator: Option<u32>,
+        origin: Origin,
+    ) -> Result<ValueId, Diagnostic> {
         match (kind, produced, accumulator) {
             // `forEach` evaluates to `undefined`, which is `void` here. Nothing
             // reads it -- an expression statement is the only place this
@@ -33733,8 +33914,8 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         callback: NodeId,
         kind: Iteration,
+        method: &str,
     ) -> Result<(Vec<u32>, NodeId), Diagnostic> {
-        let method = kind.name();
         let parameters = self.callback_parameters(callback, method)?;
         // The element, plus the accumulator where the method has one, plus an
         // optional index. The third parameter every one of these callbacks may
