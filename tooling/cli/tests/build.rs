@@ -1015,7 +1015,39 @@ fn objects_are_reused_but_never_when_a_header_changed() {
 
     // Reusing must not change the artifact.
     let before = std::fs::read(&artifact).expect("the artifact");
+    // **And must actually reuse**, which nothing here asserted.
+    //
+    // The three assertions around this one are that something was *written*,
+    // that the artifact is unchanged, and that a changed header invalidates --
+    // correctness and invalidation, and no claim that a second build does less
+    // work. A cache that recompiles everything and hands back an identical
+    // object satisfies all three, and that is exactly how the snapshot cache
+    // died unnoticed for six hours on the same day this was added: a build that
+    // recomputes everything is a correct build.
+    //
+    // Asserted by mtime rather than by timing, for the same reason: a timing
+    // assertion on a build this small is a flake.
+    let stamps = || -> BTreeMap<PathBuf, std::time::SystemTime> {
+        std::fs::read_dir(&cache)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|item| Some((item.path(), item.metadata().ok()?.modified().ok()?)))
+            .collect()
+    };
+    let compiled = stamps();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
     assert!(build(&project, &[]).ok, "the cached build failed");
+    let rebuilt: Vec<PathBuf> = stamps()
+        .into_iter()
+        .filter(|(path, at)| compiled.get(path).is_none_or(|was| was != at))
+        .map(|(path, _)| path)
+        .collect();
+    assert!(
+        rebuilt.is_empty(),
+        "the second build recompiled {} object(s), so nothing was reused: {rebuilt:?}",
+        rebuilt.len()
+    );
     assert_eq!(std::fs::read(&artifact).expect("the artifact"), before, "a reused build differs");
 
     // **The direction that matters.** A header the object was compiled against
