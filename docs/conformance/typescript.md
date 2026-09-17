@@ -2523,6 +2523,34 @@ overloads, abstract classes, `Error` subclassing with `instanceof`,
 properties, `implements`, local *function* declarations including recursive
 ones, IIFEs, and the comma operator.
 
+**Sixty more shapes probed on 2026-09-17**, all passing and none of them
+obvious enough to have been assumed: parameter properties, `override`, method
+chaining through `this`, `delete`, the `in` operator, `void`, an optional chain
+on a call result, a rename-with-default in a destructuring, an arrow capturing
+`this` inside a method, template literals with expressions, `padStart`,
+`Number.isInteger`, `Math.trunc`, `Array.isArray`, `Object.keys`, `as const`
+indexed, a union of literal types as a parameter, a recursive arrow, a
+`readonly` field written in a constructor, two interfaces on one class,
+`map`/`filter`/`reduce`, `Array.from` with a map function, `parseInt`, logical
+and exponent assignment, `Map` iteration, `[Symbol.iterator]` on a class,
+`Promise.all`, a `catch (e: unknown)` narrowed by `instanceof`, an `Error`
+subclass with extra fields, a getter on an object literal returning `this`,
+bigint arithmetic, `charAt`, `charCodeAt`, `codePointAt`, `s[0]`, `slice`,
+`substring`, `replace`, `indexOf` with a `fromIndex`, `padEnd`, a generic class
+with two instantiations, a constrained generic function, a conditional type, a
+mapped type, a discriminated-union `switch`, an abstract class with a
+constructor, an interface extending an interface, a private constructor behind a
+static factory, a getter declared only on a derived class, a labelled
+`continue`, a `do`/`while` with `break`, `switch (true)`, a comma in a `for`
+update, `Array.prototype.at`, a nested ternary chain, `String(sym)`, and a
+`for await` over an async generator.
+
+The point of writing them down is that **a sweep's passes cost as much to
+produce as its failures** and are thrown away by default. Nine of the ten
+type-level shapes in the last battery passed; the tenth — a method call on an
+array of a *union* of classes — is the erased-union family, 50 distinct sites
+and the third-largest cause in the corpus.
+
 **Still refused, each confirmed with a one-shape fixture:**
 
 ```text
@@ -2547,6 +2575,45 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 *in one position*, and the row as written sent a reader to build something that
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
+
+#### An `await` of a plain value (fixed)
+
+`await 1` is legal TypeScript and means `Promise.resolve(1)` — **a suspension of
+one tick rather than none**. It was refused, and refusing was right for exactly
+that reason: treating it as the identity would make a program that awaits a
+plain value and one that does not into the same program, and they are not.
+
+The tick is what `Promise.resolve` already builds, so the value is wrapped in a
+settled promise and awaited — the spelling the specification gives it. Nothing
+restates the ordering rule; the runtime's microtask queue does, as it does for
+every other resolved promise.
+
+`examples/an-await-of-a-plain-value` is 7 exports over a number, a string, a
+boolean, an object, a loop, a frame mixing both kinds of suspension, and
+`ordering` — which runs a helper whose continuation is scheduled one tick out
+and then awaits a plain number. **An `await` lowered as the identity agrees with
+node on every other export and fails that one.** 7 refusals on the pre-change
+binary.
+
+##### And two backends that disagreed about a `boolean` payload
+
+Writing the boolean arm found a defect with nothing to do with the feature.
+`async function g(): Promise<boolean>` — an ordinary shape — **declined on LLVM
+on the gated binary** with `a conversion from Float { bits: 64 } to Bool`: the
+payload round-trips through the frame's slot as a double and the resume reads a
+`Bool`, which is one instruction in C and not one instruction in LLVM.
+
+Every arm of LLVM's conversion table is `<instr> <from> to <to>`, so a
+conversion that is a *comparison* could not be in it. C writes `(bool)v`, which
+the standard defines as `v != 0`, and `fcmp une` is that — `une` rather than
+`one` so `NaN` is true, matching the backend that already worked rather than
+inventing a second answer.
+
+**The JVM declines the same shape for its own reason**, `a truthiness test with
+no scratch slot`, in `f__resume`. That is the JVM backend's frame machinery and
+is left to the lane that owns it; it is recorded here because a shape that
+compiles on two backends and not the third is invisible to any single-backend
+check, and `examples/an-await-of-a-plain-value` deliberately does not contain it.
 
 #### `Object.values` and `Object.entries` (fixed)
 

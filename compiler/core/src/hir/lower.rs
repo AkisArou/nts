@@ -14247,12 +14247,23 @@ impl<'a> FuncBuilder<'a> {
             .first()
             .ok_or_else(|| self.unsupported(id, "an `await` of nothing"))?;
         let promise = self.lower_expression(operand)?;
+        // **`await 1` is legal and means `Promise.resolve(1)`**, which is a
+        // suspension of one tick rather than none. This used to refuse rather
+        // than treat it as the identity, and refusing was right for that
+        // reason: the tick is observable, so a program that awaits a plain
+        // value and one that does not are different programs.
+        //
+        // The tick is what `Promise.resolve` already builds, so the value is
+        // wrapped in a settled promise and awaited -- the spelling the
+        // specification gives it. Nothing here restates the ordering rule; the
+        // runtime's queue does, as it does for every other resolved promise.
+        let promise = match self.values[promise.0 as usize].ty.clone() {
+            HirType::Managed(ManagedType::Promise(_)) => promise,
+            payload => self.settled_around(id, promise, payload)?,
+        };
         let HirType::Managed(ManagedType::Promise(payload)) =
             self.values[promise.0 as usize].ty.clone()
         else {
-            // `await 1` is legal and means `Promise.resolve(1)`, which is a
-            // suspension of one tick rather than none. Refused rather than
-            // treated as the identity, because the tick is observable.
             return Err(self.unsupported(id, "an `await` of something that is not a promise"));
         };
         let origin = self.origin(id);
@@ -15759,6 +15770,26 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The body of [`Self::lower_promise_static`], once the shape is known.
+    /// A promise already settled with `value`, for `await` to suspend on.
+    ///
+    /// The same two steps `Promise.resolve(v)` takes -- allocate, settle -- and
+    /// deliberately not a shortcut past them: a reaction on a settled promise
+    /// still runs one tick later, and that tick is the whole difference between
+    /// `await v` and `v`.
+    fn settled_around(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        payload: HirType,
+    ) -> Result<ValueId, Diagnostic> {
+        let ty = HirType::Managed(ManagedType::Promise(Box::new(payload.clone())));
+        let origin = self.origin(id);
+        let promise = self.runtime_call("nts_promise_new", Vec::new(), ty, origin);
+        let result = AsyncResult { promise, payload };
+        self.settle(id, &result, Some(value))?;
+        Ok(promise)
+    }
+
     fn settled_promise(
         &mut self,
         id: NodeId,

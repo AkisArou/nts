@@ -1959,6 +1959,8 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
                 } else {
                     format!("{out} = add {from_ty} {}, 0", name(*operand))
                 }
+            } else if matches!(to, HirType::Bool) && !matches!(from, HirType::Bool) {
+                is_not_zero(&out, from, from_ty, &name(*operand))
             } else {
                 let instruction = conversion(from, to, func)?;
                 format!(
@@ -3297,6 +3299,28 @@ fn converted(
 /// Named per direction rather than derived, because getting one of these
 /// backwards is a wrong answer that compiles: `sitofp` where `uitofp` belongs
 /// reads 4294967295 as -1.
+/// A conversion **to** `bool`, which is a comparison rather than a cast.
+///
+/// Every other conversion is one instruction with a `to` clause, so this one
+/// cannot go in [`conversion`]'s table at all. The C backend writes `(bool)v`,
+/// which the standard defines as `v != 0`; this is the same conversion spelled
+/// the way LLVM spells it rather than a second opinion about what it means.
+///
+/// `une` and not `one`, so `NaN` is true, because `NaN != 0` is true in C and
+/// the backend that already worked is the one to agree with. Nothing reaches
+/// here with a `NaN` in practice — the conversion arises where a promise whose
+/// payload is a `boolean` round-trips through its frame slot, which holds `0.0`
+/// or `1.0` — but two backends have to answer alike for the value that does
+/// arrive *and* the one that could.
+fn is_not_zero(out: &str, from: &HirType, from_ty: &str, operand: &str) -> String {
+    let (compare, zero) = if matches!(from, HirType::Float { .. }) {
+        ("fcmp une", "0.0")
+    } else {
+        ("icmp ne", "0")
+    };
+    format!("{out} = {compare} {from_ty} {operand}, {zero}")
+}
+
 fn conversion(from: &HirType, to: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
     Ok(match (from, to) {
         (HirType::Int { signed: true, .. } | HirType::BigInt, HirType::Float { .. }) => "sitofp",
