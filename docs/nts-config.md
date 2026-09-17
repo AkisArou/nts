@@ -1065,6 +1065,31 @@ writes that is silently permissive in the direction that costs correctness -- a
 truncated lockfile resolves to fewer jars and the build succeeds with one
 missing.
 
+### Where a pinned jar is looked for
+
+Most specific first, and a mismatch at any of them is a failure rather than a
+reason to try the next -- a file at the expected path with the wrong bytes is a
+supply-chain signal, not a miss.
+
+```text
+<beside the lockfile>/<artifact>-<version>.jar
+~/.m2/repository/<group split on dots>/<artifact>/<version>/<artifact>-<version>.jar
+$GRADLE_USER_HOME/caches/modules-2/files-2.1/<group>/<artifact>/<version>/<sha1>/…
+```
+
+**Vendoring wins**, because it is the one location under the project's own
+control and it survives a machine with no package-manager caches at all.
+
+The two ecosystem layouts differ in a way worth stating rather than recalling:
+Maven splits the group on dots into directories, Gradle keeps it as a single
+directory name and puts the file under a digest directory *it* computes -- so
+the leaf is read rather than constructed. `GRADLE_USER_HOME` is honoured because
+Gradle honours it and CI images routinely move the cache off `$HOME`.
+
+Verified end to end against a real `gson-2.9.1.jar` from a real Gradle cache:
+located, digest checked, 216 of its classes inside the executable jar, and the
+artifact runs.
+
 ### What it does not do yet
 
 An AAR carries dependency jars in `libs/` and an APK needs them dexed. Neither
