@@ -2561,6 +2561,7 @@ and the third-largest cause in the corpus.
   Object.assign, Math.max(...xs)                 a global member, or a *spread* into an intrinsic
   xs.sort(cmp), xs.flatMap(f)                    an array method that is not one of the eight
   n.toFixed(2), s.at(0), "abc".split(",", 2)     a string or number method, or an arity of one
+  s.startsWith("a", 1)                           …and an arity a runtime helper does not take
 ```
 
 None is a designed deferral, and none has a row of its own — recorded together
@@ -2575,6 +2576,29 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 *in one position*, and the row as written sent a reader to build something that
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
+
+#### `String.prototype.concat` at any arity (fixed)
+
+The runtime's `nts_concat` joins two strings and the method takes any number.
+One arity check, failing in **opposite directions**:
+
+- **More than one argument was refused** — *a string method with this many
+  arguments*, which is true of the helper and not of the method. Concatenation
+  is associative and exact on strings, so pairing left to right gives the string
+  the n-ary call gives. Same argument as `String.fromCharCode`, same reason
+  `Math.hypot` is excluded from it.
+- **No arguments emitted C that clang rejects.** The arity check padded the
+  missing argument, and the filler does not know the parameter is a string, so
+  it padded a *number*: `nts_concat(v0, v1)` with a `double` in the second slot.
+  **No diagnostic from this compiler at all** — the only thing that said
+  anything was the C compiler, one stage later, about a line nobody wrote.
+  `s.concat()` is `s`, which is the specification's answer and the fold's empty
+  case.
+
+`examples/string-concat-at-any-arity` is 6 exports including both directions and
+a nested call whose receiver is another fold's result. **4 refusals** on the
+pre-change binary, plus the empty call, which is not among them because it
+produced no refusal to count.
 
 #### `Math.max` and `Math.min` at any arity (fixed)
 

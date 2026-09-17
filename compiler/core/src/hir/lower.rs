@@ -31998,6 +31998,30 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(id);
 
+        // **`s.concat(a, b, c)` is the fold**, for the reason
+        // `String.fromCharCode` folds two screens up: concatenation is
+        // associative and exact on strings, so pairing them left to right gives
+        // the string the n-ary call gives. The runtime offers two at a time and
+        // the arity check below would otherwise refuse anything else as `a
+        // string method with this many arguments`, which is true of the helper
+        // and not of the method.
+        // **`s.concat()` is `s`.** With no arguments there is nothing to join,
+        // and the arity check below would otherwise pad the missing one -- with
+        // a *number*, because the filler does not know this parameter is a
+        // string. That emitted `nts_concat(v0, v1)` with a `double` in the
+        // second slot, which clang rejects, on the gated binary, with no
+        // diagnostic from this compiler at all.
+        if helper == "nts_concat" && args.len() == 1 {
+            return Ok(receiver);
+        }
+        if helper == "nts_concat" && args.len() > 2 {
+            let mut folded = args[0];
+            for value in args.into_iter().skip(1) {
+                folded = self.runtime_call("nts_concat", vec![folded, value], ty.clone(), origin.clone());
+            }
+            return Ok(folded);
+        }
+
         // A count `repeat` will not accept throws before the helper is
         // reached. See `guard_repeat_count`.
         if helper == "nts_str_repeat" && args.len() == 2 {
