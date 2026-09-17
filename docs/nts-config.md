@@ -1095,13 +1095,30 @@ Verified end to end against a real `gson-2.9.1.jar` from a real Gradle cache:
 located, digest checked, 216 of its classes inside the executable jar, and the
 artifact runs.
 
-### What it does not do yet
+### Where a runtime-scoped pin ends up
 
-An AAR carries dependency jars in `libs/` and an APK needs them dexed. Neither
-is built, so both **refuse** when a runtime-scoped pin is present rather than
-packaging an artifact that links and then dies at the first call into one. No
-fixture in this tree has such a pin, so it is a refusal nothing reaches -- which
-is a more honest state than an untested packaging path.
+| Product | Where it goes |
+| --- | --- |
+| jar (executable) | unpacked *inside* the artifact, which is what makes a runnable jar self-contained |
+| `aar` | `libs/`, because the **consumer** dexes an AAR and their build resolves it the way AGP does |
+| APK | **dexed in**, because an APK *is* the consumer and has no resolver at install time |
+| `jar` (library) | nothing; a library's consumer resolves its dependencies |
+
+Shading into `classes.jar` was the alternative for the AAR and is wrong for the
+same reason the manifest is carried rather than merged: it would duplicate the
+dependency wherever two libraries carrying it meet in one application.
+
+**All three were a refusal for half a day**, on the argument that no fixture in
+the tree has a runtime-scoped pin, so the packaging would be untested. That was
+true of the *fixtures* and not of the *tools*: `d8` is installed and a jar is
+buildable, so the path can be exercised for real -- which it now is, against a
+real `gson-2.9.1.jar` and a jar built by the test. A refusal kept because the
+inputs are awkward to make is a different thing from one kept because the output
+cannot be checked, and only the second is honest.
+
+The tests read the artifact rather than the exit status. A build that resolves a
+jar, verifies its digest and then hands `d8` everything but it exits zero and
+ships an app that dies at its first call.
 
 ## 7. Decided, and open
 

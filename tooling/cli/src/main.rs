@@ -2899,22 +2899,21 @@ fn build_jvm(
     }
     let classes = package_jvm(name, product, out, &java)?;
     match product.kind.as_str() {
-        // **Refused rather than dropped.** An AAR carries dependency jars in
-        // `libs/` and an APK needs them dexed; neither is built here yet, and
-        // an artifact packaged without them links and dies at the first call
-        // into one. No fixture in this tree has a runtime-scoped pin, so this
-        // is a refusal nothing reaches -- which is the honest state to leave it
-        // in rather than an untested packaging path.
-        "aar" if !needs.classpath.is_empty() => bail!(
-            "product `{name}` is an AAR and its packages pin {} dependency jar(s), which              this build cannot place in `libs/` yet. Build it as a `jar`, which carries              them, or drop the pin",
-            needs.classpath.len()
-        ),
-        "aar" => println!("  {}", package_aar(name, product, out, &classes, target, tsconfig)?),
-        "application" | "executable" if target.os == "android" && !needs.classpath.is_empty() => {
-            bail!(
-                "product `{name}` is an APK and its packages pin {} dependency jar(s), which                  must be dexed into it and this build cannot do that yet. Drop the pin, or                  build a `jar` target",
-                needs.classpath.len()
-            )
+        // **An AAR carries its dependencies in `libs/`, an APK dexes them in.**
+        // Both were refused this morning on the argument that no fixture in the
+        // tree has a runtime-scoped pin, so the packaging would be untested --
+        // which was true of the *fixtures* and not of the *tools*: `d8` is here
+        // and a real jar is buildable, so the path can be exercised for real.
+        // A refusal kept because the inputs were hard to make is a different
+        // thing from one kept because the output cannot be checked.
+        "aar" => {
+            println!(
+                "  {}",
+                package_aar(name, product, out, &classes, target, tsconfig, &needs.classpath)?
+            );
+            if !needs.classpath.is_empty() {
+                println!("  with {} pinned jar(s) in libs/", needs.classpath.len());
+            }
         }
         // **Not every JVM application is an APK.** `t.android` and `t.jvm` are
         // the same backend and different platforms, and only one of them has a
@@ -2932,8 +2931,21 @@ fn build_jvm(
             let sdk = sdk.expect("an APK's SDK is resolved before the emitter runs");
             println!(
                 "  {}",
-                package_apk(name, product, out, &classes, target, tsconfig, sdk, config_roots)?
+                package_apk(
+                    name,
+                    product,
+                    out,
+                    &classes,
+                    target,
+                    tsconfig,
+                    sdk,
+                    config_roots,
+                    &needs.classpath,
+                )?
             );
+            if !needs.classpath.is_empty() {
+                println!("  with {} pinned jar(s) dexed into it", needs.classpath.len());
+            }
             println!(
                 "  signed with the debug key at {}, which is not a release key",
                 out.join("debug.keystore")
@@ -3438,12 +3450,28 @@ fn package_aar(
     classes: &Utf8Path,
     target: &nts_build::config::Target,
     tsconfig: &Utf8Path,
+    depends: &[Utf8PathBuf],
 ) -> Result<Utf8PathBuf> {
     let staged = out.join("aar");
     drop(std::fs::remove_dir_all(&staged));
     std::fs::create_dir_all(&staged).with_context(|| format!("creating {staged}"))?;
     std::fs::copy(classes, staged.join("classes.jar"))
         .with_context(|| format!("copying {classes} into the AAR"))?;
+
+    // **`libs/` rather than shaded into `classes.jar`**, and for the same
+    // reason the manifest is carried rather than merged: the *consumer* dexes
+    // an AAR, so their build puts `libs/*.jar` on the classpath the way AGP
+    // already does. Shading would duplicate the dependency wherever two
+    // libraries carrying it meet in one application.
+    if !depends.is_empty() {
+        let libs = staged.join("libs");
+        std::fs::create_dir_all(&libs).with_context(|| format!("creating {libs}"))?;
+        for jar in depends {
+            let named = jar.file_name().unwrap_or("dependency.jar");
+            std::fs::copy(jar, libs.join(named))
+                .with_context(|| format!("copying {jar} into the AAR's libs/"))?;
+        }
+    }
 
     let project = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
     let fragments = android_manifest_fragments(target, tsconfig);
@@ -3670,6 +3698,7 @@ fn package_apk(
     tsconfig: &Utf8Path,
     sdk: &AndroidSdk,
     config_roots: &[Utf8PathBuf],
+    depends: &[Utf8PathBuf],
 ) -> Result<Utf8PathBuf> {
     let min_api = android_min_api(target);
     let staged = out.join("apk");
@@ -3690,6 +3719,13 @@ fn package_apk(
         .arg(staged.as_str())
         .arg(classes.as_str())
         .arg(runtime.as_str());
+    // **And every pinned jar**, for exactly the reason the runtime is not
+    // optional one comment above: an APK has no resolver at install time, so a
+    // class that is not in the dex is a `NoClassDefFoundError` at the first
+    // call rather than a build failure.
+    for jar in depends {
+        d8.arg(jar.as_str());
+    }
     run_tool(d8, "d8", "convert the class files to dex")?;
 
     let unsigned = staged.join("unsigned.apk");

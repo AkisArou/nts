@@ -3141,3 +3141,137 @@ fn an_addon_finds_its_headers_without_being_told_where_they_are() {
         String::from_utf8_lossy(&run.stdout)
     );
 }
+
+const AAR_WITH_DEPENDENCY: &str = r#"
+import { defineConfig, library } from "@nts/config";
+export default defineConfig({
+  products: {
+    sdk: library.android({ entry: "./src/main.ts", minSdk: 29 }),
+  },
+  dependencies: {
+    "android-29": { from: "gradle", lockfile: "./deps/gradle.tsv" },
+  },
+});
+"#;
+
+/// An AAR carries its pinned jars in `libs/`, where a consumer's build finds them.
+///
+/// **Not shaded into `classes.jar`**, for the reason the manifest is carried
+/// rather than merged: the consumer dexes an AAR, so their build resolves
+/// `libs/*.jar` the way AGP already does, and shading would duplicate the
+/// dependency wherever two libraries carrying it meet.
+///
+/// This was a refusal until the packaging existed, on the argument that no
+/// fixture had a runtime-scoped pin so the path would be untested. That was true
+/// of the fixtures and not of the tools -- a jar is buildable here, so the path
+/// is exercised for real.
+#[test]
+fn an_aar_carries_its_pinned_jars_in_libs() {
+    if !jdk() {
+        skip("the tsgo frontend and a JDK");
+        return;
+    }
+    let project = fixture("build-aar-dependency", AAR_WITH_DEPENDENCY);
+    if !vendored_jar(&project, "real") {
+        skip("a JDK that can build the jar to depend on");
+        return;
+    }
+    std::fs::rename(project.join("deps/maven.tsv"), project.join("deps/gradle.tsv"))
+        .expect("the lockfile this config names");
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+
+    let artifact = project.join(".nts/build/sdk/android-29-aarch64/sdk.aar");
+    assert!(artifact.is_file(), "no aar at {}:\n{}", artifact.display(), run.stdout);
+    let listed = Command::new("jar")
+        .arg("--list")
+        .arg("--file")
+        .arg(&artifact)
+        .output()
+        .expect("jar --list");
+    let inside = String::from_utf8_lossy(&listed.stdout);
+    assert!(
+        inside.contains("libs/greeter-1.0.0.jar"),
+        "the pin was resolved and not carried:\n{inside}"
+    );
+    // And still where it was: a dependency must not displace the AAR's own
+    // classes or the manifest a consumer merges.
+    assert!(inside.contains("classes.jar"), "the AAR lost its own classes:\n{inside}");
+    assert!(inside.contains("AndroidManifest.xml"), "the AAR lost its manifest:\n{inside}");
+}
+
+const APK_WITH_DEPENDENCY: &str = r#"
+import { defineConfig, app } from "@nts/config";
+export default defineConfig({
+  products: {
+    demo: app.android({
+      entry: "./src/main.ts",
+      id: "dev.nts.deps",
+      minSdk: 29,
+      compileSdk: 36,
+    }),
+  },
+  dependencies: {
+    "android-29": { from: "gradle", lockfile: "./deps/gradle.tsv" },
+  },
+});
+"#;
+
+/// An APK dexes its pinned jars in, because there is no resolver at install time.
+///
+/// The same argument the runtime jar already carries one level down: a class
+/// that is not in the dex is a `NoClassDefFoundError` at the first call rather
+/// than a build failure. An AAR can carry a jar because its consumer dexes it;
+/// an APK *is* the consumer.
+///
+/// **The dex is read, not the build's exit status.** A build that resolved the
+/// jar, verified its digest and then handed `d8` everything but it exits zero
+/// and ships an app that dies on first use.
+#[test]
+fn an_apk_dexes_its_pinned_jars_into_itself() {
+    let Some((tools, _)) = android_sdk() else {
+        skip("an Android SDK with build-tools and platform 36");
+        return;
+    };
+    if !jdk() {
+        skip("the tsgo frontend and a JDK");
+        return;
+    }
+    let project = fixture("build-apk-dependency", APK_WITH_DEPENDENCY);
+    if !vendored_jar(&project, "real") {
+        skip("a JDK that can build the jar to depend on");
+        return;
+    }
+    std::fs::rename(project.join("deps/maven.tsv"), project.join("deps/gradle.tsv"))
+        .expect("the lockfile this config names");
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+
+    let apk = project.join(".nts/build/demo/android-36-aarch64/demo.apk");
+    assert!(apk.is_file(), "no apk at {}:\n{}", apk.display(), run.stdout);
+    let out = project.join("dex");
+    std::fs::create_dir_all(&out).expect("a directory to unpack into");
+    let unpacked = Command::new("unzip")
+        .args(["-o", "-q"])
+        .arg(&apk)
+        .arg("classes.dex")
+        .arg("-d")
+        .arg(&out)
+        .status();
+    if !unpacked.is_ok_and(|status| status.success()) {
+        skip("unzip, to read the dex out of the apk");
+        return;
+    }
+    let dex = std::fs::read(out.join("classes.dex")).expect("the dex");
+    let found = |needle: &str| {
+        dex.windows(needle.len()).any(|window| window == needle.as_bytes())
+    };
+    assert!(
+        found("Lcom/example/Greeter;"),
+        "the pinned jar was verified and not dexed in"
+    );
+    // The control: the program's own class is there too, so the search is not
+    // matching something every dex happens to contain.
+    assert!(found("Lnts/gen/Program;"), "the program's own class is missing from the dex");
+    let _ = tools;
+}
