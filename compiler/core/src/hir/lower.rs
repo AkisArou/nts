@@ -14353,6 +14353,12 @@ impl<'a> FuncBuilder<'a> {
             // and `undefined` for one that was not registered.
             ("Symbol", "keyFor", [argument]) => Some(self.lower_symbol_key_for(id, *argument)),
             ("Object", "keys", [argument]) => Some(self.decide_object_keys(id, *argument)),
+            ("Object", "values", [argument]) => {
+                Some(self.decide_object_columns(id, *argument, false))
+            }
+            ("Object", "entries", [argument]) => {
+                Some(self.decide_object_columns(id, *argument, true))
+            }
             ("Object", "is", [left, right]) => Some(self.decide_object_is(id, *left, *right)),
             ("Object", "hasOwn", [argument, key]) => Some(self.decide_has_own(id, *argument, *key)),
             // `BigInt.asIntN(64, v)`, which is how the profile reads a signed
@@ -14675,7 +14681,174 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The field names of whatever the argument's layout is.
-    fn own_names(&mut self, id: NodeId, argument: NodeId) -> Result<Vec<String>, Diagnostic> {
+    /// `Object.values(o)` and `Object.entries(o)`, which a layout answers.
+    ///
+    /// The same walk `Object.keys` makes, one column over: its names are the
+    /// layout's field names and these are the fields themselves, in the same
+    /// order, which is the order the specification asks for and the order the
+    /// program wrote. Nothing runs at run time to decide *which* -- the layout
+    /// is fixed when it is laid out -- so this is a constant list of reads.
+    ///
+    /// `entries` builds a two-field object per property, which is what a
+    /// `[string, T]` tuple is here. That makes
+    /// `for (const [k, v] of Object.entries(o))` an ordinary destructuring walk
+    /// over an array of tuples, which is the shape the idiom is written in and
+    /// the reason to do both at once.
+    ///
+    /// **A value is coerced into the slot rather than stored raw.** The tuple's
+    /// second field is the *union* of the property types where they differ, so
+    /// `{ a: 1, b: "x" }` gives `[string, number | string]` and each read has to
+    /// be erased on the way in. Storing the field's own representation was the
+    /// first version and `verify` rejected it, which is the check earning its
+    /// keep at the only place that could have got this wrong.
+    fn decide_object_columns(
+        &mut self,
+        id: NodeId,
+        argument: NodeId,
+        pairs: bool,
+    ) -> Result<ValueId, Diagnostic> {
+        // Lowered for its effects before anything else, exactly as
+        // `Object.keys` does: `Object.values(f())` calls `f`.
+        let object = self.lower_expression(argument)?;
+        let (_, layout) = self.own_layout(id, argument)?;
+        let what = if pairs { "`Object.entries`" } else { "`Object.values`" };
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, what))?;
+        let HirType::Managed(ManagedType::Array(element)) = ty.clone() else {
+            return Err(self.unsupported(id, &format!("{what} answering something not an array")));
+        };
+        let element = (*element).clone();
+        let origin = self.origin(id);
+        #[allow(clippy::cast_precision_loss)]
+        let count = layout.fields.len() as f64;
+        let length = self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin.clone());
+        let array = self.push(
+            OpKind::ArrayNew {
+                length,
+                zeroed: true,
+            },
+            ty,
+            origin.clone(),
+        );
+        for (at, field) in layout.fields.clone().into_iter().enumerate() {
+            #[allow(clippy::cast_precision_loss)]
+            let position = at as f64;
+            let index = self.push(
+                OpKind::ConstFloat(position),
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            let read = self.push(
+                OpKind::FieldGet {
+                    object,
+                    field: u32::try_from(at).unwrap_or(u32::MAX),
+                },
+                field.ty.clone(),
+                origin.clone(),
+            );
+            let value = if pairs {
+                self.entry_pair(id, &element, &field.name, read)?
+            } else {
+                self.coerce(read, &element, id)?
+            };
+            self.push(
+                OpKind::ArraySet {
+                    array,
+                    index,
+                    value,
+                    checked: false,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        Ok(array)
+    }
+
+    /// One `[name, value]` of `Object.entries`.
+    fn entry_pair(
+        &mut self,
+        id: NodeId,
+        element: &HirType,
+        name: &str,
+        read: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
+        // **A pair of two like things is an array, not a struct.** `[string,
+        // number]` is laid out as an object with two differently typed fields;
+        // `[string, string]` is two strings in a row, which is an array of
+        // strings, and the representation says so rather than the syntax. Both
+        // are the same tuple to the checker and both have to be built here.
+        if let HirType::Managed(ManagedType::Array(slot)) = element {
+            let slot = (**slot).clone();
+            let origin = self.origin(id);
+            let length = self.push(OpKind::ConstFloat(2.0), HirType::NUMBER, origin.clone());
+            let pair = self.push(
+                OpKind::ArrayNew {
+                    length,
+                    zeroed: true,
+                },
+                element.clone(),
+                origin.clone(),
+            );
+            let key = self.push(OpKind::ConstString(name.to_owned()), slot.clone(), origin.clone());
+            let value = self.coerce(read, &slot, id)?;
+            for (at, value) in [key, value].into_iter().enumerate() {
+                #[allow(clippy::cast_precision_loss)]
+                let position = at as f64;
+                let index =
+                    self.push(OpKind::ConstFloat(position), HirType::NUMBER, origin.clone());
+                self.push(
+                    OpKind::ArraySet {
+                        array: pair,
+                        index,
+                        value,
+                        checked: false,
+                    },
+                    HirType::Void,
+                    origin.clone(),
+                );
+            }
+            return Ok(pair);
+        }
+        let HirType::Managed(ManagedType::Object(tuple)) = element else {
+            return Err(self.unsupported(id, "`Object.entries` over a pair that is not a tuple"));
+        };
+        let pair = self.layout_of(id, *tuple)?;
+        let [key_slot, value_slot] = pair.fields.as_slice() else {
+            return Err(self.unsupported(id, "`Object.entries` over a pair of unexpected shape"));
+        };
+        let (key_ty, value_ty) = (key_slot.ty.clone(), value_slot.ty.clone());
+        let origin = self.origin(id);
+        let built = self.push(OpKind::ObjectNew { frame: false }, element.clone(), origin.clone());
+        let key = self.push(OpKind::ConstString(name.to_owned()), key_ty, origin.clone());
+        self.push(
+            OpKind::FieldSet {
+                object: built,
+                field: 0,
+                value: key,
+            },
+            HirType::Void,
+            origin.clone(),
+        );
+        let value = self.coerce(read, &value_ty, id)?;
+        self.push(
+            OpKind::FieldSet {
+                object: built,
+                field: 1,
+                value,
+            },
+            HirType::Void,
+            origin,
+        );
+        Ok(built)
+    }
+
+    fn own_layout(
+        &mut self,
+        id: NodeId,
+        argument: NodeId,
+    ) -> Result<(TypeId, Layout), Diagnostic> {
         let ty = self
             .snapshot
             .node_types
@@ -14720,6 +14893,12 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
         let layout = self.layout_of(id, type_id)?;
+        Ok((type_id, layout))
+    }
+
+    /// The own property names an `Object` static answers about.
+    fn own_names(&mut self, id: NodeId, argument: NodeId) -> Result<Vec<String>, Diagnostic> {
+        let (_, layout) = self.own_layout(id, argument)?;
         Ok(layout
             .fields
             .iter()
@@ -16944,10 +17123,7 @@ impl<'a> FuncBuilder<'a> {
         initializer: NodeId,
         sequence: ValueId,
     ) -> Head {
-        let Head::InOrder(names) = &head else {
-            return head;
-        };
-        if names.len() < 2
+        if !matches!(head, Head::InOrder(_))
             || matches!(
                 self.values[sequence.0 as usize].ty,
                 HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_))
@@ -16955,6 +17131,15 @@ impl<'a> FuncBuilder<'a> {
         {
             return head;
         }
+        // **Whether brackets were written, not how many names are in them.**
+        // `Head::InOrder` cannot tell `for (const x of xs)` from
+        // `for (const [x] of xs)` -- a bare name and a one-element pattern both
+        // arrive as one name -- so counting names answered the first question
+        // for `[a, b]` and the wrong one for `[k]`, which bound the whole tuple
+        // to `k` and then refused converting it to a string.
+        //
+        // `for_of_pattern` returns `None` for a bare name, which is the
+        // distinction the count could not make.
         match self.for_of_pattern(initializer, syntax::ARRAY_BINDING_PATTERN) {
             Some(pattern) => Head::Pattern(pattern),
             None => head,

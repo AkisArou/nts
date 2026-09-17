@@ -2529,7 +2529,10 @@ ones, IIFEs, and the comma operator.
   new.target                                     a meta property
   accessor v = 3                                 the `accessor` keyword
   [[1],[2]].flat()                               `flat` on an array of references
-  Object.entries, JSON.stringify                 a global member with no definition here
+  JSON.stringify, JSON.parse, Object.freeze      a global member with no definition here
+  Object.assign, Math.max(...xs)                 a global member, or an intrinsic spread into
+  xs.sort(cmp), xs.flatMap(f)                    an array method that is not one of the eight
+  n.toFixed(2), s.at(0), "abc".split(",", 2)     a string or number method, or an arity of one
 ```
 
 None is a designed deferral, and none has a row of its own — recorded together
@@ -2544,6 +2547,42 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 *in one position*, and the row as written sent a reader to build something that
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
+
+#### `Object.values` and `Object.entries` (fixed)
+
+The same walk `Object.keys` has always made, one column over: its names are the
+layout's field names, and these are the fields themselves, in the same order —
+the order the specification asks for and the order the program wrote. A layout
+is fixed when it is laid out, so nothing runs at run time to decide *which* and
+both are a constant list of reads.
+
+**They landed together because `entries` is what the idiom is written in.**
+`for (const [k, v] of Object.entries(o))` is now an ordinary destructuring walk
+over an array of tuples — the feature above it — so the two compose into the
+shape people actually write, rather than into two half-usable pieces.
+
+Three things a `[string, T]` pair turned out to need:
+
+- **A value is coerced into the slot, not stored raw.** Where the property types
+  differ the tuple's second field is their union, so `{ n: 4, s: "x" }` gives
+  `[string, number | string]` and each read is erased on the way in. Storing the
+  field's own representation was the first version and `verify` rejected it.
+- **A pair of two like things is an array, not a struct.** `[string, number]` is
+  an object with two differently typed fields; `[string, string]` is two strings
+  in a row, which *is* an array of strings. Both are the same tuple to the
+  checker, and the representation is what says which to build.
+- **`[k]` is a pattern and `k` is a name**, and `Head::InOrder` cannot tell them
+  apart — both arrive as one name. The refinement added with the feature above
+  counted names, which answered correctly for `[a, b]` and wrongly for `[k]`:
+  the whole tuple was bound to `k`. It asks whether brackets were written now.
+
+`examples/object-values-and-entries` is 8 exports over values, a length, both
+names, either name alone, properties of different types, string values, and an
+indexed read. **8 refusals** on the pre-change binary.
+
+**Still refused:** an object whose *values are objects*. The tuple's second
+field is then a union of object types and `v.v` is a shared field read across
+its arms, which is the erased-union family rather than anything about `entries`.
 
 #### Destructuring in a `for...of`, and the nested literal behind it (fixed)
 
