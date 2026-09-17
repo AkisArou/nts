@@ -81,9 +81,13 @@ export async function consumed(xs: AsyncIterable<number>): Promise<number> {
 // number payload was loud: `NtsPromise *` will not go where a `double` is
 // wanted, but a reference payload would have compiled and settled with the
 // wrong object.
-export async function adopts(n: number): Promise<number> {
-  return inner(n);
-}
+//
+// **This one landed on 2026-09-16** and is measured in
+// `examples/a-promise-settled-with-a-promise`. The arm stayed here for a day
+// afterwards, lowering and agreeing with node inside a file of refusals, which
+// is the same way `sinh` and `sqrt` sat in `mathops-unsupported`: a fixture
+// that refuses *something* keeps its test green while any one of its arms
+// quietly starts working.
 
 // `Promise.all` over an array of values rather than promises. Legal, and it
 // fulfils with the values unchanged -- but deciding per element whether a
