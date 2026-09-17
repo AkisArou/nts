@@ -8489,6 +8489,20 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(id, &format!("a function returning {what}")));
             }
         }
+        // The same distinction one node kind over. A getter reaches here only
+        // when `declared_return` could not represent its property type, and
+        // `void` would be the wrong answer for exactly the reason above -- so
+        // it is named instead of silently returning nothing.
+        if self.kind_of(id) == Some(syntax::GET_ACCESSOR)
+            && let Some(&ty) = self.snapshot.node_types.get(&id)
+            && !matches!(
+                self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+                Some(TypeKind::Void | TypeKind::Undefined)
+            )
+        {
+            let what = describe(self.snapshot, ty);
+            return Err(self.unsupported(id, &format!("a getter returning {what}")));
+        }
         Ok(HirType::Void)
     }
 
@@ -8527,6 +8541,28 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn declared_return(&self, id: NodeId) -> Option<HirType> {
+        // **A `get` accessor's node type is the property it defines**, not a
+        // function type, so the signature branch below can never match one and
+        // the by-elimination branch under it is what answered for every getter
+        // that worked. That branch finds the *written annotation*, so
+        // `get v(): number` was right and `get v()` fell through both and came
+        // back `None` -- which `return_type_of` reads as "returns nothing".
+        //
+        // The result was a getter lowered as `-> void` with its `return`
+        // dropped, and a call site that read the property type and expected a
+        // value. Two derivations of one fact, disagreeing, with nothing between
+        // them: `v3 = Type4__get_double(v1)` where the callee returns `void`,
+        // which is C that does not compile -- emitted after `nothing refused`.
+        // An un-annotated getter is the ordinary way to write one, so this was
+        // every inferred getter on a class and in an object literal alike.
+        if self.kind_of(id) == Some(syntax::GET_ACCESSOR) {
+            return self
+                .snapshot
+                .node_types
+                .get(&id)
+                .copied()
+                .and_then(|ty| self.represent(ty));
+        }
         if let Some(ty) = self.snapshot.node_types.get(&id)
             && let Some(record) = self.snapshot.types.get(ty.0 as usize)
             && let nts_semantic_schema::TypeKind::Function(signature) = record.kind
