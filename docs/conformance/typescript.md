@@ -2564,12 +2564,25 @@ The check stays honest at the boundary: annotating the constant,
 `const w: string = "step"`, widens its type and this stops answering — which is
 also where TypeScript stops resolving `o[w]` to a single member.
 
+The **call** side needed the same answer and did not get it in the first
+version. `m[key]()` looked for a method called `key` — the identifier's text —
+where the read path had resolved constants through `indexed_member_name` since
+`blockers/a-key-held-in-a-variable`. Three call paths asked `literal_name`
+alone; `called_member_name` asks both, in the order the read path does.
+
+**The gate caught that, and `nts check` did not**, which is the part to
+remember. `check` reported *agreed on every case* while three of the example's
+seven exports were refused and therefore never compiled, never run and never
+compared: an absence does not fail, it is not counted. What answers it is
+`emit-c` with the refusals counted, and the number of exports compared against
+the *`checked … across N function(s)`* line.
+
 `examples/a-computed-key-that-is-constant` is 7 exports over data and methods,
-string and numeric keys, a key read back through the same constant, and the
-widened annotation. **8 refusals** on the pre-change binary, agreeing with node
-on all three backends. `methodTwice` calls one method by both spellings with
-state between them, so a lowering emitting two functions would differ in the
-value rather than only in a count.
+string and numeric keys, a key read back through the same constant, a method
+called through it, and the widened annotation. **8 refusals** on the pre-change
+binary, 0 now, all 7 exports checked on all three backends. `methodTwice` calls
+one method by both spellings with state between them, so a lowering emitting two
+functions would differ in the value rather than only in a count.
 
 #### A bracketed method call (fixed)
 

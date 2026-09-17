@@ -10172,6 +10172,24 @@ impl<'a> FuncBuilder<'a> {
     /// string or numeric literal -- everything else keeps `literal_name`'s
     /// answer, which is the node's text and is right for every position where
     /// the source writes the name.
+    /// The member a *call's* name node names.
+    ///
+    /// [`Self::literal_name`] is right wherever the source writes the name --
+    /// `o.twice`, `o["twice"]` -- and wrong for `o[k]`, where the node's text is
+    /// the **variable** and the member is whatever its type says.
+    /// [`Self::indexed_member_name`] answers that, and the read path has asked
+    /// it since `blockers/a-key-held-in-a-variable`. The call paths asked
+    /// `literal_name` alone, so `m[key]()` looked for a method called `key`.
+    ///
+    /// Through the node's parent because a call path holds the *call*, and the
+    /// access whose index this is sits between them.
+    fn called_member_name(&self, member: NodeId) -> Option<String> {
+        self.node(member)
+            .parent
+            .and_then(|access| self.indexed_member_name(access, member))
+            .or_else(|| self.literal_name(member))
+    }
+
     fn indexed_member_name(&self, id: NodeId, index: NodeId) -> Option<String> {
         if self.kind_of(id) != Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
             return None;
@@ -31459,7 +31477,7 @@ impl<'a> FuncBuilder<'a> {
         // way, so a bracketed method call was refused as "a computed method
         // name" on every receiver there is.
         let name = self
-            .literal_name(member)
+            .called_member_name(member)
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
 
         // (runtime function, how many arguments after the receiver, result)
@@ -31619,7 +31637,7 @@ impl<'a> FuncBuilder<'a> {
         // way, so a bracketed method call was refused as "a computed method
         // name" on every receiver there is.
         let name = self
-            .literal_name(member)
+            .called_member_name(member)
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
 
         // The runtime's array helpers read the block at one width:
@@ -32797,7 +32815,7 @@ impl<'a> FuncBuilder<'a> {
         // way, so a bracketed method call was refused as "a computed method
         // name" on every receiver there is.
         let member_name = self
-            .literal_name(member)
+            .called_member_name(member)
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
 
         // A method nothing in the hierarchy declares. Falling back to the
