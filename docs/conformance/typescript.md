@@ -2577,7 +2577,7 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
-#### `String.prototype.at` (C and LLVM; the JVM row follows)
+#### `String.prototype.at` (fixed)
 
 **Three spellings and three answers for an index that is not there**, and the
 language means a different one each time: `charAt` gives `""`, `s[i]` stops the
@@ -2597,13 +2597,22 @@ outright — the loud half, and the JVM lane hit it running their suite before I
 did. The quiet half would have been a `??` compiled away and an `undefined` that
 never arrives.
 
-**The JVM half is the lane's and is one table row.** Their `strAt` already had
-`String.prototype.at` semantics — relative indexing, `null` for absent — and
+**The JVM half was the lane's and was one table row.** Their `strAt` already
+had `String.prototype.at` semantics — relative indexing, `null` for absent — and
 `ops.rs` was pointing `nts_str_at` at it, which is how `"abc"[5]` threw a
-`NullPointerException` there while declining on the other two. They have split
-that (`nts_str_at` → a new `strIndex` that stops) and the jar carries both
-methods; naming `nts_str_relative_at` is what remains. `examples/string-at` is
-written and agrees with node on C and LLVM, and lands with that row.
+`NullPointerException` there while declining on the other two. They split that
+(`nts_str_at` → a new `strIndex` that stops) and named `nts_str_relative_at`.
+
+**And the same harness hole was waiting one backend over.** `Check.showString`
+on the JVM read `.length()` with no null case, and aborted sixteen times the
+moment the row landed — because until this helper existed *nothing on that
+backend could answer an absent string*: `s[i]` stops and `charAt` returns `""`.
+The feature did not break the harness; it gave it its first input.
+
+`examples/string-at` is 7 exports over the first character, a negative index,
+past either end, a fractional index, an `undefined` crossing the export
+boundary, and the three spellings beside each other. Agrees with node on C, LLVM
+and the JVM.
 
 #### An export that answers `undefined` crashed the differential (fixed)
 
