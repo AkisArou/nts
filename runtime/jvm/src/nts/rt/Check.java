@@ -136,6 +136,23 @@ public final class Check {
         }
     }
     private static void showString(String name, int at, String value) {
+        // An absent string is `null` here, which is what a `string | undefined`
+        // return produces -- `String.prototype.at` past the end, for one.
+        // Reading `.length()` threw, and the differential scores a throw as
+        // *the program aborted* rather than as an answer, so every export that
+        // could answer `undefined` was not merely unchecked but reported as a
+        // failure of the compiled side.
+        //
+        // The same hole the C harness had, and the same spelling out of it:
+        // `undefined` printed as itself. `docs/records` has the C half at
+        // `7b742b3f`; this is the JVM twin, found the moment
+        // `nts_str_relative_at` gave the backend something that legitimately
+        // answers nothing.
+        if (value == null) {
+            System.out.println(name + " " + at + " undefined");
+            System.out.flush();
+            return;
+        }
         StringBuilder out = new StringBuilder();
         out.append(name).append(' ').append(at).append(" str ").append(value.length());
         for (int i = 0; i < value.length(); ++i) { out.append(',').append((int) value.charAt(i)); }

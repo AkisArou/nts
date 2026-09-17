@@ -582,6 +582,14 @@ fn math_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // `String.length()` and killed the program, where C and LLVM declined
         // the case. One HIR name, two meanings, and the JVM had the other one.
         "nts_str_at" => (RUNTIME, "strIndex", STRING_D_TO_STRING),
+        // `String.prototype.at`: relative indexing, and `null` -- undefined --
+        // outside. The method was already here and already right; it was
+        // `nts_str_at` that was pointing at it, which is how `"abc"[5]`
+        // returned an undefined where C and LLVM stopped. C declares the
+        // helper `NTS_ALLOCATES_OR_NULL`, so the absence is part of its
+        // contract rather than a failure, and a Java reference carries it with
+        // no tag.
+        "nts_str_relative_at" => (RUNTIME, "strAt", STRING_D_TO_STRING),
         "nts_str_char_at" => (RUNTIME, "strCharAt", STRING_D_TO_STRING),
         "nts_str_code_point_at" => (RUNTIME, "strCodePointAt", "(Ljava/lang/String;D)D"),
         "nts_str_index_of_from" => (
