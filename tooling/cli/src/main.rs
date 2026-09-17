@@ -3369,8 +3369,31 @@ fn refuse_unpackaged(name: &str, kind: &str, target: &nts_build::config::Target)
                  have to be assembled on a Mac"
             }
         ),
+        // **Which side of the backend split it is on, because the kinds are not
+        // one set.** This said "no packaging for `{other}`" whatever the reason,
+        // and the reachable case is a kind that *is* packaged -- for the other
+        // backend. `aar` on a native target was told an AAR cannot be built,
+        // when what is true is that an AAR is a JVM artifact and this product's
+        // target is not.
+        (kind @ ("jar" | "aar"), false) => bail!(
+            "product `{name}` has kind `{kind}`, which is a JVM artifact, and it targets \
+             {} on the {} backend. Give it a JVM target -- `target.jvm(...)` or \
+             `target.android(...)` -- or choose a kind this target can carry: \
+             shared-library, static-library, executable, application, node-addon",
+            target.id,
+            target.backend
+        ),
+        (kind @ ("shared-library" | "static-library" | "node-addon"), true) => bail!(
+            "product `{name}` has kind `{kind}`, which is a native artifact, and it \
+             targets {} on the JVM backend. Give it a native target -- \
+             `target.linux(...)`, `target.macos(...)`, `target.windows(...)` -- or \
+             choose a kind the JVM carries: jar, aar, executable, application",
+            target.id
+        ),
         (other, _) => bail!(
-            "product `{name}` has kind `{other}`, which this build has no packaging for"
+            "product `{name}` has kind `{other}`, which is not one this build knows. \
+             The kinds are shared-library, static-library, executable, application, \
+             node-addon, jar, aar and xcframework"
         ),
     }
 }

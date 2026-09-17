@@ -3304,3 +3304,48 @@ fn an_apk_dexes_its_pinned_jars_into_itself() {
     assert!(found("Lnts/gen/Program;"), "the program's own class is missing from the dex");
     let _ = tools;
 }
+
+const AAR_ON_A_NATIVE_TARGET: &str = r#"
+import { defineConfig, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    thing: { kind: "aar", entry: "./src/main.ts", targets: [target.linux()] } as never,
+  },
+});
+"#;
+
+/// A kind that exists for the *other* backend is told so, not told it cannot be built.
+///
+/// **The kinds are two sets, and the message used to speak as if they were one.**
+/// `refuse_unpackaged` matches on `(kind, is_jvm)`, so `aar` with a native
+/// target fell through to "which this build has no packaging for" -- and an AAR
+/// is packaged, just not for a target on the C backend. The reachable case got
+/// the message written for the unreachable one.
+///
+/// Found by sweeping every `bail!` in the CLI for whether it names a fix, which
+/// is a thing the goal asks of each of them and nothing had ever checked.
+#[test]
+fn a_kind_belonging_to_the_other_backend_says_which_backend() {
+    if !available() {
+        skip("node, the tsgo frontend and clang");
+        return;
+    }
+    let project = fixture("build-kind-crossed", AAR_ON_A_NATIVE_TARGET);
+    let run = build(&project, &[]);
+    assert!(!run.ok, "an AAR on a native target built:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("is a JVM artifact"),
+        "it does not say which backend the kind belongs to:\n{}",
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("target.jvm"),
+        "it does not say how to fix it:\n{}",
+        run.stderr
+    );
+    assert!(
+        !run.stderr.contains("no packaging for"),
+        "it still reads as though an AAR cannot be built at all:\n{}",
+        run.stderr
+    );
+}
