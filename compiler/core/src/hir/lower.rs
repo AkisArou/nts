@@ -11096,6 +11096,30 @@ impl<'a> FuncBuilder<'a> {
     /// module-scope `const`'s everywhere downstream.
     fn lower_static_fields(&mut self, class: NodeId) -> Result<(), Diagnostic> {
         for member in self.children(class) {
+            // **`static { … }` runs here too, and in this loop rather than
+            // beside it.** The specification runs a class's static blocks and
+            // its static field initialisers in one source order, so
+            //
+            //     class C { static a = 1; static { C.a += 1 } static b = C.a }
+            //
+            // depends on walking them together; two loops would be two orders.
+            //
+            // It lowered to **nothing at all** before this — not refused,
+            // ignored — so `class C { static a = 0; static { C.a = 5 } }`
+            // answered 0 where node answers 5, silently and on every backend.
+            // The frontend knew the node all along: `name_of(176)` is `class
+            // static block declaration`, and only the lowering had never been
+            // told. That is the shape `super::unaccounted` exists to catch, and
+            // it does not see this one because a static block declares no
+            // symbol for it to miss.
+            if self.kind_of(member) == Some(syntax::CLASS_STATIC_BLOCK) {
+                for child in self.children(member) {
+                    if self.kind_of(child) == Some(syntax::BLOCK) {
+                        self.lower_statement(child)?;
+                    }
+                }
+                continue;
+            }
             if self.kind_of(member) != Some(syntax::PROPERTY_DECLARATION)
                 || !self
                     .node(member)

@@ -199,6 +199,9 @@ pub const TEMPLATE_MIDDLE: u16 = 16;
 /// The literal text after the last substitution.
 pub const TEMPLATE_TAIL: u16 = 17;
 
+/// `static { … }` in a class body, which runs at class definition in source
+/// order with the static field initialisers beside it.
+pub const CLASS_STATIC_BLOCK: u16 = 176;
 pub const CONSTRUCTOR: u16 = 177;
 /// `get x() { … }`. Immediately after [`CONSTRUCTOR`] in tsgo's enumeration,
 /// which is where TypeScript's own `SyntaxKind` puts it.
