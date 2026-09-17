@@ -89,7 +89,7 @@ fn an_object_that_escapes_stays_on_the_heap() {
     assert_eq!(
         placements(&program, "escapesToAGlobal"),
         vec![false],
-        "it is pushed into a module-level array, so it outlives the call"
+        "it is stored in a module-level slot, so it outlives the call"
     );
 }
 

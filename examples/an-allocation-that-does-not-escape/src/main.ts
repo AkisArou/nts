@@ -20,7 +20,12 @@ class Point {
   }
 }
 
-const kept: Point[] = [];
+// Already holding an object before the first case runs. `rc.sh` measures what
+// is live after the first case and again at the end and calls the growth a
+// leak, which it cannot distinguish from state the program still needs — so an
+// escape target that *accumulates* reads as 58 objects never given back. A slot
+// that is overwritten keeps the escape and keeps the live set constant.
+let kept: Point = new Point(0, 0);
 
 /** Nothing outlives the call, so the allocation belongs in the frame. */
 export function stays(n: number): number {
@@ -28,11 +33,11 @@ export function stays(n: number): number {
   return p.x + p.y;
 }
 
-/** Escapes into a module-level array, so it must stay on the heap. Returns a
+/** Escapes into a module-level slot, so it must stay on the heap. Returns a
  *  number rather than the object so the differential can compare it. */
 export function escapesToAGlobal(n: number): number {
   const p = new Point(n, n + 1);
-  kept.push(p);
+  kept = p;
   return p.x;
 }
 
@@ -52,6 +57,6 @@ export function escapesByReturn(n: number): number {
 export function bothInOne(n: number): number {
   const a = new Point(n, 1);
   const b = new Point(n, 2);
-  kept.push(b);
+  kept = b;
   return a.x + a.y + b.y;
 }
