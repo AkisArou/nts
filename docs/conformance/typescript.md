@@ -2500,6 +2500,46 @@ move that found `undefined | void`. Neither is started; each is recorded with
 what actually stops it, because a rank without a diagnosis is what §15 already
 records itself getting wrong.
 
+#### Swept 2026-09-17: shapes the refusal census rates at zero
+
+Five batteries of ten-line fixtures over ordinary language shapes, one shape per
+probe. About forty shapes, and the point of recording it here is that **the
+census could not see most of what it found**: a refusal is only emitted for code
+the compiler *reached*, and every enclosing function in `runtime/node` that
+would hit these stops earlier on something else. Two of the night's fixes —
+destructuring elisions and `super` accessors — were **0 sites** in the
+four-module census and are what any new program writes on its first day.
+
+**Passing, and worth having written down so nobody re-probes them:** labelled
+`break`, `do`/`while`, `switch` fallthrough, a comma in a `for` header,
+getters and setters on a class, `static` blocks, spread into a call, optional
+`catch` binding with `finally`, rest and default parameters, array
+destructuring with a rest, nested destructuring, private methods and `#x in o`,
+logical assignment, `**`, bigint literals, `for...of` over a string, tagged
+templates, assertion functions, `satisfies`, `as const`, index signatures,
+overloads, abstract classes, `Error` subclassing with `instanceof`,
+`Array.from`, `readonly` array parameters, typed array read/write, `yield*`,
+`using`, `const` type parameters, `String.raw`, `replaceAll`, shorthand
+properties, `implements`, local *function* declarations including recursive
+ones, IIFEs, and the comma operator.
+
+**Still refused, each confirmed with a one-shape fixture:**
+
+```text
+  { twice() { … } } and { get twice() { … } }   a method or accessor in an object literal
+  const C = class { … }                          a class expression
+  function f() { class L { … } }                 a class declaration inside a function
+  new.target                                     a meta property
+  accessor v = 3                                 the `accessor` keyword
+  [[1],[2]].flat()                               `flat` on an array of references
+  Object.entries, JSON.stringify                 a global member with no definition here
+```
+
+An object literal's method is the largest of these at 7 distinct sites; the rest
+are 0 to 3. None is a designed deferral, and none has a row of its own —
+recorded together because **a missing row is worse than a ✗**: a ✗ has been
+looked at, and an absence has not.
+
 #### `super.x` on an accessor (fixed)
 
 `super.m()` was answered by `lower_super` from the call path. `super.x` where
