@@ -859,13 +859,27 @@ public final class NtsRuntime {
      * `String.length()`, and the program died with a `NullPointerException`
      * where C and LLVM declined the case. One HIR name meaning two things.
      *
-     * <p>C's `nts_str_at_into` is the contract: `nts_to_integer`, then a bounds
-     * stop. Its own comment says why -- `s[i]` answers `undefined` in
-     * JavaScript, so rather than invent a third answer it stops, as an index
-     * outside an array does. This mirrors it call for call.
+     * <p>C's `nts_str_at_into` is the contract, and it moved: it converted with
+     * `nts_to_integer` first and then tested the bounds, so `ToInteger(1.7)` was
+     * 1 and `ToInteger(NaN)` was 0 and both landed *inside* the string --
+     * `"abc"[1.7]` answered `"b"`, `"abc"[NaN]` answered `"a"`. Wrong answers
+     * rather than stops. It now tests the **unconverted** value, which is what
+     * the array path has always done.
+     *
+     * <p>So this drops the conversion rather than adding a test: {@link
+     * #bounds} already is that rule. `(int) index == index` rejects a fraction,
+     * and `(int) NaN` is 0 which fails it, while `-0.0` casts to 0 and compares
+     * equal so it still indexes element zero -- which is what JavaScript does.
+     * The array helper and the string helper are one rule again because they
+     * are one call.
+     *
+     * <p>`charAt` and `at` keep converting and must: both are
+     * `ToIntegerOrInfinity`, so `"abc".charAt(1.7)` and `"abc".at(1.7)` are
+     * `"b"`. Three methods, three rules, and only the subscript is strict about
+     * what an index is.
      */
     public static String strIndex(String s, double index) {
-        return String.valueOf(s.charAt(bounds(s.length(), toInteger(index))));
+        return String.valueOf(s.charAt(bounds(s.length(), index)));
     }
 
     /** `String.prototype.at`: relative, and `null` -- undefined -- outside. */
