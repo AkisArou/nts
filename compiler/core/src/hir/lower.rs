@@ -877,7 +877,12 @@ fn closure_index(ty: TypeId) -> usize {
 /// What a `for...of` head binds. See [`Lowering::for_of_head`].
 enum Head {
     /// Names taking the values the walk produces, in order.
-    InOrder(Vec<NodeId>),
+    /// **`Option`, because an elision has no name.** `for (const [, v] of m)`
+    /// binds one name and consumes two positions, and a hole is exactly the
+    /// difference: nothing to bind, and the next element one further along. A
+    /// `Vec<NodeId>` could not say that, and the two facts have to travel
+    /// together or the count and the binding disagree.
+    InOrder(Vec<Option<NodeId>>),
     /// A pattern applied to the one value the walk produces.
     Pattern(NodeId),
 }
@@ -16525,7 +16530,7 @@ impl<'a> FuncBuilder<'a> {
             .copied()
             .find(|part| self.kind_of(*part) == Some(syntax::IDENTIFIER))
         {
-            return Ok(Head::InOrder(vec![name]));
+            return Ok(Head::InOrder(vec![Some(name)]));
         }
         if let Some(pattern) = parts
             .iter()
@@ -16549,6 +16554,15 @@ impl<'a> FuncBuilder<'a> {
             // a `...`, and a nested pattern a pattern -- each arrives as a
             // second child.
             let inner = self.children(element);
+            // **An elision is a binding element with no children**, which is
+            // how `for (const [, v] of m)` -- the way a `Map`'s values are
+            // iterated -- reaches here. It binds nothing and still occupies a
+            // position, so it is kept as a `None` rather than dropped: the
+            // count is what says `v` is the *second* element.
+            if inner.is_empty() {
+                names.push(None);
+                continue;
+            }
             let [name] = inner.as_slice() else {
                 return Err(
                     self.unsupported(element, "a destructuring element that is more than a name")
@@ -16557,7 +16571,7 @@ impl<'a> FuncBuilder<'a> {
             if self.kind_of(*name) != Some(syntax::IDENTIFIER) {
                 return Err(self.unsupported(*name, "a nested destructuring pattern"));
             }
-            names.push(*name);
+            names.push(Some(*name));
         }
         Ok(Head::InOrder(names))
     }
@@ -16588,13 +16602,16 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         id: NodeId,
         head: &Head,
-        symbols: &[u32],
+        symbols: &[Option<u32>],
         values: Vec<ValueId>,
     ) -> Result<(), Diagnostic> {
         match head {
             Head::InOrder(_) => {
                 for (symbol, value) in symbols.iter().zip(values) {
-                    self.bindings.insert(*symbol, value);
+                    // A hole consumed its position above and binds nothing.
+                    if let Some(symbol) = symbol {
+                        self.bindings.insert(*symbol, value);
+                    }
                 }
                 Ok(())
             }
@@ -16639,12 +16656,16 @@ impl<'a> FuncBuilder<'a> {
         let mut element_symbols = Vec::new();
         if let Head::InOrder(names) = &head {
             for name in names {
-                element_symbols.push(
-                    self.node(*name)
+                let Some(name) = *name else {
+                    element_symbols.push(None);
+                    continue;
+                };
+                element_symbols.push(Some(
+                    self.node(name)
                         .symbol
-                        .ok_or_else(|| self.unsupported(*name, "a `for...of` name with no symbol"))?
+                        .ok_or_else(|| self.unsupported(name, "a `for...of` name with no symbol"))?
                         .0,
-                );
+                ));
             }
         }
         // A pattern reads one value and takes it apart; the names in it are not
@@ -16733,7 +16754,7 @@ impl<'a> FuncBuilder<'a> {
 
         let mut carried: Vec<u32> = index.into_iter().collect();
         self.assigned_symbols(body, &mut carried);
-        let mut declared = element_symbols.clone();
+        let mut declared: Vec<u32> = element_symbols.iter().flatten().copied().collect();
         if let Head::Pattern(pattern) = &head {
             self.pattern_symbols(*pattern, &mut declared);
         }
@@ -27388,6 +27409,14 @@ impl<'a> FuncBuilder<'a> {
                     )
             };
             let (property, binding, default) = match parts.as_slice() {
+                // **A hole: `const [, second] = pair`.** The frontend gives an
+                // elision as a binding element with no children at all, so it
+                // has no name, no property and nothing to write to -- and the
+                // enumeration above has already counted it, which is the whole
+                // of what a hole means: the *next* element is one further
+                // along. Skipping it here rather than refusing keeps that
+                // counting in one place.
+                [] => continue,
                 [only] => (*only, *only, None),
                 [first, second] if binds(self, *second) => (*first, *second, None),
                 [first, second] => (*first, *first, Some(*second)),
