@@ -32609,6 +32609,34 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "`replace` with a pattern that is not a string"));
         }
 
+        // `codePointAt` answers **`undefined`** for an index that is not there
+        // and the helper answers NaN, which is not the same value: `?? 0` takes
+        // the one and not the other, and `String(v)` is `"undefined"` against
+        // `"NaN"`. Every out-of-range case disagreed with node, silently.
+        //
+        // Its sibling `charCodeAt` answers NaN and is **right** to, which is why
+        // this lasted: the helper is written in terms of that one, and the
+        // sibling's answer reads as a precedent for it. They are different
+        // questions with different answers, exactly as `at`, `charAt` and `s[i]`
+        // are three answers for an index that is not there.
+        //
+        // Only where the result is erased -- where the caller has not narrowed
+        // it away with `!` or a guard -- so a program that promised the index
+        // was there pays nothing. That is the rule `pop` and `at` already
+        // follow.
+        if helper == "nts_str_code_point_at" && self.type_of(id) == Some(HirType::Erased) {
+            let value = self.push(
+                OpKind::Call {
+                    callee: Callee::External(helper.to_owned()),
+                    args,
+                    frame: None,
+                },
+                ty,
+                origin.clone(),
+            );
+            return Ok(self.code_point_or_undefined(value, &origin));
+        }
+
         Ok(self.push(
             OpKind::Call {
                 callee: Callee::External(helper.to_owned()),
@@ -32875,6 +32903,51 @@ impl<'a> FuncBuilder<'a> {
             ) => Ok((*callback, None)),
             _ => Err(self.unsupported(id, &format!("a `{name}` call with this many arguments"))),
         }
+    }
+
+    /// A code point, or `undefined` where the helper answered NaN.
+    ///
+    /// **NaN is not a code point**, so a number-returning helper can carry the
+    /// absence after all and no second helper is needed for it — which means C,
+    /// LLVM and the JVM all get this the day it lands rather than two of them
+    /// getting it and the third red-gating while it catches up.
+    ///
+    /// `v !== v` is true of NaN and of nothing else.
+    fn code_point_or_undefined(&mut self, value: ValueId, origin: &Origin) -> ValueId {
+        let absent = self.push(
+            OpKind::Binary {
+                op: BinOp::Ne,
+                lhs: value,
+                rhs: value,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let missing = self.new_block();
+        let present = self.new_block();
+        let merge = self.new_block();
+        let answer = self.push_block_param(merge, HirType::Erased, origin.clone());
+        self.terminate(Terminator::Branch {
+            cond: absent,
+            then_target: missing,
+            then_args: Vec::new(),
+            else_target: present,
+            else_args: Vec::new(),
+        });
+        self.switch_to(missing);
+        let undefined = self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone());
+        self.terminate(Terminator::Jump {
+            target: merge,
+            args: vec![undefined],
+        });
+        self.switch_to(present);
+        let erased = self.push(OpKind::Erase { value }, HirType::Erased, origin.clone());
+        self.terminate(Terminator::Jump {
+            target: merge,
+            args: vec![erased],
+        });
+        self.switch_to(merge);
+        answer
     }
 
     /// `sort()` and `toSorted()`, with **no comparator**.

@@ -64,8 +64,54 @@ export function unitAt(s: string, i: number): number {
   return s.charCodeAt(i);
 }
 
+/**
+ * The narrowed form, with the index brought **into range** so the `!` is true.
+ *
+ * It used to be `s.codePointAt(i)!` on the raw `i`, which is a promise the
+ * caller cannot keep: the differential drives `i` from a pool. That passed for
+ * as long as it did by coincidence — the runtime helper answered NaN out of
+ * range, node answers `undefined`, and the harness renders both the same. The
+ * moment `codePointAt` started answering `undefined` properly, this arm started
+ * reporting `0`, which is `undefined!` unerased to a double and is a **separate,
+ * older divergence** from node: see the `x!` row in `typescript.md`.
+ *
+ * So the lie is removed rather than the assertion weakened. This still drives
+ * the narrowed path, which is the one that must cost nothing.
+ */
 export function pointAt(s: string, i: number): number {
-  return s.codePointAt(i)!;
+  if (s.length === 0) {
+    return -1;
+  }
+  return s.codePointAt(Math.abs(Math.trunc(i)) % s.length)!;
+}
+
+/**
+ * The same call **without the `!`**, which is the whole difference and is why
+ * the arm above could not have caught what was wrong here.
+ *
+ * `codePointAt` answers `undefined` for an index that is not there. The runtime
+ * helper answers NaN — correctly for `charCodeAt` beside it, which is exactly
+ * what makes the mistake easy — and until 2026-09-17 that NaN was handed back
+ * as the answer. `?? 0` takes `undefined` and not NaN, so every out-of-range
+ * call disagreed with node silently. `pointAt` above says `!`, which promises
+ * the index is there, so it asked the question this one asks and threw the
+ * answer away.
+ *
+ * `-1` for absent rather than `?? something`: the comparison against
+ * `undefined` is the assertion, and a coalesce would pass if the value were any
+ * other falsy thing.
+ */
+export function pointAtOrAbsent(s: string, i: number): number {
+  const point = s.codePointAt(i);
+  return point === undefined ? -1 : point;
+}
+
+/** And the sibling, which answers **NaN** for the same question and is right
+ *  to. Beside the two above so that the three answers for an index that is not
+ *  there can be read together. */
+export function unitAtOrNaN(s: string, i: number): number {
+  const unit = s.charCodeAt(i);
+  return Number.isNaN(unit) ? -1 : unit;
 }
 
 export function firstOf(s: string, needle: string): number {
