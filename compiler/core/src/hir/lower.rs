@@ -28179,6 +28179,19 @@ impl<'a> FuncBuilder<'a> {
         // did not ask.
         let value = if op == UnOp::Not {
             self.truthy(id, value)
+        } else if op == UnOp::Neg
+            && !matches!(self.values[value.0 as usize].ty, HirType::BigInt)
+        {
+            // **`-x` is `ToNumeric(x)` negated**, and unary `+` two arms up is
+            // the same conversion with nothing to do afterwards. It had the
+            // coercion and this did not, so `-"3"` negated a *pointer*: the
+            // backend emitted `(double)v0` on an `NtsString *`, which clang
+            // rejects and `emit-c` refused nothing about. The comment above
+            // describes that exact symptom, for `+`, one operator over.
+            //
+            // A `bigint` is the arm `ToNumeric` keeps: `-1n` is a bigint and
+            // `ToNumber` of one is a `TypeError`, so it is negated as it is.
+            self.coerce_to_number(id, *operand, value)?
         } else {
             value
         };

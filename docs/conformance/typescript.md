@@ -2577,6 +2577,40 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### Two number-conversion defects, found by sweeping rather than by a feature
+
+Neither has anything to do with the other, and both emitted code the compiler
+refused nothing about.
+
+**`-"3"` negated a pointer.** Unary `-` is `ToNumeric(x)` negated. Unary `+` —
+the same conversion with nothing to do afterwards — had the coercion and `-` did
+not, so the backend emitted `(double)v0` on an `NtsString *`. Clang rejects that;
+`emit-c` reported no refusal. The comment beside the `+` case describes the exact
+symptom *for `+`*, one operator over:
+
+> returning the operand for *every* type answered a string with the string, and
+> the backend then emitted `(double)v1` on a pointer.
+
+A `bigint` is the arm `ToNumeric` keeps — `-1n` stays a bigint and `ToNumber` of
+one is a `TypeError` — so it is negated as it is.
+
+**`Math.trunc(n).toString(16)` emitted LLVM IR clang would not take.** Rounding
+an integer is an identity, and the LLVM backend wrote it as `add i32` — an
+identity **at the operand's type**, where the result is the `double` the radix
+helper takes. `'%v1' defined with type 'i32' but expected 'double'`. The HIR was
+right throughout: `%1 = trunc %0 : f64`.
+
+The arm directly below it in the same file handles the mirror case and explains
+it — *"the result may be an integer even where the operand is not"* — with a
+note that `examples/mathops` could not be built through that backend before it.
+Both directions need the conversion written down and one of them had it. C needs
+neither, because assigning to a declared local is the conversion there.
+
+`examples/number-conversions` is 13 exports over printing, very large and very
+small magnitudes, every radix path, literal forms, both coercion defects, a
+negated bigint, the specials, `parseFloat`/`parseInt`, and the sign of zero
+observed through `1 / -0`. **Two clang errors** on the pre-change binary.
+
 #### A parameter property read by its bare name (fixed)
 
 ```ts

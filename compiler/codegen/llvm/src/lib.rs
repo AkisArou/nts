@@ -3483,6 +3483,42 @@ fn coercion(
     })
 }
 
+/// Rounding an integer, which changes nothing — at *which* type.
+///
+/// The result may be a `double` where the operand is an `i32`:
+/// `Math.trunc(n).toString(16)` on a whole `n` gives the parameter an `i32`
+/// signature, and the HIR still types the rounded value `f64` because that is
+/// what `nts_number_to_string_radix` takes. An `add i32` identity there kept the
+/// integer type and the call read it as a double — `'%v1' defined with type
+/// 'i32' but expected 'double'`, which clang rejects.
+///
+/// **The `Float` arm of [`unary`] is this same fact from the other side**, and
+/// says so: the *result* may be an integer even where the operand is not. Both
+/// directions need the conversion written down, and only one of them had it. The
+/// C backend needs neither, because assigning to a declared local is the
+/// conversion there.
+fn rounding_identity(
+    func: &Func,
+    value: ValueId,
+    operand: ValueId,
+    out: &str,
+    ty: &str,
+) -> Result<String, Diagnostic> {
+    if !matches!(func.values[value.0 as usize].ty, HirType::Float { .. }) {
+        return Ok(format!("{out} = add {ty} {}, 0", name(operand)));
+    }
+    let want = ty_of(&func.values[value.0 as usize].ty, func)?;
+    let widen = if matches!(
+        func.values[operand.0 as usize].ty,
+        HirType::Int { signed: false, .. }
+    ) {
+        "uitofp"
+    } else {
+        "sitofp"
+    };
+    Ok(format!("{out} = {widen} {ty} {} to {want}", name(operand)))
+}
+
 fn unary(
     func: &Func,
     out: &str,
@@ -3582,7 +3618,21 @@ fn unary(
         UnOp::Floor | UnOp::Ceil | UnOp::Trunc | UnOp::Round
             if matches!(func.values[operand.0 as usize].ty, HirType::Int { .. }) =>
         {
-            format!("{out} = add {ty} {}, 0", name(operand))
+            // Rounding an integer changes nothing, so this is an identity --
+            // but an identity **at which type**. The result may be a `double`
+            // where the operand is an `i32`: `Math.trunc(n).toString(16)` on a
+            // whole `n` gives the parameter an `i32` signature, and the HIR
+            // still types the rounded value `f64` because that is what
+            // `nts_number_to_string_radix` takes. `add i32` kept the integer
+            // type and the call read it as a double -- `'%v1' defined with
+            // type 'i32' but expected 'double'`, which clang rejects.
+            //
+            // **The arm below is this same fact from the other side**, and says
+            // so: "the *result* may be an integer even where the operand is
+            // not". Both directions need the conversion written down and only
+            // one of them had it. The C backend needs neither, because
+            // assigning to a declared local is the conversion there.
+            rounding_identity(func, value, operand, out, ty)?
         }
         // A genuine double. Three are intrinsics; `Math.round` is a call,
         // because JavaScript rounds a half toward positive infinity and C
