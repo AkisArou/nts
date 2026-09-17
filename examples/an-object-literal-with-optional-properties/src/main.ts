@@ -92,3 +92,48 @@ function describe(o: WithRequired): number {
 export function required(n: number): number {
   return describe({ id: n, label: "x" });
 }
+
+interface Nested {
+  tag: number;
+  inner?: { a: number; b: number };
+}
+
+/**
+ * A **conditional between two literals of different shapes**, assigned where an
+ * optional property is declared. Both arms are an `Options`-shaped thing and
+ * only one supplies the optional member, so the checker's type for the
+ * conditional is a *union* — which erases — and the erased value then met the
+ * declaration: `an erased value where a concrete representation is wanted`.
+ *
+ * The merge type is now taken from the **arms** rather than from the checker,
+ * where they already agree on a concrete representation. They do, because both
+ * are lowered expecting the slot. The correction that matters is that it is
+ * asked of the arms and not of the slot: a first version took the slot's type
+ * whenever the checker's erased, and that is wrong for `h.fn?.(n)` in
+ * `examples/callback-fields`, whose union contains a genuine **absence** —
+ * there the slot is a number, the value may be `undefined`, and what resolves
+ * it is the `??` rather than the slot. The arms disagree there, so it stays
+ * erased.
+ *
+ * `absentArm` below is that case, kept here beside this one so the two are read
+ * together.
+ */
+export function chosenBetweenTwoShapes(n: number): number {
+  const o: Nested = n > 0 ? { tag: 1, inner: { a: n, b: 2 } } : { tag: 2 };
+  return o.tag * 100 + (o.inner === undefined ? 0 : o.inner.a * 10 + o.inner.b);
+}
+
+/** The arm that must stay erased: a conditional one of whose arms is genuinely
+ *  `undefined`. A rule that read the slot instead of the arms would build this
+ *  at a number and lose the absence. */
+export function absentArm(n: number): number {
+  const v = n > 0 ? n : undefined;
+  return v ?? -1;
+}
+
+/** Three shapes rather than two, so the merge is not a coincidence of a pair. */
+export function chosenBetweenThreeShapes(n: number): number {
+  const k = ((n % 3) + 3) % 3;
+  const o: Nested = k === 0 ? { tag: 1 } : k === 1 ? { tag: 2, inner: { a: 1, b: 2 } } : { tag: 3 };
+  return o.tag * 100 + (o.inner === undefined ? 0 : o.inner.a);
+}

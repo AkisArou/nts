@@ -27778,7 +27778,6 @@ impl<'a> FuncBuilder<'a> {
         let ty = self
             .type_of(id)
             .ok_or_else(|| self.unrepresentable(id, "a conditional"))?;
-
         let then_block = self.new_block();
         let else_block = self.new_block();
         self.terminate(Terminator::Branch {
@@ -27811,6 +27810,40 @@ impl<'a> FuncBuilder<'a> {
         // the double straight through, which the C compiler reported as
         // assigning a `double` to an `NtsValue` -- with no source location and
         // nothing naming the join.
+        // **Where both arms already agree on a concrete representation, that is
+        // the merge type — whatever the checker called the conditional.**
+        //
+        //     interface Box { items?: number[] }
+        //     const b: Box = cond ? { items: [1, 2] } : {};
+        //
+        // is a union of two literal shapes, so the checker's type erases, and
+        // the erased value then met the declaration: `an erased value where a
+        // concrete representation is wanted`. But both arms were lowered
+        // *expecting* `Box` — every literal in this compiler now asks the slot —
+        // so both are already a `Box` by the time they arrive here, and erasing
+        // them to merge and unerasing to store is work to undo work.
+        //
+        // **Asked of the arms rather than of the slot**, which is the whole
+        // correction: a first version took `expecting` when the checker's type
+        // erased, and that is wrong for `h.fn?.(n)`, whose union contains a
+        // genuine *absence*. The slot there is a number and the value may be
+        // `undefined`; what resolves it is the `??` after it, not the slot. The
+        // arms are the evidence and they disagree, so it stays erased.
+        //
+        // Only when the checker said `Erased`, so nothing that already lowered
+        // can change.
+        let ty = match (
+            &ty,
+            &self.values[then_value.0 as usize].ty,
+            &self.values[else_value.0 as usize].ty,
+        ) {
+            (HirType::Erased, from_then, from_else)
+                if from_then == from_else && *from_then != HirType::Erased =>
+            {
+                from_then.clone()
+            }
+            _ => ty,
+        };
         let merge = self.new_block();
         // A conditional whose arms are two closures has the *signature* as its
         // type, which is the right answer and the one nothing else
