@@ -769,6 +769,17 @@ const HARNESS_PRELUDE: &str =
           * escaping rules, and a surrogate pair shows up as the two units\n\
           * `length` counts rather than as one character. */\n\
          static void nts_check_show_string(const char *name, int at, const NtsString *s) {\n\
+         \x20   /* An absent string is the null pointer, which is what a\n\
+         \x20    * `string | undefined` return produces. Reading `s->length`\n\
+         \x20    * there segfaulted the whole run -- so every export that could\n\
+         \x20    * answer `undefined` was not merely unchecked but fatal, and a\n\
+         \x20    * crash is the one outcome that reports nothing about the case\n\
+         \x20    * it happened on. */\n\
+         \x20   if (s == NULL) {\n\
+         \x20       printf(\"%s %d undefined\\n\", name, at);\n\
+         \x20       fflush(stdout);\n\
+         \x20       return;\n\
+         \x20   }\n\
          \x20   printf(\"%s %d str %u\", name, at, s->length);\n\
          \x20   for (uint32_t i = 0; i < s->length; i++) {\n\
          \x20       printf(\",%u\", (unsigned)nts_str_char_code_at(s, (double)i));\n\
@@ -1821,6 +1832,14 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
         "const m = await import({:?});\n\
          const view = new DataView(new ArrayBuffer(8));\n\
          function showString(name, at, s) {{\n\
+         \x20 // The compiled side answers `undefined` for an absent string, and\n\
+         \x20 // reading `.length` here threw where it segfaulted there. `null`\n\
+         \x20 // is printed as itself rather than folded in with `undefined`:\n\
+         \x20 // the compiler represents both as the null pointer, so folding\n\
+         \x20 // them would make a `string | null` export *agree* about a\n\
+         \x20 // difference it cannot represent.\n\
+         \x20 if (s === undefined) {{ process.stdout.write(`${{name}} ${{at}} undefined\\n`); return; }}\n\
+         \x20 if (s === null) {{ process.stdout.write(`${{name}} ${{at}} null\\n`); return; }}\n\
          \x20 let out = `${{name}} ${{at}} str ${{s.length}}`;\n\
          \x20 for (let i = 0; i < s.length; i++) out += `,${{s.charCodeAt(i)}}`;\n\
          \x20 process.stdout.write(out + \"\\n\");\n\

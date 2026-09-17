@@ -2577,6 +2577,35 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### An export that answers `undefined` crashed the differential (fixed)
+
+```ts
+export function f(n: number): string | undefined { return n > 99 ? "x" : undefined; }
+```
+
+`nts check` → **killed by signal 11**. Not the compiled program, which is
+correct — `f(0)` returns the null pointer and `f(1000)` returns `"x"`, verified
+by calling it directly. The differential's own harness dereferenced it:
+`nts_check_show_string` read `s->length` with no null case, and the node side's
+`showString` read `.length` on `undefined` and threw.
+
+So **every export that could answer `undefined` for a string was not merely
+unchecked but fatal**, and a crash is the one outcome that reports nothing about
+the case it happened on. It reproduces on the gated binary with nothing else
+applied, and it is why `s.at()` looked broken while being right.
+
+Both sides print `undefined` for an absent string now. `null` is printed as
+itself on the node side rather than folded in with `undefined`, deliberately:
+the compiler represents both as the null pointer, so folding them would make a
+`string | null` export **agree** about a difference it cannot represent.
+
+**That leaves a real disagreement visible**, which is the point: an export
+returning `string | null` and answering `null` now disagrees with node on every
+case, because the compiled program says `undefined` and node says `null`. That
+is a true statement about the representation — a nullable reference is one
+pointer and JavaScript has two absent values — and it was previously hidden
+behind a segfault.
+
 #### `split` with a limit, and the JVM rows behind it (fixed)
 
 `s.split(sep, limit)` was *a string method with this many arguments*, which is
