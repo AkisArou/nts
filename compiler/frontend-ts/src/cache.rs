@@ -149,6 +149,16 @@ pub fn snapshot<S: SemanticSource>(
     // 0.445s against 0.442s -- which is exactly what a cache that never hits
     // looks like, and is why the null result was worth chasing rather than
     // reporting.
+    //
+    // **What it is worth, on the same project and the same rounds once it hits
+    // again**: `examples/workspace/apps/linux`, five alternating rounds, warm,
+    // under the gate lock, artifact verified rather than only the exit status --
+    //
+    //     cache      best 0.088s  median 0.099s
+    //     no cache   best 0.384s  median 0.393s
+    //
+    // Four times, and three quarters of a warm rebuild. The object cache
+    // already covers the C, so what is left is almost all frontend.
     let configs = config_chain(&canonical);
     let wanted = snapshot.sources.len() + configs.len();
     let recorded = configs.clone();

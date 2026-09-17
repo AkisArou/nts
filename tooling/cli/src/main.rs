@@ -2530,8 +2530,15 @@ fn build(rest: &[String]) -> Result<()> {
             // sites, so the second snapshot is now a cache hit and the number
             // measured the wrong thing.
             //
-            // Current, controlled with `NTS_NO_SNAPSHOT_CACHE=1` on one binary,
+            // Controlled with `NTS_NO_SNAPSHOT_CACHE=1` on one binary,
             // alternating on warm state: **0.26s with the cache, 1.5s without**.
+            //
+            // **That number stopped being true for six hours and nothing said
+            // so.** Canonicalising the cache key moved one of two derivations
+            // of the config chain and not the other, so no entry ever matched
+            // and the cache was dead. `cache.rs` owns the current figure and
+            // the argument; this comment is the date-stamped one above and is
+            // kept for what it records rather than as a claim about today.
             // A number in a comment is a claim with a date on it; this one had
             // no date and outlived the code it described by one commit.
             let config_roots = generate_bindings(&tsconfig, std::slice::from_ref(&target.id))?;
