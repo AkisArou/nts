@@ -14220,7 +14220,7 @@ impl<'a> FuncBuilder<'a> {
             .generator
             .as_ref()
             .map_or(HirType::Void, |frame| frame.yields.clone());
-        let (sequence, forced) = self.table_source(operand);
+        let (sequence, forced) = self.sequence_source(operand);
         let sequence_value = self.lower_expression(sequence)?;
         let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
         let origin = self.origin(id);
@@ -14578,7 +14578,7 @@ impl<'a> FuncBuilder<'a> {
             let origin = self.origin(id);
             return self.lower_array_copy(argument, &ty, &origin);
         }
-        let (sequence, forced) = self.table_source(argument);
+        let (sequence, forced) = self.sequence_source(argument);
         let sequence_value = self.lower_expression(sequence)?;
         let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
 
@@ -14618,7 +14618,7 @@ impl<'a> FuncBuilder<'a> {
         // above was measured under the wrong one and had to be retracted.
         let counted = matches!(
             walk,
-            Walk::Counted(_) | Walk::Table { .. } | Walk::Entries { .. }
+            Walk::Counted { .. } | Walk::Table { .. } | Walk::Entries { .. }
         );
         let start = if counted {
             self.push(OpKind::Length(sequence_value), HirType::NUMBER, origin.clone())
@@ -16173,7 +16173,7 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Bool,
                 origin.clone(),
             ),
-            Walk::Counted(_) | Walk::Text => {
+            Walk::Counted { .. } | Walk::Text => {
                 let length = self.push(OpKind::Length(sequence), HirType::NUMBER, origin.clone());
                 self.push(
                     OpKind::Binary {
@@ -16424,12 +16424,18 @@ impl<'a> FuncBuilder<'a> {
     /// is not one this can hand a single element to.
     fn walk_element_type(walk: &Walk) -> Option<HirType> {
         Some(match walk {
-            Walk::Counted(element)
+            // Two values per step, for the same reason `Entries` is: a walk
+            // binding a pair is not one this can hand a single element to.
+            Walk::Counted {
+                binds: Binds::PositionAndElement,
+                ..
+            }
+            | Walk::Entries { .. } => return None,
+            Walk::Counted { element, .. }
             | Walk::Table { element, .. }
             | Walk::Protocol { element, .. }
             | Walk::Generator { element, .. } => element.clone(),
             Walk::Text => HirType::Managed(ManagedType::String),
-            Walk::Entries { .. } => return None,
         })
     }
 
@@ -16844,11 +16850,19 @@ impl<'a> FuncBuilder<'a> {
     /// `m.keys()` in the head of a `for...of`, reduced to `m` and which slot to
     /// read.
     ///
-    /// Only for a table. `xs.keys()` on an *array* yields indices rather than
-    /// elements, so stripping the call there would iterate the wrong thing
-    /// quietly -- which is why this asks the checker for the receiver's type
-    /// rather than trusting the method name.
-    fn table_source(&self, sequence: NodeId) -> (NodeId, Option<&'static str>) {
+    /// The receiver's **type** decides, never the method name. `xs.keys()` on
+    /// an array yields indices where `m.keys()` on a table yields keys, so a
+    /// fold that trusted the name would iterate the wrong thing quietly. Both
+    /// are folded -- an array's counted loop already keeps the index the three
+    /// spellings differ over, so it can answer all of them -- and the name is
+    /// carried out as `forced` for [`Self::walk_of`] to hold against the arity.
+    ///
+    /// Carrying the name rather than deciding here is what keeps
+    /// `for (const pair of xs.entries())` **refused** instead of silently
+    /// walking elements: the fold has already replaced the call by then, so the
+    /// arity check in `walk_of` is the only thing between a one-name head and
+    /// the wrong sequence.
+    fn sequence_source(&self, sequence: NodeId) -> (NodeId, Option<&'static str>) {
         let plain = (sequence, None);
         if self.kind_of(sequence) != Some(syntax::CALL_EXPRESSION)
             || !self.arguments_of(sequence).is_empty()
@@ -16868,7 +16882,10 @@ impl<'a> FuncBuilder<'a> {
         if !matches!(
             self.type_of(*receiver),
             Some(HirType::Managed(
-                ManagedType::Map(_, _) | ManagedType::Set(_)
+                ManagedType::Map(_, _)
+                    | ManagedType::Set(_)
+                    | ManagedType::Array(_)
+                    | ManagedType::View(_)
             ))
         ) {
             return plain;
@@ -16881,6 +16898,51 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// The walks that bind **two** names, which is a different question from
+    /// which walk a sequence supports.
+    ///
+    /// Three sequences answer it and all three for the same reason: the pair
+    /// the language says the element is never exists. A `Map` holds its keys
+    /// and values in separate arrays and reads one of each; a `Set`'s
+    /// `entries()` yields `[v, v]`, which node agrees is the same value twice;
+    /// and an array's counted loop already keeps the index, so `xs.entries()`
+    /// is that loop reading its own cursor. Building a pair per iteration to
+    /// take apart immediately would be an allocation for nothing in each.
+    ///
+    /// `None` where the sequence is not one of the three, which leaves the
+    /// arity refusal in [`Self::walk_of`] to say so.
+    fn pair_walk(ty: &HirType, forced: Option<&'static str>) -> Option<Walk> {
+        match ty {
+            // `for (const [k, v] of map)` and `of map.entries()` are the same
+            // walk written two ways, which is why the bare form is admitted.
+            HirType::Managed(ManagedType::Map(key, value))
+                if matches!(forced, None | Some("entries")) =>
+            {
+                Some(Walk::Entries {
+                    key: (**key).clone(),
+                    value: (**value).clone(),
+                    value_read: "nts_map_value_at",
+                })
+            }
+            HirType::Managed(ManagedType::Set(element)) if forced == Some("entries") => {
+                Some(Walk::Entries {
+                    key: (**element).clone(),
+                    value: (**element).clone(),
+                    value_read: "nts_map_key_at",
+                })
+            }
+            HirType::Managed(ManagedType::Array(element) | ManagedType::View(element))
+                if forced == Some("entries") =>
+            {
+                Some(Walk::Counted {
+                    element: (**element).clone(),
+                    binds: Binds::PositionAndElement,
+                })
+            }
+            _ => None,
+        }
+    }
+
     /// Which walk a lowered sequence supports, or why it supports none.
     fn walk_of(
         &mut self,
@@ -16890,29 +16952,10 @@ impl<'a> FuncBuilder<'a> {
         binds: usize,
     ) -> Result<Walk, Diagnostic> {
         let ty = self.values[value.0 as usize].ty.clone();
-        // `for (const [k, v] of map)`, and `of map.entries()`, which is the
-        // same walk written the other way. Two names, two reads, no pair.
         if binds == 2
-            && let HirType::Managed(ManagedType::Map(key, val)) = &ty
-            && matches!(forced, None | Some("entries"))
+            && let Some(walk) = Self::pair_walk(&ty, forced)
         {
-            return Ok(Walk::Entries {
-                key: (**key).clone(),
-                value: (**val).clone(),
-                value_read: "nts_map_value_at",
-            });
-        }
-        // A `Set`'s `entries()` yields `[v, v]`, which node agrees is the same
-        // value twice.
-        if binds == 2
-            && let HirType::Managed(ManagedType::Set(element)) = &ty
-            && forced == Some("entries")
-        {
-            return Ok(Walk::Entries {
-                key: (**element).clone(),
-                value: (**element).clone(),
-                value_read: "nts_map_key_at",
-            });
+            return Ok(walk);
         }
         if binds != 1 {
             return Err(self.unsupported(
@@ -16924,9 +16967,28 @@ impl<'a> FuncBuilder<'a> {
             // A view walks by count exactly as an array does -- `length` and
             // an index, which is what `Walk::Counted` is. The loop it emits
             // reads through `ArrayGet`, and that already takes both.
-            (HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)), None) => {
-                Ok(Walk::Counted((**element).clone()))
-            }
+            //
+            // `values()` is the same walk written the other way, which is what
+            // JavaScript says too. `entries()` is **not** here: with one name it
+            // would bind the `[index, element]` pair, which is a tuple this
+            // cannot represent, so it falls to the refusal below rather than
+            // quietly walking elements -- the hazard `sequence_source` names.
+            (
+                HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)),
+                None | Some("values"),
+            ) => Ok(Walk::Counted {
+                element: (**element).clone(),
+                binds: Binds::Element,
+            }),
+            // `keys()` yields the positions, so the walk's element *is* the
+            // index and its type is a number rather than the array's.
+            (
+                HirType::Managed(ManagedType::Array(_) | ManagedType::View(_)),
+                Some("keys"),
+            ) => Ok(Walk::Counted {
+                element: HirType::NUMBER,
+                binds: Binds::Position,
+            }),
             (HirType::Managed(ManagedType::String), None) => Ok(Walk::Text),
             // A `Set`'s elements are its keys, so iterating one, its `keys()`
             // and its `values()` are the same walk -- which is what JavaScript
@@ -17015,7 +17077,7 @@ impl<'a> FuncBuilder<'a> {
             Walk::Protocol { .. } | Walk::Generator { .. } => {
                 unreachable!("a cursorless walk has no cursor; its step is `Step::None`")
             }
-            Walk::Counted(_) => {
+            Walk::Counted { .. } => {
                 let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
                 self.push(
                     OpKind::Binary {
@@ -17090,6 +17152,31 @@ impl<'a> FuncBuilder<'a> {
                 )
             }
         };
+        // A counted walk, which may hand back the position, the element, or
+        // both. Here rather than in the single-value match below because
+        // `entries()` produces two, exactly as the `Map` case does.
+        if let Walk::Counted { element, binds } = walk {
+            let element = element.clone();
+            let binds = *binds;
+            // Checked: the length was read once and the bounds pass is what
+            // proves the index inside it.
+            let read = |lower: &mut Self| {
+                lower.push(
+                    OpKind::ArrayGet {
+                        array: sequence,
+                        index: at,
+                        checked: true,
+                    },
+                    element.clone(),
+                    origin.clone(),
+                )
+            };
+            return match binds {
+                Binds::Element => vec![read(self)],
+                Binds::Position => vec![at],
+                Binds::PositionAndElement => vec![at, read(self)],
+            };
+        }
         if let Walk::Entries {
             key,
             value,
@@ -17108,17 +17195,8 @@ impl<'a> FuncBuilder<'a> {
             return vec![k, v];
         }
         vec![match walk {
-            // Checked: the length was read once and the bounds pass is what
-            // proves the index inside it.
-            Walk::Counted(element) => self.push(
-                OpKind::ArrayGet {
-                    array: sequence,
-                    index: at,
-                    checked: true,
-                },
-                element.clone(),
-                origin.clone(),
-            ),
+            // Handled above, with the other walks that read their own cursor.
+            Walk::Counted { .. } => unreachable!("a counted walk answered already"),
             Walk::Table { read, element } => {
                 let slot = self.call_runtime(read, vec![sequence, at], HirType::Erased, origin);
                 // The table stores erased values. Where the element type is
@@ -17212,7 +17290,19 @@ impl<'a> FuncBuilder<'a> {
         head: Head,
         initializer: NodeId,
         sequence: ValueId,
+        forced: Option<&'static str>,
     ) -> Head {
+        // `xs.entries()` is the third reading and it is positional like the
+        // first: the two names are the position and the element, and there is
+        // no pair to take apart -- `sequence_source` has already folded the
+        // call away, so by here the value is the array itself and the only
+        // thing still saying which of the two readings was written is the name
+        // it carried out. Without this, `for (const [i, v] of xs.entries())`
+        // became a destructuring of an element and then refused, because an
+        // element is not a pair.
+        if forced == Some("entries") {
+            return head;
+        }
         if !matches!(head, Head::InOrder(_))
             || matches!(
                 self.values[sequence.0 as usize].ty,
@@ -17389,7 +17479,7 @@ impl<'a> FuncBuilder<'a> {
         // Built as the *same* walk rather than a second one, because a second
         // would be a counted loop over an array written twice.
         let (sequence, forced) = match over {
-            Over::Elements => self.table_source(sequence),
+            Over::Elements => self.sequence_source(sequence),
             Over::Keys => (sequence, None),
         };
         let sequence_value = match over {
@@ -17408,7 +17498,7 @@ impl<'a> FuncBuilder<'a> {
                 .decide_object_keys(id, sequence)
                 .map_err(|_| self.unsupported(id, "a `for...in` over something without named fields"))?,
         };
-        let head = self.head_for_the_sequence(head, initializer, sequence_value);
+        let head = self.head_for_the_sequence(head, initializer, sequence_value, forced);
         let mut element_symbols = Vec::new();
         if let Head::InOrder(names) = &head {
             for name in names {
@@ -35881,10 +35971,28 @@ enum Over {
     Keys,
 }
 
+/// What a counted walk hands the head, per step.
+///
+/// The index a counted loop already keeps *is* the key `xs.keys()` yields and
+/// the first half of what `xs.entries()` yields, so all three are one walk
+/// reading its own cursor rather than three walks over the same array. Nothing
+/// is allocated and no pair is built, which is the same argument
+/// [`Walk::Entries`] makes for a `Map`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Binds {
+    /// `for (const v of xs)` and `of xs.values()`.
+    Element,
+    /// `for (const i of xs.keys())`. The walk's element *is* the index, so its
+    /// element type is a number rather than the array's.
+    Position,
+    /// `for (const [i, v] of xs.entries())`, in that order.
+    PositionAndElement,
+}
+
 #[derive(Clone)]
 enum Walk {
     /// `xs[i]` while `i < xs.length`, stepping by one.
-    Counted(HirType),
+    Counted { element: HirType, binds: Binds },
     /// The live entries of a `Map` or a `Set`.
     ///
     /// The cursor is an entry index rather than a position, because the entries
