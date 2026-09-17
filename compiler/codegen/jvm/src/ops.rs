@@ -174,7 +174,20 @@ pub fn growable_external(name: &str, holds: &str) -> Option<(String, &'static st
         // The class comes from the argument as it does above, so `_ref` needs
         // no separate method -- `NtsArrayL.setLength` is the one that clears
         // the dropped slots.
-        "set_length" | "set_length_ref" => ("setLength", format!("(L{class};D)V")),
+        // **`_value` is the same Java method too.** In C the three differ only
+        // in what they release from the dropped slots -- nothing, a reference,
+        // an `NtsValue` -- and under a tracing collector there is nothing to
+        // release: `setLength` nulls them for the same reason `pop` does, which
+        // is that a stale reference in the backing store outlives its element.
+        // So the suffix chooses nothing here, exactly as it does not for `_ref`.
+        //
+        // It was absent, and `xs.length = n` on an `unknown[]` or a plain
+        // `(number | string)[]` reaches it -- no `any` required, so none of the
+        // narrowing that hides the erased-needle helpers applies. C and LLVM
+        // have had it since the lowering emitted it.
+        "set_length" | "set_length_ref" | "set_length_value" => {
+            ("setLength", format!("(L{class};D)V"))
+        }
         "reverse" | "reverse_ref" => ("reverse", format!("(L{class};)L{class};")),
         // **A growable array's `sort` needs its own row, and that is the whole
         // finding.** `array_external` gained `nts_array_sort_str` when the
@@ -6566,6 +6579,12 @@ mod set_length {
         // argument, so the suffix chooses nothing here.
         assert_eq!(
             super::growable_external("nts_array_set_length_ref", "L"),
+            super::growable_external("nts_array_set_length", "L"),
+        );
+        // And `_value`, which was missing entirely: `xs.length = n` on an
+        // `unknown[]` refused with `NTS4001` while C and LLVM compiled it.
+        assert_eq!(
+            super::growable_external("nts_array_set_length_value", "L"),
             super::growable_external("nts_array_set_length", "L"),
         );
 
