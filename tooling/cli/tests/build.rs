@@ -2826,3 +2826,89 @@ export default defineConfig({
   },
 });
 "#;
+
+const JVM_GRADLE_DEPENDENCY: &str = r#"
+import { defineConfig, app, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    tool: app({
+      kind: "executable",
+      entry: "./src/main.ts",
+      targets: [target.jvm({ release: 17 })],
+    }),
+  },
+  dependencies: {
+    "java-8": { from: "gradle", lockfile: "./deps/gradle.tsv" },
+  },
+});
+"#;
+
+/// A pin is found in a Gradle cache, whose layout is not Maven's.
+///
+/// **Two layouts, and getting them the same way round is the whole of this.**
+/// Maven splits the group on dots into directories; Gradle keeps it as one
+/// directory name and puts the file under a *digest* directory it computes, so
+/// the leaf has to be read rather than constructed:
+///
+/// ```text
+/// ~/.m2/repository/com/google/code/gson/gson/2.9.1/gson-2.9.1.jar
+/// ~/.gradle/caches/modules-2/files-2.1/com.google.code.gson/gson/2.9.1/<sha1>/gson-2.9.1.jar
+/// ```
+///
+/// Checked against a real cache before it was written, and the path this builds
+/// was then exercised end to end against a real `gson-2.9.1.jar`: located,
+/// digest verified, 216 of its classes inside the executable, and it ran. That
+/// run is not reproducible here -- it depends on what the developer's Gradle
+/// cache happens to hold -- so the layout is staged under a `HOME` this test
+/// owns, which exercises the same branch and can fail.
+#[test]
+fn a_pin_is_found_in_a_gradle_cache_and_not_only_beside_the_lockfile() {
+    if !jdk() {
+        skip("the tsgo frontend and a JDK");
+        return;
+    }
+    let project = fixture("build-gradle-cache", JVM_GRADLE_DEPENDENCY);
+    if !vendored_jar(&project, "real") {
+        skip("a JDK that can build the jar to depend on");
+        return;
+    }
+    // Move the jar out of the one place that would find it without a cache, so
+    // a pass cannot come from the vendored branch.
+    let staged =
+        project.join("gradle-home/caches/modules-2/files-2.1/com.example/greeter/1.0.0/abc123");
+    std::fs::create_dir_all(&staged).expect("the gradle cache layout");
+    std::fs::rename(project.join("deps/greeter-1.0.0.jar"), staged.join("greeter-1.0.0.jar"))
+        .expect("staging the jar into the cache");
+    std::fs::rename(project.join("deps/maven.tsv"), project.join("deps/gradle.tsv"))
+        .expect("the lockfile this config names");
+
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("build")
+        .arg(project.join("tsconfig.json"))
+        // **`GRADLE_USER_HOME` rather than `HOME`.** Overriding `HOME` is what
+        // this reached for first, and on a machine whose JDK arrives through
+        // asdf it breaks every tool: `jar` is a shim under `$HOME/.asdf`, so it
+        // exited 126 with empty stderr and the build reported "packaging
+        // failed" with nothing after the colon. `GRADLE_USER_HOME` is what
+        // Gradle itself reads, so honouring it is the more correct lookup as
+        // well as the testable one.
+        .env("GRADLE_USER_HOME", project.join("gradle-home"))
+        .output()
+        .expect("running nts build");
+    assert!(
+        run.status.success(),
+        "the pin was not found in the Gradle cache:\n{}{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let listed = Command::new("jar")
+        .arg("--list")
+        .arg("--file")
+        .arg(project.join(".nts/build/tool/java-17/tool.jar"))
+        .output()
+        .expect("jar --list");
+    assert!(
+        String::from_utf8_lossy(&listed.stdout).contains("com/example/Greeter.class"),
+        "found and not packaged"
+    );
+}

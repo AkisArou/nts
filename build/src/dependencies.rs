@@ -415,10 +415,19 @@ fn places(lockfile: &Utf8Path, pin: &Pin) -> Vec<Utf8PathBuf> {
         maven = maven.join(segment);
     }
     places.push(maven.join(&pin.artifact).join(&pin.version).join(pin.file_name()));
+    // **`GRADLE_USER_HOME` where it is set**, which is what Gradle itself reads
+    // and what CI images routinely point somewhere other than `$HOME`. Looking
+    // only under the home directory would miss the cache on exactly the
+    // machines that moved it on purpose.
+    //
     // Gradle keys the leaf directory on a digest of the file, so the version
-    // directory is read rather than constructed.
-    let gradle = home
-        .join(".gradle/caches/modules-2/files-2.1")
+    // directory is read rather than constructed -- and it keeps the group as
+    // one directory name where Maven splits it on dots. Checked against a real
+    // cache rather than recalled.
+    let gradle = std::env::var("GRADLE_USER_HOME")
+        .ok()
+        .map_or_else(|| home.join(".gradle"), Utf8PathBuf::from)
+        .join("caches/modules-2/files-2.1")
         .join(&pin.group)
         .join(&pin.artifact)
         .join(&pin.version);
