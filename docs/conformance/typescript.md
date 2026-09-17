@@ -2558,7 +2558,7 @@ and the third-largest cause in the corpus.
   accessor v = 3                                 the `accessor` keyword
   [[1],[2]].flat()                               `flat` on an array of references
   JSON.stringify, JSON.parse, Object.freeze      a global member with no definition here
-  Object.assign, Math.max(...xs)                 a global member, or an intrinsic spread into
+  Object.assign, Math.max(...xs)                 a global member, or a *spread* into an intrinsic
   xs.sort(cmp), xs.flatMap(f)                    an array method that is not one of the eight
   n.toFixed(2), s.at(0), "abc".split(",", 2)     a string or number method, or an arity of one
 ```
@@ -2575,6 +2575,41 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 *in one position*, and the row as written sent a reader to build something that
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
+
+#### `Math.max` and `Math.min` at any arity (fixed)
+
+Only the two-argument call lowered. `Math.max(a, b, c)`, `Math.max(a)` and
+`Math.max()` were all *an intrinsic call with this many arguments* — and the
+refusal's own comment named the fix and said why it refused instead of guessing:
+*"quietly producing the two-argument answer for a three-argument call would be
+wrong in a way nothing downstream could detect"*.
+
+**Folding is exact here**, which is the whole argument. Each step selects one of
+its operands, so three arguments folded pairwise give the number the
+specification's n-ary comparison gives. `String.fromCharCode` folds for the same
+reason and `Math.hypot` does not, which its own comment states:
+`sqrt(sqrt(a²+b²)²+c²)` is the same number only in arithmetic that has no
+rounding. The empty call is that fold's identity — `-Infinity` for `max`,
+`+Infinity` for `min`.
+
+`examples/math-min-and-max-fold` is 9 exports, two of which make "exact"
+checkable rather than asserted: `1 / Math.max(-0, 0, x)` separates `+0` from
+`-0`, and a `NaN` in the middle has to reach the result through every step.
+
+##### The fixture that had been passing on a different fact
+
+`examples/mathops-unsupported` exists so that `Math` members this compiler does
+not implement are refused rather than guessed at from their spelling, and
+`an_unimplemented_math_member_is_refused_rather_than_guessed` is the test. Its
+arms were `Math.sinh`, `Math.sqrt` and a three-argument `Math.max`.
+
+**`sinh` and `sqrt` are implemented**, and had been for long enough that nobody
+remembers. The only arm still refusing was the three-argument call — an *arity*,
+not a member — so a test named for a member being refused had been passing on a
+different fact, and this feature landing is what made it say so. The fixture now
+holds `clz32`, `asinh`, `acosh` and `atanh`, which the intrinsic table really
+does not have, and `sinh` and `sqrt` moved to `examples/mathops` where they are
+checked against node for the first time.
 
 #### A labelled block (fixed)
 

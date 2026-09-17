@@ -31752,6 +31752,47 @@ impl<'a> FuncBuilder<'a> {
                 let operand = self.lower_expression(*argument)?;
                 Ok(self.push(OpKind::Unary { op, operand }, ty, origin))
             }
+            // `Math.min(a, b, c)`, `Math.max(a)` and `Math.max()`.
+            //
+            // **Associative and exact**, which is what makes folding right here
+            // and wrong for `Math.hypot` below: each step selects one of its
+            // operands, so three arguments folded pairwise give the number the
+            // specification's n-ary comparison gives -- including the `NaN`
+            // that propagates out of any argument, and the `+0` that
+            // `max(-0, +0)` answers.
+            //
+            // The empty call is that fold's identity: `Math.max()` is
+            // `-Infinity` and `Math.min()` is `+Infinity`, which is what the
+            // specification says and what a fold with no operands needs. One
+            // argument is itself, which is `ToNumber(a)` where `a` is already a
+            // number.
+            (Intrinsic::Binary(op @ (BinOp::Min | BinOp::Max)), args) => {
+                let mut folded: Option<ValueId> = None;
+                for argument in args {
+                    let operand = self.lower_expression(*argument)?;
+                    folded = Some(match folded {
+                        None => operand,
+                        Some(lhs) => self.push(
+                            OpKind::Binary {
+                                op,
+                                lhs,
+                                rhs: operand,
+                            },
+                            ty.clone(),
+                            origin.clone(),
+                        ),
+                    });
+                }
+                if let Some(value) = folded {
+                    return Ok(value);
+                }
+                let identity = if matches!(op, BinOp::Max) {
+                    f64::NEG_INFINITY
+                } else {
+                    f64::INFINITY
+                };
+                Ok(self.push(OpKind::ConstFloat(identity), ty, origin))
+            }
             (Intrinsic::Binary(op), [left, right]) => {
                 let lhs = self.lower_expression(*left)?;
                 let rhs = self.lower_expression(*right)?;
