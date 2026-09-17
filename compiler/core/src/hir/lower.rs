@@ -9218,6 +9218,52 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// Reads the same map [`Self::class_name_for`] reads, keyed by the same
     /// node, so a call site and a definition cannot disagree about a name.
+    /// `A.base` where `base` is a `static get`.
+    ///
+    /// **The function already exists.** `func A.get base()` is lowered like any
+    /// other static member, and `dce` drops it because nothing calls it: a
+    /// static accessor is *read* as a property access, so it took the
+    /// static-field path and was refused as ``base`, a static field this
+    /// compiler gave no storage`` -- a sentence about storage, for a member
+    /// that is code. Only the call was missing.
+    ///
+    /// Named through [`Self::qualified_class_name`] first, exactly as a
+    /// constructor call is, so a class name declared in more than one file
+    /// resolves to the same `Frame@a` the definition was emitted under.
+    fn static_accessor_read(
+        &mut self,
+        id: NodeId,
+        object: NodeId,
+        member: NodeId,
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        let symbol = self.node(member).symbol?;
+        let declaration = self
+            .snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .declarations
+            .iter()
+            .copied()
+            .find(|at| self.kind_of(*at) == Some(syntax::GET_ACCESSOR))?;
+        let owner = self
+            .qualified_class_name(object)
+            .or_else(|| self.declaring_class_name(declaration))?;
+        let name = self.literal_name(member)?;
+        let Some(ty) = self.type_of(id) else {
+            return Some(Err(self.unrepresentable(id, "a static accessor")));
+        };
+        let origin = self.origin(id);
+        Some(Ok(self.push(
+            OpKind::Call {
+                callee: Callee::Direct(format!("{owner}.get {name}")),
+                args: Vec::new(),
+                frame: None,
+            },
+            ty,
+            origin,
+        )))
+    }
+
     fn qualified_class_name(&self, identifier: NodeId) -> Option<String> {
         let symbol = self.node(identifier).symbol?;
         let record = self.snapshot.symbols.get(symbol.0 as usize)?;
@@ -9225,7 +9271,7 @@ impl<'a> FuncBuilder<'a> {
             .declarations
             .iter()
             .copied()
-            .find(|at| self.kind_of(*at) == Some(syntax::CLASS_DECLARATION))?;
+            .find(|at| self.kind_of(*at).is_some_and(declares_a_class))?;
         self.qualified.get(&at).cloned()
     }
 
@@ -9380,11 +9426,17 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(member);
         let mut params = Vec::new();
         if is_static {
-            // No receiver, so no `this` and no base to resolve `super` against.
-            // Reaching either inside a static method is a TypeScript error, so
-            // there is nothing to refuse here that the checker has not.
+            // No receiver, so no `this`.
+            //
+            // **A base, though.** This used to clear that too, saying "reaching
+            // either inside a static method is a TypeScript error, so there is
+            // nothing to refuse here that the checker has not". Half right:
+            // `this` is, and `super` is not. `static make() { return
+            // super.make() * 3 }` is ordinary TypeScript calling the base
+            // class's static member, and it was refused as ``super` outside a
+            // derived class` -- inside a derived class.
             self.this = None;
-            self.base = None;
+            self.base = self.base_class(class);
         } else {
             // `this` is parameter zero. Its type is the class's instance type
             // -- or, for one copy of a generic class, the instantiation's.
@@ -19571,6 +19623,9 @@ impl<'a> FuncBuilder<'a> {
             if let Some(place) = self.static_field_place(target, *member) {
                 return place;
             }
+            if let Some(place) = self.static_accessor_place(*object_node, *member) {
+                return Ok(place);
+            }
             if let Some(place) = self.super_setter_place(*object_node, *member) {
                 return Ok(place);
             }
@@ -19609,7 +19664,7 @@ impl<'a> FuncBuilder<'a> {
                         .declared_type_of(type_id, &name)
                         .and_then(|declared| self.represent(declared));
                     return Ok(Place::Setter {
-                        object,
+                        object: Some(object),
                         callee,
                         getter,
                         wants,
@@ -19811,7 +19866,7 @@ impl<'a> FuncBuilder<'a> {
                 let read = self.push(
                     OpKind::Call {
                         callee: getter,
-                        args: vec![object],
+                        args: object.into_iter().collect(),
                         frame: None,
                     },
                     ty,
@@ -20661,7 +20716,7 @@ impl<'a> FuncBuilder<'a> {
                 self.push(
                     OpKind::Call {
                         callee: callee.clone(),
-                        args: vec![object, value],
+                        args: object.into_iter().chain([value]).collect(),
                         frame: None,
                     },
                     HirType::Void,
@@ -25729,6 +25784,55 @@ impl<'a> FuncBuilder<'a> {
     /// The getter comes from the same walk, because a compound assignment --
     /// `super.x += 1` -- reads before it writes and both halves have to name
     /// the same class.
+    /// `A.base = v` where `base` is a `static set`.
+    ///
+    /// The write half of [`Self::static_accessor_read`], and it reached the same
+    /// wrong sentence from the other side: with no storage to write, the place
+    /// fell through to lowering the *receiver*, and `A` is a class, so the
+    /// program was refused as ``A`, a class used as a value``. Neither message
+    /// was about what the program wrote.
+    ///
+    /// The getter is looked up beside it because a compound assignment needs
+    /// both -- `A.base += n` reads and then writes -- and `None` where the class
+    /// declares only a setter, which is legal and means `+=` is not.
+    fn static_accessor_place(&mut self, object: NodeId, member: NodeId) -> Option<Place> {
+        let symbol = self.node(member).symbol?;
+        // **`static`, and asked about the symbol before anything else.** Without
+        // this the walk below finds any `set`, so an *instance* setter took the
+        // static path and was emitted as a direct call to `Class.set value` --
+        // which is not what an overridden accessor means, and
+        // `an_overridden_accessor_is_dispatched` is the test that says so.
+        if !is_static_member_symbol(self.snapshot, symbol) {
+            return None;
+        }
+        let declaration = self
+            .snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .declarations
+            .iter()
+            .copied()
+            .find(|at| self.kind_of(*at) == Some(syntax::SET_ACCESSOR))?;
+        let owner = self
+            .qualified_class_name(object)
+            .or_else(|| self.declaring_class_name(declaration))?;
+        let name = self.literal_name(member)?;
+        let declares_a_getter = self
+            .snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .declarations
+            .iter()
+            .any(|at| self.kind_of(*at) == Some(syntax::GET_ACCESSOR));
+        Some(Place::Setter {
+            object: None,
+            callee: Callee::Direct(format!("{owner}.set {name}")),
+            getter: declares_a_getter
+                .then(|| Callee::Direct(format!("{owner}.get {name}"))),
+            wants: self.type_of(member),
+        })
+    }
+
     fn super_setter_place(&mut self, object: NodeId, member: NodeId) -> Option<Place> {
         if self.kind_of(object) != Some(syntax::SUPER_KEYWORD) {
             return None;
@@ -25745,7 +25849,7 @@ impl<'a> FuncBuilder<'a> {
             _ => None,
         };
         Some(Place::Setter {
-            object: receiver,
+            object: Some(receiver),
             callee,
             getter,
             wants,
@@ -25902,6 +26006,11 @@ impl<'a> FuncBuilder<'a> {
                 let ty = self.module.types[global as usize].clone();
                 let read = self.push(OpKind::GlobalGet(global), ty, origin);
                 return self.narrowed(id, read);
+            }
+            // A `static get` is not storage and never had any. It is the one
+            // member that reaches here having been lowered successfully.
+            if let Some(read) = self.static_accessor_read(id, *object, *member) {
+                return read;
             }
             let name = self.literal_name(*member).unwrap_or_default();
             return Err(self.unsupported(
@@ -32892,6 +33001,28 @@ impl<'a> FuncBuilder<'a> {
             .base
             .clone()
             .ok_or_else(|| self.unsupported(id, "`super` outside a derived class"))?;
+        // **A `static` member's `super`, which has no receiver to find a base
+        // type from.** Static dispatch has no slot and nothing to override, so
+        // the base's name is the whole answer: a direct call, which is exactly
+        // what the source means. Writing `Base.make()` instead would say the
+        // same thing and stop saying it the moment the class is renamed, which
+        // is why the language has the word.
+        if self.this.is_none() {
+            let args = self.lower_arguments(id, arguments)?;
+            let ty = self
+                .type_of(id)
+                .ok_or_else(|| self.unrepresentable(id, "a `super` call in a static member"))?;
+            let origin = self.origin(id);
+            return Ok(self.push(
+                OpKind::Call {
+                    callee: Callee::Direct(format!("{base}.{member}")),
+                    args,
+                    frame: None,
+                },
+                ty,
+                origin,
+            ));
+        }
         let receiver = self
             .this
             .ok_or_else(|| self.unsupported(id, "`super` outside a method"))?;
@@ -34913,7 +35044,10 @@ enum Place {
     /// that cannot be read, and is refused as such rather than as the absence
     /// of a field.
     Setter {
-        object: ValueId,
+        /// **`None` for a `static` accessor**, which has no receiver: `A.base`
+        /// is addressed by the class rather than by an instance, and its
+        /// function takes the value alone.
+        object: Option<ValueId>,
         callee: Callee,
         getter: Option<Callee>,
         /// What the accessor's value is declared as, for the store to coerce

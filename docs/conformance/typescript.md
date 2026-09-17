@@ -2545,6 +2545,50 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### `static get` / `static set`, and `super` in a static member (fixed)
+
+Two gaps that a sweep found and a census could not, because **neither refusal
+named the construct the program contained**.
+
+`A.base` where `base` is a `static get` was refused as ``base`, a static field
+this compiler gave no storage`` — a sentence about storage, for a member that is
+code. `A.base = v` reached the same wrong answer from the other side: with no
+storage to write, the place fell through to lowering the *receiver*, and `A` is
+a class, so ``A`, a class used as a value``.
+
+**The function was there the whole time.** `func A.get base()` is lowered like
+any other static member and `dce` drops it, because nothing calls it: a static
+accessor is *read* as a property access, so it never took a call path. Only the
+call was missing. `Place::Setter`'s receiver is an `Option` now, which is what
+lets the write half be the same shape as every other accessor write —
+`A.base += 3` needs the getter and the setter in one expression and gets both.
+
+`super.make()` inside a `static make()` was refused as ``super` outside a
+derived class``, inside a derived class. The lowering cleared the base when it
+lowered a static member and said why:
+
+> No receiver, so no `this` and no base to resolve `super` against. Reaching
+> either inside a static method is a TypeScript error, so there is nothing to
+> refuse here that the checker has not.
+
+Half right: `this` is an error there and `super` is not. The two were cleared
+together because they are cleared in the same place, and one sentence covered
+both. Static dispatch has no slot and nothing to override, so the base's name is
+the whole answer and the call is direct.
+
+`examples/a-static-accessor` is 8 exports and `examples/super-in-a-static-method`
+is 4, both agreeing with node on C, LLVM and the JVM, against 8 refusals each on
+the pre-change binary. The second covers two levels and a class that declares
+neither member, because a lowering resolving `super` to "the root of the chain"
+would agree with node on the one-level case.
+
+**An existing test caught the first version of the write path.** It looked for
+any `set` accessor rather than a `static` one, so an *instance* setter took the
+static path and was emitted as a direct call —
+`an_overridden_accessor_is_dispatched` in `compiler/core/tests/member_names.rs`
+failed on exactly the assertion it was written for. A check that does not test
+the thing it is named after passes for every input that reaches it.
+
 #### An object literal holding code, at module scope (fixed)
 
 `const o = { twice() { … } }` outside a function was refused as **a method on an
