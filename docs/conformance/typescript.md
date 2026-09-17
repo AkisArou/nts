@@ -2577,6 +2577,28 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### `typeof null` and `typeof undefined` (fixed)
+
+Both are constants — `"object"` and `"undefined"` — and both were refused as
+``null` or `undefined` where what it stands in for is not a reference``: a
+sentence about storage, for an expression with no storage and a known answer.
+
+The refusal came from **lowering the operand**, which the general `typeof` path
+does before consulting the value's representation, and a bare `null` has none to
+lower into. Answering from the checker's type instead skips nothing: `typeof`
+evaluates its operand, and the operand here is a keyword with no effects to run.
+
+**`typeof x` where `x` is a `const` holding `null` is still refused**, and so is
+`typeof g()` where `g` returns `null`. Those are the null-representation family
+— 69 distinct sites and the fourth-largest cause in the corpus — and nothing
+here touches it. What landed is the literal, which had a constant answer all
+along.
+
+`examples/typeof-a-literal-absence` is 4 exports, one of which is the *nullable*
+and *optional* cases that read a run-time tag: they already worked, and they are
+in the fixture so that answering the literal from the type cannot quietly take
+over the path that must not use it. **3 refusals** on the pre-change binary.
+
 #### `String.prototype.concat` at any arity (fixed)
 
 The runtime's `nts_concat` joins two strings and the method takes any number.

@@ -10839,6 +10839,22 @@ impl<'a> FuncBuilder<'a> {
                 TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)) => Some("boolean"),
                 TypeKind::BigInt => Some("bigint"),
                 TypeKind::Symbol => Some("symbol"),
+                // **`typeof null` is `"object"`**, which is the language's
+                // oldest quirk and a constant either way. Both of these are
+                // answered here rather than below, because below begins by
+                // lowering the operand -- and a bare `null` has no
+                // representation to lower into, so the expression was refused
+                // as ``null` or `undefined` where what it stands in for is not
+                // a reference`: a sentence about storage, for something with no
+                // storage and a known answer.
+                //
+                // Nothing is skipped by not lowering it. `typeof` evaluates its
+                // operand, and the operand here is a *keyword*: the literal
+                // `null` and the literal `undefined` have no effects to run. A
+                // `typeof f()` whose result is `null` is a different node and
+                // still goes below.
+                TypeKind::Null => Some("object"),
+                TypeKind::Undefined => Some("undefined"),
                 _ => None,
             })
             .ok_or_else(|| {
