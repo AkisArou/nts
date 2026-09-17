@@ -2604,12 +2604,17 @@ rather than the whole: a `NaN` fails the first half and a fraction passes it.
 `ToIntegerOrInfinity`. Three methods, three rules, and only the subscript is
 strict about what an index is.
 
-**The JVM mirrors the old rule and now differs.** `strIndex` was written to
-follow `nts_str_at_into` call for call, so `s[1.7]` answers a character there
-while C and LLVM decline. Nothing in the tree indexes a string with a
-non-integer — every example and all 24 addon modules agree on all three backends
-— so this is a divergence in programs that do not exist yet, reported to the
-lane that owns the method.
+**The JVM followed, by deleting a call rather than adding a test.** `strIndex`
+had mirrored `nts_str_at_into` call for call, so it inherited the old rule —
+and its `bounds` helper, shared with the array path, *already was* the new one:
+`(int) index == index` rejects a fraction, `(int) NaN` is `0` which fails that
+test, and `-0.0` casts to `0` and compares equal so it still indexes element
+zero. Dropping the `toInteger` in front of it made the string and array helpers
+one rule **by being one call**.
+
+That is the shape worth keeping from the whole exchange: two owners of one fact,
+and the repair was not to reconcile them but to make there be one. `s[1.7]`,
+`s[NaN]`, `s[1]` and `.at(1.7)` all agree across C, LLVM and the JVM.
 
 #### `String.prototype.at` (fixed)
 
