@@ -3199,9 +3199,28 @@ fn refuse_unpackaged(name: &str, kind: &str, target: &nts_build::config::Target)
             false,
         )
         | ("jar" | "aar" | "application" | "executable", true) => Ok(()),
+        // **Two facts, and the message used to conflate them.** It said "Not
+        // available here", which reads as a limitation of this machine -- and
+        // it is unconditional, so on a Mac with the toolchain installed it
+        // would have said the same thing about a build that was refused for a
+        // different reason entirely. Whether `xcodebuild` is present and
+        // whether this can drive it are separate questions and get separate
+        // clauses.
         ("xcframework", _) => bail!(
-            "product `{name}` is an XCFramework, which needs the Apple toolchain to \
-             build and `xcodebuild -create-xcframework` to assemble. Not available here"
+            "product `{name}` is an XCFramework. Assembling one is \
+             `xcodebuild -create-xcframework` over a framework per platform slice, and \
+             this build does not run it yet{}. Declare the slices as `shared-library` \
+             products and assemble them yourself, or ship a `.dylib`",
+            if std::process::Command::new("xcodebuild")
+                .arg("-version")
+                .output()
+                .is_ok_and(|seen| seen.status.success())
+            {
+                ""
+            } else {
+                " -- and `xcodebuild` is not on this machine either, so the slices \
+                 have to be assembled on a Mac"
+            }
         ),
         (other, _) => bail!(
             "product `{name}` has kind `{other}`, which this build has no packaging for"
