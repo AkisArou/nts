@@ -998,9 +998,14 @@ came from.
 ### The config's first readers
 
 `entry` (the published surface), `kind`, `targets`, `soname`, and `javaPackage`.
-That last one's first reader is a **refusal**: `codegen/jvm` hardcodes `nts/gen`,
-so a product asking for `com.acme.sdk` is told what it would have got rather than
-given a jar whose package is not the one requested.
+
+`javaPackage`'s first reader was a **refusal** -- `codegen/jvm` hardcoded
+`nts/gen`, so a product asking for `com.acme.sdk` was told what it would have
+got rather than given a jar whose package is not the one requested. **That is no
+longer true**: the package is threaded through `Shape` to `program_class` and
+`jvm_class_name`, and `library.jvm({ javaPackage: "com.acme.sdk" })` produces a
+jar holding `com/acme/sdk/Program.class`. Checked by building one and listing
+it, because a paragraph saying a thing is refused outlives the refusal.
 
 `native` is read too, for the bindings and the C described above.
 
