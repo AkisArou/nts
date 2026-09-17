@@ -395,6 +395,62 @@ fn bind_c(rest: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// What this command does, for somebody who has not read `main.rs`.
+///
+/// **Only what is built.** A usage listing a command that refuses, or a flag
+/// that parses and does nothing, is the same promise a config field nothing
+/// reads makes -- so this is checked against the dispatch below by a test
+/// rather than kept in step by hand.
+fn usage() {
+    println!(
+        "\
+nts {version} -- compile TypeScript ahead of time
+
+USAGE
+  nts <command> [project] [options]
+
+`project` is a directory, or the `tsconfig.json` in it. Defaults to the
+current directory.
+
+BUILDING
+  build        build every product `nts.config.ts` declares, for every target
+  check        typecheck and lower, writing nothing
+
+EMITTING ONE BACKEND
+  emit-c       render the program as C, to --out or stdout
+  emit-llvm    render the program as textual LLVM IR, to stdout
+  emit-jvm     render the program as class files, to --out
+
+BINDINGS
+  bind-c       generate a TypeScript declaration from a C header
+  bind         generate declarations and a binding table from class files
+  deps         acquire the TypeScript behind this project's dependencies
+
+INSPECTING
+  frontend     what the frontend answered, before lowering
+  types        every type the frontend resolved, as the schema records it
+  hir          the lowered program; --prepared is what a backend receives
+  facts        the facts lowering derived; --prepared for the prepared program
+  refusals     every construct this program was refused for, with its reason
+  layouts      the object layouts the program produces
+  modules      the modules the program is made of
+  erasure      what the program does with its `any` and `unknown` values
+
+  help         this
+  version      version, snapshot schema, and the pinned tsgo
+
+`nts build` options
+  --out <dir>        where artifacts go. Default `<project>/.nts/build`
+  --product <name>   build one product rather than all of them
+  --os <os>          build only the targets whose OS is this
+  --no-acquire       do not fetch dependencies first
+
+The config is `nts.config.ts` beside the project's `tsconfig.json`. See
+docs/nts-config.md for what it declares.",
+        version = env!("CARGO_PKG_VERSION")
+    );
+}
+
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
@@ -531,13 +587,26 @@ fn main() -> Result<()> {
             let rest: Vec<String> = args.collect();
             deps(&rest)
         }
-        Some("version") | None => {
+        Some("version") => {
             println!("nts {}", env!("CARGO_PKG_VERSION"));
             println!("snapshot schema v{SCHEMA_VERSION}");
             println!("pinned tsgo {}", tsgo::PINNED_TSGO);
             Ok(())
         }
-        Some(other) => bail!("unknown command `{other}`; try `nts version`"),
+        // **`nts` alone used to print the version banner and exit zero**, which
+        // tells someone who has just installed it nothing about what it does.
+        // `--help` answered `unknown command \`--help\``, which is the one
+        // spelling every other tool on the machine accepts. A build tool whose
+        // own surface has to be read out of `main.rs` is not finished, whatever
+        // it can build.
+        None | Some("help" | "--help" | "-h") => {
+            usage();
+            Ok(())
+        }
+        Some(other) => bail!(
+            "unknown command `{other}`. `nts help` lists them; `nts version` prints \
+             the version"
+        ),
     }
 }
 

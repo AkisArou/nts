@@ -2912,3 +2912,96 @@ fn a_pin_is_found_in_a_gradle_cache_and_not_only_beside_the_lockfile() {
         "found and not packaged"
     );
 }
+
+/// `nts help` lists every command, and only commands that exist.
+///
+/// **Two derivations of one fact, so one of them asserts.** The usage text and
+/// the `match` in `main` are both answers to "what can this be asked to do",
+/// and a usage naming a command that is not dispatched makes the same promise a
+/// config field nothing reads makes. Keeping them in step by hand is what fails
+/// quietly -- a command added to the dispatch is invisible to anyone who has
+/// not read `main.rs`, which is the state `help` was added to fix.
+///
+/// Reads the dispatch out of the source rather than restating it, because a
+/// hardcoded list here would be a *third* copy.
+#[test]
+fn the_usage_names_every_command_and_no_others() {
+    let source = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs"),
+    )
+    .expect("reading main.rs");
+    let dispatch = source
+        .split_once("fn main() -> Result<()> {")
+        .expect("main's dispatch")
+        .1;
+    let body = dispatch.split_once("\n}\n").map_or(dispatch, |(body, _)| body);
+
+    let mut dispatched: BTreeSet<String> = BTreeSet::new();
+    for at in body.match_indices("Some(\"") {
+        let rest = &body[at.0 + "Some(\"".len()..];
+        let Some(name) = rest.split('"').next() else { continue };
+        // `--help` and `-h` are spellings of `help`, not commands of their own.
+        if !name.is_empty() && !name.starts_with('-') {
+            dispatched.insert(name.to_owned());
+        }
+    }
+    assert!(dispatched.len() > 5, "the dispatch was not found: {dispatched:?}");
+
+    let shown = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("help")
+        .output()
+        .expect("running nts help");
+    let text = String::from_utf8_lossy(&shown.stdout);
+    let listed: BTreeSet<String> = text
+        .lines()
+        .filter_map(|line| {
+            // A command row is two spaces, the name, then the *column gap* and
+            // prose. Requiring two spaces after the name is what separates it
+            // from the `nts <command> [project]` line in the usage block, which
+            // has one -- and which this counted as a command called `nts`.
+            let rest = line.strip_prefix("  ")?;
+            let (name, described) = rest.split_once("  ")?;
+            let name = name.trim();
+            (!name.is_empty() && !name.contains(' ') && !name.starts_with('-')
+                && !described.trim().is_empty())
+            .then(|| name.to_owned())
+        })
+        .collect();
+
+    let missing: Vec<&String> = dispatched.difference(&listed).collect();
+    assert!(missing.is_empty(), "dispatched and not in `nts help`: {missing:?}");
+    let invented: Vec<&String> = listed.difference(&dispatched).collect();
+    assert!(invented.is_empty(), "named by `nts help` and not dispatched: {invented:?}");
+}
+
+/// `nts` with no argument says what it is, and `--help` is not an error.
+///
+/// It printed a version banner and exited zero, which tells someone who has
+/// just installed it nothing; `--help` answered ``unknown command `--help` ``,
+/// which is the one spelling every other tool on the machine accepts.
+#[test]
+fn the_bare_command_and_the_usual_help_spellings_all_print_usage() {
+    for arguments in [vec![], vec!["help"], vec!["--help"], vec!["-h"]] {
+        let shown = Command::new(env!("CARGO_BIN_EXE_nts"))
+            .args(&arguments)
+            .output()
+            .expect("running nts");
+        let text = String::from_utf8_lossy(&shown.stdout);
+        assert!(shown.status.success(), "`nts {arguments:?}` failed");
+        assert!(text.contains("USAGE"), "`nts {arguments:?}` printed no usage:\n{text}");
+        assert!(
+            text.contains("build"),
+            "`nts {arguments:?}` does not mention the main command:\n{text}"
+        );
+    }
+    // And an unknown command still fails, pointing at the listing.
+    let wrong = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("bulid")
+        .output()
+        .expect("running nts");
+    assert!(!wrong.status.success(), "a typo exited zero");
+    assert!(
+        String::from_utf8_lossy(&wrong.stderr).contains("nts help"),
+        "the error does not point at the listing"
+    );
+}
