@@ -3381,3 +3381,60 @@ fn a_kind_belonging_to_the_other_backend_says_which_backend() {
         run.stderr
     );
 }
+
+/// The config is evaluated once per file, however many times the build asks.
+///
+/// **A build that re-evaluates it is correct, just slower** -- which is the
+/// shape that hides. `resolve` is asked from eight call sites and once per
+/// target, so `apps/android` spawned 35 `node` processes to answer six
+/// questions; memoising it took that to 4. Nothing asserted it, so a key that
+/// stopped matching would put the cost straight back with every test still
+/// green -- and that is not hypothetical, it is exactly how the snapshot cache
+/// died earlier today, from a key that stopped canonicalising.
+///
+/// Counted rather than timed. A `node` shim on `NTS_NODE` records each call and
+/// executes the real one, so the assertion is the number of processes rather
+/// than a duration that would flake.
+///
+/// One, because the fixture has one config. With memoisation disabled this
+/// fixture spawns several, and `examples/workspace/apps/linux` goes from 3 to
+/// 10 -- checked by disabling it.
+#[test]
+fn the_config_is_evaluated_once_however_often_it_is_asked() {
+    if !available() {
+        skip("node, the tsgo frontend and clang");
+        return;
+    }
+    let project = fixture("build-config-once", SHARED);
+    let counts = project.join("node-calls");
+    drop(std::fs::remove_file(&counts));
+    let shim = project.join("node-shim");
+    let real = std::env::var("NTS_NODE").unwrap_or_else(|_| "node".to_owned());
+    std::fs::write(
+        &shim,
+        format!("#!/bin/sh\necho call >> \"$NTS_TEST_NODE_CALLS\"\nexec {real} \"$@\"\n"),
+    )
+    .expect("writing the shim");
+    let mut mode = std::fs::metadata(&shim).expect("the shim").permissions();
+    std::os::unix::fs::PermissionsExt::set_mode(&mut mode, 0o755);
+    std::fs::set_permissions(&shim, mode).expect("making the shim executable");
+
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("build")
+        .arg(project.join("tsconfig.json"))
+        .env("NTS_NODE", &shim)
+        .env("NTS_TEST_NODE_CALLS", &counts)
+        .output()
+        .expect("running nts build");
+    assert!(
+        run.status.success(),
+        "the build failed:\n{}{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let calls = std::fs::read_to_string(&counts).map_or(0, |text| text.lines().count());
+    assert_eq!(
+        calls, 1,
+        "the config was evaluated {calls} time(s) for a project that has one of them"
+    );
+}
