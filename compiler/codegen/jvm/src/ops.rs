@@ -5449,9 +5449,12 @@ impl Emitter<'_> {
                 let (swapped, object_form) = self.object_key(name, args).unzip();
                 let args = swapped.as_deref().unwrap_or(args);
                 let found = object_form.or(found);
+                // **The owner first, then the name it decides.** These were
+                // the other way round, so the name came from one table and the
+                // owner from another and nothing related them.
                 if self.narrowed.contains(&value)
-                    && let Some(narrow) = crate::intcall::integral_helper(name)
                     && let Some((owner, _, descriptor)) = &found
+                    && let Some(narrow) = crate::intcall::integral_helper(name, owner)
                 {
                     let arguments = descriptor.split(')').next().unwrap_or("(").to_owned();
                     for &arg in args {

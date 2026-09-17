@@ -218,19 +218,39 @@ public final class NtsArrayD {
         int i = NtsArrays.offset(index, a.length);
         return i < 0 ? Double.NaN : a.items[i];
     }
-    public static double indexOf(NtsArrayD a, double value) {
+    /**
+     * The index as an `int`, which is what `intcall` holds it as.
+     *
+     * <p>`NtsRuntime` has carried this pair since the measurement that
+     * justified it -- `arrayIndexOfI` beside `arrayIndexOf` -- and these
+     * classes did not, so a *grown* array took the owner from one table and the
+     * method name from the other and answered
+     * `NoSuchMethodError: nts.rt.NtsArrayD.arrayIndexOfI`. The loop here
+     * already counted in an `int` and widened on the way out, which is the
+     * whole of what the round trip was paying for.
+     *
+     * <p>The `double` form delegates rather than duplicating the loop, so the
+     * two spellings cannot answer differently.
+     */
+    public static int indexOfI(NtsArrayD a, double value) {
         double[] items = a.items;
         for (int i = 0, n = a.length; i < n; i++) {
             if (items[i] == value) { return i; }
         }
-        return -1.0;
+        return -1;
     }
-    public static double lastIndexOf(NtsArrayD a, double value) {
+    public static int lastIndexOfI(NtsArrayD a, double value) {
         double[] items = a.items;
         for (int i = a.length - 1; i >= 0; i--) {
             if (items[i] == value) { return i; }
         }
-        return -1.0;
+        return -1;
+    }
+    public static double indexOf(NtsArrayD a, double value) {
+        return indexOfI(a, value);
+    }
+    public static double lastIndexOf(NtsArrayD a, double value) {
+        return lastIndexOfI(a, value);
     }
     public static boolean includes(NtsArrayD a, double value) {
         if (value != value) {

@@ -55,14 +55,52 @@ use rustc_hash::FxHashSet;
 /// particular to it, and a rule like "returns `f64`, used as an int" would also
 /// catch `nts_array_pop`, whose answer is an element.
 #[must_use]
-pub(crate) fn integral_helper(name: &str) -> Option<&'static str> {
-    Some(match name {
-        "nts_array_index_of" | "nts_array_index_of_ref" => "arrayIndexOfI",
-        "nts_array_index_of_str" => "arrayIndexOfStrI",
-        "nts_array_last_index_of" | "nts_array_last_index_of_ref" => "arrayLastIndexOfI",
-        "nts_array_last_index_of_str" => "arrayLastIndexOfStrI",
+pub(crate) fn integral_helper(name: &str, owner: &str) -> Option<&'static str> {
+    // **The owner decides the spelling, because there are two and they are not
+    // derived from each other.** `NtsRuntime` takes a bare `double[]` and names
+    // these `arrayIndexOfI`; a *growable* array is a class with a backing store
+    // and the same helper on it is `indexOfI`. This function used to answer the
+    // first spelling unconditionally while the call site took the owner from
+    // `growable_external` -- so a narrowed `indexOf` on a grown array asked
+    // `NtsArrayD` for a method only `NtsRuntime` has:
+    //
+    // ```text
+    // java.lang.NoSuchMethodError:
+    //     'int nts.rt.NtsArrayD.arrayIndexOfI(nts.rt.NtsArrayD, double)'
+    // ```
+    //
+    // Two tables both answering and disagreeing, which is worse than a missing
+    // row: a missing row is `NTS4001` at build time, and this was a crash at
+    // run time. So one function knows both spellings and the pair cannot drift
+    // -- the owner it is asked about is the owner the call will name.
+    let on_runtime = owner == crate::body::RUNTIME;
+    Some(match (name, on_runtime) {
+        ("nts_array_index_of" | "nts_array_index_of_ref", true) => "arrayIndexOfI",
+        ("nts_array_index_of" | "nts_array_index_of_ref", false) => "indexOfI",
+        ("nts_array_index_of_str", true) => "arrayIndexOfStrI",
+        ("nts_array_index_of_str", false) => "indexOfStrI",
+        ("nts_array_last_index_of" | "nts_array_last_index_of_ref", true) => "arrayLastIndexOfI",
+        ("nts_array_last_index_of" | "nts_array_last_index_of_ref", false) => "lastIndexOfI",
+        ("nts_array_last_index_of_str", true) => "arrayLastIndexOfStrI",
+        ("nts_array_last_index_of_str", false) => "lastIndexOfStrI",
         _ => return None,
     })
+}
+
+/// Whether a helper has an integral form at all, on either owner.
+///
+/// `narrowed` runs over HIR and decides candidacy **before** an owner is known
+/// -- the owner falls out of `growable_external` or `external` in the emitter,
+/// much later. So this asks the set question rather than the spelling one.
+///
+/// **Derived from `integral_helper` rather than restated**, because a second
+/// list of the same names is the defect this pair was just repaired for. Every
+/// arm there answers for both owners, so asking about either settles the set;
+/// `the_two_spellings_cover_the_same_helpers` holds that invariant rather than
+/// leaving it as this sentence.
+#[must_use]
+pub(crate) fn has_integral_form(name: &str) -> bool {
+    integral_helper(name, crate::body::RUNTIME).is_some()
 }
 
 /// The verification type such a result is held as.
@@ -86,7 +124,7 @@ pub(crate) fn narrowed(func: &Func) -> FxHashSet<ValueId> {
             continue;
         }
         let OpKind::Call { callee: Callee::External(name), .. } = &op.kind else { continue };
-        if integral_helper(name).is_some() {
+        if has_integral_form(name) {
             candidates.insert(ValueId(u32::try_from(at).unwrap_or(0)));
         }
     }
@@ -408,5 +446,60 @@ fn whole_constant(func: &Func, value: ValueId) -> bool {
         OpKind::ConstFloat(n) => n.fract() == 0.0 && n.abs() <= f64::from(i32::MAX),
         OpKind::ConstInt(n) => i32::try_from(n).is_ok(),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The helpers `narrowed` may pick, named once so the test below has a
+    /// population rather than an opinion.
+    const INTEGRAL: [&str; 6] = [
+        "nts_array_index_of",
+        "nts_array_index_of_ref",
+        "nts_array_index_of_str",
+        "nts_array_last_index_of",
+        "nts_array_last_index_of_ref",
+        "nts_array_last_index_of_str",
+    ];
+
+    /// **Both owners answer for exactly the same helpers.**
+    ///
+    /// `has_integral_form` asks about one owner and `narrowed` acts on the
+    /// answer for every array, growable or not. That is only sound while the
+    /// two spellings cover the same set -- and when they did not, the call site
+    /// took the owner from one table and the name from another and produced
+    ///
+    /// ```text
+    /// java.lang.NoSuchMethodError:
+    ///     'int nts.rt.NtsArrayD.arrayIndexOfI(nts.rt.NtsArrayD, double)'
+    /// ```
+    ///
+    /// a run-time crash rather than a refusal, because both tables answered and
+    /// disagreed. A missing row is `NTS4001` at build time; this was worse.
+    #[test]
+    fn the_two_spellings_cover_the_same_helpers() {
+        for name in INTEGRAL {
+            let runtime = integral_helper(name, crate::body::RUNTIME);
+            let grown = integral_helper(name, "nts/rt/NtsArrayD");
+            assert!(runtime.is_some(), "{name} has no runtime spelling");
+            assert!(grown.is_some(), "{name} has no growable spelling");
+            assert_ne!(
+                runtime, grown,
+                "{name} answers the same method for both owners, which means one of them \
+                 does not have it"
+            );
+        }
+    }
+
+    /// A helper with no integral form answers for neither owner.
+    #[test]
+    fn a_helper_with_no_integral_form_is_absent_from_both() {
+        for name in ["nts_array_push", "nts_array_sort_str", "nts_str_index_of"] {
+            assert_eq!(integral_helper(name, crate::body::RUNTIME), None, "{name}");
+            assert_eq!(integral_helper(name, "nts/rt/NtsArrayL"), None, "{name}");
+            assert!(!has_integral_form(name), "{name}");
+        }
     }
 }

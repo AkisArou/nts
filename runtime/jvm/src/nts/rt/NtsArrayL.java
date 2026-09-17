@@ -214,19 +214,26 @@ public final class NtsArrayL {
         int i = NtsArrays.offset(index, a.length);
         return i < 0 ? null : a.items[i];
     }
-    public static double indexOf(NtsArrayL a, Object value) {
+    /** The index as an `int` -- see `NtsArrayD.indexOfI` for why this pair exists. */
+    public static int indexOfI(NtsArrayL a, Object value) {
         Object[] items = a.items;
         for (int i = 0, n = a.length; i < n; i++) {
             if (items[i] == value) { return i; }
         }
-        return -1.0;
+        return -1;
     }
-    public static double lastIndexOf(NtsArrayL a, Object value) {
+    public static int lastIndexOfI(NtsArrayL a, Object value) {
         Object[] items = a.items;
         for (int i = a.length - 1; i >= 0; i--) {
             if (items[i] == value) { return i; }
         }
-        return -1.0;
+        return -1;
+    }
+    public static double indexOf(NtsArrayL a, Object value) {
+        return indexOfI(a, value);
+    }
+    public static double lastIndexOf(NtsArrayL a, Object value) {
+        return lastIndexOfI(a, value);
     }
     public static boolean includes(NtsArrayL a, Object value) {
         return indexOf(a, value) >= 0.0;
@@ -322,17 +329,23 @@ public final class NtsArrayL {
     private static NtsValue wrap(Object element) {
         return element instanceof NtsValue ? (NtsValue) element : NtsValue.ofObject(element);
     }
-    public static double indexOfStr(NtsArrayL a, Object value) {
+    public static int indexOfStrI(NtsArrayL a, Object value) {
         for (int i = 0, n = a.length; i < n; i++) {
             if (java.util.Objects.equals(a.items[i], value)) { return i; }
         }
-        return -1.0;
+        return -1;
     }
-    public static double lastIndexOfStr(NtsArrayL a, Object value) {
+    public static int lastIndexOfStrI(NtsArrayL a, Object value) {
         for (int i = a.length - 1; i >= 0; i--) {
             if (java.util.Objects.equals(a.items[i], value)) { return i; }
         }
-        return -1.0;
+        return -1;
+    }
+    public static double indexOfStr(NtsArrayL a, Object value) {
+        return indexOfStrI(a, value);
+    }
+    public static double lastIndexOfStr(NtsArrayL a, Object value) {
+        return lastIndexOfStrI(a, value);
     }
     public static boolean includesStr(NtsArrayL a, Object value) {
         return indexOfStr(a, value) >= 0.0;

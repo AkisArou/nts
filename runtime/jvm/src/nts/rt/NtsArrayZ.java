@@ -208,19 +208,26 @@ public final class NtsArrayZ {
         int i = NtsArrays.offset(index, a.length);
         return i < 0 ? false : a.items[i];
     }
-    public static double indexOf(NtsArrayZ a, boolean value) {
+    /** The index as an `int` -- see `NtsArrayD.indexOfI` for why this pair exists. */
+    public static int indexOfI(NtsArrayZ a, boolean value) {
         boolean[] items = a.items;
         for (int i = 0, n = a.length; i < n; i++) {
             if (items[i] == value) { return i; }
         }
-        return -1.0;
+        return -1;
     }
-    public static double lastIndexOf(NtsArrayZ a, boolean value) {
+    public static int lastIndexOfI(NtsArrayZ a, boolean value) {
         boolean[] items = a.items;
         for (int i = a.length - 1; i >= 0; i--) {
             if (items[i] == value) { return i; }
         }
-        return -1.0;
+        return -1;
+    }
+    public static double indexOf(NtsArrayZ a, boolean value) {
+        return indexOfI(a, value);
+    }
+    public static double lastIndexOf(NtsArrayZ a, boolean value) {
+        return lastIndexOfI(a, value);
     }
     public static boolean includes(NtsArrayZ a, boolean value) {
         return indexOf(a, value) >= 0.0;
