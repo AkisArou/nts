@@ -19955,8 +19955,17 @@ impl<'a> FuncBuilder<'a> {
 
         // The place first, then the value: `xs[i()] = v()` evaluates the array,
         // then the index, then the value, and JavaScript says so.
+        //
+        // Which is also what makes the slot's type available *before* the value
+        // is built. `xs = [{ a: 1 }]` into an `Opts[]` used to build the array
+        // at the literal's own element type and then fail to convert the
+        // finished thing; asking the place first is the same order the
+        // evaluation rule already imposed.
         let place = self.place_of(target)?;
-        let value = self.lower_expression(source)?;
+        let value = match self.slot_type(id, &place)? {
+            Some(want) => self.lower_expecting(source, &want)?,
+            None => self.lower_expression(source)?,
+        };
         self.write_place(id, &place, value)?;
         Ok(value)
     }
@@ -21034,40 +21043,32 @@ impl<'a> FuncBuilder<'a> {
     /// and the program died with signal 11 having refused nothing. The identical
     /// cast *into a parameter* was refused by name the whole time, because
     /// `coerce_to_parameter` propagates what this one dropped.
-    fn coerce_to_slot(
-        &mut self,
-        id: NodeId,
-        place: &Place,
-        value: ValueId,
-    ) -> Result<ValueId, Diagnostic> {
-        // A function into a function-pointer slot becomes a bridge, exactly as
-        // it does at a call: `p.run = twice` and `apply_twice(twice, n)` want
-        // the same thing, a real C function with the declared signature. The
-        // closure's own value is a heap address and handing C that to call is
-        // the miscompile bridges exist to prevent -- it was refused here as
-        // "an opaque C pointer converted to a different type", which is true
-        // and unhelpful.
-        let value = match *place {
-                // A bit-field holds an integer and nothing else: a function
-                // pointer has an address and a width no bit-field can have, so
-                // there is never a closure here to bridge.
-                Place::NativeBits { .. } => value,
-            Place::NativeElement { pointer, .. } => {
-                match self.native_element_type(id, pointer)? {
-                    HirType::NativePointer(super::native::Pointee::FnPointer(signature)) => {
-                        self.bridged(id, value, &signature)?
-                    }
-                    _ => value,
+    /// The declared type a place holds, where it has one.
+    ///
+    /// Split out of [`Self::coerce_to_slot`] so an assignment can lower its
+    /// right-hand side **at** the slot rather than lowering it and converting.
+    /// A literal that decides nothing on its own -- `[]`, or `{ a: 1 }` where
+    /// the slot also declares an optional property -- needs the slot to say
+    /// what it is, and by the time `coerce_to_slot` runs the value has already
+    /// been built at the wrong type and all that is left is a cast the compiler
+    /// made necessary for itself.
+    ///
+    /// One derivation, asked twice: once before the value exists and once
+    /// after. `coerce_to_slot` answering from a second copy of this match is
+    /// exactly the shape that let a local declaration and a module-scope one
+    /// disagree about the same fact.
+    fn slot_type(&mut self, id: NodeId, place: &Place) -> Result<Option<HirType>, Diagnostic> {
+        Ok(match *place {
+            Place::NativeBits { pointer, field } => Some(self.native_bit_unit(id, pointer, field)?),
+            Place::NativeElement { pointer, .. } => Some(self.native_element_type(id, pointer)?),
+            Place::Element { array, .. } => {
+                match self.values[array.0 as usize].ty.clone() {
+                    HirType::Managed(
+                        ManagedType::Array(element) | ManagedType::View(element),
+                    ) => Some(*element),
+                    _ => None,
                 }
             }
-            _ => value,
-        };
-        let want = match *place {
-                Place::NativeBits { pointer, field } => {
-                    Some(self.native_bit_unit(id, pointer, field)?)
-                }
-            Place::NativeElement { pointer, .. } => Some(self.native_element_type(id, pointer)?),
-            Place::Element { array, .. } => return Ok(self.coerce_element(id, array, value)),
             // The runtime takes the new length as a `double`, like every other
             // array helper that carries an index or a count. `Some`, because
             // the arms here answer with an optional declared width.
@@ -21076,7 +21077,7 @@ impl<'a> FuncBuilder<'a> {
                 let HirType::Managed(ManagedType::Object(ty)) =
                     self.values[object.0 as usize].ty.clone()
                 else {
-                    return Ok(value);
+                    return Ok(None);
                 };
                 match self.layout_of(id, ty) {
                     Ok(layout) => layout
@@ -21096,8 +21097,47 @@ impl<'a> FuncBuilder<'a> {
             // later `typeof held` then had no tag to read.
             Place::Binding { ref ty, .. } => ty.clone(),
             Place::Setter { ref wants, .. } => wants.clone(),
+        })
+    }
+
+    fn coerce_to_slot(
+        &mut self,
+        id: NodeId,
+        place: &Place,
+        value: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
+        // A function into a function-pointer slot becomes a bridge, exactly as
+        // it does at a call: `p.run = twice` and `apply_twice(twice, n)` want
+        // the same thing, a real C function with the declared signature. The
+        // closure's own value is a heap address and handing C that to call is
+        // the miscompile bridges exist to prevent -- it was refused here as
+        // "an opaque C pointer converted to a different type", which is true
+        // and unhelpful.
+        let value = match *place {
+            Place::NativeElement { pointer, .. } => {
+                match self.native_element_type(id, pointer)? {
+                    HirType::NativePointer(super::native::Pointee::FnPointer(signature)) => {
+                        self.bridged(id, value, &signature)?
+                    }
+                    _ => value,
+                }
+            }
+            // Every other place: nothing here is a function-pointer slot. A
+            // bit-field is worth saying out loud, because it is the one that
+            // looks like it might be -- it holds an integer and nothing else,
+            // and a function pointer has an address and a width no bit-field
+            // can have, so there is never a closure here to bridge.
+            _ => value,
         };
-        let Some(want) = want else {
+        // An array or view element **narrows** rather than coercing -- a
+        // `double` into a `uint8_t` slot is the language's modulo and not a C
+        // assignment -- so it is answered here rather than through `want`.
+        // [`Self::slot_type`] still names its type, for the caller that wants
+        // to build a value at it before the value exists.
+        if let Place::Element { array, .. } = *place {
+            return Ok(self.coerce_element(id, array, value));
+        }
+        let Some(want) = self.slot_type(id, place)? else {
             return Ok(value);
         };
         // Unchanged where there is nothing to do, which is every store in a
@@ -24559,11 +24599,16 @@ impl<'a> FuncBuilder<'a> {
                 // four stream classes -- because the field that idiom needs
                 // holds an arrow, and an arrow in a class body captures `this`
                 // almost always.
+                // At the field's type, like every other slot. `xs: Opts[] =
+                // [{ a: 1 }]` built the literal at its own element type and met
+                // a conversion one line down that it never had to make; the
+                // want is already in hand here, and was being used only to
+                // coerce afterwards.
+                let want = layout.fields[field as usize].ty.clone();
                 let outer = self.this.replace(object);
-                let value = self.lower_expression(initializer);
+                let value = self.lower_expecting(initializer, &want);
                 self.this = outer;
                 let value = value?;
-                let want = layout.fields[field as usize].ty.clone();
                 // The layouts the field's own type needs, which used to be
                 // somebody else's doing. An initialiser was lowered at the
                 // allocation site, so a `Map<Conn, Entry>` built there got its
