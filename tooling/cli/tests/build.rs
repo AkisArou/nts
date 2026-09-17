@@ -2034,6 +2034,24 @@ fn the_workspace_fixture_still_builds() {
             "no npm hook for the app that declares one:\n{}",
             run.stdout
         );
+        // **That `--os` filtered, rather than that the build survived.** The
+        // product declares four machines and this box can build one, so a
+        // `--os` that did nothing would fail on the Apple cross-compile -- and
+        // the assertion above would catch it *incidentally*, for as long as
+        // Apple stays unbuildable here. Counting the targets asks the question
+        // directly.
+        let built: Vec<String> = std::fs::read_dir(out.join("node-brownfield/addon"))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            built.len(),
+            1,
+            "`--os linux` built {} target(s) of a four-machine product: {built:?}",
+            built.len()
+        );
     }
 }
 
