@@ -34,7 +34,23 @@
 # calls `module__init`, `program.c` defines it in no translation unit, and the row read
 # **92 failed** when the truth was one `undefined symbol: module__init` repeated 92
 # times. So each artifact is loaded once before its tests run, and a failure to load is
-# printed as itself. Measured across the 26: 25 load, `process` does not.
+# printed as itself.
+#
+# **The count that was here has gone false and is deliberately not replaced.** It
+# read "Measured across the 26: 25 load, `process` does not", which was true on
+# 2026-09-13; on 2026-09-17 `process` builds from a fresh `NTS_ADDON_OUT` and
+# loads. Something fixed it and nobody came back to the paragraph saying it was
+# broken -- which is what prose asserting a *gap* does, because implementing the
+# thing is a change nobody greps the comments for.
+#
+# A number is not restated here because this loop prints the live one every run,
+# and a second copy in a comment is the thing that just went stale. What the
+# paragraph is for is the *argument*: a shared object links with undefined
+# symbols, so building is not loading, and the load has to be checked separately.
+#
+# Note for anyone carrying a count like this: unlike `tooling/conformance/loads.sh`,
+# this loop **builds each module itself** before loading it, so it cannot be
+# inflated by an artifact an earlier compiler left in `target/node`.
 #
 # # And an addon that loads can still publish nothing
 #
