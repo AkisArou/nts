@@ -222,9 +222,15 @@ impl NativeSources {
 /// A resolved `nts.config.ts`: the value `defineConfig` returned.
 ///
 /// Deliberately not every field the TypeScript type carries. A field is added
-/// here when something reads it -- `manifests`, `dependencies` and `integrate`
-/// are real and nothing consumes them yet, and a struct member that is parsed
-/// and never read is the same shape as a config field nothing reaches.
+/// here when something reads it, because a struct member that is parsed and
+/// never read is the same shape as a config field nothing reaches.
+///
+/// **That sentence used to name `manifests`, `dependencies` and `integrate` as
+/// the three nothing consumed, and it went stale one field at a time without
+/// anything noticing.** All three are read now. What is left of the rule is the
+/// rule itself: `workspace` and `build.cache.local` are still shaped by the
+/// TypeScript and absent here, and they are absent *because* nothing reads
+/// them.
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 pub struct Resolved {
     /// The program this config describes, where it is not `./tsconfig.json`.
@@ -264,6 +270,13 @@ pub struct Resolved {
     pub targets: Option<Vec<String>>,
     #[serde(default)]
     pub native: Vec<NativeSources>,
+    /// What this project needs that this compiler did not build.
+    ///
+    /// Keyed by target, so a build consults only the claim covering the target
+    /// it is building -- which is why a resolver this cannot read refuses for
+    /// the targets naming it rather than refusing the project.
+    #[serde(default)]
+    pub dependencies: BTreeMap<String, crate::dependencies::Dependencies>,
 }
 
 /// The config above a file, if any -- the package that file belongs to.
@@ -426,6 +439,7 @@ mod tests {
         Resolved {
             tsconfig: None,
             native: Vec::new(),
+            dependencies: BTreeMap::new(),
             integrate: Vec::new(),
             build: None,
             manifests: Vec::new(),

@@ -22,6 +22,11 @@ rustc-hash.workspace = true
 # on a binary the gate happens to have left in `target/`.
 camino.workspace = true
 nts-frontend-ts.workspace = true
+# The pinned-dependency reader and the SHA-256 that checks a pin. Not a second
+# copy here: the digest a build verifies an artifact with and the digest this
+# verifies the Android pins with must be one function, because the interesting
+# failure is exactly when two copies disagree.
+nts-build.workspace = true
 
 [lints]
 workspace = true

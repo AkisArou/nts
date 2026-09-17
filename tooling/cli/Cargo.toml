@@ -37,6 +37,9 @@ camino.workspace = true
 # `tsgo::locate`, so an end-to-end test can skip when the frontend is absent
 # rather than fail for a reason that is not the compiler's.
 nts-frontend-ts.workspace = true
+# The same SHA-256 the build pins an artifact with, so a test that builds a jar
+# to depend on computes the pin the way the thing under test will read it.
+nts-build.workspace = true
 
 [lints]
 workspace = true

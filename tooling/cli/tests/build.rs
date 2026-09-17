@@ -2270,3 +2270,327 @@ export default defineConfig({
         run.stderr
     );
 }
+
+const ZLIB_DEPENDENCY: &str = r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    acme: library.native({ targets: [target.linux({ backend: "c" })], entry: "./src/main.ts" }),
+  },
+  dependencies: {
+    "linux-gnu": { from: "pkg-config", packages: ["zlib"] },
+  },
+});
+"#;
+
+/// A `pkg-config` claim reaches the link line, and its absence does not.
+///
+/// **Both arms, because a build that links nothing extra also exits zero.** The
+/// positive arm asserts `libz` is in the dynamic table; the negative arm is the
+/// same program with the claim removed, and it must not be. Without the second
+/// half this passes for a build that ignores `dependencies` entirely -- a check
+/// whose answer does not depend on its input is not a check.
+///
+/// `zlib` rather than the fixture's `libnotify`: it is what a machine with a
+/// compiler has, and the question here is whether the flags arrive, not which
+/// library they name.
+#[test]
+fn a_pkg_config_dependency_reaches_the_link_and_its_absence_does_not() {
+    let has = Command::new("pkg-config")
+        .args(["--exists", "zlib"])
+        .status()
+        .is_ok_and(|status| status.success());
+    if !available() || !has {
+        skip("clang, the tsgo frontend and zlib's pkg-config entry");
+        return;
+    }
+    let needed = |artifact: &Path| {
+        let shown = Command::new("readelf").arg("-d").arg(artifact).output().expect("readelf");
+        String::from_utf8_lossy(&shown.stdout).contains("libz.so")
+    };
+
+    let project = fixture("build-pkgconfig", ZLIB_DEPENDENCY);
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+    let artifact = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
+    assert!(artifact.is_file(), "no library at {}", artifact.display());
+    assert!(needed(&artifact), "the claim did not reach the link:\n{}", run.stdout);
+
+    // --- the same program, without the claim ---------------------------------
+    let bare = fixture("build-pkgconfig-bare", SHARED);
+    let run = build(&bare, &[]);
+    assert!(run.ok, "the control build failed:\n{}{}", run.stdout, run.stderr);
+    let artifact = bare.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
+    assert!(
+        !needed(&artifact),
+        "the control links zlib too, so the assertion above is not about the claim"
+    );
+}
+
+const MISSING_PACKAGE: &str = r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    acme: library.native({ targets: [target.linux({ backend: "c" })], entry: "./src/main.ts" }),
+  },
+  dependencies: {
+    "linux-gnu": { from: "pkg-config", packages: ["a-library-nobody-has"] },
+  },
+});
+"#;
+
+/// An unsatisfiable package claim is one message naming the package and the fix.
+///
+/// The alternative is a link failure about a symbol, in a file the reader did
+/// not write -- which is the same argument `refuse_unclaimed_target` makes about
+/// a target, one level down.
+#[test]
+fn an_unresolvable_package_refuses_by_name_before_the_build_starts() {
+    if !available() {
+        skip("node, the tsgo frontend and clang");
+        return;
+    }
+    let project = fixture("build-pkgconfig-missing", MISSING_PACKAGE);
+    let run = build(&project, &[]);
+    assert!(!run.ok, "an unsatisfiable claim built anyway:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("a-library-nobody-has"),
+        "the refusal does not name the package:\n{}",
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("PKG_CONFIG_PATH"),
+        "the refusal does not say how to fix it:\n{}",
+        run.stderr
+    );
+    // **Before anything is built**, because a configuration error reported
+    // after `building ...` says a build started that never could.
+    assert!(
+        !run.stdout.contains("building `acme`"),
+        "it announced a build it then refused:\n{}",
+        run.stdout
+    );
+}
+
+const SWIFTPM_DEPENDENCY: &str = r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    acme: library.native({ targets: [target.linux({ backend: "c" })], entry: "./src/main.ts" }),
+  },
+  dependencies: {
+    "linux-gnu": { from: "swiftpm", lockfile: "./deps/apple.resolved" },
+  },
+});
+"#;
+
+/// A resolver this build cannot read refuses, rather than resolving to nothing.
+///
+/// **The failure mode this closes is silent.** An unread resolver that
+/// contributed an empty list would produce an artifact missing everything the
+/// claim promised, and say `1 artifact(s)` about it.
+#[test]
+fn a_resolver_this_build_cannot_read_refuses_and_names_it() {
+    if !available() {
+        skip("node, the tsgo frontend and clang");
+        return;
+    }
+    let project = fixture("build-swiftpm", SWIFTPM_DEPENDENCY);
+    let run = build(&project, &[]);
+    assert!(!run.ok, "an unread resolver built anyway:\n{}", run.stdout);
+    assert!(run.stderr.contains("SwiftPM"), "does not name the resolver:\n{}", run.stderr);
+    assert!(
+        run.stderr.contains("./deps/apple.resolved"),
+        "does not name the file it would read:\n{}",
+        run.stderr
+    );
+}
+
+const JVM_WITH_DEPENDENCY: &str = r#"
+import { defineConfig, app, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    tool: app({
+      kind: "executable",
+      entry: "./src/main.ts",
+      targets: [target.jvm({ release: 17 })],
+    }),
+  },
+  dependencies: {
+    "java-8": { from: "maven", lockfile: "./deps/maven.tsv" },
+  },
+});
+"#;
+
+/// Build a real jar to depend on, and pin it at `digest`.
+///
+/// **A real jar rather than a written-out fixture**, because everything
+/// interesting here is about bytes: the digest is computed over them, and the
+/// packaging step unpacks them. A stand-in file would exercise the lookup and
+/// nothing after it.
+fn vendored_jar(project: &Path, digest: &str) -> bool {
+    let lib = project.join("lib/com/example");
+    std::fs::create_dir_all(&lib).expect("the library source directory");
+    std::fs::create_dir_all(project.join("deps")).expect("the deps directory");
+    std::fs::write(
+        lib.join("Greeter.java"),
+        "package com.example;\npublic final class Greeter {\n  \
+         public static String greet(String who) { return \"hello, \" + who; }\n}\n",
+    )
+    .expect("the library source");
+    let compiled = Command::new("javac")
+        .args(["--release", "8", "-nowarn"])
+        .arg(lib.join("Greeter.java"))
+        .status()
+        .is_ok_and(|status| status.success());
+    if !compiled {
+        return false;
+    }
+    let packaged = Command::new("jar")
+        .arg("--create")
+        .arg("--file")
+        .arg(project.join("deps/greeter-1.0.0.jar"))
+        .arg("-C")
+        .arg(project.join("lib"))
+        .arg("com")
+        .status()
+        .is_ok_and(|status| status.success());
+    if !packaged {
+        return false;
+    }
+    let bytes = std::fs::read(project.join("deps/greeter-1.0.0.jar")).expect("the built jar");
+    let pinned = if digest == "real" { nts_build::dependencies::digest(&bytes) } else { digest.to_owned() };
+    std::fs::write(
+        project.join("deps/maven.tsv"),
+        format!(
+            "# Maven's resolved output, pinned.\n\
+             com.example\tgreeter\t1.0.0\t{pinned}\tApache-2.0\truntime\thttps://repo1.maven.org/maven2\n"
+        ),
+    )
+    .expect("the lockfile");
+    true
+}
+
+fn jdk() -> bool {
+    let tool = |name: &str, arg: &str| {
+        Command::new(name).arg(arg).output().is_ok_and(|o| o.status.success())
+    };
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    frontend && tool("javac", "-version") && tool("jar", "--version")
+}
+
+/// A pinned jar ends up inside the executable, and its absence leaves it out.
+///
+/// **The artifact's contents are the assertion, not the build's exit status.**
+/// A build that resolved the jar, verified it, and then forgot to package it
+/// exits zero and produces something that dies at the first call into it -- so
+/// the test reads the archive.
+#[test]
+fn a_pinned_jar_ships_inside_the_executable() {
+    if !jdk() {
+        skip("the tsgo frontend and a JDK");
+        return;
+    }
+    let project = fixture("build-jar-dependency", JVM_WITH_DEPENDENCY);
+    if !vendored_jar(&project, "real") {
+        skip("a JDK that can build the jar to depend on");
+        return;
+    }
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+
+    let artifact = project.join(".nts/build/tool/java-17/tool.jar");
+    assert!(artifact.is_file(), "no jar at {}:\n{}", artifact.display(), run.stdout);
+    let listed = Command::new("jar")
+        .arg("--list")
+        .arg("--file")
+        .arg(&artifact)
+        .output()
+        .expect("jar --list");
+    let inside = String::from_utf8_lossy(&listed.stdout);
+    assert!(
+        inside.contains("com/example/Greeter.class"),
+        "the pinned jar was resolved and not packaged:\n{inside}"
+    );
+
+    // --- the same program with no claim --------------------------------------
+    let bare = fixture("build-jar-none", JVM_EXECUTABLE);
+    let run = build(&bare, &[]);
+    assert!(run.ok, "the control build failed:\n{}{}", run.stdout, run.stderr);
+    let listed = Command::new("jar")
+        .arg("--list")
+        .arg("--file")
+        .arg(bare.join(".nts/build/tool/java-17/tool.jar"))
+        .output()
+        .expect("jar --list");
+    assert!(
+        !String::from_utf8_lossy(&listed.stdout).contains("com/example/Greeter.class"),
+        "the control carries it too, so the assertion above is not about the claim"
+    );
+}
+
+/// The bytes on this machine are not the bytes that were reviewed.
+///
+/// A pin whose digest is not checked is a version list, and the whole argument
+/// for reading a resolver's output rather than re-running it is that the
+/// artifact which ships is the artifact that was reviewed.
+#[test]
+fn a_jar_that_does_not_hash_to_its_pin_is_refused() {
+    if !jdk() {
+        skip("the tsgo frontend and a JDK");
+        return;
+    }
+    let project = fixture("build-jar-wrong-digest", JVM_WITH_DEPENDENCY);
+    let wrong = "0".repeat(64);
+    if !vendored_jar(&project, &wrong) {
+        skip("a JDK that can build the jar to depend on");
+        return;
+    }
+    let run = build(&project, &[]);
+    assert!(!run.ok, "a substituted artifact built anyway:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("does not hash to the digest"),
+        "the refusal is not about the digest:\n{}",
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("not a stale lockfile to refresh"),
+        "the refusal does not say not to update the pin:\n{}",
+        run.stderr
+    );
+}
+
+/// `nts build`, in the project directory, with no argument at all.
+///
+/// **The invocation every other test in this file avoids.** They pass an
+/// absolute path, because `CARGO_TARGET_TMPDIR` is absolute -- and that blind
+/// spot hid a real defect: `package_runnable_jar` runs `jar --extract` with its
+/// working directory changed, so a relative output path resolved against the
+/// wrong directory and the build died with `tool.jar (No such file or
+/// directory)`. It is the same blind spot `absolute()` was written for, found
+/// the same way, one path later.
+#[test]
+fn a_runnable_jar_builds_from_the_project_directory_with_no_argument() {
+    if !jdk() {
+        skip("the tsgo frontend and a JDK");
+        return;
+    }
+    let project = fixture("build-jar-relative", JVM_EXECUTABLE);
+    let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("build")
+        .current_dir(&project)
+        .output()
+        .expect("running nts build");
+    assert!(
+        output.status.success(),
+        "a build with no argument failed:\n{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        project.join(".nts/build/tool/java-17/tool.jar").is_file(),
+        "no jar:\n{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}

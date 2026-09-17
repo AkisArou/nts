@@ -857,6 +857,12 @@ that is parsed and never read is the same shape as a config field nothing
 reaches. `targets` is deserialized and unused, which is the one exception, and it
 is there because the next consumer is target selection.
 
+> **All four have consumers now.** `targets` refuses a build for a target a
+> package does not claim, `manifests` is read by the AAR and APK packagers,
+> `integrate` emits the `cmake` and `npm` hooks, and `dependencies` is §6h
+> below. The rule this section states is the one that survived; the list of
+> fields it applied to did not, and it went stale one field at a time.
+
 ## 6g. `nts build`
 
 `nts` had seventeen subcommands and none of them built anything. `emit-c` wrote
@@ -999,6 +1005,73 @@ given a jar whose package is not the one requested.
 `native` is read too, for the bindings and the C described above.
 
 `manifests`, `dependencies` and `integrate` are still read by nothing.
+(No longer true of any of the three -- see §6h.)
+
+## 6h. `dependencies`: read the resolver's output, never the resolver
+
+The last field that parsed and did nothing. `§6c` states the rule it enforces
+and `runtime/jvm/web-platform/android/dependencies.tsv` states it better:
+
+> A version range or a `+` would make the artifact that ships differ from the
+> artifact that was reviewed, which is the whole of a supply-chain problem in one
+> line.
+
+So nothing here runs a resolver. `build.gradle` is a Turing-complete program and
+so is a Makefile; both are read by their own tool, and a config points at that
+tool's *result*.
+
+### Keyed by target, which is what scopes the refusals
+
+`dependencies` maps a target id to a claim, so a build consults only the entry
+covering the target it is building. `packages/notifications` declares Gradle for
+`android-29`, SwiftPM for `ios-17` and pkg-config for `linux-gnu`; building it
+for Linux reads the third and never looks at the other two. A resolver this
+cannot read is therefore a refusal **for the targets that name it**, not a
+refusal to build the project.
+
+The key is matched by `claim_covers`, the same floor rule `native` and
+`manifests` use -- a `java-8` pin covers a `java-17` target.
+
+### Three outcomes, and the distinction between them is the design
+
+| Resolver | What it does |
+| --- | --- |
+| `pkg-config` | runs it; `--cflags` reach every compile, `--libs` the link |
+| `maven`, `gradle` | reads the pinned TSV, finds each jar, **verifies its SHA-256**, puts it on the javac classpath and inside a runnable jar |
+| `npm` | reads and validates the lockfile, reports what it pins, **contributes nothing** |
+| `swiftpm`, `cocoapods`, `vcpkg` | **refuses by name**, saying which resolver and which file |
+
+**`npm` is not a refusal and that is the point.** A `.node` addon is loaded by a
+Node process whose `node_modules` the *consumer* installs, so an npm lockfile
+describes that consumer's environment rather than an input to this link.
+Refusing it would be as wrong as ignoring `vcpkg`, in the opposite direction:
+one of them changes the artifact and one of them does not. So the claim is read,
+validated -- named and unreadable is an error, as everywhere here -- and what it
+pins is *reported*, because a resolver nobody read looks exactly like one that
+resolved to nothing.
+
+### What a pin buys, and the reader that gives it away
+
+A digest is what makes the file a pin rather than a version list, so a jar that
+does not hash to it fails the build and says not to update the pin to match.
+
+The TSV reader moved into `nts_build::dependencies` from a test in
+`codegen/jvm`, which now reads its Android pins through it -- **one parser and
+one SHA-256**, because the digest verifying an artifact in a build and the
+digest verifying one in a test have to be the same function or the interesting
+failure is exactly when they disagree. It got stricter on the way: the original
+used `filter_map`, so a row with a missing column *vanished*. Over a file a user
+writes that is silently permissive in the direction that costs correctness -- a
+truncated lockfile resolves to fewer jars and the build succeeds with one
+missing.
+
+### What it does not do yet
+
+An AAR carries dependency jars in `libs/` and an APK needs them dexed. Neither
+is built, so both **refuse** when a runtime-scoped pin is present rather than
+packaging an artifact that links and then dies at the first call into one. No
+fixture in this tree has such a pin, so it is a refusal nothing reaches -- which
+is a more honest state than an untested packaging path.
 
 ## 7. Decided, and open
 

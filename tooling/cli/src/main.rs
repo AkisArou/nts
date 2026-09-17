@@ -2472,25 +2472,31 @@ fn build(rest: &[String]) -> Result<()> {
             // a link error about a symbol, in a file the reader did not write,
             // for a platform the package never claimed.
             refuse_unclaimed_target(name, &config_roots, target, &tsconfig)?;
+            // **Before the output directory is announced**, because an
+            // unsatisfiable claim is a configuration error and printing
+            // `building ...` first says a build started that never could.
+            let needs = dependencies_for(&config_roots, target)?;
             let out = root.join(name).join(target_directory(target));
             println!("building `{name}` for {} into {out}", target.id);
+            // A claim that contributes nothing to link against still says so,
+            // because a resolver nobody read looks exactly like one that
+            // resolved to nothing.
+            for note in &needs.notes {
+                println!("  {note}");
+            }
             match target.backend.as_str() {
                 "c" => {
-                    let wrote = emit_c(&tsconfig, Some(&out), emission)?;
-                    let artifact =
-                        link_c(name, product, &out, &wrote, &native, cache_dir.as_deref(), target)?;
-                    println!("  {artifact}");
-                    // Named here as well as on stderr, because a build whose
-                    // last line is `1 artifact(s)` has told the reader the
-                    // opposite of what happened.
-                    if wrote.refused > 0 {
-                        refused += wrote.refused;
-                        println!(
-                            "  {} function(s) refused and are absent from it; \
-                             each is named above",
-                            wrote.refused
-                        );
-                    }
+                    refused += build_c(
+                        name,
+                        product,
+                        &out,
+                        target,
+                        &tsconfig,
+                        emission,
+                        &native,
+                        cache_dir.as_deref(),
+                        &needs,
+                    )?;
                 }
                 "jvm" => build_jvm(
                     name,
@@ -2501,6 +2507,7 @@ fn build(rest: &[String]) -> Result<()> {
                     emission,
                     &config_roots,
                     android.as_ref(),
+                    &needs,
                 )?,
                 // Named rather than skipped. `emit-llvm` renders to stdout
                 // because its slice is scalar and there is no runtime to place
@@ -2786,6 +2793,7 @@ fn build_jvm(
     emission: Emission<'_>,
     config_roots: &[Utf8PathBuf],
     sdk: Option<&AndroidSdk>,
+    needs: &nts_build::dependencies::Resolution,
 ) -> Result<()> {
     let initializes = emit_jvm(tsconfig, Some(out), false, emission)?;
     // **Compiled before the classes are packaged, because the artifact would
@@ -2797,18 +2805,40 @@ fn build_jvm(
     // It reads the *declared* roots and not `native_sources`, which collects
     // `.c` files: a package contributing a directory of Java produces an empty
     // list there and reads as having no native code at all.
-    let java = compile_java_roots(name, config_roots, target, sdk, out)?;
+    let java = compile_java_roots(name, config_roots, target, sdk, out, &needs.classpath)?;
     if !java.is_empty() {
         println!("  compiled {} Java package(s) in: {}", java.len(), java.join(", "));
     }
     let classes = package_jvm(name, product, out, &java)?;
     match product.kind.as_str() {
+        // **Refused rather than dropped.** An AAR carries dependency jars in
+        // `libs/` and an APK needs them dexed; neither is built here yet, and
+        // an artifact packaged without them links and dies at the first call
+        // into one. No fixture in this tree has a runtime-scoped pin, so this
+        // is a refusal nothing reaches -- which is the honest state to leave it
+        // in rather than an untested packaging path.
+        "aar" if !needs.classpath.is_empty() => bail!(
+            "product `{name}` is an AAR and its packages pin {} dependency jar(s), which              this build cannot place in `libs/` yet. Build it as a `jar`, which carries              them, or drop the pin",
+            needs.classpath.len()
+        ),
         "aar" => println!("  {}", package_aar(name, product, out, &classes, target, tsconfig)?),
+        "application" | "executable" if target.os == "android" && !needs.classpath.is_empty() => {
+            bail!(
+                "product `{name}` is an APK and its packages pin {} dependency jar(s), which                  must be dexed into it and this build cannot do that yet. Drop the pin, or                  build a `jar` target",
+                needs.classpath.len()
+            )
+        }
         // **Not every JVM application is an APK.** `t.android` and `t.jvm` are
         // the same backend and different platforms, and only one of them has a
         // container that needs an SDK.
         "application" | "executable" if target.os != "android" => {
-            println!("  {}", package_runnable_jar(name, out, &classes, initializes)?);
+            println!(
+                "  {}",
+                package_runnable_jar(name, out, &classes, initializes, &needs.classpath)?
+            );
+            if !needs.classpath.is_empty() {
+                println!("  with {} pinned dependency jar(s) inside it", needs.classpath.len());
+            }
         }
         "application" | "executable" => {
             let sdk = sdk.expect("an APK's SDK is resolved before the emitter runs");
@@ -2837,6 +2867,54 @@ fn build_jvm(
     Ok(())
 }
 
+/// Emit, compile and link one product on the C backend, and say what it lost.
+///
+/// Returns the number of functions the lowering refused, which the caller adds
+/// to the build's running total.
+///
+/// **Lifted out of `build` because that function passed a hundred lines**, and
+/// the half that came out is the half with a backend in it -- deciding *which*
+/// products and targets to build is a different job from rendering one of them.
+#[allow(clippy::too_many_arguments)]
+fn build_c(
+    name: &str,
+    product: &nts_build::config::Product,
+    out: &Utf8Path,
+    target: &nts_build::config::Target,
+    tsconfig: &Utf8Path,
+    emission: Emission<'_>,
+    native: &[(Utf8PathBuf, Utf8PathBuf)],
+    cache_dir: Option<&Utf8Path>,
+    needs: &nts_build::dependencies::Resolution,
+) -> Result<usize> {
+    let wrote = emit_c(tsconfig, Some(out), emission)?;
+    let artifact = link_c(name, product, out, &wrote, native, cache_dir, target, needs)?;
+    println!("  {artifact}");
+    // Named here as well as on stderr, because a build whose last line is
+    // `1 artifact(s)` has told the reader the opposite of what happened.
+    if wrote.refused > 0 {
+        println!(
+            "  {} function(s) refused and are absent from it; each is named above",
+            wrote.refused
+        );
+    }
+    Ok(wrote.refused)
+}
+
+/// The compiler, and what every translation unit is compiled with.
+///
+/// **A bundle rather than three more parameters.** `cache`, `tools` and
+/// `cflags` travel together to every compile in this file and answer one
+/// question between them -- which compiler, with which flags, reusing which
+/// objects. They were passed separately until a dependency's include path made
+/// it three, at which point the count was the signal rather than the cause.
+struct Compiling<'a> {
+    cache: &'a ObjectCache,
+    tools: &'a Toolchain,
+    /// A resolved dependency's include paths. Empty when nothing is claimed.
+    cflags: &'a [String],
+}
+
 /// Compile the translation units the emitter wrote.
 ///
 /// Lifted out of `link_c` because that function was over a hundred lines and
@@ -2850,8 +2928,7 @@ fn compile_program(
     native: &[(Utf8PathBuf, Utf8PathBuf)],
     pic: bool,
     napi: Option<&Utf8Path>,
-    cache: &ObjectCache,
-    tools: &Toolchain,
+    with: &Compiling<'_>,
     objects: &mut Vec<Utf8PathBuf>,
 ) -> Result<()> {
     for source in sources {
@@ -2883,11 +2960,15 @@ fn compile_program(
             arguments.push("-I".to_owned());
             arguments.push(napi.to_string());
         }
+        // The generated program includes a package's headers, so it is
+        // compiled against a dependency's include path for the same reason the
+        // native roots are.
+        arguments.extend(with.cflags.iter().cloned());
         let from = out.join(source);
         arguments.extend(["-c".to_owned(), from.to_string(), "-o".to_owned(), object.to_string()]);
         compile_one(
-            cache,
-            tools,
+            with.cache,
+            with.tools,
             &from,
             &object,
             &arguments,
@@ -2921,6 +3002,7 @@ fn compile_java_roots(
     target: &nts_build::config::Target,
     sdk: Option<&AndroidSdk>,
     out: &Utf8Path,
+    depends: &[Utf8PathBuf],
 ) -> Result<Vec<String>> {
     let declared = declared_native_roots(config_roots, target);
     if declared.is_empty() {
@@ -2952,6 +3034,10 @@ fn compile_java_roots(
     if let Some(sdk) = sdk {
         classpath.push(sdk.platform_jar.to_string());
     }
+    // The jars a package pinned. On the compile classpath because the Java a
+    // package contributes is what calls into them -- the emitted classes do
+    // not, since nothing in HIR can name a type this compiler did not read.
+    classpath.extend(depends.iter().map(ToString::to_string));
     let mut javac = std::process::Command::new("javac");
     javac
         .arg("--release")
@@ -3485,6 +3571,7 @@ fn package_runnable_jar(
     out: &Utf8Path,
     classes: &Utf8Path,
     initializes: bool,
+    depends: &[Utf8PathBuf],
 ) -> Result<Utf8PathBuf> {
     let staged = out.join("jar");
     drop(std::fs::remove_dir_all(&staged));
@@ -3533,9 +3620,30 @@ fn package_runnable_jar(
     // `java -jar` invocation -- `Class-Path` in the manifest is relative to the
     // jar and would make the artifact depend on a file beside it, which is the
     // thing a single executable artifact exists to avoid.
-    for source in [classes.as_str(), runtime.as_str()] {
+    //
+    // **A pinned dependency is unpacked here for the same reason**, rather than
+    // named in `Class-Path`: that decision is made one paragraph up, and a jar
+    // that shipped its own classes inside and its dependencies' beside would be
+    // two answers to what a single artifact means. Unpacking is last-wins where
+    // two jars carry the same class, which is what every shading tool does and
+    // is worth knowing rather than discovering.
+    //
+    // **Every path made absolute first, because this is the one command in the
+    // build that changes its working directory.** `--file` is then resolved
+    // against `built` rather than against ours, so `nts build` with no argument
+    // -- where the output directory is the relative `.nts/build/...` -- died on
+    // `tool.jar (No such file or directory)` while the same build with an
+    // absolute project path succeeded. Every test of this path passed an
+    // absolute path, so nothing was looking: `CARGO_TARGET_TMPDIR` is absolute,
+    // which is the same blind spot `absolute()` above was written for.
+    let unpacked: Vec<Utf8PathBuf> = [classes, runtime.as_path()]
+        .into_iter()
+        .map(absolute)
+        .chain(depends.iter().map(|jar| absolute(jar)))
+        .collect();
+    for source in &unpacked {
         let mut unpack = std::process::Command::new("jar");
-        unpack.arg("--extract").arg("--file").arg(source).current_dir(built.as_str());
+        unpack.arg("--extract").arg("--file").arg(source.as_str()).current_dir(built.as_str());
         run_tool(unpack, "jar", "unpack a jar into the executable")?;
     }
     // A signature in the runtime jar's manifest would be checked against
@@ -3684,6 +3792,44 @@ fn contributed_manifest_fragments(
     }
     found.sort();
     found
+}
+
+/// Every dependency claim covering this target, from the app and its packages.
+///
+/// **The app's own config counts too**, unlike the manifest walk above: a
+/// fragment an app declares is placed by the packaging step that knows where
+/// the app's own manifest goes, whereas a dependency is a dependency wherever
+/// it was declared. An app linking `libnotify` directly and an app getting it
+/// through a package need the same flag on the same link line.
+///
+/// Ordered by config path so a link line does not reorder between runs for a
+/// reason nobody changed.
+fn dependencies_for(
+    config_roots: &[Utf8PathBuf],
+    target: &nts_build::config::Target,
+) -> Result<nts_build::dependencies::Resolution> {
+    let mut roots: Vec<&Utf8PathBuf> = config_roots.iter().collect();
+    roots.sort();
+    let mut total = nts_build::dependencies::Resolution::default();
+    for config_path in roots {
+        let directory = config_path.parent().unwrap_or_else(|| Utf8Path::new("."));
+        // A config that does not parse is not this function's error to report:
+        // everything else reading these roots skips one too, and the build
+        // fails on it where it is actually used.
+        let Ok(resolved) = nts_build::config::resolve(config_path) else { continue };
+        if resolved.dependencies.is_empty() {
+            continue;
+        }
+        let one = nts_build::dependencies::resolve(
+            directory,
+            &resolved.dependencies,
+            &target.id,
+            target.minimum_version.as_deref(),
+        )
+        .with_context(|| format!("resolving the dependencies `{config_path}` declares"))?;
+        total.absorb(one);
+    }
+    Ok(total)
 }
 
 /// The manifest fragments a target's packages contribute.
@@ -3976,6 +4122,14 @@ fn check_witness(
     )
 }
 
+/// Compile everything this product is made of and link it into one artifact.
+///
+/// **Eight arguments, and they are eight different things**: what it is called,
+/// what it declares, where it goes, what the emitter wrote, the native roots,
+/// where objects are kept, the target, and what its packages pinned. A struct
+/// grouping them would exist to satisfy a lint rather than to name anything --
+/// which is the test the `Compiling` bundle passes and this does not.
+#[allow(clippy::too_many_arguments)]
 fn link_c(
     name: &str,
     product: &nts_build::config::Product,
@@ -3984,6 +4138,7 @@ fn link_c(
     native: &[(Utf8PathBuf, Utf8PathBuf)],
     cache_dir: Option<&Utf8Path>,
     target: &nts_build::config::Target,
+    needs: &nts_build::dependencies::Resolution,
 ) -> Result<Utf8PathBuf> {
     // **Before the witness, because the witness is compiled too.** A native
     // root is checked against the headers of the platform it will run on, and
@@ -4038,8 +4193,9 @@ fn link_c(
 
     let cache = ObjectCache::new(cache_dir, &tools);
     let mut objects = Vec::new();
-    compile_native(name, out, native, pic, &mut objects, &cache, &tools)?;
-    compile_program(name, out, &sources, native, pic, napi.as_deref(), &cache, &tools, &mut objects)?;
+    let with = Compiling { cache: &cache, tools: &tools, cflags: &needs.cflags };
+    compile_native(name, out, native, pic, &mut objects, &with)?;
+    compile_program(name, out, &sources, native, pic, napi.as_deref(), &with, &mut objects)?;
 
     let artifact = out.join(artifact_name(name, product, target));
     if product.kind == "static-library" {
@@ -4080,6 +4236,14 @@ fn link_c(
                 command.arg(object.as_str());
             }
             command.args(["-Wl,--gc-sections", "-lm"]);
+            // **After our own objects and before `-o`.** A static archive is
+            // consumed left to right by the linker, so a `-l` that precedes the
+            // objects needing it resolves nothing -- which is the failure mode
+            // that reads as "the dependency did not work" rather than as an
+            // ordering rule.
+            for flag in &needs.libs {
+                command.arg(flag);
+            }
             // The libuv host is a translation unit like any other, so its
             // presence in what was written is the question -- not the product
             // kind, and not a flag somebody remembers.
@@ -4346,8 +4510,7 @@ fn compile_native(
     native: &[(Utf8PathBuf, Utf8PathBuf)],
     pic: bool,
     objects: &mut Vec<Utf8PathBuf>,
-    cache: &ObjectCache,
-    tools: &Toolchain,
+    with: &Compiling<'_>,
 ) -> Result<()> {
 
     for (directory, source) in native {
@@ -4363,8 +4526,18 @@ fn compile_native(
         if pic {
             arguments.push("-fPIC".to_owned());
         }
+        // A dependency's include directories, which is the half of `pkg-config`
+        // that a compile needs and a link does not.
+        arguments.extend(with.cflags.iter().cloned());
         arguments.extend(["-c".to_owned(), source.to_string(), "-o".to_owned(), object.to_string()]);
-        compile_one(cache, tools, source, &object, &arguments, &format!("compiling {source} for `{name}`"))?;
+        compile_one(
+            with.cache,
+            with.tools,
+            source,
+            &object,
+            &arguments,
+            &format!("compiling {source} for `{name}`"),
+        )?;
         objects.push(object);
     }
     Ok(())

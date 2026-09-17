@@ -23,5 +23,10 @@
 //! [`config`] is its first content because it is the first thing the DAG above
 //! needs: the planner cannot lower artifact nodes until something says what the
 //! artifacts are. `nts emit-c` reads a product's `exports` through it today.
+//!
+//! [`dependencies`] is the second, and it is the half of a build graph that is
+//! not ours: what a package needs that this compiler did not produce. It reads
+//! each ecosystem's pinned output and never runs a resolver.
 
 pub mod config;
+pub mod dependencies;
