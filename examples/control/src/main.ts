@@ -235,3 +235,23 @@ export function evolvedNumber(n: number): number {
   }
   return held + 1;
 }
+
+/**
+ * The comma operator, which evaluates both sides and answers the second.
+ *
+ * It is here because a 2026-09-17 sweep of ordinary statement shapes against
+ * node found it to be the only one this corpus did not already drive — the
+ * others (`??=`, a tagged template, a labelled `continue`, `do`/`while`, a
+ * nested destructuring, a spread into a call, a switch that falls through) each
+ * already had a fixture, which is a better result than the sweep finding gaps
+ * and is worth a line saying so.
+ *
+ * The assertion is the *effect*, not the value: a comma expression whose left
+ * side is discarded without being evaluated would still answer `4` here, and
+ * only reading `sink` back separates the two.
+ */
+export function commaEvaluatesBoth(n: number): number {
+  let sink = 0;
+  const answer = ((sink = 3), sink + 1);
+  return answer * 10 + sink + n * 0;
+}
