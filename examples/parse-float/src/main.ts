@@ -89,3 +89,25 @@ export function againstNumber(n: number): number {
   const same = (Number.isNaN(a) && Number.isNaN(b)) || a === b;
   return same ? 1 : 0;
 }
+
+/**
+ * `Number.parseFloat`, which is the same function object as the global in
+ * JavaScript and reaches the same helper here.
+ *
+ * `parse-int` has carried this arm since it was written and this file did not,
+ * which is the whole reason the gap existed: `Number`'s table answered for
+ * thirteen of its fourteen members and said `a global member with no definition
+ * here` for the fourteenth. A pair of fixtures that do not ask the same
+ * questions of each other is a pair that can drift, and one had already.
+ *
+ * Asked as an *identity* against the global rather than against a literal: the
+ * failure this guards is the two spellings reaching different helpers, and a
+ * value comparison would pass if both were wrong in the same way.
+ */
+export function throughNumber(n: number): number {
+  const text = pick(n);
+  const a = Number.parseFloat(text);
+  const b = parseFloat(text);
+  const same = (Number.isNaN(a) && Number.isNaN(b)) || a === b;
+  return same ? 1 : 0;
+}

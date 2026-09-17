@@ -15611,20 +15611,39 @@ impl<'a> FuncBuilder<'a> {
             }
         }
 
-        // `Number.parseInt` before the intrinsic table, because that table's
-        // entries all take exactly one argument and this takes a radix.
+        // `Number.parseInt` and `Number.parseFloat` before the intrinsic table,
+        // because that table's entries all take exactly one argument and
+        // `parseInt` takes a radix.
         //
-        // The same function object as the global in JavaScript, so it reaches
-        // the same helper rather than a second one -- and reaching a *different*
-        // one is how two spellings of an operation come to disagree, which this
-        // file has three comments about already.
+        // Each is the same function object as its global in JavaScript, so both
+        // reach the same helper rather than a second one -- and reaching a
+        // *different* one is how two spellings of an operation come to disagree,
+        // which this file has three comments about already.
+        //
+        // **`parseFloat` was missing and `parseInt` was not**, which is the
+        // shape a table one entry short always has: thirteen of `Number`'s
+        // fourteen members answered and the fourteenth said `a global member
+        // with no definition here`. The pair is written here together so that a
+        // reader adding one finds the other, which is the same argument
+        // `lower_global_call` makes for keeping them adjacent two hundred lines
+        // apart from the single-argument builtins.
+        //
+        // Only these two. `Number.isNaN` and `Number.isFinite` are **not** their
+        // globals -- the whole reason those spellings exist is what they do to a
+        // value that is not a number -- and aliasing them would be a silent
+        // wrong answer rather than a missing one. They reach `Number`'s own
+        // entries in `intrinsic_of`, which is correct because a `number` is all
+        // that can arrive there.
         if self.kind_of(callee) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
             let parts = self.children(callee);
             if let [object, member] = parts.as_slice()
                 && self.node(*object).text.as_deref() == Some("Number")
-                && self.node(*member).text.as_deref() == Some("parseInt")
             {
-                return Some(self.lower_parse_int(id, arguments));
+                match self.node(*member).text.as_deref() {
+                    Some("parseInt") => return Some(self.lower_parse_int(id, arguments)),
+                    Some("parseFloat") => return Some(self.lower_parse_float(id, arguments)),
+                    _ => {}
+                }
             }
         }
         if let Some(intrinsic) = self.intrinsic_of(callee) {
