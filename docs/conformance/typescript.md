@@ -2611,6 +2611,19 @@ holds `clz32`, `asinh`, `acosh` and `atanh`, which the intrinsic table really
 does not have, and `sinh` and `sqrt` moved to `examples/mathops` where they are
 checked against node for the first time.
 
+**Then the same question, asked of every other `-unsupported` fixture.**
+Comparing each one's export count against `nts check`'s *`checked … across N
+function(s)`* line finds the arms that have quietly started working — which is
+the check `tooling/gate/example-refusals` exists for, and whose header states
+the hazard better than I can: `nts check` *"exits 0 when an exported function
+refuses … so an example can lose most of its cases to a refusal and still be
+counted as agreeing"*. Two arms were stale: `Array.from(xs, f)`, which landed
+and is measured in `examples/array-from-with-a-callback`, and a promise settled
+with a promise, which landed on 2026-09-16 and is measured in
+`examples/a-promise-settled-with-a-promise`. Both had been lowering and agreeing
+with node from inside a file of refusals. Everything else in those fixtures is
+either still refused or a neighbour the file labels as landed on purpose.
+
 #### A labelled block (fixed)
 
 `outer: { … break outer … }` — a label on a block rather than on a loop, where
