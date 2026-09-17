@@ -227,19 +227,7 @@ fn every_product_is_built_unless_one_is_named() {
         eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
         return;
     }
-    let project = fixture(
-        "build-two",
-        r#"
-import { defineConfig, library, target } from "@nts/config";
-const targets = [target.linux({ backend: "c" })];
-export default defineConfig({
-  products: {
-    acme: library.native({ targets, entry: "./src/main.ts" }),
-    acmeStatic: library.staticNative({ targets, entry: "./src/main.ts" }),
-  },
-});
-"#,
-    );
+    let project = fixture("build-two", TWO_PRODUCTS);
     let all = build(&project, &[]);
     assert!(all.ok, "{}{}", all.stdout, all.stderr);
     assert!(project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so").exists());
@@ -249,11 +237,31 @@ export default defineConfig({
         all.stdout,
     );
 
-    let project = fixture("build-one", SHARED);
+    // **The same two-product config, so `--product` has something to exclude.**
+    // This used a fixture with *one* product and asserted that product was
+    // built -- which a `--product` that filtered nothing passes just as well.
+    // The naming half was tested and the narrowing half was not.
+    let project = fixture("build-one", TWO_PRODUCTS);
     let one = build(&project, &["--product", "acme"]);
     assert!(one.ok, "{}{}", one.stdout, one.stderr);
     assert!(project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so").exists());
+    assert!(
+        !project.join(".nts/build/acmeStatic/linux-gnu-x86_64/libacmeStatic.a").exists(),
+        "`--product acme` built the other product too:\n{}",
+        one.stdout
+    );
 }
+
+const TWO_PRODUCTS: &str = r#"
+import { defineConfig, library, target } from "@nts/config";
+const targets = [target.linux({ backend: "c" })];
+export default defineConfig({
+  products: {
+    acme: library.native({ targets, entry: "./src/main.ts" }),
+    acmeStatic: library.staticNative({ targets, entry: "./src/main.ts" }),
+  },
+});
+"#;
 
 /// A library runs its own module evaluation when it loads.
 ///
