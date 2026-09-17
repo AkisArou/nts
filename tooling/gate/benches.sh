@@ -43,6 +43,13 @@ nts=${NTS_BIN:-$root/target/release/nts}
 # and the benchmark already treats it as one.
 CFLAGS="-O2 -Wall -Wextra -Werror -std=c11"
 
+# **Two compilers, because the two checks below want different things.** `cc`
+# compiles generated C and honours `CC` like everything else in this tree.
+# `llvm_cc` reads `-x ir`, which only an LLVM front end does -- so it is named
+# separately rather than inheriting a `CC` that may legitimately be gcc.
+cc=${CC:-clang}
+llvm_cc=${NTS_LLVM_CC:-clang}
+
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT INT TERM
 
@@ -76,7 +83,14 @@ for case in benches/cases/*/; do
   fi
   # Only the program: the runtime is compiled by its own tests and compiling it
   # once per case would triple this script's cost for nothing.
-  if ! clang $CFLAGS -I"$out" -c -o /dev/null "$out/program.c" >"$work/log" 2>&1; then
+  #
+  # **`$cc`, because everything else in this tree honours `CC`** -- the sixteen
+  # interop scripts, `toolchain_for`, and `bench-agree` -- and this step was the
+  # one that did not, so a session building with a different compiler measured
+  # `clang` here and its own compiler everywhere else. Unquoted on purpose: `CC`
+  # is a command line rather than a program name, so `zig cc` and `ccache clang`
+  # have to word-split.
+  if ! $cc $CFLAGS -I"$out" -c -o /dev/null "$out/program.c" >"$work/log" 2>&1; then
     printf '  %-22s C did not compile\n' "$name"
     cat "$work/log" | head -12
     fail=1
@@ -91,7 +105,14 @@ for case in benches/cases/*/; do
   fi
   # `-w` because the backend has no warnings to fix and clang emits one about
   # the target triple for every `-x ir` input, which `nts-bench` also suppresses.
-  if ! clang -x ir -w -O2 -c -o /dev/null "$out/program.ll" >"$work/log" 2>&1; then
+  #
+  # **Not `$cc`, and that is the distinction rather than an oversight.** `-x ir`
+  # is an LLVM front end feature: `CC=gcc` is a legitimate setting for the C
+  # step above and cannot read a `.ll` at all, so substituting it here would
+  # turn "this machine's C compiler is not clang" into "the LLVM backend emits
+  # code that does not compile". `NTS_LLVM_CC` names the one to use where it is
+  # not on PATH as `clang`.
+  if ! $llvm_cc -x ir -w -O2 -c -o /dev/null "$out/program.ll" >"$work/log" 2>&1; then
     printf '  %-22s LLVM IR did not compile\n' "$name"
     cat "$work/log" | head -12
     fail=1
