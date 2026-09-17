@@ -17371,13 +17371,28 @@ impl<'a> FuncBuilder<'a> {
                 names.push(None);
                 continue;
             }
+            // **An element that is more than a name says which reading this
+            // is**, rather than being a shape to refuse. A default, a rest or a
+            // nested pattern cannot be one of a walk's positional values -- a
+            // `Map` hands over a key and a value and there is nothing to
+            // default or gather -- so the brackets must be an ordinary
+            // destructuring of the single element the walk produces, which is
+            // exactly what `Head::Pattern` means and what `bind_pattern`
+            // already does for `const [first, ...tail] = xs`.
+            //
+            // Refusing here instead made the same pattern work in a
+            // declaration and fail in a head: `for (const [head, ...tail] of
+            // rows)` was `a destructuring element that is more than a name`,
+            // which is a true sentence about the reading it was not.
+            //
+            // Over a `Map` this now falls to `walk_of`'s one-name refusal,
+            // which names the pair and says to bind `[key, value]` -- a better
+            // sentence for that case than this one was.
             let [name] = inner.as_slice() else {
-                return Err(
-                    self.unsupported(element, "a destructuring element that is more than a name")
-                );
+                return Ok(Head::Pattern(pattern));
             };
             if self.kind_of(*name) != Some(syntax::IDENTIFIER) {
-                return Err(self.unsupported(*name, "a nested destructuring pattern"));
+                return Ok(Head::Pattern(pattern));
             }
             names.push(Some(*name));
         }
