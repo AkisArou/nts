@@ -104,6 +104,19 @@ pub const SUPER_KEYWORD: u16 = 107;
 /// `arguments`, so they are not interchangeable even though most uses of the
 /// first could be written as the second.
 pub const FUNCTION_EXPRESSION: u16 = 219;
+/// `class { … }` as a value, named or not.
+///
+/// A class in every way a [`CLASS_DECLARATION`] is -- fields, methods, statics,
+/// `extends`, `implements` -- and different in one: it binds no name of its own,
+/// so an anonymous one has no identifier to be read off and the checker calls
+/// its symbol `__class`, which *every* anonymous class in the program shares.
+/// Anything naming a member after its class has to fall back to the type's own
+/// unique stand-in rather than to that.
+///
+/// Read off a real program by the route this module asks for: the lowering's
+/// fallthrough refusal interpolates [`name_of`], and it printed `a class
+/// expression is not supported by this lowering yet`.
+pub const CLASS_EXPRESSION: u16 = 232;
 pub const ARROW_FUNCTION: u16 = 220;
 pub const THIS_KEYWORD: u16 = 109;
 pub const PRIVATE_KEYWORD: u16 = 122;

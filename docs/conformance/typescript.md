@@ -2526,19 +2526,84 @@ ones, IIFEs, and the comma operator.
 **Still refused, each confirmed with a one-shape fixture:**
 
 ```text
-  { twice() { … } } and { get twice() { … } }   a method or accessor in an object literal
-  const C = class { … }                          a class expression
-  function f() { class L { … } }                 a class declaration inside a function
+  const o = { twice() { … } } at module scope    a method on an object literal
   new.target                                     a meta property
   accessor v = 3                                 the `accessor` keyword
   [[1],[2]].flat()                               `flat` on an array of references
   Object.entries, JSON.stringify                 a global member with no definition here
 ```
 
-An object literal's method is the largest of these at 7 distinct sites; the rest
-are 0 to 3. None is a designed deferral, and none has a row of its own —
-recorded together because **a missing row is worse than a ✗**: a ✗ has been
-looked at, and an absence has not.
+None is a designed deferral, and none has a row of its own — recorded together
+because **a missing row is worse than a ✗**: a ✗ has been looked at, and an
+absence has not.
+
+**Three lines left this list on 2026-09-17, and the first row is narrower than
+it was**, which is the part worth reading twice. It said *a method or accessor
+in an object literal*; re-probing each line rather than trusting it found that
+the **accessor passes at either scope and the method passes inside a function**
+— `examples/a-method-on-an-object-literal` writes its literals in a function,
+which is the shape that landed, and a module-scope `const o = { twice() { … } }`
+still refuses. A row that names a construct when the truth is a construct *in
+one position* sends the next reader to build something that already works.
+
+#### A class expression (fixed)
+
+`const C = class { … }` lowered its **fields** and none of its members. Every
+walk over the program read `CLASS_DECLARATION` and stopped there, so a class
+expression's methods, accessors, constructor and statics were never entered —
+and the refusal a call site got, ``a method `m` with no declaration in the
+hierarchy``, names the symptom rather than the cause. The shape read as
+supported right up to the first method.
+
+`blockers/class-expression` has held this since 2026-09-08, with reach measured:
+**5 occurrences in the `os` program and 34 in `fs`**. It is written rather than
+avoided because the two are not interchangeable there — `internal/uv.ts` needs a
+class that implements an interface while the *binding* carries a different name
+from the class, so `err.constructor.name` reads `"SystemError"` without a second
+name in the module's public surface. It is now a regression guard.
+
+**One syntax kind and six places that decided what a class is.** `CLASS_EXPRESSION`
+was not in `syntax.rs` at all; `declares_a_class` is the predicate now, and the
+walks — the hierarchy, `implements`, generic copies, static initializers, the
+member driver and the ancestor lookups — ask it instead of naming one kind.
+
+Three things the missing name costs, each of which was a defect before it was a
+design:
+
+- **`instance_type_of`.** A class *declaration* node carries the type it
+  declares; a class *expression* node carries the type of the expression, which
+  is the **constructor**. Both are right. Every walk here wants the instance, so
+  taking the node's type directly emitted `func Type8#m(this: managed<obj#2>)` —
+  a method named for the instance whose receiver is the constructor, which has
+  no fields, so ``this.v`` refused with ``v`, which `__class` does not declare``,
+  a sentence about the source that is false.
+- **`nominal_or_stand_in`.** The checker calls an anonymous class's symbol
+  `__class`, and *every* anonymous class in a program shares it — the `__object`
+  collision one construct over. One function now answers what a type is called,
+  and a layout, a member's emitted name and a call site's callee all ask it.
+- **A `hierarchy.name` for an anonymous class.** This one was a *silently wrong
+  answer*, which is worth stating plainly. A layout is a representation and
+  identical shapes deliberately share one, so the name a call site falls back to
+  when the hierarchy has none is the **merged** layout's. For a named class that
+  fallback is never reached. For two anonymous ones it named both alike, and
+  `new Second().which()` called `First`'s function: the fixture agreed with node
+  on 264 of 319 cases, and every disagreement was off by exactly the difference
+  between the two bodies.
+
+`examples/a-class-expression` is **319 cases across 11 exports** agreeing with
+node on C, LLVM and the JVM, against **22 refusals** on the pre-change binary.
+It includes two anonymous classes declaring the same member name — the case a
+shared layout answers alike — returning different values rather than the same
+one, which is what turns a merge from a count into a wrong number.
+
+**A `static` on an *anonymous* class is still refused**, and not for want of a
+case. A static is addressed by name from source — the program writes `C.s`, and
+`C` is the variable, not anything the class knows about itself — so the stand-in
+that works for a method, which nothing outside the program reads, would be a
+global no source can be traced back to. Naming the class answers it, which is
+what the corpus already does. `blockers/a-static-on-an-anonymous-class` holds
+it, and `blockers/class-as-value` holds `constructor.name`, the other half of
+what `internal/uv.ts` is waiting on.
 
 #### A class declared inside a function (fixed)
 

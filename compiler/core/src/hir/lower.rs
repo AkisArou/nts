@@ -359,7 +359,7 @@ fn generic_classes(
         .nodes
         .iter()
         .enumerate()
-        .filter(|(_, node)| node.kind == NodeKind::Syntax(syntax::CLASS_DECLARATION))
+        .filter(|(_, node)| matches!(node.kind, NodeKind::Syntax(kind) if declares_a_class(kind)))
         .filter_map(|(index, _)| {
             let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
             let symbol = probe
@@ -418,7 +418,9 @@ fn implemented_member(probe: &FuncBuilder, node: NodeId) -> bool {
 ///
 /// **A name that is not one.** TypeScript gives every object type a symbol and
 /// calls the ones with no declaration `__object` or `__type`, so *every*
-/// anonymous shape in a program carries the same name. `decompose.rs` already
+/// anonymous shape in a program carries the same name -- and `__class` for an
+/// anonymous *class*, which is the same problem wearing a third word.
+/// `decompose.rs` already
 /// refuses to publish those as nominal identities, for the reason it states --
 /// "unrelated anonymous shapes appear named alike" -- and one leaks through for
 /// a literal that declares a member.
@@ -429,8 +431,76 @@ fn implemented_member(probe: &FuncBuilder, node: NodeId) -> bool {
 /// produced `__object#twice`, and lowering refused the program with
 /// `DuplicateFunction`. The `Type{id}` fallback beside this is what every other
 /// anonymous shape already gets, and it is unique by construction.
+/// Whether a syntax kind declares a class.
+///
+/// **Two kinds do.** A class expression is a class in every way a walk over the
+/// program cares about -- fields, methods, statics, a base, interfaces -- and
+/// differs in exactly one: it binds no name of its own. Every walk that read
+/// `CLASS_DECLARATION` and stopped there lowered a class expression's *fields*
+/// and none of its members, so `const C = class { v = 7 }` compiled and agreed
+/// with node while adding a method to it refused with ``a method `m` with no
+/// declaration in the hierarchy``. That message names the symptom; the cause is
+/// that no walk ever visited the class.
+///
+/// The one thing the missing name costs is the name a member is emitted under.
+/// [`is_anonymous_shape`] answers it, because the checker calls an anonymous
+/// class's symbol `__class` and *every* anonymous class in the program shares
+/// that -- the same collision two `__object` literals produced, one construct
+/// over.
+/// What a type is called: its symbol's name, or the unique stand-in an anonymous
+/// shape gets.
+///
+/// **One derivation, because three things are named from it and they have to
+/// agree letter for letter.** A layout takes this name, a member is emitted as
+/// `{name}#{member}`, and a call site names its callee the same way. A second
+/// answer here is not a second opinion -- it is a call to a function nothing
+/// defines, and the linker reports it a compilation stage away from the choice
+/// that caused it.
+fn nominal_or_stand_in(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
+    snapshot
+        .types
+        .get(ty.0 as usize)
+        .and_then(|record| record.symbol)
+        .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
+        .map(|symbol| symbol.name.as_str())
+        .filter(|name| !is_anonymous_shape(name))
+        .map_or_else(|| format!("Type{}", ty.0), ToOwned::to_owned)
+}
+
+/// The type a `new` of this class produces.
+///
+/// **A class declaration and a class expression disagree about what their node's
+/// type is, and both are right.** The frontend maps a declaration to the type it
+/// declares -- the instance -- because a declaration is not an expression and has
+/// no other type to have. It maps a class *expression* to the type of the
+/// expression, which is the constructor: `#2 `__class` Function(() -> #7)`.
+///
+/// Every walk below wants `#7`. That is the type a layout is built for, the type
+/// a `new` expression has, and the type a method's `this` is, so a walk that
+/// takes the node's type directly keys the hierarchy on the constructor and then
+/// names a method `Type2#m` while its only call site asks for `Type7#m` -- one C
+/// function defined nowhere and called once, reported by the linker a stage away
+/// from the choice that caused it.
+///
+/// Reading the construct signature's result answers both without asking which
+/// kind of node this is.
+fn instance_type_of(snapshot: &SemanticSnapshot, class: NodeId) -> Option<TypeId> {
+    let ty = snapshot.node_types.get(&class).copied()?;
+    let TypeKind::Function(signature) = snapshot.types.get(ty.0 as usize)?.kind else {
+        return Some(ty);
+    };
+    Some(snapshot.signatures.get(signature.0 as usize)?.return_type)
+}
+
+fn declares_a_class(kind: u16) -> bool {
+    matches!(
+        kind,
+        syntax::CLASS_DECLARATION | syntax::CLASS_EXPRESSION
+    )
+}
+
 fn is_anonymous_shape(name: &str) -> bool {
-    matches!(name, "__object" | "__type")
+    matches!(name, "__object" | "__type" | "__class")
 }
 
 fn collect_anonymous_objects(
@@ -570,11 +640,11 @@ fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarch
         })
         .collect();
     for (index, node) in snapshot.nodes.iter().enumerate() {
-        if node.kind != NodeKind::Syntax(syntax::CLASS_DECLARATION) {
+        if !matches!(node.kind, NodeKind::Syntax(kind) if declares_a_class(kind)) {
             continue;
         }
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        let Some(ty) = snapshot.node_types.get(&id).copied() else {
+        let Some(ty) = instance_type_of(snapshot, id) else {
             continue;
         };
         let faces: Vec<TypeId> = probe
@@ -602,11 +672,11 @@ fn collect_hierarchy(
     let instantiations = super::generics::instantiations(snapshot);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
-        if node.kind != NodeKind::Syntax(syntax::CLASS_DECLARATION) {
+        if !matches!(node.kind, NodeKind::Syntax(kind) if declares_a_class(kind)) {
             continue;
         }
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        let Some(declared) = snapshot.node_types.get(&id).copied() else {
+        let Some(declared) = instance_type_of(snapshot, id) else {
             continue;
         };
         // A generic class's facts belong to each *instantiation*, because that
@@ -624,11 +694,25 @@ fn collect_hierarchy(
             );
 
         for ty in types {
-            if let Some(name) = probe
+            // An anonymous class expression has no identifier, and its stand-in
+            // is what its members were named for.
+            //
+            // **Without an entry here two of them become one.** A layout is a
+            // *representation* and identical shapes deliberately share one --
+            // `class Alpha {}` and `class Beta {}` print as `Alpha [1 2]`, see
+            // [`stands_for_a_class`] -- so the name a call site falls back to
+            // when the hierarchy has none is the merged layout's. For a named
+            // class that fallback is never reached; for an anonymous one it
+            // named every structurally identical class alike, and
+            // `new Second().which()` called `First`'s function and returned
+            // `1`. It agreed with node on 264 of 319 cases, which is what a
+            // silently wrong answer looks like from the outside.
+            let name = probe
                 .children(id)
                 .into_iter()
                 .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
                 .and_then(|child| probe.node(child).text.clone())
+                .unwrap_or_else(|| nominal_or_stand_in(snapshot, ty));
             {
                 // Qualified for an instantiation, by the same construction
                 // `layout_of` uses: a call site names its callee through this
@@ -1047,7 +1131,7 @@ pub const MODULE_INIT: &str = "module#init";
 /// A field with no initializer is storage at its zero and needs no statement,
 /// the same rule `collect_module_scope` follows for `let x: number;`.
 fn runs_a_static_initializer(probe: &FuncBuilder, id: NodeId) -> bool {
-    if probe.kind_of(id) != Some(syntax::CLASS_DECLARATION) {
+    if !probe.kind_of(id).is_some_and(declares_a_class) {
         return false;
     }
     probe.children(id).into_iter().any(|member| {
@@ -2094,8 +2178,8 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
         // is one C function defined twice and whichever the linker picked.
         let is_named_declaration = matches!(
             node.kind,
-            NodeKind::Syntax(syntax::FUNCTION_DECLARATION | syntax::CLASS_DECLARATION)
-        );
+            NodeKind::Syntax(syntax::FUNCTION_DECLARATION)
+        ) || matches!(node.kind, NodeKind::Syntax(kind) if declares_a_class(kind));
         if !is_named_declaration {
             continue;
         }
@@ -2590,7 +2674,7 @@ fn collect_static_fields(
         let Some(symbol) = probe.node(name_node).symbol else {
             continue;
         };
-        let Some(class) = probe.ancestor(id, syntax::CLASS_DECLARATION) else {
+        let Some(class) = probe.enclosing_class(id) else {
             continue;
         };
         let Some(field) = probe.literal_name(name_node) else {
@@ -2602,9 +2686,16 @@ fn collect_static_fields(
             .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
             .and_then(|child| probe.node(child).text.clone());
         let Some(class_name) = class_name else {
-            // An anonymous class has no name to qualify with, and two of them
-            // would collide. Refused rather than numbered, because a number
-            // here is a name no source can be traced back to.
+            // An anonymous class has no name to qualify with. Refused rather
+            // than numbered, because a `static` is addressed by name from
+            // source -- `C.s` -- and a number here is a name no source can be
+            // traced back to. A *method* is different and does take the
+            // numbered stand-in: nothing outside the program names it, so
+            // `Type17#m` is a symbol and not a spelling anyone has to read.
+            //
+            // Reachable for the first time now that `enclosing_class` sees a
+            // class expression. Before that an anonymous class was only
+            // `export default class`, and the two cases want the same answer.
             scope.unsupported.insert(
                 symbol.0,
                 "a static field of an anonymous class".to_owned(),
@@ -2985,8 +3076,8 @@ fn qualified_name(
     let mut at = snapshot.nodes.get(id.0 as usize)?.parent;
     while let Some(node) = at {
         let record = snapshot.nodes.get(node.0 as usize)?;
-        if record.kind == NodeKind::Syntax(syntax::CLASS_DECLARATION) {
-            return probe.declared_name(node).map(|owner| format!("{owner}#{member}"));
+        if matches!(record.kind, NodeKind::Syntax(kind) if declares_a_class(kind)) {
+            return probe.class_name(node).map(|owner| format!("{owner}#{member}"));
         }
         at = record.parent;
     }
@@ -3194,7 +3285,7 @@ fn lower_members_of(
     wanted: &mut std::collections::BTreeSet<usize>,
 ) -> bool {
     match snapshot.nodes.get(id.0 as usize).map(|node| node.kind) {
-        Some(NodeKind::Syntax(syntax::CLASS_DECLARATION)) => {
+        Some(NodeKind::Syntax(kind)) if declares_a_class(kind) => {
             lower_class(snapshot, foreign, id, generic, shared, lowered, wanted);
             true
         },
@@ -9176,12 +9267,17 @@ impl<'a> FuncBuilder<'a> {
             // with a plain function and collides readily with a method of
             // another class of the same name: `dgram` and `net` both export a
             // `Socket`, and both emitted `Socket#ref`.
+            //
+            // `class_name` and not the identifier directly, because an
+            // anonymous class expression has none and its members still have
+            // to be called something. It answers with the layout's own
+            // stand-in, which is what the call site will have asked
+            // `layout_of` for -- the two names meet in the C symbol table and
+            // a second derivation of either is a call to a function nothing
+            // defines.
             None => self.qualified.get(&class).cloned().map_or_else(
                 || {
-                    self.children(class)
-                        .into_iter()
-                        .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
-                        .and_then(|child| self.node(child).text.clone())
+                    self.class_name(class)
                         .ok_or_else(|| self.unsupported(class, "an anonymous class"))
                 },
                 Ok,
@@ -9294,13 +9390,21 @@ impl<'a> FuncBuilder<'a> {
             self.this = None;
             self.base = None;
         } else {
-            // `this` is parameter zero. Its type is the class's instance type,
-            // which is what the checker gives the class declaration's name --
-            // or, for one copy of a generic class, the instantiation's.
+            // `this` is parameter zero. Its type is the class's instance type
+            // -- or, for one copy of a generic class, the instantiation's.
+            //
+            // Through [`instance_type_of`] rather than the class node's type
+            // directly, because a class *expression* node carries its
+            // constructor. Taking that one gave `func Type8#m(this:
+            // managed<obj#2>)`: a method named for the instance type whose
+            // receiver is the constructor type, which has no fields, so
+            // `this.v` refused with ``v`, which `__class` does not declare`` --
+            // a sentence about the source that is false, since the class
+            // declares `v` three tokens earlier.
             let instance = match instance {
                 Some(ty) => HirType::Managed(ManagedType::Object(ty)),
-                None => self
-                    .type_of(class)
+                None => instance_type_of(self.snapshot, class)
+                    .and_then(|ty| self.represent(ty))
                     // Named rather than described. `unrepresentable` reads the
                     // *member*'s type, and the member is a getter returning a
                     // `string` -- so 38 sites in the node profile said "a class
@@ -23198,12 +23302,7 @@ impl<'a> FuncBuilder<'a> {
         // module specifier instead would put `java:` in the middle end, which
         // `bind.rs` is deliberately the only place to know.
         let bound = self.foreign_owner(record);
-        let name = record
-            .symbol
-            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-            .map(|symbol| symbol.name.as_str())
-            .filter(|name| !is_anonymous_shape(name))
-            .map_or_else(|| format!("Type{}", ty.0), ToOwned::to_owned);
+        let name = nominal_or_stand_in(self.snapshot, ty);
         // `Vector<Body>` and `Vector<double>` share the declaring symbol and so
         // share this name, and they are different classes with different field
         // widths. The type id tells them apart, and `<>` cannot appear in a
@@ -27535,6 +27634,23 @@ impl<'a> FuncBuilder<'a> {
             let Some([Some(name), _, _, initializer]) = self.child_slots::<4>(declaration) else {
                 return Err(self.unsupported(declaration, "a declaration of unexpected shape"));
             };
+            // **A class is not a value here.** `const C = class { … }`
+            // declares a *type*: the driver lowers a class's members wherever
+            // the class sits, and `new C()` resolves through the checker's
+            // type rather than through this binding, so there is nothing left
+            // for the binding to hold. Module scope gives the same answer by
+            // allocating no global for one, and a local `class L { … }`
+            // statement lowers to nothing for the same reason.
+            //
+            // Naming the class -- `const C = class L { … }` -- changes none of
+            // that. The name is in scope inside the class body and nowhere
+            // else, which is a fact about the checker's scopes and not about
+            // storage.
+            if initializer
+                .is_some_and(|node| self.kind_of(node) == Some(syntax::CLASS_EXPRESSION))
+            {
+                continue;
+            }
             // An empty array literal has type `never[]`: with no elements the
             // checker has nothing to infer from. The declaration does know —
             // `const out: number[] = []` says so — so the annotation supplies
@@ -30028,17 +30144,47 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|child| self.node(child).text.clone())
     }
 
+    /// The class a node sits inside, of either kind that declares one.
+    fn enclosing_class(&self, id: NodeId) -> Option<NodeId> {
+        let mut at = self.node(id).parent;
+        while let Some(parent) = at {
+            if self.kind_of(parent).is_some_and(declares_a_class) {
+                return Some(parent);
+            }
+            at = self.node(parent).parent;
+        }
+        None
+    }
+
+    /// What a class is called, where a member of it is being named.
+    ///
+    /// An anonymous class expression has no identifier to read, so this asks
+    /// [`nominal_or_stand_in`] -- the same question `layout_of` asks -- rather
+    /// than answering it a second way. Reading the identifier first is not a
+    /// different answer for the named case: the checker's symbol for a class is
+    /// the name the program wrote.
+    fn class_name(&self, class: NodeId) -> Option<String> {
+        if let Some(name) = self
+            .children(class)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+            .and_then(|child| self.node(child).text.clone())
+        {
+            return Some(name);
+        }
+        Some(nominal_or_stand_in(
+            self.snapshot,
+            instance_type_of(self.snapshot, class)?,
+        ))
+    }
+
     /// The name of the class a member is declared on.
     ///
     /// By walking to the declaration's parent rather than reading the name
     /// before the dot: `import { Body as B }` puts `B` at the call site and
     /// `Body` on the function, and the two have to agree.
     fn declaring_class_name(&self, member: NodeId) -> Option<String> {
-        let class = self.ancestor(member, syntax::CLASS_DECLARATION)?;
-        self.children(class)
-            .into_iter()
-            .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
-            .and_then(|child| self.node(child).text.clone())
+        self.class_name(self.enclosing_class(member)?)
     }
 
     /// `Class.member(...)`: an ordinary direct call to a function with no
@@ -32868,12 +33014,15 @@ impl<'a> FuncBuilder<'a> {
 
     /// The name of the class a class extends.
     fn base_class(&self, class: NodeId) -> Option<String> {
-        let ty = self.snapshot.node_types.get(&class)?;
+        let ty = instance_type_of(self.snapshot, class)?;
         // `extends` first, then `implements`, and a class extends at most one
         // class -- so the first base is the superclass when there is one.
-        let base = *self.snapshot.base_types.get(ty)?.first()?;
-        let symbol = self.snapshot.types.get(base.0 as usize)?.symbol?;
-        Some(self.snapshot.symbols.get(symbol.0 as usize)?.name.clone())
+        let base = *self.snapshot.base_types.get(&ty)?.first()?;
+        // Named the way its own members were named, which is the whole point of
+        // the name: `super.m()` is a direct call to `{base}#m`. An anonymous
+        // base is a class expression extending a class expression, and its
+        // methods were emitted under the stand-in.
+        Some(nominal_or_stand_in(self.snapshot, base))
     }
 
     fn lower_identifier(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
