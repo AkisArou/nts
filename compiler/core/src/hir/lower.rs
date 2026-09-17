@@ -19235,8 +19235,11 @@ impl<'a> FuncBuilder<'a> {
         Some(Place::ArrayLength(object))
     }
 
-    fn place_of(&mut self, target: NodeId) -> Result<Place, Diagnostic> {
-        if self.names_a_property(target) {
+    /// The place `o.x` names, for an assignment.
+    ///
+    /// Split out of [`Self::place_of`] for its length; that function is the
+    /// dispatch over what kind of target this is, and this is one of them.
+    fn property_place(&mut self, target: NodeId) -> Result<Place, Diagnostic> {
             let children = self.children(target);
             let [object_node, member] = children.as_slice() else {
                 return Err(self.unsupported(target, "a property of unexpected shape"));
@@ -19253,6 +19256,9 @@ impl<'a> FuncBuilder<'a> {
             // `collect_static_fields`.
             if let Some(place) = self.static_field_place(target, *member) {
                 return place;
+            }
+            if let Some(place) = self.super_setter_place(*object_node, *member) {
+                return Ok(place);
             }
             let object = self.lower_expression(*object_node)?;
             if let Some(place) = self.array_length_place(object, *member) {
@@ -19333,9 +19339,13 @@ impl<'a> FuncBuilder<'a> {
                     ),
                 ));
             }
-            return Ok(Place::Field { object, field });
-        }
+        Ok(Place::Field { object, field })
+    }
 
+    fn place_of(&mut self, target: NodeId) -> Result<Place, Diagnostic> {
+        if self.names_a_property(target) {
+            return self.property_place(target);
+        }
         if self.kind_of(target) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
             let (array, index) = self.element_access_parts(target)?;
             if matches!(self.values[array.0 as usize].ty, HirType::NativePointer(_)) {
@@ -25294,6 +25304,92 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
+    /// `super.x` read, where `x` is a getter on the base.
+    ///
+    /// `None` for anything else, which leaves `super.m()` on the call path it
+    /// already had.
+    fn super_getter_read(
+        &mut self,
+        id: NodeId,
+        object: NodeId,
+        member: NodeId,
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        if self.kind_of(object) != Some(syntax::SUPER_KEYWORD) {
+            return None;
+        }
+        let name = self.literal_name(member)?;
+        let (receiver, callee) = self.super_accessor(&format!("get {name}"))?;
+        Some((|| {
+            let ty = self
+                .type_of(id)
+                .ok_or_else(|| self.unrepresentable(id, "a `super` getter"))?;
+            let origin = self.origin(id);
+            Ok(self.push(
+                OpKind::Call {
+                    callee,
+                    args: vec![receiver],
+                    frame: None,
+                },
+                ty,
+                origin,
+            ))
+        })())
+    }
+
+    /// `super.x = v`, where `x` is a setter on the base.
+    ///
+    /// The getter comes from the same walk, because a compound assignment --
+    /// `super.x += 1` -- reads before it writes and both halves have to name
+    /// the same class.
+    fn super_setter_place(&mut self, object: NodeId, member: NodeId) -> Option<Place> {
+        if self.kind_of(object) != Some(syntax::SUPER_KEYWORD) {
+            return None;
+        }
+        let name = self.literal_name(member)?;
+        let (receiver, callee) = self.super_accessor(&format!("set {name}"))?;
+        let getter = self
+            .super_accessor(&format!("get {name}"))
+            .map(|(_, callee)| callee);
+        let wants = match self.values[receiver.0 as usize].ty {
+            HirType::Managed(ManagedType::Object(ty)) => self
+                .declared_type_of(ty, &name)
+                .and_then(|declared| self.represent(declared)),
+            _ => None,
+        };
+        Some(Place::Setter {
+            object: receiver,
+            callee,
+            getter,
+            wants,
+        })
+    }
+
+    /// `super.x` as an accessor: the receiver, and the base's implementation.
+    ///
+    /// **One walk for both directions.** A read and a write of the same
+    /// `super.x` have to agree about which class it resolves to, and a
+    /// predicate beside an emitter is two chances to disagree -- so this
+    /// answers "is there one" and "which one" together, and both sites take
+    /// the pair or neither.
+    ///
+    /// `Callee::Direct` and never virtual: that *is* what `super` means. A
+    /// virtual dispatch would find the override, which for
+    /// `override get x() { return super.x + 1 }` is the function asking.
+    ///
+    /// `None` where the base declares no such accessor, which leaves
+    /// `super.field` -- storage the receiver already has -- on the path that
+    /// already answered it.
+    fn super_accessor(&self, key: &str) -> Option<(ValueId, Callee)> {
+        let receiver = self.this?;
+        let HirType::Managed(ManagedType::Object(ty)) = self.values[receiver.0 as usize].ty else {
+            return None;
+        };
+        let base = *self.hierarchy.base.get(&ty)?;
+        let declaring = self.hierarchy.declaring(base, key)?;
+        let owner = self.hierarchy.name.get(&declaring)?;
+        Some((receiver, Callee::Direct(format!("{owner}#{key}"))))
+    }
+
     fn lower_property_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         self.check_native_brand_read(id)?;
         // `Colour.Red` is a constant, and the checker has already worked out
@@ -25346,6 +25442,25 @@ impl<'a> FuncBuilder<'a> {
                 ),
             ));
         };
+        // **`super.accessor`**, which is a call and not a slot.
+        //
+        // `super.m()` and `super.field` were already answered -- the first by
+        // `lower_super` from the call path, the second because a field is
+        // storage the receiver already has. A *getter* is neither: it is a
+        // method on the base, reached by name, and reading it through `super`
+        // means the base's implementation rather than the override. Without
+        // this the receiver was lowered as an ordinary expression, `super` has
+        // no value, and the refusal was the generic `a super keyword is not
+        // supported by this lowering yet` -- a sentence about the token.
+        //
+        // Routed through `lower_super` with the accessor's own key rather than
+        // rebuilt here, so which class a `super` resolves to is decided in one
+        // place: that function already walks to the base, handles a receiver
+        // that is a view, and names the owner from the hierarchy.
+        if let Some(read) = self.super_getter_read(id, *object, *member) {
+            return read;
+        }
+
         // **A promise capability's three members.** `PromiseWithResolvers<T>` is
         // represented as the promise itself, so `.promise` is the identity and
         // the other two are only reachable as calls -- which

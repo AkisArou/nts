@@ -2500,6 +2500,35 @@ move that found `undefined | void`. Neither is started; each is recorded with
 what actually stops it, because a rank without a diagnosis is what §15 already
 records itself getting wrong.
 
+#### `super.x` on an accessor (fixed)
+
+`super.m()` was answered by `lower_super` from the call path. `super.x` where
+`x` is a **getter or a setter** was not: an accessor is a method on the base,
+reached by name, and the receiver was being lowered as an ordinary expression —
+`super` has no value of its own, so the refusal was the generic `a super keyword
+is not supported by this lowering yet`, a sentence about the token.
+
+`Callee::Direct` and never virtual, which is what `super` means: a virtual
+dispatch finds the override, and for
+`override get scaled() { return super.scaled + 100 }` the override is the
+function asking.
+
+One walk answers both directions. A predicate beside an emitter is two chances
+to disagree about which class a `super` resolves to, so `super_accessor` returns
+the receiver and the callee together and both sites take the pair or neither —
+which a compound assignment (`super.x += 1`, a read and a write) needs anyway.
+
+`examples/super-on-an-accessor` is 174 cases across six exports on all three
+backends, nine refusals on the pre-change binary. `twoDeep` is the arm that
+could only pass under a direct call: it chains two overrides, so a virtual
+`super` never reaches the base at all and recurses until the stack runs out.
+
+**`super.field` is not a gap**: TypeScript rejects it, `TS2855 Class field 'k'
+defined by the parent class is not accessible in the child class via super`. A
+probe of mine reported it compiling, which it had not — the probe counted `NTS`
+refusals and the program had never typechecked. So the shapes `super` reaches
+are a method, a getter and a setter.
+
 #### `{}` — a type that erases and a value that does not (fixed)
 
 An empty object literal was refused as `an object literal that is not an
