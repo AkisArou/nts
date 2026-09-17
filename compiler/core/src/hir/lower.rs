@@ -12775,6 +12775,28 @@ impl<'a> FuncBuilder<'a> {
     /// erasable, so the oracle refuses the program rather than disagreeing with
     /// it. The differential passes `--experimental-transform-types` for exactly
     /// this and for `enum`, the other non-erasable construct.
+    /// The symbol a node *declares*, where the node carries none itself.
+    ///
+    /// The forward direction — `node.symbol` — is what almost everything wants
+    /// and is one load. A `PARAMETER` that is also a property is the case that
+    /// has no forward answer: its name node carries the property's symbol and
+    /// the parameter's is reachable only from the symbol side.
+    ///
+    /// **Both symbols name the same declaration**, so `other_than` is not a
+    /// convenience: a scan without it returns whichever comes first in the
+    /// table, which was the property's — the one already bound, and the one
+    /// this exists to be different from.
+    fn symbol_declared_by(&self, declaration: NodeId, other_than: Option<u32>) -> Option<u32> {
+        self.snapshot
+            .symbols
+            .iter()
+            .enumerate()
+            .find_map(|(at, record)| {
+                let at = u32::try_from(at).ok()?;
+                (record.declarations.contains(&declaration) && Some(at) != other_than).then_some(at)
+            })
+    }
+
     fn store_parameter_properties(&mut self, declared: &[(NodeId, u32)]) -> Result<(), Diagnostic> {
         for (child, index) in declared.iter().copied() {
             let name = self
@@ -12803,6 +12825,27 @@ impl<'a> FuncBuilder<'a> {
                 .position(|op| matches!(op.kind, OpKind::Param(at) if at == index))
                 .map(|at| ValueId(u32::try_from(at).unwrap_or(0)))
                 .ok_or_else(|| self.unsupported(child, "a parameter property with no parameter"))?;
+            // **A parameter property declares two names for one value**, and
+            // only one of them was bound. TypeScript gives the property its own
+            // symbol and the parameter another; the *name node* carries the
+            // property's, which `lower_param` binds, while a bare `base` in the
+            // constructor body resolves to the **parameter's** and found
+            // nothing. It was refused as ``base`, a name from an enclosing
+            // scope`` -- a sentence about a scope, for a name declared three
+            // tokens earlier in this one.
+            //
+            // The parameter's symbol is not on any node: the PARAMETER node
+            // itself carries none, and the symbol is found by looking for the
+            // one whose *declarations* name it. That is a scan, and it is over
+            // the symbols of one program rather than per reference -- a
+            // parameter property is a handful per class.
+            //
+            // `this.base` always worked, which is what kept this narrow enough
+            // to go unnoticed: the field half was never the broken one.
+            let property = self.name_node(child).and_then(|node| self.node(node).symbol);
+            if let Some(parameter) = self.symbol_declared_by(child, property.map(|s| s.0)) {
+                self.bindings.insert(parameter, value);
+            }
             let want = layout.fields[field as usize].ty.clone();
             let value = self.coerce(value, &want, child)?;
             let origin = self.origin(child);

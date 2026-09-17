@@ -2577,6 +2577,40 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### A parameter property read by its bare name (fixed)
+
+```ts
+class Doubler {
+  doubled: number;
+  constructor(private base: number) { this.doubled = base * 2; }
+}
+```
+
+Refused as ``base`, a name from an enclosing scope`` — a sentence about a scope,
+for a name declared three tokens earlier in this one.
+
+**A parameter property declares two names for one value**, and only one of them
+was bound. TypeScript gives the property its own symbol and the parameter
+another; the *name node* carries the property's, which is the one the parameter
+lowering binds, while a bare `base` in the body resolves to the parameter's and
+found nothing.
+
+`this.base` always worked, which is what kept this narrow enough to go
+unnoticed: the field half was never the broken one, and a fixture written with
+`this.base` could not tell the two apart. `examples/a-parameter-property-read-by-name`
+has `bothSpellings` for exactly that reason.
+
+The parameter's symbol is on **no node** — the `PARAMETER` carries none and the
+name node carries the property's — so it is found from the symbol side, by the
+symbol whose *declarations* name that node. Both symbols name the same
+declaration, so the lookup has to be told which one it already has; without that
+it returns the property's, which is the one it exists to be different from.
+Establishing that took a two-line probe printing the symbol ids on each side,
+after two wrong guesses about where the parameter's symbol lived.
+
+5 exports, **7 refusals** on the pre-change binary, agreeing with node on all
+three backends.
+
 #### `s[1.7]` and `s[NaN]` answered a character (fixed)
 
 A **wrong answer**, on the shipping compiler, on all three backends: `"abc"[1.7]`
