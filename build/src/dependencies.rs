@@ -403,41 +403,60 @@ fn locate(lockfile: &Utf8Path, id: &str, pin: &Pin) -> Result<Utf8PathBuf> {
 /// under the project's own control and survives a machine with no package
 /// manager caches at all.
 fn places(lockfile: &Utf8Path, pin: &Pin) -> Vec<Utf8PathBuf> {
+    let home = std::env::var("HOME").ok().map(Utf8PathBuf::from);
+    // `GRADLE_USER_HOME` where it is set, which is what Gradle itself reads and
+    // what CI images routinely point somewhere other than `$HOME`.
+    let gradle = std::env::var("GRADLE_USER_HOME")
+        .ok()
+        .map(Utf8PathBuf::from)
+        .or_else(|| home.as_ref().map(|at| at.join(".gradle")));
+    looked_in(lockfile, pin, home.as_deref(), gradle.as_deref())
+}
+
+/// The same question with the environment passed in, so every branch is
+/// reachable from a test.
+///
+/// **Split out because one branch was not.** The Maven path is under `$HOME`,
+/// and the only way to exercise it from a test was to override `HOME` -- which
+/// on this machine breaks every JDK tool, because they are asdf shims living
+/// under it. A lookup that reads the environment directly is a lookup whose
+/// branches are testable only by changing the machine.
+fn looked_in(
+    lockfile: &Utf8Path,
+    pin: &Pin,
+    home: Option<&Utf8Path>,
+    gradle_home: Option<&Utf8Path>,
+) -> Vec<Utf8PathBuf> {
     let mut places = Vec::new();
     if let Some(beside) = lockfile.parent() {
         places.push(beside.join(pin.file_name()));
     }
-    let Some(home) = std::env::var("HOME").ok().map(Utf8PathBuf::from) else {
-        return places;
-    };
-    let mut maven = home.join(".m2").join("repository");
-    for segment in pin.group.split('.') {
-        maven = maven.join(segment);
+    if let Some(home) = home {
+        let mut maven = home.join(".m2").join("repository");
+        // Maven splits the group on dots into directories.
+        for segment in pin.group.split('.') {
+            maven = maven.join(segment);
+        }
+        places.push(maven.join(&pin.artifact).join(&pin.version).join(pin.file_name()));
     }
-    places.push(maven.join(&pin.artifact).join(&pin.version).join(pin.file_name()));
-    // **`GRADLE_USER_HOME` where it is set**, which is what Gradle itself reads
-    // and what CI images routinely point somewhere other than `$HOME`. Looking
-    // only under the home directory would miss the cache on exactly the
-    // machines that moved it on purpose.
-    //
     // Gradle keys the leaf directory on a digest of the file, so the version
     // directory is read rather than constructed -- and it keeps the group as
-    // one directory name where Maven splits it on dots. Checked against a real
-    // cache rather than recalled.
-    let gradle = std::env::var("GRADLE_USER_HOME")
-        .ok()
-        .map_or_else(|| home.join(".gradle"), Utf8PathBuf::from)
-        .join("caches/modules-2/files-2.1")
-        .join(&pin.group)
-        .join(&pin.artifact)
-        .join(&pin.version);
-    if let Ok(entries) = gradle.read_dir_utf8() {
-        let mut found: Vec<Utf8PathBuf> = entries
-            .filter_map(Result::ok)
-            .map(|entry| entry.path().join(pin.file_name()))
-            .collect();
-        found.sort();
-        places.extend(found);
+    // *one* directory name where Maven splits it. Checked against a real cache
+    // rather than recalled.
+    if let Some(gradle_home) = gradle_home {
+        let version = gradle_home
+            .join("caches/modules-2/files-2.1")
+            .join(&pin.group)
+            .join(&pin.artifact)
+            .join(&pin.version);
+        if let Ok(entries) = version.read_dir_utf8() {
+            let mut found: Vec<Utf8PathBuf> = entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path().join(pin.file_name()))
+                .collect();
+            found.sort();
+            places.extend(found);
+        }
     }
     places
 }
@@ -623,6 +642,82 @@ mod tests {
             .to_string();
         assert!(said.contains("SwiftPM"), "does not name the resolver:\n{said}");
         assert!(said.contains("./deps/apple.resolved"), "does not name the file:\n{said}");
+    }
+
+    fn a_pin() -> Pin {
+        Pin {
+            group: "com.google.code.gson".to_owned(),
+            artifact: "gson".to_owned(),
+            version: "2.9.1".to_owned(),
+            sha256: "0".repeat(64),
+            license: "Apache-2.0".to_owned(),
+            scope: "runtime".to_owned(),
+            repository: "https://repo1.maven.org/maven2".to_owned(),
+        }
+    }
+
+    /// Maven splits the group on dots; Gradle keeps it as one directory.
+    ///
+    /// **The layouts, asserted rather than recalled.** Both were checked against
+    /// real caches, and the Gradle one is exercised end to end elsewhere -- but
+    /// the Maven branch reads `$HOME`, and the only way to reach it through the
+    /// build was to override `HOME`, which breaks every JDK tool on a machine
+    /// whose toolchain arrives through asdf. Splitting the environment out of
+    /// the lookup is what makes this branch reachable at all.
+    #[test]
+    fn the_two_repository_layouts_are_not_the_same_shape() {
+        let pin = a_pin();
+        let found = looked_in(
+            Utf8Path::new("/project/deps/gradle.tsv"),
+            &pin,
+            Some(Utf8Path::new("/home/someone")),
+            None,
+        );
+        assert_eq!(
+            found,
+            vec![
+                Utf8PathBuf::from("/project/deps/gson-2.9.1.jar"),
+                Utf8PathBuf::from(
+                    "/home/someone/.m2/repository/com/google/code/gson/gson/2.9.1/gson-2.9.1.jar"
+                ),
+            ],
+            "vendoring must come first, and Maven splits the group on dots"
+        );
+    }
+
+    /// No home is not an error; it is one fewer place to look.
+    ///
+    /// "Absent is not an error; unreadable is" -- a machine with no `$HOME` can
+    /// still build from a vendored jar.
+    #[test]
+    fn without_a_home_only_the_vendored_jar_is_looked_for() {
+        let found = looked_in(Utf8Path::new("/project/deps/x.tsv"), &a_pin(), None, None);
+        assert_eq!(found, vec![Utf8PathBuf::from("/project/deps/gson-2.9.1.jar")]);
+    }
+
+    /// A Gradle cache is read rather than constructed, because its leaf is a
+    /// digest nobody can predict.
+    #[test]
+    fn a_gradle_cache_contributes_the_leaves_it_actually_has() {
+        let root = std::env::temp_dir().join("nts-gradle-layout-test");
+        drop(std::fs::remove_dir_all(&root));
+        let root = Utf8PathBuf::from_path_buf(root).expect("a UTF-8 temporary");
+        let version = root
+            .join("caches/modules-2/files-2.1/com.google.code.gson/gson/2.9.1");
+        for leaf in ["bbbb2222", "aaaa1111"] {
+            std::fs::create_dir_all(version.join(leaf)).expect("a cache leaf");
+        }
+        let found = looked_in(Utf8Path::new("/project/deps/x.tsv"), &a_pin(), None, Some(&root));
+        assert_eq!(
+            found,
+            vec![
+                Utf8PathBuf::from("/project/deps/gson-2.9.1.jar"),
+                version.join("aaaa1111/gson-2.9.1.jar"),
+                version.join("bbbb2222/gson-2.9.1.jar"),
+            ],
+            "the digest leaves are read, and in a stable order"
+        );
+        drop(std::fs::remove_dir_all(&root));
     }
 
     /// npm is read and counted, and the root entry is not one of its own
