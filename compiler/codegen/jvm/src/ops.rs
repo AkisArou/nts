@@ -5495,15 +5495,7 @@ impl Emitter<'_> {
                 let returns = descriptor.rsplit(')').next().unwrap_or("").to_owned();
                 let returns = returns.as_str();
                 if matches!(result, HirType::Void) {
-                    // A helper whose answer nothing wants. `nts_map_set`
-                    // returns the map, because that is what `m.set(k, v)`
-                    // evaluates to, and a statement that ignores it leaves a
-                    // reference on the stack. C discards a return value for
-                    // free; the JVM has to say so.
-                    let words = nts_jvm_emitter::descriptor::words(returns);
-                    if words > 0 {
-                        code.pop(origin, words);
-                    }
+                    Self::drop_answer(code, returns, origin);
                     return Ok(Placed::Stored);
                 }
                 // A helper that takes an array of references has to declare
@@ -5539,6 +5531,9 @@ impl Emitter<'_> {
                 // Both were found the same way: read the listing at the offset
                 // the verifier named, rather than reason about which pass had
                 // claimed the value.
+                if self.wrap_bare_array(code, pool, result, returns, origin) {
+                    return Ok(Placed::OnStack);
+                }
                 let held_as_int = self.narrowed.contains(&value) && returns == "I";
                 if !held_as_int && !self.fused.contains(&value) {
                     self.narrow_result(code, pool, result, returns, origin)?;
@@ -5568,6 +5563,67 @@ impl Emitter<'_> {
             }
         };
         self.direct_call(code, pool, result, name, args, origin)
+    }
+
+    /// Discard a helper's answer where nothing wants it.
+    ///
+    /// `nts_map_set` returns the map, because that is what `m.set(k, v)`
+    /// evaluates to, and a statement that ignores it leaves a reference on the
+    /// stack. C discards a return value for free; the JVM has to say so.
+    fn drop_answer(code: &mut Code, returns: &str, origin: &nts_semantic_schema::Origin) {
+        let words = nts_jvm_emitter::descriptor::words(returns);
+        if words > 0 {
+            code.pop(origin, words);
+        }
+    }
+
+    /// A helper that returns a **bare Java array**, in a program that grows one.
+    ///
+    /// Generated code there holds every array as a growable wrapper, so a
+    /// `[Ljava/lang/String;` coming back from the runtime was stored into a
+    /// slot typed as the wrapper and threw `ClassCastException:
+    /// [Ljava/lang/String; cannot be cast to class nts.rt.NtsArrayL` — at run
+    /// time, on a program C and LLVM both agree with node about.
+    ///
+    /// `nts_str_split` is the only helper this reaches, measured one at a time
+    /// rather than reasoned about: `slice`, `concat`, `splice`, `reverse`,
+    /// `map`, `filter`, `Array.from`, `Object.keys`, `Object.values`,
+    /// `toReversed` and `toSorted` all already answer a wrapper under `grows`.
+    ///
+    /// The wrap is the one the **bound member** path already makes, with the
+    /// same overload rule: method resolution is by exact descriptor, so a
+    /// `[Ljava/lang/String;` calls `adopt([Ljava/lang/Object;)` and array
+    /// covariance is what makes the argument legal. A primitive array names its
+    /// own width, because those are different methods that copy differently.
+    ///
+    /// `false` where there is nothing to wrap, so the caller carries on.
+    fn wrap_bare_array(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        result: &HirType,
+        returns: &str,
+        origin: &nts_semantic_schema::Origin,
+    ) -> bool {
+        if !returns.starts_with('[')
+            || !self.shape.grows
+            || !matches!(result, HirType::Managed(ManagedType::Array(_)))
+        {
+            return false;
+        }
+        let Some(want) = types::descriptor(self.shape, result) else {
+            return false;
+        };
+        let Some(wrapper) = want.strip_prefix('L').and_then(|it| it.strip_suffix(';')) else {
+            return false;
+        };
+        let accepts = if returns.starts_with("[L") || returns.starts_with("[[") {
+            "[Ljava/lang/Object;"
+        } else {
+            returns
+        };
+        code.invoke_static(origin, pool, wrapper, "adopt", &format!("({accepts}){want}"));
+        true
     }
 
     /// The optional-property presence bits, emitted inline.
