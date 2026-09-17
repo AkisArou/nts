@@ -6156,6 +6156,42 @@ enum Absence {
 /// [`FuncBuilder::narrowed`] reads back what the checker narrowed, and
 /// [`FuncBuilder::present_of`] reads back what a `?.` test established. The two
 /// have different licences and the same question about the destination.
+/// What a representation is, in words a diagnostic can use.
+///
+/// For a refusal whose subject is the *representation* rather than the checker's
+/// type: the value has been lowered by the time it is refused, so the node's
+/// type would describe what the source said and not what the receiver is.
+///
+/// Grouped rather than exhaustive — a census wants "a promise" against "an
+/// erased value", not every element width apart.
+fn named_representation(ty: &HirType) -> &'static str {
+    match ty {
+        HirType::Void => "nothing",
+        HirType::Erased => "an erased value",
+        HirType::Bool => "a boolean",
+        HirType::BigInt => "a bigint",
+        HirType::Never => "a value of type `never`",
+        HirType::Int { .. } | HirType::Float { .. } => "a number",
+        HirType::NativePointer(_) => "an opaque C pointer",
+        HirType::Managed(managed) => match managed {
+            ManagedType::String => "a string",
+            ManagedType::Array(_) => "an array",
+            ManagedType::Promise(_) => "a promise",
+            ManagedType::Map(_, _) => "a map",
+            ManagedType::Set(_) => "a set",
+            ManagedType::Table(_, _) => "a table",
+            ManagedType::Symbol => "a symbol",
+            ManagedType::View(_) | ManagedType::AnyView => "a typed array",
+            ManagedType::Date => "a date",
+            ManagedType::Buffer => "a buffer",
+            ManagedType::DataView => "a data view",
+            // Exhaustive on purpose. A new representation should have to answer
+            // here rather than inherit a sentence that is wrong about it.
+            ManagedType::Object(_) => "an object",
+        },
+    }
+}
+
 fn readable_back(ty: &HirType) -> bool {
     // Everything that can be erased, except `Void`. The two directions are one
     // fact and they had drifted: `View` and `Buffer` could be erased and not
@@ -29535,7 +29571,8 @@ impl<'a> FuncBuilder<'a> {
         // receiver since the day bigints landed. **Nothing reached it from
         // here**: the guard below names `Float` and `Int` and not `BigInt`, so
         // `"" + big` rendered a bigint and `big.toString()` refused with
-        // `a method call on something without methods` -- one spelling of one
+        // `a method call on something without methods` -- today `` `toString` on a
+        // bigint, which has no method table here `` -- one spelling of one
         // operation working and the other not.
         //
         // The helper exists in all three runtimes and in `hir::runtime`, so
@@ -29672,10 +29709,35 @@ impl<'a> FuncBuilder<'a> {
             return self.symbol_method(id, receiver, member, arguments);
         }
 
-        let HirType::Managed(ManagedType::Object(type_id)) =
-            self.values[receiver.0 as usize].ty.clone()
-        else {
-            return Err(self.unsupported(id, "a method call on something without methods"));
+        let held = self.values[receiver.0 as usize].ty.clone();
+        let HirType::Managed(ManagedType::Object(type_id)) = held else {
+            // **Name what the receiver is.** Everything above this arm is a
+            // representation with methods of its own — a string, an array, a
+            // map, a date, a buffer, a view, a symbol — so what reaches here is
+            // every *other* representation at once: a promise, an erased value,
+            // a number, a native pointer. One sentence for all of them, and
+            // `something` was carrying the whole difference.
+            //
+            // It matters because the causes behind it are not one item. A
+            // promise receiver is `.then`/`.catch`/`.finally`, which has its own
+            // ✗ row and its own design; an erased receiver is a value the
+            // program has not narrowed; a number receiver is `n.toFixed()`.
+            // Ranking a census by this message put all three under one heading,
+            // which is the same thing `on a typed array` was doing to 27 sites
+            // and `a property the type does not declare` did before that.
+            //
+            // The method is named too, in the house style of every other member
+            // refusal, because the representation alone does not say whether a
+            // promise site is `.then` -- a designed row with a scoped fix -- or
+            // something else that fell through to here.
+            let called = self.node(member).text.clone().unwrap_or_default();
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "`{called}` on {}, which has no method table here",
+                    named_representation(&held)
+                ),
+            ));
         };
         self.lower_object_method(id, receiver, type_id, member, arguments)
     }
@@ -30323,10 +30385,10 @@ impl<'a> FuncBuilder<'a> {
 
     /// `sym.toString()`, the other half of the same row.
     ///
-    /// Named rather than left to fall through, because the refusal below it is
-    /// "a method call on something without methods" and a symbol *has* two the
-    /// language defines. Saying "without methods" about one would send its
-    /// reader to the wrong file.
+    /// Named rather than left to fall through, because the refusal below it
+    /// would read "`toString` on a symbol, which has no method table here" and
+    /// a symbol *has* two methods the language defines. Saying it has no method
+    /// table would send its reader to the wrong file.
     fn symbol_method(
         &mut self,
         id: NodeId,

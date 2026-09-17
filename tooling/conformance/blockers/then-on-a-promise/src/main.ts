@@ -1,4 +1,4 @@
-// expect: a method call on something without methods
+// expect: `then` on a promise, which has no method table here
 //
 // `.then` on a promise. The largest unfiled lowering root across `fs` and
 // `stream` after the rest-parameter one: 20 distinct named things.

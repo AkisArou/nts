@@ -1,4 +1,4 @@
-// expect: a method call on something without methods
+// expect: `then` on a promise, which has no method table here
 //
 // `.then` on a promise, which had no row in `typescript.md` at all until
 // 2026-09-14 while `async`/`await` and `new Promise(executor)` sat green
