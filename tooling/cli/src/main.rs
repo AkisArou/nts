@@ -2936,6 +2936,9 @@ fn refuse_without_libuv(
     out: &Utf8Path,
     tools: &Toolchain,
     target: &nts_build::config::Target,
+    native: &[(Utf8PathBuf, Utf8PathBuf)],
+    napi: Option<&Utf8Path>,
+    cflags: &[String],
 ) -> Result<()> {
     if is_host(target) {
         return Ok(());
@@ -2943,26 +2946,80 @@ fn refuse_without_libuv(
     let probe = out.join("nts_libuv_probe.c");
     std::fs::write(&probe, "#include <uv.h>\nint nts_libuv_probe(void) { return 0; }\n")
         .with_context(|| format!("writing {probe}"))?;
+    let object = out.join("nts_libuv_probe.o");
     let mut command = tools.command();
-    command.args(["-fsyntax-only", probe.as_str()]);
+    // **The same include path the compile will use**, or this asks a narrower
+    // question than the one that matters and refuses a build that would have
+    // worked.
+    command.args(program_includes(out, native, napi, cflags));
+    // **A real compile, not `-fsyntax-only`.** `zig cc` does not honour that
+    // flag -- it reports `error: FileNotFound` against line 1 column 1 whatever
+    // the file says, so the probe failed identically whether or not `uv.h` was
+    // reachable. A check whose answer does not depend on its input is not a
+    // check, and this one was written for the toolchain it does not work under:
+    // every cross build reaching it was refused, and the test could not see it
+    // because a test asserting a refusal passes for a probe that always
+    // refuses. Compiling a two-line unit to an object costs the same and
+    // discriminates.
+    command.args(["-c", probe.as_str(), "-o", object.as_str()]);
     let asked = command.output().with_context(|| {
         format!("asking the compiler for {} whether libuv is available", target.id)
     })?;
     let _ = std::fs::remove_file(&probe);
+    let _ = std::fs::remove_file(&object);
     if asked.status.success() {
         return Ok(());
     }
+    // **Says what it measured.** It said "libuv is not available", and what it
+    // established is that `uv.h` is not reachable. The distinction earns its
+    // words: a header without a library fails later at `-luv`, and the advice
+    // below -- install one, put its headers on the path -- is wrong in its first
+    // clause for that case. Two failure modes with two messages is the right
+    // answer rather than a compromise, provided a reader can tell them apart.
     bail!(
-        "product `{name}` targets {} and awaits something, so it links libuv -- and \
-         libuv is not available for {} on this machine. It is the program's dependency \
-         rather than this compiler's: install a libuv built for {}, put its headers on \
-         the include path, or set CC to a cross compiler that has one. Building on {} \
-         itself needs none of that.",
+        "product `{name}` targets {} and is built as an executable, so it links the \
+         libuv host -- and `uv.h` is not reachable when compiling for {}. libuv is the \
+         program's dependency rather than this compiler's: install one built for {}, \
+         put its headers on the include path, declare it as a `dependencies` claim, or \
+         set CC to a cross compiler that has one. Building on {} itself needs none of \
+         that.",
         target.id,
         target.id,
         target.id,
         target.os
     )
+}
+
+/// Everywhere a translation unit of the generated program looks for a header.
+///
+/// **One derivation, because a guard computing its own was the bug.**
+/// `refuse_without_libuv` probed for `uv.h` with a bare command while the real
+/// compile added the output directory, every native root, the Node-API headers
+/// and a dependency's `--cflags` -- so a libuv arriving through any of those was
+/// invisible to the probe, and it would have refused a build that was going to
+/// work. That is exactly the case its own comment says it exists to permit.
+///
+/// The output directory first: the emitter writes `nts_uv_host.h` and the
+/// program's own headers there. Then the package's headers, because the
+/// *generated* program includes them too -- a binding over `point.h` lowers to
+/// `#include "point.h"`.
+fn program_includes(
+    out: &Utf8Path,
+    native: &[(Utf8PathBuf, Utf8PathBuf)],
+    napi: Option<&Utf8Path>,
+    cflags: &[String],
+) -> Vec<String> {
+    let mut flags = vec!["-I".to_owned(), out.to_string()];
+    for (directory, _) in native {
+        flags.push("-I".to_owned());
+        flags.push(directory.to_string());
+    }
+    if let Some(napi) = napi {
+        flags.push("-I".to_owned());
+        flags.push(napi.to_string());
+    }
+    flags.extend(cflags.iter().cloned());
+    flags
 }
 
 /// The compiler, and what every translation unit is compiled with.
@@ -3006,28 +3063,14 @@ fn compile_program(
         // one program. It needs the two `-f` flags at compile time to have
         // sections to drop.
         let mut arguments: Vec<String> =
-            ["-std=c11", "-O2", "-ffunction-sections", "-fdata-sections", "-I"]
+            ["-std=c11", "-O2", "-ffunction-sections", "-fdata-sections"]
                 .iter()
                 .map(|flag| (*flag).to_owned())
                 .collect();
-        arguments.push(out.to_string());
-        // The package's own headers: the *generated* program includes them too,
-        // because a binding over `point.h` lowers to `#include "point.h"`.
-        for directory in native.iter().map(|(directory, _)| directory).collect::<Vec<_>>() {
-            arguments.push("-I".to_owned());
-            arguments.push(directory.to_string());
-        }
         if pic {
             arguments.push("-fPIC".to_owned());
         }
-        if let Some(napi) = napi {
-            arguments.push("-I".to_owned());
-            arguments.push(napi.to_string());
-        }
-        // The generated program includes a package's headers, so it is
-        // compiled against a dependency's include path for the same reason the
-        // native roots are.
-        arguments.extend(with.cflags.iter().cloned());
+        arguments.extend(program_includes(out, native, napi, with.cflags));
         let from = out.join(source);
         arguments.extend(["-c".to_owned(), from.to_string(), "-o".to_owned(), object.to_string()]);
         compile_one(
@@ -4278,7 +4321,7 @@ fn link_c(
     // replaced: a raw `fatal error: 'uv.h' file not found` out of clang, forty
     // lines into a build, about a library the reader never named.
     if sources.iter().any(|source| source == nts_codegen_c::UV_HOST_SOURCE_NAME) {
-        refuse_without_libuv(name, out, &tools, target)?;
+        refuse_without_libuv(name, out, &tools, target, native, napi.as_deref(), &needs.cflags)?;
     }
     let cache = ObjectCache::new(cache_dir, &tools);
     let mut objects = Vec::new();

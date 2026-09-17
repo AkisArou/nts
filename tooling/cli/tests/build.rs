@@ -2628,8 +2628,8 @@ fn a_cross_build_that_needs_libuv_names_it_rather_than_failing_in_the_compiler()
     let run = build(&project, &[]);
     assert!(!run.ok, "it built without libuv:\n{}", run.stdout);
     assert!(
-        run.stderr.contains("libuv is not available"),
-        "the refusal does not name libuv:\n{}",
+        run.stderr.contains("`uv.h` is not reachable") && run.stderr.contains("libuv"),
+        "the refusal does not name what it measured:\n{}",
         run.stderr
     );
     assert!(
@@ -2759,3 +2759,70 @@ fn a_missing_toolchain_is_reported_before_a_dependency_it_would_never_reach() {
 fn host_is_apple() -> bool {
     std::env::consts::OS == "macos"
 }
+
+/// The libuv probe answers differently when libuv is reachable.
+///
+/// **The arm that makes the other one a check.** A test asserting a refusal
+/// passes for a probe that refuses unconditionally, and that is what the first
+/// version was: it asked `-fsyntax-only`, which `zig cc` does not honour --
+/// it reports `error: FileNotFound` against line 1 column 1 whatever the file
+/// says -- so every cross build reaching it was refused whether or not `uv.h`
+/// was there. The refusal test could not see it and the library control never
+/// reached the probe.
+///
+/// So this puts a `uv.h` somewhere *only a dependency claim names*, which also
+/// pins the second half: the probe compiles with the include path the real
+/// compile uses, not a narrower one. A header arriving through `--cflags` is
+/// exactly the case the probe's own comment says it exists to permit.
+///
+/// It gets past the probe and fails later in the compile, because the header is
+/// a stub with none of libuv's types in it. That is the assertion -- not that
+/// the build succeeds, but that it no longer stops *here*.
+#[test]
+fn the_libuv_probe_sees_a_header_that_only_a_dependency_claim_names() {
+    let zig = Command::new("zig").arg("version").output().is_ok_and(|o| o.status.success());
+    if !available() || !zig {
+        skip("the tsgo frontend, clang and zig");
+        return;
+    }
+    let project = fixture("build-libuv-reachable", WINDOWS_EXECUTABLE_WITH_UV);
+    let include = project.join("fakeuv/include");
+    std::fs::create_dir_all(&include).expect("the include directory");
+    std::fs::write(include.join("uv.h"), "#ifndef FAKE_UV_H\n#define FAKE_UV_H\n#endif\n")
+        .expect("the stub header");
+    let pc = project.join("pc");
+    std::fs::create_dir_all(&pc).expect("the pkg-config directory");
+    std::fs::write(
+        pc.join("fakeuv.pc"),
+        format!(
+            "prefix={}\nName: fakeuv\nDescription: a libuv reachable only through a claim\n\
+             Version: 1.0.0\nCflags: -I${{prefix}}/include\nLibs:\n",
+            project.join("fakeuv").display()
+        ),
+    )
+    .expect("the pkg-config file");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("build")
+        .arg(project.join("tsconfig.json"))
+        .env("PKG_CONFIG_PATH", &pc)
+        .output()
+        .expect("running nts build");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("`uv.h` is not reachable"),
+        "the probe refused a header its own dependency claim names:\n{stderr}"
+    );
+}
+
+const WINDOWS_EXECUTABLE_WITH_UV: &str = r#"
+import { defineConfig, app, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    tool: app({ kind: "executable", entry: "./src/main.ts", targets: [target.windows()] }),
+  },
+  dependencies: {
+    windows: { from: "pkg-config", packages: ["fakeuv"] },
+  },
+});
+"#;
