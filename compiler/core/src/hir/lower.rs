@@ -3291,6 +3291,16 @@ fn refusal_by_name(snapshot: &SemanticSnapshot, id: NodeId, what: &str) -> Diagn
     FuncBuilder::probe(snapshot).unsupported(id, what)
 }
 
+/// The name a class or literal member is written with, for a diagnostic.
+fn member_name_of(snapshot: &SemanticSnapshot, member: NodeId) -> Option<String> {
+    snapshot
+        .nodes
+        .get(member.0 as usize)?
+        .children
+        .iter()
+        .find_map(|child| snapshot.nodes.get(child.0 as usize)?.text.clone())
+}
+
 fn lower_object_literal_members(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
@@ -3306,6 +3316,40 @@ fn lower_object_literal_members(
     for member in members_of(snapshot, foreign, literal) {
         let mut builder = shared.builder(snapshot, foreign, Copy::default());
         match builder.lower_method_of(literal, member, Some(instance)) {
+            // **A member's function is named after the type the literal is
+            // built at**, so two literals built at one *named* type each
+            // declaring it produce two functions called `T2#twice`.
+            //
+            // That is invalid HIR, and invalid HIR is the worst way for this to
+            // fail: `emit-c` prints `refusing to emit code from invalid HIR`,
+            // writes nothing and **exits 0**, and the only diagnostic a reader
+            // sees is the cascade — ``f` cannot be compiled because it calls
+            // `T2#twice`, which was refused above` — with nothing above it,
+            // because nothing was. A false sentence and a silently unbuilt
+            // program.
+            //
+            // Refused here by name instead. The refusal is honest about what it
+            // is: this needs *dispatch*, because two literals at one interface
+            // are two implementations of it, and the call site has only the
+            // interface. The anonymous case was solved on 2026-09-17 by giving
+            // each literal its own identity — `__object` is not a nominal name —
+            // and the named case is the same question with the answer already
+            // taken by the interface. `blockers/two-literals-at-one-interface`
+            // carries it.
+            Ok(func) if lowered.program.funcs.iter().any(|known| known.name == func.name) => {
+                let diagnostic = builder.unsupported(
+                    member,
+                    &format!(
+                        "a second object literal declaring `{}` at one type, which would be two \
+                         functions named `{}` — the two are different implementations and the call \
+                         site has only the interface",
+                        member_name_of(snapshot, member).unwrap_or_else(|| "a member".to_owned()),
+                        func.name,
+                    ),
+                );
+                note_uncompiled(snapshot, &mut lowered.program, member, &diagnostic);
+                lowered.diagnostics.push(diagnostic);
+            }
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => {
                 note_uncompiled(snapshot, &mut lowered.program, member, &diagnostic);
