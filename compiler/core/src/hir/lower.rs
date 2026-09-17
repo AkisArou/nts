@@ -12023,9 +12023,28 @@ impl<'a> FuncBuilder<'a> {
     fn default_of(&self, param: NodeId) -> Option<NodeId> {
         let children = self.children(param);
         let last = *children.last()?;
-        let name = *children
-            .iter()
-            .find(|child| self.kind_of(**child) == Some(syntax::IDENTIFIER))?;
+        // **A parameter's name is not always an identifier.** A destructured
+        // one is a binding pattern, and looking only for an `IDENTIFIER` made
+        // this answer `None` for every `{ a = 1 }: Opts = {}` — the options-bag
+        // idiom — so the call filled nothing and passed no argument at all.
+        //
+        // That produced no diagnostic. The arity check is in `verify`, so
+        // `emit-c` reported `invalid HIR: CallArgumentCount { expected: 1,
+        // found: 0 }` and exited **0**, having emitted nothing: a whole program
+        // silently not built. `g({ a: 1 })` and `function g(a = 1)` both worked,
+        // which is why this survived — it needs the default *and* the pattern
+        // *and* a call that omits the argument, and each of the three alone is
+        // fine.
+        let name = *children.iter().find(|child| {
+            matches!(
+                self.kind_of(**child),
+                Some(
+                    syntax::IDENTIFIER
+                        | syntax::OBJECT_BINDING_PATTERN
+                        | syntax::ARRAY_BINDING_PATTERN
+                )
+            )
+        })?;
         (last != name
             && !syntax::is_type_node(self.kind_of(last).unwrap_or(0))
             && self.kind_of(last) != Some(syntax::QUESTION_TOKEN))
