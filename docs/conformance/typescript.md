@@ -2561,7 +2561,6 @@ and the third-largest cause in the corpus.
   Object.assign, Object.freeze                   …and two more of them
   Math.max(...xs)                                a spread element
   xs.sort(cmp), xs.flatMap(f)                    an array method that is not one of the eight
-  xs.reduce(f) with no seed                      …and an arity of one that is a different loop
   n.toFixed(2), n.toPrecision(3)                 a number method this compiler lacks
   s.startsWith("a", 1), s.localeCompare(t)       a string method, or an arity a helper lacks
 ```
@@ -2584,6 +2583,37 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 *in one position*, and the row as written sent a reader to build something that
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
+
+#### `reduce` with no initial value (fixed)
+
+Refused, and the refusal said exactly what it would take: *"`reduce` with no
+initial value starts from the first element and throws on an empty array, which
+is a different lowering and a different failure."*
+
+**It is the same loop started one along.** The specification takes the first
+element as the accumulator and walks from the second, and raises where there is
+no first — so the three differences from the seeded form are a guard, a seed read
+out of the array, and an index that begins at one. Everything else is shared,
+which is why it is a branch inside the existing loop rather than a second one
+beside it, and why `reduce` joined the list of kinds that arrive with a callback
+and no seed rather than getting an arm of its own.
+
+The seed is read with the same `ArrayGet` the body reads every other element
+with, so the accumulator's first value and its later ones cannot disagree about
+what an element is.
+
+The raise is **observable** — `try { xs.reduce(f) } catch` catches it — and the
+message is node's word for word. It is emitted by the lowering rather than left
+to the runtime for `guard_repeat_count`'s reason: a handler is a block and a
+`throw` is a jump this lowering writes, so nothing below it can reach one.
+
+`examples/reduce-with-no-initial-value` is 7 exports. Two of them are what make
+it a check rather than a demonstration: `nonCommutative` folds with `a * 10 + b`,
+so a loop that walked from zero or folded the first element twice agrees with
+node on the plain sum and fails there; and `emptyWithSeed` is the other half of
+the guard's condition, one line from `emptyThrows`. **5 refusals** on the
+pre-change binary. Zero corpus sites — `runtime/node` does not use `reduce` at
+all — so this is ordinary TypeScript rather than a corpus unblock.
 
 #### A container whose element type has no layout — measured, not fixed
 

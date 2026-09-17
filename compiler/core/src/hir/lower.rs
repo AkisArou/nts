@@ -22559,6 +22559,55 @@ impl<'a> FuncBuilder<'a> {
     /// node driver died on the first synchronous throw and every case after it
     /// went unasked. The driver was fixed and `examples/strings` went red on
     /// five cases the same day.
+    /// `[].reduce(f)` throws, and the message is node's word for word.
+    ///
+    /// The specification has no answer for an empty list and no initial value —
+    /// there is nothing to return — so it raises rather than inventing one, and
+    /// the raise is observable: `try { xs.reduce(f) } catch` catches it. Emitted
+    /// here rather than left to the runtime for `guard_repeat_count`'s reason: a
+    /// handler is a block and a `throw` is a jump this lowering writes, so
+    /// nothing below it can reach one.
+    fn guard_reduce_has_elements(
+        &mut self,
+        id: NodeId,
+        length: ValueId,
+        origin: &Origin,
+    ) -> Result<(), Diagnostic> {
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let empty = self.push(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: length,
+                rhs: zero,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let throwing = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: empty,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: Vec::new(),
+        });
+        self.switch_to(throwing);
+        self.throw_provided_error(
+            id,
+            "TypeError",
+            "Reduce of empty array with no initial value",
+        )?;
+        if !self.is_terminated() {
+            self.terminate(Terminator::Jump {
+                target: carry_on,
+                args: Vec::new(),
+            });
+        }
+        self.switch_to(carry_on);
+        Ok(())
+    }
+
     fn guard_repeat_count(&mut self, id: NodeId, count: ValueId) -> Result<(), Diagnostic> {
         let origin = self.origin(id);
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
@@ -32259,12 +32308,17 @@ impl<'a> FuncBuilder<'a> {
                     | Iteration::All
                     | Iteration::FindIndex
                     | Iteration::Filter
-                    | Iteration::Find,
+                    | Iteration::Find
+                    // **`reduce` with no initial value belongs in this list**,
+                    // which is not obvious: it starts from the first element
+                    // and throws on an empty array, so it is a different loop
+                    // and a different failure. But the difference is made in
+                    // `lower_iteration`, where the loop is built -- here it is
+                    // one more kind arriving with a callback and no seed, and
+                    // saying so twice would be two arms with one body.
+                    | Iteration::Reduce,
                     [callback],
                 ) => (*callback, None),
-                // `reduce` with no initial value starts from the first element
-                // and throws on an empty array, which is a different lowering
-                // and a different failure. Refused rather than assumed.
                 _ => {
                     return Err(
                         self.unsupported(id, &format!("a `{name}` call with this many arguments"))
@@ -32776,6 +32830,45 @@ impl<'a> FuncBuilder<'a> {
     /// makes a `return` inside the body work the same in all three -- it has to
     /// deliver the value before it jumps, and there is one function that knows
     /// how.
+    /// Where an iteration begins, and what its accumulator starts as.
+    ///
+    /// `(0, the seed)` for every kind but one. `reduce` with **no** initial
+    /// value takes the first element as the accumulator and walks from the
+    /// second, and raises where there is no first — so it is the same loop
+    /// started one along, and these are the only three things that differ.
+    ///
+    /// The seed is read with the same `ArrayGet` the body reads every other
+    /// element with, so the accumulator's first value and its later ones cannot
+    /// disagree about what an element is.
+    fn reduce_start(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        element_ty: &HirType,
+        length: ValueId,
+        seed: Option<ValueId>,
+        from_first: bool,
+    ) -> Result<(ValueId, Option<ValueId>), Diagnostic> {
+        let origin = self.origin(id);
+        if !from_first {
+            let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin);
+            return Ok((zero, seed));
+        }
+        self.guard_reduce_has_elements(id, length, &origin)?;
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let first = self.push(
+            OpKind::ArrayGet {
+                array: receiver,
+                index: zero,
+                checked: true,
+            },
+            element_ty.clone(),
+            origin.clone(),
+        );
+        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin);
+        Ok((one, Some(first)))
+    }
+
     fn lower_iteration(
         &mut self,
         id: NodeId,
@@ -32799,10 +32892,17 @@ impl<'a> FuncBuilder<'a> {
         let index_symbol = names.get(element_at + 1).copied();
 
         let origin = self.origin(id);
+        // **`reduce` with no initial value is the same loop started one along.**
+        // The specification takes the first element as the accumulator and
+        // walks from the second, and raises where there is no first -- so the
+        // three differences from the seeded form are a guard, a seed read out
+        // of the array, and an index that begins at one. Everything below is
+        // shared, which is why this is a branch here rather than a second loop.
+        let from_first = matches!(kind, Iteration::Reduce) && seed.is_none();
         let index = self.synthetic_symbol();
-        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        self.bindings.insert(index, zero);
         let length = self.push(OpKind::Length(receiver), HirType::NUMBER, origin.clone());
+        let (start, seed) = self.reduce_start(id, receiver, element_ty, length, seed, from_first)?;
+        self.bindings.insert(index, start);
 
         // What the loop carries: the index always, the accumulator when there
         // is one, and every name the body assigns that it did not declare.
