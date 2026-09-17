@@ -2577,6 +2577,43 @@ actually refused was a module-scope `const o = { twice() { … } }`, a construct
 already worked. Narrowing it was what made the next question askable, and the
 answer was that nothing was missing at all: see below.
 
+#### A container whose element type has no layout — measured, not fixed
+
+```ts
+const fs: (() => number)[] = [];
+fs.push(() => n);
+```
+
+`NTS2006 an object type with no layout: type 5`, from the **C backend** — the
+lowering says *"3 function(s), nothing refused"*, `emit-c` prints the error and
+still writes the file, and the observable is that the function is not in it.
+
+**An array *literal* of closures works.** `[() => n, () => n * 2]` takes its
+element type from the arrows themselves, and each arrow is a class; two of one
+shape merge. An *empty* array has nothing to take it from, so it takes the
+annotation's — a bare function type, which has no layout, because *"a function
+type has no fields: two closures of one type differ by what they captured"*.
+
+So this is the representation family rather than a missing case. An array of
+closures needs one representation for a closure of a given signature, and the
+pieces for that exist — `Callee::Closure`, the `Fn…__…` signature layouts —
+without being what an annotation resolves to.
+
+**Measured on 2026-09-17: 61 occurrences across 36 distinct locations** in
+`runtime/node`. The largest cluster is 22 in `web-platform/src/streams/fifo.ts`,
+and it is this fixture one level of generality up: `Fifo<T>` instantiated at an
+element type with no layout. Next after it are `stream/src/iter/ring-buffer.ts`
+and `fs/src/async.ts` at 8 each.
+
+That puts it just below the four largest causes in the corpus and above
+*a method call on something without methods*. `blockers/an-empty-array-of-closures`
+pins the narrow end of it; nothing here fixes it.
+
+**The `NTS2006` message names a type id rather than a type, and that is
+deliberate** — the C backend holds a `Program`, and a program with no layout for
+a type has no name for it either. `nts types` resolves the id. Worth stating
+because it reads like a defect and is the only handle that exists at that point.
+
 #### Two number-conversion defects, found by sweeping rather than by a feature
 
 Neither has anything to do with the other, and both emitted code the compiler
