@@ -54,12 +54,59 @@ if [ ${#modules[@]} -eq 0 ]; then
   )
 fi
 
-ok=0; crashed=0; absent=0
+# The compiler this run is asking about. The same expression `build-floor.sh`
+# uses, spelled again rather than shared: these two scripts are run separately
+# as often as together, and a default that lived in one of them would be a
+# default the other did not have.
+compiler="${NTS_COMPILER:-${NTS_BIN:-$root/target/release/nts}}"
+
+# Whether an addon predates something it was built from, and which thing.
+#
+# **An artifact older than its inputs is not evidence about them.** This check
+# loads whatever `.node` files are in the directory -- deliberately, so that it
+# answers about the same artifacts the rest of a run measures -- and until this
+# existed it could not tell "built by this compiler and loads" from "left here
+# in September and still lying there".
+#
+# That is not hypothetical and it is not rare. `build-floor.sh` rebuilds the
+# modules in `FLOOR` and nothing else, so any module *outside* the floor keeps
+# whatever artifact it last had, indefinitely. On 2026-09-17 this reported
+# `child_process` as loading, from a `.node` built on 2026-09-13, on a compiler
+# that had never compiled it -- while the build half said `24 of 24 still
+# build, 0 newly building` one screen above. A whole claim was written on the
+# strength of the loading half.
+#
+# Reported rather than failed. A stale artifact is an unanswered question, not
+# a regression, and failing on one would break this check in every working tree
+# that has ever built a module -- which is every one of them. What it must not
+# be is counted as `ok`, because `ok` is what the summary offers as evidence.
+stale_because() {
+  local addon="$1" module="$2" newer
+  if [ -f "$compiler" ] && [ "$compiler" -nt "$addon" ]; then
+    printf 'the compiler'
+    return 0
+  fi
+  newer=$(find "$root/runtime/node/$module" "$root/runtime/node/internal" \
+    -name '*.ts' -newer "$addon" -print -quit 2>/dev/null)
+  if [ -n "$newer" ]; then
+    printf '%s' "${newer#"$root"/}"
+    return 0
+  fi
+  return 1
+}
+
+ok=0; crashed=0; absent=0; stale=0
 for module in "${modules[@]}"; do
   addon="$addon_dir/$module.node"
   if [ ! -f "$addon" ]; then
     printf '  %-22s no addon built\n' "$module"
     absent=$((absent + 1))
+    continue
+  fi
+  if because=$(stale_because "$addon" "$module"); then
+    printf '  %-22s older than %s, so loading it says nothing about this compiler\n' \
+      "$module" "$because"
+    stale=$((stale + 1))
     continue
   fi
   # `require` binds lazily, which is not the question.
@@ -137,5 +184,7 @@ for module in "${modules[@]}"; do
   fi
 done
 
-printf '\n%d load, %d crashed or failed, %d not built\n' "$ok" "$crashed" "$absent"
+printf '\n%d load, %d crashed or failed, %d not built' "$ok" "$crashed" "$absent"
+[ "$stale" -gt 0 ] && printf ', %d older than what built them' "$stale"
+printf '\n'
 [ "$crashed" -eq 0 ]
