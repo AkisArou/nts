@@ -379,6 +379,95 @@ fn generic_classes(
 /// existed, `sink.write(v)` on a `Sink`-typed receiver found no declaration in
 /// the hierarchy and was refused -- 739 occurrences across the corpus and the
 /// most frequent single shape in two other lanes' inventories.
+/// Anonymous object types that declare methods, so a call through one resolves.
+///
+/// `{ v: 1, twice() { return this.v * 2 } }` is an object with a method, and
+/// the method is reached the way a class's is: `declaring` walks
+/// `hierarchy.declares`, which `collect_classes` and `collect_interfaces` fill
+/// from *declarations*. An object literal has none -- its type is made by the
+/// checker -- so nothing was ever in it and the call refused with `a method
+/// `twice` with no declaration in the hierarchy`.
+///
+/// **Over types rather than over literal nodes**, and that is the whole reason
+/// it works. `const o = { v, twice() {} }` gives the literal expression one
+/// anonymous type and widens `o` to another; a walk over nodes registers the
+/// first and the call site asks about the second. Every anonymous object type
+/// carrying a method is registered here, so which one a given site holds stops
+/// mattering.
+///
+/// **Anonymous only**, and `or_insert` besides. A named type went through the
+/// passes above, and answering for it from two sources is how the two come to
+/// disagree -- a class whose method is missing from `declares` is a bug in that
+/// pass rather than something to paper over here.
+///
+/// The keys are exactly the ones `accessor_callee` and `callee_for` build, and
+/// the record says which apply: `MemberKind::Method` is the bare name and
+/// `Accessor` carries whether it declares a getter, a setter or both.
+/// Whether a symbol name is the checker's placeholder for an anonymous shape.
+///
+/// **A name that is not one.** TypeScript gives every object type a symbol and
+/// calls the ones with no declaration `__object` or `__type`, so *every*
+/// anonymous shape in a program carries the same name. `decompose.rs` already
+/// refuses to publish those as nominal identities, for the reason it states --
+/// "unrelated anonymous shapes appear named alike" -- and one leaks through for
+/// a literal that declares a member.
+///
+/// It leaked harmlessly while nothing was named after such a layout. It stopped
+/// being harmless the moment an object literal's methods were emitted as
+/// `{layout}#{member}`: two literals in one file each declaring `twice` both
+/// produced `__object#twice`, and lowering refused the program with
+/// `DuplicateFunction`. The `Type{id}` fallback beside this is what every other
+/// anonymous shape already gets, and it is unique by construction.
+fn is_anonymous_shape(name: &str) -> bool {
+    matches!(name, "__object" | "__type")
+}
+
+fn collect_anonymous_objects(snapshot: &SemanticSnapshot, hierarchy: &mut Hierarchy) {
+    for (index, record) in snapshot.types.iter().enumerate() {
+        let TypeKind::Object { properties } = &record.kind else {
+            continue;
+        };
+        let ty = TypeId(u32::try_from(index).unwrap_or(u32::MAX));
+        // `is_anonymous_shape` and not `named(..).is_none()`: the checker
+        // names an object type with a member `__object`, so the simpler test is
+        // true of `{}` and false of `{ v, twice() {} }` -- which is how the
+        // first version of this walked past every type it was written for.
+        if named(snapshot, ty).is_some_and(|name| !is_anonymous_shape(name)) {
+            continue;
+        }
+        let mut declared = Vec::new();
+        for property in properties {
+            // The same three keys `accessor_callee` and `callee_for` build, and
+            // the record says exactly which apply: a method is its bare name,
+            // an accessor is `get `/`set ` and carries which of the two it
+            // declares. `GetSet` declares both.
+            match property.kind {
+                nts_semantic_schema::MemberKind::Method => {
+                    declared.push(property.name.clone());
+                },
+                nts_semantic_schema::MemberKind::Accessor(accessor) => {
+                    if matches!(
+                        accessor,
+                        nts_semantic_schema::Accessor::Get | nts_semantic_schema::Accessor::GetSet
+                    ) {
+                        declared.push(format!("get {}", property.name));
+                    }
+                    if matches!(
+                        accessor,
+                        nts_semantic_schema::Accessor::Set | nts_semantic_schema::Accessor::GetSet
+                    ) {
+                        declared.push(format!("set {}", property.name));
+                    }
+                },
+                nts_semantic_schema::MemberKind::Field => {},
+            }
+        }
+        if !declared.is_empty() {
+            hierarchy.declares.entry(ty).or_insert(declared);
+        }
+    }
+}
+
 fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy: &mut Hierarchy) {
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::INTERFACE_DECLARATION) {
@@ -572,6 +661,7 @@ fn collect_hierarchy(
     }
 
     collect_interfaces(snapshot, &probe, &mut hierarchy);
+    collect_anonymous_objects(snapshot, &mut hierarchy);
 
     // A slot for every method something overrides, numbered against the class
     // that first declares it. A method nothing overrides gets none, which is why
@@ -3034,6 +3124,87 @@ fn members_of(
 /// copy needs type arguments only a caller has. 129 refusal sites in the
 /// profile are exactly this, and the message names the class so they read as
 /// what they are rather than as a lowering gap.
+/// Lower the methods and accessors an object literal declares.
+///
+/// The same shape as [`lower_class`] with everything a class has and a literal
+/// does not taken out: no copies, because there is no way to write a generic
+/// object literal; no statics; no constructor; and no base.
+///
+/// The instance type is the literal's own, which is what makes
+/// `class_name_for` answer -- it takes the name from the layout when it has an
+/// instance, and a layout is exactly what an anonymous object type has.
+///
+/// The driver calls this **without** `continue`, unlike a class declaration: a
+/// literal is an expression inside something else, and that something else
+/// still has to be lowered.
+/// Lower the members of whatever owns some, and say whether that is all this
+/// node is.
+///
+/// Two kinds own members and they end differently. A **class declaration** is
+/// only its members, so the driver stops -- `true`. An **object literal** is an
+/// expression inside something else, and that something else still has to be
+/// lowered, so the driver carries on -- `false`, which is also the answer for
+/// every other node.
+///
+/// One function rather than two branches in the driver because "which nodes own
+/// members" is one fact, and the driver's job is dispatch rather than knowing
+/// it.
+fn lower_members_of(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    id: NodeId,
+    generic: &rustc_hash::FxHashMap<NodeId, Vec<super::generics::Instantiation>>,
+    shared: &Shared,
+    lowered: &mut Lowered,
+    wanted: &mut std::collections::BTreeSet<usize>,
+) -> bool {
+    match snapshot.nodes.get(id.0 as usize).map(|node| node.kind) {
+        Some(NodeKind::Syntax(syntax::CLASS_DECLARATION)) => {
+            lower_class(snapshot, foreign, id, generic, shared, lowered, wanted);
+            true
+        },
+        Some(NodeKind::Syntax(syntax::OBJECT_LITERAL_EXPRESSION)) => {
+            lower_object_literal_members(snapshot, foreign, id, shared, lowered, wanted);
+            false
+        },
+        _ => false,
+    }
+}
+
+/// A function refused for what its name says, as a diagnostic.
+///
+/// A probe built for one line, lifted out so the driver loop reads as the
+/// dispatch it is.
+fn refusal_by_name(snapshot: &SemanticSnapshot, id: NodeId, what: &str) -> Diagnostic {
+    FuncBuilder::probe(snapshot).unsupported(id, what)
+}
+
+fn lower_object_literal_members(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    literal: NodeId,
+    shared: &Shared,
+    lowered: &mut Lowered,
+    wanted: &mut std::collections::BTreeSet<usize>,
+) {
+    let mut owner = shared.builder(snapshot, foreign, Copy::default());
+    let Some(instance) = owner.literal_member_owner(literal) else {
+        return;
+    };
+    for member in members_of(snapshot, foreign, literal) {
+        let mut builder = shared.builder(snapshot, foreign, Copy::default());
+        match builder.lower_method_of(literal, member, Some(instance)) {
+            Ok(func) => lowered.program.funcs.push(func),
+            Err(diagnostic) => {
+                note_uncompiled(snapshot, &mut lowered.program, member, &diagnostic);
+                lowered.diagnostics.push(diagnostic);
+            },
+        }
+        wanted.extend(builder.used_closures.iter().copied());
+        collect_layouts(&mut lowered.program, builder.layouts);
+    }
+}
+
 fn lower_class(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
@@ -4589,8 +4760,7 @@ pub fn lower_with(
         // taking the instance as its first parameter. There is no dispatch to
         // arrange: the checker resolved every call site, so a method call is a
         // static call and `this` is an ordinary argument.
-        if node.kind == NodeKind::Syntax(syntax::CLASS_DECLARATION) {
-            lower_class(snapshot, foreign, id, &generic, &shared, &mut lowered, &mut wanted);
+        if lower_members_of(snapshot, foreign, id, &generic, &shared, &mut lowered, &mut wanted) {
             continue;
         }
 
@@ -4619,9 +4789,7 @@ pub fn lower_with(
         // hard part were not there. Checking them first means they are live and
         // testable now, and stay so.
         if let Some(what) = refused_by_name(snapshot, id) {
-            lowered
-                .diagnostics
-                .push(FuncBuilder::probe(snapshot).unsupported(id, what));
+            lowered.diagnostics.push(refusal_by_name(snapshot, id, what));
             continue;
         }
 
@@ -19289,8 +19457,8 @@ impl<'a> FuncBuilder<'a> {
                 .or_else(|| Self::symbol_keyed(&layout, &name))
             else {
                 // A setter, for the same reason.
-                if let Some(callee) = self.accessor_callee(type_id, &name, "set ") {
-                    let getter = self.accessor_callee(type_id, &name, "get ");
+                if let Some(callee) = self.accessor_callee(target, type_id, &name, "set ") {
+                    let getter = self.accessor_callee(target, type_id, &name, "get ");
                     let wants = self
                         .declared_type_of(type_id, &name)
                         .and_then(|declared| self.represent(declared));
@@ -21358,6 +21526,72 @@ impl<'a> FuncBuilder<'a> {
             .then_some(ty)
     }
 
+    /// The object type a literal is **built at**, and whether the result is
+    /// erased after.
+    ///
+    /// **One answer, because two things ask.** The literal's fields are written
+    /// at this type and its methods are lowered under this type's name, and if
+    /// those disagree the call site finds neither: an `{ v, twice() {} }`
+    /// assigned to an `interface O` lowered its method as `Type6#twice` while
+    /// the call asked for `O#twice`, because one side took the literal's own
+    /// checker type and the other the contextual one.
+    ///
+    /// A literal contextually typed by a *union* erases. Building it at its own
+    /// type and erasing puts one shape into a slot that `unerase` reads as
+    /// another -- see `contextual_union_member`, and record 0244 for what that
+    /// answers.
+    ///
+    /// `{}` reaches here too, and correctly: its type erases because in
+    /// TypeScript it is every value except `null` and `undefined`, while its
+    /// *value* is still an object. `options = {}` is node's sentinel for "no
+    /// options were passed", and it is under `net.createServer` at 91 of 148
+    /// failing files and `http.createServer` at 241 of 405.
+    fn literal_object_type(
+        &mut self,
+        id: NodeId,
+        ty: HirType,
+    ) -> Result<(TypeId, bool), Diagnostic> {
+        let (ty, erase_afterwards) = match ty {
+            HirType::Erased => match self.contextual_union_member(id) {
+                Some(member) => (HirType::Managed(ManagedType::Object(member)), true),
+                // `{}` with nothing to say about it. Built as the object it is
+                // and erased after, which is the same two steps the union arm
+                // above takes for the same reason.
+                None => match self.empty_object_literal(id) {
+                    Some(own) => (HirType::Managed(ManagedType::Object(own)), true),
+                    None => (HirType::Erased, false),
+                },
+            },
+            other => (other, false),
+        };
+        let HirType::Managed(ManagedType::Object(type_id)) = ty else {
+            return Err(self.unsupported(id, "an object literal that is not an object"));
+        };
+        Ok((type_id, erase_afterwards))
+    }
+
+    /// The type an object literal's *members* are lowered under.
+    ///
+    /// Reads the same two sources in the same order [`Self::lower_object_literal`]
+    /// does and hands them to the same decision, so the function a method is
+    /// emitted as and the name a call looks for cannot drift apart.
+    fn literal_member_owner(&mut self, id: NodeId) -> Option<TypeId> {
+        let ty = self
+            .contextual_type(id, 0)
+            .filter(|ty| {
+                matches!(
+                    ty,
+                    HirType::Managed(ManagedType::Object(_) | ManagedType::Table(_, _))
+                )
+            })
+            .or_else(|| {
+                self.contextual_union_member(id)
+                    .map(|member| HirType::Managed(ManagedType::Object(member)))
+            })
+            .or_else(|| self.type_of(id))?;
+        self.literal_object_type(id, ty).ok().map(|(ty, _)| ty)
+    }
+
     fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         if matches!(self.contextual_type(id, 0), Some(HirType::NativePointer(_)))
             || matches!(self.type_of(id), Some(HirType::NativePointer(_)))
@@ -21405,32 +21639,8 @@ impl<'a> FuncBuilder<'a> {
             let key = (**key).clone();
             return self.lower_table_literal(id, ty.clone(), &key);
         }
-        // A literal contextually typed by a *union*, which erases. Building it
-        // at its own type and erasing puts one shape into a slot that `unerase`
-        // reads as another -- see `contextual_union_member`, and record 0244 for
-        // what that answers.
-        //
-        // `{}` reaches here too, and correctly: its type erases because in
-        // TypeScript it is every value except `null` and `undefined`, while its
-        // *value* is still an object. `options = {}` is node's sentinel for "no
-        // options were passed", and it is under `net.createServer` at 91 of 148
-        // failing files and `http.createServer` at 241 of 405.
-        let (ty, erase_afterwards) = match ty {
-            HirType::Erased => match self.contextual_union_member(id) {
-                Some(member) => (HirType::Managed(ManagedType::Object(member)), true),
-                // `{}` with nothing to say about it. Built as the object it is
-                // and erased after, which is the same two steps the union arm
-                // above takes for the same reason.
-                None => match self.empty_object_literal(id) {
-                    Some(own) => (HirType::Managed(ManagedType::Object(own)), true),
-                    None => (HirType::Erased, false),
-                },
-            },
-            other => (other, false),
-        };
-        let HirType::Managed(ManagedType::Object(type_id)) = ty else {
-            return Err(self.unsupported(id, "an object literal that is not an object"));
-        };
+        let (type_id, erase_afterwards) = self.literal_object_type(id, ty)?;
+        let ty = HirType::Managed(ManagedType::Object(type_id));
         let layout = self.layout_of(id, type_id)?;
         let origin = self.origin(id);
         let object = self.push(OpKind::ObjectNew { frame: false }, ty, origin.clone());
@@ -21454,6 +21664,19 @@ impl<'a> FuncBuilder<'a> {
             // struct built from nothing.
             if self.kind_of(property) == Some(syntax::SPREAD_ASSIGNMENT) {
                 self.spread_into(property, object, &layout, &origin)?;
+                continue;
+            }
+            // A method or an accessor is not storage. It was lowered as a
+            // function of its own by `lower_object_literal_members`, and the
+            // layout has no field for it to be written to.
+            if matches!(
+                self.kind_of(property),
+                Some(
+                    syntax::METHOD_DECLARATION
+                        | syntax::GET_ACCESSOR
+                        | syntax::SET_ACCESSOR
+                )
+            ) {
                 continue;
             }
             let (name, value) = self.property_parts(property)?;
@@ -21981,10 +22204,19 @@ impl<'a> FuncBuilder<'a> {
     /// once here rather than at each of the two sites for the reason the
     /// hierarchy's own comment gives about the base: two places that must agree
     /// is how this goes wrong.
-    fn accessor_callee(&self, ty: TypeId, member: &str, kind: &str) -> Option<Callee> {
+    fn accessor_callee(&mut self, id: NodeId, ty: TypeId, member: &str, kind: &str) -> Option<Callee> {
         let key = format!("{kind}{member}");
         let declaring = self.hierarchy.declaring(ty, &key)?;
-        let owner = self.hierarchy.name.get(&declaring)?;
+        // **The layout's name where the hierarchy has none**, which is what
+        // `callee_for` has always done for a method. Only a *declared* type gets
+        // a `hierarchy.name`, so an object literal's accessor resolved its
+        // declaring type and then returned `None` here -- and the refusal named
+        // the member as having no representation, which is a sentence about a
+        // field for something that is not one.
+        let owner = match self.hierarchy.name.get(&declaring) {
+            Some(name) => name.clone(),
+            None => self.layout_of(id, declaring).ok()?.name,
+        };
         let name = format!("{owner}#{key}");
         Some(
             if self.hierarchy.overridden(ty, &key)
@@ -22910,7 +23142,9 @@ impl<'a> FuncBuilder<'a> {
         let name = record
             .symbol
             .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-            .map_or_else(|| format!("Type{}", ty.0), |symbol| symbol.name.clone());
+            .map(|symbol| symbol.name.as_str())
+            .filter(|name| !is_anonymous_shape(name))
+            .map_or_else(|| format!("Type{}", ty.0), ToOwned::to_owned);
         // `Vector<Body>` and `Vector<double>` share the declaring symbol and so
         // share this name, and they are different classes with different field
         // widths. The type id tells them apart, and `<>` cannot appear in a
@@ -26239,7 +26473,7 @@ impl<'a> FuncBuilder<'a> {
                 // A getter. `o.x` looks like a field read and runs code, which
                 // is why an accessor may not be laid out as a field: emitting
                 // the load would read whatever sits at that offset.
-                if let Some(callee) = self.accessor_callee(type_id, member_name, "get ") {
+                if let Some(callee) = self.accessor_callee(id, type_id, member_name, "get ") {
                     let ty = self
                         .type_of(id)
                         .ok_or_else(|| self.unrepresentable(id, "a getter"))?;
