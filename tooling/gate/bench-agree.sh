@@ -28,6 +28,23 @@
 # differential has nothing to build a pool for and says so. That is not a
 # failure and it is not agreement either -- it is the same distinction the rest
 # of this gate keeps between a refusal and an absence.
+#
+# **The floor is now every case that can be measured, and the arithmetic says
+# so**: 61 benchmark cases compile on all three backends, nine of them have no
+# pool, and 61 - 9 = 52. It sat at 41 while the tree produced 52, which is a
+# ratchet eleven teeth behind -- eleven cases could have stopped agreeing with
+# node and this step would still have printed green. A floor that has slipped is
+# not a loose ratchet, it is an absent one.
+#
+# Raised off `pinned.sh` on 44f8287e, from its own worktree, which printed no
+# `NOT A COMMIT` line -- the rule `all.sh` states beside the example floors, for
+# the reason recorded there: a floor taken from a run that counted somebody's
+# untracked directory is a claim about that directory and goes red when they
+# revert it.
+#
+# The count is the **jvm** backend's, which is the one `all.sh` runs. Another
+# backend may measure a different set; `NTS_BENCH_AGREE_FLOOR` is how to say so
+# rather than editing this.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -43,7 +60,7 @@ nts=${NTS_BIN:-$root/target/release/nts}
 
 backend=${NTS_BACKEND:-jvm}
 export NTS_BACKEND=$backend
-floor=${NTS_BENCH_AGREE_FLOOR:-41}
+floor=${NTS_BENCH_AGREE_FLOOR:-52}
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT INT TERM
