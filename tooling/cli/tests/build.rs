@@ -2981,7 +2981,17 @@ fn the_usage_names_every_command_and_no_others() {
 /// which is the one spelling every other tool on the machine accepts.
 #[test]
 fn the_bare_command_and_the_usual_help_spellings_all_print_usage() {
-    for arguments in [vec![], vec!["help"], vec!["--help"], vec!["-h"]] {
+    // `nts build --help` too, which is the spelling reached for *after* the
+    // command is known and is the one that used to try to build a project
+    // called `--help`.
+    for arguments in [
+        vec![],
+        vec!["help"],
+        vec!["--help"],
+        vec!["-h"],
+        vec!["build", "--help"],
+        vec!["check", "-h"],
+    ] {
         let shown = Command::new(env!("CARGO_BIN_EXE_nts"))
             .args(&arguments)
             .output()

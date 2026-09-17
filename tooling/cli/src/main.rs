@@ -451,8 +451,24 @@ docs/nts-config.md for what it declares.",
     );
 }
 
+/// What was asked for, or `None` when the answer was the usage.
+///
+/// **`--help` anywhere, not only alone.** `nts build --help` treated `--help`
+/// as the project path and reported that there is no config beside it -- and
+/// that is the spelling a person reaches for *after* they know the command
+/// exists, so it is the more likely of the two to be typed.
+fn arguments() -> Option<Vec<String>> {
+    let given: Vec<String> = std::env::args().skip(1).collect();
+    if given.iter().any(|arg| arg == "--help" || arg == "-h") {
+        usage();
+        return None;
+    }
+    Some(given)
+}
+
 fn main() -> Result<()> {
-    let mut args = std::env::args().skip(1);
+    let Some(given) = arguments() else { return Ok(()) };
+    let mut args = given.into_iter();
     match args.next().as_deref() {
         Some("frontend") => {
             let rest: Vec<String> = args.collect();
