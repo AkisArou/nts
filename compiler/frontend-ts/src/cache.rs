@@ -80,8 +80,27 @@ pub fn snapshot<S: SemanticSource>(
     let Some(dir) = cache_dir() else {
         return source.snapshot(tsconfig);
     };
-    let listing = project_listing(tsconfig);
-    let path = dir.join(format!("{:032x}.postcard", hash_of(tsconfig.as_str().as_bytes())));
+    // **The key is a path, so it has to be *the* path.**
+    //
+    // It was `tsconfig.as_str()` verbatim, and `nts build` run from a project
+    // directory passes the relative `tsconfig.json` -- so every project on the
+    // machine invoked that way hashed to one entry. Worse, the `listing` guard
+    // that would have caught the collision was vacuous for exactly those calls:
+    // `Utf8Path::new("tsconfig.json").parent()` is `""`, `read_dir("")` fails,
+    // and an empty listing matches an empty listing.
+    //
+    // Reproduced from a cleared cache with two projects, each built as
+    // `nts build tsconfig.json` from its own directory: the first succeeded and
+    // the second was handed the first's program. It surfaced as "no source in
+    // this program is that file" -- the product-entry check catching it, which
+    // is luck rather than protection, because a project whose entry happened to
+    // match would have compiled the wrong sources and said nothing.
+    //
+    // Canonicalised rather than merely made absolute: two paths reaching one
+    // config through different symlinks are one project and must be one entry.
+    let canonical = absolute(tsconfig);
+    let listing = project_listing(&canonical);
+    let path = dir.join(format!("{:032x}.postcard", hash_of(canonical.as_str().as_bytes())));
     // The compiler that *built* the snapshot, beside the tool that answered the
     // questions. `tool` stamps `tsgo`; the decomposer turning tsgo's answers
     // into a `SemanticSnapshot` lives here, and nothing recorded it.
@@ -110,7 +129,7 @@ pub fn snapshot<S: SemanticSource>(
         && entry.built_by == built_by
         && entry.tool == tool
         && entry.listing == listing
-        && entry.configs == config_chain(tsconfig)
+        && entry.configs == config_chain(&canonical)
         && entry.read.iter().all(|(file, seen)| {
             std::fs::read(file).is_ok_and(|bytes| hash_of(&bytes) == *seen)
         })
@@ -195,6 +214,21 @@ fn cache_dir() -> Option<Utf8PathBuf> {
         .map(|dir| dir.join("nts-snapshots"))
 }
 
+/// The path a cache entry is named by, resolved once.
+///
+/// **An empty parent is the current directory, not nothing** -- the third time
+/// that sentence has been the fix in this repository, after `absolute()` in the
+/// CLI and the `jar --extract` working directory. `canonicalize` on a path that
+/// cannot be resolved falls back to the path itself, which keys no worse than
+/// before.
+fn absolute(path: &Utf8Path) -> Utf8PathBuf {
+    let path = if path.as_str().is_empty() { Utf8Path::new(".") } else { path };
+    std::fs::canonicalize(path)
+        .ok()
+        .and_then(|resolved| Utf8PathBuf::from_path_buf(resolved).ok())
+        .unwrap_or_else(|| path.to_owned())
+}
+
 /// The tsconfig and everything it `extends`, so a change to one invalidates.
 ///
 /// The entry checked every `.ts` the snapshot read and **not the configuration
@@ -265,6 +299,10 @@ fn project_listing(tsconfig: &Utf8Path) -> Vec<String> {
     let Some(root) = tsconfig.parent() else {
         return Vec::new();
     };
+    // Defence in depth for the bug above: a caller reaching this with a bare
+    // relative path got an empty listing, and an empty listing is a guard that
+    // passes for everything rather than a project with no sources in it.
+    let root = if root.as_str().is_empty() { Utf8Path::new(".") } else { root };
     let mut found = Vec::new();
     walk(root, &mut found, 0);
     found.sort_unstable();

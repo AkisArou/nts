@@ -2901,6 +2901,58 @@ fn build_c(
     Ok(wrote.refused)
 }
 
+/// libuv is the *program's* dependency, and a cross build rarely has one.
+///
+/// A program that awaits anything links the libuv host, and libuv is a system
+/// library rather than something this repository vendors. On the host that is
+/// fine -- every machine building this has one. Cross-compiling to Windows with
+/// `zig cc` does not: zig bundles a libc for the target and nothing else, so
+/// the build died on `fatal error: 'uv.h' file not found`, which names a file
+/// rather than a dependency and says nothing about what to do.
+///
+/// **Asked rather than assumed, because the triple does not answer it.** A
+/// machine *with* a Windows libuv on its include path should build, and a rule
+/// keyed on "is this a cross build" would refuse it. So this compiles a
+/// two-line translation unit and reports what the target's own compiler says --
+/// the same shape as the measurement that produced the Apple refusal above.
+///
+/// Only on a cross build: a host missing libuv fails at `-luv` with a message
+/// that already names it, and a probe on every build would be a compile nobody
+/// asked for.
+fn refuse_without_libuv(
+    name: &str,
+    out: &Utf8Path,
+    tools: &Toolchain,
+    target: &nts_build::config::Target,
+) -> Result<()> {
+    if is_host(target) {
+        return Ok(());
+    }
+    let probe = out.join("nts_libuv_probe.c");
+    std::fs::write(&probe, "#include <uv.h>\nint nts_libuv_probe(void) { return 0; }\n")
+        .with_context(|| format!("writing {probe}"))?;
+    let mut command = tools.command();
+    command.args(["-fsyntax-only", probe.as_str()]);
+    let asked = command.output().with_context(|| {
+        format!("asking the compiler for {} whether libuv is available", target.id)
+    })?;
+    let _ = std::fs::remove_file(&probe);
+    if asked.status.success() {
+        return Ok(());
+    }
+    bail!(
+        "product `{name}` targets {} and awaits something, so it links libuv -- and \
+         libuv is not available for {} on this machine. It is the program's dependency \
+         rather than this compiler's: install a libuv built for {}, put its headers on \
+         the include path, or set CC to a cross compiler that has one. Building on {} \
+         itself needs none of that.",
+        target.id,
+        target.id,
+        target.id,
+        target.os
+    )
+}
+
 /// The compiler, and what every translation unit is compiled with.
 ///
 /// **A bundle rather than three more parameters.** `cache`, `tools` and
@@ -4191,6 +4243,12 @@ fn link_c(
         sources.push(AUTO_INIT_NAME.to_owned());
     }
 
+    // **Before anything is compiled**, because the alternative is what this
+    // replaced: a raw `fatal error: 'uv.h' file not found` out of clang, forty
+    // lines into a build, about a library the reader never named.
+    if sources.iter().any(|source| source == nts_codegen_c::UV_HOST_SOURCE_NAME) {
+        refuse_without_libuv(name, out, &tools, target)?;
+    }
     let cache = ObjectCache::new(cache_dir, &tools);
     let mut objects = Vec::new();
     let with = Compiling { cache: &cache, tools: &tools, cflags: &needs.cflags };

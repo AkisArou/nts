@@ -2594,3 +2594,123 @@ fn a_runnable_jar_builds_from_the_project_directory_with_no_argument() {
         String::from_utf8_lossy(&output.stdout)
     );
 }
+
+const WINDOWS_EXECUTABLE: &str = r#"
+import { defineConfig, app, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    tool: app({ kind: "executable", entry: "./src/main.ts", targets: [target.windows()] }),
+  },
+});
+"#;
+
+/// A cross build that needs libuv says so, rather than failing inside clang.
+///
+/// **What this replaced is the point.** A program that awaits anything links the
+/// libuv host, `zig cc` bundles a libc for the target and nothing else, and the
+/// build died forty lines in with `fatal error: 'uv.h' file not found` -- a
+/// message naming a file the reader never wrote, about a dependency nobody
+/// told them they had.
+///
+/// **The control is `a_windows_target_produces_a_windows_dll` above**: the same
+/// target and the same cross toolchain, built as a *library*, and it still
+/// succeeds. Only the executable path emits the libuv host -- `main.c` includes
+/// it -- so the pair separates "this refuses a Windows build that needs libuv"
+/// from "this refuses Windows".
+#[test]
+fn a_cross_build_that_needs_libuv_names_it_rather_than_failing_in_the_compiler() {
+    let zig = Command::new("zig").arg("version").output().is_ok_and(|o| o.status.success());
+    if !available() || !zig {
+        skip("the tsgo frontend, clang and zig");
+        return;
+    }
+    let project = fixture("build-windows-libuv", WINDOWS_EXECUTABLE);
+    let run = build(&project, &[]);
+    assert!(!run.ok, "it built without libuv:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("libuv is not available"),
+        "the refusal does not name libuv:\n{}",
+        run.stderr
+    );
+    assert!(
+        !run.stderr.contains("uv.h' file not found"),
+        "it still reports the compiler's error rather than its own:\n{}",
+        run.stderr
+    );
+}
+
+const RELATIVE_LIB: &str = r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    lib: library.native({ targets: [target.linux()], entry: "./src/main.ts" }),
+  },
+});
+"#;
+
+/// Two projects built the same way are two projects.
+///
+/// **The snapshot cache keyed on the tsconfig path as given**, so every project
+/// on the machine built as `nts build tsconfig.json` from its own directory
+/// hashed to one entry -- and the `listing` guard that should have caught it was
+/// vacuous for exactly those calls, because `Utf8Path::new("tsconfig.json")`
+/// has an empty parent and `read_dir("")` fails. An empty listing matches an
+/// empty listing.
+///
+/// Reproduced from a cleared cache: the first project built and the second was
+/// handed the first's program. It surfaced as the product-entry check failing,
+/// which is luck rather than protection -- two projects whose entry paths agree
+/// would have compiled the wrong sources and said nothing.
+///
+/// **Both halves are asserted**, because "the second one builds" also passes for
+/// a cache that answered from the first: the test reads the emitted C and
+/// requires the second project's function and not the first's.
+#[test]
+fn two_projects_built_from_their_own_directories_do_not_share_a_snapshot() {
+    if !available() {
+        skip("node, the tsgo frontend and clang");
+        return;
+    }
+    let build_there = |project: &Path| {
+        Command::new(env!("CARGO_BIN_EXE_nts"))
+            .args(["build", "tsconfig.json"])
+            .current_dir(project)
+            .output()
+            .expect("running nts build")
+    };
+    let alpha = fixture("build-relative-alpha", RELATIVE_LIB);
+    std::fs::write(
+        alpha.join("src/main.ts"),
+        "export function alphaOnly(n: number): number { return n + 1; }\n",
+    )
+    .expect("alpha entry");
+    let beta = fixture("build-relative-beta", RELATIVE_LIB);
+    std::fs::write(
+        beta.join("src/main.ts"),
+        "export function betaOnly(n: number): number { return n + 2; }\n",
+    )
+    .expect("beta entry");
+
+    let first = build_there(&alpha);
+    assert!(
+        first.status.success(),
+        "the first build failed:\n{}{}",
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let second = build_there(&beta);
+    assert!(
+        second.status.success(),
+        "the second build failed, which is what the collision looked like:\n{}{}",
+        String::from_utf8_lossy(&second.stdout),
+        String::from_utf8_lossy(&second.stderr)
+    );
+
+    let emitted = beta.join(".nts/build/lib/linux-gnu-x86_64/program.c");
+    let text = std::fs::read_to_string(&emitted).expect("the second project's C");
+    assert!(text.contains("betaOnly"), "the second project's own function is absent");
+    assert!(
+        !text.contains("alphaOnly"),
+        "the second project was compiled from the first's sources"
+    );
+}
