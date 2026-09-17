@@ -350,6 +350,13 @@ public final class NtsArrayL {
     public static boolean includesStr(NtsArrayL a, Object value) {
         return indexOfStr(a, value) >= 0.0;
     }
+    /** The erased-needle forms -- see `NtsRuntime.arrayIndexOfStrValue` for the rule. */
+    public static double indexOfStrValue(NtsArrayL a, NtsValue needle) {
+        return needle.tag == NtsValue.STRING ? indexOfStr(a, needle.ref) : -1.0;
+    }
+    public static boolean includesStrValue(NtsArrayL a, NtsValue needle) {
+        return needle.tag == NtsValue.STRING && includesStr(a, needle.ref);
+    }
 
     /**
      * A Java array, used directly as this array's storage.

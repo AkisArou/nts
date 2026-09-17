@@ -1628,6 +1628,28 @@ public final class NtsRuntime {
         return arrayLastIndexOfStrI(a, value);
     }
     public static boolean arrayIncludesStr(Object[] a, Object value) { return arrayIndexOfStr(a, value) >= 0; }
+    /**
+     * `includes` and `indexOf` over an array of strings with an **erased**
+     * needle, which is `validateOneOf(value: unknown, …, oneOf: string[])` --
+     * one of node's most-called validators.
+     *
+     * <p>The tag decides and a non-string answers "not found" rather than
+     * aborting: unerasing would be the wrong repair, because an `unknown` that
+     * is not a string is not an error here, it is a value SameValueZero says is
+     * absent from an array of strings. `nts_runtime.h` states it that way and
+     * this is the same rule, not a second one.
+     *
+     * <p>Two branches of different types in one local are what keep a needle
+     * erased -- a local `any` with a concrete initialiser narrows to it -- which
+     * is why no example in this tree had ever reached these and both backends
+     * beside this one have had them for longer.
+     */
+    public static double arrayIndexOfStrValue(Object[] a, NtsValue needle) {
+        return needle.tag == NtsValue.STRING ? arrayIndexOfStr(a, needle.ref) : -1.0;
+    }
+    public static boolean arrayIncludesStrValue(Object[] a, NtsValue needle) {
+        return needle.tag == NtsValue.STRING && arrayIncludesStr(a, needle.ref);
+    }
     public static NtsValue arrayAtValue(double[] a, double index) {
         int at = NtsArrays.offset(index, a.length);
         return at < 0 ? NtsValue.ABSENT_NUMBER : NtsValue.ofNumber(a[at]);

@@ -159,6 +159,9 @@ pub fn growable_external(name: &str, holds: &str) -> Option<(String, &'static st
         "last_index_of_str" => ("lastIndexOfStr", format!("(L{class};{element})D")),
         "includes" | "includes_ref" => ("includes", format!("(L{class};{element})Z")),
         "includes_str" => ("includesStr", format!("(L{class};{element})Z")),
+        // The same pair on a growable array -- see `array_external`.
+        "index_of_str_value" => ("indexOfStrValue", format!("(L{class};{VALUE})D")),
+        "includes_str_value" => ("includesStrValue", format!("(L{class};{VALUE})Z")),
         "fill" | "fill_ref" | "fill_bool" => ("fill", format!("(L{class};{element})L{class};")),
         // **Void**, with `keep_first` below the only other one here. Most
         // growable helpers answer something -- a new length, an element, the
@@ -250,6 +253,20 @@ pub fn array_external(name: &str, element: &str) -> Option<(&'static str, &'stat
             (RUNTIME, "arrayIncludes", format!("({array}{one})Z"))
         }
         "nts_array_includes_str" => (RUNTIME, "arrayIncludesStr", format!("({array}{one})Z")),
+        // **The erased-needle forms, which this backend had in neither table.**
+        // `validateOneOf(value: unknown, …, oneOf: string[])` is the shape, and
+        // C and LLVM have carried it since it first became reachable. Nothing
+        // here reached it because three of the four routes to an erased needle
+        // are closed -- `any` is refused as a parameter and at module scope, and
+        // a local `any` with a concrete initialiser narrows to that initialiser
+        // -- so it takes two branches of different types in one local, which no
+        // example in this corpus writes.
+        "nts_array_index_of_str_value" => {
+            (RUNTIME, "arrayIndexOfStrValue", format!("({array}Lnts/rt/NtsValue;)D"))
+        }
+        "nts_array_includes_str_value" => {
+            (RUNTIME, "arrayIncludesStrValue", format!("({array}Lnts/rt/NtsValue;)Z"))
+        }
         "nts_array_join_num" => {
             (RUNTIME, "arrayJoinNum", format!("({array}Ljava/lang/String;)Ljava/lang/String;"))
         }
