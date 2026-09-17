@@ -130,3 +130,23 @@ export function plain(n: number): number {
   const o = { v: n, w: 2 };
   return o.v + o.w;
 }
+
+/** Two literals of the *identical* shape, which `sameNameTwice` above does not
+ *  cover: its two declare different fields, so they are different types and
+ *  different layouts. These two are one layout -- identical shapes deliberately
+ *  share a representation -- and were one function until 2026-09-17, so
+ *  `b.which()` returned `1`. No diagnostic, on every backend. A name for
+ *  dispatch is not a representation, and the hierarchy holds it now. */
+export function identicalShapeTwice(n: number): number {
+  const a = {
+    which(): number {
+      return 1;
+    },
+  };
+  const b = {
+    which(): number {
+      return 2;
+    },
+  };
+  return a.which() * 10 + b.which() + n;
+}

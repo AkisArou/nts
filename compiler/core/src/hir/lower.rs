@@ -568,6 +568,22 @@ fn collect_anonymous_objects(
             }
         }
         if !declared.is_empty() {
+            // **Named, so that two literals of one shape stay two functions.**
+            // A layout is a *representation* and identical shapes deliberately
+            // share one, so `{ which() { return 1 } }` and
+            // `{ which() { return 2 } }` are one layout -- correct, they are
+            // the same storage -- and the name a member is emitted under came
+            // from it. One `Type4#which` was defined, both call sites called
+            // it, and `b.which()` returned `1`. No diagnostic, on every
+            // backend, and the existing coverage missed it because its two
+            // literals declare different *fields* and so do not merge.
+            //
+            // A name for dispatch is not a representation. This one is the
+            // type's, which is what the checker gave each literal separately.
+            hierarchy
+                .name
+                .entry(ty)
+                .or_insert_with(|| nominal_or_stand_in(snapshot, ty));
             hierarchy.declares.entry(ty).or_insert(declared);
         }
     }
@@ -1612,39 +1628,6 @@ fn collect_function_values(
     }
 }
 
-/// Collect what a module declares outside any function.
-///
-/// Scalars only. A managed global is a *root* -- reachable without being on any
-/// stack -- so a collector has to be told about it, and RFC §10.2 puts root
-/// registration in the memory provider rather than in a backend. Until that
-/// exists, refusing is better than a global nothing traces.
-///
-/// An initializer that is not a constant is refused for a different reason:
-/// running it needs a module initializer, which is a real thing to design (what
-/// order, and what happens when one throws) rather than something to improvise
-/// here.
-impl FuncBuilder<'_> {
-    /// The first method an object literal declares, if it declares one.
-    ///
-    /// Both spellings: `{ f() {} }` is a method declaration, and
-    /// `{ f: () => {} }` is a property whose value is a function. Neither is
-    /// lowered, and the point of finding one is to say so.
-    fn method_of_an_object_literal(&self, initializer: NodeId) -> Option<NodeId> {
-        if self.kind_of(initializer) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
-            return None;
-        }
-        self.children(initializer)
-            .into_iter()
-            .find(|member| match self.kind_of(*member) {
-                Some(syntax::METHOD_DECLARATION) => true,
-                Some(syntax::PROPERTY_ASSIGNMENT) => self
-                    .children(*member)
-                    .into_iter()
-                    .any(|part| self.kind_of(part) == Some(syntax::ARROW_FUNCTION)),
-                _ => false,
-            })
-    }
-}
 
 /// What each function declaration is emitted as, and which cannot be.
 #[derive(Default)]
@@ -2399,6 +2382,24 @@ fn declared_literal(probe: &FuncBuilder, name: NodeId) -> Option<f64> {
     }
 }
 
+/// Collect what a module declares outside any function.
+///
+/// Scalars only. A managed global is a *root* -- reachable without being on any
+/// stack -- so a collector has to be told about it, and RFC §10.2 puts root
+/// registration in the memory provider rather than in a backend. Until that
+/// exists, refusing is better than a global nothing traces.
+///
+/// An initializer that is not a constant is *deferred* rather than refused: it
+/// runs in `module#init`, in source order. The paragraph here used to say it was
+/// refused, "because running it needs a module initializer, which is a real
+/// thing to design" -- which the module initializer then became, leaving the
+/// sentence behind. It is written down because one refusal outlived the same
+/// fact: an object literal holding a method was turned away here, on the
+/// grounds that "the methods of an object literal are not walked, so they are
+/// not lowered and not refused", for as long as that had been false.
+///
+/// This doc comment sat on an unrelated `impl` block 765 lines above the
+/// function it describes until 2026-09-17.
 fn collect_module_scope(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
@@ -2500,21 +2501,6 @@ fn collect_module_scope(
             Some(initializer) if !erased => probe.constant_value(initializer, &scope.constants),
             _ => None,
         };
-        if let (None, Some(initializer)) = (constant, initializer) {
-            // Code, rather than data this file happens not to use. Reported
-            // here because nothing downstream will: the methods of an object
-            // literal are not walked, so they are not lowered and not refused.
-            if let Some(member) = probe.method_of_an_object_literal(initializer) {
-                scope
-                    .refusals
-                    .push(probe.unsupported(member, "a method on an object literal"));
-                scope.unsupported.insert(
-                    symbol.0,
-                    "a module-scope variable whose initializer is not constant".to_owned(),
-                );
-                continue;
-            }
-        }
         // **A declared constant's type *is* its value.** `declare const MAX:
         // 512` has no initializer, so `constant` is `None` and `initial`
         // became `0` -- and `globals::analyze` seeds a non-exported numeric
@@ -9261,7 +9247,17 @@ impl<'a> FuncBuilder<'a> {
         match instance.filter(|_| !is_static) {
             // The layout's name rather than the declaration's, because two
             // instantiations of one class must not produce one function.
-            Some(ty) => Ok(self.layout_of(class, ty)?.name),
+            //
+            // The hierarchy's first, where it has one. For an instantiation the
+            // two agree by construction -- `collect_hierarchy` says so and says
+            // why. For an *anonymous* type they do not: the layout may have
+            // merged with another shape-identical one, and the call site reads
+            // the hierarchy, so taking the layout here would define
+            // `Type4#which` against a call to `Type8#which`.
+            Some(ty) => match self.hierarchy.name.get(&ty) {
+                Some(name) => Ok(name.clone()),
+                None => Ok(self.layout_of(class, ty)?.name),
+            },
             // Through the same naming that keeps two functions of one name
             // apart. A method is spelled `Class#method`, which cannot collide
             // with a plain function and collides readily with a method of

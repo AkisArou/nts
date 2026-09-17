@@ -2526,7 +2526,6 @@ ones, IIFEs, and the comma operator.
 **Still refused, each confirmed with a one-shape fixture:**
 
 ```text
-  const o = { twice() { … } } at module scope    a method on an object literal
   new.target                                     a meta property
   accessor v = 3                                 the `accessor` keyword
   [[1],[2]].flat()                               `flat` on an array of references
@@ -2537,14 +2536,75 @@ None is a designed deferral, and none has a row of its own — recorded together
 because **a missing row is worse than a ✗**: a ✗ has been looked at, and an
 absence has not.
 
-**Three lines left this list on 2026-09-17, and the first row is narrower than
-it was**, which is the part worth reading twice. It said *a method or accessor
-in an object literal*; re-probing each line rather than trusting it found that
-the **accessor passes at either scope and the method passes inside a function**
-— `examples/a-method-on-an-object-literal` writes its literals in a function,
-which is the shape that landed, and a module-scope `const o = { twice() { … } }`
-still refuses. A row that names a construct when the truth is a construct *in
-one position* sends the next reader to build something that already works.
+**Four lines left this list on 2026-09-17, and the way the last one left is the
+part worth reading twice.** The row said *a method or accessor in an object
+literal*. Re-probing each line rather than trusting it found that the accessor
+passed at either scope and the method passed **inside a function** — so what
+actually refused was a module-scope `const o = { twice() { … } }`, a construct
+*in one position*, and the row as written sent a reader to build something that
+already worked. Narrowing it was what made the next question askable, and the
+answer was that nothing was missing at all: see below.
+
+#### An object literal holding code, at module scope (fixed)
+
+`const o = { twice() { … } }` outside a function was refused as **a method on an
+object literal**, and the binding after it as *a module-scope variable whose
+initializer is not constant*. The same literal inside a function lowered, ran,
+and agreed with node.
+
+**Nothing had to be built, and the guard's own comment said why it existed:**
+
+> Code, rather than data this file happens not to use. Reported here because
+> nothing downstream will: the methods of an object literal are not walked, so
+> they are not lowered and not refused.
+
+That was true when it was written and stopped being true when a literal's
+members were walked. A module-scope binding whose initializer is not constant is
+deferred to `module#init` and built there — which a literal with a *non-constant
+field* has always done, `{ v: seed() }` compiling and running throughout — and a
+literal holding a method is the same deferral carrying the same kind of value.
+Deleting the guard is the whole change. An arrow, `{ twice: (n) => n * 2 }`, was
+the second half of it and lowers too.
+
+**A refusal whose reason has expired does not fail; it just keeps refusing.**
+Nothing in the tree connects a guard to the sentence that justifies it, so the
+only thing that finds one is re-probing a claim you already believe. This one
+was found by reading the ledger's own list back against the compiler.
+
+##### And behind it, a wrong answer with no diagnostic
+
+Clearing it published a defect that predates it and is worth more than the
+feature. Two object literals of the **identical shape** —
+
+```ts
+const a = { which(): number { return 1 } }
+const b = { which(): number { return 2 } }
+```
+
+— produce one layout, correctly: a layout is a *representation*, and identical
+shapes deliberately share one. The name a member was emitted under came from
+that layout, so one `Type4#which` was defined, both call sites called it, and
+`b.which()` returned **1**. On C, on LLVM and on the JVM, with no diagnostic
+anywhere, on the shipping compiler, inside a function — nothing to do with
+module scope.
+
+`examples/a-method-on-an-object-literal` has covered "two literals declaring the
+same member name" since it was written, and could not catch this: **its two
+literals declare different fields**, so they are different types, different
+layouts and different functions. The case it was written for was the name
+collision; the case that was broken was the name *agreement*.
+
+The fix is one sentence: a name for dispatch is not a representation. Every
+anonymous object type that declares an implemented member now carries its own
+`hierarchy.name`, which is the identity the checker already gave each literal
+separately, and `class_name_for` reads the hierarchy before the layout. The
+layouts still merge, because sharing storage was never the bug.
+
+`examples/an-object-literal-at-module-scope` is 5 exports over methods, arrows,
+both in one literal, an accessor beside a method, and two identical literals —
+**11 refusals** on the pre-change binary. `a-method-on-an-object-literal` gained
+`identicalShapeTwice`, which **disagrees with node on 28 cases** on that same
+binary and agrees on all three backends now.
 
 #### A class expression (fixed)
 
