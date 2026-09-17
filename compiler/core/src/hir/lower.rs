@@ -21799,15 +21799,31 @@ impl<'a> FuncBuilder<'a> {
                 //
                 // Decided **before** lowering rather than at the coercion below,
                 // because the three destinations a `return` can have want three
-                // different types. A callback return hands the value to an
-                // iteration's accumulator and an `async` settle hands it to a
-                // promise; only the plain path wants `self.returns`, and both of
-                // the others are knowable here. `Void` is excluded for the same
-                // reason the arm below drops the value entirely.
-                let want = (self.callback_returns.last().is_none()
-                    && self.async_result.is_none()
-                    && !matches!(self.returns, HirType::Void))
-                .then(|| self.returns.clone());
+                // different types, and two of them are knowable here.
+                //
+                // A **callback** return hands the value to an iteration's
+                // accumulator, whose type the loop decides and this cannot see,
+                // so that one is left alone.
+                //
+                // An **`async`** settle hands it to a promise, and the payload
+                // is written on `AsyncResult` for exactly the reason this needs
+                // it. That was excluded at first, which left `async function
+                // make(): Promise<P> { return { x: 1 } }` refusing — ``an
+                // anonymous type` where a `P` is wanted` for a literal that
+                // simply had not been told what it was, while the identical
+                // `return` in a synchronous function lowered. One fact, and the
+                // exclusion was mine.
+                //
+                // `Void` is excluded on both paths for the same reason the arm
+                // below drops the value entirely.
+                let want = if self.callback_returns.last().is_some() {
+                    None
+                } else if let Some(result) = &self.async_result {
+                    Some(result.payload.clone())
+                } else {
+                    Some(self.returns.clone())
+                }
+                .filter(|ty| !matches!(ty, HirType::Void));
                 let value = match (expression, &want) {
                     (Some(expression), Some(want)) => {
                         Some(self.lower_expecting(expression, want)?)
