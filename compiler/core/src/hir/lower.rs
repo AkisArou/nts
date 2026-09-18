@@ -26234,6 +26234,29 @@ impl<'a> FuncBuilder<'a> {
         {
             return self.lower_optional_element(id, *object, *index);
         }
+        // **An index link is a link, and this has to be asked before anything
+        // decides what kind of index it is.** `a?.p[i]` reads the element after
+        // the arms have merged, so the read happens on the absent path too --
+        // on C that aborts, and on the JVM an element of `undefined` is
+        // `undefined`, which a trailing `??` folds to the same answer the
+        // short-circuit would have given. Agreement by coincidence of the
+        // surrounding operator, on one backend.
+        //
+        // **It sat below `lower_string_index` and that left one shape out.** A
+        // *string* index -- `a?.label[1]` -- was intercepted there and never
+        // reached the question, so it was neither refused nor right: the
+        // compiled program **segfaults**, signal 11, on 9 of 29 cases, on every
+        // backend. Not a decline, not a wrong number, a crash, and it long
+        // predates the guard -- the guard simply never covered it, because the
+        // dispatch above it had already chosen a kind of index.
+        //
+        // So the chain question goes first. What kind of index it is only
+        // matters once it is established that the index runs at all.
+        if let Some(object) = self.children(id).first()
+            && self.ends_an_optional_chain(*object)
+        {
+            return Err(self.unsupported(id, "a link after an optional access"));
+        }
         if let Some(name) = self.enum_reverse_member(id)? {
             return Ok(name);
         }
@@ -26242,29 +26265,6 @@ impl<'a> FuncBuilder<'a> {
         }
         if let Some(read) = self.lower_string_index(id)? {
             return Ok(read);
-        }
-        // An index link is a link. `a?.p[i]` reads the element **after** the
-        // arms have merged, so the read happens on the absent path too -- and
-        // on C that aborts the program, `nts: refused: element of a non-array,
-        // which the lowering proved was an array`, for every input that takes
-        // the absent arm.
-        //
-        // This was nearly left out on a measurement that said the shape agreed
-        // with node on all three backends. It did not: the differential folds a
-        // decline into *skipped*, so `agreed on every case` is its last line
-        // while the line above it reads `17 case(s) the compiled program
-        // declined`. Reading only the verdict reported it as working, and the
-        // fixture written to pin it as working was hollow on two backends.
-        //
-        // The JVM is the one that answers, because an element of `undefined`
-        // there is `undefined` and a trailing `??` folds it to the same answer
-        // the short-circuit would have given -- agreement by coincidence of the
-        // surrounding operator, on one backend, which is what an instrument
-        // that cannot see a decline reports as a pass.
-        if let Some(object) = self.children(id).first()
-            && self.ends_an_optional_chain(*object)
-        {
-            return Err(self.unsupported(id, "a link after an optional access"));
         }
         let (array, index) = self.element_access_parts(id)?;
         self.element_of(id, array, index)

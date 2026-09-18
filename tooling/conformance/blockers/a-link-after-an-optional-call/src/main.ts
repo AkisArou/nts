@@ -20,10 +20,33 @@
 //     a?.p[i].q      5 of 29 cases disagree
 //     a?.p[i]        C aborts on every absent input; the JVM answers
 //     a?.m()[i]      the same
+//     a?.s[i]        **segfault**, signal 11, on every backend
 //
-// `ends_an_optional_chain` now answers for all six, asked from the property,
+// `ends_an_optional_chain` now answers for all seven, asked from the property,
 // call and index link sites, and recursing through a chain's base rather than
 // testing the node in front of it.
+//
+// # Lowering them, and why that is not here yet
+//
+// The design is known and was built far enough to be measured:
+// `optional_chain_base` finds the **innermost** link, and one test is built
+// there with the rest of the expression re-lowered *inside the present arm*,
+// that link standing for the narrowed receiver. The narrowed links have to be a
+// **stack** rather than one slot -- a two-link chain overwrote a single slot,
+// the first link stopped standing for anything, lowering it branched again, and
+// `outer?.inner?.items[0]` ended in `fatal runtime error: stack overflow`.
+//
+// That version passed every shape here on C and on the JVM, side-effecting
+// arguments included. It is not landed because of what it does on **LLVM**: the
+// element access inside the arm takes the *whole chain's* type, which is
+// `T | undefined`, so a read that is `array.get unchecked` in the equivalent
+// unchained program becomes `erase` plus `nts_array_element`, and 17 of 29
+// cases then decline under LLVM while agreeing under C and the JVM.
+//
+// The pessimisation is the real objection and the divergence is its symptom: a
+// link inside the present arm should be typed by *its own* result, not by the
+// type of the chain that may short-circuit around it. Whoever takes this should
+// start there rather than from the backend.
 //
 // # The fourth was found by a fixture, not by the matrix
 //
@@ -103,4 +126,20 @@ export function indexAfterAnOptionalProperty(n: number): number {
 export function indexAfterAnOptionalCall(n: number): number {
   const a: number[] | undefined = n > 0 ? [n, n + 1, n + 2] : undefined;
   return a?.slice(1)[0] ?? -1;
+}
+
+// The seventh, and the worst of them: a **string** index after an optional
+// link. It was not merely unrefused -- the compiled program **segfaults**,
+// signal 11, on 9 of 29 cases, on C and LLVM and the JVM alike. Not a decline,
+// not a wrong number, a crash.
+//
+// It escaped the guard for a structural reason worth keeping: the guard sat
+// *below* `lower_string_index`, so the dispatch had already decided what kind
+// of index this was before anything asked whether the index runs at all. The
+// six above are property and call links, which are dispatched later, so the
+// same guard covered them and missed this one. The chain question now goes
+// first.
+export function stringIndexAfterAnOptionalLink(n: number): number {
+  const o: { label: string } | undefined = n > 0 ? { label: "abcd" } : undefined;
+  return (o?.label[1] ?? "-").charCodeAt(0);
 }
