@@ -1538,7 +1538,14 @@ test262() {
   # The fourth -- whether a classification is *wrong* -- needs a census artifact
   # and runs in both directions: an `inapplicable` that lowers, and a
   # `supported` whose files all refuse. It is advisory and is not this step.
-  node tooling/census/audit.mjs || return 1
+  # **`test/language`, not just its `expressions` subtree.** The conformance lane
+  # measured one directory, and widening the population is the whole point of the
+  # current plan -- but the audit's `complete` question fails on a feature in the
+  # selection with no row, so the classifications have to arrive first or the
+  # gate goes red on a change that touched no compiler code. Fifteen were added
+  # on 2026-09-18 for exactly this, each probed against node rather than
+  # classified from its name.
+  node tooling/census/audit.mjs --under test/language || return 1
 }
 
 step "build"   cargo build --release
