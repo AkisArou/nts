@@ -232,6 +232,19 @@ function classify(result) {
     if (asFooter) footer = { functions: Number(asFooter[1]), refused: Number(asFooter[2] ?? 0) };
   }
   if (result.error?.signal === "SIGTERM") return { bucket: "timeout", ts, nts, footer };
+  // **A frontend panic is not a compiler refusal and must not be counted as
+  // one.** Found on the first full run: 18 files in slice 1 crash `tsgo` with
+  //
+  //   panic: Debug failure. False expression: Trying to get the type of
+  //   `import.defer` in `import.defer(...)`
+  //
+  // out of `getSymbolsAtLocations`. That is a defect in the vendored
+  // typescript-go, not a gap in this compiler, and folding it into either the
+  // refusal ranking or the typecheck column would attribute an upstream crash
+  // to the lowering.
+  if (result.out.includes("frontend transport failed") || result.out.includes("panic: ")) {
+    return { bucket: "frontend-crash", ts, nts, footer };
+  }
   if (result.out.includes("invalid HIR:")) return { bucket: "invalid-hir", ts, nts, footer };
   if (ts.length > 0) return { bucket: `ts:${ts[0].code}`, ts, nts, footer };
   if (nts.length > 0) return { bucket: "unsupported", ts, nts, footer };
@@ -286,6 +299,14 @@ const firstRefusal = new Map();
 const tsCodes = new Map();
 let unparsed = 0;
 let compared = 0;
+/**
+ * Files the reader could not classify, by name.
+ *
+ * A count alone is unactionable, and this bucket is where a reader bug hides:
+ * the five-digit `TS18050` sat here as seven files before anyone looked. Naming
+ * them is what turns "0.7% unexplained" into a list somebody can open.
+ */
+const unclassified = [];
 
 const bump = (map, key) => map.set(key, (map.get(key) ?? 0) + 1);
 
@@ -297,6 +318,7 @@ for (const record of planned) {
   const source = `"use strict";\n${HARNESS}${readFileSync(join(SUITE, record.path), "utf8")}`;
   const outcome = classify(compile(dir, source));
   compared += 1;
+  if (outcome.bucket === "infrastructure-error") unclassified.push(record.path);
   if (outcome.bucket === "infrastructure-error" && process.env.NTS_CENSUS_EXPLAIN) {
     console.error(`--- ${record.path} ---`);
     console.error(JSON.stringify({ footer: outcome.footer, ts: outcome.ts.length, nts: outcome.nts.length }));
@@ -326,6 +348,7 @@ const report = {
   ts_codes: Object.fromEntries([...tsCodes].sort((a, b) => b[1] - a[1])),
   first_refusal: Object.fromEntries(ranked),
   unparsed,
+  unclassified,
 };
 
 if (asJson) {
@@ -344,6 +367,11 @@ if (asJson) {
     for (const [message, count] of ranked.slice(0, 20)) {
       console.log(`    ${String(count).padStart(6)}  ${message.slice(0, 96)}`);
     }
+  }
+  if (unclassified.length > 0) {
+    console.log(`  ${unclassified.length} file(s) the reader could not classify:`);
+    for (const path of unclassified.slice(0, 10)) console.log(`    ${path}`);
+    if (unclassified.length > 10) console.log(`    ... and ${unclassified.length - 10} more`);
   }
   if (unparsed > 0) {
     console.log(`  ${unparsed} file(s) whose diagnostics did not reconcile with the compiler's own count`);
