@@ -30,7 +30,8 @@ node tooling/census/test262.mjs --selection selection.jsonl --slice1
 Suite pinned at `14e8c908e54ae2e770e473bcacf536f8cb654929`. Two runs over one
 checkout produced identical bucket counts.
 
-**Slice 1** is the 2,527 files that are scheduled for the strict lane, carry no
+The **full strict lane** is the 10,445 scheduled files; **slice 1** is the
+2,527 files that are scheduled for the strict lane, carry no
 harness `includes:`, contain no `function` or `=>` token, and are not negative
 tests. No unannotated parameter means no implicit `any`, so a refusal here is a
 lowering gap rather than the typecheck wall — which is what makes this slice
@@ -38,12 +39,19 @@ worth running before `NeedsRepresentation` exists.
 
 ## Outcomes
 
-| | files | |
-| --- | ---: | --- |
-| `lowers` | 481 | accepted — **not** verified correct |
-| `unsupported` | 425 | a lowering refusal; **this is the census** |
-| TypeScript error | 1,603 | across **65** codes, before lowering is reached |
-| `frontend-crash` | 18 | a `tsgo` panic, not a gap of ours |
+| | full lane | slice 1 | |
+| --- | ---: | ---: | --- |
+| files | 10,445 | 2,527 | |
+| `lowers` | 500 | 481 | accepted — **not** verified correct |
+| `unsupported` | 936 | 425 | a lowering refusal; **this is the census** |
+| TypeScript error | 8,875 | 1,603 | 107 / 65 codes, before lowering is reached |
+| `frontend-crash` | 134 | 18 | a `tsgo` panic, not a gap of ours |
+| distinct first refusals | **49** | 37 | |
+
+Slice 1 is the better instrument for the language: it is the slice with no
+unannotated parameters, so almost everything that reaches lowering reaches it
+for a reason about the code rather than about `any`. The full lane is 85%
+TypeScript errors.
 
 The TypeScript column is the larger half and is not a defect list: Test262 tests
 coercion on purpose, and a typed language rejects much of it statically. The
@@ -97,19 +105,37 @@ tests, so a positive test should not legitimately read a name before binding,
 which makes an over-eager refusal the more likely reading — but that has not
 been established and is not claimed here.
 
-## An upstream crash, found on the first full run
+## Two upstream crashes, found by running the corpus
 
-18 files panic the vendored TypeScript frontend:
+134 files panic the vendored TypeScript frontend, in two distinct families.
+Neither is a gap here, and they have their own bucket so they cannot be folded
+into the refusal ranking or the typecheck column.
+
+**130 files**, all `dynamic-import/**/*import-defer*`, out of
+`getSymbolsAtLocations`:
 
 ```
 panic: Debug failure. False expression:
   Trying to get the type of `import.defer` in `import.defer(...)`
 ```
 
-out of `getSymbolsAtLocations`. Every one is
-`dynamic-import/syntax/valid/*import-defer*`. That is a defect in
-`third_party/typescript-go`, not a gap here, and it has its own bucket so it
-cannot be folded into either the refusal ranking or the typecheck column.
+**4 files**, `assignment/dstr/*nested-array*`, out of `getTypeArguments` — and
+this one is on ordinary code rather than a stage-3 proposal:
+
+```
+panic: interface conversion:
+  checker.TypeData is *checker.TypeReference, not *checker.TupleType
+```
+
+Minimised to two lines:
+
+```ts
+let x: number;
+[[x]] = [[]];        // panics;  [[x]] = [[1]] does not
+```
+
+Nested array destructuring assignment against an **empty** nested array
+literal. A flat `[x] = [1]` is fine, and so is a non-empty `[[x]] = [[1]]`.
 
 ## What this census cannot see
 
@@ -155,3 +181,22 @@ background job rather than a gate step. What *is* gated is cheap and has no
 compiler dependency: the pin being reachable, and
 `tooling/census/audit.mjs`'s three static questions over the feature
 classifications.
+
+## The classification check, and what it is worth
+
+`tooling/census/audit.mjs --rows` joins the census against `features.json` and
+reports a classification the corpus contradicts. Its first run over the full
+lane flagged three, and **all three were artefacts of its own denominator**: it
+counted files that *declare* a feature rather than files that *reached
+lowering*, so `class-static-fields-private` read as "0 of 171 lower" when 102 of
+those are `TS7008` and never got that far.
+
+Corrected to the honest denominator, one survives — and it is still not a
+finding. Those 7 files refuse with *"a static field of an anonymous class"*,
+which is a different gap; a private static field lowers perfectly well, checked
+against three controls.
+
+So the check now prints **what the files refuse with** beside the flag, because
+that single line is what refutes it. It is a pointer to something worth reading,
+not a verdict: the compiler reports one blocker at a time, so a refusal in a
+file declaring feature A very often names feature B.

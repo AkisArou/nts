@@ -91,6 +91,8 @@ if (!existsSync(REGISTRY)) {
 const map = JSON.parse(readFileSync(MAP, "utf8"));
 const rows = map.features ?? {};
 const CLASSES = new Set(["inapplicable", "gap", "supported", "host"]);
+/** Files that reached lowering, below which "none lower" is not evidence. */
+const REACHED_ENOUGH = 5;
 
 // The registry is `name` per line, with `#` comments -- whole-line *and
 // trailing*, which is what the first version of this missed. Several entries
@@ -203,26 +205,56 @@ if (rowsFile) {
   const tally = new Map();
   for (const row of census) {
     for (const feature of row.features ?? []) {
-      const at = tally.get(feature) ?? { lowered: 0, refused: 0, total: 0 };
+      const at = tally.get(feature) ?? { lowered: 0, refused: 0, total: 0, why: new Map() };
       at.total += 1;
       if (row.bucket === "lowers") at.lowered += 1;
-      if (row.bucket === "unsupported") at.refused += 1;
+      if (row.bucket === "unsupported") {
+        at.refused += 1;
+        // **What they refuse with, not merely that they do.** The compiler
+        // reports one blocker at a time, so a refusal in a file declaring
+        // feature A very often names feature B -- and without the text a reader
+        // cannot tell the two apart. On the first real run this flagged
+        // `class-static-fields-private`, and all seven files refused with
+        // *"a static field of an anonymous class"*, which is a different gap.
+        // Four probes were spent refuting a flag that one line of output
+        // answers.
+        at.why.set(row.first, (at.why.get(row.first) ?? 0) + 1);
+      }
       tally.set(feature, at);
     }
   }
   for (const [name, at] of tally) {
     const row = rows[name];
     if (!row) continue;
+    // The other direction needs no threshold: one §13 non-goal that compiles is
+    // already a statement about the classification, however many files decline.
     if (row.class === "inapplicable" && at.lowered > 0) {
       contradictions.push(
         `${name}: classified inapplicable (${row.reason}) and ${at.lowered} of ${at.total} file(s) LOWER ` +
           "-- a §13 non-goal that compiles is a classification, not a principle",
       );
     }
-    if (row.class === "supported" && at.lowered === 0 && at.refused > 0) {
+    // **The denominator is the files that reached lowering, not the files that
+    // declare the feature.** The first version used `at.total` and reported
+    // three contradictions on its first real run, all of them artefacts:
+    // `class-static-fields-private` read as "0 of 171 lower", and 102 of those
+    // 171 are `TS7008` -- they never reached lowering, so they say nothing
+    // about whether the feature lowers. A count whose unit is misread is worse
+    // than no count, because it arrives looking like a finding.
+    //
+    // `REACHED_ENOUGH` because 0 of 1 is not evidence. `let` and
+    // `class-static-fields-public` had 1 and 2 measurable files and both
+    // dropped out; `class-static-fields-private` has 7 and stays, which is a
+    // signal worth a person reading rather than a number worth acting on.
+    const reached = at.lowered + at.refused;
+    if (row.class === "supported" && at.lowered === 0 && reached >= REACHED_ENOUGH) {
+      const why = [...at.why.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([message, count]) => `${count}x ${String(message).slice(0, 72)}`)
+        .join("; ");
       contradictions.push(
-        `${name}: classified supported and 0 of ${at.total} file(s) lower, ${at.refused} refuse ` +
-          "-- check the ledger row before trusting it",
+        `${name}: classified supported and 0 of the ${reached} file(s) that reached lowering do ` +
+          `(${at.total} declare it; the rest never typechecked)\n      they refuse with: ${why}`,
       );
     }
   }
