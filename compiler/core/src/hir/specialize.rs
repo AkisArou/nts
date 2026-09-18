@@ -1000,8 +1000,34 @@ fn reconcile_fixed_results<S: std::hash::BuildHasher>(
             });
         }
 
+        // **`Convert` is a numeric conversion, and an erasure is not one.**
+        // This bridged every disagreement with it, so a call whose declared
+        // result is a `double` reaching readers that expect an erased value
+        // emitted `v22 = (NtsValue)v10` -- *used type 'NtsValue' where
+        // arithmetic or pointer type is required*, from clang, on a program
+        // every pass before it called well typed.
+        //
+        // `o?.m()` is the shape: the optional call's merge parameter is erased
+        // because one arm is `undefined`, lowering types the call erased to
+        // match, and this pass then narrows it to what `m` actually declares --
+        // leaving an `f64` where the merge edge wants an `NtsValue`. An
+        // ordinary optional method call on a class, wrong on C for as long as
+        // this pass has narrowed returns.
+        //
+        // The two erasure directions are named rather than folded in with the
+        // numeric one, because they are different operations on different
+        // representations and only `Convert` is a cast.
+        let kind = match (&declared, &produced) {
+            (concrete, HirType::Erased) if *concrete != HirType::Erased => {
+                OpKind::Erase { value: call }
+            },
+            (HirType::Erased, concrete) if *concrete != HirType::Erased => {
+                OpKind::Unerase { value: call }
+            },
+            _ => OpKind::Convert(call),
+        };
         func.values.push(Op {
-            kind: OpKind::Convert(call),
+            kind,
             ty: produced,
             origin,
         });
