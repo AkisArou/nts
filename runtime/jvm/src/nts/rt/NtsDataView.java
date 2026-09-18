@@ -70,7 +70,28 @@ public final class NtsDataView extends NtsAnyView {
     }
 
     private static int length(NtsDataView view) {
-        if (view.declared >= 0) { return view.declared; }
+        if (view.declared >= 0) {
+            // **The same staleness as `NtsView.count`, and node answers it
+            // differently -- which is the half that symmetry would get wrong.**
+            //
+            // An out-of-bounds *typed array* has length 0. An out-of-bounds
+            // fixed `DataView` **throws a `TypeError`**; checked in node rather
+            // than assumed, on one buffer with both views over it:
+            //
+            //     shrunk: typedArray.length 0, dataView threw TypeError
+            //
+            // No throw here reaches a handler, so this declines by name.
+            // Answering 0 would disagree with node just as surely as the stale
+            // length did, and silently.
+            long end = (long) view.offset + (long) view.declared;
+            if (end > view.buffer.length) {
+                throw new NtsRefusal(
+                    "a TypeError: this DataView covers bytes " + view.offset + " to " + end
+                    + " and its buffer was resized to " + view.buffer.length
+                    + " -- an out-of-bounds DataView throws on every access");
+            }
+            return view.declared;
+        }
         int rest = view.buffer.length - view.offset;
         return rest < 0 ? 0 : rest;
     }

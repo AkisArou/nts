@@ -259,7 +259,35 @@ public abstract class NtsView extends NtsAnyView {
 
     static int count(NtsView view) {
         if (view.buffer.bytes == null) { return 0; }
-        if (view.declared >= 0) { return view.declared; }
+        if (view.declared >= 0) {
+            // **A fixed view over a resizable buffer is a test, not a latch.**
+            //
+            // This returned `declared` unconditionally, so `tracks.length` was
+            // right -- it takes the branch below -- and
+            // `tracks.subarray(0, 2).length` was not. Node's rule, measured
+            // component by component rather than inferred from a total: a fixed
+            // view is out of bounds when `byteOffset + length * width` exceeds
+            // the buffer, and an out-of-bounds view has length 0.
+            //
+            // Computed on every read because the buffer can grow back:
+            //
+            //     buffer 4 -> 0    tracks 0    cut 0    offsetCut 0
+            //     buffer 0 -> 8    tracks 8    cut 2    offsetCut 2
+            //     buffer 8 -> 3    tracks 3    cut 2    offsetCut 0
+            //
+            // `cut` goes 2, 0, 2 -- anything that recorded the answer at
+            // `resize` gets the third row wrong. And `offsetCut` at offset 2
+            // needs 4 bytes where `cut` needs 2, which is what the 3-byte row
+            // separates: testing `length` and forgetting `byteOffset` passes on
+            // `cut` alone.
+            //
+            // `long` on the sum and the shift for the reason `offsetOf` below
+            // states: a large offset plus a large count overflows `int` and
+            // wraps to a valid-looking small number, which is a bounds test
+            // that passes for a view that is out of bounds.
+            long end = (long) view.offset + ((long) view.declared << view.shift);
+            return end > view.buffer.length ? 0 : view.declared;
+        }
         int rest = view.buffer.length - view.offset;
         return rest <= 0 ? 0 : rest >> view.shift;
     }
