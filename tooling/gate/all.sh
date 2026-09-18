@@ -783,6 +783,16 @@ backend_examples() {
   # are ratcheting, which is a different instrument and still the right one
   # there.
   exact=${3:-}
+  # **A ceiling, because a count an instrument prints every run and nobody
+  # reads stops being a question.** That is this file saying so about itself:
+  # the `bare` comment records a figure that "had read `Six` since before
+  # anyone counted", printed on every run and never expanded. A number with no
+  # ratchet is a number with no reader.
+  #
+  # It is a *ceiling* rather than a floor because the right direction is down.
+  # Deterministic across runs, checked twice on two backends before it was
+  # written here.
+  ceiling=${4:-}
 
   # **A count from this glob is a fact about the working tree, not about a
   # commit.** `ls examples/*/tsconfig.json` sees another session's *untracked*
@@ -847,7 +857,37 @@ backend_examples() {
         # the floor is quoted as "equal to the corpus".
         echo "bare $n"
       else
-        echo "ok $n"
+        # **Compared *less* is the same defect as compared *nothing*, and this
+        # `if` had a case for one of them.** `bare` exists because somebody saw
+        # that an example comparing no cases must not read as agreement. The
+        # question it stops one short of is an example comparing *some*: it
+        # exits 0, never prints `nothing to check`, and landed in `ok`.
+        #
+        # So `253 of 253 agree` was true of a predicate meaning "exited 0 and
+        # compared at least one case". `examples/optional-access` satisfies it
+        # while comparing **97 of 261** through LLVM, and has since before any
+        # of this weeks changes.
+        #
+        # The differential prints the count on the line above its verdict --
+        # `17 case(s) the compiled program declined` -- and folds a decline into
+        # *skipped*, never into *disagreed*, so the verdict line alone cannot
+        # tell a full comparison from a tenth of one. Reading only that line
+        # reported three hollow passes in one night, one of them in a fixture
+        # written to guard against exactly this.
+        #
+        # Counted as passing, because a decline is often the designed answer --
+        # `x!` where `x` is `undefined` aborts here and node answers `undefined`,
+        # which is a ledger row of its own. What it must not be is *silent*, so
+        # it gets its own outcome and its own ceiling.
+        case "$out" in
+          *"the compiled program declined"*)
+            why=$(printf "%s" "$out" |
+                  awk "/case\(s\) the compiled program declined/{d=\$1}
+                       /checked [0-9]+ of [0-9]+ case/{for(i=1;i<=NF;i++) if(\$i==\"checked\"){c=\$(i+1); o=\$(i+3)}}
+                       END{printf \"%s declined, %s of %s compared\", d+0, c+0, o+0}")
+            printf "partial %s\t%s\n" "$n" "$why" ;;
+          *) echo "ok $n" ;;
+        esac
       fi
       exit 0
     fi
@@ -894,13 +934,21 @@ backend_examples() {
         ;;
     esac
   ' _ > "$results"
-  passed=$(grep -c '^ok ' "$results" || true)
+  # `partial` is a pass -- see the classifier -- so it belongs in `passed`,
+  # which keeps every floor in this file meaning what it meant before.
+  passed=$(grep -c -e '^ok ' -e '^partial ' "$results" || true)
+  partial=$(grep -c '^partial ' "$results" || true)
   bare=$(grep -c '^bare ' "$results" || true)
   unmeasured=$(grep -c '^unmeasured ' "$results" || true)
   total=$((passed + $(grep -c '^no ' "$results" || true)))
   behind=$(awk '/^no /{printf " %s", $2}' "$results")
   printf '  %s of %s examples agree with node %s\n' "$passed" "$total" "$said"
   [ "$bare" -gt 0 ] && printf '  %s compared nothing\n' "$bare"
+  if [ "$partial" -gt 0 ]; then
+    printf '  %s compared only part of their cases:\n' "$partial"
+    awk -F'\t' '/^partial /{ sub(/^partial /, "", $1); printf "    %-40s %s\n", $1, $2 }' \
+      "$results"
+  fi
   if [ "$unmeasured" -gt 0 ]; then
     # **Not counted against the floor, and the step fails anyway.** A case that
     # could not be run is not evidence in either direction, and scoring it as a
@@ -949,6 +997,14 @@ backend_examples() {
   # run.** A number is only ready when the fixture that produces it is
   # committed, which is why this message says what the run saw rather than
   # editing anything itself.
+  if [ -n "$ceiling" ] && [ "$partial" -gt "$ceiling" ]; then
+    echo "  ^ $partial example(s) compared only part of their cases, ceiling is $ceiling" >&2
+    echo "    An example that stops comparing some of its cases still prints" >&2
+    echo "    \`agreed on every case\`, so this is the only place it is visible." >&2
+    return 1
+  fi
+  [ -n "$ceiling" ] && [ "$partial" -lt "$ceiling" ] &&
+    printf '  ^ lower the partial ceiling in tooling/gate/all.sh to %s\n' "$partial"
   [ "$passed" -gt "$floor" ] && printf '  ^ raise the floor in tooling/gate/all.sh to %s\n' "$passed"
   return 0
 }
@@ -971,7 +1027,7 @@ backend_examples() {
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # 197 through 202 on 2026-09-13. One below its sibling, and the one is named:
   # `this-in-a-field-initializer`, which the run prints rather than absorbing.
-  backend_examples 252 "through the LLVM backend, counting" ); }
+  backend_examples 252 "through the LLVM backend, counting" "" 14 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -992,7 +1048,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # not flattening -- an example this backend does not yet agree on should lower
 # the number it can hold, not fail the step the day it lands.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 253 "through the LLVM backend" ); }
+  backend_examples 253 "through the LLVM backend" "" 14 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1252,7 +1308,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   status=$?
   printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
   [ "$status" -eq 0 ] || return 1
-  backend_examples 253 "through the JVM backend" exact ); }
+  backend_examples 253 "through the JVM backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
