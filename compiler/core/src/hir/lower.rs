@@ -29180,6 +29180,37 @@ impl<'a> FuncBuilder<'a> {
             {
                 continue;
             }
+            // **`var v;` after `v = 2` must leave `v` alone.** A `var` binding
+            // belongs to the function, not to the statement that spells it, so
+            // a declaration with no initializer is not a point at which
+            // anything happens -- the language evaluates nothing there. This
+            // bound `unwritten`'s zero over whatever had already been written:
+            //
+            //     function f() { v = 2; var v: number; return v; }
+            //     // node: 2.  this compiler, until the fix: 0
+            //
+            // Silently, with no diagnostic. It is the same shape as the
+            // module-scope redeclaration defect and the same reason -- a
+            // declaration treated as the moment the storage comes into
+            // existence, when for `var` the storage was already there.
+            //
+            // `let` and `const` keep the placeholder, and must. Their binding
+            // *begins* at the declaration and the checker has already proved
+            // nothing read it earlier, so there is no earlier value to
+            // preserve. The kind defaults to `Let` when the list cannot be
+            // found, which is the arm that changes nothing.
+            let declared_kind = self
+                .ancestor(declaration, syntax::VARIABLE_DECLARATION_LIST)
+                .map_or(nts_semantic_schema::VariableKind::Let, |list| {
+                    nts_semantic_schema::VariableKind::from_flags(self.node(list).flags)
+                });
+            if initializer.is_none()
+                && declared_kind == nts_semantic_schema::VariableKind::Var
+                && let Some(symbol) = self.node(name).symbol
+                && self.bindings.contains_key(&symbol.0)
+            {
+                continue;
+            }
             // An empty array literal has type `never[]`: with no elements the
             // checker has nothing to infer from. The declaration does know —
             // `const out: number[] = []` says so — so the annotation supplies
