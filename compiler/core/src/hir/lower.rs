@@ -13719,9 +13719,17 @@ impl<'a> FuncBuilder<'a> {
         // the update. `for (let i = 0; i < n; i++)` then runs forever, and the
         // only thing that catches it is the SSA verifier noticing that the exit
         // reads a value the body defined.
-        // A global is skipped here rather than at each of the seven call
-        // sites, because "which names does this loop carry" is one question and
-        // it was being answered in one place already.
+        // **Globals are not filtered here**, despite what this comment said
+        // until 2026-09-18. They are filtered by the *consumers* --
+        // `begin_loop` and `lower_switch` -- and deliberately: a `for (let i =
+        // 0; ...)` head at module scope is picked up by `collect_module_scope`
+        // as a module binding, so filtering it here stopped `i` being carried
+        // and the loop never advanced. By the time a consumer runs, the head has
+        // been lowered and `i` has a binding, which is the question that
+        // actually distinguishes them.
+        //
+        // The claim cost a panic: `lower_switch` was written trusting it and
+        // indexed the binding table directly.
         //
         // Before this, a loop assigning a module-scope binding was refused --
         // "a loop assigning a name declared outside it" -- because `begin_loop`
@@ -13887,6 +13895,32 @@ impl<'a> FuncBuilder<'a> {
             self.declared_symbols(*clause, &mut declared);
         }
         carried.retain(|symbol| !declared.contains(symbol));
+        // **A global is memory and carries nothing**, the same rule `begin_loop`
+        // applies to a loop's carried set and for the same reason: a global is
+        // read with `GlobalGet` and written with `GlobalSet`, so a clause that
+        // assigns one needs no block parameter — the next reader reads the slot.
+        //
+        // Without this, `carried_now` looked the symbol up in the binding table
+        // and **panicked**: `no entry found for key`, from
+        //
+        //     let r = 0;
+        //     switch (k) { case 1: r = 1; break; default: r = 9; }
+        //
+        // at module scope. `emit-c` died rather than refusing, so there was no
+        // diagnostic, no artifact, and an instrument reading the exit status saw
+        // a build failure with nothing naming the construct.
+        //
+        // A symbol that is neither bound nor a global is refused by name rather
+        // than indexed, which is what `begin_loop` does one line further on. The
+        // panic is the only thing that was ever wrong here.
+        let unbound = carried
+            .iter()
+            .find(|symbol| !self.bindings.contains_key(symbol) && !self.is_a_global(**symbol))
+            .copied();
+        if unbound.is_some() {
+            return Err(self.unsupported(id, "a `switch` assigning a name declared outside it"));
+        }
+        carried.retain(|symbol| self.bindings.contains_key(symbol));
 
         let subject = self.lower_expression(discriminant)?;
 

@@ -57,6 +57,16 @@ nmsg=$(grep -o "message: '[^']*'" "$D/node.txt" | head -1 | cut -d"'" -f2)
 rm -rf "$D/out"
 NTS_NO_SNAPSHOT_CACHE=1 "${NTS_BIN:-./target/release/nts}" emit-c "$D/tsconfig.json" \
   --out "$D/out" --main >/dev/null 2>"$D/r.txt" || true
+# **The compiler crashing is its own outcome.** It was reported as `C DID NOT
+# COMPILE` -- the output directory is simply absent, and `cc` fails the same way
+# for a missing file as for a bad one, so "the compiler did not survive" and "the
+# C is wrong" arrived as one line. A module-scope `switch` assigning a global
+# panicked `lower_switch` and read as a toolchain problem.
+if grep -q "^thread '.*panicked at" "$D/r.txt"; then
+  printf '  %-34s node=%s  COMPILER PANIC %s\n' "$label" "$ns" \
+    "$(grep -m1 -A1 "panicked at" "$D/r.txt" | tail -1 | cut -c1-30)"
+  exit 0
+fi
 # TypeScript first: a program the checker rejects says nothing about lowering.
 if grep -q '^TS[0-9]' "$D/r.txt"; then
   printf '  %-34s node=%s  TYPESCRIPT %s\n' "$label" "$ns" "$(grep -m1 -o '^TS[0-9]*' "$D/r.txt")"
@@ -70,6 +80,10 @@ if grep -q 'NTS100' "$D/r.txt"; then
 fi
 ( cd "$D/out" && cc -std=c11 -O2 -I. main.c program.c nts_runtime.c nts_uv_host.c -luv -lm \
   -o program ) 2>/dev/null || true
+if [ ! -f "$D/out/program.c" ]; then
+  printf '  %-34s node=%s  NO C WAS WRITTEN\n' "$label" "$ns"
+  exit 0
+fi
 if [ ! -x "$D/out/program" ]; then
   printf '  %-34s node=%s  C DID NOT COMPILE\n' "$label" "$ns"
   exit 0
