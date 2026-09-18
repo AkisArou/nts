@@ -7544,11 +7544,18 @@ fn representation_of(
         // evidence collection, provenance, polymorphic recovery and the trusted
         // boundaries, none of which is another arm in this match.
         //
-        // It is worth knowing that `any` arrives here wearing the *generic*
-        // refusal — the same sentence as every other unrepresentable type — so
-        // no census can rank it and no before/after can measure it. A diagnostic
-        // of its own is the first thing that work needs, before any of the
-        // analysis.
+        // **`any` is already countable, and this comment claimed otherwise until
+        // it was checked.** The refusals reaching here name the type in a
+        // parenthetical, because `describe` answers `"any"` for `TypeKind::Any`:
+        //
+        //     a parameter of unrepresentable type (any)
+        //     a property `p` of unrepresentable type (any)
+        //     a call result of unrepresentable type (any)
+        //
+        // So a census can rank it and a before/after can measure it. In the
+        // slice-1 test262 population that is 8 of the 413 files that reach
+        // lowering, all of them the property form. No new diagnostic is needed
+        // before the analysis, which is what the plan for this work assumed.
         _ => return None,
     })
 }

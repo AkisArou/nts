@@ -18,8 +18,21 @@ erasure that was never needed. See "It does now" below.
 `any` is not started. `NeedsRepresentation` — the mechanism this document, the
 RFC and the README all name — has no occurrences in the compiler: no stub, no
 TODO, no disabled pass. `representation_of` has no `TypeKind::Any` arm, so `any`
-falls to the generic "unrepresentable type" refusal and is not even separately
-countable from a diagnostic.
+falls through to the "unrepresentable type" refusal.
+
+It is nonetheless **already countable**, which this paragraph denied until it
+was checked on 2026-09-18. The refusals name the type in a parenthetical,
+because `describe` answers `"any"` for `TypeKind::Any`:
+
+```text
+a parameter of unrepresentable type (any)
+a property `p` of unrepresentable type (any)
+a call result of unrepresentable type (any)
+```
+
+So a census can rank `any` and a before/after can measure it today. In the
+slice-1 test262 population it is 8 of the 413 files that reach lowering, all of
+them the property form. No new diagnostic is needed before the analysis.
 
 This paragraph read "the current lowerer still refuses both `any` and
 `unknown`" while line 290 of this same file said otherwise.
