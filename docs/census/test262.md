@@ -181,15 +181,30 @@ files under `test/language/expressions`:
 2,019 + 486 + 18 + 4 = 2,527. The run prints that sum and says so when it does
 not reconcile.
 
-**Re-measured the same evening**, on `f07920ea6d20a7a4` — the same corpus and
-the same instrument, with four of that day's fixes in the compiler:
+**Re-measured twice the same evening**, same corpus and same instrument, on
+compilers carrying successively more of that day's fixes:
 
-| | before | after | |
-| --- | ---: | ---: | --- |
-| `strict-pass` | 486 | **527** | +41 |
-| `unsupported` | 2,019 | 1,979 | −40 |
-| `threw` | 4 | **3** | the underflow one |
-| `frontend-crash` | 18 | 18 | upstream, unchanged |
+| | `a780cf01` | `f07920ea` | `2b47cdae` |
+| --- | ---: | ---: | ---: |
+| `strict-pass` | 486 | 527 | **536** |
+| `unsupported` | 2,019 | 1,979 | 1,970 |
+| `threw` | 4 | 3 | 3 |
+| `frontend-crash` | 18 | 18 | 18 |
+
++41 then +9. The first step is the module-scope evolving-type fix (36 files by
+its own count, all compound assignment) plus the destructuring-default work; the
+second is completing that work for an **erased** element, which is the inferred
+shape and needed a second test for a present-but-`undefined` element.
+
+Three numbers from three binaries over one corpus, each with its own compiler
+fingerprint in the report. That is the only way a claim about a compiler moves
+rather than being restated — and the fingerprint is the bytes rather than the
+path, because `target/release/nts` is what everyone builds into.
+
+The last of those still predates that evening's final fixes — a module-scope
+`switch` and a labelled block, both of which **panicked** the compiler rather
+than refusing, and a class whose only static member is a block. None is in the
+536.
 
 The +41 is the module-scope evolving-type fix (36 files by its own count, all
 compound assignment) plus the destructuring-default work. Two numbers from two
