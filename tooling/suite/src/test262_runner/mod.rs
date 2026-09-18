@@ -8,6 +8,7 @@ mod metadata;
 mod model;
 mod report;
 mod schedule;
+mod select;
 mod verdict;
 
 pub use adapter::{ExecutionAdapter, ScriptedAdapter};
@@ -25,6 +26,7 @@ pub use model::{
 };
 pub use report::{ReportSummary, RunReport, SummaryCount};
 pub use schedule::schedule_strict_script;
+pub use select::{Selection, select};
 pub use verdict::judge_execution;
 
 /// The Test262 revision against which this protocol implementation is tested.
