@@ -2592,9 +2592,20 @@ fn collect_module_scope(
             .type_of(*name_node)
             .or_else(|| probe.evolved_type(*name_node))
         else {
+            // **Named, because a refusal that does not name its type cannot be
+            // counted by kind.** That is `describe_node`'s whole reason for
+            // existing, and this message predated it: 29 files of the slice-1
+            // `test/language` population carry it, and opening them showed most
+            // are `var x = new Boolean(true)` — the wrapper objects, which have
+            // a ✗ row of their own and 26 more files under *a `X` of
+            // unrepresentable type*. One cause, two messages, and only one of
+            // them said so.
             scope.unsupported.insert(
                 symbol.0,
-                "a module-scope variable of unrepresentable type".to_owned(),
+                format!(
+                    "a module-scope variable of unrepresentable type ({})",
+                    probe.describe_node(*name_node)
+                ),
             );
             continue;
         };
