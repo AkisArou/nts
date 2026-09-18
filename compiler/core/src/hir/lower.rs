@@ -2539,7 +2539,28 @@ fn collect_module_scope(
         // right for every pass and every backend at once.
         let declared = declared_literal(&probe, *name_node);
         let value = constant.or(declared).unwrap_or(0.0);
-        let Some(ty) = probe.type_of(*name_node) else {
+        // **`or_else(evolved_type)`, the way a local has always done it.**
+        // `var x;` with no annotation has no type *at the declaration* -- the
+        // checker fills it in from the assignments that follow, and every later
+        // mention of the name carries what it settled on. `evolved_type` reads
+        // one back, and the two sites in `lower_variable_statement` have asked
+        // it from the beginning. This one asked `type_of` alone, so the same
+        // declaration was an ordinary local inside a function and refused at
+        // module scope:
+        //
+        //     var x;
+        //     x = -1;
+        //     x += -1;   // fine in a function, refused at module scope
+        //
+        // Two derivations of one question, and the narrower one was here. It is
+        // 36 files of the 413 that reach lowering in the slice-1 test262
+        // population -- and they rank under *two* headings, because the read
+        // that follows the missing global refuses again as `reading a name
+        // before it is bound`, which is the cascade rather than the cause.
+        let Some(ty) = probe
+            .type_of(*name_node)
+            .or_else(|| probe.evolved_type(*name_node))
+        else {
             scope.unsupported.insert(
                 symbol.0,
                 "a module-scope variable of unrepresentable type".to_owned(),

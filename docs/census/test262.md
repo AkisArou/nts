@@ -96,14 +96,38 @@ elisions — `examples/a-hole-in-a-destructuring-pattern` — but every one of t
 is a **destructuring pattern** (`const [, second] = pair`), which is a different
 production. 18 files separate the two.
 
-**Reading a name before it is bound** is the temporal dead zone, and the ledger
-already has a ✅ row for it (line 619) — which says, in its own words, that
-*"no example and no blocker fixture mentions NTS1004, so this refusal is
-asserted and not exercised"*. These 36 files are the first thing that exercises
-it. **Which direction they point is undetermined**: slice 1 excludes negative
-tests, so a positive test should not legitimately read a name before binding,
-which makes an over-eager refusal the more likely reading — but that has not
-been established and is not claimed here.
+**Reading a name before it is bound** was described here as the temporal dead
+zone, pointing at the ✅ ledger row for it. **That was wrong on 2026-09-18, and
+wrong in the way this document keeps warning about: a diagnostic's text is not
+its cause.** `NTS1004` is the dead-zone diagnostic, it is about *cross-module*
+evaluation order, and its first test is `if declaring == at { return }` — so it
+cannot fire on a single-file program, which every file here is.
+
+The real refusal is a `Place::Binding` whose symbol was never bound, and all 36
+files are **compound assignment** over a module-scope `var` with no annotation:
+
+```js
+var x;
+x = -1;
+x += -1;
+```
+
+The checker fills such a declaration's type in from the assignments that follow.
+`lower_variable_statement` reads that back with `evolved_type` and always has;
+`collect_module_scope` asked `type_of` alone, so the same three lines were an
+ordinary local inside a function and refused one scope out. Fixed 2026-09-18 —
+`examples/an-evolving-type-at-module-scope`, and 12 of 12 sampled files went
+from refused to `strict-pass`.
+
+It also ranked **twice**. The root, *a module-scope variable of unrepresentable
+type*, is 36 files as well — the same 36. The read that follows the missing
+global refuses again, and a table of first-diagnostics counts one cause under
+two headings and names it wrongly under both.
+
+It is worth saying plainly what this cost: the paragraph here read confidently,
+named a mechanism, and cited a ledger row — and every part of that was reached
+by matching the *words* of a diagnostic rather than by reading the code that
+emits it. The row it cited is about something else entirely.
 
 ## Two upstream crashes, found by running the corpus
 

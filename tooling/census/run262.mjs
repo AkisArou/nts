@@ -126,6 +126,9 @@ if (limit > 0) chosen = chosen.slice(0, limit);
 
 // --- building and running one body ----------------------------------------
 
+/** The text of a refusal, after the code: `… NTS1001 <this part>`. */
+const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet)?$/m;
+
 /** `nts: uncaught <Class>: <message>` — the class comes from the descriptor. */
 const UNCAUGHT = /^nts: uncaught ([A-Za-z_$][A-Za-z0-9_$]*)(?::|$)/m;
 
@@ -193,7 +196,24 @@ function attempt(dir, body) {
   }
   // `emit-c` exits 0 while refusing, so the diagnostics decide, never the
   // status -- and *both* streams are the diagnostics.
-  if (/NTS\d{4}/.test(diagnostics)) return { bucket: "unsupported", why: "lowering" };
+  if (/NTS\d{4}/.test(diagnostics)) {
+    // **Which refusal, not merely that there was one.** A run that records
+    // only the bucket can say 413 files are blocked in lowering and nothing
+    // about what to fix; the census records its first diagnostic for exactly
+    // this reason and the runner did not, so the two instruments answered
+    // different halves of one question.
+    //
+    // The first, because the compiler reports one blocker at a time -- so this
+    // ranks reach rather than causes, the same caveat the census carries.
+    // Identifiers are redacted to `X` so that a hundred files naming a hundred
+    // different names rank as one shape.
+    const first = FIRST_REFUSAL.exec(diagnostics);
+    return {
+      bucket: "unsupported",
+      why: "lowering",
+      first: first ? first[1].replace(/`[^`]*`/g, "`X`").trim() : undefined,
+    };
+  }
 
   const args = linkCommand(stdout);
   if (!args) return { bucket: "infrastructure-error", why: "no link command in the emit output" };
