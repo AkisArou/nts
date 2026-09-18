@@ -48,7 +48,7 @@
 //   3. The harness is a stand-in, not the harness.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -57,7 +57,14 @@ import { environment, materialise, workspace } from "./project.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const SUITE = join(ROOT, "third_party/test262");
-const SCRATCH = process.env.NTS_CENSUS_DIR ?? join(ROOT, "target/census/run262");
+// **Per process, because two runs in one directory measure each other.**
+// `attempt` writes `src/main.ts` and then compiles it, so two runs sharing a
+// workspace race on that file: the compiler reads whichever body landed last,
+// and both report a bucket for a program the other wrote. Two were found
+// running at once here, started an hour apart, with no flag between them and
+// nothing in either report to say so -- the outputs looked ordinary.
+const SCRATCH =
+  process.env.NTS_CENSUS_DIR ?? join(ROOT, "target/census/run262", String(process.pid));
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const CC = process.env.CC ?? "cc";
 
@@ -234,19 +241,22 @@ const checks = selfChecks();
 // --- the run ---------------------------------------------------------------
 
 const dir = workspace(join(SCRATCH, "w0"));
+if (rowsFile) writeFileSync(rowsFile, "");
 const buckets = new Map();
 const thrownBy = new Map();
-const rows = [];
 const bump = (map, key) => map.set(key, (map.get(key) ?? 0) + 1);
 
 for (const record of chosen) {
   const outcome = attempt(dir, readFileSync(join(SUITE, record.path), "utf8"));
   bump(buckets, outcome.bucket);
   if (outcome.bucket === "threw") bump(thrownBy, outcome.thrown);
-  if (rowsFile) rows.push({ path: record.path, ...outcome });
+  // **Appended as it is produced, not written at the end.** A full slice is
+  // tens of minutes, and holding every row until the last one meant a run that
+  // was killed -- or that this box killed -- left no rows at all and no way to
+  // tell how far it had got. The file is also the only progress signal: `ps`
+  // says a process exists, and the rows say it is moving.
+  if (rowsFile) appendFileSync(rowsFile, `${JSON.stringify({ path: record.path, ...outcome })}\n`);
 }
-
-if (rowsFile) writeFileSync(rowsFile, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
 
 // --- the report ------------------------------------------------------------
 
