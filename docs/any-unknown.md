@@ -4,8 +4,25 @@ Native TypeScript is a typed-first native compiler. It must preserve ordinary Ty
 
 The compiler therefore distinguishes **TypeScript's checker type** from the **runtime trust and representation** of a value.
 
-This document is the design contract. The current lowerer still refuses both
-`any` and `unknown`; the analysis described here has not been implemented yet.
+This document is the design contract. **It is half implemented, and the two
+halves are in completely different states** — which matters because they are
+routinely spoken of as one thing.
+
+`unknown` is done. `representation_of` answers `HirType::Erased` for it, a
+16-byte tagged value emitted by all four backends with the tag numbering chosen
+so `TagOf` *is* `typeof`; it narrows through `typeof`, `=== null`, `instanceof`
+and `Array.isArray`, references survive erasure with the descriptor carrying
+erased slots so the cycle collector reads the tag, and `unerase.rs` removes
+erasure that was never needed. See "It does now" below.
+
+`any` is not started. `NeedsRepresentation` — the mechanism this document, the
+RFC and the README all name — has no occurrences in the compiler: no stub, no
+TODO, no disabled pass. `representation_of` has no `TypeKind::Any` arm, so `any`
+falls to the generic "unrepresentable type" refusal and is not even separately
+countable from a diagnostic.
+
+This paragraph read "the current lowerer still refuses both `any` and
+`unknown`" while line 290 of this same file said otherwise.
 
 ## `any`
 

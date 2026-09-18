@@ -3768,10 +3768,16 @@ fn evaluated_reads(probe: &FuncBuilder, id: NodeId, visit: &mut impl FnMut(NodeI
 /// Every top-level statement in the program, in the order they must run.
 ///
 /// Within a file that is source order. *Across* files it is the module graph,
-/// which the snapshot does not carry -- so a program with top-level statements
-/// in more than one file is refused rather than run in an order this guessed
-/// at. One file's statements are the common case and the whole of what can be
-/// ordered honestly today.
+/// and the body below computes it: `evaluation_order` gives a post-order walk
+/// of the import graph, cycles are evaluated rather than refused because ES
+/// modules specify them and node runs them, and the statements are concatenated
+/// in that order into one `module#init`.
+///
+/// This comment said the opposite -- "a program with top-level statements in
+/// more than one file is refused rather than run in an order this guessed at"
+/// -- describing a state the function below has not been in for some time.
+/// `examples/module-order` is four files with top-level statements in each,
+/// written to pin the order against node, and it has been green throughout.
 fn module_statements(
     snapshot: &SemanticSnapshot,
 ) -> (Option<(NodeId, Vec<NodeId>)>, Vec<Diagnostic>) {
@@ -7502,22 +7508,26 @@ fn representation_of(
         //
         // Left with no arm would read as an oversight; this is the arm.
         //
-        // `any` and `unknown` fall here and are refused, which is right for one
-        // of them and wrong for the other.
+        // **`any` falls here. `unknown` no longer does** — it is the first arm
+        // of this same match, `TypeKind::Unknown => HirType::Erased`, and has
+        // been since erasure landed. This comment said "`any` and `unknown` fall
+        // here and are refused" for as long as that arm has existed, 342 lines
+        // above it, in the same `match` a reader would have to scroll through to
+        // get here.
         //
-        // `docs/any-unknown.md` settles it: `any` is not a runtime type at all
-        // and none may reach MIR — application `any` is rejected, while
-        // declaration-originated `any` (from `lib.*.d.ts` or `@types`) is tracked
-        // as *unchecked* rather than rejected, so the ecosystem stays usable.
-        // `unknown`, by contrast, is a fully supported top type that "must not be
-        // rejected merely because it requires an erased representation", and its
-        // representation is chosen by whole-program analysis — a primitive, a
-        // managed reference, a closed union, a handle, or a general erased value,
-        // whichever is cheapest across all reachable uses.
+        // `docs/any-unknown.md` settles what is left: `any` is not a runtime
+        // type at all and none may reach MIR — application `any` is rejected,
+        // while declaration-originated `any` (from `lib.*.d.ts` or `@types`) is
+        // tracked as *unchecked* rather than rejected, so the ecosystem stays
+        // usable. That is `NeedsRepresentation`, which has no implementation:
+        // evidence collection, provenance, polymorphic recovery and the trusted
+        // boundaries, none of which is another arm in this match.
         //
-        // Refusing `unknown` therefore rejects valid programs today. Implementing
-        // it needs the provenance tracking and representation analysis that
-        // document describes, not another arm in this match.
+        // It is worth knowing that `any` arrives here wearing the *generic*
+        // refusal — the same sentence as every other unrepresentable type — so
+        // no census can rank it and no before/after can measure it. A diagnostic
+        // of its own is the first thing that work needs, before any of the
+        // analysis.
         _ => return None,
     })
 }

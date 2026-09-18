@@ -375,12 +375,29 @@ transformations prescribed by Test262.
 
 ### Script execution
 
-NativeTS currently lowers function bodies, not a complete global script. The
-runner requires a real ordered script initializer that executes top-level
-statements and shares declarations across harness, include, and test units. A
-wrapper function is not equivalent. Reflective global-object behavior may
-remain unsupported until the runtime has a global object, but statically
-resolved script bindings still require correct declaration and execution order.
+**This prerequisite is met.** Top-level statements lower into one `module#init`
+ordered across modules by `evaluation_order`, rooted for reachability, and
+`emit-c --out <dir> --main` writes a `main.c` that calls it and then drains the
+microtask queue. `tooling/cli/tests/build.rs` builds a top-level-only program
+and runs it; `examples/module-order` pins the cross-file order against node.
+
+This paragraph read "NativeTS currently lowers function bodies, not a complete
+global script" and was the first of four prerequisites named here; three were
+already met when it was checked on 2026-09-18, and the fourth --
+`NeedsRepresentation` -- does not gate this lane, because the leading slice has
+no unannotated parameters by construction. What was genuinely missing was the
+*wiring*: `ExecutionAdapter` had only a mock, and `judge_execution`,
+`RunReport` and `SuiteAssembler` were called from nothing but their own unit
+tests.
+
+A wrapper function is still not equivalent, and units are still not concatenated
+into one: that changes global script semantics, strict-directive reach, parse
+phases and declaration visibility. `tooling/census/project.mjs` prepends the
+harness as sibling top-level statements in one script, which is none of those.
+
+Reflective global-object behavior remains unsupported until the runtime has a
+global object; statically resolved script bindings require correct declaration
+and execution order, and get it.
 
 ### Harness and host boundary
 
