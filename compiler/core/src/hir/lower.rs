@@ -20009,7 +20009,10 @@ impl<'a> FuncBuilder<'a> {
             label: Some(label),
             exits_at: self.exits.len(),
         });
-        let lowered = self.lower_block(block);
+        // `lower_statement` rather than `lower_block`: this path now takes any
+        // labelled statement, and `lower_statement` dispatches a `BLOCK` to
+        // `lower_block` anyway.
+        let lowered = self.lower_statement(block);
         if lowered.is_ok() && !self.is_terminated() {
             let args = self.carried_now(&carried);
             let (exit, _) = self.exit_of(depth);
@@ -20036,32 +20039,47 @@ impl<'a> FuncBuilder<'a> {
         let Some(text) = self.node(name).text.clone() else {
             return Err(self.unsupported(name, "a label with no name"));
         };
-        // `outer: { … break outer … }` -- a labelled *block*, where the `break`
-        // is a forward jump to the end of it. It has an exit and no latch,
-        // which is the same shape a `switch` pushes, so it is built here rather
-        // than by `lower_statement`: the breakable has to carry the label, and
-        // a block is not a construct that takes one.
-        if self.kind_of(statement) == Some(syntax::BLOCK) {
-            return self.lower_labeled_block(id, text, statement);
-        }
-        if !matches!(
+        // **A loop or a `switch` takes the label itself; anything else gets the
+        // forward-jump shape.** The specification puts a label on *any*
+        // statement — `lbl: n = 1;`, `lbl: if (c) { … }`, `lbl: try { … }` are
+        // all legal, and `break lbl` leaves them. Only `continue` needs a loop,
+        // and a non-loop breakable has no latch, so the checker's rejection of
+        // `continue` to such a label is backed by this having nothing to
+        // continue to.
+        //
+        // It was an allow-list of five kinds, and everything else refused as
+        // "a label on something that is not a loop" — 14 files in the slice-1
+        // `test/language` population, most of them in `asi` and `statementList`
+        // where a label on an expression statement is the *subject*.
+        //
+        // `for…in` was missing from the list as well, so
+        // `outer: for (const k in o) { continue outer; }` refused while the same
+        // loop over `for…of` compiled. `lower_for_of` handles both — the
+        // `Over::Keys` arm — and only this list did not say so.
+        if matches!(
             self.kind_of(statement),
             Some(
                 syntax::FOR_STATEMENT
+                    | syntax::FOR_IN_STATEMENT
                     | syntax::FOR_OF_STATEMENT
                     | syntax::WHILE_STATEMENT
                     | syntax::DO_STATEMENT
                     | syntax::SWITCH_STATEMENT
             )
         ) {
-            return Err(self.unsupported(id, "a label on something that is not a loop"));
+            self.pending_label = Some(text);
+            let lowered = self.lower_statement(statement);
+            // Cleared whatever happened: a loop that refused never took it, and
+            // a name left here would be picked up by the next loop in the
+            // function.
+            self.pending_label = None;
+            return lowered;
         }
-        self.pending_label = Some(text);
-        let lowered = self.lower_statement(statement);
-        // Cleared whatever happened: a loop that refused never took it, and a
-        // name left here would be picked up by the next loop in the function.
-        self.pending_label = None;
-        lowered
+        // Everything else: an exit and no latch, which is the shape a labelled
+        // block already had. The breakable carries the label, which is why this
+        // is built here rather than by `lower_statement` — a statement is not a
+        // construct that takes one.
+        self.lower_labeled_block(id, text, statement)
     }
 
     /// `try { … } catch (e) { … }`.

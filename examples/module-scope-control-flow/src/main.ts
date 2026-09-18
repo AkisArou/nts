@@ -106,3 +106,61 @@ export function readLeft(): number {
 export function readMixedOut(): number {
   return mixedOut;
 }
+
+// A label may attach to **any** statement, not only to a loop or a block.
+//
+// `lbl: n = 1;`, `lbl: if (c) { … }` and `lbl: try { … } finally { … }` are all
+// legal, and `break lbl` leaves them. `lower_labeled` had an allow-list of five
+// kinds and refused everything else as *a label on something that is not a
+// loop* — 14 files in the slice-1 `test/language` population, most of them in
+// `asi` and `statementList`, where a label on an expression statement is the
+// subject of the test rather than incidental to it.
+//
+// Only `continue` needs a loop, and the shape a non-loop label gets has no
+// latch — so the checker's rejection of `continue` to such a label is backed by
+// there being nothing to continue to.
+//
+// `for…in` was missing from that list as well, so a labelled `for…in` refused
+// while the same loop written `for…of` compiled. `lower_for_of` handles both,
+// through its `Over::Keys` arm; only the list did not say so.
+
+let labelledExpression = 0;
+byName: labelledExpression = 1;
+
+let labelledIf = 0;
+overIf: if (1 > 0) {
+  labelledIf = 1;
+  break overIf;
+}
+
+let labelledTry = 0;
+overTry: try {
+  labelledTry = 1;
+} finally {
+  labelledTry = labelledTry + 1;
+}
+
+let labelledForIn = 0;
+const keyed: Record<string, number> = { a: 1, b: 2, c: 3 };
+overKeys: for (const key in keyed) {
+  if (keyed[key] === 2) {
+    continue overKeys;
+  }
+  labelledForIn = labelledForIn + 1;
+}
+
+export function readLabelledExpression(): number {
+  return labelledExpression;
+}
+
+export function readLabelledIf(): number {
+  return labelledIf;
+}
+
+export function readLabelledTry(): number {
+  return labelledTry;
+}
+
+export function readLabelledForIn(): number {
+  return labelledForIn;
+}
