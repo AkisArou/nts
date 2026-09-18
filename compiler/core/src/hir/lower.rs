@@ -1140,12 +1140,27 @@ fn runs_a_static_initializer(probe: &FuncBuilder, id: NodeId) -> bool {
         return false;
     }
     probe.children(id).into_iter().any(|member| {
-        probe.kind_of(member) == Some(syntax::PROPERTY_DECLARATION)
-            && probe
-                .node(member)
-                .modifiers
-                .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
-            && matches!(probe.child_slots::<5>(member), Some([_, _, _, _, Some(_)]))
+        // **A `static { … }` block counts too, and did not.** `lower_static_fields`
+        // has lowered one since the day static blocks stopped being ignored, but
+        // this predicate decides whether the class joins the ordered statement
+        // list at all -- so a class with a block and *no static field* answered
+        // false, never reached that code, and the block did not run:
+        //
+        //     let seen = 0;
+        //     class C { static { seen = 1; } }   // node: 1.  this: 0
+        //
+        // Silently, on every backend. The field version worked, which is what
+        // hid it: `class C { static n = 0; static { C.n = 5 } }` answers 5,
+        // because the *field* put the class in the list and the block came along.
+        // A class whose only static member is a block is the case nothing
+        // covered.
+        probe.kind_of(member) == Some(syntax::CLASS_STATIC_BLOCK)
+            || (probe.kind_of(member) == Some(syntax::PROPERTY_DECLARATION)
+                && probe
+                    .node(member)
+                    .modifiers
+                    .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
+                && matches!(probe.child_slots::<5>(member), Some([_, _, _, _, Some(_)])))
     })
 }
 

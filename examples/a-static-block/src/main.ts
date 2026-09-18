@@ -145,3 +145,53 @@ class NoBlock {
 export function staticFieldsWithoutABlock(n: number): number {
   return NoBlock.first * 10 + NoBlock.second + n * 0;
 }
+
+// # A class whose *only* static member is a block
+//
+// Every class above has a static field beside its block, and that is exactly
+// why this survived: `runs_a_static_initializer` decides whether a class joins
+// the ordered module-statement list, and it asked only for a static
+// **property** with an initializer. A class with a block and no field answered
+// false, never reached `lower_static_fields`, and its block did not run.
+//
+//     let seen = 0;
+//     class C { static { seen = 1; } }   // node: 1.  this compiler: 0
+//
+// Silently, on every backend, in a file whose subject is static blocks — the
+// arms above pass on the compiler that gets this wrong, because a field put
+// their class in the list and the block came along with it.
+//
+// The predicate has to stay narrow in the other direction. A class with no
+// static member at all must *not* join the list: putting every class in gives a
+// file that had no module evaluation an empty `module#init`, which is a new
+// exported function in every such program — `examples/delete` went from eight
+// exports to nine that way, caught by a test asserting the count exactly.
+// `noStatics` below is that control.
+
+let touchedByABlockOnly = 0;
+
+class BlockOnly {
+  static {
+    touchedByABlockOnly = 7;
+  }
+}
+
+const blockOnlyRan: number = touchedByABlockOnly;
+
+class NoStatics {
+  n = 1;
+}
+
+export function readBlockOnly(n: number): number {
+  return blockOnlyRan * 10 + n;
+}
+
+export function noStatics(n: number): number {
+  const it = new NoStatics();
+  return it.n + n;
+}
+
+export function touchesTheBlockOnlyClass(n: number): number {
+  const it = new BlockOnly();
+  return n + (it === null ? 1 : 0);
+}
