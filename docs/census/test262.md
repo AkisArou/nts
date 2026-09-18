@@ -137,11 +137,77 @@ let x: number;
 Nested array destructuring assignment against an **empty** nested array
 literal. A flat `[x] = [1]` is fine, and so is a non-empty `[[x]] = [[1]]`.
 
+## The first conformance result — 486 of 2,527
+
+**`tooling/census/run262.mjs` builds, links and runs.** It is the half this
+census deliberately does not do, and it answers the question the census cannot:
+not *why does this not lower* but *does the program do what the specification
+says*.
+
+At test262 `14e8c908`, compiler `a780cf01fcbc8c3c`, over the 2,527 slice-1
+files under `test/language/expressions`:
+
+| | files | |
+| --- | ---: | --- |
+| `strict-pass` | **486** | compiled, linked, ran, completed normally |
+| `unsupported` | 2,019 | 1,603 TypeScript, 413 lowering, 3 link |
+| `frontend-crash` | 18 | all in `syntax/`, the two upstream `tsgo` panics |
+| `threw Test262Error` | **4** | compiled, ran, and gave a wrong answer |
+
+2,019 + 486 + 18 + 4 = 2,527. The run prints that sum and says so when it does
+not reconcile.
+
+**One strict variant per file.** `strict-pass` is not a file pass, and a file
+whose metadata also wants a sloppy variant is not fully answered. Negative
+tests, `noStrict`, modules and raw are scope-excluded by the scheduler; a test
+whose `includes:` names a harness file beyond the `assert.js`/`sta.js` stand-in
+is excluded here.
+
+### The four that ran and were wrong
+
+These are the whole point of running rather than compiling. Every one was a real
+defect and none of them emits a diagnostic:
+
+- `multiplication/S11.5.1_A4_T7.js` — `1 / (-0.1 * Number.MIN_VALUE)` answered
+  `+Infinity`. A zero made by **underflow** kept no sign: `facts::mul`'s rule
+  asked only whether an *operand* was zero. **Fixed 2026-09-18**, with three
+  folded arms in `examples/negative-zero`.
+- `greater-than/S11.8.2_A4.12_T1.js` and `less-than/S11.8.1_A4.12_T1.js` — both
+  are `"\uDC00" > "\uD800"`, and the cause is not comparison. An **unpaired
+  surrogate does not survive the frontend**: `"\uD800"` arrives as *three*
+  U+FFFD code units, emitted literally as `{ 65533, 65533, 65533 }` with
+  `length` 3. Its three WTF-8 bytes were each replaced by a lossy UTF-8 decode
+  at the transport boundary. Our own string representation is not at fault —
+  `length`, `charCodeAt` and ordering are all correct UTF-16 for every
+  well-formed string, including astral pairs — so the ✅ relational-comparison
+  row stands and the gap is the literal, not the operator.
+- `in/S8.12.6_A2_T1.js` — `"valueOf" in {}` answers `false`. `in` does not
+  consult `Object.prototype`, so no inherited name is visible to it.
+
+### Why this number was 151 the first time
+
+The runner read **stdout**, and `emit-c` prints refusals on **stderr** while
+exiting 0. So the `unsupported/lowering` bucket never once fired, and every
+refused program was linked and run anyway: one that completed came back
+`strict-pass` — *a compiler refusal counted as a pass*, which is the one rule
+this document's protocol says must never be broken — and one that threw came
+back as a conformance failure. 151 of the first 906 rows were the second, every
+one from `class/dstr`, and they read as 151 correctness bugs. They were **one**
+refusal dropping a method body whose last statement increments the counter the
+test then asserts on.
+
+Neither existing self-check could see it, because both are clean programs. The
+third arm is a program that is *refused* and would otherwise complete, required
+to come back exactly `unsupported` — not merely "not a pass", since a crash
+would satisfy the weaker test while the refusal still went unread.
+
 ## What this census cannot see
 
 Printed by the instrument on every run, not left to a reader.
 
-1. **Nothing is executed.** `lowers` is not `correct`.
+1. **The census executes nothing.** `lowers` is not `correct` — which is what
+   `run262.mjs` above exists to answer, and it is a separate instrument with a
+   separate population.
 2. **Only the first blocking diagnostic per file is ranked**, so this ranks
    reach rather than causes.
 3. **The harness is a stand-in.** `tooling/census/harness.ts` replaces
