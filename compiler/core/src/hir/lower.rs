@@ -28273,10 +28273,32 @@ impl<'a> FuncBuilder<'a> {
         then_branch: Branch,
         else_branch: Branch,
     ) -> Result<ValueId, Diagnostic> {
-        let origin = self.origin(id);
         let ty = self
             .type_of(id)
             .ok_or_else(|| self.unrepresentable(id, "a conditional"))?;
+        self.lower_branching_value_at(id, ty, condition, then_branch, else_branch)
+    }
+
+    /// The same, at a type the caller supplies rather than the node's own.
+    ///
+    /// A conditional written in the source has a type the checker gave it, and
+    /// [`Self::lower_branching_value`] reads it off the node. A branch this
+    /// compiler *synthesises* has no such node: `defaulted_array_element` builds
+    /// one whose arms are an element read and `undefined`, and its merge is
+    /// erased whatever the node it is anchored to happens to be.
+    ///
+    /// Anchoring it to a node with the wrong type would have merged two erased
+    /// values into a concrete parameter, which is the shape the arm-reconciling
+    /// below exists to catch in the other direction.
+    fn lower_branching_value_at(
+        &mut self,
+        id: NodeId,
+        ty: HirType,
+        condition: ValueId,
+        then_branch: Branch,
+        else_branch: Branch,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
         let then_block = self.new_block();
         let else_block = self.new_block();
         self.terminate(Terminator::Branch {
@@ -29509,26 +29531,21 @@ impl<'a> FuncBuilder<'a> {
     ///
     ///   * no default -- there is nothing to hand back, and an over-long
     ///     pattern is still a checked read that aborts;
-    ///   * an object pattern -- a missing field is a compile-time refusal, not
-    ///     a runtime length;
     ///   * a tuple, which is read as an object because the position *is* the
     ///     field: its length is static, so an out-of-range element is already
     ///     refused when the program is compiled rather than when it runs.
     fn defaulted_array_element(
         &mut self,
         element: NodeId,
+        property: NodeId,
         binding: NodeId,
         value: ValueId,
         position: usize,
         default: Option<NodeId>,
-        object: bool,
     ) -> Result<Option<ValueId>, Diagnostic> {
         let Some(default) = default else {
             return Ok(None);
         };
-        if object {
-            return Ok(None);
-        }
         let HirType::Managed(ManagedType::Array(element_ty)) =
             self.values[value.0 as usize].ty.clone()
         else {
@@ -29553,8 +29570,55 @@ impl<'a> FuncBuilder<'a> {
                 rhs: index,
             },
             HirType::Bool,
-            origin,
+            origin.clone(),
         );
+        // **An erased element can be present *and* `undefined`, and the default
+        // applies to that too.** `f([undefined])` is `9` for `function f([a =
+        // 9])`, exactly as `f([])` is: the language tests the value, and
+        // exhaustion is only one way to get an absent one. test262 writes the
+        // two as separate files, `-init-exhausted` and `-init-undef`.
+        //
+        // It is also the *common* case rather than a corner. An unannotated
+        // `[a = 9]` is inferred as `(number | undefined)[]`, which represents as
+        // erased -- so every untyped destructuring default in the corpus lands
+        // here, and a rule that only tested the length would answer `undefined`
+        // where the default was written.
+        //
+        // Two tests, so two branches, and the second one already exists. The
+        // first produces the element *as an erased value*, `undefined` when the
+        // array is too short -- both arms erased, so there is no representation
+        // to reconcile. That value is then an ordinary read with a possible
+        // absence, which is precisely what `defaulted_when` and `Branch::Present`
+        // were built for: the one tests an erased value's tag for `undefined`,
+        // the other reads it back at the type the branch has established.
+        if *element_ty == HirType::Erased {
+            let undefined = self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone());
+            let read = self.lower_branching_value_at(
+                element,
+                HirType::Erased,
+                exhausted,
+                Branch::Value(undefined),
+                Branch::ArrayElement {
+                    array: value,
+                    index,
+                    ty: HirType::Erased,
+                },
+            )?;
+            let Some(absent) = self.defaulted_when(element, property, read)? else {
+                return Ok(Some(read));
+            };
+            return self
+                .lower_branching_value(
+                    binding,
+                    absent,
+                    Branch::Expression(default),
+                    Branch::Present(read),
+                )
+                .map(Some);
+        }
+        // A concrete element type has no `undefined` to hold, so exhaustion is
+        // the whole question and one branch answers it.
+        //
         // The binding's node, not the element's, for the reason the ordinary
         // path gives: its type is the one the default has already been folded
         // into, and both arms have to produce it.
@@ -29765,8 +29829,17 @@ impl<'a> FuncBuilder<'a> {
             }
             // Asked *before* the read, because for an array element with a
             // default the read is the thing being avoided.
-            let read = if let Some(chosen) = self
-                .defaulted_array_element(element, binding, value, position, default, object)?
+            //
+            // An **object** pattern never asks: a missing field is a
+            // compile-time refusal rather than a runtime length, and
+            // `{ length = 0 }` over an array would otherwise read index 0 where
+            // it means the `length` field.
+            let defaulted = if object {
+                None
+            } else {
+                self.defaulted_array_element(element, property, binding, value, position, default)?
+            };
+            let read = if let Some(chosen) = defaulted
             {
                 chosen
             } else {

@@ -84,3 +84,67 @@ function takes([a = 9]: number[]): number {
 export function throughAParameter(n: number): number {
   return takes(n > 0 ? [7] : []);
 }
+
+// # An unannotated pattern is the common case, and it needs a second test
+//
+// `function f([a = 9])` with no annotation is inferred as
+// `(number | undefined)[]`, which represents as an **erased** element. So the
+// element can be present *and* `undefined` — `f([undefined])` is `9` in every
+// engine, exactly as `f([])` is — and a rule that only tested the length would
+// answer `undefined` where the default was written.
+//
+// test262 writes the two as separate files, `-init-exhausted` and
+// `-init-undef`, which is how the second half was found: the first version of
+// this fix cleared the exhausted family and left `-init-undef` refusing.
+//
+// The lowering is two branches and the second already existed. The first
+// produces the element as an erased value, `undefined` when the array is too
+// short — both arms erased, so there is nothing to reconcile. That value is then
+// an ordinary read with a possible absence, which is what `defaulted_when` and
+// `Branch::Present` were built for.
+
+// The arrays are **built** rather than chosen by a conditional. `n > 0 ? [7] :
+// [undefined]` merges a `number[]` with an `undefined[]`, which is a union of
+// two array types and has no representation — the example refused two of these
+// three arms that way before it compared anything, while still printing
+// `agreed on every case` over the six it could reach.
+//
+// The parameter is **annotated** `(number | undefined)[]` rather than left bare.
+// A bare `[a = 9]` is what the corpus writes and is the shape this was found on,
+// but TypeScript infers it as the *tuple* `[(number | undefined)?]` — so a
+// built array is not assignable to it, and the differential cannot drive a
+// tuple. The annotation names the same representation the inference produces,
+// an array whose element is erased, which is what the lowering branches on.
+
+function untyped([a = 9]: (number | undefined)[]): number {
+  return a;
+}
+
+/** Exhausted: no element at all. */
+export function untypedExhausted(n: number): number {
+  // Each literal gets its own annotated slot before the conditional chooses.
+  // `n > 0 ? [7] : []` lowers the `[7]` as a `number[]` — the annotation on the
+  // *result* does not reach inside a conditional's arms — and the merge then
+  // refused as *an array of Erased where an array of Float is wanted*.
+  const full: (number | undefined)[] = [7];
+  const empty: (number | undefined)[] = [];
+  return untyped(n > 0 ? full : empty);
+}
+
+/** Present and `undefined`: the element is there and the default still wins. */
+export function untypedUndefined(n: number): number {
+  const xs: (number | undefined)[] = [n > 0 ? 7 : undefined];
+  return untyped(xs);
+}
+
+/** Present and defined, which must not take the default. */
+export function untypedPresent(n: number): number {
+  // Through a named slot, so the element's type is the union rather than
+  // `number`: `[n > 0 ? 7 : 3]` is a `number[]` and would not be the erased
+  // element this arm exists to exercise — it refused as *an array of Erased
+  // where an array of Float is wanted*, which is the fixture telling you it was
+  // about to test the wrong representation.
+  const chosen: number | undefined = n > 0 ? 7 : 3;
+  const xs: (number | undefined)[] = [chosen];
+  return untyped(xs);
+}
