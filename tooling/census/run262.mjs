@@ -47,7 +47,7 @@
 //      arm below is what keeps that honest.
 //   3. The harness is a stand-in, not the harness.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -148,33 +148,49 @@ function attempt(dir, body) {
   materialise(dir, body);
   const out = join(dir, "out");
 
-  let emitted;
-  try {
-    emitted = execFileSync(
-      NTS,
-      ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--main"],
-      {
-        encoding: "utf8",
-        timeout: 120_000,
-        maxBuffer: 64 * 1024 * 1024,
-        env: environment(),
-        // stderr piped, or the child's "does not typecheck" scrolls past the
-        // run instead of being classified by it.
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-  } catch (error) {
-    const text = `${error.stdout ?? ""}${error.stderr ?? ""}`;
-    if (text.includes("frontend transport failed") || text.includes("panic: ")) {
+  // **`spawnSync`, because both streams have to be read on success.**
+  //
+  // This was `execFileSync`, which returns stdout and throws away stderr unless
+  // the child fails -- and `emit-c` prints its refusals on **stderr** while
+  // exiting 0. So the `NTS\d{4}` test below read a stream that never carries a
+  // refusal, the `unsupported/lowering` bucket never once fired, and a refused
+  // program went on to be linked and run:
+  //
+  //   it completed  ->  `strict-pass`. A compiler refusal counted as a pass,
+  //                     which is the one rule `docs/conformance/test262.md`
+  //                     says must never be broken.
+  //   it threw      ->  `threw Test262Error`, indistinguishable from a real
+  //                     conformance failure.
+  //
+  // 151 of the first 906 rows were the second, all from one directory, and they
+  // read as 151 correctness bugs. They are one refusal -- `a default on a
+  // property that can be \`null\` as well as missing` -- dropping a method body
+  // whose last statement increments the counter the test then asserts on.
+  //
+  // The two self-checks below could not see it: neither program has a refusal
+  // in it, so the arm that would have fired never ran. `refused()` is that arm.
+  const emit = spawnSync(NTS, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--main"], {
+    encoding: "utf8",
+    timeout: 120_000,
+    maxBuffer: 64 * 1024 * 1024,
+    env: environment(),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const stdout = emit.stdout ?? "";
+  const diagnostics = `${stdout}${emit.stderr ?? ""}`;
+  if (emit.error || emit.status !== 0) {
+    if (emit.signal === "SIGTERM") return { bucket: "timeout", why: "emit" };
+    if (diagnostics.includes("frontend transport failed") || diagnostics.includes("panic: ")) {
       return { bucket: "frontend-crash" };
     }
-    if (/^TS\d{4,5}/m.test(text)) return { bucket: "unsupported", why: "typescript" };
+    if (/^TS\d{4,5}/m.test(diagnostics)) return { bucket: "unsupported", why: "typescript" };
     return { bucket: "unsupported", why: "emit" };
   }
-  // `emit-c` exits 0 while refusing, so the diagnostics decide, never the status.
-  if (/NTS\d{4}/.test(emitted)) return { bucket: "unsupported", why: "lowering" };
+  // `emit-c` exits 0 while refusing, so the diagnostics decide, never the
+  // status -- and *both* streams are the diagnostics.
+  if (/NTS\d{4}/.test(diagnostics)) return { bucket: "unsupported", why: "lowering" };
 
-  const args = linkCommand(emitted);
+  const args = linkCommand(stdout);
   if (!args) return { bucket: "infrastructure-error", why: "no link command in the emit output" };
   try {
     execFileSync(CC, args, {
@@ -233,7 +249,42 @@ function selfChecks() {
         "The verdict does not depend on what the program did.",
     );
   }
-  return { control: control.bucket, sabotage: `${sabotage.bucket} ${sabotage.thrown}` };
+  // **The third arm, and the one this runner shipped without.**
+  //
+  // A program that is *refused* and would otherwise complete. Both arms above
+  // are clean programs, so neither can tell whether a refusal is noticed -- and
+  // it was not: refusals go to stderr, the runner read stdout, and every refused
+  // program was linked and run anyway. One that completed came back
+  // `strict-pass`.
+  //
+  // The regex must be **reached**, not merely written. `const pattern = /x/;`
+  // with no reader is a dead binding and lowers clean, which is the same trap
+  // the sabotage arm hit once with an unused `any`: the arm tested the compiler
+  // on a program the compiler had deleted.
+  //
+  // Required to be exactly `unsupported`, not merely "not a pass". A crash or a
+  // throw would satisfy the weaker test while still meaning the refusal went
+  // unread.
+  const refused = attempt(
+    dir,
+    'function classify(text: string): boolean {\n' +
+      '  return /^[a-z]+$/.test(text);\n' +
+      '}\n' +
+      'classify("abc");\n' +
+      'assert.sameValue(1 + 1, 2, "refusal arm");\n',
+  );
+  if (refused.bucket !== "unsupported") {
+    cannotMeasure(
+      `a program containing a refused construct reported ${refused.bucket}` +
+        `${refused.why ? ` (${refused.why})` : ""}, not unsupported. ` +
+        "A compiler refusal is being counted as a verdict about the language.",
+    );
+  }
+  return {
+    control: control.bucket,
+    sabotage: `${sabotage.bucket} ${sabotage.thrown}`,
+    refused: `${refused.bucket}/${refused.why}`,
+  };
 }
 
 const checks = selfChecks();
@@ -280,7 +331,10 @@ if (asJson) {
   console.log(`  pin ${report.pin}`);
   console.log(`  compiler ${NTS}`);
   console.log(`  ${under}: ${records.length} selected, ${chosen.length} attempted, ${ran} run`);
-  console.log(`  self-checks: control ${checks.control}, sabotage ${checks.sabotage}`);
+  console.log(
+    `  self-checks: control ${checks.control}, sabotage ${checks.sabotage}, ` +
+      `refused ${checks.refused}`,
+  );
   for (const [name, count] of [...buckets].sort((a, b) => b[1] - a[1])) {
     console.log(`    ${String(count).padStart(6)}  ${name}`);
   }
