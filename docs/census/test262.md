@@ -184,12 +184,12 @@ not reconcile.
 **Re-measured twice the same evening**, same corpus and same instrument, on
 compilers carrying successively more of that day's fixes:
 
-| | `a780cf01` | `f07920ea` | `2b47cdae` |
-| --- | ---: | ---: | ---: |
-| `strict-pass` | 486 | 527 | **536** |
-| `unsupported` | 2,019 | 1,979 | 1,970 |
-| `threw` | 4 | 3 | 3 |
-| `frontend-crash` | 18 | 18 | 18 |
+| | `a780cf01` | `f07920ea` | `2b47cdae` | `2b71401d` |
+| --- | ---: | ---: | ---: | ---: |
+| `strict-pass` | 486 | 527 | 536 | **542** |
+| `unsupported` | 2,019 | 1,979 | 1,970 | 1,964 |
+| `threw` | 4 | 3 | 3 | 3 |
+| `frontend-crash` | 18 | 18 | 18 | 18 |
 
 +41 then +9. The first step is the module-scope evolving-type fix (36 files by
 its own count, all compound assignment) plus the destructuring-default work; the
@@ -201,10 +201,13 @@ fingerprint in the report. That is the only way a claim about a compiler moves
 rather than being restated — and the fingerprint is the bytes rather than the
 path, because `target/release/nts` is what everyone builds into.
 
-The last of those still predates that evening's final fixes — a module-scope
-`switch` and a labelled block, both of which **panicked** the compiler rather
-than refusing, and a class whose only static member is a block. None is in the
-536.
+The fourth column is the same corpus once those landed: a module-scope `switch`
+and a labelled block, both of which **panicked** the compiler rather than
+refusing, and a class whose only static member is a block. +6.
+
++41, +9, +6 — the steps get smaller because the population is one directory and
+the shapes left in it are two known pieces of work. That is the argument for
+widening rather than for grinding: see the run over all of `test/language`.
 
 The +41 is the module-scope evolving-type fix (36 files by its own count, all
 compound assignment) plus the destructuring-default work. Two numbers from two
