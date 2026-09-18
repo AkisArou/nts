@@ -91,7 +91,7 @@ checking before they could be described — the first draft of this paragraph wa
 wrong about each.
 
 **An omitted expression** is an elision in an *array literal*: test262's
-`var array = [,,,,,]`. `typescript.md` has no row for it. The corpus does cover
+`var array = [,,,,,]`. `typescript.md` had no row for it; it has one as of 2026-09-18. The corpus does cover
 elisions — `examples/a-hole-in-a-destructuring-pattern` — but every one of them
 is a **destructuring pattern** (`const [, second] = pair`), which is a different
 production. 18 files separate the two.
