@@ -1,34 +1,48 @@
 # Test262: protocol, scope, and NativeTS prerequisites
 
 This document records the intended Test262 conformance protocol. The
-tooling-only part now exists: pin-checked discovery, metadata parsing, strict
+tooling-only part now exists **and, as of 2026-09-18, has been run against
+the pinned corpus** -- the inventory, the strict-lane assembly and the
+Rust/Python metadata parity audit all pass at the pin above. Before that the
+pin was unreachable and every one of them returned `WrongPin`. What exists
+is: pin-checked discovery, metadata parsing, strict
 scheduling, source-unit assembly plans, host declaration assets, a mock adapter,
 verdict logic, and deterministic report types. It does not compile or run a
 Test262 case. The NativeTS execution adapter, script initializer, host
 implementation, and representation-recovery pass do not exist yet.
 
 The suite is pinned locally at commit
-`d86b2294eb0a17eaa281ff12c73c473ec864c72f`.
+`14e8c908e54ae2e770e473bcacf536f8cb654929`.
+
+**Advanced from `d86b2294eb0a17eaa281ff12c73c473ec864c72f` on 2026-09-18, and the
+numbers below re-derived from the run rather than recomputed.** No checkout in
+this tree held the old pin, and `discover_suite` refuses a suite that is not at
+`TEST262_PIN` before doing any work, so every command here returned `WrongPin`
+and **none of this had ever run against the corpus it describes**.
+`bootstrap.sh` cloned master and checked nothing out, so that was structural
+rather than a slip; it now checks out the pin and reads it from the constant.
+The drift moved exactly two files, both default scripts, so every file count
+rose by 2 and every variant count by 4 while no flag-selected bucket moved.
 
 ## Scope at the pin
 
 | corpus | test files | required variants |
 | --- | ---: | ---: |
-| all `.js` files, including fixtures | 53,872 | — |
+| all `.js` files, including fixtures | 53,874 | — |
 | `_FIXTURE.js` module dependencies | 294 | never standalone |
-| standalone tests | 53,578 | 102,918 |
+| standalone tests | 53,580 | 102,922 |
 | ECMA-402 / `Intl` | 3,357 | 6,714 |
-| NativeTS ECMA-262 scope | **50,221** | **96,204** |
+| NativeTS ECMA-262 scope | **50,223** | **96,208** |
 
 One file may require two variants, which is why variants outnumber files.
-At this pin, 4,238 standalone files select one variant and 49,340 use the
+At this pin, 4,238 standalone files select one variant and 49,342 use the
 default two; the ECMA-402 files all use two variants.
 NativeTS does not implement `Intl`, and Test262 explicitly permits an
 implementation without ECMA-402 to exclude `test/intl402`. That scope exclusion
 must be recorded rather than mixed into the ECMA-262 conformance percentage.
 Staging tests outside ECMA-402 remain part of the ECMA-262 inventory.
 
-The metadata parser must still read all 53,578 standalone files. Parser
+The metadata parser must still read all 53,580 standalone files. Parser
 correctness is independent of whether the selected compiler profile implements
 a feature used by a test.
 
@@ -43,9 +57,9 @@ both flow-style and multiline YAML flag lists:
 
 | scheduling bucket | files | initial action |
 | --- | ---: | --- |
-| default scripts | 45,983 | run the injected strict variant only |
+| default scripts | 45,985 | run the injected strict variant only |
 | `onlyStrict` scripts | 678 | run |
-| **initial strict-script lane** | **46,661** | one variant per file |
+| **initial strict-script lane** | **46,663** | one variant per file |
 | `noStrict` scripts | 2,687 | scope-excluded |
 | modules | 843 | scope-excluded |
 | raw tests | 30 | scope-excluded |
@@ -413,7 +427,7 @@ cargo test -p nts-suite --no-default-features --lib \
 ```
 
 The last audit compares normalized metadata and extracted body hashes for all
-53,578 standalone files with Test262's bundled Python parser. Python is a test
+53,580 standalone files with Test262's bundled Python parser. Python is a test
 oracle only; the Rust command has no Python or general-purpose YAML dependency.
 
 `tooling/suite/src/test262.rs` is an expression harvester, not a Test262 runner.

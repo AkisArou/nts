@@ -1479,6 +1479,55 @@ records() {
   echo "  $(ls docs/records | grep -cE '^[0-9]{4}') records, 4 numbers claimed twice and named"
 }
 
+# The Test262 protocol layer, which nothing in this file ran until 2026-09-18.
+#
+# **The failure it exists to catch is silent and was live for months.**
+# `discover_suite` refuses a checkout that is not at `TEST262_PIN` before doing
+# any work, and both subcommands go through it -- so when the pin and the
+# vendored tree drifted apart, every command returned `WrongPin` and the whole
+# 2,240-line protocol layer stopped running. Nothing said so, because nothing
+# ran it: the binary was named in three places in the repository and all three
+# were its own source or its own documentation.
+#
+# So this checks the one thing a unit test cannot -- that the pin is reachable
+# from the tree a person actually has. The counts stay in
+# `pinned_corpus_matches_the_documented_strict_inventory`, which owns them.
+#
+# Skipped rather than failed with no checkout: `bootstrap.sh --minimal` does not
+# clone it, and a gate that fails for a corpus somebody opted out of is a gate
+# people stop running.
+test262() {
+  if [ ! -d third_party/test262/.git ]; then
+    echo "  no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
+    return 0
+  fi
+  pin=$(awk -F'"' '/^pub const TEST262_PIN/ { print $2 }' \
+    tooling/suite/src/test262_runner/mod.rs)
+  at=$(git -C third_party/test262 rev-parse HEAD 2>/dev/null || echo unknown)
+  if [ "$at" != "$pin" ]; then
+    echo "  the checkout is at $at and the pin is $pin"
+    echo "  every test262 command refuses with WrongPin until those agree:"
+    echo "    git -C third_party/test262 fetch --depth 1 origin $pin &&"
+    echo "    git -C third_party/test262 checkout --detach $pin"
+    return 1
+  fi
+  out=$(cargo run -q -p nts-suite --no-default-features \
+    --bin nts-test262-protocol -- inventory third_party/test262 2>&1)
+  if [ $? -ne 0 ]; then
+    printf '%s\n' "$out" | sed 's/^/    /'
+    return 1
+  fi
+  # Read out of the report rather than assumed: the command can exit 0 and
+  # describe a different suite than the one this checkout holds.
+  reported=$(printf '%s' "$out" | awk -F'"' '/"pin"/ { print $4 }')
+  if [ "$reported" != "$pin" ]; then
+    echo "  the inventory reports pin $reported, not $pin"
+    return 1
+  fi
+  standalone=$(printf '%s' "$out" | awk -F'[:,]' '/"standalone"/ { gsub(/ /,"",$2); print $2 }')
+  echo "  pin $at reachable, $standalone standalone file(s) parsed, 0 with unsupported metadata"
+}
+
 step "build"   cargo build --release
 step "clippy"  lint
 # Every interop project, built the way its README says and then run.
@@ -1557,6 +1606,7 @@ interop() {
 step "format"  format
 step "reformat" reformatted
 step "records" records
+step "test262" test262
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
 # what is measured, and a claim nothing checks is how a closed primitive quietly

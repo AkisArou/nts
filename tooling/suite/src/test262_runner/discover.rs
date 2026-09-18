@@ -214,6 +214,9 @@ mod tests {
     use serde::Deserialize;
 
     use super::*;
+    // `super` is `discover`; the pin lives one module up, and one place
+    // decides it.
+    use crate::test262_runner::TEST262_PIN;
 
     #[test]
     #[ignore = "walks the optional vendored Test262 checkout"]
@@ -222,19 +225,23 @@ mod tests {
         if !root.is_dir() {
             return;
         }
+        // **Read off a run of `nts-test262-protocol inventory`, never recomputed.**
+        // These are eleven coupled numbers and arithmetic on any one of them is
+        // how a ledger goes wrong quietly. The 2026-09-18 pin advance moved
+        // exactly two files, both default scripts, so every count rose by 2 and
+        // every variant count by 4; the flag-selected buckets did not move at all.
         let (inventory, records) =
-            discover_suite(&root, "d86b2294eb0a17eaa281ff12c73c473ec864c72f")
-                .expect("the pinned suite must parse completely");
-        assert_eq!(inventory.javascript_files, 53_872);
+            discover_suite(&root, TEST262_PIN).expect("the pinned suite must parse completely");
+        assert_eq!(inventory.javascript_files, 53_874);
         assert_eq!(inventory.fixtures, 294);
-        assert_eq!(inventory.standalone, 53_578);
-        assert_eq!(inventory.standalone_variants, 102_918);
-        assert_eq!(records.len(), 53_578);
+        assert_eq!(inventory.standalone, 53_580);
+        assert_eq!(inventory.standalone_variants, 102_922);
+        assert_eq!(records.len(), 53_580);
         assert_eq!(inventory.intl402, 3_357);
         assert_eq!(inventory.intl402_variants, 6_714);
-        assert_eq!(inventory.ecma262, 50_221);
-        assert_eq!(inventory.ecma262_variants, 96_204);
-        assert_eq!(inventory.strict_script, 46_661);
+        assert_eq!(inventory.ecma262, 50_223);
+        assert_eq!(inventory.ecma262_variants, 96_208);
+        assert_eq!(inventory.strict_script, 46_663);
         assert_eq!(inventory.no_strict, 2_687);
         assert_eq!(inventory.module, 843);
         assert_eq!(inventory.raw, 30);
@@ -255,8 +262,8 @@ mod tests {
         if !root.is_dir() {
             return;
         }
-        let (_, records) = discover_suite(&root, "d86b2294eb0a17eaa281ff12c73c473ec864c72f")
-            .expect("the Rust parser must accept the pin");
+        let (_, records) =
+            discover_suite(&root, TEST262_PIN).expect("the Rust parser must accept the pin");
 
         let script = r#"
 import json

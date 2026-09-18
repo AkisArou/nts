@@ -104,7 +104,7 @@ if [ "$all" = false ]; then
   say "done"
   echo "  Corpora skipped by --minimal. Re-run without it for:"
   echo "    third_party/node               the Node compatibility profile and conformance"
-  echo "    third_party/test262            the numeric conformance slice"
+  echo "    third_party/test262            the ECMAScript conformance corpus"
   echo "    third_party/are-we-fast-yet    the C++ and Java reference columns"
   exit 0
 fi
@@ -132,11 +132,36 @@ fi
 # Cloned whole rather than sparsely, deliberately: `harness/` and
 # `INTERPRETING.md` matter as much as the tests, because the frontmatter is
 # what makes the suite filterable at all.
-say "third_party/test262"
+#
+# **The pin is checked out, and it is read from the one place that decides it.**
+# This cloned master and checked nothing out, so a fresh bootstrap landed
+# off-pin by construction -- and `discover_suite` refuses a suite that is not at
+# `TEST262_PIN` before doing any work, so the whole protocol layer was
+# unrunnable on any machine that had not happened to clone it at the right
+# moment. It had never run against the corpus it was written for.
+#
+# Retyping the SHA here would make bootstrap a second derivation of the pin, and
+# the drift above was invisible precisely because the pin was spelled in three
+# places already.
+test262_pin=$(awk -F'"' '/^pub const TEST262_PIN/ { print $2 }' \
+  tooling/suite/src/test262_runner/mod.rs)
+say "third_party/test262  ${test262_pin}"
 if have third_party/test262/.git; then
-  echo "  already cloned"
+  # Reported rather than repaired, exactly as the node checkout above: moving it
+  # is a fetch, and doing that silently under someone mid-task is worse than
+  # telling them. What is new is that it is *checked* at all.
+  at=$(git -C third_party/test262 rev-parse HEAD 2>/dev/null || echo unknown)
+  if [ "$at" = "$test262_pin" ]; then
+    echo "  already cloned, at the pin"
+  else
+    echo "  note: checked out at ${at}, pin is ${test262_pin}"
+    echo "        git -C third_party/test262 fetch --depth 1 origin ${test262_pin} && \\"
+    echo "        git -C third_party/test262 checkout --detach ${test262_pin}"
+  fi
 else
-  git clone --depth 1 --filter=blob:none https://github.com/tc39/test262.git third_party/test262
+  git clone --filter=blob:none --no-checkout \
+    https://github.com/tc39/test262.git third_party/test262
+  git -C third_party/test262 checkout --detach "$test262_pin"
 fi
 
 # The `C++` and `Java` columns of the benchmark table: their own hand-written
