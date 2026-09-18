@@ -345,7 +345,34 @@ fn walk(dir: &Utf8Path, into: &mut Vec<String>, depth: u32) {
         };
         if path.is_dir() {
             walk(&path, into, depth + 1);
-        } else if path.extension() == Some("ts") || path.extension() == Some("tsx") {
+        } else if matches!(
+            path.extension(),
+            // **The JavaScript family too, and unconditionally.**
+            //
+            // `entry.read` hashes every file tsgo actually read, so an *edit*
+            // to a `.js` file was already caught. What this listing catches is
+            // a file being **added** -- a program can grow a source without any
+            // existing source changing, and then nothing else notices.
+            //
+            // Under `allowJs` that was a stale hit rather than a slow one.
+            // Reproduced: a project with one `.ts`, compiled once to populate
+            // the cache, then given a new JSDoc-typed `.js` beside it. With the
+            // cache it reported `1 function(s)`; with `NTS_NO_SNAPSHOT_CACHE=1`
+            // it reported `2`. The second function was simply absent, and
+            // nothing said so.
+            //
+            // Two derivations of one fact: tsgo resolves a project's files from
+            // the tsconfig and includes `.js` when `allowJs` is on, and this
+            // walk did not. They agreed only while both meant `.ts`.
+            //
+            // Unconditional rather than read off `allowJs`, because reading the
+            // option here would make this a *third* derivation of the project's
+            // shape. Over-invalidating is the safe direction -- a needless miss
+            // costs a recompile, a wrong hit costs a wrong program -- and it is
+            // cheap: the largest project in this tree gains 25 paths, and `.js`
+            // is 6% of the repository's `.ts` count.
+            Some("ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs")
+        ) {
             into.push(path.into_string());
         }
     }
@@ -354,4 +381,60 @@ fn walk(dir: &Utf8Path, into: &mut Vec<String>, depth: u32) {
 fn read_entry(path: &Utf8Path) -> Option<Entry> {
     let bytes = std::fs::read(path).ok()?;
     postcard::from_bytes(&bytes).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The listing is what notices a source being **added**.
+    ///
+    /// `entry.read` hashes every file tsgo read, so an edit to an existing
+    /// source invalidates on its own. A new file was read by nobody, so it is
+    /// in no hash, and the listing is the only thing that can see it.
+    ///
+    /// It walked `.ts` and `.tsx` only, which was correct until `allowJs` made
+    /// a `.js` file part of a program. Reproduced before this test existed: one
+    /// `.ts` project compiled to populate the cache, then given a JSDoc-typed
+    /// `.js` beside it, reported `1 function(s)` with the cache and `2` without.
+    #[test]
+    fn the_listing_sees_a_javascript_file_added_beside_a_typescript_one() {
+        let dir = std::env::temp_dir().join(format!("nts-listing-{}", std::process::id()));
+        let src = dir.join("src");
+        std::fs::create_dir_all(&src).expect("a scratch project");
+        std::fs::write(dir.join("tsconfig.json"), "{}").expect("a config");
+        std::fs::write(src.join("main.ts"), "export const a = 1;\n").expect("a source");
+        let config = Utf8PathBuf::from_path_buf(dir.join("tsconfig.json")).expect("utf8");
+
+        let before = project_listing(&config);
+        std::fs::write(src.join("extra.js"), "export const b = 2;\n").expect("a second source");
+        let after = project_listing(&config);
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert_ne!(
+            before, after,
+            "a `.js` file added to the project must change the listing, or the \
+             cache serves a program with a source missing and says nothing"
+        );
+        assert!(after.iter().any(|path| path.ends_with("extra.js")));
+    }
+
+    /// The other direction, so the change is not simply "list everything".
+    #[test]
+    fn the_listing_ignores_a_file_that_is_not_a_source() {
+        let dir = std::env::temp_dir().join(format!("nts-listing-other-{}", std::process::id()));
+        let src = dir.join("src");
+        std::fs::create_dir_all(&src).expect("a scratch project");
+        std::fs::write(dir.join("tsconfig.json"), "{}").expect("a config");
+        std::fs::write(src.join("main.ts"), "export const a = 1;\n").expect("a source");
+        let config = Utf8PathBuf::from_path_buf(dir.join("tsconfig.json")).expect("utf8");
+
+        let before = project_listing(&config);
+        std::fs::write(src.join("notes.md"), "not a source\n").expect("a note");
+        std::fs::write(src.join("data.json"), "{}\n").expect("some data");
+        let after = project_listing(&config);
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(before, after, "only sources belong in the listing");
+    }
 }

@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.fixtures.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": [
+    "src"
+  ]
+}
