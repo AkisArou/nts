@@ -8506,6 +8506,64 @@ impl<'a> FuncBuilder<'a> {
         Ok(HirType::Void)
     }
 
+    /// Whether a node is the tail of an **optional chain**.
+    ///
+    /// `a?.b.c` short-circuits the *whole* chain: when `a` is absent, `.c` is
+    /// not evaluated either. That is a property of the chain rather than of any
+    /// one link, so a link built on a node that already carries a `?.` cannot
+    /// be lowered as `(a?.b).c` -- that reads a member of the absent value.
+    ///
+    /// **One derivation, asked wherever a link is built.** `lower_property_access`
+    /// had this rule inline, as "is my object a property access whose second
+    /// child is `?.`", under a comment stating that "all twenty-six optional
+    /// accesses in the node profile are a single link". That precondition
+    /// expired when `a?.b()` landed: an optional **call** is a link too, and it
+    /// is a `CallExpression`, so the inline test could not see it. Neither could
+    /// it see anything asked from `lower_method_call`, which had no test at all.
+    ///
+    /// Three shapes were reaching code generation as a result, none of them
+    /// refused and none of them right -- `a?.m().p` answered `3` where node
+    /// answers `-1`, and `a?.m().m2()` and `a?.p.m()` aborted the compiled
+    /// program:
+    ///
+    /// ```text
+    ///   a?.m().p      property after an optional call
+    ///   a?.m().m2()   call after an optional call
+    ///   a?.p.m()      call after an optional property
+    /// ```
+    ///
+    /// An index link is deliberately **not** a caller: `a?.m()[i]` and
+    /// `a?.p[i]` agree with node today, so guarding them would refuse working
+    /// code to be tidy.
+    fn ends_an_optional_chain(&self, id: NodeId) -> bool {
+        if !matches!(
+            self.kind_of(id),
+            Some(
+                syntax::PROPERTY_ACCESS_EXPRESSION
+                    | syntax::ELEMENT_ACCESS_EXPRESSION
+                    | syntax::CALL_EXPRESSION
+            )
+        ) {
+            return false;
+        }
+        let children = self.children(id);
+        // `?.` is a token of its own, so `a?.b`, `a?.[i]` and `a?.()` each carry
+        // one among their children.
+        children
+            .iter()
+            .any(|child| self.kind_of(*child) == Some(syntax::QUESTION_DOT_TOKEN))
+            // And the base of a chain is always child zero -- the object of an
+            // access, the callee of a call. **Recursing is what makes this a
+            // question about the chain rather than about the last link.** The
+            // first version tested only the node itself and missed
+            // `a?.p[i].q`, where the optional link is two nodes down: the
+            // example written to pin the boundary found it, by disagreeing with
+            // node on 5 of 29 cases.
+            || children
+                .first()
+                .is_some_and(|base| self.ends_an_optional_chain(*base))
+    }
+
     /// Whether a node's subtree contains one of a kind.
     ///
     /// Bounded by the subtree rather than by depth: a function body is the only
@@ -26089,6 +26147,29 @@ impl<'a> FuncBuilder<'a> {
         if let Some(read) = self.lower_string_index(id)? {
             return Ok(read);
         }
+        // An index link is a link. `a?.p[i]` reads the element **after** the
+        // arms have merged, so the read happens on the absent path too -- and
+        // on C that aborts the program, `nts: refused: element of a non-array,
+        // which the lowering proved was an array`, for every input that takes
+        // the absent arm.
+        //
+        // This was nearly left out on a measurement that said the shape agreed
+        // with node on all three backends. It did not: the differential folds a
+        // decline into *skipped*, so `agreed on every case` is its last line
+        // while the line above it reads `17 case(s) the compiled program
+        // declined`. Reading only the verdict reported it as working, and the
+        // fixture written to pin it as working was hollow on two backends.
+        //
+        // The JVM is the one that answers, because an element of `undefined`
+        // there is `undefined` and a trailing `??` folds it to the same answer
+        // the short-circuit would have given -- agreement by coincidence of the
+        // surrounding operator, on one backend, which is what an instrument
+        // that cannot see a decline reports as a pass.
+        if let Some(object) = self.children(id).first()
+            && self.ends_an_optional_chain(*object)
+        {
+            return Err(self.unsupported(id, "a link after an optional access"));
+        }
         let (array, index) = self.element_access_parts(id)?;
         self.element_of(id, array, index)
     }
@@ -27062,11 +27143,7 @@ impl<'a> FuncBuilder<'a> {
         // of being lowered as `(a?.b).c`, which would read a member of the
         // absent value. All twenty-six optional accesses in the node profile
         // are a single link.
-        if self
-            .children(*object)
-            .get(1)
-            .is_some_and(|dot| self.kind_of(*dot) == Some(syntax::QUESTION_DOT_TOKEN))
-        {
+        if self.ends_an_optional_chain(*object) {
             return Err(self.unsupported(id, "a link after an optional access"));
         }
         // `C.x` where `C` is a module: the checker resolved the member to the
@@ -29555,6 +29632,12 @@ impl<'a> FuncBuilder<'a> {
             ));
         };
         let (receiver_node, member) = (*receiver_node, *member);
+        // A **call** is a link too, and it short-circuits with the rest of the
+        // chain. Without this, `a?.p.m()` and `a?.m().m2()` lowered as a call
+        // on the absent value and aborted the compiled program.
+        if self.ends_an_optional_chain(receiver_node) {
+            return Err(self.unsupported(id, "a link after an optional access"));
+        }
         let receiver = self.lower_expression(receiver_node)?;
         self.lower_method_on(id, receiver, receiver_node, member, arguments)
     }
