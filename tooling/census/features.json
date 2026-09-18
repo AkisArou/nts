@@ -1,0 +1,281 @@
+{
+  "//": [
+    "Every Test262 feature token this census has seen, and what the ledger says about it.",
+    "",
+    "FOUR CLASSES, and the distinction is the point:",
+    "  inapplicable  a typescript.md \u00a713 non-goal. Refused on principle, never to be fixed,",
+    "                and must not sit in a backlog. Carries a reason and the authority.",
+    "  gap           a \u2717 or \u25d0 row. This is the backlog.",
+    "  supported     a \u2705 row. The census expects these files to lower.",
+    "  host          needs a host capability (realms, agents, detached buffers).",
+    "",
+    "THIS NEVER FILTERS. Every selected file is compiled whatever its features say, and",
+    "the class is a column on the row. That is the only arrangement in which a wrong",
+    "classification is detectable, and it is detectable in BOTH directions:",
+    "  a file classed `inapplicable` that LOWERS   -> the classification is wrong",
+    "  a file classed `supported` that ALL REFUSE  -> the ledger row is wrong",
+    "The second is not hypothetical: typescript.md's `namespace` row was \u2705 and false,",
+    "probed 2026-09-14, and `x!` and decorators are \u2717 rows that silently produce wrong",
+    "answers rather than refusing.",
+    "",
+    "UNCERTAIN TOKENS ARE `gap`, deliberately. A gap that turns out to be supported sits",
+    "in a backlog and is corrected by the audit; a non-goal that is really a gap",
+    "disappears. The safe direction is the one that stays visible.",
+    "",
+    "Names are test262's own, from third_party/test262/features.txt at the pin.",
+    "tooling/census/audit.mjs checks that every name here still exists there, which is",
+    "how an upstream rename is caught rather than silently reclassified."
+  ],
+  "version": 1,
+  "features": {
+    "AggregateError": {
+      "class": "gap"
+    },
+    "ArrayBuffer": {
+      "class": "gap"
+    },
+    "BigInt": {
+      "class": "gap"
+    },
+    "DataView": {
+      "class": "gap"
+    },
+    "Float32Array": {
+      "class": "gap"
+    },
+    "Float64Array": {
+      "class": "gap"
+    },
+    "Int16Array": {
+      "class": "gap"
+    },
+    "Int32Array": {
+      "class": "gap"
+    },
+    "Int8Array": {
+      "class": "gap"
+    },
+    "Map": {
+      "class": "gap"
+    },
+    "Promise": {
+      "class": "gap"
+    },
+    "Proxy": {
+      "class": "inapplicable",
+      "reason": "metaobject-protocol",
+      "authority": "docs/conformance/typescript.md \u00a713"
+    },
+    "Reflect": {
+      "class": "inapplicable",
+      "reason": "metaobject-protocol",
+      "authority": "docs/conformance/typescript.md \u00a713"
+    },
+    "Reflect.construct": {
+      "class": "inapplicable",
+      "reason": "metaobject-protocol",
+      "authority": "docs/conformance/typescript.md \u00a713"
+    },
+    "Set": {
+      "class": "gap"
+    },
+    "SharedArrayBuffer": {
+      "class": "gap"
+    },
+    "Symbol": {
+      "class": "gap"
+    },
+    "Symbol.asyncIterator": {
+      "class": "gap"
+    },
+    "Symbol.hasInstance": {
+      "class": "inapplicable",
+      "reason": "runtime-redirect-hook",
+      "authority": "docs/conformance/typescript.md \u00a713"
+    },
+    "Symbol.iterator": {
+      "class": "gap"
+    },
+    "Symbol.toPrimitive": {
+      "class": "inapplicable",
+      "reason": "runtime-redirect-hook",
+      "authority": "docs/conformance/typescript.md \u00a713"
+    },
+    "Symbol.toStringTag": {
+      "class": "gap"
+    },
+    "Symbol.unscopables": {
+      "class": "inapplicable",
+      "reason": "runtime-redirect-hook",
+      "authority": "docs/conformance/typescript.md \u00a713"
+    },
+    "TypedArray": {
+      "class": "gap"
+    },
+    "Uint16Array": {
+      "class": "gap"
+    },
+    "Uint32Array": {
+      "class": "gap"
+    },
+    "Uint8Array": {
+      "class": "gap"
+    },
+    "Uint8ClampedArray": {
+      "class": "gap"
+    },
+    "WeakMap": {
+      "class": "gap"
+    },
+    "WeakRef": {
+      "class": "gap"
+    },
+    "WeakSet": {
+      "class": "gap"
+    },
+    "__proto__": {
+      "class": "inapplicable",
+      "reason": "no-prototype-chain",
+      "authority": "docs/conformance/typescript.md \u00a713"
+    },
+    "arrow-function": {
+      "class": "supported"
+    },
+    "async-functions": {
+      "class": "supported"
+    },
+    "async-iteration": {
+      "class": "gap"
+    },
+    "class": {
+      "class": "supported"
+    },
+    "class-fields-private": {
+      "class": "supported"
+    },
+    "class-fields-private-in": {
+      "class": "gap"
+    },
+    "class-fields-public": {
+      "class": "supported"
+    },
+    "class-methods-private": {
+      "class": "supported"
+    },
+    "class-static-block": {
+      "class": "supported"
+    },
+    "class-static-fields-private": {
+      "class": "supported"
+    },
+    "class-static-fields-public": {
+      "class": "supported"
+    },
+    "class-static-methods-private": {
+      "class": "supported"
+    },
+    "coalesce-expression": {
+      "class": "supported"
+    },
+    "computed-property-names": {
+      "class": "supported"
+    },
+    "const": {
+      "class": "supported"
+    },
+    "cross-realm": {
+      "class": "inapplicable",
+      "reason": "no-realms",
+      "authority": "docs/conformance/typescript.md \u00a713"
+    },
+    "decorators": {
+      "class": "gap"
+    },
+    "default-parameters": {
+      "class": "supported"
+    },
+    "destructuring-assignment": {
+      "class": "supported"
+    },
+    "destructuring-binding": {
+      "class": "supported"
+    },
+    "dynamic-import": {
+      "class": "gap"
+    },
+    "exponentiation": {
+      "class": "supported"
+    },
+    "export-star-as-namespace-from-module": {
+      "class": "gap"
+    },
+    "generators": {
+      "class": "gap"
+    },
+    "globalThis": {
+      "class": "inapplicable",
+      "reason": "no-global-object",
+      "authority": "docs/conformance/typescript.md \u00a78"
+    },
+    "import-attributes": {
+      "class": "gap"
+    },
+    "import-defer": {
+      "class": "gap"
+    },
+    "import-text": {
+      "class": "gap"
+    },
+    "import.meta": {
+      "class": "gap"
+    },
+    "json-modules": {
+      "class": "gap"
+    },
+    "let": {
+      "class": "supported"
+    },
+    "logical-assignment-operators": {
+      "class": "supported"
+    },
+    "new.target": {
+      "class": "gap"
+    },
+    "numeric-separator-literal": {
+      "class": "supported"
+    },
+    "object-rest": {
+      "class": "supported"
+    },
+    "object-spread": {
+      "class": "supported"
+    },
+    "optional-chaining": {
+      "class": "supported"
+    },
+    "rest-parameters": {
+      "class": "supported"
+    },
+    "source-phase-imports": {
+      "class": "gap"
+    },
+    "source-phase-imports-module-source": {
+      "class": "gap"
+    },
+    "super": {
+      "class": "supported"
+    },
+    "tail-call-optimization": {
+      "class": "gap"
+    },
+    "template": {
+      "class": "supported"
+    },
+    "top-level-await": {
+      "class": "gap"
+    },
+    "u180e": {
+      "class": "gap"
+    }
+  }
+}

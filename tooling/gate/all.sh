@@ -1526,6 +1526,18 @@ test262() {
   fi
   standalone=$(printf '%s' "$out" | awk -F'[:,]' '/"standalone"/ { gsub(/ /,"",$2); print $2 }')
   echo "  pin $at reachable, $standalone standalone file(s) parsed, 0 with unsupported metadata"
+  # The feature classifications, checked against the suite that names them.
+  #
+  # `tooling/census/features.json` decides whether a Test262 feature token is a
+  # §13 non-goal, a gap, or something the ledger says already works -- and an
+  # exclusion list nobody reads back is how a census comes to describe a corpus
+  # it is not measuring. Three of its four questions need no compiler and no
+  # census run, which is why they can be here.
+  #
+  # The fourth -- whether a classification is *wrong* -- needs a census artifact
+  # and runs in both directions: an `inapplicable` that lowers, and a
+  # `supported` whose files all refuse. It is advisory and is not this step.
+  node tooling/census/audit.mjs || return 1
 }
 
 step "build"   cargo build --release
