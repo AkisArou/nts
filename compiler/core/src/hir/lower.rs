@@ -28779,6 +28779,24 @@ impl<'a> FuncBuilder<'a> {
         {
             return Some(node);
         }
+        // **An accessor is a call**, which is the first sentence of
+        // `examples/accessors` and was not true of this guard: it matched
+        // `CallExpression` and `NewExpression`, and a getter read is a
+        // `PropertyAccessExpression`. So `try { return c.checked } catch { }`
+        // compiled, and the throw crossed the boundary the refusal exists to
+        // name -- **6 of 29 cases declined** where node answers `-1`, on a
+        // program the compiler reported as complete. A setter does it too:
+        // `try { c.checked = n } catch { }` is the same call under an
+        // assignment.
+        //
+        // It reads as a property everywhere except where it matters, which is
+        // exactly what the accessors example warns about one level down --
+        // "laying `doubled` out as a field and emitting a load for `b.doubled`
+        // would read whatever happens to sit at that offset". The guard made
+        // the same mistake about control flow rather than about storage.
+        if self.reads_an_accessor(node) {
+            return Some(node);
+        }
         // Not into a nested function: a closure written inside a `try` is not
         // *called* by it, and refusing on one would refuse every `try` holding
         // a callback that runs somewhere else entirely.
@@ -28795,6 +28813,38 @@ impl<'a> FuncBuilder<'a> {
         self.children(node)
             .into_iter()
             .find_map(|child| self.call_within(child))
+    }
+
+    /// Whether a member access runs an **accessor**, and is therefore a call.
+    ///
+    /// By the member symbol's declarations rather than by the node's shape,
+    /// because nothing in the syntax of `c.checked` says whether `checked` is a
+    /// field or a `get`. Covers `set` as well: an assignment to one is a call
+    /// with the same boundary.
+    fn reads_an_accessor(&self, node: NodeId) -> bool {
+        if !matches!(
+            self.kind_of(node),
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
+        ) {
+            return false;
+        }
+        let Some(&member) = self.children(node).last() else {
+            return false;
+        };
+        let Some(symbol) = self.node(member).symbol else {
+            return false;
+        };
+        self.snapshot
+            .symbols
+            .get(symbol.0 as usize)
+            .is_some_and(|symbol| {
+                symbol.declarations.iter().any(|at| {
+                    matches!(
+                        self.kind_of(*at),
+                        Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR)
+                    )
+                })
+            })
     }
 
     /// Whether a call or `new` reaches a function this program compiles.
