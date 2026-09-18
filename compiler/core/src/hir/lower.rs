@@ -28378,6 +28378,18 @@ impl<'a> FuncBuilder<'a> {
                 let index = self.lower_expression(index)?;
                 self.element_of(id, receiver, index)
             }
+            Branch::ArrayElement { array, index, ty } => {
+                let origin = self.origin(id);
+                Ok(self.push(
+                    OpKind::ArrayGet {
+                        array,
+                        index,
+                        checked: true,
+                    },
+                    ty,
+                    origin,
+                ))
+            }
             Branch::Member(receiver, member, present) => {
                 let name = self
                     .literal_name(member)
@@ -29343,6 +29355,88 @@ impl<'a> FuncBuilder<'a> {
     /// position for a tuple, and an indexed element for an array. Extracted
     /// from `bind_pattern` so that the loop there is about *binding* -- rests,
     /// nesting, symbols -- and this is about reading.
+    /// `[a = 9]` over an array that may be too short: the default, no read.
+    ///
+    /// `function f([a = 9]) {}` called as `f([])` is 9 in every engine, and
+    /// this compiler aborted the process:
+    ///
+    /// ```text
+    /// nts: refused: index 0 is outside [0, 0)
+    /// ```
+    ///
+    /// The default was applied *after* the read, by the branch in
+    /// [`Self::bind_pattern`], so the read a default exists to avoid happened
+    /// first and killed the program. Six files in the test262 corpus are this,
+    /// every one named `-init-exhausted` -- the suite writes the case down
+    /// precisely because it is the one an implementation gets wrong.
+    ///
+    /// `Ok(None)` when this is not that shape, and the caller falls through to
+    /// the ordinary read:
+    ///
+    ///   * no default -- there is nothing to hand back, and an over-long
+    ///     pattern is still a checked read that aborts;
+    ///   * an object pattern -- a missing field is a compile-time refusal, not
+    ///     a runtime length;
+    ///   * a tuple, which is read as an object because the position *is* the
+    ///     field: its length is static, so an out-of-range element is already
+    ///     refused when the program is compiled rather than when it runs.
+    fn defaulted_array_element(
+        &mut self,
+        element: NodeId,
+        binding: NodeId,
+        value: ValueId,
+        position: usize,
+        default: Option<NodeId>,
+        object: bool,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(default) = default else {
+            return Ok(None);
+        };
+        if object {
+            return Ok(None);
+        }
+        let HirType::Managed(ManagedType::Array(element_ty)) =
+            self.values[value.0 as usize].ty.clone()
+        else {
+            return Ok(None);
+        };
+        let origin = self.origin(element);
+        #[allow(clippy::cast_precision_loss)]
+        let at = position as f64;
+        let index = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
+        // `OpKind::Length`, the plain read. `Place::ArrayLength` is the
+        // *compound-assignment* path and refuses on sight -- "reading an array's
+        // `length` as part of assigning to it" -- which is right for `xs.length
+        // -= 1` and has nothing to do with this.
+        let length = self.push(OpKind::Length(value), HirType::NUMBER, origin.clone());
+        // The **absent** condition, matching what `defaulted_when` produces, so
+        // that both paths hand `lower_branching_value` a test with one meaning:
+        // true takes the default.
+        let exhausted = self.push(
+            OpKind::Binary {
+                op: BinOp::Le,
+                lhs: length,
+                rhs: index,
+            },
+            HirType::Bool,
+            origin,
+        );
+        // The binding's node, not the element's, for the reason the ordinary
+        // path gives: its type is the one the default has already been folded
+        // into, and both arms have to produce it.
+        self.lower_branching_value(
+            binding,
+            exhausted,
+            Branch::Expression(default),
+            Branch::ArrayElement {
+                array: value,
+                index,
+                ty: *element_ty,
+            },
+        )
+        .map(Some)
+    }
+
     fn read_for_pattern(
         &mut self,
         element: NodeId,
@@ -29417,6 +29511,10 @@ impl<'a> FuncBuilder<'a> {
             // Checked, like every other element read: a pattern longer than
             // its array is `undefined` in JavaScript and this compiler has
             // no `undefined` to hand back.
+            //
+            // An element with a **default** never reaches here:
+            // `defaulted_array_element` takes that shape, because the read this
+            // performs is the one the default exists to avoid.
             self.push(
                 OpKind::ArrayGet {
                     array: value,
@@ -29531,25 +29629,34 @@ impl<'a> FuncBuilder<'a> {
                 }
                 continue;
             }
-            let read = self.read_for_pattern(element, property, value, position, object)?;
-            // `{ a = d }`: the default stands in where the read is `undefined`,
-            // and only there.
-            let read = match default {
-                Some(default) => match self.defaulted_when(element, property, read)? {
-                    // The *binding's* node, not the element's: its type is the
-                    // one the default has already been folded into, which is
-                    // what both arms have to produce.
-                    Some(absent) => self.lower_branching_value(
-                        binding,
-                        absent,
-                        Branch::Expression(default),
-                        Branch::Present(read),
-                    )?,
-                    // No room for an absence, so the default is unreachable.
-                    // The language agrees: it is never evaluated.
+            // Asked *before* the read, because for an array element with a
+            // default the read is the thing being avoided.
+            let read = if let Some(chosen) = self
+                .defaulted_array_element(element, binding, value, position, default, object)?
+            {
+                chosen
+            } else {
+                let read = self.read_for_pattern(element, property, value, position, object)?;
+                // `{ a = d }`: the default stands in where the read is
+                // `undefined`, and only there.
+                match default {
+                    Some(default) => match self.defaulted_when(element, property, read)? {
+                        // The *binding's* node, not the element's: its type is
+                        // the one the default has already been folded into,
+                        // which is what both arms have to produce.
+                        Some(absent) => self.lower_branching_value(
+                            binding,
+                            absent,
+                            Branch::Expression(default),
+                            Branch::Present(read),
+                        )?,
+                        // No room for an absence, so the default is
+                        // unreachable. The language agrees: it is never
+                        // evaluated.
+                        None => read,
+                    },
                     None => read,
-                },
-                None => read,
+                }
             };
             // `{ p: { x } }` is a read and then another pattern over what it
             // produced, which is the same function one level down.
@@ -37463,6 +37570,28 @@ enum Branch {
     /// reason [`Self::Member`]'s payload read is: `xs?.[next()]` must not call
     /// `next` when `xs` is absent, and the specification says so.
     Element(ValueId, NodeId, Option<HirType>),
+    /// One element of an array, read in the arm where the index is in range.
+    ///
+    /// The read is **here** rather than before the branch, and that is the whole
+    /// point of the variant. [`Self::Value`] and [`Self::Present`] both take a
+    /// value the caller has already computed, and for a checked `ArrayGet` that
+    /// means the abort has already happened -- which is precisely what a default
+    /// on the element exists to prevent.
+    ///
+    /// Distinct from [`Self::Element`] because that one lowers an index
+    /// *expression* from a node: `xs?.[next()]` must not call `next` on the
+    /// absent path. A pattern's index is a position this compiler synthesised
+    /// and there is no node to lower.
+    ///
+    /// Still `checked`. Inside the arm the index cannot be out of range, so the
+    /// check costs a comparison that the optimiser can see through -- and if the
+    /// guard is ever wrong, the program aborts where it would otherwise read
+    /// past the end of the backing store.
+    ArrayElement {
+        array: ValueId,
+        index: ValueId,
+        ty: HirType,
+    },
     /// A value the branch has established is neither `null` nor `undefined`.
     ///
     /// Distinct from [`Self::Value`] because the distinction is a soundness
