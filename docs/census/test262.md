@@ -267,6 +267,16 @@ Removing those leaves *a method with no declaration in the hierarchy* (40) and
 *an erased value where a concrete representation is wanted* (40) as the largest
 rows that are actually work.
 
+The first is **`next` in all 40** — the iterator protocol, and it already has a
+✗ ledger row: `IteratorResult<T>` is "a union of two object types whose `value`
+is `T` in one and `any` in the other, so they lay out differently and the union
+has no representation". `typescript.md` also records that `any` is only its
+*first* blocker, that `done?: false` and `done: true` representing differently
+is an independent second one, and that this was measured and reverted once
+already. So this row is one known piece of work with a design behind it, not 40
+separate things — which is the useful thing a ranked table can say, and only
+says if somebody opens the files.
+
 ## What this census cannot see
 
 Printed by the instrument on every run, not left to a reader.
