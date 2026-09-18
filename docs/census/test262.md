@@ -225,6 +225,48 @@ third arm is a program that is *refused* and would otherwise complete, required
 to come back exactly `unsupported` — not merely "not a pass", since a crash
 would satisfy the weaker test while the refusal still went unread.
 
+### What blocks the 413 that reach lowering
+
+The census ranks the whole corpus, most of which never typechecks. This ranks
+the population that actually *could* have run: the 413 slice-1 files that
+typecheck, reach lowering, and are refused there. 37 distinct shapes.
+
+| files | first refusal |
+| ---: | --- |
+| 48 | `X`, a builtin this compiler does not provide |
+| 40 | a method `X` with no declaration in the hierarchy |
+| 40 | an erased value where a concrete representation is wanted |
+| 36 | a module-scope variable of unrepresentable type |
+| 36 | reading a name before it is bound |
+| 32 | `X`, a static field this compiler gave no storage |
+| 31 | `X`, declared by `X` with a type that has no representation (a function type) |
+| 24 | a `X` of unrepresentable type (`X`) |
+| 20 | a parameter of unrepresentable type (`X`) |
+| 20 | a rest element with no name |
+| 12 | an omitted expression |
+
+**The top row is not a gap, and the two after it are one cause.** Both are
+reasons to read a ranked table with the files open rather than as a backlog.
+
+*`a builtin this compiler does not provide`* is **43 `eval`**, plus one
+`Function`, one `RegExp`, and three others — counted by opening all 48. `eval`
+and `Function` are a documented boundary, not an oversight: `docs/eval.md`
+records a possible AOT design for them and states that the default profile
+"remains engine-free" and "must never silently add an interpreter, bytecode VM,
+JIT, runtime compiler, or external compilation service". So the largest single
+row in this table is a design decision the project has already taken, and
+treating it as the next thing to fix would be reading the table backwards.
+
+*`a module-scope variable of unrepresentable type`* and *`reading a name before
+it is bound`* are **the same 36 files**, counted twice: the second is the read
+that follows the global the first did not create. Both were fixed on
+2026-09-18, and the section above records how the second came to be described
+here as the temporal dead zone.
+
+Removing those leaves *a method with no declaration in the hierarchy* (40) and
+*an erased value where a concrete representation is wanted* (40) as the largest
+rows that are actually work.
+
 ## What this census cannot see
 
 Printed by the instrument on every run, not left to a reader.
