@@ -19099,6 +19099,67 @@ impl<'a> FuncBuilder<'a> {
         let Some(ty) = self.snapshot.node_types.get(&rhs).copied() else {
             return Err(self.unsupported(rhs, "an `in` on a value with no type"));
         };
+        // **Every object inherits `Object.prototype`, and `in` is defined over the
+        // whole chain.** `"valueOf" in {}` is `true` in every engine and was
+        // `false` here: every path below asks which members the *type* declares,
+        // and an inherited one is declared by none of them. Measured by running
+        // test262 `language/expressions/in/S8.12.6_A2_T1.js`, one of four files
+        // in the 2,527-file slice-1 population that compiled, ran, and answered
+        // wrongly.
+        //
+        // # The precondition, stated so it can be found again
+        //
+        // This is sound only because **no object in a program this compiler
+        // accepts can have a null prototype**. `Object.create` and
+        // `Object.setPrototypeOf` are both refused today -- checked, not assumed
+        // -- so there is no way to write one. Whoever implements either must
+        // come back here: `Object.create(null)` makes every answer below wrong,
+        // silently, and nothing else in the compiler will notice.
+        //
+        // Strings are excluded deliberately, for the reason the `in`-on-a-native
+        // path already records: `"length" in "abc"` **throws** a TypeError in
+        // JavaScript rather than answering, so a string receiver must not take a
+        // shortcut that answers.
+        //
+        // A *lying cast* defeats that, and is worth writing down rather than
+        // discovering: `s as unknown as Record<string, number>` gives a string
+        // the static type of a table, and this answers `true` where node throws.
+        // The compiler cannot see through a double cast through `unknown` -- the
+        // programmer has asserted something false and this trusts declared types
+        // throughout. It is not a regression in reach: on the compiler before
+        // this the same program emitted C that did not compile. It is a change
+        // in *kind*, from a broken build to a wrong answer, and that direction
+        // is the one to be uneasy about.
+        //
+        // The list is `Object.prototype`'s own property names -- the seven the
+        // specification requires plus `__proto__` and the four Annex B
+        // accessors, because node has them and node is the oracle. It does not
+        // make the member *callable*: `Object.prototype.hasOwnProperty` is still
+        // refused as a global member with no definition. `in` is the half the
+        // specification is unambiguous about, and the two are separate work.
+        if matches!(
+            self.represent(ty),
+            Some(HirType::Managed(
+                ManagedType::Object(_) | ManagedType::Array(_) | ManagedType::Table(_, _)
+            ))
+        ) && matches!(
+            key.as_str(),
+            "constructor"
+                | "hasOwnProperty"
+                | "isPrototypeOf"
+                | "propertyIsEnumerable"
+                | "toLocaleString"
+                | "toString"
+                | "valueOf"
+                | "__proto__"
+                | "__defineGetter__"
+                | "__defineSetter__"
+                | "__lookupGetter__"
+                | "__lookupSetter__"
+        ) {
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::ConstBool(true), HirType::Bool, origin));
+        }
         // TypeScript's `object`, which is what every one of these sites narrows
         // to: `value !== null && typeof value === "object" && "message" in value`
         // is how a program duck-types an `unknown`, and it is 67 sites in
