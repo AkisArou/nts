@@ -1119,17 +1119,6 @@ enum Head {
 /// names use it: no program can declare something that collides with this.
 pub const MODULE_INIT: &str = "module#init";
 
-/// Whether a node at module scope is a statement rather than a declaration.
-///
-/// An allow-list, and deliberately not the complement of one. A kind that is
-/// neither is *refused* below rather than skipped, because skipping silently
-/// is the defect this exists to fix: a `total = bump(41)` at module scope was
-/// dropped, and the program compiled, ran, and answered as though the line
-/// were not there.
-///
-/// `return`, `break` and `continue` are absent because they are illegal at
-/// module scope, and `VariableStatement` because a module-scope declaration is
-/// a global with a static initializer, which needs no code to run.
 /// Whether a class declaration has a `static` field to initialize at evaluation.
 ///
 /// **Asked of the node rather than the kind**, and only classes that answer yes
@@ -1160,6 +1149,29 @@ fn runs_a_static_initializer(probe: &FuncBuilder, id: NodeId) -> bool {
     })
 }
 
+/// Whether a node at module scope is a statement rather than a declaration.
+///
+/// An allow-list, and deliberately not the complement of one. A kind that is
+/// neither is *refused* below rather than skipped, because skipping silently
+/// is the defect this exists to fix: a `total = bump(41)` at module scope was
+/// dropped, and the program compiled, ran, and answered as though the line
+/// were not there.
+///
+/// `return`, `break` and `continue` are absent because they are illegal at
+/// module scope, and `VariableStatement` because a module-scope declaration is
+/// a global with a static initializer, which needs no code to run.
+///
+/// **The three at the bottom were absent for no reason anyone wrote down.**
+/// `lower_statement` has always handled them -- `lower_try`, `lower_for_of` with
+/// `Over::Keys`, `lower_labeled` -- so a `try` in a function body compiled while
+/// the same `try` at module scope was refused as "a statement this lowering
+/// does not run at module scope". An allow-list is right, and an allow-list
+/// three entries short of its own lowering is just a gap.
+///
+/// (This doc comment was itself attached to `runs_a_static_initializer`, which
+/// someone inserted between the comment and the function it describes. Rustdoc
+/// put a paragraph about module statements at the top of a predicate about
+/// static fields, and neither function had a reader who noticed.)
 fn is_module_statement(kind: u16) -> bool {
     matches!(
         kind,
@@ -1176,6 +1188,9 @@ fn is_module_statement(kind: u16) -> bool {
             // A declaration whose initializer is code runs at evaluation time,
             // and its position among the other statements is observable.
             | syntax::VARIABLE_STATEMENT
+            | syntax::TRY_STATEMENT
+            | syntax::FOR_IN_STATEMENT
+            | syntax::LABELED_STATEMENT
     )
 }
 
