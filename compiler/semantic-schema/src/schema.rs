@@ -216,20 +216,50 @@ pub enum VariableKind {
     Var,
     Let,
     Const,
+    /// `using x = …` — a block-scoped binding disposed at scope exit.
+    Using,
+    /// `await using x = …`, whose disposal is awaited.
+    AwaitUsing,
 }
 
 impl VariableKind {
     /// Classify a `VariableDeclarationList` by its node flags.
+    ///
+    /// **`Using` is tested first, and the order is the whole of it.** The
+    /// frontend's flags are `Let = 1 << 0`, `Const = 1 << 1`, `Using = 1 << 2`,
+    /// and `await using` is spelled `Const | Using` — its own source says the
+    /// two "would otherwise be mutually exclusive". So a plain `using` has
+    /// neither `Let` nor `Const` set and read as **`Var`**, and an
+    /// `await using` read as **`Const`**.
+    ///
+    /// Neither answer was wrong in a way anything noticed, because nothing in
+    /// this compiler had heard of `using` at all: the declaration lowered as an
+    /// ordinary binding and `[Symbol.dispose]` was **never called**. A program
+    /// using it compiled, ran, and silently did nothing at scope exit —
+    /// `docs/conformance/typescript.md` even listed `using` among shapes
+    /// "probed and passing", which it is only if the probe stops at whether it
+    /// compiles.
     #[must_use]
     pub const fn from_flags(flags: u32) -> Self {
-        // NodeFlags: Let = 1, Const = 2. Neither set means `var`.
-        if flags & 2 != 0 {
+        if flags & 4 != 0 {
+            if flags & 2 != 0 {
+                Self::AwaitUsing
+            } else {
+                Self::Using
+            }
+        } else if flags & 2 != 0 {
             Self::Const
         } else if flags & 1 != 0 {
             Self::Let
         } else {
             Self::Var
         }
+    }
+
+    /// Whether this declaration disposes its binding when the scope ends.
+    #[must_use]
+    pub const fn disposes(self) -> bool {
+        matches!(self, Self::Using | Self::AwaitUsing)
     }
 }
 

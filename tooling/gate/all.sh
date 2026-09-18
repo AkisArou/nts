@@ -830,17 +830,18 @@ backend_examples() {
         # Nothing for the differential to drive, so it exits 0 without comparing
         # an answer -- and would count as agreement in either backend.
         #
-        # **Nine do, and the number had read `Six` since before anyone counted.**
+        # **Ten do, and the number had read `Six` since before anyone counted.**
         # It is printed on every run and was never expanded, which is what made
         # it invisible: a figure an instrument states unchanged every time stops
         # being read as a question. The JVM lane enumerated theirs after the
         # same shape turned up in a ledger row with an empty cell.
         #
-        # Four are `*-unsupported` and comparing nothing is exactly right --
+        # Five are `*-unsupported` and comparing nothing is exactly right --
         # they exist to document a refusal:
         #
         #     dates-unsupported   enum-reverse-map-unsupported
         #     generator-unsupported   generic-classes-unsupported
+        #     using-unsupported
         #
         # **Five are ordinary examples that export real functions**: `advanced`
         # (`isFish`, `assertFish`, `identity`, `bounded`), `calls` (`widen`
@@ -1060,7 +1061,7 @@ backend_examples() {
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # 197 through 202 on 2026-09-13. One below its sibling, and the one is named:
   # `this-in-a-field-initializer`, which the run prints rather than absorbing.
-  backend_examples 264 "through the LLVM backend, counting" "" 14 ); }
+  backend_examples 265 "through the LLVM backend, counting" "" 14 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -1081,7 +1082,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # not flattening -- an example this backend does not yet agree on should lower
 # the number it can hold, not fail the step the day it lands.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 265 "through the LLVM backend" "" 14 ); }
+  backend_examples 266 "through the LLVM backend" "" 14 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1341,7 +1342,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   status=$?
   printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
   [ "$status" -eq 0 ] || return 1
-  backend_examples 265 "through the JVM backend" exact 10 ); }
+  backend_examples 266 "through the JVM backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

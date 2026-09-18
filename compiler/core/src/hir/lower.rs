@@ -2591,6 +2591,25 @@ fn collect_module_scope(
             .map_or(nts_semantic_schema::VariableKind::Var, |list| {
                 nts_semantic_schema::VariableKind::from_flags(probe.node(list).flags)
             });
+        // **Refused, because accepting it was worse.** Nothing in this compiler
+        // had heard of `using`, so the declaration lowered as an ordinary
+        // binding and `[Symbol.dispose]` was **never called** -- the program
+        // compiled, ran, and silently did nothing at scope exit.
+        //
+        //     let disposed = 0;
+        //     class R { [Symbol.dispose]() { disposed = 1; } }
+        //     function f() { using r = new R(); }
+        //     f();                    // node: disposed is 1.  this: 0
+        //
+        // `typescript.md` listed `using` among shapes "probed and passing",
+        // which it is only if the probe stops at whether the program builds.
+        if kind.disposes() {
+            scope.unsupported.insert(
+                symbol.0,
+                "a `using` declaration, whose scope-exit disposal".to_owned(),
+            );
+            continue;
+        }
         // A `const` whose initializer folds is a value rather than storage: the
         // reader gets the number and nothing is allocated. One whose
         // initializer is code is storage like any other, written once by
@@ -11331,6 +11350,33 @@ impl<'a> FuncBuilder<'a> {
         statement: NodeId,
         refused: &rustc_hash::FxHashSet<u32>,
     ) -> Result<(), Diagnostic> {
+        // **Refused here rather than only in `collect_module_scope`, because a
+        // refusal recorded against a *symbol* is reported where the name is
+        // read — and a `using` binding often has no reader at all.** Its whole
+        // purpose is the disposal at scope exit, so
+        //
+        //     using r = new R();
+        //
+        // mentions `r` exactly once. The collector's entry was correct and
+        // silent, the declaration still lowered, and nothing said that
+        // `[Symbol.dispose]` would not run. Refusing the *statement* is what
+        // module evaluation reports.
+        if self
+            .ancestor(statement, syntax::VARIABLE_DECLARATION_LIST)
+            .or_else(|| {
+                self.children(statement)
+                    .into_iter()
+                    .find(|child| self.kind_of(*child) == Some(syntax::VARIABLE_DECLARATION_LIST))
+            })
+            .is_some_and(|list| {
+                nts_semantic_schema::VariableKind::from_flags(self.node(list).flags).disposes()
+            })
+        {
+            return Err(self.unsupported(
+                statement,
+                "a `using` declaration, whose scope-exit disposal",
+            ));
+        }
         let mut declarations = Vec::new();
         collect_kind(
             self.snapshot,
@@ -29392,6 +29438,15 @@ impl<'a> FuncBuilder<'a> {
                 .map_or(nts_semantic_schema::VariableKind::Let, |list| {
                     nts_semantic_schema::VariableKind::from_flags(self.node(list).flags)
                 });
+            // Refused rather than lowered as an ordinary binding: see the
+            // module-scope site, and `VariableKind::from_flags`, for why
+            // accepting it was the worse of the two.
+            if declared_kind.disposes() {
+                return Err(self.unsupported(
+                    declaration,
+                    "a `using` declaration, whose scope-exit disposal",
+                ));
+            }
             if initializer.is_none()
                 && declared_kind == nts_semantic_schema::VariableKind::Var
                 && let Some(symbol) = self.node(name).symbol
