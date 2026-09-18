@@ -879,6 +879,39 @@ backend_examples() {
         # `x!` where `x` is `undefined` aborts here and node answers `undefined`,
         # which is a ledger row of its own. What it must not be is *silent*, so
         # it gets its own outcome and its own ceiling.
+        #
+        # **This closes one hole and the line above it names another.** A
+        # decline is *the program refused this input*; `checked N of M` is
+        # *nobody ran the rest*. They are different, and the second is printed
+        # here unratcheted on purpose.
+        #
+        # Two of us looked at ratcheting it on 2026-09-18 and decided against,
+        # which is worth recording as a decision rather than as an absence:
+        #
+        #   - `M` is a fact about the hostile **pool**, not about the compiler.
+        #     A ceiling on it goes red when someone improves the generator and
+        #     green when someone narrows it -- a floor measuring something other
+        #     than the thing under test, which is the family this file keeps
+        #     pulling out of itself.
+        #   - It would not have caught the defect that prompted it. A fixed view
+        #     over a resizable buffer reported a stale length on every backend
+        #     for the life of the feature, and `(max=8, grown=0)` was neither
+        #     declined nor unreached -- it was **never generated**. No count over
+        #     run cases can see an input that does not exist, so the instrument
+        #     would have been green throughout.
+        #
+        # What found it was a fixture *arm* that drove the boundary: a `sized(n)`
+        # helper mapping the input onto `0, 3, 4, 8` so the corner became a
+        # compared case rather than a hoped-for one. That is a property of the
+        # example, not a statistic over runs, so it belongs in how examples are
+        # written rather than in a step here. **Map the input the pool gives you
+        # onto the corners you mean to test; do not hope the pool visits them.**
+        #
+        # (No apostrophes above: this sits inside the single-quoted `sh -c`
+        # string, and the block forty lines up says so. Written with one
+        # anyway, and the shell reported it as a syntax error at an unrelated
+        # `fi` three hundred lines below -- which is why that warning is worth
+        # repeating where the next person will be typing.)
         case "$out" in
           *"the compiled program declined"*)
             why=$(printf "%s" "$out" |
