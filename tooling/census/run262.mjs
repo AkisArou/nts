@@ -52,7 +52,7 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { environment, materialise, workspace } from "./project.mjs";
+import { environment, materialise, pinCompiler, workspace } from "./project.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -88,6 +88,11 @@ function cannotMeasure(why) {
 
 if (!existsSync(NTS)) cannotMeasure(`no compiler at ${NTS}; set NTS_BIN`);
 if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bootstrap.sh clones it");
+
+// Copied, and every `attempt` runs the copy: a run measures one binary even
+// though `target/release/nts` is the path everyone builds into. `pinCompiler`
+// carries why.
+const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 
 // --- the selection --------------------------------------------------------
 
@@ -169,7 +174,7 @@ function attempt(dir, body) {
   //
   // The two self-checks below could not see it: neither program has a refusal
   // in it, so the arm that would have fired never ran. `refused()` is that arm.
-  const emit = spawnSync(NTS, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--main"], {
+  const emit = spawnSync(PINNED, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--main"], {
     encoding: "utf8",
     timeout: 120_000,
     maxBuffer: 64 * 1024 * 1024,
@@ -315,6 +320,9 @@ const ran = [...buckets.values()].reduce((sum, count) => sum + count, 0);
 const report = {
   pin: execFileSync("git", ["-C", SUITE, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   compiler: NTS,
+  // The bytes, not the path. A path stays true while the binary behind it is
+  // replaced, which is the whole reason the copy above exists.
+  fingerprint: FINGERPRINT,
   under,
   slice: slice1 ? "slice1" : "positive-no-includes",
   selected: records.length,
@@ -329,7 +337,7 @@ if (asJson) {
   console.log(JSON.stringify(report, null, 2));
 } else {
   console.log(`  pin ${report.pin}`);
-  console.log(`  compiler ${NTS}`);
+  console.log(`  compiler ${NTS} (sha256:${FINGERPRINT})`);
   console.log(`  ${under}: ${records.length} selected, ${chosen.length} attempted, ${ran} run`);
   console.log(
     `  self-checks: control ${checks.control}, sabotage ${checks.sabotage}, ` +

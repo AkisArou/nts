@@ -45,14 +45,15 @@
 // measured nothing somewhere else in this repository.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { HARNESS, pinCompiler, workspace as scratchProject } from "./project.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const SUITE = join(ROOT, "third_party/test262");
-const HARNESS = readFileSync(join(HERE, "harness.ts"), "utf8");
 const SCRATCH = process.env.NTS_CENSUS_DIR ?? join(ROOT, "target/census/test262");
 
 const argv = process.argv.slice(2);
@@ -99,6 +100,10 @@ function cannotMeasure(why) {
 
 if (!existsSync(NTS)) cannotMeasure(`no compiler at ${NTS}; set NTS_BIN`);
 if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bootstrap.sh clones it");
+
+// Copied, so a twenty-minute census measures one binary rather than whichever
+// build happened to be at that path when each file's turn came.
+const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 
 // --- the selection --------------------------------------------------------
 
@@ -162,32 +167,13 @@ const TS_LINE = /^(TS\d{4,5})\s+(.*)$/;
 /** `N function(s), M construct(s) refused` -- the footer this reconciles against. */
 const FOOTER = /^(\d+) function\(s\), (?:(\d+) construct\(s\) refused|nothing refused)$/;
 
+// The project, the harness and the compiler pin all come from `project.mjs`.
+// It was written for this -- "two instruments need it ... if each materialised
+// its own project they would be two derivations of one fact" -- and then only
+// `run262.mjs` was converted, so the header claimed a sharing that did not
+// exist while this file kept its own copy of the tsconfig.
 function workspace(worker) {
-  const dir = join(SCRATCH, `w${worker}`);
-  mkdirSync(join(dir, "src"), { recursive: true });
-  // Options inlined rather than `extends`-ed. A copied fixture config's
-  // relative `extends` resolves to nothing, silently, and the options vanish --
-  // which has cost this repository a probe that measured a different language
-  // than it meant to.
-  writeFileSync(
-    join(dir, "tsconfig.json"),
-    `${JSON.stringify(
-      {
-        compilerOptions: {
-          target: "ESNext",
-          module: "ESNext",
-          moduleResolution: "bundler",
-          allowImportingTsExtensions: true,
-          strict: true,
-          noEmit: true,
-        },
-        include: ["src"],
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  return dir;
+  return scratchProject(join(SCRATCH, `w${worker}`));
 }
 
 function compile(dir, source) {
@@ -196,7 +182,7 @@ function compile(dir, source) {
   writeFileSync(join(dir, "src", "main.ts"), source);
   try {
     return {
-      out: execFileSync(NTS, ["hir", join(dir, "tsconfig.json"), "--prepared"], {
+      out: execFileSync(PINNED, ["hir", join(dir, "tsconfig.json"), "--prepared"], {
         encoding: "utf8",
         timeout: 60_000,
         maxBuffer: 64 * 1024 * 1024,
@@ -359,6 +345,9 @@ const ranked = [...firstRefusal.entries()].sort((a, b) => b[1] - a[1]);
 const report = {
   pin: execFileSync("git", ["-C", SUITE, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   compiler: NTS,
+  // The bytes, not the path: a path stays true while the binary behind it is
+  // replaced, which is what the copy above prevents.
+  fingerprint: FINGERPRINT,
   under,
   slice: slice1 ? "slice1" : "planned",
   selected: records.length,

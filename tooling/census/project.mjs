@@ -6,7 +6,8 @@
 // the first time they disagreed the census and the run would be measuring
 // different programs while reporting the same corpus.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -59,6 +60,33 @@ export function materialise(dir, body) {
   const source = `"use strict";\n${HARNESS}${body}`;
   writeFileSync(join(dir, "src", "main.ts"), source);
   return source;
+}
+
+/**
+ * The compiler, copied into `scratch` so a run measures one binary.
+ *
+ * Returns `{ path, fingerprint }`: run `path`, report `fingerprint`.
+ *
+ * A full slice is tens of minutes and `target/release/nts` is the path everyone
+ * builds into, so an instrument reading it directly measures whatever binary
+ * happened to be there when each file's turn came. A run here was killed after
+ * 1742 rows for exactly that -- a `cargo build --release` landed partway
+ * through, and the rows before and after it are two different compilers
+ * reported as one number.
+ *
+ * Nothing in the output would have said so. A report names a compiler *path*,
+ * and a path stays true while the thing behind it is replaced. The fingerprint
+ * is the bytes, which is the part that cannot.
+ */
+export function pinCompiler(nts, scratch) {
+  mkdirSync(scratch, { recursive: true });
+  const path = join(scratch, "nts");
+  copyFileSync(nts, path);
+  chmodSync(path, 0o755);
+  return {
+    path,
+    fingerprint: createHash("sha256").update(readFileSync(path)).digest("hex").slice(0, 16),
+  };
 }
 
 /**
