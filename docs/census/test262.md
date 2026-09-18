@@ -286,6 +286,40 @@ Removing those leaves *a method with no declaration in the hierarchy* (40) and
 *an erased value where a concrete representation is wanted* (40) as the largest
 rows that are actually work.
 
+### And the six largest shapes occur nowhere else
+
+Split the 413 by whether the file is in one of test262's **generated**
+families — `class/dstr`, `object/dstr`, `assignment/dstr`, `class/elements`,
+which expand one construct exhaustively across method / generator / async /
+static / private / anonymous-class forms — and the table separates almost
+perfectly. 215 files inside, 198 outside.
+
+| elsewhere | generated | shape |
+| ---: | ---: | --- |
+| 48 | 0 | `X`, a builtin this compiler does not provide (43 are `eval`) |
+| 36 | 0 | reading a name before it is bound *(fixed 2026-09-18)* |
+| 32 | 4 | a module-scope variable of unrepresentable type *(fixed 2026-09-18)* |
+| 24 | 0 | a `X` of unrepresentable type |
+| 10 | 0 | `X` or `X` where what it stands in for is not a reference |
+| **0** | **40** | an erased value where a concrete representation is wanted |
+| **0** | **40** | a method `X` with no declaration in the hierarchy |
+| **0** | **32** | `X`, a static field this compiler gave no storage |
+| **0** | **31** | declared by `X` with a type that has no representation |
+| **0** | **20** | a rest element with no name |
+| **0** | **20** | a parameter of unrepresentable type |
+
+**The six largest shapes in the whole table occur in the generated families and
+nowhere else.** They are not six independent language gaps; they are one
+construct family — destructuring patterns in method positions — refused at
+whichever point each combination reaches first. `class/dstr` alone is 150 files
+spread across seven "shapes".
+
+That cuts both ways and both are worth stating. Clearing them would move the
+number a great deal for a narrow amount of language. And the *breadth* of what
+this compiler cannot do is better read off the 198 outside, which after removing
+`eval` and the two fixed on 2026-09-18 is a long thin tail: 24, 10, 9, 5, and
+then ones and twos.
+
 The first is **`next` in all 40** — the iterator protocol, and it already has a
 ✗ ledger row: `IteratorResult<T>` is "a union of two object types whose `value`
 is `T` in one and `any` in the other, so they lay out differently and the union
