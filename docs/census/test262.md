@@ -320,6 +320,14 @@ this compiler cannot do is better read off the 198 outside, which after removing
 `eval` and the two fixed on 2026-09-18 is a long thin tail: 24, 10, 9, 5, and
 then ones and twos.
 
+The largest row left outside the generated families, after `eval` and the two
+fixed that day, is **24 files of wrapper objects** — `new String`, `new Number`,
+`new Boolean`, counted by opening them. They have a ✗ ledger row as of
+2026-09-18: objects rather than primitives, needing a boxed representation and
+`ToPrimitive` at every operator, for a construct no code written this decade
+uses deliberately. test262 exercises them heavily because they are specified,
+which is what puts them that high here and nowhere else.
+
 The first is **`next` in all 40** — the iterator protocol, and it already has a
 ✗ ledger row: `IteratorResult<T>` is "a union of two object types whose `value`
 is `T` in one and `any` in the other, so they lay out differently and the union
