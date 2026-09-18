@@ -69,6 +69,14 @@ struct ModuleScope {
     /// compile. It is a global whose initial value is zero and whose real value
     /// is assigned by `module#init`, in evaluation order with everything else.
     deferred: rustc_hash::FxHashMap<u32, NodeId>,
+
+    /// Declarations whose name is a **binding pattern**, by declaration node.
+    ///
+    /// Keyed by the declaration rather than by a symbol, because the whole
+    /// point is that there is no single one: `const [a, b] = pair` is one
+    /// initializer and two names. [`Self::deferred`] cannot carry it for that
+    /// reason, and [`FuncBuilder::lower_module_binding`] asks this first.
+    destructured: rustc_hash::FxHashSet<u32>,
     /// Symbols this declares but cannot represent, and why.
     ///
     /// Kept rather than refused on sight. A module-scope variable no function
@@ -2474,10 +2482,18 @@ fn collect_module_scope(
         // pattern: `export const [a, b] = arr` declared a global called `arr`,
         // beside the real one, and the emitted C said `redefinition of 'arr'`.
         //
-        // A destructuring declaration is left alone rather than half-handled.
-        // Its names are the pattern's, and binding them is `bind_pattern`'s job
-        // inside a function -- at module scope there is nothing here that does
-        // it, and inventing one name for several is worse than declaring none.
+        // A **destructuring** declaration takes the branch below instead: its
+        // names are the pattern's, and each one needs storage of its own.
+        let Some(first) = children.first().copied() else {
+            continue;
+        };
+        if matches!(
+            probe.kind_of(first),
+            Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN)
+        ) {
+            declare_a_destructured_module_binding(&mut scope, &mut probe, id, first, &children);
+            continue;
+        }
         let Some(name_node) = children
             .first()
             .filter(|child| probe.kind_of(**child) == Some(syntax::IDENTIFIER))
@@ -2648,40 +2664,19 @@ fn collect_module_scope(
             scope.unsupported.insert(symbol.0, reason);
             continue;
         }
-        // One symbol is one storage location. A redeclaration re-uses it:
-        // pushing a second global left the first as storage nothing reads,
-        // since `scope.variables` -- which every read and write resolves
-        // through -- names only the last.
-        if let Some(existing) = scope.variables.get(&symbol.0).copied() {
-            if initializer.is_some() {
-                scope.globals[existing as usize].deferred = true;
-            }
-        } else {
-            let global = u32::try_from(scope.globals.len()).unwrap_or(u32::MAX);
-            let spelling = probe.node(*name_node).text.clone();
-            scope.globals.push(super::Global {
-                name: unshared_name(&scope.globals, spelling, global),
-                ty: ty.clone(),
-                initial: value,
-                exported: false,
-                // Exactly the condition `scope.deferred` is given below, stated
-                // on the global itself so a backend and a later pass can ask.
-                deferred: constant.is_none() && initializer.is_some(),
-                origin: probe.origin(*name_node),
-            });
-            scope.variables.insert(symbol.0, global);
-            scope.types.push(ty);
-        }
-        // Only where there is one to lower. A declaration with no initializer
-        // has nothing deferred; its storage is already the zero above.
+        // One condition, asked once and recorded in two places: on the global,
+        // where a backend and a later pass can see it, and in `scope.deferred`,
+        // which is the set `lower_module_binding` walks.
         //
-        // A redeclaration is deferred even when its value folds, because
-        // `initial` cannot express a value that arrives partway through the
-        // module. The map records *that* the symbol needs code;
-        // `lower_module_binding` takes the expression from the declaration it
-        // is lowering, so two declarations do not both store the last value.
+        // A declaration with no initializer needs no code — its storage is
+        // already the type's zero. One whose value folds needs none either,
+        // because the number is in `initial`. A *re*declaration always does,
+        // since `initial` is written before any statement runs and cannot
+        // express a value that arrives partway through the module.
+        let needs_code = initializer.is_some() && (constant.is_none() || redeclared);
+        declare_a_module_global(&mut scope, &probe, *name_node, symbol, &ty, value, needs_code);
         if let Some(initializer) = initializer
-            && (constant.is_none() || redeclared)
+            && needs_code
         {
             scope.deferred.insert(symbol.0, initializer);
         }
@@ -2691,6 +2686,128 @@ fn collect_module_scope(
     // from this walk, which is why they were missing.
     scope.layouts = probe.layouts;
     scope
+}
+
+/// `const [a, b] = pair` at module scope: storage for every name the pattern
+/// declares, and the declaration recorded so `module#init` destructures it.
+///
+/// This was refused, and the refusal read as though the *construct* were
+/// unsupported: *a name from an enclosing scope*, because the collector
+/// declared no global and the read then found no binding either. It is 37 files
+/// of the slice-1 `test/language` population, every one of them a
+/// `const`/`let`/`var` `dstr` test, and it works one scope in: inside a
+/// function `bind_pattern` binds the names as ordinary locals.
+///
+/// **Every name or none.** A pattern that cannot be stored refuses all of its
+/// names rather than some, because a half-bound pattern is a program where one
+/// name holds a value and its neighbour silently holds zero — and the read that
+/// would tell you is the one nobody wrote. `unsupported` is keyed by symbol and
+/// reported where the name is read, so each gets its own entry.
+///
+/// The value always needs code: a destructured name's value comes from reads of
+/// the initializer, never from a constant this could fold into `initial`.
+fn declare_a_destructured_module_binding(
+    scope: &mut ModuleScope,
+    probe: &mut FuncBuilder,
+    declaration: NodeId,
+    pattern: NodeId,
+    children: &[NodeId],
+) {
+    // Nothing to destructure *from*. `let [a, b];` is not legal JavaScript, and
+    // a declaration with no initializer has no reads for the names to take.
+    if declaration_initializer(children, pattern, |c| probe.kind_of(c)).is_none() {
+        return;
+    }
+    let mut names = Vec::new();
+    probe.pattern_names(pattern, &mut names);
+
+    // Resolved before anything is declared, so that a name this cannot store
+    // refuses the whole pattern rather than leaving its neighbours holding a
+    // zero nobody wrote.
+    let mut storage = Vec::with_capacity(names.len());
+    for name in names {
+        let resolved = probe.node(name).symbol.and_then(|symbol| {
+            probe
+                .type_of(name)
+                .or_else(|| probe.evolved_type(name))
+                .filter(|ty| storable(probe, name, ty).is_ok())
+                .map(|ty| (name, symbol, ty))
+        });
+        let Some(resolved) = resolved else {
+            refuse_the_whole_pattern(scope, probe, pattern);
+            return;
+        };
+        storage.push(resolved);
+    }
+    if storage.is_empty() {
+        return;
+    }
+    for (name, symbol, ty) in storage {
+        declare_a_module_global(scope, probe, name, symbol, &ty, 0.0, true);
+    }
+    scope.destructured.insert(declaration.0);
+}
+
+/// Refuse every name a pattern declares, under one reason.
+///
+/// **Every name or none.** A half-stored pattern is a program where one name
+/// holds a value and its neighbour silently holds zero, and the read that would
+/// tell you is the one nobody wrote. `unsupported` is keyed by symbol and
+/// reported where a name is read, so each name needs its own entry for the
+/// refusal to be reachable at all.
+fn refuse_the_whole_pattern(scope: &mut ModuleScope, probe: &FuncBuilder, pattern: NodeId) {
+    let mut names = Vec::new();
+    probe.pattern_names(pattern, &mut names);
+    for name in names {
+        if let Some(symbol) = probe.node(name).symbol {
+            scope.unsupported.insert(
+                symbol.0,
+                "a module-scope destructuring with a name of unrepresentable type".to_owned(),
+            );
+        }
+    }
+}
+
+/// Give a module-scope name storage, or re-use the storage it already has.
+///
+/// **One symbol is one storage location.** A redeclaration writes the global it
+/// already has rather than pushing a second: `scope.variables` is what every
+/// read and write resolves through, so a second push leaves the first as
+/// storage nothing can reach.
+///
+/// `needs_code` is the single condition, stated on the global so a backend and
+/// a later pass can ask it, and it is the same condition `scope.deferred` is
+/// given. A declaration whose value folds needs none — the number is in
+/// `initial` — unless it is a *re*declaration, because `initial` is written
+/// once before any statement runs and cannot express a value that arrives
+/// partway through the module.
+fn declare_a_module_global(
+    scope: &mut ModuleScope,
+    probe: &FuncBuilder,
+    name_node: NodeId,
+    symbol: nts_semantic_schema::SymbolId,
+    ty: &HirType,
+    initial: f64,
+    needs_code: bool,
+) {
+    if let Some(existing) = scope.variables.get(&symbol.0).copied() {
+        if needs_code {
+            scope.globals[existing as usize].deferred = true;
+        }
+        return;
+    }
+    let global = u32::try_from(scope.globals.len()).unwrap_or(u32::MAX);
+    let spelling = probe.node(name_node).text.clone();
+    scope.globals.push(super::Global {
+        name: unshared_name(&scope.globals, spelling, global),
+        ty: ty.clone(),
+        initial,
+        exported: false,
+        deferred: needs_code,
+        origin: probe.origin(name_node),
+    });
+    scope.variables.insert(symbol.0, global);
+    scope.types.push(ty.clone());
 }
 
 /// The initializer in a variable declaration: the last child that is neither
@@ -11385,6 +11502,14 @@ impl<'a> FuncBuilder<'a> {
             &mut declarations,
         );
         for declaration in declarations {
+            // **Before the name is looked for.** A destructured declaration has
+            // no single name, and the search below takes the first `IDENTIFIER`
+            // it finds -- which for `const [a, b] = pair` is `a`, a name inside
+            // the pattern rather than the declaration's.
+            if self.module.destructured.contains(&declaration.0) {
+                self.lower_destructured_module_binding(declaration)?;
+                continue;
+            }
             let children = self.children(declaration);
             let Some(name) = children
                 .iter()
@@ -11498,6 +11623,67 @@ impl<'a> FuncBuilder<'a> {
             let value = self.lower_expecting(initializer, &want)?;
             let value = self.coerce(value, &want, member)?;
             self.write_place(member, &Place::Global(global), value)?;
+        }
+        Ok(())
+    }
+
+    /// `const [a, b] = pair` at module scope: destructure, then store.
+    ///
+    /// The reads are `bind_pattern`'s, unchanged — the same function that binds
+    /// the same pattern inside a function body, with its defaults, its nested
+    /// patterns and its rest elements. What differs is only where the values
+    /// end up: a local binds them, and here each one is copied into the global
+    /// `collect_module_scope` gave it.
+    ///
+    /// **Both halves walk the pattern with `pattern_names`.** The collector
+    /// decides which names get storage and this decides which names get
+    /// written, and if those two lists ever disagreed a name would have a
+    /// global that nothing writes — storage reading as zero for ever, with no
+    /// diagnostic. One walk, asked twice.
+    fn lower_destructured_module_binding(&mut self, declaration: NodeId) -> Result<(), Diagnostic> {
+        let children = self.children(declaration);
+        let Some(pattern) = children.first().copied() else {
+            return Ok(());
+        };
+        let Some(initializer) = declaration_initializer(&children, pattern, |c| self.kind_of(c))
+        else {
+            return Ok(());
+        };
+        let value = self.lower_expression(initializer)?;
+        self.bind_pattern(pattern, value)?;
+
+        let mut names = Vec::new();
+        self.pattern_names(pattern, &mut names);
+        for name in names {
+            let Some(symbol) = self.node(name).symbol else {
+                continue;
+            };
+            // `bind_pattern` put the read here; the global is where a *reader*
+            // will look, and every reader outside `module#init` resolves through
+            // `self.module.variables` rather than through the bindings.
+            let Some(bound) = self.bindings.get(&symbol.0).copied() else {
+                return Err(self.unsupported(name, "a destructured name the pattern did not bind"));
+            };
+            let Some(global) = self.module.variables.get(&symbol.0).copied() else {
+                continue;
+            };
+            let want = self.module.types[global as usize].clone();
+            let value = self.coerce(bound, &want, declaration)?;
+            self.write_place(declaration, &Place::Global(global), value)?;
+            // **And then the binding goes.** It is a temporary of the
+            // destructuring, not the name's storage: the global is. Left in
+            // place it shadows the global for the rest of `module#init`, so a
+            // later `a = 100` wrote the binding while every function reading `a`
+            // read the global and still saw the destructured value.
+            //
+            // Reading at module scope agreed, because that read took the
+            // binding too — which is what made it a wrong answer visible only
+            // from *outside* the initializer, and is why the fixture reads every
+            // name through an exported function.
+            //
+            // The identifier path never had this to undo: it writes the global
+            // and binds nothing.
+            self.bindings.remove(&symbol.0);
         }
         Ok(())
     }
@@ -30088,6 +30274,39 @@ impl<'a> FuncBuilder<'a> {
     /// That is the only thing telling the two apart: the encoder gives both as
     /// the same two identifiers, with no `=` token and no property-name slot to
     /// distinguish them.
+    /// Every name a binding pattern declares, in the order the pattern writes
+    /// them.
+    ///
+    /// The **declared** identifiers only. `{ a: b }` gives `b` and `{ a = b }`
+    /// gives `a`, and the two encode identically — told apart by whose symbol
+    /// lists this element among its declarations, which is exactly the question
+    /// [`Self::declared_by`] answers and exactly what [`Self::bind_pattern`]
+    /// asks when it binds them. Asking it twice in two ways is how the
+    /// module-scope walk and the binder would come to disagree about which
+    /// names exist, and a global declared for a name nothing binds is storage
+    /// that reads as zero for ever.
+    ///
+    /// Nested patterns recurse; a rest element's name is declared by its
+    /// element like any other and needs no case of its own.
+    fn pattern_names(&self, pattern: NodeId, into: &mut Vec<NodeId>) {
+        for element in self.children(pattern) {
+            if self.kind_of(element) != Some(syntax::BINDING_ELEMENT) {
+                continue;
+            }
+            for part in self.children(element) {
+                match self.kind_of(part) {
+                    Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN) => {
+                        self.pattern_names(part, into);
+                    }
+                    Some(syntax::IDENTIFIER) if self.declared_by(element, part) => {
+                        into.push(part);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     fn declared_by(&self, element: NodeId, node: NodeId) -> bool {
         self.node(node)
             .symbol
