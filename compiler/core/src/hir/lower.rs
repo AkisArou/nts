@@ -28154,9 +28154,21 @@ impl<'a> FuncBuilder<'a> {
         // type, which is the right answer and the one nothing else
         // materialises: a signature is written on a declaration and never
         // allocated, so this merge is the first place it is used as a value.
-        if let HirType::Managed(ManagedType::Object(at)) = ty {
-            let _ = self.layout_of(id, at);
-        }
+        //
+        // **Through containers, not only at the top level.** This tested
+        // `Managed(Object(_))` and nothing else, so an *array* of signatures
+        // went unlaid: `cond ? [() => n] : []` merges at
+        // `managed<[managed<obj#9>]>` while both arms built `obj#5`, two type
+        // ids for one function type, and only the arms' one had a layout. The
+        // C emitter then said `NTS2006 an object type with no layout: type 9`
+        // -- a message about a type rather than about a line, from the backend,
+        // on a program the lowering reported as clean.
+        //
+        // `materialize` is the walk that already answers this for an array's
+        // element, a map's value and a set's member, and it is the same
+        // question here one level in. `collect_layouts` merges the two by
+        // shape once both exist.
+        let _ = self.materialize(id, &ty);
         // **A `Void` conditional has no value to merge.** `x?.m()` for a `void`
         // `m` is `undefined | void`, one absence written twice, which represents
         // as `Void` -- and the C backend declares no variable for a value of
