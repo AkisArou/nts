@@ -262,6 +262,48 @@ third arm is a program that is *refused* and would otherwise complete, required
 to come back exactly `unsupported` — not merely "not a pass", since a crash
 would satisfy the weaker test while the refusal still went unread.
 
+### Widened to all of `test/language` — 1,132 of 4,812
+
+The lane had measured **one directory** for four runs. `test/language` is
+23,726 scheduled files, 4,812 of them slice-1, against the 2,527 under
+`expressions`. At `fc4cb1c3`:
+
+| | files | |
+| --- | ---: | --- |
+| `strict-pass` | **1,132** | 542 of them in `expressions`, 229 in `statements`, 121 in `literals`, 84 in `identifiers`, 47 in `asi` |
+| `unsupported` | 3,659 | 2,747 TypeScript, 898 lowering, 13 link |
+| `frontend-crash` | 18 | unchanged; all in `expressions/syntax` |
+| `threw Test262Error` | **3** | the same three as before |
+
+3,659 + 1,132 + 18 + 3 = 4,812, and all three self-checks fired.
+
+**The widening doubled the passing count and found no new wrong answers.** That
+is the most useful thing it says. Three files in 4,812 compile, run, and answer
+wrongly, and they are the two lone-surrogate comparisons and `"valueOf" in {}` —
+already diagnosed, already carrying ✗ rows. The defects found the same evening
+by hand-probing module-scope statements are *not* in this corpus: test262's
+positive slice reaches them through assertions that hit a refusal first.
+
+### And what the wider corpus blocks on that expressions never showed
+
+Of the 898 lowering refusals, 473 are in the generated `dstr`/`class/elements`
+families and 425 elsewhere. The rows that are new:
+
+| files | first refusal |
+| ---: | --- |
+| 154 | `X`, a builtin this compiler does not provide — still mostly `eval` |
+| 36 | a regular expression literal |
+| 25 | an empty array literal in a position that does not say what it is |
+| 14 | **a label on something that is not a loop** — *fixed 2026-09-18* |
+| 13 | a conversion to string from unknown |
+| 9 | a declaration without an initializer |
+| 6 | a `using` declaration, whose scope-exit disposal — *newly refused, see the ledger* |
+
+The label row is the one this widening was for. Not one of its 14 files is an
+expression — they are `asi` and `statementList`, where a label on an expression
+statement is the subject of the test — so four runs over `expressions` could
+never have seen it. 11 of 14 now `strict-pass`.
+
 ### What blocks the 413 that reach lowering
 
 The census ranks the whole corpus, most of which never typechecks. This ranks
