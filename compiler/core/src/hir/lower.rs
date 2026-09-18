@@ -2779,6 +2779,59 @@ fn refuse_the_whole_pattern(scope: &mut ModuleScope, probe: &FuncBuilder, patter
     }
 }
 
+/// A scalar where a reference is wanted, or the reverse.
+fn representation_mismatch(have: &HirType, want: &HirType) -> String {
+    format!(
+        "{} where {} is wanted",
+        representation_word(have),
+        representation_word(want)
+    )
+}
+
+/// A machine type, in words a reader can act on.
+///
+/// `{ty:?}` put Rust's `Debug` into a user-facing diagnostic: *a value of type
+/// Never where Managed(Object(TypeId(16))) is wanted*. `TypeId(16)` names
+/// nothing a program contains, and the sentence cannot be searched for either,
+/// because every occurrence carries a different number.
+///
+/// Deliberately coarse. This message is about a **representation** mismatch — a
+/// scalar where a reference is wanted, or the reverse — so the useful thing to
+/// say is which side of that line each type falls, not which object type it is.
+/// `describe` is the function for naming a *checker* type, and it is the right
+/// one wherever the node's own type is what went wrong.
+fn representation_word(ty: &HirType) -> &'static str {
+    match ty {
+        HirType::Void => "nothing",
+        HirType::Never => "a value that cannot exist",
+        HirType::NativePointer(_) => "a native pointer",
+        HirType::Bool => "a boolean",
+        HirType::Int { .. } => "an integer",
+        HirType::Float { .. } => "a number",
+        HirType::BigInt => "a bigint",
+        HirType::Erased => "an erased value",
+        HirType::Managed(managed) => managed_word(managed),
+    }
+}
+
+/// The reference half of [`representation_word`].
+fn managed_word(managed: &ManagedType) -> &'static str {
+    match managed {
+        ManagedType::String => "a string",
+        ManagedType::Object(_) => "an object",
+        ManagedType::Array(_) => "an array",
+        ManagedType::Promise(_) => "a promise",
+        ManagedType::Map(_, _) => "a map",
+        ManagedType::Table(_, _) => "a table",
+        ManagedType::Set(_) => "a set",
+        ManagedType::Date => "a date",
+        ManagedType::Buffer => "a buffer",
+        ManagedType::View(_) | ManagedType::AnyView => "a typed array",
+        ManagedType::DataView => "a data view",
+        ManagedType::Symbol => "a symbol",
+    }
+}
+
 /// Give a module-scope name storage, or re-use the storage it already has.
 ///
 /// **One symbol is one storage location.** A redeclaration writes the global it
@@ -11023,10 +11076,7 @@ impl<'a> FuncBuilder<'a> {
             // nothing before the verifier said a word, because this line was
             // the last one and it said yes to everything left.
             if have.is_managed() != want.is_managed() {
-                return Err(self.unsupported(
-                    id,
-                    &format!("a value of type {have:?} where {want:?} is wanted"),
-                ));
+                return Err(self.unsupported(id, &representation_mismatch(&have, want)));
             }
             // **And base-first layout is a fact about a base, not about every
             // pair of object types.** The sentence above was true of the case it
