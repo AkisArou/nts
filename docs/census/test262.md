@@ -277,6 +277,32 @@ already. So this row is one known piece of work with a design behind it, not 40
 separate things — which is the useful thing a ranked table can say, and only
 says if somebody opens the files.
 
+### And what blocks the 1,603 that never typecheck
+
+Sampled 40 at random from the slice-1 population and opened each. The answer is
+a long tail, and **it is not the harness**:
+
+| code | n | |
+| --- | ---: | --- |
+| TS2362 | 7 | arithmetic on a non-number |
+| TS2339 | 6 | property does not exist on type |
+| TS2348 | 4 | value is not callable |
+| TS2365 | 3 | operator cannot be applied |
+| TS2304 | 3 | cannot find name |
+| TS18050 | 3 | |
+| — | 14 | eleven other codes, one or two each |
+
+These are TypeScript statically rejecting dynamically-typed JavaScript, and **no
+configuration reconciles them**: `"a" * 1` is TS2362 whatever `noImplicitAny`
+says, because the operand has a known literal type.
+
+The three `TS2304`s are `x`, `y` and `unresolved` — the tests' own undeclared
+globals, not a harness entry. That matters for planning: `$DONOTEVALUATE` is
+2,034 files **corpus-wide** and is the right first harness fix, but every one of
+them is a *negative* test, which this lane scope-excludes. It does not move this
+number. A figure taken from the whole corpus and spent on a sub-population is
+the same mistake as a ranked table read without opening the files.
+
 ## What this census cannot see
 
 Printed by the instrument on every run, not left to a reader.
