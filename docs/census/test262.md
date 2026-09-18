@@ -277,6 +277,26 @@ The lane had measured **one directory** for four runs. `test/language` is
 
 3,659 + 1,132 + 18 + 3 = 4,812, and all three self-checks fired.
 
+**Re-measured at `a33f93ba` once the two gaps this widening found were closed:
+1,167**, with `unsupported` at 3,624 and nothing lost.
+
+| | `fc4cb1c3` | `a33f93ba` |
+| --- | ---: | ---: |
+| `strict-pass` | 1,132 | **1,167** |
+| `unsupported` | 3,659 | 3,624 |
+
++35, and the rows are named rather than inferred — every newly passing file is
+matched against the refusal it used to carry:
+
+```
+  22  `a name from an enclosing scope`      module-scope destructuring
+  11  `a label on something that is not a loop`
+   2  (had not reached lowering before)
+```
+
+Both are gaps **only the widening could have shown**: 37 of the first and 14 of
+the second, and not one of those 51 files is under `expressions`.
+
 **The widening doubled the passing count and found no new wrong answers.** That
 is the most useful thing it says. Three files in 4,812 compile, run, and answer
 wrongly, and they are the two lone-surrogate comparisons and `"valueOf" in {}` —
