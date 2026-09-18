@@ -5641,6 +5641,25 @@ double nts_dataview_byte_length(const NtsDataView *view) {
     return 0.0;
   }
   if (!view->tracks) {
+    /* **A fixed-length `DataView` can go out of bounds too, and node does not
+       answer 0 for one -- it throws.** Measured rather than assumed: over a
+       buffer shrunk below the view's extent, `dv.byteLength` is a `TypeError`
+       where the typed-array equivalent is `0`. The two rules differ and the
+       stored length was wrong for both.
+
+       This runtime has no throw that reaches a handler in the compiled program
+       -- a `throw` lowers to a jump inside one function -- so the honest answer
+       is to decline rather than to invent a number. Returning 0 would still
+       disagree with node and would do it silently; this shows up as a declined
+       case, which is what "we do not implement this" looks like. */
+    if (view->offset + view->length > buffer->length) {
+      fprintf(stderr,
+              NTS_REFUSED "byteLength of a fixed-length DataView whose buffer "
+                          "has shrunk below it -- node throws a TypeError "
+                          "here, and this runtime has no throw that reaches a "
+                          "handler\n");
+      abort();
+    }
     return (double)view->length;
   }
   if (view->offset >= buffer->length) {
@@ -6141,6 +6160,24 @@ double nts_view_length(const NtsView *view) {
     return 0;
   }
   if (!view->tracking) {
+    /* **A fixed-length view can go out of bounds, and an out-of-bounds view has
+       length 0.** The stored length is what the view was cut to; whether it can
+       still be read is a question about the buffer *now*.
+
+       `new Uint8Array(buffer, 2, 2)` over a buffer shrunk to 3 bytes needs 4
+       and has 3, so node answers 0 for its length and `undefined` for every
+       element. Returning the stored length instead is the same failure the
+       tracking branch below was written to avoid, on the other side of this
+       `if`: right until the first resize and silently wrong afterwards.
+
+       It is a **test, not a latch**. Grow the buffer back and the view is in
+       bounds again -- measured in node, `cut.length` going 2, 0, 2 across
+       `resize(0)` and `resize(8)` -- so this is computed on every read rather
+       than recorded when the buffer shrinks. */
+    size_t extent = view->byte_offset + view->length_ * (size_t)view->width;
+    if (extent > view->buffer->length) {
+      return 0;
+    }
     return (double)view->length_;
   }
   /* Computed, so a view built without a length follows its buffer through
