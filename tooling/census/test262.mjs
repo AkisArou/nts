@@ -62,6 +62,17 @@ const flag = (name, fallback) => {
 };
 const under = flag("--under", "test/language/expressions");
 const selectionFile = flag("--selection", null);
+/**
+ * Where to write one JSON object per file compiled.
+ *
+ * The aggregate answers "what blocks this corpus". The rows answer a question
+ * the aggregate cannot: **is a classification wrong**. A file whose features
+ * class it `inapplicable` and which nonetheless lowers proves the class wrong;
+ * a `supported` feature all of whose files refuse proves the *ledger row*
+ * wrong. Neither is visible without the per-file join, and the second is not
+ * hypothetical -- `typescript.md`'s `namespace` row was ✅ and false.
+ */
+const rowsFile = flag("--rows", null);
 const limit = Number(flag("--limit", "0")) || 0;
 const slice1 = argv.includes("--slice1");
 const asJson = argv.includes("--json");
@@ -307,6 +318,8 @@ let compared = 0;
  * them is what turns "0.7% unexplained" into a list somebody can open.
  */
 const unclassified = [];
+/** One record per file compiled, written only when `--rows` asks. */
+const rows = [];
 
 const bump = (map, key) => map.set(key, (map.get(key) ?? 0) + 1);
 
@@ -318,6 +331,14 @@ for (const record of planned) {
   const source = `"use strict";\n${HARNESS}${readFileSync(join(SUITE, record.path), "utf8")}`;
   const outcome = classify(compile(dir, source));
   compared += 1;
+  if (rowsFile) {
+    rows.push({
+      path: record.path,
+      bucket: outcome.bucket,
+      features: record.features,
+      first: outcome.nts[0]?.message ?? outcome.ts[0]?.code ?? null,
+    });
+  }
   if (outcome.bucket === "infrastructure-error") unclassified.push(record.path);
   if (outcome.bucket === "infrastructure-error" && process.env.NTS_CENSUS_EXPLAIN) {
     console.error(`--- ${record.path} ---`);
@@ -350,6 +371,10 @@ const report = {
   unparsed,
   unclassified,
 };
+
+if (rowsFile) {
+  writeFileSync(rowsFile, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+}
 
 if (asJson) {
   console.log(JSON.stringify(report, null, 2));

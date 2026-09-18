@@ -62,6 +62,11 @@ const flag = (name, fallback) => {
 };
 const under = flag("--under", "test/language/expressions");
 const selectionFile = flag("--selection", null);
+/**
+ * Census rows, from `test262.mjs --rows`. Optional, because three of the four
+ * questions need no compiler and this one does.
+ */
+const rowsFile = flag("--rows", null);
 
 /**
  * An instrument failure is not a finding.
@@ -176,6 +181,53 @@ for (const [name, count] of seen) {
   }
 }
 
+// --- wrong, in either direction (needs a census artifact) ------------------
+//
+// The three questions above ask whether the map is *well formed*. This asks
+// whether it is *true*, and it is the one worth having: a classification nobody
+// can contradict is an opinion with a schema.
+//
+// Advisory, because it needs a run and because a `supported` feature can
+// legitimately have every file blocked by something else in the same file --
+// the compiler reports one blocker at a time, so a refusal naming feature B
+// says nothing about feature A appearing beside it. Reported, never failed.
+const contradictions = [];
+if (rowsFile) {
+  if (!existsSync(rowsFile)) cannotMeasure(`no census rows at ${rowsFile}`);
+  const census = readFileSync(rowsFile, "utf8")
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => JSON.parse(line));
+  if (census.length === 0) cannotMeasure(`${rowsFile} holds no rows`);
+  /** feature -> { lowered, refused, total } over the files declaring it. */
+  const tally = new Map();
+  for (const row of census) {
+    for (const feature of row.features ?? []) {
+      const at = tally.get(feature) ?? { lowered: 0, refused: 0, total: 0 };
+      at.total += 1;
+      if (row.bucket === "lowers") at.lowered += 1;
+      if (row.bucket === "unsupported") at.refused += 1;
+      tally.set(feature, at);
+    }
+  }
+  for (const [name, at] of tally) {
+    const row = rows[name];
+    if (!row) continue;
+    if (row.class === "inapplicable" && at.lowered > 0) {
+      contradictions.push(
+        `${name}: classified inapplicable (${row.reason}) and ${at.lowered} of ${at.total} file(s) LOWER ` +
+          "-- a §13 non-goal that compiles is a classification, not a principle",
+      );
+    }
+    if (row.class === "supported" && at.lowered === 0 && at.refused > 0) {
+      contradictions.push(
+        `${name}: classified supported and 0 of ${at.total} file(s) lower, ${at.refused} refuse ` +
+          "-- check the ledger row before trusting it",
+      );
+    }
+  }
+}
+
 // --- unclaimed (reported, never failed) -----------------------------------
 const unclaimed = Object.keys(rows).filter((name) => !seen.has(name));
 
@@ -197,6 +249,12 @@ if (unclaimed.length > 0) {
       `population is ${under} only:`,
   );
   console.log(`    ${unclaimed.join(" · ")}`);
+}
+if (contradictions.length > 0) {
+  console.log(`  ${contradictions.length} classification(s) the census contradicts:`);
+  for (const line of contradictions) console.log(`    ${line}`);
+} else if (rowsFile) {
+  console.log("  no classification contradicted by the census");
 }
 if (problems.length > 0) {
   console.log(`  ${problems.length} problem(s):`);
