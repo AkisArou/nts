@@ -13727,6 +13727,47 @@ impl<'a> FuncBuilder<'a> {
         self.module.variables.contains_key(&symbol)
     }
 
+    /// The names a construct actually has to carry, from the names it assigns.
+    ///
+    /// Drops globals, which need no block parameter: a global is memory, read
+    /// with `GlobalGet` and written with `GlobalSet`, so the next reader reads
+    /// the slot the last writer wrote. Refuses by name for a symbol that is
+    /// neither bound nor a global, rather than letting the caller index the
+    /// binding table and panic.
+    ///
+    /// **Three callers, and each learned this separately.** `begin_loop` had it
+    /// from the day a loop assigning a global was fixed; `lower_switch` and
+    /// `lower_labeled_block` did not, and both **panicked** -- `no entry found
+    /// for key`, with no diagnostic and no artifact -- on a module-scope
+    /// `switch` and a module-scope labelled block. Two of the three places that
+    /// decide one question had the wrong answer, which is why it is one function
+    /// now.
+    ///
+    /// Not folded into [`Self::assigned_symbols`], deliberately: a
+    /// `for (let i = 0; …)` head at module scope is collected by
+    /// `collect_module_scope` as a module binding, so filtering it there stopped
+    /// `i` being carried and the loop never advanced. By the time a caller runs,
+    /// the head has been lowered and `i` has a binding, which is the question
+    /// that actually distinguishes them.
+    fn carried_locals(
+        &self,
+        id: NodeId,
+        carried: &[u32],
+        refusal: &str,
+    ) -> Result<Vec<u32>, Diagnostic> {
+        if carried
+            .iter()
+            .any(|symbol| !self.bindings.contains_key(symbol) && !self.is_a_global(*symbol))
+        {
+            return Err(self.unsupported(id, refusal));
+        }
+        Ok(carried
+            .iter()
+            .copied()
+            .filter(|symbol| self.bindings.contains_key(symbol))
+            .collect())
+    }
+
     fn assigned_symbols(&self, root: NodeId, into: &mut Vec<u32>) {
         // Every form that writes to a name, not just `=`. Missing one does not
         // fail loudly: the header simply gets no parameter for that name, the
@@ -13910,32 +13951,11 @@ impl<'a> FuncBuilder<'a> {
             self.declared_symbols(*clause, &mut declared);
         }
         carried.retain(|symbol| !declared.contains(symbol));
-        // **A global is memory and carries nothing**, the same rule `begin_loop`
-        // applies to a loop's carried set and for the same reason: a global is
-        // read with `GlobalGet` and written with `GlobalSet`, so a clause that
-        // assigns one needs no block parameter — the next reader reads the slot.
-        //
-        // Without this, `carried_now` looked the symbol up in the binding table
-        // and **panicked**: `no entry found for key`, from
-        //
-        //     let r = 0;
-        //     switch (k) { case 1: r = 1; break; default: r = 9; }
-        //
-        // at module scope. `emit-c` died rather than refusing, so there was no
-        // diagnostic, no artifact, and an instrument reading the exit status saw
-        // a build failure with nothing naming the construct.
-        //
-        // A symbol that is neither bound nor a global is refused by name rather
-        // than indexed, which is what `begin_loop` does one line further on. The
-        // panic is the only thing that was ever wrong here.
-        let unbound = carried
-            .iter()
-            .find(|symbol| !self.bindings.contains_key(symbol) && !self.is_a_global(**symbol))
-            .copied();
-        if unbound.is_some() {
-            return Err(self.unsupported(id, "a `switch` assigning a name declared outside it"));
-        }
-        carried.retain(|symbol| self.bindings.contains_key(symbol));
+        // A global carries nothing, and an unbound name is refused rather than
+        // indexed. Before this a module-scope `switch` assigning a global
+        // **panicked** -- see `carried_locals`.
+        let carried =
+            self.carried_locals(id, &carried, "a `switch` assigning a name declared outside it")?;
 
         let subject = self.lower_expression(discriminant)?;
 
@@ -14286,24 +14306,10 @@ impl<'a> FuncBuilder<'a> {
         // + v;` answered 0 where node answers 10, with no diagnostic on the
         // export and nothing in a published-name count able to see it.
         //
-        // Decided here rather than where the carried set is *collected*,
-        // because a `for (let i = 0; ...)` head at module scope is picked up by
-        // `collect_module_scope` as a module binding: filtering it there
-        // stopped `i` being carried and the loop never advanced. By the time
-        // this runs the head has been lowered and `i` has a binding, which is
-        // the question that actually distinguishes them.
-        let kept: Vec<u32> = carried
-            .iter()
-            .copied()
-            .filter(|symbol| self.bindings.contains_key(symbol))
-            .collect();
-        if let Some(missing) = carried
-            .iter()
-            .find(|symbol| !self.bindings.contains_key(symbol) && !self.is_a_global(**symbol))
-        {
-            let _ = missing;
-            return Err(self.unsupported(id, "a loop assigning a name declared outside it"));
-        }
+        // `carried_locals` carries why this is decided here rather than where
+        // the carried set is collected.
+        let kept =
+            self.carried_locals(id, carried, "a loop assigning a name declared outside it")?;
         let carried: &[u32] = &kept;
 
         // The values entering the loop, in the order the parameters take them.
@@ -19933,6 +19939,14 @@ impl<'a> FuncBuilder<'a> {
         // A name the block declares is the block's own and cannot be carried
         // out of it, the same rule `lower_switch` applies to a clause.
         carried.retain(|symbol| !declared.contains(symbol));
+        // A global carries nothing, and an unbound name is refused rather than
+        // indexed. Before this a module-scope labelled block assigning a global
+        // **panicked** -- see `carried_locals`.
+        let carried = self.carried_locals(
+            id,
+            &carried,
+            "a labelled block assigning a name declared outside it",
+        )?;
         let exit_types: Vec<HirType> = self
             .carried_now(&carried)
             .into_iter()

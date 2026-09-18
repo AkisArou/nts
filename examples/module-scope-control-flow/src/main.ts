@@ -64,3 +64,45 @@ export function readSeen(): number {
 export function readLabelled(): number {
   return labelled;
 }
+
+// A labelled **block** with `break label`, which is a different construct from
+// the labelled loop above: there is nothing to continue, only somewhere to
+// leave. It **panicked the compiler** at module scope — `no entry found for
+// key`, from `carried_now` indexing the binding table for a name that is a
+// global.
+//
+// Three constructs carry names across their arms — a loop, a `switch`, and a
+// labelled block — and each collects them with `assigned_symbols`. Only the
+// loop filtered globals out. The other two indexed the table directly and died,
+// and both were found on the same evening by running module-scope statements
+// against node rather than by reading the code. `carried_locals` is the one
+// place that decides it now.
+let left = 0;
+leave: {
+  left = 1;
+  if (left === 1) {
+    break leave;
+  }
+  left = 2;
+}
+
+// The same construct with a *local* beside the global: one is carried out of
+// the block and the other is not, which a filter that took all or nothing would
+// get wrong.
+let mixedOut = 0;
+both: {
+  const inner = 4;
+  mixedOut = inner;
+  if (mixedOut > 0) {
+    break both;
+  }
+  mixedOut = 9;
+}
+
+export function readLeft(): number {
+  return left;
+}
+
+export function readMixedOut(): number {
+  return mixedOut;
+}
