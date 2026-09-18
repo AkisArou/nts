@@ -335,6 +335,30 @@ this compiler cannot do is better read off the 198 outside, which after removing
 `eval` and the two fixed on 2026-09-18 is a long thin tail: 24, 10, 9, 5, and
 then ones and twos.
 
+**Opened, the six reduce to two.** Each was probed to the smallest program that
+reproduces it:
+
+| shape | files | what it actually is |
+| --- | ---: | --- |
+| a method `next` with no declaration | 40 | the iterator protocol |
+| a parameter of unrepresentable type | 20 | `Iterable` — the same |
+| declared by `X` with no representation | 31 | a generator's return type — the same |
+| an erased value where a concrete one is wanted | 40 | **cleared 2026-09-18** |
+| a rest element with no name | 20 | **cleared 2026-09-18** |
+| a static field this compiler gave no storage | 32 | a static field on an *anonymous* class expression |
+
+So the generated families' remaining blockers are **the iterator protocol (~91
+files) and anonymous-class statics (32)**, not six independent gaps. The second
+is a refusal with a written rationale — a `static` is addressed by name from
+source and a numbered stand-in is a name no source traces back to — and it has a
+one-word workaround: `const C = class Named { static n = 5 }` compiles where
+`const C = class { static n = 5 }` does not. Probed both ways; a private method
+on an anonymous class expression is fine, so anonymity alone is not the
+condition.
+
+This is the difference between a table and a diagnosis, and it took opening the
+files rather than ranking them.
+
 The largest row left outside the generated families, after `eval` and the two
 fixed that day, is **24 files of wrapper objects** — `new String`, `new Number`,
 `new Boolean`, counted by opening them. They have a ✗ ledger row as of
