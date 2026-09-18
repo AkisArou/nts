@@ -181,6 +181,25 @@ files under `test/language/expressions`:
 2,019 + 486 + 18 + 4 = 2,527. The run prints that sum and says so when it does
 not reconcile.
 
+**Re-measured the same evening**, on `f07920ea6d20a7a4` — the same corpus and
+the same instrument, with four of that day's fixes in the compiler:
+
+| | before | after | |
+| --- | ---: | ---: | --- |
+| `strict-pass` | 486 | **527** | +41 |
+| `unsupported` | 2,019 | 1,979 | −40 |
+| `threw` | 4 | **3** | the underflow one |
+| `frontend-crash` | 18 | 18 | upstream, unchanged |
+
+The +41 is the module-scope evolving-type fix (36 files by its own count, all
+compound assignment) plus the destructuring-default work. Two numbers from two
+binaries over one corpus, which is the only way a claim about a compiler moves
+rather than merely being restated.
+
+The `in` fix landed *after* this run was pinned, so it is not in the 527 — and
+it does not clear its own test either: the file's receiver is `var __obj = {}`,
+whose inferred type is `{}`, and `{}` accepts strings. See the ledger row.
+
 **One strict variant per file.** `strict-pass` is not a file pass, and a file
 whose metadata also wants a sloppy variant is not fully answered. Negative
 tests, `noStrict`, modules and raw are scope-excluded by the scheduler; a test
