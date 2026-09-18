@@ -324,6 +324,31 @@ expression — they are `asi` and `statementList`, where a label on an expressio
 statement is the subject of the test — so four runs over `expressions` could
 never have seen it. 11 of 14 now `strict-pass`.
 
+### The non-generated backlog, attributed
+
+414 lowering refusals sit outside the generated `dstr`/`class/elements`
+families. Opened and grouped by **cause** rather than by message, since a cause
+routinely wears two:
+
+| files | | |
+| ---: | --- | --- |
+| 159 | `eval` and dynamic code | §13, and `docs/eval.md` has the design that is deliberately not built |
+| 87 | everything else | a thin tail of ones and twos |
+| 61 | the **wrapper objects** | `new Boolean/Number/String`; two messages until 2026-09-18, when the module-scope one started naming its type |
+| 38 | regular expression literals | needs an engine |
+| 26 | the **array-growth pair** | the empty-literal refusal stands in front of a growing index write that *aborts*; closing one alone is worse |
+| 17 | an absence in a non-reference slot | `null`/`undefined` where the representation has no room |
+| 13 | `String()` of something that may be an object | reasoned: an `unknown` may hold one, and object `toString` is §13 |
+| 7 | array elisions | `[1, , 3]` |
+| 6 | `using` | newly refused, having previously compiled and silently disposed of nothing |
+
+**Nothing large is unexplained.** Of the 414, 250 are decisions the project has
+already taken and written down, and the largest thing that is *work* is an
+engine for regular expressions. That is the useful state for a backlog to be in,
+and it took opening the files: four of these nine groups were reached by probing
+a message down to the smallest program that reproduces it, and two of them turned
+out to be one cause under two headings.
+
 ### What blocks the 413 that reach lowering
 
 The census ranks the whole corpus, most of which never typechecks. This ranks
