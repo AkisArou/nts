@@ -65,3 +65,55 @@ export function accumulateThenCoerce(n: number, k: number): number {
   }
   return total;
 }
+
+// **Underflow is a third way to make one, and the analysis could not see it.**
+//
+// `-0.1 * 5e-324` is `-0`: neither operand is zero, the product is simply too
+// small to represent, and IEEE keeps the sign. Every clause of `facts::mul`'s
+// negative-zero rule asked whether an *operand* was or might be zero, so none
+// of them fired — and `Facts::new` spells a `-0` bound as `0` deliberately,
+// since the two compare equal and an interval means the same thing either way.
+// That left the sign nowhere to live: `fold` saw an ordinary singleton zero and
+// wrote `0.0` into the program.
+//
+// `fold`'s own guard was already right — "a singleton at zero that may be
+// negative zero is *two* values as far as anything observable goes" — and was
+// being handed a fact that had lost the distinction. The fix is upstream of it,
+// in the fact.
+//
+// test262 `language/expressions/multiplication/S11.5.1_A4_T7.js` is this, and
+// was one of exactly four files in the 2,527-file slice-1 population that
+// compiled, ran, and gave a wrong answer.
+//
+// # These take no arguments, and that is the whole point
+//
+// The first version of these arms took `a: number` and multiplied it by the
+// denormal — and **agreed on the compiler that had the bug**. The defect is in
+// constant folding, so an operand the differential supplies at run time never
+// reaches it: the C is computed by the machine, which gets it right. A fixture
+// for a folding defect has to be foldable, which here means no parameters.
+//
+// `underflowThroughAParameter` keeps the runtime path, as the control that says
+// the machine was never the problem.
+
+/** Folded: `-0.1 * 5e-324` underflows to `-0`, so this is `-Infinity`. */
+export function underflowedProduct(): number {
+  return 1 / (-0.1 * 5e-324);
+}
+
+/** Folded, both operands negative: the product is `+0`, so `+Infinity`. */
+export function underflowedBothNegative(): number {
+  return 1 / (-0.1 * -5e-324);
+}
+
+/** Folded through a name, which the folder still sees through. */
+export function underflowedThroughAName(): number {
+  const tiny = 5e-324;
+  const scaled = -0.1 * tiny;
+  return 1 / scaled;
+}
+
+/** The control: the same arithmetic at run time, which was always right. */
+export function underflowThroughAParameter(a: number): number {
+  return 1 / (a * 5e-324);
+}

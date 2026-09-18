@@ -353,9 +353,13 @@ fn bound_mul(a: f64, b: f64) -> f64 {
 }
 
 /// The four endpoint products, since a sign change reorders them.
+fn corner_values(a: Facts, b: Facts, f: impl Fn(f64, f64) -> f64) -> [f64; 4] {
+    [f(a.lo, b.lo), f(a.lo, b.hi), f(a.hi, b.lo), f(a.hi, b.hi)]
+}
+
+/// The interval those corners span.
 fn corners(a: Facts, b: Facts, f: impl Fn(f64, f64) -> f64) -> (f64, f64) {
-    let products = [f(a.lo, b.lo), f(a.lo, b.hi), f(a.hi, b.lo), f(a.hi, b.hi)];
-    products
+    corner_values(a, b, f)
         .iter()
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| {
             (lo.min(*p), hi.max(*p))
@@ -440,6 +444,26 @@ pub fn mul(a: Facts, b: Facts) -> Facts {
     let a_positive = a.hi > 0.0 || a_has_zero;
     let b_positive = b.hi > 0.0 || b_has_zero;
 
+    // **Underflow makes a zero out of two operands that are not zero, and the
+    // rule above cannot see it.** Every clause there asks whether an *operand*
+    // is or may be zero. `-0.1 * 5e-324` has neither: the product is simply too
+    // small to represent, and IEEE keeps its sign.
+    //
+    // `Facts::new` spells a `-0` bound as `0` -- deliberately, since the two
+    // compare equal and an interval means the same thing either way -- so
+    // `maybe_negative_zero` is the only place that sign can live. Without it
+    // `fold` saw an ordinary singleton zero and wrote `0.0` into the program,
+    // and `1 / (-0.1 * Number.MIN_VALUE)` answered `+Infinity` where every
+    // engine says `-Infinity`. `fold`'s own guard was already right and was
+    // being handed a fact that had lost the distinction.
+    //
+    // Asked of the corner products rather than re-derived from the signs: they
+    // are the same four multiplications the interval is built from, so a
+    // negative zero anywhere among them is one the result can be.
+    let underflows_to_negative_zero = corner_values(a, b, bound_mul)
+        .iter()
+        .any(|product| *product == 0.0 && product.is_sign_negative());
+
     Facts::new(
         lo,
         hi,
@@ -448,7 +472,8 @@ pub fn mul(a: Facts, b: Facts) -> Facts {
         (a_has_zero && b_negative)
             || (a.maybe_negative_zero && b_positive)
             || (b_has_zero && a_negative)
-            || (b.maybe_negative_zero && a_positive),
+            || (b.maybe_negative_zero && a_positive)
+            || underflows_to_negative_zero,
     )
 }
 
