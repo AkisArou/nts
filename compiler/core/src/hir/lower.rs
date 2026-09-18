@@ -16036,7 +16036,45 @@ impl<'a> FuncBuilder<'a> {
         self.snapshot
             .node_types
             .get(&node)
-            .is_some_and(|ty| named(self.snapshot, *ty) == Some("PromiseWithResolvers"))
+            .copied()
+            .is_some_and(|ty| self.is_a_capability_type(ty))
+    }
+
+    /// The same question of a **type**, seeing through a union with an absence.
+    ///
+    /// A capability that may be missing is still a capability:
+    /// `cap?.resolve(v)` types its receiver as
+    /// `PromiseWithResolvers<T> | undefined`, and asking `named` of that union
+    /// answers `None` -- so the settle was not recognised and the call fell all
+    /// the way through to *``resolve`` on a promise, which has no method table
+    /// here*, while the very same settle written without the `?.` lowered.
+    ///
+    /// Only an absence is looked past. A union of a capability with anything
+    /// *else* is two things the settle cannot be written for, and the member
+    /// read below has to refuse it rather than pick one.
+    fn is_a_capability_type(&self, ty: nts_semantic_schema::TypeId) -> bool {
+        if named(self.snapshot, ty) == Some("PromiseWithResolvers") {
+            return true;
+        }
+        let Some(TypeKind::Union(members)) = self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind)
+        else {
+            return false;
+        };
+        let mut capability = false;
+        for member in members.iter().copied() {
+            if matches!(
+                self.snapshot.types.get(member.0 as usize).map(|r| &r.kind),
+                Some(TypeKind::Void | TypeKind::Undefined | TypeKind::Null)
+            ) {
+                continue;
+            }
+            if named(self.snapshot, member) == Some("PromiseWithResolvers") {
+                capability = true;
+                continue;
+            }
+            return false;
+        }
+        capability
     }
 
     /// `Promise.withResolvers<T>()`, which allocates a promise and nothing else.
@@ -16110,6 +16148,67 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unrepresentable(object, "a promise capability"));
         };
         let promise = self.lower_expression(object)?;
+        self.settle_lowered(id, promise, *payload, arguments, rejecting)
+    }
+
+    /// `cap.resolve(v)` and `cap.reject(e)` on a receiver already lowered.
+    ///
+    /// Reached from [`Self::lower_method_on`], which is where the *optional*
+    /// spelling arrives: `lower_capability_call` recognises a settle
+    /// syntactically and cannot see the three-child callee `a?.b()` has.
+    ///
+    /// Asked of the **checker's** type, because the representation of a
+    /// capability is deliberately a plain `Promise<T>` -- that is the whole
+    /// trick -- and telling the two apart is what decides whether `resolve` is
+    /// a settle or a name this compiler does not have.
+    fn capability_settle(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        receiver_node: NodeId,
+        member: NodeId,
+        arguments: &[NodeId],
+        held: &HirType,
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        let HirType::Managed(ManagedType::Promise(payload)) = held else {
+            return None;
+        };
+        if !self.names_a_promise_capability(receiver_node) {
+            return None;
+        }
+        let rejecting = match self.node(member).text.as_deref() {
+            Some("resolve") => false,
+            Some("reject") => true,
+            _ => return None,
+        };
+        let payload = (**payload).clone();
+        Some(self.settle_lowered(id, receiver, payload, arguments, rejecting))
+    }
+
+    /// The settle itself, on a receiver that is **already a value**.
+    ///
+    /// Split out of [`Self::settle_capability`] so the optional-chained form
+    /// can reach it. `lower_capability_call` recognises the settle
+    /// *syntactically* -- a two-child property-access callee -- and `a?.b()`
+    /// has **three** children, the `?.` being a token of its own, so
+    /// `cap?.resolve(v)` fell past it and out the bottom of `lower_method_on`
+    /// as *`resolve` on a promise, which has no method table here* while
+    /// `cap.resolve(v)` lowered. Nine distinct sites in `runtime/node` and
+    /// `runtime/web-platform` are the optional spelling, all of the shape
+    /// `this.#writeRequests.dequeue()?.reject(...)`.
+    ///
+    /// It cannot be fixed by teaching the syntactic path about three children:
+    /// the settle must happen **inside the present arm**, and the arm is built
+    /// by `lower_optional_method_call`, which hands a narrowed `ValueId` to
+    /// `lower_method_on`. So this is where both spellings meet.
+    fn settle_lowered(
+        &mut self,
+        id: NodeId,
+        promise: ValueId,
+        payload: HirType,
+        arguments: &[NodeId],
+        rejecting: bool,
+    ) -> Result<ValueId, Diagnostic> {
         let value = match arguments {
             [] => None,
             [only] => Some(self.lower_expression(*only)?),
@@ -16120,10 +16219,7 @@ impl<'a> FuncBuilder<'a> {
         if rejecting {
             return self.reject_with(id, promise, value);
         }
-        let result = AsyncResult {
-            promise,
-            payload: *payload,
-        };
+        let result = AsyncResult { promise, payload };
         self.settle(id, &result, value)
     }
 
@@ -29829,6 +29925,11 @@ impl<'a> FuncBuilder<'a> {
         }
 
         let held = self.values[receiver.0 as usize].ty.clone();
+        if let Some(settled) =
+            self.capability_settle(id, receiver, receiver_node, member, arguments, &held)
+        {
+            return settled;
+        }
         let HirType::Managed(ManagedType::Object(type_id)) = held else {
             // **Name what the receiver is.** Everything above this arm is a
             // representation with methods of its own — a string, an array, a
