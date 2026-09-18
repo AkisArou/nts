@@ -37,6 +37,25 @@ class Holder {
 const held = new Holder();
 const list: number[] = [1, 2];
 
+// TypeScript's `object`, which is what these sites narrow *to*:
+// `value !== null && typeof value === "object" && "k" in value` is how a program
+// duck-types an `unknown`, and it is the most common `in` receiver in
+// `runtime/node`. `object` is the non-primitive type, so it cannot be a string
+// and the reason strings are excluded does not reach it.
+//
+// TypeScript's `{}` is deliberately **not** covered, and the difference is not
+// pedantry: `{}` accepts every value but `null` and `undefined`, strings among
+// them, so `"valueOf" in ("a" as {})` throws in node. A receiver whose type
+// admits a primitive keeps taking the ordinary path and answers `false` — which
+// is still not what node does, but is the existing behaviour rather than a new
+// wrong answer.
+const narrowed: object = { via: 1 };
+const inheritedOnObject: boolean = "valueOf" in narrowed;
+
+export function readInheritedOnObject(): boolean {
+  return inheritedOnObject;
+}
+
 // Inherited from `Object.prototype`, on three different receiver shapes.
 const inheritedOnATable: boolean = "valueOf" in table;
 const inheritedOnAClass: boolean = "toString" in held;

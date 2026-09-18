@@ -19137,12 +19137,26 @@ impl<'a> FuncBuilder<'a> {
         // make the member *callable*: `Object.prototype.hasOwnProperty` is still
         // refused as a global member with no definition. `in` is the half the
         // specification is unambiguous about, and the two are separate work.
-        if matches!(
+        // `object` is included by name. It is TypeScript's non-primitive type --
+        // `is_the_object_type` tests exactly the `NON_PRIMITIVE` flag -- so a
+        // value of that type cannot be a string, and the reason strings are
+        // excluded above does not reach it. It is also the type these sites
+        // narrow *to*: `value !== null && typeof value === "object" && "k" in
+        // value` is how a program duck-types an `unknown`, and it is the most
+        // common `in` receiver in `runtime/node`.
+        //
+        // TypeScript's `{}` is deliberately **not** included, and the difference
+        // is not pedantry: `{}` accepts every value but `null` and `undefined`,
+        // strings among them, so `"valueOf" in ("a" as {})` throws in node. A
+        // receiver whose type admits a primitive has to keep taking the ordinary
+        // path.
+        if (matches!(
             self.represent(ty),
             Some(HirType::Managed(
                 ManagedType::Object(_) | ManagedType::Array(_) | ManagedType::Table(_, _)
             ))
-        ) && matches!(
+        ) || self.is_the_object_type(ty))
+            && matches!(
             key.as_str(),
             "constructor"
                 | "hasOwnProperty"
