@@ -29708,6 +29708,20 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(element);
         let read = if object {
+            // **`length` off an array, in an object pattern.**
+            // `function f([...{ length }])` is ordinary JavaScript and the tail
+            // is an array, which has no *fields* — so this refused as
+            // "destructuring something with no fields", true of the
+            // representation and useless about the program.
+            //
+            // Only `length`, and only for an array. An object pattern over an
+            // array can also name numeric keys (`{ 0: x }`), which is a
+            // different read and stays refused rather than guessed at.
+            if let HirType::Managed(ManagedType::Array(_)) = self.values[value.0 as usize].ty
+                && self.literal_name(property).as_deref() == Some("length")
+            {
+                return Ok(self.push(OpKind::Length(value), HirType::NUMBER, origin));
+            }
             let HirType::Managed(ManagedType::Object(type_id)) =
                 self.values[value.0 as usize].ty.clone()
             else {
@@ -30081,15 +30095,43 @@ impl<'a> FuncBuilder<'a> {
         value: ValueId,
         position: usize,
     ) -> Result<(), Diagnostic> {
-        let Some(binding) = self
-            .children(element)
-            .into_iter()
-            .find(|part| self.kind_of(*part) == Some(syntax::IDENTIFIER))
-        else {
-            return Err(self.unsupported(element, "a rest element with no name"));
+        // **The rest target may be a pattern, not only a name.**
+        // `function f([...[x, y]])` and `function f([...{ length }])` are both
+        // ordinary JavaScript: the tail is built exactly as it is for a name and
+        // then destructured again, one level down. Searching only for an
+        // `IDENTIFIER` found neither, and the refusal said "a rest element with
+        // no name" — true of what it looked for and misleading about the
+        // program, which names the tail's *parts* rather than the tail.
+        //
+        // 20 of the 413 files that reach lowering in the slice-1 test262
+        // population are this, all in the generated `class/dstr` family.
+        //
+        // The tail is built first either way, because both cases need it and the
+        // slice is what the language says a rest element is: a fresh array, so
+        // writing to it does not touch the one it came from.
+        let Some(target) = self.children(element).into_iter().find(|part| {
+            matches!(
+                self.kind_of(*part),
+                Some(
+                    syntax::IDENTIFIER
+                        | syntax::ARRAY_BINDING_PATTERN
+                        | syntax::OBJECT_BINDING_PATTERN
+                )
+            )
+        }) else {
+            return Err(self.unsupported(element, "a rest element with no name or pattern"));
         };
-        let Some(symbol) = self.node(binding).symbol else {
-            return Err(self.unsupported(element, "an unresolved binding"));
+        let nested = matches!(
+            self.kind_of(target),
+            Some(syntax::ARRAY_BINDING_PATTERN | syntax::OBJECT_BINDING_PATTERN)
+        );
+        let symbol = if nested {
+            None
+        } else {
+            match self.node(target).symbol {
+                Some(symbol) => Some(symbol),
+                None => return Err(self.unsupported(element, "an unresolved binding")),
+            }
         };
         let ty = self.values[value.0 as usize].ty.clone();
         let origin = self.origin(element);
@@ -30106,8 +30148,16 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin,
         );
-        self.bindings.insert(symbol.0, rest);
-        Ok(())
+        match symbol {
+            Some(symbol) => {
+                self.bindings.insert(symbol.0, rest);
+                Ok(())
+            }
+            // `[...[x, y]]` is the tail and then another pattern over it, which
+            // is the same function one level down — exactly what `bind_pattern`
+            // already does for `{ p: { x } }`.
+            None => self.bind_pattern(target, rest),
+        }
     }
 
     fn lower_string(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {

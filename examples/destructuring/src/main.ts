@@ -249,3 +249,44 @@ function take({ name = "xy", flag }: Options): number {
 export function defaultedParameter(n: number): number {
   return take(options(n)) + n;
 }
+
+// # A rest element whose target is a **pattern** rather than a name
+//
+// `[...[x, y]]` and `[...{ length }]` are both ordinary JavaScript: the tail is
+// built exactly as it is for a name, and then destructured again one level
+// down. `bind_rest` searched its children for an `IDENTIFIER`, found neither,
+// and refused with *a rest element with no name* — true of what it looked for
+// and misleading about the program, which names the tail's *parts* rather than
+// the tail.
+//
+// 20 of the 413 files that reach lowering in the slice-1 test262 population are
+// this shape, and `restElement` above — a rest bound to a name — passes on the
+// compiler that refused every one of them.
+//
+// `[...{ length }]` needed a second thing: an object pattern over an **array**.
+// The tail has no fields, so the read refused as *destructuring something with
+// no fields*, which is a true sentence about the representation and useless
+// about the program. Only `length` is answered, and only for an array; an
+// object pattern naming a numeric key (`{ 0: x }`) is a different read and
+// stays refused rather than guessed at.
+
+export function restToAnArrayPattern(n: number): number {
+  const [...[x, y]] = [n, n + 1];
+  return x * 10 + y;
+}
+
+export function restToAnObjectPattern(n: number): number {
+  const [...{ length }] = [n, n + 1, n + 2];
+  return length;
+}
+
+export function restPatternAfterAnElement(n: number): number {
+  const [head, ...[x, y]] = [n, n + 1, n + 2];
+  return head * 100 + x * 10 + y;
+}
+
+/** Reading `length` straight off an array in an object pattern, no rest. */
+export function lengthOffAnArray(n: number): number {
+  const { length } = [n, n + 1];
+  return length;
+}
