@@ -2464,14 +2464,24 @@ fn collect_module_scope(
         // which `module#init` then tried to lower as an expression -- and it
         // made `let x = y` a declaration with no initializer at all, because
         // `y` is an identifier too.
-        let initializer = children
-            .iter()
-            .rev()
-            .find(|child| {
-                **child != *name_node
-                    && !syntax::is_type_node(probe.kind_of(**child).unwrap_or_default())
-            })
-            .copied();
+        let initializer = declaration_initializer(&children, *name_node, |c| probe.kind_of(c));
+
+        // **A second declaration of one symbol is a store, not an initial
+        // value.** `var` may be declared more than once at module scope, and
+        // `Global.initial` is written once, before any statement runs -- so
+        // folding a redeclaration's constant into it applied the value *before*
+        // the statements between the two declarations, instead of at the
+        // declaration's own position.
+        //
+        //   var x = 5;
+        //   x = 99;
+        //   var x = 5;   // node: 5.  ours, until this: 99
+        //
+        // Silently, on every backend, with no diagnostic: the second
+        // declaration emitted no code at all. Found by running
+        // `language/expressions/addition/S11.6.1_A2.4_T1.js`, which is a test
+        // about `+` and never mentions redeclaration.
+        let redeclared = scope.variables.contains_key(&symbol.0);
 
         // An erased global's initial value needs a *tag*, and `Global.initial`
         // is one `f64` with no room for one. So a constant initializer is not
@@ -2568,23 +2578,41 @@ fn collect_module_scope(
             scope.unsupported.insert(symbol.0, reason);
             continue;
         }
-        let global = u32::try_from(scope.globals.len()).unwrap_or(u32::MAX);
-        let spelling = probe.node(*name_node).text.clone();
-        scope.globals.push(super::Global {
-            name: unshared_name(&scope.globals, spelling, global),
-            ty: ty.clone(),
-            initial: value,
-            exported: false,
-            // Exactly the condition `scope.deferred` is given below, stated on
-            // the global itself so a backend and a later pass can ask.
-            deferred: constant.is_none() && initializer.is_some(),
-            origin: probe.origin(*name_node),
-        });
-        scope.variables.insert(symbol.0, global);
-        scope.types.push(ty);
+        // One symbol is one storage location. A redeclaration re-uses it:
+        // pushing a second global left the first as storage nothing reads,
+        // since `scope.variables` -- which every read and write resolves
+        // through -- names only the last.
+        if let Some(existing) = scope.variables.get(&symbol.0).copied() {
+            if initializer.is_some() {
+                scope.globals[existing as usize].deferred = true;
+            }
+        } else {
+            let global = u32::try_from(scope.globals.len()).unwrap_or(u32::MAX);
+            let spelling = probe.node(*name_node).text.clone();
+            scope.globals.push(super::Global {
+                name: unshared_name(&scope.globals, spelling, global),
+                ty: ty.clone(),
+                initial: value,
+                exported: false,
+                // Exactly the condition `scope.deferred` is given below, stated
+                // on the global itself so a backend and a later pass can ask.
+                deferred: constant.is_none() && initializer.is_some(),
+                origin: probe.origin(*name_node),
+            });
+            scope.variables.insert(symbol.0, global);
+            scope.types.push(ty);
+        }
         // Only where there is one to lower. A declaration with no initializer
         // has nothing deferred; its storage is already the zero above.
-        if let (None, Some(initializer)) = (constant, initializer) {
+        //
+        // A redeclaration is deferred even when its value folds, because
+        // `initial` cannot express a value that arrives partway through the
+        // module. The map records *that* the symbol needs code;
+        // `lower_module_binding` takes the expression from the declaration it
+        // is lowering, so two declarations do not both store the last value.
+        if let Some(initializer) = initializer
+            && (constant.is_none() || redeclared)
+        {
             scope.deferred.insert(symbol.0, initializer);
         }
     }
@@ -2593,6 +2621,29 @@ fn collect_module_scope(
     // from this walk, which is why they were missing.
     scope.layouts = probe.layouts;
     scope
+}
+
+/// The initializer in a variable declaration: the last child that is neither
+/// the name nor a type annotation.
+///
+/// One derivation, asked twice. `collect_module_scope` needs it to decide
+/// whether a global is deferred, and `lower_module_binding` needs the node to
+/// lower -- and while those agreed for a symbol declared once, `deferred` is
+/// keyed by **symbol** and a module-scope `var` may be declared more than once.
+/// Reading the map there gave every declaration of one symbol the *last*
+/// declaration's initializer.
+fn declaration_initializer(
+    children: &[NodeId],
+    name_node: NodeId,
+    kind_of: impl Fn(NodeId) -> Option<u16>,
+) -> Option<NodeId> {
+    children
+        .iter()
+        .rev()
+        .find(|child| {
+            **child != name_node && !syntax::is_type_node(kind_of(**child).unwrap_or_default())
+        })
+        .copied()
 }
 
 /// A `static` field is one storage location for the program, so it is a global.
@@ -11201,8 +11252,12 @@ impl<'a> FuncBuilder<'a> {
     /// Declarations whose initializer folded to a constant are skipped: their
     /// value is already in the artifact, either as the global's `initial` or,
     /// for a `const`, inlined at every read. `deferred` is exactly the set that
-    /// needs code, which is why the decision is made once in
+    /// needs code, which is why *that* decision is made once in
     /// `collect_module_scope` rather than re-derived here.
+    ///
+    /// The expression, though, comes from the declaration in hand rather than
+    /// from the map: `deferred` is keyed by symbol, and one module-scope symbol
+    /// can have several declarations.
     fn lower_module_binding(
         &mut self,
         statement: NodeId,
@@ -11232,7 +11287,18 @@ impl<'a> FuncBuilder<'a> {
             if refused.contains(&symbol.0) {
                 continue;
             }
-            let Some(initializer) = self.module.deferred.get(&symbol.0).copied() else {
+            // **This declaration's initializer, not the symbol's.**
+            // `deferred` is keyed by symbol and answers *whether* the symbol
+            // needs a store; a module-scope `var` may be declared more than
+            // once, and the map holds only the last one. Reading the node from
+            // the map stored the last declaration's value at every
+            // declaration's position -- so `var x = 1; … var x = 2;` set `x` to
+            // 2 twice.
+            if !self.module.deferred.contains_key(&symbol.0) {
+                continue;
+            }
+            let Some(initializer) = declaration_initializer(&children, *name, |c| self.kind_of(c))
+            else {
                 continue;
             };
             let Some(global) = self.module.variables.get(&symbol.0).copied() else {
