@@ -33647,6 +33647,72 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// What to say about a call the checker resolved to no declaration.
+    ///
+    /// **Four different failures wear this one position**, and telling them
+    /// apart is the whole of the value here: a message naming the wrong cause
+    /// sends its reader somewhere there is nothing to find.
+    ///
+    /// A name the checker resolved to no declaration is a builtin this compiler
+    /// has not implemented, *or* a name from a package whose implementation is
+    /// not in this program -- the second is far commoner now that dependencies
+    /// are acquired, because a package publishing only generated JavaScript has
+    /// nothing to acquire. Reporting it as a missing builtin sends its reader
+    /// to `hir::builtin`, where nothing is missing.
+    ///
+    /// A third was found by probing the ledger row for *calling* a class value.
+    /// `TypeError(m)` is what JavaScript makes `new TypeError(m)`, TypeScript
+    /// accepts it, and it arrives here with no declaration -- so it read as a
+    /// builtin this compiler does not provide, which is false twice over: the
+    /// class is the second entry in `hir::builtin`. What is missing is a `call`
+    /// that constructs. Only a *provided* class reaches that arm, since a class
+    /// the program declares is TS2348 before the compiler sees it.
+    ///
+    /// **The fourth had somebody else's name in it.** A callee this program
+    /// *declares* is not a builtin, whatever the checker resolved its call to:
+    ///
+    /// ```js
+    /// var f = Function('eval = 42;');
+    /// f();
+    /// ```
+    ///
+    /// `f` is an ordinary `var` in the source. Its call resolves to no
+    /// declaration because its type is `Function`, whose call signature lives
+    /// in `lib.d.ts` -- so this named the variable and sent its reader to
+    /// `hir::builtin` to add `f`. Nine files of the slice-1 `test/language`
+    /// population, under four names (`f`, `fn`, `MyFunction`,
+    /// `_13_0_12_fun`), and every one of them is `Function` or `new Function`.
+    /// One message was carrying two causes and the count for the real one was
+    /// nine files short. The type is what the sentence should name.
+    ///
+    /// `SymbolRecord::declarations` is the test, and the schema already
+    /// documents it: "empty for a symbol declared outside the decoded file
+    /// set". A binding-table lookup was tried first and **never fired** -- the
+    /// maps it asks are the lowering's own, so a symbol whose declaration the
+    /// lowering already refused is absent from them, which is exactly this
+    /// case. `tooling/conformance/blockers/a-value-of-function-type-called`
+    /// pins the sentence.
+    fn no_such_callee(&self, callee_node: NodeId, name: &str) -> String {
+        let declared_here = self
+            .node(callee_node)
+            .symbol
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .is_some_and(|symbol| !symbol.declarations.is_empty());
+        if crate::hir::PROVIDED_ERROR_NAMES.contains(&name) {
+            format!("`{name}`, a class this compiler provides, called without `new`")
+        } else if self.imported_from(callee_node).is_some() {
+            format!("`{name}`, an imported name whose implementation is not in this program")
+        } else if declared_here {
+            format!(
+                "`{name}`, a value of type {} called as a function, where the type does not say \
+                 which function it is",
+                self.describe_node(callee_node)
+            )
+        } else {
+            format!("`{name}`, a builtin this compiler does not provide")
+        }
+    }
+
     fn lower_call(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         // Before the target lookup, because `resolve` is a parameter rather
         // than a function: the frontend has nothing to resolve it to, and the
@@ -33823,14 +33889,7 @@ impl<'a> FuncBuilder<'a> {
             // What is missing is a `call` that constructs. Only a *provided*
             // class reaches this arm: a class the program declares is TS2348
             // before the compiler sees it, so the list is the whole of it.
-            let message = if crate::hir::PROVIDED_ERROR_NAMES.contains(&name.as_str()) {
-                format!("`{name}`, a class this compiler provides, called without `new`")
-            } else if self.imported_from(callee_node).is_some() {
-                format!("`{name}`, an imported name whose implementation is not in this program")
-            } else {
-                format!("`{name}`, a builtin this compiler does not provide")
-            };
-            return Err(self.unsupported(id, &message));
+            return Err(self.unsupported(id, &self.no_such_callee(callee_node, &name)));
         }
         let callee = if defined {
             Callee::Direct(name)
