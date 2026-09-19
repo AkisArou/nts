@@ -1203,6 +1203,15 @@ enum Head {
     InOrder(Vec<Option<NodeId>>),
     /// A pattern applied to the one value the walk produces.
     Pattern(NodeId),
+    /// A **target that already exists**, assigned once per iteration.
+    ///
+    /// `for (v of xs)` and `for (o.k of xs)` declare nothing: the language
+    /// permits any assignment target in the head, and the loop writes to it
+    /// exactly as an assignment statement would. So this carries the target
+    /// *expression* rather than a name -- `place_of` is what turns it into
+    /// somewhere to write, and it already knows every shape an assignment can
+    /// have, including a getter-backed property and a readonly field.
+    Assign(NodeId),
 }
 
 /// The name of the `n`th closure's class, and of its one method.
@@ -18928,11 +18937,17 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn for_of_head(&self, initializer: NodeId) -> Result<Head, Diagnostic> {
-        let declaration = self
+        let Some(declaration) = self
             .children(initializer)
             .into_iter()
             .find(|child| self.kind_of(*child) == Some(syntax::VARIABLE_DECLARATION))
-            .ok_or_else(|| self.unsupported(initializer, "a `for...of` without a declaration"))?;
+        else {
+            // **No declaration is not an error, it is the other form.**
+            // `for (v of xs)` assigns to something that already exists, which
+            // the language allows for any assignment target. The head *is* the
+            // target here rather than containing one.
+            return Ok(Head::Assign(initializer));
+        };
         let parts = self.children(declaration);
         if let Some(name) = parts
             .iter()
@@ -19022,6 +19037,63 @@ impl<'a> FuncBuilder<'a> {
     /// Names take them in order. A pattern takes the one value there is and
     /// goes through [`Self::bind_pattern`], the same function a declaration
     /// uses, so a rename or a nested pattern needs nothing here.
+    /// **The head assigns too**, so what it writes is loop-carried.
+    ///
+    /// `for (v of xs) { s += v }` writes `v` once per iteration and the body
+    /// may never mention it, so `assigned_symbols(body)` does not see it -- and
+    /// a value written in the loop and read after it has to be carried like any
+    /// other. It showed as `NotDominated`, not as a wrong answer.
+    ///
+    /// Only names already bound here. `for (o.k of xs)` writes through a place
+    /// that outlives the loop on its own, and a module-scope global is storage
+    /// rather than a carried value.
+    fn carry_what_the_head_assigns(&self, head: &Head, carried: &mut Vec<u32>) {
+        let Head::Assign(target) = head else {
+            return;
+        };
+        let mut written = Vec::new();
+        self.names_written_by(*target, &mut written);
+        for symbol in written {
+            if self.bindings.contains_key(&symbol) && !carried.contains(&symbol) {
+                carried.push(symbol);
+            }
+        }
+    }
+
+    /// Every name a `for (… of …)` head writes to, as symbols.
+    ///
+    /// A bare `v` writes one; `[a, b]` and `{ a, b }` write several. Collected
+    /// by walking the target rather than through `assigned_symbols`, which
+    /// looks for assignment *expressions* -- the head is a target, not an
+    /// assignment, so that walk finds nothing and the loop left every one of
+    /// these behind. It showed as `NotDominated`, a value written inside the
+    /// loop and read after it, rather than as a wrong answer.
+    fn names_written_by(&self, target: NodeId, into: &mut Vec<u32>) {
+        match self.kind_of(target) {
+            Some(syntax::IDENTIFIER) => {
+                if let Some(symbol) = self.node(target).symbol {
+                    into.push(symbol.0);
+                }
+            }
+            Some(syntax::ARRAY_LITERAL_EXPRESSION | syntax::OBJECT_LITERAL_EXPRESSION) => {
+                for child in self.children(target) {
+                    self.names_written_by(child, into);
+                }
+            }
+            // A property or element target is storage that outlives the loop on
+            // its own, and a shorthand property carries the *property's* symbol
+            // rather than the variable's -- which `assign_pattern` resolves by
+            // name and this does not have to.
+            _ => {
+                for child in self.children(target) {
+                    if self.kind_of(child) == Some(syntax::IDENTIFIER) {
+                        self.names_written_by(child, into);
+                    }
+                }
+            }
+        }
+    }
+
     fn bind_head(
         &mut self,
         id: NodeId,
@@ -19045,6 +19117,29 @@ impl<'a> FuncBuilder<'a> {
                 };
                 let (pattern, element) = (*pattern, *element);
                 self.bind_pattern(pattern, element)
+            }
+            // The same write an assignment statement makes, once per iteration
+            // -- including when the target is a **destructuring pattern**.
+            //
+            // `for ([a, b] of pairs)` writes through an array *literal* used as
+            // an assignment target, which `assign_pattern` already handles for
+            // `[a, b] = p`; `place_of` does not, and refused it as `assignment
+            // to a computed target` -- 31 of the 36 files this form appears in.
+            // Routed to the same function rather than taught the shape twice.
+            Head::Assign(target) => {
+                let [element] = values.as_slice() else {
+                    return Err(self.unsupported(id, "a `for...of` target over a walk of pairs"));
+                };
+                let (target, element) = (*target, *element);
+                if matches!(
+                    self.kind_of(target),
+                    Some(syntax::ARRAY_LITERAL_EXPRESSION | syntax::OBJECT_LITERAL_EXPRESSION)
+                ) {
+                    return self.assign_pattern(target, element);
+                }
+                let place = self.place_of(target)?;
+                self.write_place(target, &place, element)?;
+                Ok(())
             }
         }
     }
@@ -19134,7 +19229,7 @@ impl<'a> FuncBuilder<'a> {
         // what the walk hands over.
         let wanted = match &head {
             Head::InOrder(names) => names.len(),
-            Head::Pattern(_) => 1,
+            Head::Pattern(_) | Head::Assign(_) => 1,
         };
         let walk = self.walk_of(sequence, sequence_value, forced, wanted)?;
         // **`for await` over a synchronous iterable awaits each element**, and
@@ -19180,6 +19275,7 @@ impl<'a> FuncBuilder<'a> {
 
         let mut carried: Vec<u32> = index.into_iter().collect();
         self.assigned_symbols(body, &mut carried);
+        self.carry_what_the_head_assigns(&head, &mut carried);
         let mut declared: Vec<u32> = element_symbols.iter().flatten().copied().collect();
         if let Head::Pattern(pattern) = &head {
             self.pattern_symbols(*pattern, &mut declared);
