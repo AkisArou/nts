@@ -57,7 +57,7 @@ class assert {
   static sameValue(actual: string, expected: string, message?: string): void;
   static sameValue(actual: boolean, expected: boolean, message?: string): void;
   static sameValue(actual: unknown, expected: unknown, message?: string): void {
-    if (actual !== expected) {
+    if (!assert.isSameValue(actual, expected)) {
       throw new Test262Error(message ?? "sameValue");
     }
   }
@@ -66,8 +66,37 @@ class assert {
   static notSameValue(actual: string, expected: string, message?: string): void;
   static notSameValue(actual: boolean, expected: boolean, message?: string): void;
   static notSameValue(actual: unknown, expected: unknown, message?: string): void {
-    if (actual === expected) {
+    if (assert.isSameValue(actual, expected)) {
       throw new Test262Error(message ?? "notSameValue");
     }
+  }
+
+  /**
+   * `SameValue`, which is **not** `!==`, and the difference is measurable.
+   *
+   * This stand-in compared with `!==` until 2026-09-19, which gets two values
+   * wrong in the direction that matters: `NaN !== NaN`, so every test asserting
+   * a NaN result failed *whatever the compiler answered*; and `+0 === -0`, so
+   * every test distinguishing the zeros passed whatever it answered.
+   *
+   * `applying-the-exp-operator_A4.js` is the file that showed it -- "if base is
+   * NaN and exponent is nonzero, the result is NaN", scored as a wrong answer
+   * by the census while `probe.sh` had the same program agreeing with node.
+   * An instrument finding itself, which is the direction to prefer, but it had
+   * already been reported as four files that "ran and answered wrongly".
+   *
+   * Transcribed from `third_party/test262/harness/assert.js` rather than
+   * reasoned about, which is the whole point of a stand-in: the shipped harness
+   * is the specification of what this has to mean.
+   */
+  static isSameValue(a: unknown, b: unknown): boolean {
+    if (a === b) {
+      // The zeros are `===` and are not the same value. `1 / +0` is `Infinity`
+      // and `1 / -0` is `-Infinity`, which is how they are told apart.
+      return a !== 0 || 1 / (a as number) === 1 / (b as number);
+    }
+    // NaN is the only value not equal to itself, so this is the NaN case and
+    // nothing else reaches it.
+    return a !== a && b !== b;
   }
 }
