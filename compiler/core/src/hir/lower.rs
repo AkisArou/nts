@@ -2588,21 +2588,7 @@ fn collect_module_scope(
         // population -- and they rank under *two* headings, because the read
         // that follows the missing global refuses again as `reading a name
         // before it is bound`, which is the cascade rather than the cause.
-        // **The declaration's own type first, unless it is unsettled.** `var xs
-        // = []` types the declaration `never[]`, which is a `Some`, so the
-        // `or_else` below never used to run and the global was declared to hold
-        // nothing -- and the empty literal then refused for want of a type the
-        // assignments had already settled. The final `or` keeps today's
-        // diagnostic where nothing settles it: `never[]` reaches the literal and
-        // the literal names the construct, which a global of unrepresentable
-        // type would not.
-        let declared = probe.type_of(*name_node);
-        let Some(ty) = declared
-            .clone()
-            .filter(|ty| !is_an_unsettled_array(ty))
-            .or_else(|| probe.evolved_type(*name_node).filter(growth_can_fill))
-            .or(declared)
-        else {
+        let Some(ty) = settled_global_type(&probe, *name_node) else {
             // **Named, because a refusal that does not name its type cannot be
             // counted by kind.** That is `describe_node`'s whole reason for
             // existing, and this message predated it: 29 files of the slice-1
@@ -2864,6 +2850,113 @@ fn managed_word(managed: &ManagedType) -> &'static str {
 /// is a function: `lower_array_literal` will not build one, `evolved_type` must
 /// not let one veto a settled sibling, and `collect_module_scope` must not take
 /// one as a global's type when a sibling settled it.
+/// What a module-scope global is declared to hold.
+///
+/// **The declaration's own type first, unless it is unsettled.** `var xs = []`
+/// types the declaration `never[]`, which is a `Some`, so an `or_else` beside
+/// it never ran and the global was declared to hold nothing -- and the empty
+/// literal then refused for want of a type the assignments had already settled.
+///
+/// The two filters are the price of taking the settled one. Every write that
+/// settles an evolving array's type *grows* it, so the type is only usable
+/// where those writes can actually be performed: not for a counted element
+/// ([`growth_can_fill`]) and not out of order ([`written_as_a_dense_prefix`]).
+/// Failing either, the unsettled type is handed back rather than nothing, which
+/// keeps the diagnostic the literal gives -- it names the construct, where a
+/// global of unrepresentable type does not.
+fn settled_global_type(probe: &FuncBuilder, name_node: NodeId) -> Option<HirType> {
+    let declared = probe.type_of(name_node);
+    declared
+        .clone()
+        .filter(|ty| !is_an_unsettled_array(ty))
+        .or_else(|| {
+            probe
+                .evolved_type(name_node)
+                .filter(growth_can_fill)
+                .filter(|_| written_as_a_dense_prefix(probe, name_node))
+        })
+        .or(declared)
+}
+
+/// Are this name's indexed writes `[0]`, `[1]`, ... in that order?
+///
+/// **The second half of the question `growth_can_fill` asks**, and the half
+/// that was missing. Every write that settles an evolving array's type grows it,
+/// and growth is *by one* -- `xs[5] = v` on a length-1 array wants four holes,
+/// a hole reads as `undefined`, and a dense array of numbers has no room for
+/// one. So the runtime aborts, with no diagnostic and nothing naming the
+/// construct.
+///
+/// Letting the type settle for such a name turns a refusal into an **abort**,
+/// which is strictly worse. That is not hypothetical: six `test/language`
+/// files went from `unsupported` to SIGABRT the first time a settled type
+/// reached them -- `applying-the-exp-operator_A11.js` opens
+/// `var exponents = []; exponents[3] = Infinity; exponents[2] = ...`, dense in
+/// the end and sparse at every step of the way.
+///
+/// So the writes have to be a **prefix, in order**: each index a constant, and
+/// each the next slot after the last. That is the shape the corpus writes --
+/// `var bases = []; bases[0] = a; bases[1] = b` -- and every one of those is an
+/// append. Anything else keeps the refusal it had before.
+///
+/// A name with no indexed writes at all passes: it is filled by `push`, which
+/// appends by definition. Conservative where they are mixed, which is a shape
+/// nothing in the corpus writes.
+fn written_as_a_dense_prefix(probe: &FuncBuilder, name_node: NodeId) -> bool {
+    let Some(symbol) = probe.node(name_node).symbol else {
+        return false;
+    };
+    let mut expected = 0.0_f64;
+    for at in 0..probe.snapshot.nodes.len() {
+        let Ok(index) = u32::try_from(at) else {
+            return false;
+        };
+        let id = NodeId(index);
+        if id == name_node || probe.node(id).symbol != Some(symbol) {
+            continue;
+        }
+        let Some(access) = probe.node(id).parent else {
+            continue;
+        };
+        if probe.kind_of(access) != Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
+            continue;
+        }
+        let parts = probe.children(access);
+        let [array, subscript] = parts.as_slice() else {
+            continue;
+        };
+        // The name as the *subscript* of someone else's access is a read of it.
+        if *array != id {
+            continue;
+        }
+        let Some(assignment) = probe.node(access).parent else {
+            continue;
+        };
+        if probe.kind_of(assignment) != Some(syntax::BINARY_EXPRESSION) {
+            continue;
+        }
+        let operands = probe.children(assignment);
+        let [target, operator, _] = operands.as_slice() else {
+            continue;
+        };
+        if *target != access {
+            continue;
+        }
+        // A compound assignment *reads* the slot before writing it, so it can
+        // never be the write that creates one. Rejected rather than skipped:
+        // treating it as a read would let `xs[9] += 1` settle a type that the
+        // read itself aborts on.
+        if probe.kind_of(*operator) != Some(syntax::EQUALS_TOKEN) {
+            return false;
+        }
+        match declared_literal(probe, *subscript) {
+            Some(value) if (value - expected).abs() < f64::EPSILON => expected += 1.0,
+            _ => return false,
+        }
+    }
+    true
+}
+
 /// Can the writes that settled this type actually be performed?
 ///
 /// Only asked of a type [`is_an_unsettled_array`] rejected -- one the *writes*

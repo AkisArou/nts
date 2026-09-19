@@ -135,6 +135,35 @@ export function readAnnotated(): number {
 // is deliberately absent below for the reason `an-array-grown-by-index` gives
 // about its own sparse case.
 //
+// # And a sparse fill turns the refusal into an *abort*, which is worse
+//
+// `growth_can_fill` was not enough on its own, and the census is what said so:
+// six `test/language` files went from `unsupported` to **SIGABRT** the first
+// time a settled type reached them. `applying-the-exp-operator_A11.js` opens
+//
+//     var exponents = [];
+//     exponents[3] = Infinity;
+//     exponents[2] = 1.7976931348623157E308;
+//     exponents[1] = 1;
+//     exponents[0] = 0.000000000000001;
+//
+// — dense when it is finished and sparse at every step of the way. Growth is by
+// *one*: `xs[3] = v` on an empty array wants three holes, a hole reads as
+// `undefined`, and a dense array of numbers has no room for one, so the runtime
+// aborts with no diagnostic. A refusal replaced by an abort is a worse answer,
+// not a better one.
+//
+// `written_as_a_dense_prefix` is the second filter: every indexed write must be
+// a constant, and each must be the next slot after the last. That is what the
+// corpus writes, and every one of those writes is an append. A compound
+// assignment is rejected outright rather than skipped — `xs[9] += 1` *reads*
+// the slot before writing it, so it could never be the write that creates one.
+//
+// **The population that still aborts is untouched by this and was never
+// refused**: an annotated `const xs: number[] = []; xs[3] = v` and the same
+// inside a function both abort today and did before any of this, which
+// `an-array-grown-by-index` records as the sparse half of its own row.
+//
 // **The guard is the element type, not the write**, so `var words = [];
 // words.push("a")` stays refused as well -- a `push` needs no growth and would
 // be safe. That is a refusal wider than its hazard, and it is deliberate for
