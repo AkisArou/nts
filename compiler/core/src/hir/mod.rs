@@ -1150,12 +1150,47 @@ pub enum OpKind {
         resume: String,
     },
     /// `array[index] = value`. Produces nothing.
+    ///
+    /// A `checked` store may also **grow the array by one**, where the index is
+    /// exactly the current length — `xs[xs.length] = v` extends an array in
+    /// JavaScript. See [`array_write_may_grow`] for the element types that
+    /// holds for, and `nts_slot_or_grow` in the runtime for the shape.
     ArraySet {
         array: ValueId,
         index: ValueId,
         value: ValueId,
         checked: bool,
     },
+}
+
+/// Whether a checked write to this array may extend it rather than abort.
+///
+/// **One derivation, asked by three backends.** Each emitter picks the runtime
+/// helper for a store, and three copies of this rule would be three chances to
+/// disagree about when a program grows an array — which is a difference no test
+/// comparing one backend against node could see.
+///
+/// The rule is reference counting's. `rc.rs` pairs every store of a value that
+/// `may_hold_a_reference` with a **load of what the slot held**, so that the old
+/// reference can be released; at `index == length` there is no such slot and
+/// nothing to load. So a counted element keeps today's abort, and the arrays
+/// that grow are the ones whose elements are numbers, booleans and the like.
+///
+/// Asked of the array's element type rather than of the stored value: the
+/// stored value may be a narrower type than the slot, and it is the slot that
+/// decides whether a release is owed.
+///
+/// The length claim this invalidates is [`allocated_length_is_exact`]'s, and
+/// that function carries which stores cost it.
+#[must_use]
+pub fn array_write_may_grow(func: &Func, array: ValueId) -> bool {
+    let HirType::Managed(ManagedType::Array(element)) = &func.values[array.0 as usize].ty else {
+        // A view is a window onto a buffer with a fixed extent. Growing one
+        // would mean growing the buffer underneath every other view of it,
+        // which is not what an index write means.
+        return false;
+    };
+    !element.may_hold_a_reference()
 }
 
 /// What a call reaches.
@@ -2268,6 +2303,26 @@ pub fn allocated_length_is_exact(func: &Func, array: ValueId, growable: bool) ->
         // all.
         return true;
     }
+    // A literal's own initialising stores cannot grow it: `ArrayNew` made the
+    // slots and each store names one of them by a constant.
+    let allocated = match func.values[array.0 as usize].kind {
+        OpKind::ArrayNew { length, .. } => match func.values[length.0 as usize].kind {
+            OpKind::ConstFloat(n) => n,
+            _ => -1.0,
+        },
+        _ => -1.0,
+    };
+    if func.values.iter().any(|op| {
+        let OpKind::ArraySet { array: t, index, checked: true, .. } = &op.kind else {
+            return false;
+        };
+        if *t != array {
+            return false;
+        }
+        !matches!(func.values[index.0 as usize].kind, OpKind::ConstFloat(at) if at >= 0.0 && at < allocated)
+    }) {
+        return false;
+    }
     !func
         .values
         .iter()
@@ -2316,6 +2371,19 @@ pub fn arrays_can_grow(program: &Program) -> bool {
     program.funcs.iter().any(|func| {
         func.values.iter().any(|op| {
             match &op.kind {
+                // **A growing index write changes a length without being a
+                // call.** `xs[xs.length] = v` appends, and the rule below reads
+                // helper *names* -- so this was invisible to it, and every
+                // `.length` on an allocation kept folding to the size the
+                // literal was made with. `[1].length` answered 1 after a store
+                // that made it 2, which is precisely the wrong answer
+                // `changes_array_length`'s own comment warns about one function
+                // up.
+                OpKind::ArraySet {
+                    array,
+                    checked: true,
+                    ..
+                } => array_write_may_grow(func, *array),
                 OpKind::Call {
                     callee: Callee::External(name),
                     ..

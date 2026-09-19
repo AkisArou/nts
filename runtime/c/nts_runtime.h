@@ -2097,6 +2097,50 @@ static inline uint32_t nts_index(const NtsArray *array, double index) {
   return (uint32_t)index;
 }
 
+/* The slot a *write* wants, growing the array by one where the write is an
+ * append.
+ *
+ * `xs[xs.length] = v` extends an array in JavaScript, and this compiler aborted
+ * on it -- `nts: refused: index 1 is outside [0, 1)`, with no diagnostic and no
+ * artifact, which is a worse failure than a refusal. Filling an array by index
+ * is how `var xs = []; xs[0] = a; xs[1] = b;` is written, and it is 26 files of
+ * the slice-1 `test/language` population on its own.
+ *
+ * **Split the way `nts_array_push` is split, and for the reason its comment
+ * gives.** The check is what runs every time and belongs at the call site; the
+ * growth is a `malloc`, a copy and a free, happens log n times, and belongs
+ * behind a call. `nts_append_slot` is that call, and the common path -- an
+ * index already in range -- is the same two comparisons `nts_index` makes.
+ *
+ * **By one only.** `xs[5] = v` on a length-1 array wants four holes, and a hole
+ * reads as `undefined`, which a dense array of numbers has no room for. Filling
+ * them with the element's zero would be a silent wrong answer, so a sparse
+ * write still aborts exactly as it does today.
+ *
+ * **Not for an array of references**, and the caller decides that rather than
+ * this: reference counting pairs every store with a load of what the slot held,
+ * so that it can be released, and at `index == length` there is nothing to
+ * load. `hir::array_write_may_grow` is the one place that rule is written down.
+ */
+uint32_t nts_append_slot(NtsArray *array, double index);
+
+static inline uint32_t nts_slot_or_grow(NtsArray *array, double index) {
+  if (index >= 0.0 && index < (double)array->header.length &&
+      index == (double)(uint32_t)index) {
+    return (uint32_t)index;
+  }
+  return nts_append_slot(array, index);
+}
+
+/* The same, for an index the compiler already narrowed to an integer. One
+ * unsigned comparison catches a negative, exactly as in `nts_check`. */
+static inline uint32_t nts_check_or_grow(NtsArray *array, uint32_t index) {
+  if (index < array->header.length) {
+    return index;
+  }
+  return nts_append_slot(array, (double)index);
+}
+
 /* The same two checks over a view, whose length is computed rather than read
  * out of a header -- a view built without one follows its buffer through
  * `resize`, so there is no stored count to compare against. A detached view

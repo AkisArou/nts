@@ -3165,6 +3165,27 @@ fn descriptor_name(element: &str) -> String {
 /// a too-large one, since a negative wraps to something enormous. Where the
 /// analysis proved the index in range, there is no test at all.
 fn index_expression(func: &Func, array: ValueId, index: ValueId, checked: bool) -> String {
+    slot_expression(func, array, index, checked, false)
+}
+
+/// The same, for a **write**, which may extend the array by one.
+///
+/// `growing` picks `nts_slot_or_grow` over `nts_index`: the same two
+/// comparisons inline, and an out-of-line append where they fail by exactly
+/// one. `hir::array_write_may_grow` decides when that is asked for, in one
+/// place for all three backends.
+fn write_slot_expression(func: &Func, array: ValueId, index: ValueId, checked: bool) -> String {
+    let growing = checked && nts_core::hir::array_write_may_grow(func, array);
+    slot_expression(func, array, index, checked, growing)
+}
+
+fn slot_expression(
+    func: &Func,
+    array: ValueId,
+    index: ValueId,
+    checked: bool,
+    growing: bool,
+) -> String {
     if !checked {
         // Proven in range, so the cast is exact whichever representation it
         // arrived in.
@@ -3177,14 +3198,22 @@ fn index_expression(func: &Func, array: ValueId, index: ValueId, checked: bool) 
         HirType::Managed(ManagedType::View(_))
     );
     if matches!(func.values[index.0 as usize].ty, HirType::Int { .. }) {
-        let helper = if view { "nts_view_check" } else { "nts_check" };
+        let helper = match (view, growing) {
+            (true, _) => "nts_view_check",
+            (false, true) => "nts_check_or_grow",
+            (false, false) => "nts_check",
+        };
         format!(
             "{helper}({}, (uint32_t){})",
             value_name(array),
             value_name(index)
         )
     } else {
-        let helper = if view { "nts_view_index" } else { "nts_index" };
+        let helper = match (view, growing) {
+            (true, _) => "nts_view_index",
+            (false, true) => "nts_slot_or_grow",
+            (false, false) => "nts_index",
+        };
         format!("{helper}({}, {})", value_name(array), value_name(index))
     }
 }
@@ -4299,7 +4328,7 @@ fn memory_op(
                 &func.values[array.0 as usize].ty,
                 &op.origin,
             )?;
-            let slot = index_expression(func, *array, *index, *checked);
+            let slot = write_slot_expression(func, *array, *index, *checked);
             let items = items_macro(&func.values[array.0 as usize].ty);
             // The third storage this family needs and the third time it has
             // been found by a program rather than by looking: an argument gets
@@ -4319,8 +4348,18 @@ fn memory_op(
                 }
                 _ => String::new(),
             };
+            // **Two statements, because a growing write reallocates.** C does
+            // not order the subscript against the `NTS_ITEMS` read beside it,
+            // so `NTS_ITEMS(v, T)[nts_slot_or_grow(v, i)] = x;` may take the
+            // items pointer *before* the call that moves it -- a store through
+            // a freed block, on the one path in a thousand that grows.
+            //
+            // Sequenced whether or not this store can grow: one shape is easier
+            // to read than two, the slot is a local the C compiler folds away
+            // where nothing moved, and a rule that applies only sometimes is one
+            // that will be got wrong when the next helper is added.
             format!(
-                "{items}({}, {element})[{slot}] = {cast}{};",
+                "{{ uint32_t nts_slot = {slot}; {items}({}, {element})[nts_slot] = {cast}{}; }}",
                 value_name(*array),
                 value_name(*stored)
             )

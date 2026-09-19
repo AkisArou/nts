@@ -1801,6 +1801,29 @@ static inline void nts_array_reserve(NtsArray *a) {
   }
 }
 
+/* The out-of-line half of `nts_slot_or_grow`: an append, or the abort the
+ * in-range check already fell through to.
+ *
+ * Reached only when the index is *not* a slot the array already has, so this is
+ * the log-n path and the one that may `malloc`. The header's comment carries
+ * why the split is where it is.
+ *
+ * The new slot is left holding whatever the allocation did, and the caller
+ * stores into it on the very next line -- which is the same contract
+ * `nts_array_push` has with itself, one statement apart rather than two. It is
+ * sound for exactly the element types that take no reference count, because a
+ * counted store first loads what the slot held so that it can release it, and a
+ * slot that did not exist a moment ago held nothing to load. */
+uint32_t nts_append_slot(NtsArray *a, double index) {
+  if (!(index == (double)(uint32_t)index &&
+        (uint32_t)index == a->header.length)) {
+    nts_bounds(index, a->header.length);
+  }
+  nts_array_reserve(a);
+  a->header.length++;
+  return (uint32_t)index;
+}
+
 /* Inlined, which is the largest number in `benches/cases/array-predicates`:
  * 3.73us to 2.19us, and past the `std::vector` it is measured against.
  *
@@ -2926,6 +2949,16 @@ uint32_t nts_check_fn(const NtsArray *array, uint32_t index) {
 
 uint32_t nts_index_fn(const NtsArray *array, double index) {
   return nts_index(array, index);
+}
+
+/* The growing pair, for the same reason: a backend that cannot inline needs the
+ * rule as a symbol rather than a second copy of it. */
+uint32_t nts_check_or_grow_fn(NtsArray *array, uint32_t index) {
+  return nts_check_or_grow(array, index);
+}
+
+uint32_t nts_slot_or_grow_fn(NtsArray *array, double index) {
+  return nts_slot_or_grow(array, index);
 }
 
 uint32_t nts_view_check_fn(const NtsView *view, uint32_t index) {

@@ -700,6 +700,7 @@ fn index_lines(
     array: ValueId,
     index: ValueId,
     checked: bool,
+    growing: bool,
 ) -> Result<Vec<String>, Diagnostic> {
     // An array's elements sit at a fixed offset inside its header; a view's are
     // in a buffer somewhere else, so the block is a call rather than an offset.
@@ -714,7 +715,7 @@ fn index_lines(
     // address is an offset and the pointer is loaded out of it; a view's bytes
     // are what `nts_view_bytes` already returns, and loading from that would
     // read the first eight bytes of the data as an address.
-    let mut lines = if view {
+    let block = if view {
         vec![format!(
             "{out}.block = call ptr @nts_view_bytes(ptr {})",
             name(array)
@@ -729,6 +730,12 @@ fn index_lines(
             format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")),
         ]
     };
+    // **The index first, then the block**, and the order is load-bearing for a
+    // growing store: `nts_slot_or_grow_fn` may reallocate the elements, so a
+    // pointer loaded before it can be to freed memory. The two do not depend on
+    // each other, so the safe order is also always a valid one -- which is why
+    // it is unconditional rather than a second shape for the growing case.
+    let mut lines = Vec::with_capacity(block.len() + 3);
     let held = &func.values[index.0 as usize].ty;
     let integral = matches!(held, HirType::Int { .. });
     if checked {
@@ -738,11 +745,13 @@ fn index_lines(
         // need narrowing is exactly the one where saying `i32` and meaning
         // `i64` is wrong. Found by a benchmark whose counter is bounded by a
         // length rather than a constant.
-        let helper = match (view, integral) {
-            (true, true) => "nts_view_check_fn",
-            (true, false) => "nts_view_index_fn",
-            (false, true) => "nts_check_fn",
-            (false, false) => "nts_index_fn",
+        let helper = match (view, integral, growing) {
+            (true, true, _) => "nts_view_check_fn",
+            (true, false, _) => "nts_view_index_fn",
+            (false, true, false) => "nts_check_fn",
+            (false, true, true) => "nts_check_or_grow_fn",
+            (false, false, false) => "nts_index_fn",
+            (false, false, true) => "nts_slot_or_grow_fn",
         };
         let at = helper_operand(func, out, helper, 1, index, &mut lines)?;
         lines.push(format!(
@@ -761,6 +770,7 @@ fn index_lines(
         // it arrived in.
         lines.push(format!("{out}.i = fptoui double {} to i32", name(index)));
     }
+    lines.extend(block);
     Ok(lines)
 }
 
@@ -1216,6 +1226,11 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_bigint_shr",
     "nts_cell_unready",
     "nts_check_fn",
+    // The growing pair, here for the reason the view trio is: `index_lines`
+    // writes the call as raw IR, so `externals` -- which reads `OpKind::Call` --
+    // never sees it, and the module referred to an undefined symbol.
+    "nts_check_or_grow_fn",
+    "nts_slot_or_grow_fn",
     "nts_concat",
     "nts_promise_subscribe",
     "nts_index_fn",
@@ -2227,7 +2242,7 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             // the one on the write took its type from the *stored value* and
             // put `store i64` into an array of doubles.
             let element = ty_of(array_element(func, *array)?, func)?;
-            let mut lines = index_lines(func, &out, *array, *index, *checked)?;
+            let mut lines = index_lines(func, &out, *array, *index, *checked, false)?;
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
             ));
@@ -2244,7 +2259,8 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             checked,
         } => {
             let element = ty_of(array_element(func, *array)?, func)?;
-            let mut lines = index_lines(func, &out, *array, *index, *checked)?;
+            let growing = *checked && nts_core::hir::array_write_may_grow(func, *array);
+            let mut lines = index_lines(func, &out, *array, *index, *checked, growing)?;
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
             ));
