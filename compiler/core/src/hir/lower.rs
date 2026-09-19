@@ -36923,6 +36923,35 @@ impl<'a> FuncBuilder<'a> {
             return self.call_through_closure(id, member, held, arguments);
         }
 
+        // **A getter returning a function, called where it is read.**
+        // `new C().f(n)` is two operations that look like one: read `f`, which
+        // *runs the getter*, then call what it answered. The branch above is
+        // the same shape for a field, and this was refused as `a method \`f\`
+        // with no declaration in the hierarchy` -- a true sentence about a
+        // question that should not have been asked, since the hierarchy has
+        // `get f` and no method at all.
+        //
+        // It is the link above `a method used as a value`: the corpus writes
+        // `get method() { return this.#method; }` and then `new C().method([])`,
+        // so the read had to produce a function object before this could call
+        // one.
+        if let Some(callee) = self.accessor_callee(member, type_id, &member_name, "get ") {
+            let ty = self
+                .type_of(member)
+                .ok_or_else(|| self.unrepresentable(member, "a getter returning a function"))?;
+            let origin = self.origin(member);
+            let held = self.push(
+                OpKind::Call {
+                    callee,
+                    args: vec![receiver],
+                    frame: None,
+                },
+                ty,
+                origin,
+            );
+            return self.call_through_closure(id, member, held, arguments);
+        }
+
         // **An optional property holding a function**, which is not the same
         // slot as a union with `undefined` in it and was refused while that one
         // lowered.

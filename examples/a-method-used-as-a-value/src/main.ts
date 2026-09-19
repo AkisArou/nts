@@ -164,3 +164,69 @@ export function freeFunction(n: number): number {
 export function calledNormally(n: number): number {
   return new C().twice(n) + C.half(n);
 }
+
+// # The link above this one: calling what the getter answered
+//
+// `new C().f(n)` where `f` is a **getter** returning a function is two
+// operations that look like one — read `f`, which *runs the getter*, then call
+// what it answered. It was refused as `a method `f` with no declaration in the
+// hierarchy`: a true sentence about a question that should not have been asked,
+// since the hierarchy has `get f` and no method of that name at all.
+//
+// A *field* holding an arrow already worked when called that way, which is what
+// says the machinery was there and only the getter was not reaching it.
+//
+// The two together are what the corpus writes — `get method() { return
+// this.#method; }` and then `new C().method(…)` — so the read had to produce a
+// function object before this could call one. `getterRunsOnce` is the arm that
+// pins the operation count: one read, not two.
+
+class Handing {
+  #thrice(n: number): number {
+    return n * 3;
+  }
+
+  get handedOut(): (v: number) => number {
+    return this.#thrice;
+  }
+}
+
+export function callingAGetterResult(n: number): number {
+  return new Handing().handedOut(n);
+}
+
+let getterCalls = 0;
+
+class Counting {
+  get made(): (v: number) => number {
+    getterCalls = getterCalls + 1;
+    return (n: number): number => n * 2;
+  }
+}
+
+/** The getter runs once, not once per argument and not twice. */
+export function getterRunsOnce(n: number): number {
+  getterCalls = 0;
+  const answered = new Counting().made(n);
+  return answered * 10 + getterCalls;
+}
+
+/** **Control.** A field holding an arrow, called the same way — always worked. */
+class Held {
+  f = (n: number): number => n * 2;
+}
+
+export function callingAFieldHeldArrow(n: number): number {
+  return new Held().f(n);
+}
+
+/** **Control.** A getter returning a number, which must stay a plain read. */
+class Plain {
+  get v(): number {
+    return 7;
+  }
+}
+
+export function aPlainGetter(n: number): number {
+  return new Plain().v + n;
+}
