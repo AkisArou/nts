@@ -1767,11 +1767,45 @@ fn collect_function_values(
     closures.extend(bound.into_iter().map(|declaration| ClosureInfo {
         node: declaration,
         captures: Vec::new(),
-        refusal: uses_its_receiver(probe, declaration).then_some(RECEIVER_IS_NOT_BOUND),
+        refusal: refusal_for_a_method_value(probe, declaration),
         wraps: true,
         binds_receiver: true,
     }));
 }
+
+/// Why this method cannot be used as a value, if it cannot.
+fn refusal_for_a_method_value(probe: &FuncBuilder, method: NodeId) -> Option<&'static str> {
+    if uses_its_receiver(probe, method) {
+        return Some(RECEIVER_IS_NOT_BOUND);
+    }
+    // **A generator method, whose closure would have to carry a frame.**
+    // Calling a generator produces its *frame*, and the frame's type is
+    // synthetic and per-declaration -- `managed<generator#0>`. The type the
+    // checker gives the call is the abstract `Generator<…>` object, and a
+    // wrapping closure is declared with that one, so the value that flows and
+    // the type that describes it disagree: `Closure8#call(…) -> managed<obj#31>`
+    // returning a `managed<generator#0>`.
+    //
+    // That is **invalid HIR**, which is worse than a refusal -- `emit-c` prints
+    // `refusing to emit code from invalid HIR`, writes nothing and exits 0. It
+    // is 36 files of the slice-1 `test/language` population, every one
+    // `private-gen-meth-*`, and they refused before a method could be used as a
+    // value at all. Refused by name until the closure can be declared at the
+    // frame type the method actually returns.
+    if probe
+        .node(method)
+        .modifiers
+        .contains(nts_semantic_schema::DeclarationModifiers::GENERATOR)
+    {
+        return Some(GENERATOR_METHOD_AS_A_VALUE);
+    }
+    None
+}
+
+/// Why a generator method cannot be used as a value here.
+const GENERATOR_METHOD_AS_A_VALUE: &str =
+    "a generator method used as a value, whose closure would have to be declared at the frame \
+     type the method returns rather than at the abstract `Generator` the call site sees";
 
 /// Why a method whose body reads `this` cannot be used as a value here.
 const RECEIVER_IS_NOT_BOUND: &str =
@@ -12517,6 +12551,21 @@ impl<'a> FuncBuilder<'a> {
         };
         self.layouts.push(self.closure_layout(index, fields));
 
+        // **Every parameter's layout, not only the return's.** A closure
+        // restates the wrapped declaration's parameter list, and a type that
+        // reaches HIR without a layout is *invalid HIR* rather than a refusal:
+        // `emit-c` prints `refusing to emit code from invalid HIR`, writes
+        // nothing and exits 0.
+        //
+        // `* #m([x = 4])` is the shape that found it. An untyped destructuring
+        // parameter with a default has an anonymous tuple type that nothing
+        // else in the program names, so reading the method as a value was the
+        // first thing to ask for it -- and the pre-change compiler *refused*
+        // that read, which is how this stayed invisible until the read landed.
+        for param in &params {
+            let ty = param.ty.clone();
+            self.materialize(id, &ty)?;
+        }
         let return_type = self.return_type_of(id)?;
         self.materialize(id, &return_type)?;
 
@@ -17905,6 +17954,21 @@ impl<'a> FuncBuilder<'a> {
     /// In release it wrapped to a number no reservation matches and the `find`
     /// answered `None`, which is the right answer by accident. The gate's
     /// overflow-checked build said so; `cargo test --release` cannot.
+    /// What a generator's frame holds in its `yielded` slot.
+    ///
+    /// **`never` is answered truthfully**, and a reader that cannot store one
+    /// deals with it. Mapping it to a number here was tried and is wrong: the
+    /// frame's slot type is decided by `suspend.rs` from the generator's
+    /// `yield`s, so a different answer here disagrees with the field that
+    /// actually exists -- `expected Int { bits: 32 }, found Float { bits: 64 }`
+    /// in a `module#init` that had inlined the walk.
+    ///
+    /// `function* g() {}` walked by a `for...of` reads this slot before testing
+    /// whether there is anything in it, and a `never` reaching code generation
+    /// is invalid HIR. That is **not new** -- it predates the `next()` work,
+    /// and both compilers refuse the same program -- and it is recorded rather
+    /// than half-fixed here. `generator_next` handles its own case, where the
+    /// result object's slot is the compiler's own and can hold a zero.
     fn generator_element(&self, frame: TypeId) -> Option<HirType> {
         // A concrete frame names its declaration; the abstract generator *is*
         // the declaration, and carries the same type argument directly.
@@ -18005,14 +18069,24 @@ impl<'a> FuncBuilder<'a> {
             HirType::Bool,
             origin.clone(),
         );
-        let yielded = self.push(
-            OpKind::FieldGet {
-                object: frame,
-                field: super::suspend::FIELD_YIELDED,
-            },
-            element,
-            origin.clone(),
-        );
+        // The element is `never` for a generator with no `yield` in it, and
+        // there is nothing in the frame to read: the slot below exists because
+        // the layout has a fixed shape, and its zero is what goes in it. See
+        // `provided_iterator_layout` for why nothing can observe the
+        // difference.
+        let yielded = if matches!(element, HirType::Never) {
+            let zero = super::zero_of(&layout.fields[1].ty);
+            self.push(zero, layout.fields[1].ty.clone(), origin.clone())
+        } else {
+            self.push(
+                OpKind::FieldGet {
+                    object: frame,
+                    field: super::suspend::FIELD_YIELDED,
+                },
+                element,
+                origin.clone(),
+            )
+        };
         let object = self.push(
             OpKind::ObjectNew { frame: false },
             HirType::Managed(ManagedType::Object(result)),
@@ -29551,6 +29625,25 @@ impl<'a> FuncBuilder<'a> {
             let value = self
                 .represent(element)
                 .ok_or_else(|| self.unrepresentable(id, "an iterator's element"))?;
+            // **An uninhabited yield arm still needs a slot.** A generator with
+            // no `yield` in it has element `never`, so `IteratorYieldResult<never>`
+            // can never be constructed and `next()` can only answer
+            // `{ done: true }` -- but a layout has a fixed shape, so the slot
+            // exists and has to have a width.
+            //
+            // The same decision as the zero this layout already stores for the
+            // finished arm, and it rests on the same guarantee:
+            // `refuse_unguarded_iterator_value` permits a `.value` read only
+            // where the checker has ruled the finished arm out, and for a
+            // `never` element that narrowing gives a value of type `never`
+            // which no program can then use. Without this the field was
+            // `HirType::Never` and the read of it was **invalid HIR** --
+            // `a value of type \`never\` reached code generation`.
+            let value = if matches!(value, HirType::Never) {
+                HirType::NUMBER
+            } else {
+                value
+            };
             self.materialize(id, &value)?;
             let layout = Layout {
                 types: vec![ty],
@@ -37044,20 +37137,31 @@ impl<'a> FuncBuilder<'a> {
         // `get method() { return this.#method; }` and then `new C().method([])`,
         // so the read had to produce a function object before this could call
         // one.
-        if let Some(callee) = self.accessor_callee(member, type_id, &member_name, "get ") {
-            let ty = self
-                .type_of(member)
-                .ok_or_else(|| self.unrepresentable(member, "a getter returning a function"))?;
-            let origin = self.origin(member);
-            let held = self.push(
-                OpKind::Call {
-                    callee,
-                    args: vec![receiver],
-                    frame: None,
-                },
-                ty,
-                origin,
-            );
+        // **Through `member_of`, not a second copy of the getter call.** Asking
+        // the checker for the result type here gave `managed<obj#28>` where the
+        // getter function returns `managed<obj#20>` -- two anonymous types for
+        // one thing -- and a value whose type nothing had laid out makes the
+        // program **invalid HIR**: `emit-c` prints `refusing to emit code from
+        // invalid HIR`, writes nothing and exits 0. `member_of` is where a
+        // getter read is resolved for every other reader, so it decides this
+        // one too.
+        if self
+            .accessor_callee(member, type_id, &member_name, "get ")
+            .is_some()
+        {
+            let access = self.node(member).parent.unwrap_or(member);
+            let held = self.member_of(access, receiver, &member_name)?;
+            // **The value's own type needs a layout, and only here.** A getter
+            // returning a function gives its result an anonymous function type
+            // that nothing else in the program names; a type reaching HIR
+            // without one is *invalid HIR* rather than a refusal. Materialized
+            // at the **call** rather than at the read, because a read whose
+            // closure is refused must not bring the class into existence --
+            // doing it in `member_of` built a `call` for a generator method
+            // that had already been declined, and the program failed
+            // verification instead of refusing.
+            let held_ty = self.values[held.0 as usize].ty.clone();
+            self.materialize(member, &held_ty)?;
             return self.call_through_closure(id, member, held, arguments);
         }
 

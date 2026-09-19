@@ -230,3 +230,59 @@ class Plain {
 export function aPlainGetter(n: number): number {
   return new Plain().v + n;
 }
+
+// # A destructuring parameter, which is where the layout was missing
+//
+// `get method() { return this.#m; }` gives the read an **anonymous function
+// type** that nothing else in the program names. A type reaching HIR without a
+// layout is *invalid HIR* rather than a refusal — `emit-c` prints `refusing to
+// emit code from invalid HIR`, writes nothing and exits 0 — and that is what
+// `new C().method([]).next()` produced once the read and the call both worked.
+//
+// It took a destructuring parameter to show it: with a plain parameter the
+// function type is one the program already names elsewhere. `[x = 4]` gives it
+// a tuple nothing else asks for.
+//
+// The layout is materialized at the **call**, not at the read, and the
+// difference is load-bearing: a read whose closure is refused must not bring
+// the class into existence. Doing it in `member_of` built a `call` for a method
+// that had already been declined, and the program failed verification instead
+// of refusing.
+//
+// # What is still refused, and why it is refused rather than wrong
+//
+// A **generator** method used as a value. Calling a generator produces its
+// *frame*, whose type is synthetic and per-declaration; the type the checker
+// gives the call is the abstract `Generator<…>`, and a wrapping closure is
+// declared with that one — so the value that flows and the type that describes
+// it disagree. Left as a named refusal because the alternative measured worse:
+// without it the emitted C does not compile.
+
+class Destructured {
+  #sum([a, b]: [number, number]): number {
+    return a + b;
+  }
+
+  get handed(): ([a, b]: [number, number]) => number {
+    return this.#sum;
+  }
+}
+
+export function aDestructuredParameter(n: number): number {
+  return new Destructured().handed([n, n + 1]);
+}
+
+class Defaulted {
+  #firstOr([x = 4]: [number?]): number {
+    return x;
+  }
+
+  get handed(): ([x]: [number?]) => number {
+    return this.#firstOr;
+  }
+}
+
+/** The default is taken when the element is absent. */
+export function aDefaultedParameter(n: number): number {
+  return new Defaulted().handed([]) * 100 + new Defaulted().handed([n]);
+}
