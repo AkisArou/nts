@@ -417,15 +417,33 @@ fn width_of(
             lhs,
             rhs,
         } => {
-            // The result being whole does not make the operands whole — `7.0 /
-            // 3.5` is `2` — and converting an operand that is not would
+            // The result being whole does not make the operands whole -- `7.0 /
+            // 3.5` is `2` -- and converting an operand that is not would
             // silently truncate it.
-            provable(*lhs) && provable(*rhs)
+            //
+            // **And the operands being whole does not make the result usable**,
+            // which is the half this was missing. `0 * -5` is `-0` and `-0 - 0`
+            // is `-0`, from operands that are both provably integral; an integer
+            // slot then loses a sign the program can see. `provable(id)` is the
+            // same question asked of this value, so it stays lenient wherever
+            // `observed` says nothing downstream can tell the zeros apart -- the
+            // leniency the comment above this closure exists for is untouched.
+            provable(id) && provable(*lhs) && provable(*rhs)
         }
+        // **`Neg` is the operation that makes a `-0` out of a `+0`**, so asking
+        // only about the operand could never see one: `const 0` is as integral
+        // as a value gets. `facts::neg` records it -- "negating a zero produces
+        // the other zero" -- and this is the reader that was not asking.
+        //
+        // Measured: `sign(-0)` where `sign` takes an `unknown` answered
+        // `+Infinity` for `1 / a`, because the erased parameter and the whole
+        // chain behind it narrowed to `i32`. Three test262 files in
+        // `test/language` failed on it, and the census could not see them until
+        // its harness stopped comparing with `!==`.
         OpKind::Unary {
             op: UnOp::Neg,
             operand,
-        } => provable(*operand),
+        } => provable(id) && provable(*operand),
         // Always integral, and the middle two are the interesting half of this
         // pass. A coercion's result is an integer by construction whatever
         // reached it — the one place a value becomes provably integral with

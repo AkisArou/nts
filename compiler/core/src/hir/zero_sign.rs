@@ -89,6 +89,22 @@ pub fn observed(func: &Func) -> FxHashSet<ValueId> {
                 }
                 // Gone somewhere this cannot see.
                 OpKind::Call { args, .. } => seen.extend(args.iter().copied()),
+                // **Erasing a value hands its zero sign to whoever unerases
+                // it**, and that is not visible from here. An erased value is
+                // by definition on its way somewhere this function cannot see
+                // the shape of -- a parameter typed `unknown`, a tagged slot, a
+                // union -- so the thing being erased is observed whatever the
+                // erased value is then used for.
+                //
+                // Without this, `-0` reaching an `unknown` parameter narrowed
+                // to `i32` and came back `+0`: the call argument was the
+                // *erase*, which is observed, while the `neg` behind it was
+                // not, so the lenient test applied to the one operation that
+                // makes a `-0` out of a `+0`. Three `test/language` files
+                // failed on it and `1 / -0` answered `+Infinity`.
+                OpKind::Erase { value: erased } => {
+                    seen.insert(*erased);
+                }
                 OpKind::FieldSet { value: stored, .. }
                 | OpKind::ArraySet { value: stored, .. }
                 | OpKind::GlobalSet { value: stored, .. } => {

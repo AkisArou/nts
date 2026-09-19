@@ -117,3 +117,65 @@ export function underflowedThroughAName(): number {
 export function underflowThroughAParameter(a: number): number {
   return 1 / (a * 5e-324);
 }
+
+// # Through an erased slot, which is where `observed` could not see it
+//
+// A value that is *erased* — handed to an `unknown` parameter, a tagged slot, a
+// union — leaves this function's sight. `zero_sign::observed` listed a call
+// argument as observed and stopped there, so in
+//
+//     sign(-0)   where   function sign(a: unknown) { return 1 / (a as number); }
+//
+// the *erase* was the argument and was observed, while the `neg` behind it was
+// not. The lenient test then applied to the one operation that makes a `-0` out
+// of a `+0`, the whole chain narrowed to `i32`, and `1 / a` answered
+// `+Infinity`. An `Erase` now observes what it erases.
+//
+// `width_of` was the other half. Its arms for `+ - * %` and for `Neg` asked
+// whether the *operands* were integral and never asked about the result — but
+// `0 * -5` is `-0` from two operands as integral as values get, and `Neg` is
+// the operation that makes one. Both now ask `provable(id)` as well, which
+// routes through the same `observed` set and so stays lenient exactly where it
+// was lenient before: `examples/arrays`, `strings` and `bitwise` specialise the
+// same number of values as they did.
+//
+// Found through the test262 census, and only after its harness stopped
+// comparing with `!==` — `assert.sameValue(x, -0)` was passing for `+0` the
+// whole time, so three `test/language` files had been reported as passes.
+
+function sign(a: unknown): number {
+  return 1 / (a as number);
+}
+
+// **The zeros here are constants, and the first version of these arms was
+// wrong for making them parameters.** A parameter is never narrowed to an
+// integer by this pass -- there is nothing to narrow it *from* -- so
+// `sign(-(a * 0))` agreed on the unfixed compiler, which is the only thing a
+// new arm has to fail on. The expected answer is therefore constant and the
+// *defect* is what varies: `-Infinity` where the analysis is right, `+Infinity`
+// where the sign was lost. `a` is still taken, so the gate compares them.
+
+/** A negated zero through an erased parameter. */
+export function negatedThroughAnErasedSlot(a: number): number {
+  return sign(-0) + a * 0;
+}
+
+/** A product that is `-0`, the same way. */
+export function productThroughAnErasedSlot(a: number): number {
+  return sign(0 * -5) + a * 0;
+}
+
+/** A subtraction that is `-0`: only `-0 - 0` is. */
+export function differenceThroughAnErasedSlot(a: number): number {
+  return sign(-0 - 0) + a * 0;
+}
+
+/** **Control.** A positive zero, which must stay `+Infinity`. */
+export function positiveThroughAnErasedSlot(a: number): number {
+  return sign(0) + a * 0;
+}
+
+/** **Control.** An ordinary integer, which must still specialise and arrive. */
+export function integerThroughAnErasedSlot(a: number): number {
+  return sign(4) * 100 + (a | 0);
+}
