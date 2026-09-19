@@ -97,3 +97,88 @@ annotated += 1;
 export function readAnnotated(): number {
   return annotated;
 }
+
+// # The same question, one type further in: `var xs = []`
+//
+// An empty array literal is the evolving type's other half. The declaration
+// types it `never[]` — *unsettled*, not wrong — and the element comes from the
+// writes, exactly as a bare `var x` takes its type from the assignments above.
+//
+// `collect_module_scope` took `type_of` and stopped, and `type_of` answers
+// `never[]`, which is a `Some` — so the `or_else(evolved_type)` beside it never
+// ran and the global was declared to hold nothing. **26 files** of the slice-1
+// `test/language` population are `var bases = []; bases[0] = …`.
+//
+// `is_an_unsettled_array` is the one place `never[]` is recognised, asked by
+// three readers that each used to spell it themselves: the literal will not
+// build one, `evolved_type` must not let one veto a settled sibling, and the
+// module scope must not take one as a global's type.
+//
+// # And a second derivation, found by instrumenting rather than reading
+//
+// Settling the type was not enough, because `refused_initializers` lowers every
+// module initializer a second time to decide which symbols to mark unsupported
+// -- with a bare `lower_expression`, so with **no expectation**. The real
+// lowering in `lower_module_binding` passes the global's type. The two
+// disagreed: the probe refused the literal for want of a type the global
+// already had, marked the symbol unsupported, and the lowering that knew better
+// never ran. Both now read the same `module.types` entry.
+//
+// # What still refuses, and why it is not an oversight
+//
+// `var xs = []; xs[0] = "a"` stays refused. Those writes all grow the array --
+// there is no slot 0 to write to -- and growth is not supported for a counted
+// element: `rc.rs` pairs each store with a load of what the slot was holding,
+// and at `index == length` there is nothing to load. Letting the type settle
+// would build the literal and then **abort** at the first write, exit 134 with
+// no diagnostic. `growth_can_fill` is that refusal, and a strings-by-index arm
+// is deliberately absent below for the reason `an-array-grown-by-index` gives
+// about its own sparse case.
+//
+// **The guard is the element type, not the write**, so `var words = [];
+// words.push("a")` stays refused as well -- a `push` needs no growth and would
+// be safe. That is a refusal wider than its hazard, and it is deliberate for
+// now: narrowing it means asking whether any write to the name goes through an
+// index, which is a second question about the same symbol and worth having a
+// reason to ask. Nothing regressed by it -- every untyped empty literal at
+// module scope refused before this -- and an arm for it is left out rather than
+// carried, because an example arm that refuses measures nothing.
+//
+// A `.length`-only program stays refused too: the checker widens an evolving
+// array at an *element* read, so with nothing reading one there is no settled
+// type to find. Asking the writes instead would be a second derivation of the
+// element type competing with the checker's, which is the shape this file
+// already carries a finding about.
+
+var bases = [];
+bases[0] = 11;
+bases[1] = 22;
+const firstBase: number = bases[0]!;
+const secondBase: number = bases[1]!;
+const baseCount: number = bases.length;
+
+export function readBases(n: number): number {
+  return baseCount * 1000 + firstBase * n + secondBase;
+}
+
+// Booleans, so the settled element is not always a number here either.
+var flags = [];
+flags[0] = true;
+flags[1] = false;
+const firstFlag: boolean = flags[0]!;
+const flagCount: number = flags.length;
+
+export function readFlags(n: number): number {
+  return (firstFlag ? 1 : 0) * n + flagCount;
+}
+
+// **The control.** The annotated spelling, which lowered before any of this and
+// must keep lowering unchanged -- it reaches the global's type at the
+// declaration and never asks the writes.
+var annotatedList: number[] = [];
+annotatedList[0] = 3;
+annotatedList[1] = 4;
+
+export function readAnnotatedList(n: number): number {
+  return annotatedList.length * 100 + annotatedList[1]! * n;
+}

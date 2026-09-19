@@ -55,6 +55,21 @@
 // It refuses only when both arms are actually built, and the message now reads
 // `\`done\` on a union one of whose members has no layout`.
 //
+// # Re-probed 2026-09-19: the union half is closed, this fixture still blocks
+//
+// `IteratorResult<T>` now has a **provided** layout -- one `bool` slot and one
+// element slot, per instantiation -- so the two things named above stopped
+// being blockers: no arm is decomposed, so the optional modifier is never met,
+// and the return arm's `value` gets no slot, so `TReturn`'s `any` is not
+// represented. `examples/a-library-iterator-result` is the fixture.
+//
+// **This file's refusal did not move**, and that is the point of recording it
+// here: bracketed against the pre-change binary, both answer
+// `a method \`next\` with no declaration in the hierarchy`. What blocks a
+// generator *method* is the dispatch, not the result object -- so clearing the
+// object below it changed nothing here, and a reader coming to this file from
+// the `IteratorResult` row would otherwise expect it to have.
+//
 // **That distinction is why the first version of this probe was wrong.** Four
 // arms compiled and agreed, and the HIR is what gave it away: `value` came out
 // `i32`, so the checker had collapsed the union to the arm the program used and

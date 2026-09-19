@@ -2588,9 +2588,20 @@ fn collect_module_scope(
         // population -- and they rank under *two* headings, because the read
         // that follows the missing global refuses again as `reading a name
         // before it is bound`, which is the cascade rather than the cause.
-        let Some(ty) = probe
-            .type_of(*name_node)
-            .or_else(|| probe.evolved_type(*name_node))
+        // **The declaration's own type first, unless it is unsettled.** `var xs
+        // = []` types the declaration `never[]`, which is a `Some`, so the
+        // `or_else` below never used to run and the global was declared to hold
+        // nothing -- and the empty literal then refused for want of a type the
+        // assignments had already settled. The final `or` keeps today's
+        // diagnostic where nothing settles it: `never[]` reaches the literal and
+        // the literal names the construct, which a global of unrepresentable
+        // type would not.
+        let declared = probe.type_of(*name_node);
+        let Some(ty) = declared
+            .clone()
+            .filter(|ty| !is_an_unsettled_array(ty))
+            .or_else(|| probe.evolved_type(*name_node).filter(growth_can_fill))
+            .or(declared)
         else {
             // **Named, because a refusal that does not name its type cannot be
             // counted by kind.** That is `describe_node`'s whole reason for
@@ -2845,6 +2856,46 @@ fn managed_word(managed: &ManagedType) -> &'static str {
 /// `initial` — unless it is a *re*declaration, because `initial` is written
 /// once before any statement runs and cannot express a value that arrives
 /// partway through the module.
+/// `never[]` -- what the checker gives `[]` before anything says what it holds.
+///
+/// An **unsettled** observation rather than a wrong one: TypeScript's evolving
+/// array type starts here and widens from the writes, so a node carrying it has
+/// not yet been told what the array is for. Three readers ask, which is why it
+/// is a function: `lower_array_literal` will not build one, `evolved_type` must
+/// not let one veto a settled sibling, and `collect_module_scope` must not take
+/// one as a global's type when a sibling settled it.
+/// Can the writes that settled this type actually be performed?
+///
+/// Only asked of a type [`is_an_unsettled_array`] rejected -- one the *writes*
+/// settled rather than the declaration. Those writes are `xs[0] = v` on an
+/// array that does not have a slot 0 yet, so every one of them grows, and
+/// growth is **not supported for a counted element**: `rc.rs` pairs each store
+/// with a load of what the slot was holding, and at `index == length` there is
+/// no such slot to load -- `array_write_may_grow` is where that is written
+/// down, and the ledger row for `xs[xs.length] = v` carries why.
+///
+/// Without this the type would be settled, the literal would build, and the
+/// first write would **abort** -- `nts: refused: index 0 is outside [0, 0)`,
+/// exit 134, no diagnostic. Refusing the literal, which is what happens when
+/// the type stays unsettled, names the construct instead. Measured: a
+/// `var xs = []; xs[0] = "a"` at module scope did exactly that, one build after
+/// the settled type started arriving.
+///
+/// Lifting this is one design rather than a patch -- an explicit reserve before
+/// `rc.rs`'s load, so the slot exists by the time anything reads it -- and it
+/// lifts the annotated spelling at the same time, which diverges from node
+/// today for the same reason.
+fn growth_can_fill(ty: &HirType) -> bool {
+    let HirType::Managed(ManagedType::Array(element)) = ty else {
+        return true;
+    };
+    !element.may_hold_a_reference()
+}
+
+fn is_an_unsettled_array(ty: &HirType) -> bool {
+    matches!(ty, HirType::Managed(ManagedType::Array(element)) if **element == HirType::Never)
+}
+
 fn declare_a_module_global(
     scope: &mut ModuleScope,
     probe: &FuncBuilder,
@@ -4245,7 +4296,28 @@ fn refused_initializers(
     let mut refused = rustc_hash::FxHashSet::default();
     for (symbol, initializer) in &shared.module.deferred {
         let mut probe = shared.builder(snapshot, NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default), Copy::default());
-        if let Err(diagnostic) = probe.lower_expression(*initializer) {
+        // **At the slot it is going to fill**, which is how `lower_module_binding`
+        // lowers the very same node. A bare `lower_expression` is a second
+        // derivation of "can this initializer lower", and the two disagreed: a
+        // `var xs = []` whose global the assignments settled to `number[]` was
+        // refused *here* -- an empty array literal in a position that does not
+        // say what it holds -- and the symbol marked unsupported, so the real
+        // lowering, which would have known, never ran. 26 files of the slice-1
+        // `test/language` population sat behind that one missing expectation.
+        //
+        // The global's type is the same `module.types` entry `lower_module_binding`
+        // reads, so the two cannot drift again without drifting together.
+        let want = shared
+            .module
+            .variables
+            .get(symbol)
+            .and_then(|global| shared.module.types.get(*global as usize))
+            .cloned();
+        let result = match &want {
+            Some(want) => probe.lower_expecting(*initializer, want),
+            None => probe.lower_expression(*initializer),
+        };
+        if let Err(diagnostic) = result {
             lowered.diagnostics.push(diagnostic);
             refused.insert(*symbol);
         }
@@ -23043,16 +23115,12 @@ impl<'a> FuncBuilder<'a> {
         // missing is a type for the literal to take, and only the branch that
         // discarded `never[]` knows that.
         let own = self.type_of(id);
-        let empty = matches!(&own, Some(HirType::Managed(ManagedType::Array(element)))
-            if **element == HirType::Never);
+        let empty = own.as_ref().is_some_and(is_an_unsettled_array);
         let ty = own
             // `[]` is typed `never[]`, which is the checker saying the literal
             // decides nothing -- the slot it goes into does. So the expected
             // type wins over it.
-            .filter(|ty| {
-                !matches!(ty, HirType::Managed(ManagedType::Array(element))
-                    if **element == HirType::Never)
-            })
+            .filter(|ty| !is_an_unsettled_array(ty))
             // **And it wins over an array whose element is not the slot's**,
             // which is the other half of the same argument. "A literal with
             // elements knows what it holds" is true of the *values* and not of
@@ -30158,6 +30226,15 @@ impl<'a> FuncBuilder<'a> {
             let Some(ty) = self.type_of(id) else {
                 continue;
             };
+            // An unsettled observation is not a disagreement. `var xs = []`
+            // leaves `never[]` on the declaration *and* on every reference the
+            // checker had not yet widened, and letting one of those veto a
+            // settled sibling is what kept `var bases = []; bases[0] = 1`
+            // without a type at module scope -- 26 files of the slice-1
+            // `test/language` population.
+            if is_an_unsettled_array(&ty) {
+                continue;
+            }
             match &settled {
                 Some(known) if *known != ty => return None,
                 Some(_) => {}

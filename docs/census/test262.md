@@ -457,15 +457,22 @@ fixed that day, is **24 files of wrapper objects** — `new String`, `new Number
 uses deliberately. test262 exercises them heavily because they are specified,
 which is what puts them that high here and nowhere else.
 
-The first is **`next` in all 40** — the iterator protocol, and it already has a
-✗ ledger row: `IteratorResult<T>` is "a union of two object types whose `value`
+The first is **`next` in all 40** — the iterator protocol, and it had a ✗
+ledger row: `IteratorResult<T>` was "a union of two object types whose `value`
 is `T` in one and `any` in the other, so they lay out differently and the union
-has no representation". `typescript.md` also records that `any` is only its
-*first* blocker, that `done?: false` and `done: true` representing differently
-is an independent second one, and that this was measured and reverted once
-already. So this row is one known piece of work with a design behind it, not 40
-separate things — which is the useful thing a ranked table can say, and only
-says if somebody opens the files.
+has no representation", with `any` as its first blocker and `done?: false`
+against `done: true` as an independent second. One known piece of work with a
+design behind it, not 40 separate things — which is the useful thing a ranked
+table can say, and only says if somebody opens the files.
+
+**Closed 2026-09-19**, and both blockers dissolved rather than being worked
+around: the layout is *provided* per instantiation, so no arm is decomposed and
+the optional modifier is never met, and the return arm's `value` gets no slot,
+so `TReturn`'s `any` is not represented at all. `typescript.md` carries the
+account. **The 40 are not 40 fewer**: `Iterator<T>`, `Iterable<T>` and
+`IterableIterator<T>` as annotations are still refused one link above, at
+interface dispatch for a library interface, and this table's rows should be
+re-ranked from a run rather than adjusted by reasoning.
 
 ### And what blocks the 1,603 that never typecheck
 
