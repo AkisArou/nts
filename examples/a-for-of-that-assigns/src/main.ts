@@ -223,3 +223,97 @@ export function defaultRunsOnlyWhenAbsent(n: number): number {
   }
   return first * 10 + second;
 }
+
+// # The three shapes an assignment pattern still refused
+//
+// `[a = 7] = xs` landed above; these are the rest of what the corpus writes,
+// and all three were one message — `assignment to a computed target` — which
+// `place_of` answers truthfully about whatever node it is handed. Each is the
+// **binding** path's rule, learned by the assignment path:
+//
+//   `[[a, b]] = xss`       a nested pattern     -> the same function, one level down
+//   `[a, ...rest] = xs`    a rest element       -> `rest_tail`, shared with `bind_rest`
+//   `[, a] = xs`           a hole               -> skip it, and still count it
+//
+// The tail is a **fresh array** — writing to it must not touch the one it came
+// from — which is why `rest_tail` exists rather than a second slice built here:
+// the binding path (`const [a, ...rest] = xs`) and this one differ only in
+// where the tail ends up.
+
+export function aNestedPattern(n: number): number {
+  const xss: number[][] = [[1, 2]];
+  let a = 0;
+  let b = 0;
+  [[a, b]] = xss;
+  return a * 10 + b + n * 0;
+}
+
+/** Three levels, because a fix that recursed once would pass the one above. */
+export function nestedThreeDeep(n: number): number {
+  const deep: number[][][] = [[[9]]];
+  let a = 0;
+  [[[a]]] = deep;
+  return a + n * 0;
+}
+
+/** An object pattern nested inside an array one, and the reverse. */
+export function nestedAcrossKinds(n: number): number {
+  const rows: { x: number }[] = [{ x: 7 }];
+  let a = 0;
+  [{ x: a }] = rows;
+
+  const o: { p: number[] } = { p: [4, 5] };
+  let b = 0;
+  let c = 0;
+  ({ p: [b, c] } = o);
+
+  return a * 100 + b * 10 + c + n * 0;
+}
+
+export function aRestElement(n: number): number {
+  const xs: number[] = [1, 2, 3];
+  let a = 0;
+  let rest: number[] = [];
+  [a, ...rest] = xs;
+  return a * 100 + rest.length * 10 + rest[0] + n * 0;
+}
+
+/**
+ * The tail is a fresh array. Writing to it must leave the source alone, which
+ * a rest implemented as an alias would fail and every arm above would pass.
+ */
+export function theTailIsFresh(n: number): number {
+  const xs: number[] = [1, 2, 3];
+  let rest: number[] = [];
+  [...rest] = xs;
+  rest[0] = 9;
+  return xs[0] * 10 + rest[0] + n * 0;
+}
+
+/** A rest whose target is itself a pattern. */
+export function aRestIntoAPattern(n: number): number {
+  const xs: number[] = [1, 2, 3];
+  let a = 0;
+  let b = 0;
+  [, ...[a, b]] = xs;
+  return a * 10 + b + n * 0;
+}
+
+/**
+ * A hole binds nothing and **occupies a position**. The two facts travel
+ * together: skipping without counting would write `xs[0]` into `a`, and
+ * `twoHoles` is the arm that fails if it does.
+ */
+export function aHole(n: number): number {
+  const xs: number[] = [1, 2, 3];
+  let a = 0;
+  [, a] = xs;
+  return a + n * 0;
+}
+
+export function twoHoles(n: number): number {
+  const xs: number[] = [1, 2, 3];
+  let a = 0;
+  [, , a] = xs;
+  return a + n * 0;
+}

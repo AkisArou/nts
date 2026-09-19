@@ -21911,63 +21911,24 @@ impl<'a> FuncBuilder<'a> {
         (self.kind_of(*operator) == Some(syntax::EQUALS_TOKEN)).then_some((*target, *default))
     }
 
-    fn assign_pattern(&mut self, target: NodeId, value: ValueId) -> Result<(), Diagnostic> {
-        let object = self.kind_of(target) == Some(syntax::OBJECT_LITERAL_EXPRESSION);
-        for (position, element) in self.children(target).into_iter().enumerate() {
-            let origin = self.origin(element);
-            let (property, destination) = if object {
-                let parts = self.children(element);
-                match (self.kind_of(element), parts.as_slice()) {
-                    // `{ x: o.y } = p`: the property, then where it goes.
-                    (Some(syntax::PROPERTY_ASSIGNMENT), [from, to]) => (*from, *to),
-                    // `({ x } = p)`: one identifier standing for both the
-                    // property *and* the variable it writes to -- and the
-                    // symbol on it is the **property's**, not the variable's.
-                    // Assigning through it wrote to a symbol nothing reads, so
-                    // `x` kept its old value and the compiler said nothing.
-                    //
-                    // Resolving it needs the checker's
-                    // `getShorthandAssignmentValueSymbol`, which this frontend
-                    // does not ask for. Until it does, the explicit form
-                    // `({ x: x } = p)` is the one that works, and this is
-                    // refused rather than guessed at by name -- a guess would
-                    // be wrong exactly where a local shadows an outer one.
-                    (Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT), _) => {
-                        return Err(self.unsupported(
-                            element,
-                            "a shorthand in an assignment pattern, whose name resolves to the property",
-                        ));
-                    }
-                    _ => {
-                        return Err(self.unsupported(
-                            element,
-                            "an assignment pattern with a default or a rest",
-                        ));
-                    }
-                }
-            } else {
-                (element, element)
-            };
-
-            // **A default in an assignment pattern**: `[a = 7] = xs`, and the
-            // `for ([a = 7] of xss)` head that reaches the same code.
-            //
-            // The element node is a `BinaryExpression` with `=`, so the
-            // destination is its left and the default its right --
-            // `place_of(a = 7)` refused it as `assignment to a computed
-            // target`, which is what the *whole element* looks like to
-            // something expecting a target.
-            //
-            // The value comes from `defaulted_array_element`, which the
-            // *binding* path already uses for `const [a = 7] = xs`: one
-            // derivation of when an element is absent and what happens then,
-            // asked by both. Only the array form -- an object assignment
-            // pattern's default stays refused above, and so does a rest.
-            if self.assign_with_a_default(element, object, value, position)? {
-                continue;
-            }
-
-            let read = if object {
+    /// One element of an assignment pattern, read out of the value.
+    ///
+    /// Three shapes and they are not interchangeable: an **object** pattern
+    /// reads a named field, a **tuple** reads the field at that position, and
+    /// an **array** reads the element at that index. A tuple is written like
+    /// an array and read like an object, because that is what a tuple is here:
+    /// the position is the field.
+    fn pattern_element_read(
+        &mut self,
+        element: NodeId,
+        property: NodeId,
+        object: bool,
+        value: ValueId,
+        position: usize,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(element);
+        Ok(
+            if object {
                 let HirType::Managed(ManagedType::Object(type_id)) =
                     self.values[value.0 as usize].ty.clone()
                 else {
@@ -22038,8 +21999,121 @@ impl<'a> FuncBuilder<'a> {
                     *element_ty,
                     origin,
                 )
+            }
+        )
+    }
+
+    fn assign_pattern(&mut self, target: NodeId, value: ValueId) -> Result<(), Diagnostic> {
+        let object = self.kind_of(target) == Some(syntax::OBJECT_LITERAL_EXPRESSION);
+        for (position, element) in self.children(target).into_iter().enumerate() {
+            let (property, destination) = if object {
+                let parts = self.children(element);
+                match (self.kind_of(element), parts.as_slice()) {
+                    // `{ x: o.y } = p`: the property, then where it goes.
+                    (Some(syntax::PROPERTY_ASSIGNMENT), [from, to]) => (*from, *to),
+                    // `({ x } = p)`: one identifier standing for both the
+                    // property *and* the variable it writes to -- and the
+                    // symbol on it is the **property's**, not the variable's.
+                    // Assigning through it wrote to a symbol nothing reads, so
+                    // `x` kept its old value and the compiler said nothing.
+                    //
+                    // Resolving it needs the checker's
+                    // `getShorthandAssignmentValueSymbol`, which this frontend
+                    // does not ask for. Until it does, the explicit form
+                    // `({ x: x } = p)` is the one that works, and this is
+                    // refused rather than guessed at by name -- a guess would
+                    // be wrong exactly where a local shadows an outer one.
+                    (Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT), _) => {
+                        return Err(self.unsupported(
+                            element,
+                            "a shorthand in an assignment pattern, whose name resolves to the property",
+                        ));
+                    }
+                    _ => {
+                        return Err(self.unsupported(
+                            element,
+                            "an assignment pattern with a default or a rest",
+                        ));
+                    }
+                }
+            } else {
+                (element, element)
             };
 
+            // **A default in an assignment pattern**: `[a = 7] = xs`, and the
+            // `for ([a = 7] of xss)` head that reaches the same code.
+            //
+            // The element node is a `BinaryExpression` with `=`, so the
+            // destination is its left and the default its right --
+            // `place_of(a = 7)` refused it as `assignment to a computed
+            // target`, which is what the *whole element* looks like to
+            // something expecting a target.
+            //
+            // The value comes from `defaulted_array_element`, which the
+            // *binding* path already uses for `const [a = 7] = xs`: one
+            // derivation of when an element is absent and what happens then,
+            // asked by both. Only the array form -- an object assignment
+            // pattern's default stays refused above, and so does a rest.
+            if self.assign_with_a_default(element, object, value, position)? {
+                continue;
+            }
+
+            let read = self.pattern_element_read(element, property, object, value, position)?;
+
+            // **A hole**: `[, a] = xs`. It binds nothing and still *occupies
+            // a position*, and the two facts have to travel together -- the
+            // count is what says `a` is the second element, which `enumerate`
+            // above already keeps. Skipping without counting would write
+            // `xs[0]` into `a`.
+            //
+            // The binding path learned this on 2026-09-17 (`const [, second] =
+            // pair`), and `place_of` was being asked where an *omitted
+            // expression* writes, answering `assignment to a computed target`.
+            if self.kind_of(element) == Some(syntax::OMITTED_EXPRESSION) {
+                continue;
+            }
+
+            // **A rest element**: `[a, ...rest] = xs`. The tail comes from
+            // `rest_tail`, the same helper `bind_rest` uses, so a fresh array
+            // is built here for the same reason it is there.
+            //
+            // Array form only. `({ a, ...rest } = o)` is a different operation
+            // -- an object copy minus the named keys -- and stays refused
+            // above, where the object arm says so.
+            if !object && self.kind_of(element) == Some(syntax::SPREAD_ELEMENT) {
+                let tail = self.rest_tail(element, value, position);
+                let Some(target) = self.children(element).into_iter().next() else {
+                    return Err(self.unsupported(element, "a rest element with no target"));
+                };
+                if matches!(
+                    self.kind_of(target),
+                    Some(syntax::ARRAY_LITERAL_EXPRESSION | syntax::OBJECT_LITERAL_EXPRESSION)
+                ) {
+                    self.assign_pattern(target, tail)?;
+                } else {
+                    let place = self.place_of(target)?;
+                    self.write_place(target, &place, tail)?;
+                }
+                continue;
+            }
+
+            // **A nested pattern**: `[[a, b]] = xss`, `[{ x: a }] = rows`,
+            // `({ p: [a, b] } = o)`. The element's destination is itself an
+            // array or object literal, which is the same thing one level down
+            // -- so it is the same function, handed the value just read.
+            //
+            // `place_of` was being asked where an *array literal* writes, and
+            // answered truthfully: `assignment to a computed target`. The
+            // binding path has always recursed here (`const [[a, b]] = xss`
+            // works), and this is the assignment path learning the same shape
+            // rather than a second rule that can drift from it.
+            if matches!(
+                self.kind_of(destination),
+                Some(syntax::ARRAY_LITERAL_EXPRESSION | syntax::OBJECT_LITERAL_EXPRESSION)
+            ) {
+                self.assign_pattern(destination, read)?;
+                continue;
+            }
             let place = self.place_of(destination)?;
             self.write_place(destination, &place, read)?;
         }
@@ -22228,6 +22302,26 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn place_of(&mut self, target: NodeId) -> Result<Place, Diagnostic> {
+        // **Parentheses around a target change nothing about where it writes.**
+        // `(x) = 5`, `(x)++`, `(o.k) = 7` and `for ((v) of xs)` are all
+        // ordinary JavaScript -- the grammar's *cover* production, which is why
+        // test262 names those files `target-cover-id`. The parenthesised node
+        // is not an identifier and not a member access, so every test below
+        // missed it and the fall-through said `assignment to a computed
+        // target`: a true sentence about the node in front of it and a false
+        // one about the program.
+        //
+        // Six files of the slice-1 `test/language` population, across
+        // assignment, both increments and both decrements, plus a `for...of`
+        // head. Unwrapped here rather than at each caller, because *where a
+        // thing writes* is one question and this is the one function that
+        // answers it -- a caller that unwrapped for itself would be a second
+        // derivation, and the next caller would not.
+        if self.kind_of(target) == Some(syntax::PARENTHESIZED_EXPRESSION)
+            && let Some(inner) = self.children(target).into_iter().next()
+        {
+            return self.place_of(inner);
+        }
         if self.names_a_property(target) {
             return self.property_place(target);
         }
@@ -32115,6 +32209,33 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// A slice rather than a view, which is what the language says: `tail` is a
     /// fresh array and writing to it does not touch the one it came from.
+    /// The tail a rest element stands for: `xs.slice(position)`.
+    ///
+    /// **A fresh array, which is what the language says a rest element is** --
+    /// writing to it must not touch the one it came from.
+    ///
+    /// One derivation, asked by the binding path (`const [a, ...rest] = xs`)
+    /// and by the assignment path (`[a, ...rest] = xs`). The two differ only in
+    /// where the tail ends up, which is the same split every other element of a
+    /// pattern already has.
+    fn rest_tail(&mut self, element: NodeId, value: ValueId, position: usize) -> ValueId {
+        let ty = self.values[value.0 as usize].ty.clone();
+        let origin = self.origin(element);
+        #[allow(clippy::cast_precision_loss)]
+        let at = position as f64;
+        let from = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
+        let to = self.push(OpKind::Length(value), HirType::NUMBER, origin.clone());
+        self.push(
+            OpKind::Call {
+                callee: Callee::External("nts_array_slice".to_owned()),
+                args: vec![value, from, to],
+                frame: None,
+            },
+            ty,
+            origin,
+        )
+    }
+
     fn bind_rest(
         &mut self,
         element: NodeId,
@@ -32159,21 +32280,7 @@ impl<'a> FuncBuilder<'a> {
                 None => return Err(self.unsupported(element, "an unresolved binding")),
             }
         };
-        let ty = self.values[value.0 as usize].ty.clone();
-        let origin = self.origin(element);
-        #[allow(clippy::cast_precision_loss)]
-        let at = position as f64;
-        let from = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
-        let to = self.push(OpKind::Length(value), HirType::NUMBER, origin.clone());
-        let rest = self.push(
-            OpKind::Call {
-                callee: Callee::External("nts_array_slice".to_owned()),
-                args: vec![value, from, to],
-                frame: None,
-            },
-            ty,
-            origin,
-        );
+        let rest = self.rest_tail(element, value, position);
         match symbol {
             Some(symbol) => {
                 self.bindings.insert(symbol.0, rest);
