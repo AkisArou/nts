@@ -19053,6 +19053,14 @@ impl<'a> FuncBuilder<'a> {
         };
         let mut written = Vec::new();
         self.names_written_by(*target, &mut written);
+        // **And anything the head's defaults assign.** `for ([a = (flag = 1)]
+        // of xss)` writes `flag` inside the loop, on the iterations where the
+        // element is absent -- so it is carried for the same reason `a` is, and
+        // for a reason `names_written_by` cannot see: it collects *targets*,
+        // and this is an assignment in an expression. `assigned_symbols` is the
+        // walk that finds those, and it finds nothing for a bare name, so the
+        // two are complementary rather than redundant.
+        self.assigned_symbols(*target, &mut written);
         for symbol in written {
             if self.bindings.contains_key(&symbol) && !carried.contains(&symbol) {
                 carried.push(symbol);
@@ -21788,6 +21796,63 @@ impl<'a> FuncBuilder<'a> {
     /// on its own.
     ///
     /// The same shapes refuse, for the same reasons, and by the same names.
+    /// Write one element of an assignment pattern that carries a **default**.
+    ///
+    /// `Ok(false)` when this element has none, so the caller's ordinary read
+    /// runs. The value comes from `defaulted_array_element`, which the
+    /// *binding* path already uses for `const [a = 7] = xs`: one derivation of
+    /// when an element is absent and what happens then, asked by both.
+    ///
+    /// Array form only. An object assignment pattern's default is refused by
+    /// the caller, and so is a rest.
+    fn assign_with_a_default(
+        &mut self,
+        element: NodeId,
+        object: bool,
+        value: ValueId,
+        position: usize,
+    ) -> Result<bool, Diagnostic> {
+        let Some((destination, default)) = self.assignment_default(element).filter(|_| !object)
+        else {
+            return Ok(false);
+        };
+        let read = self.defaulted_array_element(
+            element,
+            destination,
+            destination,
+            value,
+            position,
+            Some(default),
+        )?;
+        let Some(read) = read else {
+            return Err(self.unsupported(
+                element,
+                "a default in an assignment pattern over something that is not an array, where \
+                 there is no length to say whether the element is absent",
+            ));
+        };
+        let place = self.place_of(destination)?;
+        self.write_place(destination, &place, read)?;
+        Ok(true)
+    }
+
+    /// `a = 7` inside an assignment pattern, split into where and what.
+    ///
+    /// Distinct from a *binding* pattern's default, which arrives as a
+    /// `BindingElement` with an initializer child. An assignment pattern is
+    /// made of expressions, so its default is an ordinary assignment
+    /// expression -- and the whole of it is what `place_of` was being handed.
+    fn assignment_default(&self, element: NodeId) -> Option<(NodeId, NodeId)> {
+        if self.kind_of(element) != Some(syntax::BINARY_EXPRESSION) {
+            return None;
+        }
+        let parts = self.children(element);
+        let [target, operator, default] = parts.as_slice() else {
+            return None;
+        };
+        (self.kind_of(*operator) == Some(syntax::EQUALS_TOKEN)).then_some((*target, *default))
+    }
+
     fn assign_pattern(&mut self, target: NodeId, value: ValueId) -> Result<(), Diagnostic> {
         let object = self.kind_of(target) == Some(syntax::OBJECT_LITERAL_EXPRESSION);
         for (position, element) in self.children(target).into_iter().enumerate() {
@@ -21825,6 +21890,24 @@ impl<'a> FuncBuilder<'a> {
             } else {
                 (element, element)
             };
+
+            // **A default in an assignment pattern**: `[a = 7] = xs`, and the
+            // `for ([a = 7] of xss)` head that reaches the same code.
+            //
+            // The element node is a `BinaryExpression` with `=`, so the
+            // destination is its left and the default its right --
+            // `place_of(a = 7)` refused it as `assignment to a computed
+            // target`, which is what the *whole element* looks like to
+            // something expecting a target.
+            //
+            // The value comes from `defaulted_array_element`, which the
+            // *binding* path already uses for `const [a = 7] = xs`: one
+            // derivation of when an element is absent and what happens then,
+            // asked by both. Only the array form -- an object assignment
+            // pattern's default stays refused above, and so does a rest.
+            if self.assign_with_a_default(element, object, value, position)? {
+                continue;
+            }
 
             let read = if object {
                 let HirType::Managed(ManagedType::Object(type_id)) =

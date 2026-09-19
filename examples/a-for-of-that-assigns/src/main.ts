@@ -153,3 +153,73 @@ export function declaresAPattern(n: number): number {
   }
   return total;
 }
+
+// # A default in an assignment pattern
+//
+// `[a = 7] = xs` and the `for ([a = 7] of xss)` head that reaches the same
+// code. The element node is a `BinaryExpression` with `=`, so `place_of` was
+// handed the *whole* of `a = 7` and refused it as `assignment to a computed
+// target` — a true sentence about a question that should not have been asked.
+//
+// The value comes from `defaulted_array_element`, which the **binding** path
+// already uses for `const [a = 7] = xs`: one derivation of when an element is
+// absent and what happens then, asked by both. This was refused outside a loop
+// too, so the fix is not about the head.
+//
+// **The default is an expression, and it runs only when the element is
+// absent.** `defaultRunsOnlyWhenAbsent` is the arm for that — and it is also
+// the arm that found the second half of the carried-value problem: a default
+// like `a = (flag = 1)` *writes* `flag` inside the loop, on the iterations
+// where the element is missing. `names_written_by` collects targets and cannot
+// see it; `assigned_symbols` finds assignments in expressions and cannot see a
+// bare name. Both are needed, and with only the first this was `NotDominated`.
+
+export function aDefaultWhenAbsent(n: number): number {
+  const none: number[] = [];
+  let a = 0;
+  [a = n] = none;
+  return a;
+}
+
+export function aDefaultNotTakenWhenPresent(n: number): number {
+  const one = [n];
+  let a = 0;
+  [a = 99] = one;
+  return a;
+}
+
+/** One element present, one absent, in the same pattern. */
+export function partlyDefaulted(n: number): number {
+  const one = [n];
+  let a = 0;
+  let b = 0;
+  [a, b = 9] = one;
+  return a * 10 + b;
+}
+
+/** In a head, which is where the corpus writes it. */
+export function aDefaultInTheHead(n: number): number {
+  const xss: number[][] = [[], [n]];
+  let a = 0;
+  let total = 0;
+  for ([a = 7] of xss) {
+    total += a;
+  }
+  return total;
+}
+
+/**
+ * The default runs **only** when the element is absent, and what it writes is
+ * carried out of the loop like anything else the head assigns.
+ */
+export function defaultRunsOnlyWhenAbsent(n: number): number {
+  const xss: number[][] = [[n]];
+  let first = 0;
+  let second = 0;
+  let a = 0;
+  let b = 0;
+  for ([a = (first = 1), b = (second = 1)] of xss) {
+    // nothing
+  }
+  return first * 10 + second;
+}
