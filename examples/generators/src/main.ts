@@ -390,3 +390,113 @@ export function walkedAsBefore(n: number): number {
   }
   return total;
 }
+
+// # A generator that yields nothing
+//
+// `function* g() {}` is ordinary JavaScript: it returns an iterator that is
+// immediately done. The checker types its element `never`, and
+// `Generator<void, …>` — driven entirely by what the caller passes to
+// `next(v)` — is the other spelling of the same thing. Both were **refused by
+// name** until 2026-09-20, which was 176 files of the slice-1 `test/language`
+// population.
+//
+// Neither can ever fill the frame's `yielded` slot, and a layout has a fixed
+// shape, so the slot exists and has to have a width. `suspend::yielded_slot`
+// is that rule and it is asked in **four** places — whether `Generator<T>`
+// represents at all, the concrete frame's slot, the read out of the frame, and
+// the abstract `Generator<…>` a frame extends — plus the `IteratorResult`
+// layout whose `value` receives what the slot holds. A placeholder applied to
+// fewer than all of them is a store and a load that disagree, and the first
+// attempt at this failed exactly that way: two of them gave `BrokenBase
+// { layout: "silent#frame", base: "Generator0" }` and one gave `StoreType
+// { expected: Int { bits: 32 }, found: Float { bits: 64 } }`.
+//
+// Nothing can read the slot. `refuse_unguarded_iterator_value` permits a
+// `.value` read only where the checker has ruled the finished arm out, and for
+// an uninhabited element that narrowing gives a value of type `never`.
+//
+// **Not the same as `nothing(limit)` above**, which is the arm that already
+// existed. That one has element type `number` and a real slot, and happens to
+// yield nothing *at runtime* behind a guard no caller satisfies. This one has
+// no element type at all, so there is no slot to have unless something invents
+// one — and that is the whole of the difference, which is why the existing arm
+// lowered for as long as this one refused.
+
+function* noElementAtAll(): Generator<never, void, unknown> {}
+
+/** The walk runs zero times, which is the whole observable behaviour. */
+export function walkOverNoElement(n: number): number {
+  let count = 0;
+  for (const v of noElementAtAll()) {
+    count++;
+  }
+  return count + n;
+}
+
+/** `next()` on it answers done immediately, and keeps answering done. */
+export function doneFromTheStart(n: number): number {
+  const it = noElementAtAll();
+  const first = it.next().done ? 1 : 0;
+  const second = it.next().done ? 1 : 0;
+  return first * 10 + second + n;
+}
+
+let bodyRan = 0;
+
+function* withAnEffect(): Generator<never, void, unknown> {
+  bodyRan = 1;
+}
+
+/**
+ * The body still runs. A generator that yields nothing is not a generator that
+ * *does* nothing, and an implementation that skipped the frame would pass
+ * `emptyWalk` and fail here.
+ */
+export function theBodyStillRuns(n: number): number {
+  bodyRan = 0;
+  for (const v of withAnEffect()) {
+    // nothing
+  }
+  return bodyRan + n;
+}
+
+/**
+ * A generator **method** with an empty body, which is the shape the corpus
+ * writes — 78 files each in `expressions/class` and `statements/class`.
+ */
+class Empty {
+  *rows(): Generator<never, void, unknown> {}
+}
+
+export function anEmptyGeneratorMethod(n: number): number {
+  let count = 0;
+  for (const v of new Empty().rows()) {
+    count++;
+  }
+  return count + n;
+}
+
+/**
+ * `Generator<never>` — the **short spelling**, with the other two arguments
+ * left to their defaults. It moved here from `examples/generator-unsupported`
+ * on 2026-09-20 when it started compiling, and it is a separate arm from
+ * `noElementAtAll` above because the number of type arguments written is what
+ * `type_arguments` hands back: a rule reading the first of three and a rule
+ * reading the first of one are the same rule only if the checker fills the
+ * defaults in, which is a fact about the frontend rather than an assumption to
+ * make.
+ */
+function* silent(): Generator<never> {}
+
+export function shortSpellingWalk(n: number): number {
+  let seen = 0;
+  for (const v of silent()) {
+    seen = seen + 1;
+  }
+  return seen + n * 0;
+}
+
+export function shortSpellingNext(n: number): number {
+  const r = silent().next();
+  return (r.done ? 1 : 0) + n * 0;
+}

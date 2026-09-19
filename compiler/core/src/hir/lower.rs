@@ -7560,7 +7560,12 @@ fn generator_element_type(
         .type_arguments
         .get(&ty)
         .and_then(|arguments| arguments.first())?;
-    representation_within(snapshot, argument, path, subst)
+    // Through `yielded_slot`, which is where the uninhabited-element rule
+    // lives. See its doc comment: four places derive this and a placeholder
+    // applied to fewer than all of them is a store and a load that disagree.
+    Some(super::suspend::yielded_slot(representation_within(
+        snapshot, argument, path, subst,
+    )?))
 }
 
 fn provided_representation(
@@ -7635,9 +7640,11 @@ fn provided_representation(
     // done }` result rather than a frame. Representing those two names as a
     // frame would take the working case and give it the wrong machine value.
     // They are a subtyping question, and a separate row.
+    // No `!= Void` here any more: `generator_element_type` answers through
+    // `yielded_slot`, so an uninhabited element arrives as the placeholder and
+    // a `Generator<void, …>` represents like any other.
     if abstract_generator_kind(snapshot, ty).is_some()
-        && generator_element_type(snapshot, ty, path, subst)
-            .is_some_and(|element| element != HirType::Void)
+        && generator_element_type(snapshot, ty, path, subst).is_some()
     {
         return Some(HirType::Managed(ManagedType::Object(ty)));
     }
@@ -12468,9 +12475,7 @@ impl<'a> FuncBuilder<'a> {
         // one generated `class/dstr` matrix testing *destructuring in a
         // parameter*, where the `function*` is incidental. A count from one
         // matrix is not 125 language facts.
-        if matches!(yields, HirType::Void | HirType::Never) {
-            return Err(self.unsupported(id, "a generator that yields nothing"));
-        }
+        let yields = super::suspend::yielded_slot(yields);
         let Some(index) = self.generators.get(&id).copied() else {
             return Err(self.unsupported(id, "a generator outside every walk"));
         };
@@ -18045,7 +18050,7 @@ impl<'a> FuncBuilder<'a> {
             .type_arguments
             .get(&declared)
             .and_then(|arguments| arguments.first())?;
-        self.represent(argument)
+        Some(super::suspend::yielded_slot(self.represent(argument)?))
     }
 
     /// How to resume a generator this call site did not make.
@@ -26065,12 +26070,13 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|arguments| arguments.first())
             .copied()
             .and_then(|argument| self.represent(argument))
-            // A `void` element has no field, so there is no layout to build.
-            // `provided_representation` declines the same type for the same
-            // reason, and the two must agree: a type that represents as an
-            // object and then has no layout is an object type the program
-            // cannot name.
-            .filter(|element| *element != HirType::Void)?;
+            // Through `yielded_slot`, the same rule the frame's own slot takes.
+            // This used to decline a `void` element outright, and
+            // `representation_within` declined it in step -- a type that
+            // represents as an object and then has no layout is an object type
+            // the program cannot name, so the two had to agree. They still do,
+            // one line further along: neither declines now.
+            .map(super::suspend::yielded_slot)?;
         // Numbered over the program's generators rather than by the order
         // layouts happen to be demanded in, so one program names one class the
         // same way on every run and a dump can be diffed.
@@ -29927,11 +29933,7 @@ impl<'a> FuncBuilder<'a> {
             // which no program can then use. Without this the field was
             // `HirType::Never` and the read of it was **invalid HIR** --
             // `a value of type \`never\` reached code generation`.
-            let value = if matches!(value, HirType::Never) {
-                HirType::NUMBER
-            } else {
-                value
-            };
+            let value = super::suspend::yielded_slot(value);
             self.materialize(id, &value)?;
             let layout = Layout {
                 types: vec![ty],

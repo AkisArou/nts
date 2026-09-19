@@ -887,6 +887,46 @@ fn state_field() -> Field {
 /// fields: [`super::Layout::same_shape`] compares a base and would let two
 /// layouts that disagree merge, and the disagreement would be invisible until a
 /// `getfield` resolved against the wrong one.
+/// The representation a generator's `yielded` slot takes for an element type.
+///
+/// **A generator that yields nothing still needs a slot.** `function* g() {}`
+/// is ordinary JavaScript — it returns an iterator that is immediately done —
+/// and the checker types its element `never`; `Generator<void, …>`, driven
+/// entirely by what the caller passes to `next(v)`, is the other spelling.
+/// Neither can ever fill the slot, and a layout has a fixed shape, so the slot
+/// exists and has to have a width.
+///
+/// **One derivation, because the element has four and they must agree.** A
+/// placeholder applied to fewer than all of them is a store and a load that
+/// disagree, which is exactly how the first attempt at this failed:
+///
+/// ```text
+///   representation_within      whether `Generator<T>` represents at all
+///   begin_generator            the concrete frame's slot
+///   generator_element          the read out of the frame
+///   abstract_generator_layout  the `Generator<…>` a frame extends
+/// ```
+///
+/// Patching two of them gave `BrokenBase { layout: "silent#frame", base:
+/// "Generator0" }` and patching one gave `StoreType { expected: Int { bits: 32
+/// }, found: Float { bits: 64 } }`. The fifth caller is
+/// `provided_iterator_layout`, whose `value` slot receives what this slot
+/// holds — `generator_next` copies one into the other, so a different
+/// placeholder there would be the same disagreement one type further out.
+///
+/// Sound because nothing can read it. `refuse_unguarded_iterator_value`
+/// permits a `.value` read only where the checker has ruled the finished arm
+/// out, and for an uninhabited element that narrowing gives a value of type
+/// `never`, which no program can then use.
+#[must_use]
+pub fn yielded_slot(element: HirType) -> HirType {
+    if matches!(element, HirType::Void | HirType::Never) {
+        HirType::NUMBER
+    } else {
+        element
+    }
+}
+
 #[must_use]
 pub fn generator_prefix(yields: &HirType) -> Vec<Field> {
     vec![

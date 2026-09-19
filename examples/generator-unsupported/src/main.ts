@@ -57,20 +57,23 @@ export function abandonedWalk(n: number): number {
   return total * 1000 + closedTimes;
 }
 
-// A generator that yields **nothing**.
+// A generator driven by what the caller sends, whose `yield` has **no operand**.
 //
-// `Generator<void, void, string>` is driven entirely by what the caller passes
-// to `next(v)`: the elements go *in*, not out. So there is no element, the
-// frame's `yielded` slot has no type, and the abstract generator every frame
-// extends cannot be laid out -- C says it exactly, `field has incomplete type
-// 'void'`.
+// `Generator<void, void, string>` takes its values *in* rather than handing
+// them out, and this is the shape `runtime/node/readline`'s `emitKeys` has.
 //
-// This is the shape `runtime/node/readline`'s `emitKeys` has, and it is why it
-// is refused by name here rather than left to fail at the layout: the honest
-// sentence is about the generator, and the layout's would be about a struct the
-// source never wrote. It cost the `fs` and `readline` addons their build for an
-// hour, with the refusal counts saying nothing -- the cascade was identical to
-// the byte and only the emitted C differed.
+// **The refusal here changed on 2026-09-20 and the arm is kept for the new
+// one.** It used to be `a generator that yields nothing` -- an element type of
+// `void` or `never` left the frame's `yielded` slot with no width, and the
+// abstract generator every frame extends could not be laid out. That is fixed:
+// `suspend::yielded_slot` gives an uninhabited element a placeholder, asked by
+// all four places that derive it. What is left is the **operand**: `yield;`
+// with nothing after it is a suspension whose value is `undefined`, and
+// `a `yield` of nothing` is a separate refusal with its own lowering behind it.
+//
+// So this arm now pins a narrower sentence than it was written for, which is
+// the point of keeping it rather than deleting it: the two were one refusal and
+// are two, and only one of them has gone.
 function* driven(): Generator<void, void, string> {
   yield;
   yield;
@@ -85,42 +88,14 @@ export function yieldsNothing(n: number): number {
   return n;
 }
 
-// A `function*` with **no `yield` in it**, walked.
+// The `silent` generator that used to live here -- `function* silent():
+// Generator<never> {}`, walked and reached by `next()` -- **moved to
+// `examples/generators` on 2026-09-20**, because it compiles. Its two arms are
+// `walkOverNoElement` and `doneFromTheStart` there, beside a generator method
+// with an empty body, which is the shape the test262 corpus writes 156 times.
 //
-// Its element type is `never`, and the walk reads the frame's `yielded` slot
-// inside the loop body — a body the resumption can never enter, since it
-// answers `done` at once. The read is still emitted, and a value of type
-// `never` reaching code generation is **invalid HIR**: `emit-c` prints
-// `refusing to emit code from invalid HIR`, writes nothing and exits 0, so the
-// program failed with no diagnostic naming anything.
-//
-// Refused by name since 2026-09-19. Giving the slot a width here was tried and
-// is wrong: the field `suspend.rs` actually builds is typed from the
-// generator's `yield`s, so a different answer disagrees with it —
-// `expected Int { bits: 32 }, found Float { bits: 64 }`.
-function* silent(): Generator<never> {}
-
-export function walkedSilently(n: number): number {
-  let seen = 0;
-  for (const _v of silent()) {
-    seen = seen + 1;
-  }
-  return seen + n * 0;
-}
-
-// And the same generator reached by **`g.next()`** rather than by a walk.
-//
-// `begin_generator` refuses while lowering the *generator*; a `next()` is a
-// different function, and `generator_element` answers from the type argument
-// rather than from whether the generator was accepted — so the call built the
-// read anyway and stored a `never` into the result's slot:
-// `StoreType { expected: Int { bits: 32 }, found: Never }`, which is invalid
-// HIR and so no output at all.
-//
-// Two refusals naming one fact, deliberately. The alternative was one refusal
-// at whichever reader happened to run first, with a message naming a `for...of`
-// at a program that has none — which is what the first version did.
-export function nextOnASilentGenerator(n: number): number {
-  const r = silent().next();
-  return (r.done ? 1 : 0) + n * 0;
-}
+// An example named `-unsupported` is a claim about what a compiler refuses, and
+// it goes stale in the one direction nobody watches: the construct starts
+// working and the file keeps saying it does not. `tooling/gate/example-refusals`
+// is what caught this -- it counts each fixture's refusals and reported
+// `generator-unsupported refuses 3, down from 5 -- edit the table`.

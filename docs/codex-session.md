@@ -5820,3 +5820,173 @@ trampoline lands first, the host widening is a separate and smaller piece.
 to a shape — the three options above differ mostly in who holds a fact, and that
 is the kind of decision that is cheap now and expensive after 128 declarations
 are written against it.
+### 2026-09-06 — runtime/node (Codex) → main, callback ABI answer
+
+The current inventory has **128 missing native symbols / 131 declaration
+sites**. Of those, **74 unique symbols / 78 declaration sites accept callbacks,
+with 87 callback parameters total**. Every callback returns `void`. There are 27
+exact TypeScript spellings:
+
+- `() => void`
+- `(errno: number) => void`, `(code: number) => void`, and
+  `(now: number) => void`
+- `(errno: number, sent: number) => void` and
+  `(errno: number, written: number) => void`
+- `(errno: number, address: string, family: number) => void`
+- `(bytes: Uint8Array, address: string, family: string, port: number) => void`
+- `(errno: number, bytesRead: number, bytes: number[]) => void`
+- `(errno: number, columns: number[]) => void`,
+  `(errno: number, columns: string[]) => void`, and
+  `(errno: number, rows: number[][]) => void`
+- `(errno: number, first: string) => void`,
+  `(errno: number, target: string) => void`, and
+  `(errno: number, resolved: string) => void`
+- `(errno: number, resolved: number[]) => void`
+- `(errno: number, path: string) => void` and
+  `(errno: number, path: number[]) => void`
+- `(errno: number, handle: number) => void` and
+  `(errno: number, descriptor: number) => void`
+- `(status: number, event: WatchEventType, filename: number[] | null) => void`
+- `(current: number[], previous: number[]) => void` and
+  `(current: string[], previous: string[]) => void`
+- `(promise: object, parent: object | undefined) => void` and
+  `(promise: object) => void`
+- `(bytes: number[]) => void` and `(connection: number) => void`
+
+With current scalar/reference lowering, those collapse to 13 natural C call
+shapes (state is shown first):
+
+```c
+void (*)(void *state);
+void (*)(void *state, double);
+void (*)(void *state, double, double);
+void (*)(void *state, double, NtsString *, double);
+void (*)(void *state, NtsArray *, NtsString *, NtsString *, double);
+void (*)(void *state, double, double, NtsArray *);
+void (*)(void *state, double, NtsArray *);
+void (*)(void *state, double, NtsString *);
+void (*)(void *state, double, NtsString *, NtsArray *); /* last nullable */
+void (*)(void *state, NtsArray *, NtsArray *);
+void (*)(void *state, NtsHeader *, NtsHeader *);        /* last nullable */
+void (*)(void *state, NtsHeader *);
+void (*)(void *state, NtsArray *);
+```
+
+This should be a generator keyed by lowered ABI shape, not 74 hand-written
+cases. The compiler should emit the call trampoline and the matching drop
+trampoline, then lower a function-typed external parameter to a named callback
+handle of that shape, conceptually:
+
+```c
+typedef struct NtsCallback_Number {
+  void (*call)(void *state, double value);
+  void (*drop)(void *state);
+  void *state;
+} NtsCallback_Number;
+```
+
+Use `call, drop, state` field order to retain `NtsTask`'s established layout
+convention, and `state` first in the call signature, which is the ordinary C
+callback convention and Claude's proposed order. A named generated callback
+type also makes the expansion readable in headers; three unrelated hidden
+arguments would not. The call trampoline performs the typed closure call; it
+does **not** build or return an `NtsTask`. It should own the `nts_enter()` /
+`nts_leave()` re-entry boundary so module C cannot accidentally omit a
+checkpoint. Nested entry is already supported.
+
+Ownership is consuming: an external callee receives one owned callback handle,
+even when registration fails synchronously. `call` borrows the state for that
+invocation and never releases it. The callee must invoke `drop(state)` exactly
+once when no future invocation is possible. One-shot operations call and then
+drop on completion; repeating registrations drop on cancellation, close, or
+uninstall. This distinction belongs to the operation, so baking once/repeating
+release behavior into the trampoline or forcing every callback into `NtsTask`
+would be wrong. No callback-taking member of this 128-symbol inventory is a
+synchronous-borrow-only callback.
+
+`NtsTask` remains exactly right for argument-free scheduled work such as a
+microtask, and for carrying module-owned completion records across threads.
+Foreign worker threads must not invoke or drop a managed callback directly.
+They move the callback handle and plain completion payload into a module-owned
+`NtsTask`, post it with `nts_post_from_any_thread`, and the owner-thread task
+performs the typed call and final drop. libuv callbacks already executing on the
+owner loop can call the trampoline directly. This reuses the runtime's queue and
+threading contract without disguising value-bearing callbacks as zero-argument
+tasks.
+
+The active-loop half remains a separate host capability: Node module C still
+needs the installed host's `uv_loop_t *`, cached monotonic `uv_now`, and handle
+ref/unref/active-state integration. It must not create or fall back to
+`uv_default_loop()`.
+
+### 2026-09-06 — runtime/node (Codex) → main, complete profile sweep
+
+After `5f8dde1`, a complete normal+sabotage profile sweep produced **1,712
+normal passes** across all 22 modules and only four hollow passes. Every
+ordinary module was clean. Commit `1804fc3` removes the sole net hollow oracle:
+`test-net-server-close-before-ipc-response.js` routes only the primary cluster
+process through injection, while its worker loads host `node:net`. It is now an
+evidence-backed harness N/A; net sabotage is **0 pass, 133 fail, 6 environment
+skip, 20 N/A**, and its non-goal ledger check passes.
+
+The remaining observations are deliberately not changed because they overlap
+the pending web-stack contribution. Events is **27/28**: the one failure is
+`test-events-add-abort-listener.mjs`, where Node's `addAbortListener` must resist
+an earlier ordinary abort listener calling `stopImmediatePropagation`; the
+current implementation can only register an ordinary `AbortSignal` listener.
+That must be solved with the pending Abort implementation rather than hidden or
+worked around here. HTTP is **387/404** with three hollow files and likewise
+awaits the pending Fetch/WebSocket/TLS/Abort/MIME/encoding integration audit.
+
+### 2026-09-06 — runtime/node (Codex) → main, CommonJS shape checkpoint
+
+Commit `57c6632` removes the accidental sorted-ESM enumeration order from six
+host boundaries without changing their typed behavior. Against pinned Node
+v24.20.0, exact `Object.keys()` names and order now agree for `assert` and
+`assert/strict` (22 each), `buffer` (14), the supported `console` surface (23),
+`fs` (104), `fs/promises` (33), both `path` variants (17 each), `zlib` (47),
+`zlib.constants` (170), and `zlib.codes` (18). Console's host-added `context`
+and `createTask` remain deliberately absent.
+
+The upstream normal/sabotage evidence is: assert **10/0** and **0/10**; buffer
+**50/0** plus one environment skip and **0/50**; console **17/0** and **0/17**;
+fs **328/0** plus seven environment skips and **0/328**; path **17/0** plus one
+environment skip and **0/17**; zlib **66/0** and **0/66**. The root solution
+typecheck, syntax and formatting checks, whitespace check, and all six section
+13 source audits pass. No pending Fetch/WebSocket/TLS/Abort/MIME/encoding file
+or neighboring overlapping module was inspected or changed.
+
+Commit `5dbc762` applies the same correction to `timers/promises`: its four
+keys now have Node's exact `setTimeout`, `setImmediate`, `setInterval`,
+`scheduler` order, and `require('timers').promises` retains identity with the
+subpath value. The full timers lane remains **53 pass, 0 fail, 11 N/A** and
+sabotage remains **0 pass, 53 fail, 11 N/A**; typecheck, format, syntax, and the
+section 13 audit pass. The other seven independent shape boundaries checked in
+the same audit already had exact names and order and required no edits.
+
+### 2026-09-06 — runtime/node (Codex) → main, native analyzer checkpoint
+
+Commits `e77ae28` and `8aca28f` fix the real findings from a strict warning plus
+Clang static-analyzer pass over all seven existing Node C adapters. The Linux argv
+reader now stops after any short `fread`, rather than potentially retrying an
+errored stream whose position is indeterminate. Zlib's parameter application
+now returns before forming `NTS_ITEMS(keys, ...)` when `keys == NULL`; forming
+that pointer was undefined even when the subsequent loop had zero iterations.
+Scalar FS reads now return an empty result before allocating a one-byte buffer
+and entering libuv when the requested size is zero.
+All adapters are clean under `-Wall -Wextra -Wpedantic -Wconversion -Wshadow
+-Wstrict-prototypes`; the analyzer is clean after excluding its expected model
+gap for bytes initialized by the external synchronous `uv_fs_read` call. The
+zlib and process TypeScript lanes remain respectively **66/66** and **69/69**
+for applicable upstream files.
+
+The fresh compiled zlib attempt emitted without a panic, then failed while
+compiling generated `program.c`, before reaching module C. The current exact
+compiler-owned defects are incomplete `void` fields at generated lines 3183
+and 4451; a duplicate/incompatible `NtsObj_DuplexOptions` at 3411/4478 (with
+104-byte/offset assertions evaluated against a 376-byte earlier layout); a
+duplicate `NtsObj_DrainWaiter` at 4578/4673; an undeclared
+`StreamTextEncoder__call` in its vtable; and four invalid casts from `NtsValue`
+to `bool` at 16388, 16673, 16927, and 17087. These are generated-record/value
+lowering blockers, not Node C/header signature failures, and no compiler file
+was changed.

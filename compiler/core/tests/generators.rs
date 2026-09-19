@@ -381,10 +381,20 @@ fn a_walk_of_any_length_allocates_once() {
 ///   `for...of` passes nothing — answering `undefined` to a program that
 ///   expects a conversation is not the same as not having one.
 /// - an `async` generator speaks both protocols at once.
-/// - a generator that yields **nothing** -- `Generator<void, void, string>`,
-///   driven entirely by what the caller passes to `next(v)`. There is no
-///   element, so the frame's `yielded` slot has no type and the abstract
-///   generator cannot be laid out: C answers `field has incomplete type 'void'`.
+/// - a `yield` with **no operand** -- `yield;` in a `Generator<void, void,
+///   string>`, driven entirely by what the caller passes to `next(v)`. The
+///   suspension's value is `undefined`, which is a lowering this compiler does
+///   not have.
+///
+/// **A generator that yields nothing was a sixth and is not one any more**, as
+/// of 2026-09-20. `function* g() {}` is ordinary JavaScript and its element
+/// type is `never`; `Generator<void, …>` is the other spelling. Neither can
+/// fill the frame's `yielded` slot and a layout has a fixed shape, so
+/// `suspend::yielded_slot` gives it a placeholder -- asked by all four places
+/// that derive the element, because a placeholder applied to fewer than all of
+/// them is a store and a load that disagree. 176 files of the slice-1
+/// `test/language` population, 125 of which now pass. See `examples/generators`
+/// and the arms that moved there from `generator-unsupported`.
 ///
 /// `yield*` was another, and is not one either: it is a walk with a `yield`
 /// where the body would be, and the nested cursor it was said to need is what
@@ -408,7 +418,7 @@ fn what_a_generator_is_refused_for() {
         .collect();
     for wanted in [
         "the value of a `yield` is not supported by this lowering yet",
-        "a generator that yields nothing is not supported by this lowering yet",
+        "a `yield` of nothing is not supported by this lowering yet",
         "a `finally` that spans a `yield`, which is iterator closing is not supported by \
          this lowering yet",
     ] {
