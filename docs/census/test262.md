@@ -500,21 +500,29 @@ them is a *negative* test, which this lane scope-excludes. It does not move this
 number. A figure taken from the whole corpus and spent on a sub-population is
 the same mistake as a ranked table read without opening the files.
 
-### 1,179 of 4,812, and what the 839 lowering refusals actually are
+### 1,175 of 4,812, and what the 839 lowering refusals actually are
 
 Measured 2026-09-19 with the compiler pinned, over the same slice-1 population:
 
 ```text
-  3601  unsupported     2747 do not typecheck, 839 refuse at lowering,
-                        14 link, 1 emit
-  1179  strict-pass
+  3616  unsupported     the great majority do not typecheck; 839 refuse at
+                        lowering, 14 link, 1 emit
+  1175  strict-pass
     18  frontend-crash
-     8  threw           ran and answered wrongly
-     6  crash
+     3  threw           ran and answered wrongly
+     0  crash
 ```
 
 Up from 1,132 when the population was widened and 1,167 the round before. All
 three self-checks passed.
+
+**The two numbers worth reading are the bottom two.** The same slice measured
+earlier the same day had **6 crashes and 8 wrong answers**; five of the eight
+and all six crashes were closed, and the rest are named below. A run of this
+went 1,179 in between, which was *higher* and less true: the harness was
+comparing with `!==`, so every NaN assertion failed and every ±0 assertion
+passed regardless of the answer. Fixing it cost five apparent passes and bought
+three real ones.
 
 **The 839 that reach lowering, ranked by file** -- each row is one file's *first*
 refusal, so this is the chokepoint table rather than a diagnostic census. The
@@ -564,6 +572,17 @@ Of what is left:
 - `in/S8.12.6_A2_T1.js` -- `"valueOf" in {}`, where the receiver is an
   *unannotated* empty object literal. `typescript.md` carries why that one shape
   is excluded and what it would take.
+
+**Three remain**, and they are the last two of those plus the `in` receiver --
+the lone-surrogate pair and `"valueOf" in {}`. Both are recorded decisions with
+a named next step rather than unexplained wrong answers, which is the state this
+column is meant to reach. Nothing crashes.
+
+The harness fix also exposed three files nobody could have seen: `-0` handed to
+an erased slot came back `+0`, because `zero_sign::observed` did not look
+through an `Erase` and `width_of` judged an arithmetic result by its operands
+alone. `typescript.md`'s `negative-zero` row carries it. Those three were
+**reported as passes** for as long as the census has existed.
 
 ## What this census cannot see
 
