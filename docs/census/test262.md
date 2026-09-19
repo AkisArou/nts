@@ -500,6 +500,71 @@ them is a *negative* test, which this lane scope-excludes. It does not move this
 number. A figure taken from the whole corpus and spent on a sub-population is
 the same mistake as a ranked table read without opening the files.
 
+### 1,179 of 4,812, and what the 839 lowering refusals actually are
+
+Measured 2026-09-19 with the compiler pinned, over the same slice-1 population:
+
+```text
+  3601  unsupported     2747 do not typecheck, 839 refuse at lowering,
+                        14 link, 1 emit
+  1179  strict-pass
+    18  frontend-crash
+     8  threw           ran and answered wrongly
+     6  crash
+```
+
+Up from 1,132 when the population was widened and 1,167 the round before. All
+three self-checks passed.
+
+**The 839 that reach lowering, ranked by file** -- each row is one file's *first*
+refusal, so this is the chokepoint table rather than a diagnostic census. The
+names are redacted to `X` in the rows, so the four largest were re-run
+unredacted against a sample of their own files:
+
+| files | refusal | what it really is |
+| --- | --- | --- |
+| 155 | `X`, a builtin this compiler does not provide | **85% `eval`** (22 of 26 sampled), with `Function` and `Object` behind it. A §13 non-goal, not a gap -- it should be classified `inapplicable` rather than sitting at the top of a backlog. |
+| 96 | a method `X` with no declaration in the hierarchy | dispatch through a library interface, and generator-as-a-value. See `typescript.md`'s iteration-family section. |
+| 88 | `X`, a static field this compiler gave no storage | every one sampled is `#method` -- a **private static method read as a value**. |
+| 87 | `X`, declared by `X` with a type that has no representation (a function type) | the same cause, one modifier over: `return this.#method` on an instance. |
+| 38 | a regular expression literal | needs an engine; `docs/` records QuickJS as the answer. |
+| 36 | an omitted expression | array elisions -- `[,]`, `[1, , 3]`. A hole reads as `undefined`, which a dense array of numbers has no room for, so this is the same representation question as sparse growth. |
+
+**88 and 87 are one cause, and it is 175 files: a method used as a value.**
+Probed down to the smallest program, a *public* method refuses the same way --
+
+```ts
+class C { twice(n: number): number { return n * 2; } }
+const g = new C().twice;   // refused
+```
+
+-- so the private modifier and the `static` modifier are both incidental, and
+the feature is a bound-method closure: a function value carrying the receiver
+alongside the code. That is one piece of work for both rows and for a good part
+of the 96 above it, which is worth knowing before anyone starts at the top of
+the table.
+
+### The eight that ran and answered wrongly
+
+Six of the crashes and four of the throws were **sparse fills** --
+`var exponents = []; exponents[3] = …` -- reached because a module-scope
+untyped array had just begun taking the type its writes settled. Growth is by
+one, so the first write aborted. Guarded the same day: a refusal replaced by an
+abort is a worse answer, and `written_as_a_dense_prefix` is the guard.
+
+Of what is left:
+
+- `applying-the-exp-operator_A4.js` -- **`1 ** NaN` answered 1**. C99 makes
+  `pow(+1, y)` return 1 for any `y`, even a NaN, and the specification says NaN
+  before it looks at the base. Fixed; `examples/math` carries the arm.
+- `less-than/S11.8.1_A4.12_T1.js` and `greater-than/S11.8.2_A4.12_T1.js` -- a
+  matched pair, and both reduce to **lone surrogates**: `"\uD800" < "\uDC00"`.
+  Every other case in both files agrees. This is the UTF-16 representation
+  question `docs/icu-i18n.md` covers, not a comparison bug.
+- `in/S8.12.6_A2_T1.js` -- `"valueOf" in {}`, where the receiver is an
+  *unannotated* empty object literal. `typescript.md` carries why that one shape
+  is excluded and what it would take.
+
 ## What this census cannot see
 
 Printed by the instrument on every run, not left to a reader.
