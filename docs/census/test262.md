@@ -500,18 +500,23 @@ them is a *negative* test, which this lane scope-excludes. It does not move this
 number. A figure taken from the whole corpus and spent on a sub-population is
 the same mistake as a ranked table read without opening the files.
 
-### 1,175 of 4,812, and what the 839 lowering refusals actually are
+### 1,209 of 4,812, and what the 839 lowering refusals actually are
 
 Measured 2026-09-19 with the compiler pinned, over the same slice-1 population:
 
 ```text
-  3616  unsupported     the great majority do not typecheck; 839 refuse at
-                        lowering, 14 link, 1 emit
-  1175  strict-pass
+  3582  unsupported     the great majority do not typecheck; the rest refuse at
+                        lowering, link or emit
+  1209  strict-pass
     18  frontend-crash
      3  threw           ran and answered wrongly
      0  crash
 ```
+
+**1,175 -> 1,209 later the same day**, and the 34 are attributed rather than
+assumed: every one moved `unsupported -> strict-pass`, nothing moved the other
+way, and all 34 are in `expressions/class` and `statements/class` -- which is
+exactly the family the three links below were opened for.
 
 Up from 1,132 when the population was widened and 1,167 the round before. All
 three self-checks passed.
@@ -539,6 +544,11 @@ unredacted against a sample of their own files:
 | 36 | an omitted expression | array elisions -- `[,]`, `[1, , 3]`. A hole reads as `undefined`, which a dense array of numbers has no room for, so this is the same representation question as sparse growth. |
 
 **88 and 87 are one cause, and it is 175 files: a method used as a value.**
+*(Opened 2026-09-19, in three links -- a method used as a value, then calling
+the result of a getter, then `g.next()` on a generator held rather than walked.
+34 files cleared; the rest now stop at `an object type with no layout`, which is
+a fourth link and a different obstacle. Each one revealed the next, which is
+what "the compiler reports one blocker at a time" looks like from outside.)*
 Probed down to the smallest program, a *public* method refuses the same way --
 
 ```ts
