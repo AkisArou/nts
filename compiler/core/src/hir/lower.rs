@@ -26496,7 +26496,33 @@ impl<'a> FuncBuilder<'a> {
             let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
             return self.view_over_fresh_buffer(id, zero, zero, kind, &ty);
         };
-        let count = self.lower_expression(*first)?;
+        // **An array literal is lowered at the view's element type.** `new
+        // Uint8Array([])` types its literal `never[]` and falls back to the
+        // *contextual* type, which is the constructor's `ArrayLike<number> |
+        // Iterable<number>` -- not an array, so the literal refused for the
+        // shape it was about to be given. Asked of the node rather than of the
+        // lowered value, because the value is what the expectation decides.
+        let count = match (
+            self.kind_of(*first) == Some(syntax::ARRAY_LITERAL_EXPRESSION),
+            &ty,
+        ) {
+            // **At `number[]`, not at the view's own element.** Expecting
+            // `Array(u8)` builds a `u8` array, which is not a representation an
+            // array literal otherwise has, and the specialized copy of the
+            // enclosing function then read zeroes out of it for small integer
+            // arguments while every other value was right. The narrowing
+            // belongs at the store into the view, where `a[i] = v` already puts
+            // it; this expectation exists only so that `new Uint8Array([])`
+            // has an array type to be, rather than the constructor's
+            // `ArrayLike<number> | Iterable<number>`.
+            (true, HirType::Managed(ManagedType::View(element)))
+                if matches!(**element, HirType::Int { .. } | HirType::Float { .. }) =>
+            {
+                let wanted = HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)));
+                self.lower_expecting(*first, &wanted)?
+            }
+            _ => self.lower_expression(*first)?,
+        };
         // `new Uint8Array(buffer, offset, length)` is a *window* onto storage
         // that already exists, which is the whole reason a view is a distinct
         // representation: it is how two of them come to name the same bytes.
@@ -26506,10 +26532,13 @@ impl<'a> FuncBuilder<'a> {
         ) {
             return self.lower_view_over(id, count, &arguments[1..], width, kind, &ty);
         }
-        // `new Uint8Array([1, 2, 3])` and `new Uint8Array(other)` copy from
-        // what they are given rather than sizing to it. Refused by name rather
-        // than read as a length, which would allocate whatever the pointer
-        // happened to be.
+        // `new Uint8Array([1, 2, 3])` **copies from** what it is given rather
+        // than sizing to it, which is the one case below. Anything else is
+        // refused by name rather than read as a length, which would allocate
+        // whatever the pointer happened to be.
+        if let HirType::Managed(ManagedType::Array(_)) = self.values[count.0 as usize].ty.clone() {
+            return self.view_copied_from_array(id, count, width, kind, &ty);
+        }
         if !matches!(
             self.values[count.0 as usize].ty,
             HirType::Int { .. } | HirType::Float { .. }
@@ -26729,6 +26758,106 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// A buffer of `bytes`, and a view of `count` elements over the whole of it.
+    /// `new Uint8Array([1, 2, 3])` -- a view sized to the array, then filled.
+    ///
+    /// **An array only**, and for the same reason `new Set([…])` takes one: any
+    /// other iterable needs `Iterable<T>` to be representable, which is library
+    /// interface dispatch. `new Uint8Array(anotherView)` is still refused, by
+    /// name; it wants `nts_view_set`, which copies between two *views* and is a
+    /// different operation from this one.
+    ///
+    /// **Nothing new in the runtime.** The fill is `Place::Element` per index,
+    /// which is what `a[i] = v` already lowers to on a view -- so the narrowing
+    /// each element needs (a `double` into a `uint8`) is the one the assignment
+    /// path already decides, in one place, rather than a second rule here that
+    /// would agree with it until it did not.
+    fn view_copied_from_array(
+        &mut self,
+        id: NodeId,
+        source: ValueId,
+        width: f64,
+        kind: f64,
+        ty: &HirType,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let length = self.push(OpKind::Length(source), HirType::NUMBER, origin.clone());
+        let stride = self.push(OpKind::ConstFloat(width), HirType::NUMBER, origin.clone());
+        let bytes = self.push(
+            OpKind::Binary {
+                op: BinOp::Mul,
+                lhs: length,
+                rhs: stride,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let view = self.view_over_fresh_buffer(id, bytes, length, kind, ty)?;
+
+        let start = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let header = self.new_block();
+        let body = self.new_block();
+        let exit = self.new_block();
+        self.terminate(Terminator::Jump {
+            target: header,
+            args: vec![start],
+        });
+
+        self.switch_to(header);
+        let index = self.push_block_param(header, HirType::NUMBER, origin.clone());
+        let more = self.push(
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: index,
+                rhs: length,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.terminate(Terminator::Branch {
+            cond: more,
+            then_target: body,
+            then_args: Vec::new(),
+            else_target: exit,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(body);
+        let element = self.values[source.0 as usize]
+            .ty
+            .clone();
+        let HirType::Managed(ManagedType::Array(element)) = element else {
+            return Err(self.unsupported(id, "a typed array copied from something with no elements"));
+        };
+        // Checked, because `bounds.rs` is where an index proof is spent or kept.
+        let value = self.push(
+            OpKind::ArrayGet {
+                array: source,
+                index,
+                checked: true,
+            },
+            *element,
+            origin.clone(),
+        );
+        self.write_place(id, &Place::Element { array: view, index }, value)?;
+        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+        let next = self.push(
+            OpKind::Binary {
+                op: BinOp::Add,
+                lhs: index,
+                rhs: one,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        self.terminate(Terminator::Jump {
+            target: header,
+            args: vec![next],
+        });
+
+        self.switch_to(exit);
+        Ok(view)
+    }
+
     fn view_over_fresh_buffer(
         &mut self,
         id: NodeId,
