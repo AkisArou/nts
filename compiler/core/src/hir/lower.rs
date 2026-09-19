@@ -7430,8 +7430,24 @@ fn representation_within(
     path.pop();
     // Runtime containers dispatch between numbers, managed references and
     // tagged values. A native pointer belongs to none of those protocols.
+    //
+    // **And neither does `undefined`.** `undefined[]` -- which `[undefined]`
+    // is, and which an untyped `([x = 23] = [undefined])` parameter default
+    // produces -- has `HirType::Void` as its element, and the C backend writes
+    // the element type into every access: `NTS_ITEMS(v, void)[i]` is not C.
+    // The program emitted, the compiler exited 0, and `cc` failed on generated
+    // code -- the silently-unbuilt shape, which is worse than a refusal.
+    //
+    // **`Array` alone.** A `Promise<void>` is the most ordinary thing in the
+    // language and settles with nothing rather than storing it; the same arm
+    // covers both, so the test has to name the container. `Set<undefined>` is
+    // left out for want of a program that writes one.
     result.filter(|ty| match ty {
-        HirType::Managed(ManagedType::Array(element) | ManagedType::Set(element) | ManagedType::Promise(element)) => !matches!(element.as_ref(), HirType::NativePointer(_)),
+        HirType::Managed(ManagedType::Array(element)) => !matches!(
+            element.as_ref(),
+            HirType::NativePointer(_) | HirType::Void
+        ),
+        HirType::Managed(ManagedType::Set(element) | ManagedType::Promise(element)) => !matches!(element.as_ref(), HirType::NativePointer(_)),
         HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => !matches!(key.as_ref(), HirType::NativePointer(_)) && !matches!(value.as_ref(), HirType::NativePointer(_)),
         _ => true,
     })
