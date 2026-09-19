@@ -1163,6 +1163,32 @@ pub enum OpKind {
     },
 }
 
+/// The zero of a representation: a value of `ty` that occupies its slot and
+/// says nothing.
+///
+/// Two callers, one fact. `split.rs` needs one for an edge that carries no
+/// payload, and `lower.rs` needs one for the `value` slot of an iterator
+/// result whose `done` is `true` -- a slot no read may reach. Written twice
+/// they would be two derivations of one thing, and the first disagreement
+/// would be a constant of the wrong representation in a live slot.
+///
+/// **The reference arms are the reason this moved.** `split.rs`'s copy fell
+/// through to `ConstFloat(0.0)` for everything it did not name, and a union's
+/// payload is `Managed` whenever one of its members is a reference -- so an
+/// absence edge in `string | undefined` would hand a float to a pointer
+/// parameter. Whether that was reachable is a separate question; it is not
+/// reachable from here.
+#[must_use]
+pub fn zero_of(ty: &HirType) -> OpKind {
+    match ty {
+        HirType::Bool => OpKind::ConstBool(false),
+        HirType::Int { .. } => OpKind::ConstInt(0),
+        HirType::Managed(_) | HirType::NativePointer(_) => OpKind::ConstNull,
+        HirType::Erased | HirType::Void => OpKind::ConstUndefined,
+        _ => OpKind::ConstFloat(0.0),
+    }
+}
+
 /// Whether a checked write to this array may extend it rather than abort.
 ///
 /// **One derivation, asked by three backends.** Each emitter picks the runtime

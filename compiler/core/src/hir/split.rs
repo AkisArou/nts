@@ -434,22 +434,13 @@ fn fill_edges(
                 func,
                 from,
                 Op {
-                    kind: zero(payload_ty),
+                    kind: super::zero_of(payload_ty),
                     ty: payload_ty.clone(),
                     origin,
                 },
             ),
         };
         set_arg(func, from, which, index, tag_id, payload_id);
-    }
-}
-
-/// The zero of a representation, for an edge that carries no payload.
-fn zero(ty: &HirType) -> OpKind {
-    match ty {
-        HirType::Bool => OpKind::ConstBool(false),
-        HirType::Int { .. } => OpKind::ConstInt(0),
-        _ => OpKind::ConstFloat(0.0),
     }
 }
 

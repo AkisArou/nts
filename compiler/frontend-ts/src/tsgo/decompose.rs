@@ -1135,7 +1135,28 @@ impl<'a> Decomposer<'a> {
             .get(slot.0 as usize)
             .and_then(|record| record.symbol)
             .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
-            .is_some_and(|declared| matches!(declared.name.as_str(), "PromiseWithResolvers"))
+            .is_some_and(|declared| {
+                matches!(
+                    declared.name.as_str(),
+                    "PromiseWithResolvers"
+                        // The two arms of `IteratorResult<T, TReturn>`, whose
+                        // properties this compiler reads to build the layout it
+                        // *provides* for them -- see `builtin::
+                        // iterator_result_fields`. Pruned, the arms arrive with
+                        // no `value` property and the provision has no element
+                        // type to name.
+                        //
+                        // **This line was landed alone once and reverted**, at
+                        // 2 to 4 cleared sites per module, because "everything
+                        // downstream stops immediately" on the optional `done`
+                        // or on `TReturn`'s `any`. The revert was right: a
+                        // name-list entry that clears nothing is a claim the
+                        // list does not support. It arrives here with the
+                        // layout that makes it mean something.
+                        | "IteratorYieldResult"
+                        | "IteratorReturnResult"
+                )
+            })
     }
 
     fn is_ours(snapshot: &SemanticSnapshot, slot: TypeId) -> bool {

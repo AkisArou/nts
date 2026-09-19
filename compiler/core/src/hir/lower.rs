@@ -6944,6 +6944,79 @@ pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType
 /// into the machine type for the copy being lowered.
 pub type Substitution = rustc_hash::FxHashMap<TypeId, HirType>;
 
+/// The element type of an `IteratorResult<T, …>`, where this type is one.
+///
+/// Recognised **by name**, deliberately, and the reason is the one
+/// `decompose.rs` gives for its own name list: "a rule like *carry any library
+/// interface whose members are representable* is the version that sounds
+/// principled and pulls the graph in through the first type whose members
+/// happen to qualify; a name is a decision that can be read."
+///
+/// Both spellings arrive. A `next()` annotated `IteratorResult<T>` returns the
+/// union of the two arms, and one annotated `IteratorYieldResult<T>` returns a
+/// single arm — so this answers for the union and for either arm alone, and the
+/// element comes from whichever arm yields, because the return arm's `value` is
+/// `TReturn` and gets no slot.
+fn iterator_result_element(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<TypeId> {
+    fn value_of(snapshot: &SemanticSnapshot, arm: TypeId) -> Option<TypeId> {
+        let TypeKind::Object { properties } = &snapshot.types.get(arm.0 as usize)?.kind else {
+            return None;
+        };
+        properties
+            .iter()
+            .find(|property| property.name == "value")
+            .map(|property| property.ty)
+    }
+    let record = snapshot.types.get(ty.0 as usize)?;
+    match &record.kind {
+        // The union. Every member has to be one of the two arms, so that a
+        // wider union that merely contains them is not mistaken for one.
+        TypeKind::Union(members) => {
+            let mut yielded = None;
+            for member in members {
+                match named(snapshot, *member) {
+                    Some("IteratorYieldResult") => yielded = value_of(snapshot, *member),
+                    Some("IteratorReturnResult") => {}
+                    _ => return None,
+                }
+            }
+            yielded
+        }
+        // The yield arm alone, which is what a `next()` annotated
+        // `IteratorYieldResult<T>` returns. The *return* arm alone is not
+        // provided for: it yields nothing, so there is no element to name, and
+        // its `value` is the `TReturn` that gets no slot — a `next()` that can
+        // only finish is a shape nothing in the corpus writes, and refusing it
+        // says so rather than inventing an element type.
+        TypeKind::Object { .. } if named(snapshot, ty) == Some("IteratorYieldResult") => {
+            value_of(snapshot, ty)
+        }
+        _ => None,
+    }
+}
+
+/// Can a value of this type be a *finished* iterator result?
+///
+/// The union can, and its `value` is therefore only readable where something
+/// has ruled the return arm out. The yield arm alone cannot: its `done` is
+/// `false` by declaration, so its `value` is the element and reading it needs
+/// no proof at all.
+///
+/// **This is the whole guard**, and the reason there is no new analysis behind
+/// it: TypeScript narrows `IteratorResult<T>` by `done` itself, so inside
+/// `if (!r.done)` the checker has already replaced the union with the yield
+/// arm. Asking the narrowed type is asking the language's own rule rather than
+/// a second, weaker derivation of it -- which is what a `flow.rs` relation on
+/// the `done` field would have been, and it would have disagreed with the
+/// checker the first time the two were spelled differently.
+fn may_be_a_finished_iterator_result(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    iterator_result_element(snapshot, ty).is_some()
+        && matches!(
+            snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+            Some(TypeKind::Union(_)),
+        )
+}
+
 /// The declared name of a type, where it has one.
 fn named(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
     let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
@@ -7387,19 +7460,50 @@ fn brand_representation(brand: super::native::Scalar) -> HirType {
     }
 }
 
+/// What [`decided_representation`] answers.
+enum Decided {
+    /// Provided as this, whatever the type's own kind says.
+    As(HirType),
+    /// **Recognised and deliberately unrepresentable** as a value -- a decision
+    /// rather than a failure to find one, which is why it is not simply absent.
+    Unrepresentable,
+}
+
+/// The representations decided before a type's own kind is read.
+///
+/// `None` means "not one of these, carry on"; the two `Decided` arms are the
+/// ones a chain of early-outs could not tell apart without repeating itself.
+fn decided_representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Decided> {
+    if let Some(brand) = super::native::scalar(snapshot, ty) {
+        return Some(Decided::As(brand_representation(brand)));
+    }
+    if let Some(name) = super::native::pointer(snapshot, ty) {
+        return Some(Decided::As(HirType::NativePointer(name)));
+    }
+    if super::native::is_layout(snapshot, ty) {
+        return Some(Decided::Unrepresentable);
+    }
+    // **Provided, not decomposed**, for the reason `builtin.rs` exists: the
+    // arms carry `done?: false`, and an optional property needs a presence bit,
+    // which changes a layout rather than adding to it. One object stands for
+    // the union, so `representation_within`'s union arm never sees two layouts
+    // that differ -- and `TReturn`'s `any` gets no slot rather than a
+    // representation it is not allowed to have.
+    iterator_result_element(snapshot, ty)
+        .map(|_| Decided::As(HirType::Managed(ManagedType::Object(ty))))
+}
+
 fn representation_of(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     path: &mut Vec<TypeId>,
     subst: &Substitution,
 ) -> Option<HirType> {
-    if let Some(brand) = super::native::scalar(snapshot, ty) {
-        return Some(brand_representation(brand));
+    match decided_representation(snapshot, ty) {
+        Some(Decided::As(representation)) => return Some(representation),
+        Some(Decided::Unrepresentable) => return None,
+        None => {}
     }
-    if let Some(name) = super::native::pointer(snapshot, ty) {
-        return Some(HirType::NativePointer(name));
-    }
-    if super::native::is_layout(snapshot, ty) { return None; }
     let record = snapshot.types.get(ty.0 as usize)?;
     Some(match &record.kind {
         TypeKind::Unknown => HirType::Erased,
@@ -21218,6 +21322,25 @@ impl<'a> FuncBuilder<'a> {
                     ),
                 ));
             }
+        // **The one write that can invalidate the iterator-result proof.**
+        //
+        // A result built `{ done: true, value: undefined }` holds the element
+        // representation's zero in its `value` slot, and nothing may read it:
+        // the checker narrows the union by `done`, so `r.value` is only
+        // reachable where the return arm is ruled out. Writing `done` moves
+        // that ruling without moving the slot, and `r.done = false; r.value`
+        // then answers `0` where JavaScript answers `undefined` -- which is
+        // not hypothetical, it is `tooling/sweep/probe.sh` disagreeing with
+        // node before this refusal existed.
+        //
+        // TypeScript permits the write: `done` is not `readonly` on either
+        // arm. So the refusal is this compiler's, and it says so.
+        if layout.name == super::builtin::ITERATOR_RESULT && name == "done" {
+            return Err(self.unsupported(
+                target,
+                "assigning to an iterator result's `done`, which would move the guard that                  decides whether its `value` may be read without moving what `value` holds",
+            ));
+        }
         Ok(Place::Field { object, field })
     }
 
@@ -23565,8 +23688,27 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(property, "a property the type does not declare"));
             };
             let want = layout.fields[field as usize].ty.clone();
-            let (_, value) = self.property_parts(property, Some(&want))?;
-            let value = self.coerce(value, &want, property)?;
+            // `{ done: true, value: undefined }` -- the return arm of an
+            // iterator result, whose `value` slot has the *yield* arm's
+            // representation and so has no room for an absence.
+            //
+            // The slot is filled with that representation's zero, and the
+            // reason that is not a wrong answer is the other half of this
+            // decision rather than anything here: **no read can reach it.**
+            // `read_iterator_value` refuses a `.value` read that is not proven
+            // to sit under `!done`, and `protocol_step` builds its own read on
+            // the not-done edge. Land one half without the other and
+            // `it.next().value` answers `0` where JavaScript says `undefined`.
+            //
+            // Only the non-reference case needs this: a `Managed` slot takes
+            // `undefined` as a null already, which is why an
+            // `IteratorResult<string>` compiled before this line existed.
+            let value = if self.is_iterator_return_arm(id, &layout, &name) {
+                self.push(super::zero_of(&want), want.clone(), origin.clone())
+            } else {
+                let (_, value) = self.property_parts(property, Some(&want))?;
+                self.coerce(value, &want, property)?
+            };
             self.field_set(object, field, value, &origin);
         }
         if erase_afterwards {
@@ -23675,6 +23817,30 @@ impl<'a> FuncBuilder<'a> {
     /// The name and the value, with the value built at `want` where the caller
     /// knows the slot. A table literal passes `None`: its values are erased on
     /// the way in and there is no declared field to build one at.
+    /// Is this the `value` of an object literal spelling `{ done: true, ... }`?
+    ///
+    /// Syntactic on purpose. The question is not what the checker makes of the
+    /// literal -- it types it `IteratorReturnResult<any>`, and `any` is refused
+    /// here -- but what the author wrote, which is a slot that says nothing
+    /// beside a `done` that says so.
+    ///
+    /// Narrow on purpose too. It asks for the literal `true`, not for a value
+    /// that happens to be `true`: a `done` computed at runtime leaves the
+    /// arm undecided, and the honest answer there is today's refusal.
+    fn is_iterator_return_arm(&self, literal: NodeId, layout: &Layout, name: &str) -> bool {
+        if name != "value" || layout.name != super::builtin::ITERATOR_RESULT {
+            return false;
+        }
+        self.children(literal).iter().any(|property| {
+            let children = self.children(*property);
+            let [key, initializer] = children.as_slice() else {
+                return false;
+            };
+            self.node(*key).text.as_deref() == Some("done")
+                && self.kind_of(*initializer) == Some(syntax::TRUE_KEYWORD)
+        })
+    }
+
     fn property_parts(
         &mut self,
         id: NodeId,
@@ -24989,6 +25155,12 @@ impl<'a> FuncBuilder<'a> {
             .find(|layout| layout.types.contains(&ty))
         {
             return Ok(known.clone());
+        }
+        // Before the snapshot lookup, because the union this stands for is not
+        // a `TypeKind::Object` and would be refused as "not an object type"
+        // three lines down.
+        if let Some(provided) = self.provided_iterator_layout(id, ty) {
+            return provided;
         }
         let record =
             self.snapshot.types.get(ty.0 as usize).ok_or_else(|| {
@@ -28464,12 +28636,128 @@ impl<'a> FuncBuilder<'a> {
         Some((members, at, read))
     }
 
+    /// The layout an `IteratorResult<T>` gets, which nothing decomposes.
+    ///
+    /// **Provided rather than read**, the way `builtin::error_fields` is and for
+    /// the reason that header gives: the two arms carry an optional property,
+    /// `done?: false`, and an optional property needs a presence bit -- which
+    /// changes a layout rather than adding to it. Providing one means neither
+    /// arm is ever decomposed, so the modifier is never seen; and `TReturn`
+    /// never gets a slot, so the `any` it defaults to never reaches HIR.
+    ///
+    /// Per instantiation, unlike `Error`'s: the element comes from the yield
+    /// arm, so `IteratorResult<number>` and `IteratorResult<string>` are two
+    /// layouts and two names.
+    ///
+    /// `None` when this is not one, which is not the same as `Some(Err(..))` --
+    /// a type this recognises but cannot represent the element of is a refusal,
+    /// not a fall-through to the ordinary path.
+    fn provided_iterator_layout(
+        &mut self,
+        id: NodeId,
+        ty: TypeId,
+    ) -> Option<Result<Layout, Diagnostic>> {
+        let element = iterator_result_element(self.snapshot, ty)?;
+        Some((|| {
+            let value = self
+                .represent(element)
+                .ok_or_else(|| self.unrepresentable(id, "an iterator's element"))?;
+            self.materialize(id, &value)?;
+            let layout = Layout {
+                types: vec![ty],
+                name: super::builtin::ITERATOR_RESULT.to_owned(),
+                interfaces: Vec::new(),
+                fields: super::builtin::iterator_result_fields(value),
+                methods: vec![None; self.hierarchy.table_size()],
+                base: None,
+            };
+            self.layouts.push(layout.clone());
+            Ok(layout)
+        })())
+    }
+
+    /// May `value` be read off an iterator result here?
+    ///
+    /// `IteratorResult<T>`'s `value` is `T` on the yield arm and `TReturn` --
+    /// `undefined` in every ordinary spelling -- on the return arm, and the
+    /// layout provided for it has one slot with one representation. A finished
+    /// result therefore holds that representation's zero, and a read is only
+    /// answerable where the finished arm has been ruled out.
+    ///
+    /// Refused by name otherwise. That is strictly better than what stood here
+    /// before -- the whole type was unrepresentable, so `for...of` over a
+    /// hand-written iterator refused too -- and it is the difference between a
+    /// construct this compiler declines and one it answers `0` for.
+    ///
+    /// **Two callers, because two paths reach the slot.** `member_of` lowers
+    /// `r.value`, and `read_for_pattern` lowers `const { value } = r`. Written
+    /// once, at the first, the second still read the zero: `probe.sh` had node
+    /// answering `undefined` and this compiler answering `0` for a destructured
+    /// `value` off a finished result, with the refusal already in the tree and
+    /// looking like it covered the question.
+    ///
+    /// `protocol_step` needs no call: it builds its `FieldGet` directly on the
+    /// edge where `done` is false, which is the proof by construction.
+    fn refuse_unguarded_iterator_value(
+        &self,
+        at: NodeId,
+        receiver: ValueId,
+        name: &str,
+    ) -> Result<(), Diagnostic> {
+        let HirType::Managed(ManagedType::Object(ty)) = self.values[receiver.0 as usize].ty else {
+            return Ok(());
+        };
+        if name != "value"
+            || self.receiver_cannot_be_finished(at)
+            || !may_be_a_finished_iterator_result(self.snapshot, ty)
+        {
+            return Ok(());
+        }
+        Err(self.unsupported(
+            at,
+            "reading `value` off an iterator result that may be finished, which needs `done` ruled out at the read -- the slot holds the yielded representation and has no room for the `undefined` a finished iterator answers",
+        ))
+    }
+
+    /// Has the checker already ruled out the finished arm at this read?
+    ///
+    /// The value's `HirType` carries the type the receiver was *built* at, and
+    /// narrowing does not rewrite it: `const r = it.next()` makes one SSA value
+    /// typed with the union, and reading `r` inside `if (!r.done)` hands back
+    /// that same value. The narrowing lives on the *node*, which is where this
+    /// looks.
+    ///
+    /// Asked of the receiver expression rather than of the access, because the
+    /// access's own type is `value`'s and the question is about the object.
+    ///
+    /// **`false` for anything that is not an access**, which is how the
+    /// destructuring caller gets its answer without asserting one.
+    fn receiver_cannot_be_finished(&self, access: NodeId) -> bool {
+        if !matches!(
+            self.kind_of(access),
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
+        ) {
+            return false;
+        }
+        let Some(receiver) = self.children(access).first().copied() else {
+            return false;
+        };
+        let Some(narrowed) = self.snapshot.node_types.get(&receiver).copied() else {
+            return false;
+        };
+        iterator_result_element(self.snapshot, narrowed).is_some()
+            && !may_be_a_finished_iterator_result(self.snapshot, narrowed)
+    }
+
     fn member_of(
         &mut self,
         id: NodeId,
         value: ValueId,
         member_name: &str,
     ) -> Result<ValueId, Diagnostic> {
+        // The other half of the iterator-result decision, and the half that
+        // makes the first one honest. See `refuse_unguarded_iterator_value`.
+        self.refuse_unguarded_iterator_value(id, value, member_name)?;
         if matches!(self.values[value.0 as usize].ty, HirType::NativePointer(_)) {
             let place = self.native_member_place(id, value)?;
             return self.read_place(id, &place);
@@ -30057,6 +30345,14 @@ impl<'a> FuncBuilder<'a> {
             else {
                 return Err(self.absent_member(element, type_id, &name));
             };
+            // A binding element is not an access, so the proof below answers
+            // `false` for it by construction rather than by assertion: a
+            // destructuring has no receiver *expression* here -- the narrowed
+            // type sits on the initialiser node and what arrives is the value
+            // it produced. `if (!r.done) { const { value } = r; }` is therefore
+            // refused along with the unprovable shapes: honest rather than
+            // precise, and liftable the day a pattern carries that node.
+            self.refuse_unguarded_iterator_value(element, value, &name)?;
             let ty = layout.fields[field as usize].ty.clone();
             self.push(
                 OpKind::FieldGet {

@@ -153,6 +153,58 @@ pub(super) fn omitted(name: &str) -> Option<&'static str> {
         .map(|(_, reason)| *reason)
 }
 
+/// The name a provided `IteratorResult` layout takes.
+pub(super) const ITERATOR_RESULT: &str = "IteratorResult";
+
+/// The `done` field, first, and `value` after it.
+///
+/// **Provided rather than decomposed, for the reason this module exists.**
+/// `IteratorResult<T, TReturn>` is
+/// `IteratorYieldResult<T> | IteratorReturnResult<TReturn>`, and the two arms
+/// are:
+///
+/// ```text
+///   interface IteratorYieldResult<T>   { done?: false; value: T }
+///   interface IteratorReturnResult<R>  { done: true;   value: R }
+/// ```
+///
+/// `done?: false` is an **optional property**, which is the same thing that
+/// keeps `Error` out of `lib.d.ts`'s reach: it needs a presence bit, which
+/// changes a layout rather than adding to it. And `TReturn` defaults to `any`,
+/// which `docs/any-unknown.md` says may never reach HIR.
+///
+/// One layout answers both. `done` is a plain `bool` — the specification says
+/// an absent `done` is `false`, so the optional carries no information a bit
+/// could not — and the return arm's `value` gets **no slot at all**, so no
+/// `any` is represented rather than an `any` being represented as something.
+///
+/// `done` first because it is the field every reader touches: a walk tests it
+/// every step and reads `value` only when it is false.
+///
+/// **`readonly: false` on `done` is not an oversight.** Writing it is refused,
+/// in `property_place`, because it would move the guard that decides whether
+/// `value` may be read without moving what `value` holds -- but that refusal
+/// cannot live here: `property_is_readonly` is asked of the *type*, not of the
+/// layout, and its own comment records why. A layout is shared by every type of
+/// the same shape, so a `readonly` written here would be read back under
+/// whichever type was laid out first.
+pub(super) fn iterator_result_fields(value: HirType) -> Vec<Field> {
+    vec![
+        Field {
+            name: "done".to_owned(),
+            ty: HirType::Bool,
+            readonly: false,
+            declared_by: None,
+        },
+        Field {
+            name: "value".to_owned(),
+            ty: value,
+            readonly: false,
+            declared_by: None,
+        },
+    ]
+}
+
 /// What every provided error class holds.
 ///
 /// `name` is a field rather than a constant on the layout because constructors
