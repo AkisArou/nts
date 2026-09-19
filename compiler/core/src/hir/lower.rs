@@ -7445,7 +7445,7 @@ fn representation_within(
     result.filter(|ty| match ty {
         HirType::Managed(ManagedType::Array(element)) => !matches!(
             element.as_ref(),
-            HirType::NativePointer(_) | HirType::Void
+            HirType::NativePointer(_) | HirType::Void | HirType::Never
         ),
         HirType::Managed(ManagedType::Set(element) | ManagedType::Promise(element)) => !matches!(element.as_ref(), HirType::NativePointer(_)),
         HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => !matches!(key.as_ref(), HirType::NativePointer(_)) && !matches!(value.as_ref(), HirType::NativePointer(_)),
@@ -12421,16 +12421,25 @@ impl<'a> FuncBuilder<'a> {
         let Some(yields) = self.represent(argument) else {
             return Err(self.unrepresentable(id, "a generator's element"));
         };
-        // A generator that yields *nothing* -- `Generator<void, void, string>`,
-        // which is driven entirely by what the caller passes to `next(v)`. There
-        // is no element, so the frame's `yielded` slot has no type and the
-        // abstract generator cannot be laid out: C answers `field has incomplete
-        // type 'void'`.
+        // A generator that yields *nothing*, in the two spellings the checker
+        // uses for it.
         //
-        // Refused by name here rather than left to fail at the layout, because
-        // the honest sentence is about the generator and the layout's would be
-        // about a struct the source never wrote.
-        if yields == HirType::Void {
+        // `Generator<void, …>` is one -- driven entirely by what the caller
+        // passes to `next(v)` -- and **`never` is the other**, which is what a
+        // `function*` with no `yield` statement in it infers. Either way there
+        // is no element, so the frame's `yielded` slot has no type and the
+        // abstract generator cannot be laid out: C answers `field has
+        // incomplete type 'void'` for the first and `a value of type \`never\`
+        // reached code generation` for the second.
+        //
+        // **The `never` half was missing**, and it was reachable: a `for...of`
+        // over `function* g() {}` emitted nothing, exited 0 and left `cc` to
+        // fail -- 119 files of the slice-1 `test/language` population reach it
+        // through a class's generator method. Refused here rather than at the
+        // layout, and rather than at either reader, because the honest sentence
+        // is about the generator: a walk's would name a loop and a `next()`'s
+        // would name a call, and both were written before this was found.
+        if matches!(yields, HirType::Void | HirType::Never) {
             return Err(self.unsupported(id, "a generator that yields nothing"));
         }
         let Some(index) = self.generators.get(&id).copied() else {
@@ -17951,13 +17960,6 @@ impl<'a> FuncBuilder<'a> {
         // be read out of an uninhabited slot, and giving it a width here would
         // disagree with the field `suspend.rs` actually built (measured:
         // `expected Int { bits: 32 }, found Float { bits: 64 }`).
-        if matches!(layout, HirType::Never) {
-            return Err(self.unsupported(
-                sequence,
-                "a `for...of` over a generator with no `yield` in it, whose element type is \
-                 `never` and whose loop body therefore cannot be given one",
-            ));
-        }
         // From the *type*, which is where the answer already is: a concrete
         // frame names the abstract generator it extends, and that is either a
         // `Generator<T, …>` or an `AsyncGenerator<T, …>`. Reading the loop's
@@ -18105,24 +18107,27 @@ impl<'a> FuncBuilder<'a> {
             HirType::Bool,
             origin.clone(),
         );
-        // The element is `never` for a generator with no `yield` in it, and
-        // there is nothing in the frame to read: the slot below exists because
-        // the layout has a fixed shape, and its zero is what goes in it. See
-        // `provided_iterator_layout` for why nothing can observe the
-        // difference.
-        let yielded = if matches!(element, HirType::Never) {
-            let zero = super::zero_of(&layout.fields[1].ty);
-            self.push(zero, layout.fields[1].ty.clone(), origin.clone())
-        } else {
-            self.push(
-                OpKind::FieldGet {
-                    object: frame,
-                    field: super::suspend::FIELD_YIELDED,
-                },
-                element,
-                origin.clone(),
-            )
-        };
+        // **The same fact `begin_generator` refuses, said at the call.** That
+        // refusal fires while lowering the *generator*; this is a different
+        // function, and `generator_element` answers from the type argument
+        // rather than from whether the generator was accepted -- so a `next()`
+        // built the read anyway and stored a `never` into the result's slot:
+        // `StoreType { expected: Int { bits: 32 }, found: Never }`.
+        if matches!(element, HirType::Never) {
+            return Err(self.unsupported(
+                id,
+                "a `next()` on a generator that yields nothing, whose frame has no element slot \
+                 to answer with",
+            ));
+        }
+        let yielded = self.push(
+            OpKind::FieldGet {
+                object: frame,
+                field: super::suspend::FIELD_YIELDED,
+            },
+            element,
+            origin.clone(),
+        );
         let object = self.push(
             OpKind::ObjectNew { frame: false },
             HirType::Managed(ManagedType::Object(result)),

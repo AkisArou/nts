@@ -27,7 +27,7 @@
 # Deliberate: these exist to hold constructs that refuse, and the count is the
 # point rather than a debt.
 generic-classes-unsupported 8 the constructs the name promises
-generator-unsupported 4 the constructs the name promises
+generator-unsupported 5 the constructs the name promises
 dates-unsupported 6 the constructs the name promises
 async-unsupported 3 the constructs the name promises
 # Was 2 until `86994fb4` landed the mapped-callback arm, which is one of the

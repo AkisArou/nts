@@ -107,3 +107,20 @@ export function walkedSilently(n: number): number {
   }
   return seen + n * 0;
 }
+
+// And the same generator reached by **`g.next()`** rather than by a walk.
+//
+// `begin_generator` refuses while lowering the *generator*; a `next()` is a
+// different function, and `generator_element` answers from the type argument
+// rather than from whether the generator was accepted — so the call built the
+// read anyway and stored a `never` into the result's slot:
+// `StoreType { expected: Int { bits: 32 }, found: Never }`, which is invalid
+// HIR and so no output at all.
+//
+// Two refusals naming one fact, deliberately. The alternative was one refusal
+// at whichever reader happened to run first, with a message naming a `for...of`
+// at a program that has none — which is what the first version did.
+export function nextOnASilentGenerator(n: number): number {
+  const r = silent().next();
+  return (r.done ? 1 : 0) + n * 0;
+}
