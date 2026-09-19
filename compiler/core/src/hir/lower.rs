@@ -17924,6 +17924,106 @@ impl<'a> FuncBuilder<'a> {
     /// the dispatch, and the name it declares gives the call its signature. Both
     /// come from the layout rather than being rebuilt here, because a slot
     /// numbered twice is a slot two places must agree about.
+    /// `g.next()` where `g` is a generator the program is holding.
+    ///
+    /// **A generator value is a frame, and a frame has no `next`.** It is
+    /// *resumed*: the resumption answers whether it produced anything and
+    /// leaves the element in the frame's `yielded` slot -- which
+    /// `a-generator-method` recorded as "exactly the two halves of an
+    /// `IteratorResult`, so what is missing is not the step but the object".
+    /// The object arrived on 2026-09-19, so this is the step it was missing.
+    ///
+    /// `value` is stored unconditionally, from `yielded`. When the generator is
+    /// finished that slot holds whatever it last left there -- and nothing can
+    /// read it, because `refuse_unguarded_iterator_value` permits `.value` only
+    /// where the checker has ruled the finished arm out. The same guarantee the
+    /// `{ done: true, value: undefined }` zero rests on, reached from the other
+    /// side.
+    ///
+    /// **An argument is refused.** `g.next(v)` resumes the suspended `yield`
+    /// *with* `v`, which the resumption's signature has no parameter for;
+    /// dropping it would be a wrong answer rather than a missing one.
+    fn generator_next(
+        &mut self,
+        id: NodeId,
+        frame: ValueId,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        if !arguments.is_empty() {
+            return Err(self.unsupported(
+                id,
+                "a `next(v)` that sends a value into a generator, which its resumption has no \
+                 parameter for",
+            ));
+        }
+        // **Through `generator_walk`, not through a second copy of it.** It is
+        // what decides whether the resumption is named directly -- a frame made
+        // by a call in this function -- or dispatched through a slot, and
+        // asking that question again here got it wrong: `generator_dispatch`
+        // wants a *layout* for the frame, and a frame made here has a synthetic
+        // type the snapshot has never heard of, so `const g = upto(n);
+        // g.next()` refused with `an object type that is not in the snapshot`.
+        let Walk::Generator {
+            resume,
+            element,
+            asynchronous,
+            ..
+        } = self.generator_walk(member, frame)?
+        else {
+            return Err(self.unsupported(id, "a generator whose walk is not a frame"));
+        };
+        if asynchronous {
+            return Err(self.unsupported(
+                id,
+                "a `next()` on an async generator, whose result is a promise",
+            ));
+        }
+        let Some(HirType::Managed(ManagedType::Object(result))) = self.type_of(id) else {
+            return Err(self.unrepresentable(id, "a `next()` result"));
+        };
+        let layout = self.layout_of(id, result)?;
+        if layout.name != super::builtin::ITERATOR_RESULT {
+            return Err(self.unsupported(
+                id,
+                "a `next()` whose result is not an `IteratorResult`",
+            ));
+        }
+
+        let origin = self.origin(member);
+        // **The resumption answers `done`, not "produced a value".** Taken from
+        // `walk_condition`, which runs a generator loop while `!at` where `at`
+        // is exactly this call's result -- so a `Not` here inverts it. The
+        // emitted resumption agrees: it sets the frame's state to `-1` and
+        // returns `true` on the path that finishes.
+        let done = self.push(
+            OpKind::Call {
+                callee: resume,
+                args: vec![frame],
+                frame: None,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let yielded = self.push(
+            OpKind::FieldGet {
+                object: frame,
+                field: super::suspend::FIELD_YIELDED,
+            },
+            element,
+            origin.clone(),
+        );
+        let object = self.push(
+            OpKind::ObjectNew { frame: false },
+            HirType::Managed(ManagedType::Object(result)),
+            origin.clone(),
+        );
+        self.field_set(object, 0, done, &origin);
+        let value = self.coerce(yielded, &layout.fields[1].ty.clone(), member)?;
+        self.field_set(object, 1, value, &origin);
+        Ok(object)
+    }
+
     fn generator_dispatch(&mut self, id: NodeId, ty: TypeId) -> Result<Callee, Diagnostic> {
         let slot = self
             .hierarchy
@@ -36891,6 +36991,15 @@ impl<'a> FuncBuilder<'a> {
         let member_name = self
             .called_member_name(member)
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
+
+        // `g.next()` on a generator **held as a value** rather than walked.
+        if member_name == "next"
+            && self
+                .generator_element_of(&self.values[receiver.0 as usize].ty.clone())
+                .is_some()
+        {
+            return self.generator_next(id, receiver, member, arguments);
+        }
 
         // A method nothing in the hierarchy declares. Falling back to the
         // receiver's own type named a function this program never emits: on a

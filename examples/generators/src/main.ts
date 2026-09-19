@@ -273,3 +273,120 @@ export function beforeNegative(a: number, b: number, c: number): number {
   }
   return count * 1000000 + sum;
 }
+
+// # `g.next()` — the generator held rather than walked
+//
+// A `for...of` never calls `next()`: the frame is *resumed*, and the resumption
+// answers whether the generator finished while leaving the element in the
+// frame's `yielded` slot. `a-generator-method` recorded that as
+//
+//   > exactly the two halves of an `IteratorResult` — so what is missing is not
+//   > the step but the *object*
+//
+// and the object arrived on 2026-09-19, when `IteratorResult<T>` became a
+// provided layout. This is the step it was waiting for.
+//
+// # Two things the HIR had to be read for
+//
+// **The resumption answers `done`, not "produced a value".** `walk_condition`
+// runs a generator loop while `!at`, where `at` is exactly this call's result;
+// inverting it here made every arm answer the opposite. The emitted resumption
+// agrees — it sets the frame's state to `-1` and returns `true` on the path
+// that finishes.
+//
+// **The resumption is named two ways**, and asking again here got it wrong.
+// `generator_walk` already decides between a direct name — for a frame made by
+// a call in this function — and a dispatch through a slot. Calling
+// `generator_dispatch` unconditionally instead wanted a *layout* for the frame,
+// and a frame made here has a synthetic type the snapshot has never heard of,
+// so `const g = upto(n); g.next()` refused with `an object type that is not in
+// the snapshot`. `nextOnAParameter` is the arm on the other side of that
+// decision.
+//
+// # What `value` holds when it is done
+//
+// Whatever the generator last left in `yielded`, stored unconditionally.
+// Nothing can read it: `.value` is permitted only where the checker has ruled
+// the finished arm out, which is the same guarantee the `{ done: true, value:
+// undefined }` zero rests on, reached from the other side.
+//
+// `next(v)` — sending a value into a suspended `yield` — is refused by name.
+// The resumption has no parameter for it and dropping it would be a wrong
+// answer.
+
+function* threeFrom(n: number): Generator<number> {
+  yield n;
+  yield n + 1;
+  yield n + 2;
+}
+
+export function nextOnce(n: number): number {
+  const r = threeFrom(n).next();
+  return r.done ? -1 : r.value;
+}
+
+export function nextTwice(n: number): number {
+  const g = threeFrom(n);
+  const a = g.next();
+  const b = g.next();
+  return (a.done ? 0 : a.value) * 100 + (b.done ? 0 : b.value);
+}
+
+/** Driven to exhaustion, which is the shape a hand-written walk takes. */
+export function nextUntilDone(n: number): number {
+  const g = threeFrom(n);
+  let total = 0;
+  for (;;) {
+    const r = g.next();
+    if (r.done) {
+      return total;
+    }
+    total += r.value;
+  }
+}
+
+/** `done` stays true once it is true. */
+export function doneStaysDone(n: number): number {
+  const g = threeFrom(n);
+  g.next();
+  g.next();
+  g.next();
+  const a = g.next();
+  const b = g.next();
+  return (a.done ? 1 : 0) + (b.done ? 2 : 0);
+}
+
+/**
+ * **The other side of the naming decision.** A generator that arrived has no
+ * call here to take a resumption name from, so it dispatches through a slot.
+ */
+function firstOf(g: Generator<number>): number {
+  const r = g.next();
+  return r.done ? -1 : r.value;
+}
+
+export function nextOnAParameter(n: number): number {
+  return firstOf(threeFrom(n));
+}
+
+/** A reference element, so `yielded` is not always a number. */
+function* twoWords(n: number): Generator<string> {
+  yield "a" + n;
+  yield "b";
+}
+
+export function nextOnStrings(n: number): number {
+  const g = twoWords(n);
+  const a = g.next();
+  const b = g.next();
+  return (a.done ? 0 : a.value.length) * 10 + (b.done ? 0 : b.value.length);
+}
+
+/** **Control.** The walk, which must be unchanged by any of this. */
+export function walkedAsBefore(n: number): number {
+  let total = 0;
+  for (const v of threeFrom(n)) {
+    total += v;
+  }
+  return total;
+}
