@@ -17922,6 +17922,26 @@ impl<'a> FuncBuilder<'a> {
         let Some(layout) = self.generator_element(frame) else {
             return Err(self.unsupported(sequence, "a generator whose element was not reserved"));
         };
+        // **A generator with no `yield` in it has element `never`**, and the
+        // walk reads the frame's `yielded` slot inside the loop body -- a body
+        // that can never run, since the resumption answers `done` immediately.
+        // The read is still *emitted*, and a value of type `never` reaching
+        // code generation is **invalid HIR**: `emit-c` prints `refusing to emit
+        // code from invalid HIR`, writes nothing and exits 0.
+        //
+        // Refused by name instead. That is strictly better than what stood
+        // here -- a program that produced no output and no diagnostic naming
+        // the construct -- and it is the honest shape of the gap: nothing can
+        // be read out of an uninhabited slot, and giving it a width here would
+        // disagree with the field `suspend.rs` actually built (measured:
+        // `expected Int { bits: 32 }, found Float { bits: 64 }`).
+        if matches!(layout, HirType::Never) {
+            return Err(self.unsupported(
+                sequence,
+                "a `for...of` over a generator with no `yield` in it, whose element type is \
+                 `never` and whose loop body therefore cannot be given one",
+            ));
+        }
         // From the *type*, which is where the answer already is: a concrete
         // frame names the abstract generator it extends, and that is either a
         // `Generator<T, …>` or an `AsyncGenerator<T, …>`. Reading the loop's

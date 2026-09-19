@@ -84,3 +84,26 @@ export function yieldsNothing(n: number): number {
   driven();
   return n;
 }
+
+// A `function*` with **no `yield` in it**, walked.
+//
+// Its element type is `never`, and the walk reads the frame's `yielded` slot
+// inside the loop body — a body the resumption can never enter, since it
+// answers `done` at once. The read is still emitted, and a value of type
+// `never` reaching code generation is **invalid HIR**: `emit-c` prints
+// `refusing to emit code from invalid HIR`, writes nothing and exits 0, so the
+// program failed with no diagnostic naming anything.
+//
+// Refused by name since 2026-09-19. Giving the slot a width here was tried and
+// is wrong: the field `suspend.rs` actually builds is typed from the
+// generator's `yield`s, so a different answer disagrees with it —
+// `expected Int { bits: 32 }, found Float { bits: 64 }`.
+function* silent(): Generator<never> {}
+
+export function walkedSilently(n: number): number {
+  let seen = 0;
+  for (const _v of silent()) {
+    seen = seen + 1;
+  }
+  return seen + n * 0;
+}
