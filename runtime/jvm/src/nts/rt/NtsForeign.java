@@ -369,14 +369,47 @@ public final class NtsForeign {
     }
 
     /**
+     * A growable int array as a Java {@code int[]}.
+     *
+     * **A varargs pack is the shape the reasoning below did not cover.**
+     * `catalog.sum(1, 2, 3)` against a Java `int...` builds its array *here*,
+     * in the compiler, from plain numbers -- the declared parameter is `int[]`
+     * but the argument never was an `Int32Array`, so `nts bind`'s mapping says
+     * nothing about it. Before growth existed the pack was a plain
+     * {@code double[]} and `ints` served it; once `arrays_can_grow` is true
+     * anywhere in the program it is an {@link NtsArrayD}, and this is the
+     * conversion that was missing. `examples/interop/java-from-ts` went red on
+     * exactly that line.
+     *
+     * <p>{@code toInt32} rather than a cast, which is the rule everywhere at
+     * this boundary: `nts bind` renders a Java `int` as `number`, so what
+     * arrives is a double and ECMAScript decides how it narrows.
+     */
+    public static int[] grownI(NtsArrayD from) {
+        int length = from == null ? 0 : (int) NtsArrayD.length(from);
+        int[] out = new int[length];
+        for (int at = 0; at < length; at++) {
+            out[at] = NtsRuntime.toInt32(from.items[at]);
+        }
+        return out;
+    }
+
+    /**
      * A growable boolean array as a Java {@code boolean[]}.
      *
-     * **The only primitive that reaches here**, which is worth saying because
-     * the obvious siblings were written first and could never run: `nts bind`
-     * maps `[I` to `Int32Array` and every other primitive array to a typed
-     * array, and a typed array is a *view* -- `arrays_can_grow` does not touch
-     * one. `boolean` has no typed array, so `[Z` is the one primitive that
-     * binds as a plain `T[]` and can therefore be behind the growable wrapper.
+     * **One of two primitives that reach here.** `nts bind` maps `[I` to
+     * `Int32Array` and every other primitive array to a typed array, and a
+     * typed array is a *view* -- `arrays_can_grow` does not touch one.
+     * `boolean` has no typed array, so `[Z` is the one primitive that binds as
+     * a plain `T[]` for a *declared parameter*. The other way in is a varargs
+     * pack, which the compiler builds itself; see {@link #grownI}.
+     *
+     * <p>The remaining siblings -- {@code grownJ}, {@code grownB} and the rest
+     * -- are still absent on purpose. No program reaches them, and writing a
+     * conversion nothing calls is how this file came to carry a paragraph
+     * explaining that the obvious siblings could never run. The refusal in
+     * `ops.rs` names the descriptor it wanted, so the next one to arrive says
+     * so.
      */
     public static boolean[] grownZ(NtsArrayZ from) {
         int length = from == null ? 0 : (int) NtsArrayZ.length(from);

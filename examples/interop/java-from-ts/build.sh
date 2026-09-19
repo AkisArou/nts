@@ -78,14 +78,20 @@ emitted="$built"
 # The build above already emitted; this reads its log. A `TS2339` used to
 # surface as a bare non-zero exit and an empty log, which is why the log is
 # captured and grepped rather than left on the terminal.
+# **The log it greps and the log it prints have to be the same file.** These
+# read `build.log` and printed `emit.log`, which this flow never writes -- so a
+# real refusal came out as three lines of `sed: can't read .../emit.log` and the
+# message naming the construct was never shown. The gate step went red for a day
+# with the cause on disk and unprinted: `NTS4001 a bound member wanting \`[I\`
+# from a growable array`, which is one line and says exactly what to do.
 if grep -qE "^TS[0-9]{4}|does not typecheck" "$out/build.log"; then
   echo "java-from-ts: the program does not typecheck:"
-  sed 's/^/    /' "$out/emit.log"
+  grep -E "^TS[0-9]{4}|does not typecheck" "$out/build.log" | sed 's/^/    /'
   exit 1
 fi
 if grep -qE "NTS[0-9]{4}" "$out/build.log"; then
   echo "java-from-ts: the program did not lower:"
-  sed 's/^/    /' "$out/emit.log"
+  grep -E "NTS[0-9]{4}" "$out/build.log" | sed 's/^/    /'
   exit 1
 fi
 

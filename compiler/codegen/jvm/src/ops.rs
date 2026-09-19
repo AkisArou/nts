@@ -1125,12 +1125,6 @@ pub fn external(name: &str) -> Option<(&'static str, &'static str, String)> {
 }
 
 
-/// The `NtsForeign` conversion from a growable array to the Java array a bound
-/// parameter declared.
-///
-/// **`[Z` and nothing else**, and the siblings it obviously wants were written
-/// and deleted: `nts bind` maps every other primitive array to a typed array,
-/// and a typed array is a view that `arrays_can_grow` does not touch. So
 /// The boxing a bound parameter wants, as `(class, the primitive it takes)`.
 ///
 /// `java.lang.Integer` renders as `number`, so a value reaching one of these is
@@ -1150,10 +1144,33 @@ fn boxed_primitive(want: &str) -> Option<(&'static str, &'static str)> {
     })
 }
 
-/// `grownI` and friends compiled, linked, and could not be reached by any
-/// program -- which is a shape this repository has a note about.
-fn grown_array(want: &str) -> Option<&'static str> {
-    (want == "[Z").then_some("grownZ")
+/// The `NtsForeign` conversion from a growable array to the Java array a bound
+/// parameter declared.
+///
+/// Two, and each is here because a program reaches it. `[Z` is the one
+/// primitive a *declared* parameter binds as a plain `T[]`, since `boolean` has
+/// no typed array and every other primitive array binds to a view that
+/// `arrays_can_grow` does not touch. `[I` arrives the other way: a **varargs
+/// pack**, which the compiler builds itself out of plain numbers, so the
+/// binder's mapping says nothing about it.
+///
+/// The rest -- `grownJ`, `grownB` and the siblings this obviously wants -- were
+/// written once and deleted for compiling, linking and being unreachable. They
+/// stay absent until a program asks: the refusal below names the descriptor it
+/// wanted, which is how `[I` was found.
+///
+/// Returns `(member, the wrapper it takes)`. The wrapper is part of the answer
+/// rather than a constant at the call sites: a growable `boolean[]` is an
+/// `NtsArrayZ` and a growable `number[]` is an `NtsArrayD`, and the descriptor
+/// was written `(Lnts/rt/NtsArrayZ;)` in both of the places that build it --
+/// true while `[Z` was the only entry and a `NoSuchMethodError` the moment it
+/// was not.
+fn grown_array(want: &str) -> Option<(&'static str, &'static str)> {
+    match want {
+        "[Z" => Some(("grownZ", "Lnts/rt/NtsArrayZ;")),
+        "[I" => Some(("grownI", "Lnts/rt/NtsArrayD;")),
+        _ => None,
+    }
 }
 
 /// The `NtsForeign` conversion from a typed array to the Java array a bound
@@ -1910,13 +1927,13 @@ impl Emitter<'_> {
                     "(Lnts/rt/NtsArrayL;[Ljava/lang/Object;)[Ljava/lang/Object;",
                 );
                 code.check_cast(origin, pool, other);
-            } else if let Some(member) = grown_array(other) {
+            } else if let Some((member, from)) = grown_array(other) {
                 code.invoke_static(
                     origin,
                     pool,
                     types::ARRAYS,
                     member,
-                    &format!("(Lnts/rt/NtsArrayZ;){other}"),
+                    &format!("({from}){other}"),
                 );
             } else {
                 return Err(refuse(
@@ -2033,19 +2050,13 @@ impl Emitter<'_> {
             code.check_cast(origin, pool, want);
             return Ok(());
         }
-        let Some(member) = grown_array(want) else {
+        let Some((member, from)) = grown_array(want) else {
             return Err(refuse(
                 self.func,
                 &format!("a bound member wanting `{want}`, which this lane cannot hand over"),
             ));
         };
-        code.invoke_static(
-            origin,
-            pool,
-            types::ARRAYS,
-            member,
-            &format!("(Lnts/rt/NtsArrayZ;){want}"),
-        );
+        code.invoke_static(origin, pool, types::ARRAYS, member, &format!("({from}){want}"));
         Ok(())
     }
 
