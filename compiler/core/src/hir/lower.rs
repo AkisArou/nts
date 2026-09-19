@@ -12439,6 +12439,26 @@ impl<'a> FuncBuilder<'a> {
         // layout, and rather than at either reader, because the honest sentence
         // is about the generator: a walk's would name a loop and a `next()`'s
         // would name a call, and both were written before this was found.
+        // **Supporting the `never` half was attempted and reverted**, and what
+        // it would take is worth writing down: the element has *at least three*
+        // independent derivations, and a placeholder width applied to fewer
+        // than all of them is a store and a load that disagree.
+        //
+        //   `begin_generator`      builds the concrete frame's slot
+        //   `generator_element`    reads out of the frame, from the type
+        //   `layout_of(declared)`  the abstract `Generator<…>` the frame
+        //                          *extends*, whose own field comes from the
+        //                          library type
+        //
+        // Patching the first two gave `BrokenBase { layout: "silent#frame",
+        // base: "Generator0" }`; patching the second alone gave `StoreType
+        // { expected: Int { bits: 32 }, found: Float { bits: 64 } }`. It is one
+        // derivation's worth of refactor, not a placeholder.
+        //
+        // It is also worth knowing what it buys: 125 slice-1 files, all of them
+        // one generated `class/dstr` matrix testing *destructuring in a
+        // parameter*, where the `function*` is incidental. A count from one
+        // matrix is not 125 language facts.
         if matches!(yields, HirType::Void | HirType::Never) {
             return Err(self.unsupported(id, "a generator that yields nothing"));
         }
