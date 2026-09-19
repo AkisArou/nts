@@ -21615,8 +21615,18 @@ impl<'a> FuncBuilder<'a> {
                 self.narrowed(id, read)?
             }
             Place::Global(global) => {
+                // **Narrowed, like every other read of a name.** A global
+                // declared `number | undefined` is stored erased, and the
+                // checker narrows it exactly as it narrows a local -- so a read
+                // where the narrowing says `number` needs the unerase that
+                // `narrowed` inserts. Without it the erased value reached a slot
+                // wanting a concrete one and refused, for `number | undefined`,
+                // `boolean | undefined` and `number | null` alike, while
+                // `string | undefined` compiled because a nullable pointer is
+                // not erased and had nothing to unerase.
                 let ty = self.module.types[global as usize].clone();
-                self.push(OpKind::GlobalGet(global), ty, origin)
+                let read = self.push(OpKind::GlobalGet(global), ty, origin);
+                self.narrowed(id, read)?
             }
             Place::Binding { symbol, .. } => {
                 let bound = *self
@@ -36572,8 +36582,14 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, reason));
         }
         if let Some(global) = self.module.variables.get(&symbol.0) {
+            // The third of the three reads of a global, and the one this was
+            // missing from: the branch above for a global *member* narrows, and
+            // the local-binding branch at the top of this function narrows, and
+            // this returned the slot's declared representation whatever the
+            // checker had established about it.
             let ty = self.module.types[*global as usize].clone();
-            return Ok(self.push(OpKind::GlobalGet(*global), ty, origin));
+            let read = self.push(OpKind::GlobalGet(*global), ty, origin);
+            return self.narrowed(id, read);
         }
         // A named function used as a value. One static instance per
         // declaration, so two mentions of it are the same object.
