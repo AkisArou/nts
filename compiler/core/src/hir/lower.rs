@@ -7475,6 +7475,40 @@ fn representation_within(
 /// like any other object. Before that existed this was refused, at a cost of 40
 /// refusals in the node profile -- 38 of them a `Map` value, where naming the
 /// argument is what made them visible at all.
+/// A representation as it is **stored**, rather than as it is produced.
+///
+/// `undefined` and `void` both represent as [`HirType::Void`], which is right
+/// for a function's result — it returns nothing — and wrong for a slot that is
+/// read back. `[,]` is typed `undefined[]`, and
+///
+/// ```js
+/// method([x = 23] = [,]) { … }
+/// ```
+///
+/// reads index 0 and compares it with `undefined` to decide whether the default
+/// fires. A slot with no width has nothing to hand back, and a **numeric**
+/// placeholder would hand back `0` — so the default would not fire and `x`
+/// would be `0` where JavaScript says 23. That is the difference from
+/// `suspend::yielded_slot`, which may use a number precisely because nothing
+/// can read the slot it fills.
+///
+/// `Erased` is the one representation with an `undefined` in it, so it is the
+/// only honest answer. It costs a tagged value where nothing is stored, which
+/// is the right trade for a slot that exists only to be compared against
+/// `undefined`.
+///
+/// Asked at the two places a representation becomes a **slot** — an array's
+/// element and a tuple's position. A function's result, a parameter and a
+/// binding are not slots in this sense: they hand `undefined` back by having
+/// nothing there, which is what `Void` already means.
+fn in_a_slot(representation: HirType) -> HirType {
+    if matches!(representation, HirType::Void) {
+        HirType::Erased
+    } else {
+        representation
+    }
+}
+
 fn tuple_representation(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
@@ -7485,7 +7519,7 @@ fn tuple_representation(
     let mut shared: Option<HirType> = None;
     let mut mixed = false;
     for element in elements {
-        let element = representation_within(snapshot, *element, path, subst)?;
+        let element = in_a_slot(representation_within(snapshot, *element, path, subst)?);
         match &shared {
             Some(existing) if *existing != element => mixed = true,
             _ => shared = Some(element),
@@ -7893,7 +7927,7 @@ fn representation_of(
         // for a symbol used as a *value*.
         TypeKind::Symbol => HirType::Managed(ManagedType::Symbol),
         TypeKind::Array(element) => {
-            let element = representation_within(snapshot, *element, path, subst)?;
+            let element = in_a_slot(representation_within(snapshot, *element, path, subst)?);
             HirType::Managed(ManagedType::Array(Box::new(element)))
         }
         // A function value is an object with one method, which is why it shares
@@ -13507,7 +13541,26 @@ impl<'a> FuncBuilder<'a> {
                         shadowed.push((*symbol, self.bindings.get(symbol).copied()));
                         self.bindings.insert(*symbol, args[at]);
                     }
-                    let lowered = self.lower_expression(node);
+                    // **At the parameter's representation**, which is the
+                    // lesson the *argument* loop above already carries and this
+                    // one did not: "an array literal decides its own element
+                    // width when it is built, and `coerce` can only reject the
+                    // result". A default is an argument the caller did not
+                    // write, so the same thing decides its type.
+                    //
+                    // `function f(p: number[] = [])` refused with ``an array
+                    // literal that is not an array``: `[]` is typed `never[]`,
+                    // the checker saying the literal decides nothing and the
+                    // slot does -- and nothing was telling it what the slot is.
+                    // 36 files of the slice-1 `test/language` population reach
+                    // it through `method([x = 23] = [,])`, where the census
+                    // reported it as *a parameter of unrepresentable type (a
+                    // tuple)*, one cause under a message naming another.
+                    let want = self.parameter_representation(call, args.len());
+                    let lowered = match &want {
+                        Some(want) => self.lower_expecting(node, want),
+                        None => self.lower_expression(node),
+                    };
                     for (symbol, before) in shadowed {
                         match before {
                             Some(value) => self.bindings.insert(symbol, value),
@@ -23887,19 +23940,39 @@ impl<'a> FuncBuilder<'a> {
     /// `an array literal of unrepresentable type`: a true sentence naming the
     /// wrong thing, and it only appeared when `undefined[]` started being
     /// refused at all.
-    fn refuse_a_hole(&self, id: NodeId) -> Result<(), Diagnostic> {
-        if self
+    /// A hole is `undefined` at that index, so the element type must hold one.
+    ///
+    /// **Permitted where it does**, which is the condition this refusal has
+    /// always named. `[1, , 3]` typed `number[]` has an `f64` element and a
+    /// hole would have to be `0`, which is a wrong answer rather than a missing
+    /// feature; `[,]` is typed `undefined[]`, whose element `in_a_slot` gives
+    /// `Erased` — the one representation with an `undefined` in it — so the
+    /// hole is an ordinary value there.
+    ///
+    /// Asked of the **element**, not of the literal, and asked before the type
+    /// is resolved elsewhere, because the message has to name the elision
+    /// rather than the representation: an earlier version let the
+    /// `undefined[]` filter fire first and the sentence became "an array
+    /// literal of unrepresentable type", which sends its reader after a
+    /// representation gap instead of at the hole.
+    fn holds_a_hole(&self, id: NodeId, ty: Option<&HirType>) -> Result<(), Diagnostic> {
+        if !self
             .children(id)
             .into_iter()
             .any(|child| self.kind_of(child) == Some(syntax::OMITTED_EXPRESSION))
         {
-            return Err(self.unsupported(
-                id,
-                "an array literal with a hole in it, which reads as `undefined` and so needs an \
-                 element type with room for one",
-            ));
+            return Ok(());
         }
-        Ok(())
+        if let Some(HirType::Managed(ManagedType::Array(element))) = ty
+            && matches!(element.as_ref(), HirType::Erased)
+        {
+            return Ok(());
+        }
+        Err(self.unsupported(
+            id,
+            "an array literal with a hole in it, which reads as `undefined` and so needs an \
+             element type with room for one",
+        ))
     }
 
     fn lower_array_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
@@ -23910,7 +23983,6 @@ impl<'a> FuncBuilder<'a> {
         // the reader after a representation gap that is not there. What is
         // missing is a type for the literal to take, and only the branch that
         // discarded `never[]` knows that.
-        self.refuse_a_hole(id)?;
         let own = self.type_of(id);
         let empty = own.as_ref().is_some_and(is_an_unsettled_array);
         let ty = own
@@ -23978,6 +24050,7 @@ impl<'a> FuncBuilder<'a> {
                     self.unrepresentable(id, "an array literal")
                 }
             })?;
+        self.holds_a_hole(id, Some(&ty))?;
         // `[a, b]` where the slot is a tuple. Written the same way as an array
         // and meaning something else: a fixed number of slots of their own
         // types, which is an object, so this builds one rather than an
@@ -24066,9 +24139,35 @@ impl<'a> FuncBuilder<'a> {
             //
             // `verify` reported it as a `StoreType` -- after `emit-c` had
             // refused nothing, which is the only reason it stayed reachable.
-            let value = match &wanted_element {
-                Some(element) => self.lower_expecting(*element_node, element)?,
-                None => self.lower_expression(*element_node)?,
+            // A hole, stored as an `undefined`. `holds_a_hole` above has
+            // already established that the element is `Erased`.
+            //
+            // **A hole is genuinely absent, not present-and-`undefined`**, and
+            // the difference is observable: `1 in [1, , 3]` is `false`,
+            // `Object.keys` gives `["0", "2"]`, and `forEach`, `map` and
+            // `join` all skip it. This stores a value at that index, so every
+            // one of those would disagree with node.
+            //
+            // It is sound today because **each of them refuses**, and measured
+            // rather than assumed: `in` over an array refuses whatever the key
+            // (a number is not a literal property name), and `forEach`, `map`,
+            // `join`, `Object.keys` and `hasOwnProperty` all refuse on an array
+            // of erased elements, which is what a literal with a hole in it
+            // now is. `blockers/a-hole-is-absent-not-undefined` pins that, so
+            // the day one of those lands the person landing it finds this.
+            //
+            // The alternative is a sparse representation, which is a different
+            // data structure from the dense array this compiler has -- so the
+            // approximation is the same one the array model already makes, and
+            // the honest scope of it is: **right for an indexed read, wrong for
+            // anything that asks whether the index exists.**
+            let value = if self.kind_of(*element_node) == Some(syntax::OMITTED_EXPRESSION) {
+                self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone())
+            } else {
+                match &wanted_element {
+                    Some(element) => self.lower_expecting(*element_node, element)?,
+                    None => self.lower_expression(*element_node)?,
+                }
             };
             #[allow(clippy::cast_precision_loss)]
             let position = index as f64;
