@@ -505,13 +505,21 @@ the same mistake as a ranked table read without opening the files.
 Measured 2026-09-19 with the compiler pinned, over the same slice-1 population:
 
 ```text
-  3582  unsupported     the great majority do not typecheck; the rest refuse at
-                        lowering, link or emit
+  3548  unsupported     2747 do not typecheck, 800 refuse at lowering, 1 at emit
   1243  strict-pass
     18  frontend-crash
      3  threw           ran and answered wrongly
      0  crash
+     0  invalid HIR     a file that emitted nothing and said nothing
 ```
+
+**The bottom row is the one that moved last.** A separate pass over the same
+population found **135 files** whose first diagnostic was *a value of type
+`never` reached code generation* and **18** that emitted C and failed to link --
+both of which mean the compiler exited 0, wrote no usable program and named no
+construct. Every one is now a refusal that names something, and the pass count
+did not move by a single file in either direction, which is what that conversion
+should look like.
 
 **1,175 -> 1,209 -> 1,243 over the same day**, in two steps of 34, and both are
 attributed rather than assumed: every file moved `unsupported -> strict-pass`,
@@ -545,7 +553,8 @@ unredacted against a sample of their own files:
 | 88 | `X`, a static field this compiler gave no storage | every one sampled is `#method` -- a **private static method read as a value**. |
 | 87 | `X`, declared by `X` with a type that has no representation (a function type) | the same cause, one modifier over: `return this.#method` on an instance. |
 | 38 | a regular expression literal | needs an engine; `docs/` records QuickJS as the answer. |
-| 36 | an omitted expression | array elisions -- `[,]`, `[1, , 3]`. A hole reads as `undefined`, which a dense array of numbers has no room for, so this is the same representation question as sparse growth. |
+| 176 | a generator that yields nothing | the largest *actionable* row, and it is **one generated `class/dstr` matrix** testing destructuring in a parameter where the `function*` is incidental. Supporting it was attempted and reverted: the element has at least three independent derivations and a placeholder in fewer than all of them is a store and a load that disagree. `lower.rs` carries what the refactor is. |
+| 36 | an array literal with a hole in it | `[,]`, `[1, , 3]`. A hole reads as `undefined`, which a dense array of numbers has no room for, so this is the same representation question as sparse growth. |
 
 **88 and 87 are one cause, and it is 175 files: a method used as a value.**
 *(Opened 2026-09-19, in four links -- a method used as a value, calling the
