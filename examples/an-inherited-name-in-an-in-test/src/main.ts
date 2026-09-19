@@ -96,3 +96,47 @@ export function readDeclaredPresent(): boolean {
 export function readDeclaredAbsent(): boolean {
   return declaredAbsent;
 }
+
+// # And the operand this branch was not evaluating
+//
+// `in` evaluates its right operand before it looks anything up. The branch
+// above answers a **constant** for an inherited name, and it used to answer it
+// without touching the receiver — so `"toString" in make()` never called
+// `make`. A counter the receiver incremented stayed at 0 where node had 1,
+// while the same program with a *declared* key agreed, because that path lowers
+// the receiver like everything else.
+//
+// A constant answer is not a reason to skip the operand. It is the reason it is
+// easy to.
+//
+// # What is still wrong here, and why it is not this branch's fault
+//
+// `"toString" in {}` — an *unannotated* empty object literal, whose checker
+// type is literally `{}` — still answers `false`. `{}` is deliberately excluded
+// above because it accepts every value but `null` and `undefined`, strings
+// among them, and `"valueOf" in ("a" as {})` throws in node. The receiver's
+// *representation* would tell an object from a string where its type cannot,
+// but reading it means lowering the receiver before the decision rather than
+// after, and every other path in `lower_in` lowers it for itself. One place
+// deciding that is a refactor rather than a branch, and it is the shape to
+// build when someone needs it: `const o: object = {}` and `const o: Record<…>
+// = {}` both work today, so nothing is blocked on it.
+
+let receiverCalls = 0;
+
+function makeReceiver(): { own: number } {
+  receiverCalls = receiverCalls + 1;
+  return { own: 1 };
+}
+
+const inheritedOnACall: boolean = "toString" in makeReceiver();
+const callsAfterInherited: number = receiverCalls;
+
+export function readInheritedOnACall(): boolean {
+  return inheritedOnACall;
+}
+
+/** The whole point of the arm above: the operand ran exactly once. */
+export function readCallsAfterInherited(): number {
+  return callsAfterInherited;
+}

@@ -19807,6 +19807,17 @@ impl<'a> FuncBuilder<'a> {
                 | "__lookupGetter__"
                 | "__lookupSetter__"
         ) {
+            // **Lowered for its effect, even though the answer is a constant.**
+            // `in` evaluates its right operand before it looks anything up, and
+            // this branch used to answer `true` without touching it -- so
+            // `"toString" in make()` never called `make`. Measured against node:
+            // a counter the receiver incremented stayed at 0 where node had 1,
+            // while the same program with a *declared* key agreed, because that
+            // path lowers the receiver like everything else.
+            //
+            // A constant answer is not a reason to skip the operand. It is the
+            // reason it is easy to.
+            self.lower_expression(rhs)?;
             let origin = self.origin(id);
             return Ok(self.push(OpKind::ConstBool(true), HirType::Bool, origin));
         }
