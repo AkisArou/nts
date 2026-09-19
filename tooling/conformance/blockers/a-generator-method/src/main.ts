@@ -1,4 +1,4 @@
-// expect: a method `next` with no declaration in the hierarchy
+// expect: nothing refused -- FIXED, kept as a guard
 //
 // **Narrowed on 2026-09-11. The generator *method* itself is closed** -- a
 // `*named()` and a `*[Symbol.iterator]()` both lower, and
@@ -55,7 +55,24 @@
 // It refuses only when both arms are actually built, and the message now reads
 // `\`done\` on a union one of whose members has no layout`.
 //
-// # Re-probed 2026-09-19: the union half is closed, this fixture still blocks
+// # FIXED 2026-09-19, and kept as a guard
+//
+// `g.next()` on a held generator lowers. The last sentence of the section below
+// -- "what is missing is not the step but the *object*" -- turned out to be the
+// whole of it: `IteratorResult<T>` became a provided layout earlier the same
+// day, and `generator_next` then had two halves to put in one.
+//
+// What that step had to be **read** for rather than reasoned about: the
+// resumption answers `done`, not "produced a value", and it is named two ways
+// -- directly for a frame made by a call in the same function, through a slot
+// otherwise. `examples/generators` carries the arms on both sides.
+//
+// Kept rather than deleted because the reasoning below is the record of how the
+// blocker was mis-stated twice, and because a fixture that says *nothing
+// refused* is a regression guard for exactly the thing that was hardest to get
+// right.
+//
+// # Re-probed 2026-09-19: the union half was closed first
 //
 // `IteratorResult<T>` now has a **provided** layout -- one `bool` slot and one
 // element slot, per instantiation -- so the two things named above stopped
@@ -63,12 +80,11 @@
 // and the return arm's `value` gets no slot, so `TReturn`'s `any` is not
 // represented. `examples/a-library-iterator-result` is the fixture.
 //
-// **This file's refusal did not move**, and that is the point of recording it
-// here: bracketed against the pre-change binary, both answer
-// `a method \`next\` with no declaration in the hierarchy`. What blocks a
-// generator *method* is the dispatch, not the result object -- so clearing the
-// object below it changed nothing here, and a reader coming to this file from
-// the `IteratorResult` row would otherwise expect it to have.
+// **This file's refusal did not move then**, which was the point of recording
+// it: bracketed against the pre-change binary, both answered `a method
+// \`next\` with no declaration in the hierarchy`. Clearing the result object
+// was necessary and not sufficient -- the step that builds one had to be
+// written too, hours later, and it is what finally moved this.
 //
 // **That distinction is why the first version of this probe was wrong.** Four
 // arms compiled and agreed, and the HIR is what gave it away: `value` came out
