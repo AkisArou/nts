@@ -2896,6 +2896,18 @@ fn is_an_unsettled_array(ty: &HirType) -> bool {
     matches!(ty, HirType::Managed(ManagedType::Array(element)) if **element == HirType::Never)
 }
 
+/// How a `[key, value]` pair hands over its two halves.
+///
+/// Two representations, because a tuple has two: members that *differ* are an
+/// object layout with named fields, members that *agree* are an array of two
+/// slots -- storage that needs no names. Both are `[K, V]` to the checker, and
+/// handling only the first is what made `new Map<number, number>([[1, 2]])`
+/// refuse beside three string-keyed arms that passed.
+enum Pair {
+    Fields(Layout),
+    Slots(HirType),
+}
+
 fn declare_a_module_global(
     scope: &mut ModuleScope,
     probe: &FuncBuilder,
@@ -34952,25 +34964,19 @@ impl<'a> FuncBuilder<'a> {
         key: &HirType,
     ) -> Result<ValueId, Diagnostic> {
         let is_a_map = matches!(ty, HirType::Managed(ManagedType::Map(_, _)));
-        let what = if is_a_map { "Map" } else { "Set" };
         // An argument is an initializer -- `new Map([[k, v]])` or
         // `new Set(xs)` -- which is iteration, and the protocol that would serve
         // it does not exist. Refused rather than dropped: a `new Set(existing)`
         // that silently produced an empty one is the kind of wrong that reads as
         // a logic bug in the caller.
-        if let Some(argument) = self.arguments_of(id).first() {
-            return Err(self.unsupported(
-                *argument,
-                &format!("a `new {what}` with contents, which needs the iteration protocol"),
-            ));
-        }
+        let contents = self.arguments_of(id).first().copied();
         let origin = self.origin(id);
         let kind = self.push(
             OpKind::ConstFloat(f64::from(key_kind_of(key))),
             HirType::NUMBER,
             origin.clone(),
         );
-        Ok(self.push(
+        let table = self.push(
             OpKind::Call {
                 callee: Callee::External(
                     if is_a_map {
@@ -34984,8 +34990,228 @@ impl<'a> FuncBuilder<'a> {
                 frame: None,
             },
             ty.clone(),
-            origin,
-        ))
+            origin.clone(),
+        );
+        let Some(contents) = contents else {
+            return Ok(table);
+        };
+        // **At the array the contents are going to be walked as.** `new
+        // Set<number>([])` types its literal `never[]` and falls back to the
+        // *contextual* type, which is the constructor's `Iterable<T>` -- not an
+        // array, so the literal refused for a shape it was about to be given.
+        // A Set's element is its key; a Map's is a two-field tuple this does not
+        // have a representation for here, so only the one is passed.
+        let wanted = (!is_a_map).then(|| {
+            HirType::Managed(ManagedType::Array(Box::new(key.clone())))
+        });
+        self.fill_table_from(id, contents, table, is_a_map, wanted.as_ref(), &origin)?;
+        Ok(table)
+    }
+
+    /// How a map's `[key, value]` element stores its two halves.
+    ///
+    /// **Asking only about the first was a real hole.** A tuple whose members
+    /// differ is an object layout with two fields; a tuple whose members agree
+    /// -- `Map<number, number>` -- is an *array*, because two slots of one
+    /// representation are storage that needs no names. Both are `[K, V]` to the
+    /// checker, and `mapOfNumbers` in the fixture is the arm that found it: it
+    /// refused beside three string-keyed arms that passed.
+    ///
+    /// Arity is the checker's. `Map<K, V>`'s constructor takes
+    /// `readonly (readonly [K, V])[]`, so an array of three would not have
+    /// typechecked; the slot reads are still emitted checked, because
+    /// `bounds.rs` is where an index proof is spent or kept.
+    fn pair_shape(&mut self, contents: NodeId, element: &HirType) -> Result<Pair, Diagnostic> {
+        match element {
+            HirType::Managed(ManagedType::Object(pair)) => {
+                let layout = self.layout_of(contents, *pair)?;
+                if layout.fields.len() != 2 {
+                    return Err(self.unsupported(
+                        contents,
+                        "a `new Map` over an array of tuples that are not exactly two long",
+                    ));
+                }
+                Ok(Pair::Fields(layout))
+            }
+            HirType::Managed(ManagedType::Array(slot)) => Ok(Pair::Slots((**slot).clone())),
+            _ => Err(self.unsupported(
+                contents,
+                "a `new Map` over an array whose elements are not `[key, value]` pairs",
+            )),
+        }
+    }
+
+    /// What one step of the filling loop hands `nts_set_add` or `nts_map_set`.
+    ///
+    /// The table first, then the element -- or, for a map, the pair's two
+    /// halves, read the way its representation stores them. Everything crosses
+    /// erased, because that is what a table holds, which is the same thing
+    /// `lower_table_method` does for `s.add(v)` and `m.set(k, v)`.
+    fn table_insertion_arguments(
+        &mut self,
+        table: ValueId,
+        entry: ValueId,
+        pair: Option<&Pair>,
+        origin: &Origin,
+    ) -> Vec<ValueId> {
+        let mut args = vec![table];
+        match pair {
+            Some(Pair::Fields(layout)) => {
+                for field in 0..2u32 {
+                    let slot = self.push(
+                        OpKind::FieldGet {
+                            object: entry,
+                            field,
+                        },
+                        layout.fields[field as usize].ty.clone(),
+                        origin.clone(),
+                    );
+                    let erased = self.erased_for_table(slot, origin);
+                    args.push(erased);
+                }
+            }
+            Some(Pair::Slots(slot_ty)) => {
+                for at in 0..2u32 {
+                    let at = self.push(
+                        OpKind::ConstFloat(f64::from(at)),
+                        HirType::NUMBER,
+                        origin.clone(),
+                    );
+                    let slot = self.push(
+                        OpKind::ArrayGet {
+                            array: entry,
+                            index: at,
+                            checked: true,
+                        },
+                        slot_ty.clone(),
+                        origin.clone(),
+                    );
+                    let erased = self.erased_for_table(slot, origin);
+                    args.push(erased);
+                }
+            }
+            None => {
+                let erased = self.erased_for_table(entry, origin);
+                args.push(erased);
+            }
+        }
+        args
+    }
+
+    /// `new Set([1, 2])` and `new Map([[k, v]])` -- the contents, as a loop.
+    ///
+    /// **An array only, and that is the whole feature.** The constructors take
+    /// any iterable, and an arbitrary one needs `Iterable<T>` to be
+    /// representable -- a library interface whose method has to be dispatched,
+    /// which is a larger piece and the one the iteration family is behind. An
+    /// array needs none of it: its length is known and its elements are indexed.
+    /// Anything else is still refused, by name.
+    ///
+    /// **Nothing new in the runtime, and that is deliberate.** The loop calls
+    /// `nts_set_add` and `nts_map_set`, which `lower_table_method` already
+    /// calls for `s.add(v)` and `m.set(k, v)`, so the three backends need no
+    /// change and cannot disagree about this: a helper added for one of them
+    /// red-gates the others, and there is no allowance list for that.
+    ///
+    /// The index write is emitted **checked**, not because it can fail but
+    /// because `bounds.rs` is where that is decided: `i < nts_length(xs)` is the
+    /// relation its interval domain is built to eliminate, and asserting the
+    /// elimination here would be a second derivation of the same proof.
+    fn fill_table_from(
+        &mut self,
+        id: NodeId,
+        contents: NodeId,
+        table: ValueId,
+        is_a_map: bool,
+        wanted: Option<&HirType>,
+        origin: &Origin,
+    ) -> Result<(), Diagnostic> {
+        let source = match wanted {
+            Some(wanted) => self.lower_expecting(contents, wanted)?,
+            None => self.lower_expression(contents)?,
+        };
+        let HirType::Managed(ManagedType::Array(element)) =
+            self.values[source.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(
+                contents,
+                "a `new Map` or `new Set` over something that is not an array, which needs the \
+                 iteration protocol",
+            ));
+        };
+        let element_ty = (*element).clone();
+        let pair = is_a_map
+            .then(|| self.pair_shape(contents, &element_ty))
+            .transpose()?;
+
+        let length = self.push(OpKind::Length(source), HirType::NUMBER, origin.clone());
+        let start = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let header = self.new_block();
+        let body = self.new_block();
+        let exit = self.new_block();
+        self.terminate(Terminator::Jump {
+            target: header,
+            args: vec![start],
+        });
+
+        self.switch_to(header);
+        let index = self.push_block_param(header, HirType::NUMBER, origin.clone());
+        let more = self.push(
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: index,
+                rhs: length,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.terminate(Terminator::Branch {
+            cond: more,
+            then_target: body,
+            then_args: Vec::new(),
+            else_target: exit,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(body);
+        let entry = self.push(
+            OpKind::ArrayGet {
+                array: source,
+                index,
+                checked: true,
+            },
+            element_ty,
+            origin.clone(),
+        );
+        let args = self.table_insertion_arguments(table, entry, pair.as_ref(), origin);
+        let helper = if is_a_map { "nts_map_set" } else { "nts_set_add" };
+        self.push(
+            OpKind::Call {
+                callee: Callee::External(helper.to_owned()),
+                args,
+                frame: None,
+            },
+            HirType::Void,
+            origin.clone(),
+        );
+        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+        let next = self.push(
+            OpKind::Binary {
+                op: BinOp::Add,
+                lhs: index,
+                rhs: one,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        self.terminate(Terminator::Jump {
+            target: header,
+            args: vec![next],
+        });
+
+        self.switch_to(exit);
+        let _ = id;
+        Ok(())
     }
 
     /// A method on a `Map` or a `Set`.
