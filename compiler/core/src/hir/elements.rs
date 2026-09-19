@@ -238,14 +238,66 @@ fn stored_into_a_global(program: &Program) -> rustc_hash::FxHashSet<HirType> {
             let OpKind::GlobalSet { value, .. } = &op.kind else {
                 continue;
             };
-            if let HirType::Managed(ManagedType::Array(element)) =
-                &func.values[value.0 as usize].ty
-            {
-                anchored.insert((**element).clone());
-            }
+            anchor_every_depth(&func.values[value.0 as usize].ty, &mut anchored);
         }
     }
     anchored
+}
+
+/// Every element type **inside** a type, not only the outermost one.
+///
+/// The one-level version of this read the stored value's own element type and
+/// stopped, which is right for `const xs: number[] = [1, 2]` and wrong one
+/// level in. `const xs: number[][] = [[1, 2]]` anchors `[f64]` -- the outer
+/// array's element -- and says nothing about `f64`, so the **inner** literal
+/// narrowed to `[i32]` while the global stayed `[[f64]]`:
+///
+/// ```text
+/// invalid HIR: StoreType { func: "module#init", what: "a global",
+///   expected: Array(Array(Float { bits: 64 })),
+///   found:    Array(Array(Int { bits: 32, signed: true })) }
+/// ```
+///
+/// Invalid HIR is the bad outcome here rather than a wrong answer: `emit-c`
+/// prints `refusing to emit code from invalid HIR`, **writes nothing and exits
+/// 0**, so the program is silently unbuilt and no diagnostic names a line. The
+/// same declaration inside a function is fine, because a local's type is the
+/// value's and narrows with it -- only a global's is declared once and left
+/// behind.
+///
+/// **Only an array contributes an entry**, and the other containers are walked
+/// without contributing one. The set is read as *element types that may not
+/// narrow*, so inserting a `Map`'s value type would anchor `f64` for a
+/// `Map<string, number>` global -- and since the key is the element type and
+/// nothing else, that one global would block the narrowing of **every**
+/// `number[]` in the program. The first version of this did exactly that. A
+/// map's payload is an `NtsValue` in an `NtsMap` and is not an array's storage;
+/// what it can *contain* is, which is what the recursion is for.
+///
+/// Objects and tuples are not walked, and that is measured rather than assumed:
+/// `class C { rows: number[][] = [[1, 2]] }` and `const p: [number[], number] =
+/// [[1, 2], 3]` both build and agree with node today, because a layout's field
+/// types are rewritten by specialization and a global's type is not. Walking
+/// them would anchor arrays that narrow correctly, which costs the narrowing
+/// for nothing.
+fn anchor_every_depth(ty: &HirType, anchored: &mut rustc_hash::FxHashSet<HirType>) {
+    let HirType::Managed(managed) = ty else {
+        return;
+    };
+    match managed {
+        ManagedType::Array(element) => {
+            anchored.insert((**element).clone());
+            anchor_every_depth(element, anchored);
+        }
+        ManagedType::Promise(payload) | ManagedType::Set(payload) => {
+            anchor_every_depth(payload, anchored);
+        }
+        ManagedType::Map(key, value) | ManagedType::Table(key, value) => {
+            anchor_every_depth(key, anchored);
+            anchor_every_depth(value, anchored);
+        }
+        _ => {}
+    }
 }
 
 /// Element types whose arrays are handed to the runtime.

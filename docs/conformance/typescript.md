@@ -3157,6 +3157,47 @@ is 6 more covering both readings, a hole, mixed tuple types, an object pattern,
 and a `Map` written both ways. Both agree with node on all three backends and
 both fail on the pre-change binary.
 
+##### And a second one, one pass further down (fixed 2026-09-20)
+
+The lowering above is right and the **specialization** behind it was not, for
+the identical program, so `const xs: number[][] = [[1, 2]]` was still silently
+unbuilt:
+
+```text
+invalid HIR: StoreType { func: "module#init", what: "a global",
+  expected: Array(Array(Float { bits: 64 })),
+  found:    Array(Array(Int { bits: 32, signed: true })) }
+```
+
+`elements::representations` narrows an array's storage from `double[]` to
+`int[]` when every value it can hold is whole. A **global** cannot take part —
+its type is declared once at lowering and never rewritten — so
+`stored_into_a_global` holds those back, and it read the element type of the
+array being stored and stopped there. That anchors `[f64]`, the outer array's
+element, and says nothing about `f64`, so the **inner** literal narrowed while
+the global stayed `[[f64]]`. It anchors every depth now, and **only at an
+array**: a `Map`'s value type is not an array's storage, and inserting it would
+have anchored `f64` for a `Map<string, number>` global — which, since the facts
+are keyed on the element type program-wide, would block the narrowing of every
+`number[]` in that program. The first version of the fix did exactly that.
+
+**`examples/a-nested-array-literal` is blind to this and could not have caught
+it.** Element facts are keyed on the element type across the whole program, so
+one array of fractions anywhere costs every `number[]` in it the narrowing —
+and every arm in that example adds its `n: number` parameter to an element,
+which reads `f64` into floating-point arithmetic and disqualifies it. The pass
+under test never ran there, on any arm.
+
+`examples/a-nested-array-whose-elements-narrow` is 4 exports that read elements
+without any floating-point arithmetic — the parameter selects an index or sits
+on the right of a comparison, never as an operand of `+` — and the unfixed
+compiler **writes nothing** for it. **A flat `number[]` control was written for
+that file and had to be removed, because it hid the defect**: a flat global
+anchors `f64` through the very line this change extends, and program-wide
+keying means that one global protects the nested arrays too. With it the
+unfixed compiler emits C and all five arms agree. A control chosen because it
+exercises the neighbouring path can *be* the thing under test one level down.
+
 #### A class's own `toString` (fixed)
 
 `${o}`, `"" + o` and `String(o)` all convert through the object's `toString` —
