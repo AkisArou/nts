@@ -878,6 +878,91 @@ struct ClosureInfo {
     /// is the same object everywhere it is written. An event emitter removing
     /// a listener depends on exactly that.
     wraps: bool,
+    /// Whether the wrapped declaration is a **method**, whose receiver the
+    /// closure carries.
+    ///
+    /// `const g = c.twice` is a function object that remembers `c`. A free
+    /// function needs nothing remembered, so [`Self::wraps`] alone is a single
+    /// static instance; a method needs one object *per read*, with the receiver
+    /// in field 0 -- which is also what JavaScript does, since `c.twice !==
+    /// c.twice`.
+    ///
+    /// Always empty [`Self::captures`]: a method body reads its receiver
+    /// through `this`, not through the enclosing scope, so field 0 is the whole
+    /// environment and `bind_captures` starts after it.
+    binds_receiver: bool,
+}
+
+/// File a method read as a value under the closure it will become.
+///
+/// **The same question one member kind over.** `const g = c.twice` is a
+/// function object, and the closure it becomes wraps `C#twice`. Collected here
+/// rather than at the read, because the read needs the `ClosureInfo` to already
+/// exist.
+///
+/// Two lists, because the two shapes differ in what they carry. A **static**
+/// method needs no receiver at all, so it is the free-function case under
+/// another name: one instance for the program, forwarding directly. An
+/// **instance** method's closure holds the object that selects its body, which
+/// means one object per read.
+fn collect_method_used_as_value(
+    probe: &FuncBuilder,
+    record: &SymbolRecord,
+    reference: NodeId,
+    wrapped: &mut Vec<NodeId>,
+    bound: &mut Vec<NodeId>,
+) {
+    for declaration in &record.declarations {
+        if probe.kind_of(*declaration) != Some(syntax::METHOD_DECLARATION) {
+            continue;
+        }
+        // The name in `twice(n) { … }` is an identifier for the same symbol,
+        // and declaring a method is not using it as a value.
+        if probe.node(reference).parent == Some(*declaration) {
+            continue;
+        }
+        let list = if is_static_member(probe.snapshot, *declaration) {
+            &mut *wrapped
+        } else {
+            &mut *bound
+        };
+        if !list.contains(declaration) {
+            list.push(*declaration);
+        }
+    }
+}
+
+/// Does this method's body reach its receiver?
+///
+/// **A property read does not bind one.** `const g = c.twice; g(3)` calls
+/// `twice` with `this` *undefined* -- `c.twice` is the function itself, not
+/// `c.twice.bind(c)`, and the two differ the moment the body touches `this`.
+/// Measured against node: a method reading `this.k` **throws** where this
+/// compiler answered `30`.
+///
+/// The receiver is still carried, because it is what *selects* the body -- a
+/// `D` read through a `C`-typed name must reach `D`'s override, which is a
+/// virtual dispatch and needs the object. So the closure holds it for dispatch
+/// and hands it on as `this`, and that is only sound while the body cannot tell
+/// -- which is what this asks.
+///
+/// An arrow written inside the method is walked into, because an arrow inherits
+/// `this`; a nested `function` is not, because it has its own. `super` counts
+/// too: it is the receiver under another name.
+fn uses_its_receiver(probe: &FuncBuilder, method: NodeId) -> bool {
+    if probe
+        .node(method)
+        .children
+        .iter()
+        .any(|child| probe.first_this(*child).is_some())
+    {
+        return true;
+    }
+    let mut subtree = Vec::new();
+    probe.subtree(method, &mut subtree);
+    subtree
+        .iter()
+        .any(|node| probe.kind_of(*node) == Some(syntax::SUPER_KEYWORD))
 }
 
 /// The symbol a captured `this` is filed under.
@@ -1429,6 +1514,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
             captures: Vec::new(),
             refusal: None,
             wraps: false,
+            binds_receiver: false,
         };
 
         let mut subtree = Vec::new();
@@ -1552,8 +1638,19 @@ fn collect_function_values(
     // static instance meaningful: two mentions of `finish` are the same object,
     // as they are in JavaScript.
     let mut wrapped: Vec<NodeId> = Vec::new();
+    // The method declarations read as values, kept apart from `wrapped`
+    // because the closure each becomes carries a receiver.
+    let mut bound: Vec<NodeId> = Vec::new();
     for (index, node) in snapshot.nodes.iter().enumerate() {
-        if node.kind != NodeKind::Syntax(syntax::IDENTIFIER) {
+        // **A private name is an identifier too, for this question.**
+        // `return this.#method` is the shape the corpus writes -- a getter
+        // handing a private method out as a value -- and `#method` is a
+        // `PRIVATE_IDENTIFIER`, so a filter naming only `IDENTIFIER` saw every
+        // public method read and none of the private ones.
+        if !matches!(
+            node.kind,
+            NodeKind::Syntax(syntax::IDENTIFIER | syntax::PRIVATE_IDENTIFIER)
+        ) {
             continue;
         }
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
@@ -1571,9 +1668,9 @@ fn collect_function_values(
         // each of those would give a closure table to programs that are nothing
         // but ordinary calls.
         //
-        // A class method is excluded by the symbol checks below rather than
-        // here: its declaration is a `METHOD_DECLARATION` and needs a receiver,
-        // which is a different feature and not this one.
+        // A class method reaches here too, and is collected separately below:
+        // its declaration is a `METHOD_DECLARATION` and the closure it becomes
+        // carries a receiver, which a free function's does not.
         let used_as_value = if probe.names_a_member(id) {
             node.parent.is_some_and(|parent| {
                 probe.kind_of(parent) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
@@ -1599,6 +1696,10 @@ fn collect_function_values(
             .aliased
             .and_then(|to| snapshot.symbols.get(to.0 as usize))
             .unwrap_or(record);
+        if record.flags.contains(SymbolFlags::METHOD) {
+            collect_method_used_as_value(probe, record, id, &mut wrapped, &mut bound);
+            continue;
+        }
         if !record.flags.contains(SymbolFlags::FUNCTION) {
             continue;
         }
@@ -1656,15 +1757,27 @@ fn collect_function_values(
         }
     }
 
-    for declaration in wrapped {
-        closures.push(ClosureInfo {
-            node: declaration,
-            captures: Vec::new(),
-            refusal: None,
-            wraps: true,
-        });
-    }
+    closures.extend(wrapped.into_iter().map(|declaration| ClosureInfo {
+        node: declaration,
+        captures: Vec::new(),
+        refusal: None,
+        wraps: true,
+        binds_receiver: false,
+    }));
+    closures.extend(bound.into_iter().map(|declaration| ClosureInfo {
+        node: declaration,
+        captures: Vec::new(),
+        refusal: uses_its_receiver(probe, declaration).then_some(RECEIVER_IS_NOT_BOUND),
+        wraps: true,
+        binds_receiver: true,
+    }));
 }
+
+/// Why a method whose body reads `this` cannot be used as a value here.
+const RECEIVER_IS_NOT_BOUND: &str =
+    "a method used as a value whose body reads `this`, which a read does not bind -- \
+     `const g = c.m; g()` calls `m` with `this` undefined, and this compiler would hand it \
+     the receiver instead";
 
 
 /// What each function declaration is emitted as, and which cannot be.
@@ -12393,7 +12506,15 @@ impl<'a> FuncBuilder<'a> {
         // The captures, read back and bound to the names the body writes. A
         // field read rather than a copy into a local: the value is already
         // there, and `FieldGet` is what every other object read is.
-        let fields = self.bind_captures(receiver, info, &origin)?;
+        // **Field 0 is the receiver, and it comes before the captures.**
+        // `binds_receiver` guarantees `info.captures` is empty -- a method body
+        // reaches its receiver through `this`, not through the enclosing scope
+        // -- so the two never have to agree about an offset.
+        let fields = if info.binds_receiver {
+            vec![self.bind_receiver(id, receiver, &origin)?]
+        } else {
+            self.bind_captures(receiver, info, &origin)?
+        };
         self.layouts.push(self.closure_layout(index, fields));
 
         let return_type = self.return_type_of(id)?;
@@ -12444,22 +12565,17 @@ impl<'a> FuncBuilder<'a> {
             // `path` has `isPosixPathSeparator` in both `posix.ts` and
             // `win32.ts` and passes it to `normalizeString`, which is exactly
             // this shape.
-            let called = self
-                .qualified
-                .get(&id)
-                .cloned()
-                .or_else(|| self.declared_name(id))
-                .ok_or_else(|| self.unsupported(id, "a function declaration with no name"))?;
             if forwarded.len() + 1 != params.len() {
                 return Err(self.unsupported(
                     id,
                     "a function used as a value whose parameters are not plain names",
                 ));
             }
+            let (callee, args) = self.wrapped_call(id, info, forwarded)?;
             let call = self.push(
                 OpKind::Call {
-                    callee: Callee::Direct(called),
-                    args: forwarded,
+                    callee,
+                    args,
                     frame: None,
                 },
                 return_type.clone(),
@@ -12639,6 +12755,93 @@ impl<'a> FuncBuilder<'a> {
     /// Returns the fields, which the layout is then built from -- and the
     /// creation side builds the same list, so the two are checked against each
     /// other by `collect_layouts` merging them into one layout rather than two.
+    /// What a wrapping closure's body calls, and with what.
+    ///
+    /// **A method's forwarding call is the one its call sites make.**
+    /// `c.twice(n)` is `call.virtual[slot] C#twice(c, n)`, so a `c.twice` read
+    /// as a value must dispatch the same way -- a `Callee::Direct` here would
+    /// run the base's body for a receiver whose class overrides it, which is a
+    /// wrong answer rather than a missing one.
+    ///
+    /// The receiver is field 0, read by [`Self::bind_receiver`] and left in
+    /// `self.this`; it goes in front of the forwarded parameters, exactly where
+    /// the method declares it. A free function and a static method have no
+    /// receiver and are called directly.
+    fn wrapped_call(
+        &mut self,
+        id: NodeId,
+        info: &ClosureInfo,
+        forwarded: Vec<ValueId>,
+    ) -> Result<(Callee, Vec<ValueId>), Diagnostic> {
+        if !info.binds_receiver {
+            let called = self
+                .qualified
+                .get(&id)
+                .cloned()
+                .or_else(|| self.static_method_name(id))
+                .or_else(|| self.declared_name(id))
+                .ok_or_else(|| self.unsupported(id, "a function declaration with no name"))?;
+            return Ok((Callee::Direct(called), forwarded));
+        }
+        let receiver = self
+            .this
+            .ok_or_else(|| self.unsupported(id, "a bound method with no receiver"))?;
+        let HirType::Managed(ManagedType::Object(owner)) = self.values[receiver.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(id, "a bound method whose receiver is not an object"));
+        };
+        // `member_name_of` rather than `declared_name`: a private method's name
+        // node is a `PRIVATE_IDENTIFIER`, and `declared_name` looks for an
+        // `IDENTIFIER` -- so `#twice` reported "a method declaration with no
+        // name" while every public method beside it worked.
+        let member = member_name_of(self.snapshot, id)
+            .ok_or_else(|| self.unsupported(id, "a method declaration with no name"))?;
+        let callee = self.callee_for(id, owner, &member)?;
+        let mut args = vec![receiver];
+        args.extend(forwarded);
+        Ok((callee, args))
+    }
+
+    /// The receiver a bound method's closure carries, as its field 0.
+    ///
+    /// Read out of the closure object and left in `self.this`, which is where
+    /// the forwarding call below picks it up -- and which is also what makes
+    /// the method's own `this` work if the body is ever lowered here rather
+    /// than forwarded to.
+    ///
+    /// The field's type is the *declaring class's instance type*, not the
+    /// receiver's type at the read: a `D` read through a `C`-typed name binds a
+    /// closure whose field is a `C`, and the virtual call then dispatches on
+    /// what is actually there. Storing the narrower type would make one closure
+    /// class per receiver type for one method.
+    fn bind_receiver(
+        &mut self,
+        method: NodeId,
+        closure: ValueId,
+        origin: &Origin,
+    ) -> Result<Field, Diagnostic> {
+        let owner = self
+            .enclosing_class(method)
+            .and_then(|class| instance_type_of(self.snapshot, class))
+            .ok_or_else(|| self.unsupported(method, "a method declared outside a class"))?;
+        let ty = HirType::Managed(ManagedType::Object(owner));
+        let value = self.push(
+            OpKind::FieldGet {
+                object: closure,
+                field: 0,
+            },
+            ty.clone(),
+            origin.clone(),
+        );
+        self.this = Some(value);
+        Ok(Field {
+            name: "this".to_owned(),
+            ty,
+            readonly: true,
+            declared_by: None,
+        })
+    }
+
     fn bind_captures(
         &mut self,
         receiver: ValueId,
@@ -24656,6 +24859,128 @@ impl<'a> FuncBuilder<'a> {
     /// a member of the *declared* `Error` that this compiler chose not to
     /// provide, and saying which is the difference between "you misspelled it"
     /// and "a compiled binary keeps no record of the frames it came through".
+    /// The single static closure a receiverless declaration is used as.
+    ///
+    /// A free function and a *static* method are the same shape here: nothing
+    /// is captured, so one instance serves the whole program and the identity
+    /// JavaScript gives -- `finish === finish` -- falls out. An instance method
+    /// needs an object per read and goes through `bound_method` instead.
+    fn wrapping_closure(&mut self, symbol: SymbolId, at: NodeId) -> Option<ValueId> {
+        let record = self.snapshot.symbols.get(symbol.0 as usize)?;
+        let index = record.declarations.iter().find_map(|declaration| {
+            self.closures
+                .iter()
+                .position(|closure| closure.wraps && !closure.binds_receiver && closure.node == *declaration)
+        })?;
+        if self.closures[index].refusal.is_some() {
+            return None;
+        }
+        self.used_closures.push(index);
+        self.layouts.push(self.closure_layout(index, Vec::new()));
+        let ty = HirType::Managed(ManagedType::Object(closure_type(index)));
+        let origin = self.origin(at);
+        Some(self.push(OpKind::ClosureStatic, ty, origin))
+    }
+
+    /// A member the layout has no slot for: a getter, a method, or neither.
+    ///
+    /// Both of the first two *look* like a field read in source and are not
+    /// storage -- which is why an accessor may not be laid out as a field:
+    /// emitting the load would read whatever sits at that offset. The third is
+    /// the refusal, which names the member.
+    fn member_that_is_not_a_field(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        type_id: TypeId,
+        member_name: &str,
+    ) -> Result<ValueId, Diagnostic> {
+        if let Some(callee) = self.accessor_callee(id, type_id, member_name, "get ") {
+            let ty = self
+                .type_of(id)
+                .ok_or_else(|| self.unrepresentable(id, "a getter"))?;
+            let origin = self.origin(id);
+            return Ok(self.push(
+                OpKind::Call {
+                    callee,
+                    args: vec![value],
+                    frame: None,
+                },
+                ty,
+                origin,
+            ));
+        }
+        if let Some(bound) = self.bound_method(id, value, member_name)? {
+            return Ok(bound);
+        }
+        Err(self.absent_member(id, type_id, member_name))
+    }
+
+    /// `c.twice` where `twice` is a method -- a closure carrying the receiver.
+    ///
+    /// **A method read rather than called.** A method is not storage -- it
+    /// lives in the dispatch table -- so the layout has no field for it, and
+    /// the read arrives one line from `absent_member` saying so. JavaScript's
+    /// answer is a function object, and `collect_closures` has already made a
+    /// class for it.
+    ///
+    /// `None` when this is not one, so the caller's refusal still names the
+    /// member. `Some` builds the object: the class was made by
+    /// `collect_closures`, which saw the same read and filed the method's
+    /// declaration; here it is instantiated and field 0 is filled.
+    ///
+    /// **One object per read.** `c.twice !== c.twice` in JavaScript, and a
+    /// static instance -- what a *free* function used as a value gets -- would
+    /// have to hold one receiver for the whole program.
+    fn bound_method(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        member_name: &str,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(member) = self.children(id).last().copied() else {
+            return Ok(None);
+        };
+        let Some(symbol) = self.node(member).symbol else {
+            return Ok(None);
+        };
+        let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else {
+            return Ok(None);
+        };
+        if !record.flags.contains(SymbolFlags::METHOD) {
+            return Ok(None);
+        }
+        let Some(index) = record.declarations.iter().find_map(|declaration| {
+            self.closures
+                .iter()
+                .position(|closure| closure.binds_receiver && closure.node == *declaration)
+        }) else {
+            return Ok(None);
+        };
+        let info = self.closures[index].clone();
+        if let Some(reason) = info.refusal {
+            return Err(self.unsupported(id, reason));
+        }
+        self.used_closures.push(index);
+
+        let origin = self.origin(id);
+        let ty = HirType::Managed(ManagedType::Object(closure_type(index)));
+        let object = self.push(OpKind::ObjectNew { frame: false }, ty.clone(), origin.clone());
+        let held = self.values[receiver.0 as usize].ty.clone();
+        self.field_set(object, 0, receiver, &origin);
+        self.layouts.push(self.closure_layout(
+            index,
+            vec![Field {
+                name: "this".to_owned(),
+                ty: held,
+                readonly: true,
+                declared_by: None,
+            }],
+        ));
+        let _ = member_name;
+        Ok(Some(object))
+    }
+
     fn absent_member(&self, id: NodeId, ty: TypeId, member: &str) -> Diagnostic {
         let on_an_error = named(self.snapshot, ty).is_some_and(super::builtin::is_error)
             || self.provided_error_base(ty).is_some();
@@ -28424,6 +28749,13 @@ impl<'a> FuncBuilder<'a> {
             if let Some(read) = self.static_accessor_read(id, *object, *member) {
                 return read;
             }
+            // **A static method read rather than called**: `C.twice`. It has no
+            // receiver, so it is the free-function case under another name --
+            // one static instance whose `call` forwards directly, and `C.twice
+            // === C.twice` as JavaScript says.
+            if let Some(closure) = self.wrapping_closure(symbol, id) {
+                return Ok(closure);
+            }
             let name = self.literal_name(*member).unwrap_or_default();
             return Err(self.unsupported(
                 id,
@@ -29257,25 +29589,7 @@ impl<'a> FuncBuilder<'a> {
                 .or_else(|| layout.index_of(member_name))
                 .or_else(|| Self::symbol_keyed(&layout, member_name))
             else {
-                // A getter. `o.x` looks like a field read and runs code, which
-                // is why an accessor may not be laid out as a field: emitting
-                // the load would read whatever sits at that offset.
-                if let Some(callee) = self.accessor_callee(id, type_id, member_name, "get ") {
-                    let ty = self
-                        .type_of(id)
-                        .ok_or_else(|| self.unrepresentable(id, "a getter"))?;
-                    let origin = self.origin(id);
-                    return Ok(self.push(
-                        OpKind::Call {
-                            callee,
-                            args: vec![value],
-                            frame: None,
-                        },
-                        ty,
-                        origin,
-                    ));
-                }
-                return Err(self.absent_member(id, type_id, member_name));
+                return self.member_that_is_not_a_field(id, value, type_id, member_name);
             };
             self.no_aggregate_errors_read(id, type_id, &layout, field, member_name)?;
             let ty = layout.fields[field as usize].ty.clone();
@@ -33261,6 +33575,23 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The name a declaration declares.
+    /// `C.twice` as the function name a static method is emitted under.
+    ///
+    /// A static method has no receiver and no slot -- it is a namespaced
+    /// function -- so a closure wrapping one forwards to it directly, and needs
+    /// the name its declaration produced. `member_name_of` rather than
+    /// `declared_name` for the same reason the instance side needs it: a
+    /// private static method's name node is a `PRIVATE_IDENTIFIER`.
+    fn static_method_name(&self, declaration: NodeId) -> Option<String> {
+        if self.kind_of(declaration) != Some(syntax::METHOD_DECLARATION)
+            || !is_static_member(self.snapshot, declaration)
+        {
+            return None;
+        }
+        let class = self.class_name(self.enclosing_class(declaration)?)?;
+        Some(format!("{class}.{}", member_name_of(self.snapshot, declaration)?))
+    }
+
     fn declared_name(&self, declaration: NodeId) -> Option<String> {
         self.children(declaration)
             .into_iter()
