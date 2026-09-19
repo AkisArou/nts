@@ -117,6 +117,8 @@ pub const FUNCTION_EXPRESSION: u16 = 219;
 /// fallthrough refusal interpolates [`name_of`], and it printed `a class
 /// expression is not supported by this lowering yet`.
 pub const CLASS_EXPRESSION: u16 = 232;
+/// The hole in `[1, , 3]` and `[,]`, which stands where an element would be.
+pub const OMITTED_EXPRESSION: u16 = 233;
 pub const ARROW_FUNCTION: u16 = 220;
 pub const THIS_KEYWORD: u16 = 109;
 pub const PRIVATE_KEYWORD: u16 = 122;

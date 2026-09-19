@@ -23690,6 +23690,34 @@ impl<'a> FuncBuilder<'a> {
     /// is a constant, which is what lets the analysis prove that every one of
     /// these stores is in bounds — the checks below are elided before they cost
     /// anything.
+    /// `[1, , 3]` and `[,]` -- an elision, named before the type is asked about.
+    ///
+    /// The hole an `OmittedExpression` stands for reads as `undefined`, which a
+    /// dense array of numbers has no room for: the same wall `xs[5] = v` meets,
+    /// and the same reason.
+    ///
+    /// **Refused before the literal's type, not where the child is lowered.**
+    /// The child is only reached once the literal has a type, and `[,]`'s type
+    /// is `undefined[]` -- refused a step earlier for a reason that says
+    /// nothing about holes. That ordering turned `an omitted expression` into
+    /// `an array literal of unrepresentable type`: a true sentence naming the
+    /// wrong thing, and it only appeared when `undefined[]` started being
+    /// refused at all.
+    fn refuse_a_hole(&self, id: NodeId) -> Result<(), Diagnostic> {
+        if self
+            .children(id)
+            .into_iter()
+            .any(|child| self.kind_of(child) == Some(syntax::OMITTED_EXPRESSION))
+        {
+            return Err(self.unsupported(
+                id,
+                "an array literal with a hole in it, which reads as `undefined` and so needs an \
+                 element type with room for one",
+            ));
+        }
+        Ok(())
+    }
+
     fn lower_array_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         // Whether the checker's own answer was `never[]`, which is the empty
         // literal. Held separately because it decides the *message*: when the
@@ -23698,6 +23726,7 @@ impl<'a> FuncBuilder<'a> {
         // the reader after a representation gap that is not there. What is
         // missing is a type for the literal to take, and only the branch that
         // discarded `never[]` knows that.
+        self.refuse_a_hole(id)?;
         let own = self.type_of(id);
         let empty = own.as_ref().is_some_and(is_an_unsettled_array);
         let ty = own
