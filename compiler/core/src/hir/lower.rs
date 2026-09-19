@@ -16655,6 +16655,26 @@ impl<'a> FuncBuilder<'a> {
                 }
             }
         }
+        // `Uint8Array.of(…)` and `Uint8Array.from(xs)`, beside the `Number`
+        // block above and before the intrinsic table, which is keyed on a fixed
+        // pair of names and has nowhere to put a class family.
+        if self.kind_of(callee) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            let parts = self.children(callee);
+            if let [object, member] = parts.as_slice()
+                && let Some(class) = self.node(*object).text.clone()
+                && let Some(element) = super::builtin::typed_array_element(&class)
+            {
+                match self.node(*member).text.as_deref() {
+                    Some("of") => {
+                        return Some(self.lower_typed_array_of(id, &class, element, arguments));
+                    }
+                    Some("from") => {
+                        return Some(self.lower_typed_array_from(id, &class, element, arguments));
+                    }
+                    _ => {}
+                }
+            }
+        }
         if let Some(intrinsic) = self.intrinsic_of(callee) {
             return Some(self.lower_intrinsic(id, intrinsic, arguments));
         }
@@ -26466,6 +26486,131 @@ impl<'a> FuncBuilder<'a> {
     /// so the guard is on the element count and the multiplication happens
     /// after it. Guarding the product instead would refuse a count the language
     /// allows on a width the language allows.
+    /// A typed array class's storage width, tag and representation.
+    ///
+    /// One derivation, asked by the constructor and by the `of`/`from`
+    /// factories -- which build the same object and would otherwise each decide
+    /// what a `Uint8Array` is.
+    fn typed_array_shape(
+        &self,
+        id: NodeId,
+        class: &str,
+        element: HirType,
+    ) -> Result<(f64, f64, HirType), Diagnostic> {
+        let (Some(width), Some(kind)) = (
+            super::builtin::element_width(&element),
+            super::builtin::element_kind(&element),
+        ) else {
+            return Err(self.unsupported(
+                id,
+                &format!("a `{class}`, whose element this compiler has no storage kind for"),
+            ));
+        };
+        Ok((
+            f64::from(width),
+            f64::from(kind),
+            HirType::Managed(ManagedType::View(Box::new(element))),
+        ))
+    }
+
+    /// `Uint8Array.from(xs)` -- the constructor's array case, under its other
+    /// name.
+    ///
+    /// Routed to the same code rather than reimplemented: `from` with one array
+    /// argument *is* `new Uint8Array(xs)`, and the specification's second
+    /// argument -- a mapping function -- is refused by name rather than
+    /// ignored, which would silently drop it.
+    fn lower_typed_array_from(
+        &mut self,
+        id: NodeId,
+        class: &str,
+        element: HirType,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let [source] = arguments else {
+            return Err(self.unsupported(
+                id,
+                &format!("a `{class}.from` with a mapping function or with no argument"),
+            ));
+        };
+        let (width, kind, ty) = self.typed_array_shape(id, class, element)?;
+        let wanted = HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)));
+        let values = if self.kind_of(*source) == Some(syntax::ARRAY_LITERAL_EXPRESSION) {
+            self.lower_expecting(*source, &wanted)?
+        } else {
+            self.lower_expression(*source)?
+        };
+        if !matches!(
+            self.values[values.0 as usize].ty,
+            HirType::Managed(ManagedType::Array(_))
+        ) {
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "a `{class}.from` over something that is not an array, which needs the \
+                     iteration protocol"
+                ),
+            ));
+        }
+        self.view_copied_from_array(id, values, width, kind, &ty)
+    }
+
+    /// `Uint8Array.of(1, 2, 3)` -- the arguments, as an array, then the same.
+    ///
+    /// The array is built here rather than asked for: `of` takes its elements
+    /// as arguments, so there is no node to lower as one. Its length is the
+    /// argument count, which is why the stores are unchecked -- `ArrayNew` made
+    /// exactly those slots a line earlier.
+    fn lower_typed_array_of(
+        &mut self,
+        id: NodeId,
+        class: &str,
+        element: HirType,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let (width, kind, ty) = self.typed_array_shape(id, class, element)?;
+        let origin = self.origin(id);
+        // `f64::from(u32)` rather than `as`: an argument list longer than a
+        // `u32` is not a program, and the cast clippy objects to would round
+        // one silently rather than say so.
+        let Ok(arity) = u32::try_from(arguments.len()) else {
+            return Err(self.unsupported(id, &format!("a `{class}.of` with that many arguments")));
+        };
+        let count = self.push(
+            OpKind::ConstFloat(f64::from(arity)),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let values = self.push(
+            OpKind::ArrayNew {
+                length: count,
+                zeroed: false,
+            },
+            HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER))),
+            origin.clone(),
+        );
+        for (at, argument) in arguments.iter().enumerate() {
+            let value = self.lower_expression(*argument)?;
+            let value = self.coerce(value, &HirType::NUMBER, *argument)?;
+            let index = self.push(
+                OpKind::ConstFloat(f64::from(u32::try_from(at).unwrap_or(u32::MAX))),
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            self.push(
+                OpKind::ArraySet {
+                    array: values,
+                    index,
+                    value,
+                    checked: false,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        self.view_copied_from_array(id, values, width, kind, &ty)
+    }
+
     fn lower_new_typed_array(
         &mut self,
         id: NodeId,
@@ -26475,18 +26620,7 @@ impl<'a> FuncBuilder<'a> {
         // Refused by name rather than defaulted. An element with no kind is a
         // typed array this compiler does not know how to store, and saying so
         // is the difference between a refusal and a silent `f64`.
-        let (Some(width), Some(kind)) = (
-            super::builtin::element_width(&element),
-            super::builtin::element_kind(&element),
-        ) else {
-            return Err(self.unsupported(
-                id,
-                &format!("a `new {class}`, whose element this compiler has no storage kind for"),
-            ));
-        };
-        let width = f64::from(width);
-        let kind = f64::from(kind);
-        let ty = HirType::Managed(ManagedType::View(Box::new(element)));
+        let (width, kind, ty) = self.typed_array_shape(id, class, element)?;
         let origin = self.origin(id);
         let arguments = self.arguments_of(id);
 

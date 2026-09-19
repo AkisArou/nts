@@ -93,3 +93,54 @@ export function overABuffer(n: number): number {
   a[3] = n;
   return a.length * 100 + a[3]!;
 }
+
+// # The same object under its other two names
+//
+// `Uint8Array.of(1, 2, 3)` and `Uint8Array.from(xs)` were both `not a member of
+// this compiler's Uint8Array`. `from` with one array argument *is*
+// `new Uint8Array(xs)`, so it routes to the same code rather than deciding
+// again what a `Uint8Array` is; `typed_array_shape` is the one place the width
+// and the storage tag come from, asked by all three.
+//
+// `of` takes its elements as *arguments*, so there is no node to lower as an
+// array — this builds one, with the argument count as its length, which is why
+// those stores are unchecked: `ArrayNew` made exactly those slots a line
+// earlier.
+//
+// **`from`'s second argument is a mapping function and is refused by name.**
+// Ignoring it would be a silently wrong answer, which is the failure mode this
+// whole file is about.
+
+export function ofThreeValues(n: number): number {
+  const a = Uint8Array.of(n, n + 1, n + 2);
+  return a.length * 100 + a[2]!;
+}
+
+/** `of` narrows exactly as the constructor does, for the same reason. */
+export function ofNarrows(n: number): number {
+  const a = Uint8Array.of(300 + n, -1);
+  return a[0]! * 1000 + a[1]!;
+}
+
+/** No arguments at all, which is an empty view rather than a refusal. */
+export function ofNothing(n: number): number {
+  const a = Uint8Array.of();
+  return a.length + n;
+}
+
+export function fromALiteralArgument(n: number): number {
+  const a = Uint8Array.from([n, n + 1]);
+  return a.length * 100 + a[1]!;
+}
+
+export function fromAVariableArgument(n: number): number {
+  const xs = [n, n + 1, n + 2];
+  const a = Int32Array.from(xs);
+  return a.length * 1000 + a[2]!;
+}
+
+/** Floats through `of`, where nothing narrows. */
+export function ofDoubles(n: number): number {
+  const a = Float64Array.of(n / 2, n / 4);
+  return a[0]! * 100 + a[1]!;
+}
