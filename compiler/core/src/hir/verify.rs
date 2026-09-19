@@ -42,6 +42,35 @@ pub enum Invalid {
         layout: String,
         base: String,
     },
+    /// Two layouts share a name and are not the same shape.
+    ///
+    /// A layout's name is what every backend names its type after, so two of
+    /// them is two definitions of one C struct -- `error: redefinition of
+    /// 'NtsObj_IteratorResult'`, from clang, a compilation stage away from the
+    /// choice that caused it and naming no source line at all.
+    ///
+    /// That is how it arrived on 2026-09-20: `IteratorResult<T>` gets a layout
+    /// **per instantiation**, and every instantiation was named by one
+    /// constant, so `http` and `process` stopped building. The name was also
+    /// what three call sites compared against to recognise the provided layout,
+    /// which is why it was a constant -- one string doing two jobs that pull in
+    /// opposite directions.
+    ///
+    /// Checked here rather than in an emitter because it is a statement about
+    /// the program, and because the JVM backend would answer it differently:
+    /// there the descriptor carries the type, so two same-named layouts collide
+    /// silently instead of loudly.
+    DuplicateLayout {
+        name: String,
+        /// Where they part: a field name, or the count when even that differs.
+        ///
+        /// The first version of this reported the two field *counts*, and the
+        /// defect it was written for has the same count on both sides --
+        /// `IteratorResult` is `{ done, value }` either way and the `value`
+        /// slots hold different things. It printed `fields: 2, other: 2`, which
+        /// is true and says nothing.
+        differs: String,
+    },
     /// A direct call passed an argument of an incompatible *representation*.
     ///
     /// Representation and not type, and the distinction is the whole of what
@@ -329,6 +358,44 @@ fn check_native_calls(program: &Program, problems: &mut Vec<Invalid>) {
 /// this is what keeps it honest: a base named here has to be laid out as the
 /// prefix every backend already treats it as.
 fn check_layouts(program: &Program, problems: &mut Vec<Invalid>) {
+    // **One name, one shape.** See `Invalid::DuplicateLayout`. Keyed on the
+    // name and compared on the fields, because a layout reached twice for the
+    // same type is ordinary -- `layout_of` is asked from many places and hands
+    // back a clone -- and only a *disagreement* is the defect.
+    let mut by_name: rustc_hash::FxHashMap<&str, &super::Layout> =
+        rustc_hash::FxHashMap::default();
+    for layout in &program.layouts {
+        match by_name.entry(layout.name.as_str()) {
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                slot.insert(layout);
+            }
+            std::collections::hash_map::Entry::Occupied(slot) => {
+                let first = *slot.get();
+                let differs = if first.fields.len() == layout.fields.len() {
+                    first
+                        .fields
+                        .iter()
+                        .zip(&layout.fields)
+                        .find(|(mine, theirs)| !super::lower::same_slot(mine, theirs))
+                        .map(|(mine, theirs)| {
+                            format!("`{}`: {:?} against {:?}", mine.name, mine.ty, theirs.ty)
+                        })
+                } else {
+                    Some(format!(
+                        "{} field(s) against {}",
+                        first.fields.len(),
+                        layout.fields.len()
+                    ))
+                };
+                if let Some(differs) = differs {
+                    problems.push(Invalid::DuplicateLayout {
+                        name: layout.name.clone(),
+                        differs,
+                    });
+                }
+            }
+        }
+    }
     for layout in &program.layouts {
         let Some(at) = program.base_layout(layout) else {
             continue;

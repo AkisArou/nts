@@ -119,7 +119,49 @@ fi
 # the full run before committing. It is licence not to wait twenty minutes for a
 # four-minute question -- which is what made building underneath a running gate
 # look reasonable twice in one night, invalidating both.
+# **Every step name this run knows about, recorded as it is offered.**
+#
+# Derived from what `step` and `concurrently` actually consider rather than
+# from a second list beside them: two lists of the same names is two
+# derivations of one fact, and the day they disagree the gate is wrong in
+# whichever direction nobody is watching.
+#
+# The hazard it closes: `NTS_GATE_STEPS` is matched with a glob, so a name that
+# matches nothing selects nothing, **every step returns early, and the run
+# prints `green` having done no work**. The step is spelled `llvm-rc` and the
+# shell function behind it is `llvm_rc`, which is exactly the confusion to
+# expect -- `NTS_GATE_STEPS=llvm_rc` was run three times on 2026-09-20 to decide
+# whether a new example agreed under reference counting, and all three answered
+# `green` in two lines without compiling anything. The floor was then read as
+# "held at 272", which was a statement about a step that never ran.
+#
+# A silently permissive guard is the expensive direction: it looks like the best
+# result of the run.
+KNOWN_STEPS=$(mktemp)
+# Removed on every exit, including the `exit 1` a failing step takes. `/tmp` on
+# this machine is a tmpfs that has run **out of inodes** while `df -h` still
+# reported gigabytes free, so a per-run file nobody deletes is a real cost.
+trap 'rm -f "$KNOWN_STEPS"' EXIT INT TERM
+known_step() { printf '%s\n' "$1" >> "$KNOWN_STEPS"; }
+
+# Fails the run when a requested name is not one of them. Called after
+# everything has been offered, because that is when the set is complete.
+requested_steps_exist() {
+  [ -n "${NTS_GATE_STEPS-}" ] || return 0
+  unknown=""
+  for want in $NTS_GATE_STEPS; do
+    grep -qxF "$want" "$KNOWN_STEPS" || unknown="$unknown $want"
+  done
+  [ -z "$unknown" ] && return 0
+  printf '\n\033[31mFAILED\033[0m: NTS_GATE_STEPS names no such step:%s\n' "$unknown" >&2
+  printf '  nothing matching it ran, so a `green` here would mean no work was done.\n' >&2
+  printf '  the steps this run offers are:\n' >&2
+  sort -u "$KNOWN_STEPS" | sed 's/^/    /' >&2
+  exit 1
+}
+
 step() {
+  known_step "$1"
   case " ${NTS_GATE_STEPS-} " in
     "  ") ;;
     *" $1 "*) ;;
@@ -189,6 +231,7 @@ concurrently() {
   running=""
   chosen=""
   for name in "$@"; do
+    known_step "$name"
     case " ${NTS_GATE_STEPS-} " in
       "  ") ;;
       *" $name "*) ;;
@@ -1072,8 +1115,9 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # 266 -> 272 on 2026-09-19, one at a time, for `a-library-iterator-result`,
   # `a-narrowed-module-scope-global`, `a-table-built-from-an-array`,
   # `a-typed-array-from-an-array`, `a-method-used-as-a-value` and
-  # `a-for-of-that-assigns`.
-  backend_examples 272 "through the LLVM backend, counting" "" 14 ); }
+  # `a-for-of-that-assigns`. 273 on 2026-09-20 for
+  # `a-nested-array-whose-elements-narrow`.
+  backend_examples 273 "through the LLVM backend, counting" "" 14 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -1100,7 +1144,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # `a-for-of-that-assigns`. The JVM's `exact` floor below took all six in the
 # same runs and at the same numbers.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 273 "through the LLVM backend" "" 14 ); }
+  backend_examples 274 "through the LLVM backend" "" 14 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1360,7 +1404,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   status=$?
   printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
   [ "$status" -eq 0 ] || return 1
-  backend_examples 273 "through the JVM backend" exact 10 ); }
+  backend_examples 274 "through the JVM backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
@@ -1777,6 +1821,8 @@ concurrently profile sweep llvm llvm-rc jvm dex on-device bench-agree examples r
 # fails on a leak, on a changed answer, and on a count below the argument
 # written down beside it. It caught a collector bug that leaked one link out of
 # every list built head first while every count balanced perfectly.
+
+requested_steps_exist
 
 printf '\n\033[32mgreen\033[0m\n'
 

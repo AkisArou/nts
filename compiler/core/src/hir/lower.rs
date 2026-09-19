@@ -18114,7 +18114,7 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unrepresentable(id, "a `next()` result"));
         };
         let layout = self.layout_of(id, result)?;
-        if layout.name != super::builtin::ITERATOR_RESULT {
+        if !self.is_a_provided_iterator_result(&layout) {
             return Err(self.unsupported(
                 id,
                 "a `next()` whose result is not an `IteratorResult`",
@@ -22160,7 +22160,7 @@ impl<'a> FuncBuilder<'a> {
         //
         // TypeScript permits the write: `done` is not `readonly` on either
         // arm. So the refusal is this compiler's, and it says so.
-        if layout.name == super::builtin::ITERATOR_RESULT && name == "done" {
+        if name == "done" && self.is_a_provided_iterator_result(&layout) {
             return Err(self.unsupported(
                 target,
                 "assigning to an iterator result's `done`, which would move the guard that                  decides whether its `value` may be read without moving what `value` holds",
@@ -24688,7 +24688,7 @@ impl<'a> FuncBuilder<'a> {
     /// that happens to be `true`: a `done` computed at runtime leaves the
     /// arm undecided, and the honest answer there is today's refusal.
     fn is_iterator_return_arm(&self, literal: NodeId, layout: &Layout, name: &str) -> bool {
-        if name != "value" || layout.name != super::builtin::ITERATOR_RESULT {
+        if name != "value" || !self.is_a_provided_iterator_result(layout) {
             return false;
         }
         self.children(literal).iter().any(|property| {
@@ -29884,6 +29884,25 @@ impl<'a> FuncBuilder<'a> {
     /// `None` when this is not one, which is not the same as `Some(Err(..))` --
     /// a type this recognises but cannot represent the element of is a refusal,
     /// not a fall-through to the ordinary path.
+    /// Whether a layout is one [`Self::provided_iterator_layout`] made.
+    ///
+    /// **Asked of the type, not of the name.** The name was the test until
+    /// 2026-09-20, and it could not stay one: a provided layout is per
+    /// instantiation, so its name has to distinguish `IteratorResult<Buffer[]>`
+    /// from `IteratorResult<unknown>` -- and a name that distinguishes them
+    /// cannot also be a constant to compare against. One string was doing two
+    /// jobs and the jobs pull in opposite directions.
+    ///
+    /// `Layout::types` carries the instantiation this layout was built for, and
+    /// `iterator_result_element` is the predicate the provider itself asks, so
+    /// the two cannot drift.
+    fn is_a_provided_iterator_result(&self, layout: &Layout) -> bool {
+        layout
+            .types
+            .first()
+            .is_some_and(|ty| iterator_result_element(self.snapshot, *ty).is_some())
+    }
+
     fn provided_iterator_layout(
         &mut self,
         id: NodeId,
@@ -29916,7 +29935,22 @@ impl<'a> FuncBuilder<'a> {
             self.materialize(id, &value)?;
             let layout = Layout {
                 types: vec![ty],
-                name: super::builtin::ITERATOR_RESULT.to_owned(),
+                // **Per instantiation, so the name has to be too.**
+                // `iterator_result_element` gives a different element for
+                // `IteratorResult<Buffer[]>` and `IteratorResult<unknown>`, so the
+                // two layouts differ -- and both were named by the bare constant,
+                // which the C emitter turns into a struct name. That is two
+                // `struct NtsObj_IteratorResult` definitions in one translation
+                // unit:
+                //
+                //   error: redefinition of 'NtsObj_IteratorResult'
+                //   error: static assertion failed ... sizeof(...) == 48
+                //
+                // `http` and `process` both stopped building on it, and neither is
+                // a shape any example carries. `Type{id}` is what every anonymous
+                // layout is already distinguished by and it is unique by
+                // construction.
+                name: format!("{}{}", super::builtin::ITERATOR_RESULT, ty.0),
                 interfaces: Vec::new(),
                 fields: super::builtin::iterator_result_fields(value),
                 methods: vec![None; self.hierarchy.table_size()],
