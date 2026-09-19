@@ -30,6 +30,46 @@ export function overflowingExponent(base: number, exponent: number): number {
   return base ** (exponent * 1e308);
 }
 
+// **The second divergence, and the same one twice.** `Number::exponentiate`
+// step 1 is "if exponent is NaN, return NaN", *before* it says anything about
+// the base. C99 F.10.4.4 says `pow(+1, y)` returns 1 for any y, **even a NaN**,
+// and Java's `Math.pow` says the same -- so `1 ** NaN` answered 1 where node
+// answers NaN.
+//
+// Reached rather than written, for the reason the comment above gives about
+// infinity: `Math.sqrt` of a negative is NaN, and `-1 - |exponent|` is negative
+// whatever the pool hands over.
+//
+// **The exponent is NaN for every input, deliberately, and the first version of
+// this arm was wrong for wanting otherwise.** `base ** Math.sqrt(exponent)`
+// looks like the better fixture -- some inputs NaN, some not -- and it passed on
+// the *pre-fix* compiler, which is the only thing that makes a new arm worth
+// having. The driver pairs its arguments rather than crossing them, so a base of
+// 1 was never handed a negative exponent and the case the rule exists for was
+// never executed. The same trap the infinity comment above describes, one pool
+// dimension over.
+//
+// The answer here is NaN for every base, which is what a working compiler
+// makes it; the *defect* is what varies, answering 1 at base 1 and NaN
+// everywhere else. A constant expected answer is a weak check in general and
+// the right one here.
+export function aNaNExponent(base: number, exponent: number): number {
+  return base ** Math.sqrt(-1 - Math.abs(exponent));
+}
+
+// The same, through `Math.pow`, because the two spellings are one helper and a
+// rule fixed in one of them would otherwise be a rule fixed in one of them.
+export function aNaNExponentCall(base: number, exponent: number): number {
+  return Math.pow(base, Math.sqrt(-1 - Math.abs(exponent)));
+}
+
+// **Control.** `x ** 0` is 1 for every base, NaN included, which the
+// specification says before it says anything else about the base -- and which
+// the exponent-is-NaN rule above must not have broken, since zero is not a NaN.
+export function aZeroExponent(base: number): number {
+  return base ** 0;
+}
+
 // The same operation under its other two spellings.
 export function powerCall(base: number, exponent: number): number {
   return Math.pow(base, exponent);

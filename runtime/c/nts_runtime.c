@@ -3662,11 +3662,29 @@ bool nts_is_safe_integer(double x) {
 
 /* ECMAScript's exponentiation, which is **not** C's `pow`.
  *
+ * Two divergences, and they are the same divergence twice: C99 answers 1 where
+ * the specification answers NaN, both times because the *limit* is 1.
+ *
  * The specification says that if the base is 1 or -1 and the exponent is an
- * infinity, the result is NaN. C99 says both are 1, on the grounds that the
- * limit is 1 -- and the difference is reachable from ordinary source:
- * `Math.pow(1, x)` where `x` overflows to infinity. */
+ * infinity, the result is NaN. C99 says both are 1 -- and the difference is
+ * reachable from ordinary source: `Math.pow(1, x)` where `x` overflows to
+ * infinity.
+ *
+ * And `Number::exponentiate` step 1 is "if exponent is NaN, return NaN",
+ * *before* it says anything about the base. C99 F.10.4.4 says `pow(+1, y)`
+ * returns 1 for any y, **even a NaN**, so `1 ** NaN` answered 1 where node
+ * answers NaN. Found by `test/language/expressions/exponentiation/
+ * applying-the-exp-operator_A4.js`, which the census ran and which threw.
+ *
+ * Only `+1` needs it -- `pow(x, NaN)` is already NaN for every other base --
+ * but the test is written on the exponent because that is where the
+ * specification writes it, and a rule spelled as its own precondition is one
+ * that keeps being true when the other arm moves. Note that `x ** 0` is
+ * unaffected: zero is not a NaN, and both languages answer 1 for every base. */
 double nts_math_pow(double base, double exponent) {
+  if (exponent != exponent) {
+    return NAN;
+  }
   if ((base == 1.0 || base == -1.0) &&
       (exponent == INFINITY || exponent == -INFINITY)) {
     return NAN;

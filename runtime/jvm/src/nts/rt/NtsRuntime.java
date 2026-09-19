@@ -221,6 +221,28 @@ public final class NtsRuntime {
     public static boolean[] arrayFillBool(boolean[] array, boolean value) { Arrays.fill(array, value); return array; }
     public static Object[] arrayFillRef(Object[] array, Object value) { Arrays.fill(array, value); return array; }
 
+    /**
+     * ECMAScript's exponentiation, which {@link Math#pow} <b>already is</b>.
+     *
+     * <p>The C runtime's {@code nts_math_pow} corrects two cases where C99
+     * answers 1 and the specification answers NaN. Java answers NaN for both,
+     * so this forwards unguarded by measurement rather than by omission:
+     *
+     * <pre>
+     *                    glibc   Java   ECMAScript
+     *   pow(1, NaN)      1.0     NaN    NaN
+     *   pow(-1, NaN)     NaN     NaN    NaN
+     *   pow(1, +inf)     1.0     NaN    NaN
+     *   pow(NaN, 0)      1.0     1.0    1
+     * </pre>
+     *
+     * <p>A guard was written here first, on the assumption that a platform
+     * following IEEE 754 follows C99 -- and the sabotage that should have
+     * proved it was live passed instead, because there was nothing for it to
+     * fix. Left as a note so the next reader of the C helper does not add one
+     * either: duplicating a rule the platform already has is a second
+     * derivation of it, and the redundant copy is the one that goes stale.
+     */
     public static double mathPow(double base, double exponent) { return Math.pow(base, exponent); }
     public static double mathSinh(double x) { return Math.sinh(x); }
     public static boolean isFinite(double x) { return !Double.isNaN(x) && !Double.isInfinite(x); }
