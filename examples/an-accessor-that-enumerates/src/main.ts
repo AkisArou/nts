@@ -119,6 +119,32 @@ class Shaped {
 }
 const instance = new Shaped();
 
+// **The order arms, which exist because this change broke them once.**
+//
+// The checker's member list is *own-first* and a layout is *base-first*, so
+// walking properties unconditionally renamed `Object.keys(new Derived())` from
+// `a,b,c,d` to `c,d,a,b`. Nothing in the corpus enumerated an inherited class,
+// so the gate was green on it; a probe against node was what said otherwise.
+//
+// The list keeps the layout's order unless a literal accessor is present ---
+// and an accessor only ever reaches it from a literal, where layout order,
+// property order and source order are the same thing.
+class Base {
+  first = 1;
+  second = 2;
+}
+class Derived extends Base {
+  third = 3;
+  fourth = 4;
+}
+const derived = new Derived();
+
+class Shadowing extends Base {
+  second = 9;
+  third = 3;
+}
+const shadowing = new Shadowing();
+
 // Observed once, in module order, so every export below is a pure read.
 const runsBefore = runs;
 const twoGetterValues = Object.values(twoGetters).join("");
@@ -182,4 +208,12 @@ export function aPrototypeMethodStaysOut(n: number): number {
 
 export function aPrototypeGetterIsNotOwn(n: number): number {
   return (Object.hasOwn(instance, "derived") ? 1 : 0) * 10 + n;
+}
+
+export function inheritedFieldsComeFirst(): string {
+  return Object.keys(derived).join(",");
+}
+
+export function aShadowedFieldKeepsItsFirstPosition(): string {
+  return Object.keys(shadowing).join(",");
 }

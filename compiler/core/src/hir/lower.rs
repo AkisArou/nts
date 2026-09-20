@@ -16960,6 +16960,32 @@ impl<'a> FuncBuilder<'a> {
             named.any(|property| !self.declared_with_a_private_name(property))
         };
 
+        // **The layout's order is kept unless an accessor forces otherwise**,
+        // and that is not tidiness: the checker's member list is *own-first*
+        // and a layout is *base-first*, so walking properties unconditionally
+        // renamed `Object.keys(new B())` from `a,b,c,d` to `c,d,a,b` for
+        // `class B extends A`. Measured against the previous binary, and the
+        // gate could not have said so --- no example enumerates an inherited
+        // class, which is why one is in `an-accessor-that-enumerates` now.
+        //
+        // An accessor only ever reaches this list from an object *literal*,
+        // where the layout order, the property order and the source order are
+        // the same thing. So where there is none, this is the walk it always
+        // was, bit for bit.
+        let has_a_literal_accessor = properties.iter().any(|property| {
+            matches!(property.kind, MemberKind::Accessor(_))
+                && self.declared_in_an_object_literal(property)
+        });
+        if !has_a_literal_accessor {
+            return layout
+                .fields
+                .iter()
+                .enumerate()
+                .filter(|(_, field)| keeps(&field.name))
+                .map(|(at, field)| (Enumerated::Slot(at), field.name.clone()))
+                .collect();
+        }
+
         let mut out: Vec<(Enumerated, String)> = Vec::new();
         // **Accessors first means walking the type, not the layout.**
         //
