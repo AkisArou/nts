@@ -31,6 +31,27 @@
 //
 // Two locals of one name in scope is refused, and stays refused:
 // `blockers/a-shorthand-naming-a-shadowed-binding` holds it.
+//
+// # `({ x = 1 } = o)`, which is the same node and one more child
+//
+// Six files of the census slice moved from the refusal above to *"a shorthand
+// property of unexpected shape"* the moment the one-child form started
+// working --- the next blocker, visible only because the first was gone. It is
+// the same name resolved the same way, plus a default standing in where the
+// read is `undefined`, and the default half is `bind_pattern`'s two lines asked
+// of the same helpers: one question about one node, not two.
+//
+// **The encoder keeps the `=`.** The children are
+// `[identifier, EqualsToken, initializer]` and not `[name, default]` --- a
+// probe said so after the two-child spelling compiled, ran, and refused every
+// one of these exactly as before. A pattern match that never matches and a
+// guard that never fires fail the same silent way.
+
+let withDefault = 0;
+({ withDefault = 7 } = {} as { withDefault?: number });
+
+let defaultSkipped = 0;
+({ defaultSkipped = 7 } = { defaultSkipped: 3 });
 
 let outer = 0;
 
@@ -79,4 +100,34 @@ export function insideALoop(n: number): number {
     sum += v;
   }
   return sum * 10 + n;
+}
+
+export function aDefaultStandsInForAnAbsentProperty(n: number): number {
+  return withDefault * 10 + n;
+}
+
+export function aPresentPropertyWinsOverTheDefault(n: number): number {
+  return defaultSkipped * 10 + n;
+}
+
+/// The default is an *expression*, and it must not run when the property is
+/// there. Counting the calls is the only arm that can tell.
+export function theDefaultIsNotEvaluatedWhenPresent(): number {
+  let calls = 0;
+  const fallback = (): number => {
+    calls += 1;
+    return 4;
+  };
+  let taken = 0;
+  ({ taken = fallback() } = { taken: 9 });
+  let given = 0;
+  ({ given = fallback() } = {} as { given?: number });
+  return calls * 100 + taken * 10 + given;
+}
+
+export function severalDefaultsAtOnce(n: number): number {
+  let a = 0;
+  let b = 0;
+  ({ a = 1, b = 2 } = {} as { a?: number; b?: number });
+  return a * 100 + b * 10 + n;
 }

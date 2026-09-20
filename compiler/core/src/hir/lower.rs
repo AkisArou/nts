@@ -23051,6 +23051,9 @@ impl<'a> FuncBuilder<'a> {
             // Set only by the shorthand arm below, where the node's own symbol
             // is the wrong one to write through.
             let mut shorthand: Option<nts_semantic_schema::SymbolId> = None;
+            // `({ x = 1 } = o)`: the same node, plus a default to stand in
+            // where the property read is `undefined`.
+            let mut shorthand_default: Option<NodeId> = None;
             let (property, destination) = if object {
                 let parts = self.children(element);
                 match (self.kind_of(element), parts.as_slice()) {
@@ -23086,6 +23089,28 @@ impl<'a> FuncBuilder<'a> {
                         })?;
                         let symbol = self.shorthand_value_symbol(*name, &text)?;
                         shorthand = Some(symbol);
+                        (*name, *name)
+                    }
+                    // `({ x = 1 } = o)`. The encoder gives the name and the
+                    // default as two children, and the name resolves the same
+                    // way the one-child form does --- there is no second
+                    // question here, only a second child.
+                    //
+                    // Six files of the census slice stopped here after the
+                    // one-child form started working, which is the shape of
+                    // every row this compiler clears: one blocker at a time,
+                    // and the next one is only visible once the first is gone.
+                    // **Three children, not two.** The encoder keeps the `=`:
+                    // `[identifier, EqualsToken, initializer]`, which a probe
+                    // said and reading the two-child form did not. Matching
+                    // `[name, default]` compiled, ran, and refused every one of
+                    // these exactly as before.
+                    (Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT), [name, _equals, default]) => {
+                        let text = self.node(*name).text.clone().ok_or_else(|| {
+                            self.unsupported(element, "a shorthand without a name")
+                        })?;
+                        shorthand = Some(self.shorthand_value_symbol(*name, &text)?);
+                        shorthand_default = Some(*default);
                         (*name, *name)
                     }
                     (Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT), _) => {
@@ -23178,6 +23203,24 @@ impl<'a> FuncBuilder<'a> {
                 self.assign_pattern(destination, read)?;
                 continue;
             }
+            // The default stands in where the read is `undefined`, and only
+            // there --- the same two lines `bind_pattern` uses for
+            // `const { a = d } = o`, asked of the same helpers, because it is
+            // the same question about the same node.
+            let read = match shorthand_default {
+                Some(default) => match self.defaulted_when(element, property, read)? {
+                    Some(absent) => self.lower_branching_value(
+                        destination,
+                        absent,
+                        Branch::Expression(default),
+                        Branch::Present(read),
+                    )?,
+                    // No room for an absence, so the default is unreachable and
+                    // the language agrees: it is never evaluated.
+                    None => read,
+                },
+                None => read,
+            };
             let place = match shorthand {
                 Some(symbol) => self.place_for_symbol(destination, symbol)?,
                 None => self.place_of(destination)?,
