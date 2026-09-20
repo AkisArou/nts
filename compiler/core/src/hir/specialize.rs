@@ -1502,6 +1502,39 @@ fn convert(
     if func.values[operand.0 as usize].ty.is_managed() && wanted.is_managed() {
         return operand;
     }
+    // **A reference where a width is wanted is not a conversion either**, and
+    // repairing it here is what hid it.
+    //
+    // `(new C() as unknown as number) * 2` reaches the lowering as
+    // `mul %0, %1 : f64` with `%0` a `managed<obj#1>` --- already ill-typed, and
+    // `check_operands` has had a rule against exactly that since it was written.
+    // The rule never fired, because this function ran first: a managed value
+    // where an `f64` was wanted fell past every arm below to `_ => Convert`, the
+    // operands then agreed at `f64`, and the verifier was correct about a
+    // program the lowering had not produced. What reached the backend was
+    // `v3 = (double)v0;` --- `error: pointer cannot be cast to type 'double'`,
+    // from clang, with no source location and nothing naming the construct.
+    //
+    // The arm below says this in its own words one case over, for the erased
+    // boundary: "a `Convert` is emitted as a C cast ... neither of which is C".
+    // The managed boundary is the same sentence and fell past it.
+    //
+    // Left ill-typed on purpose. There is nothing to convert *to* --- a pointer
+    // is not a number and no cast makes it one --- so the honest thing is to
+    // leave the mismatch standing and let `check_operands` report it against the
+    // operator, which is a diagnostic naming a construct instead of a C error
+    // naming a temporary.
+    //
+    // A native pointer is deliberately not caught: `is_managed` is false for one,
+    // so a pointer-to-integer conversion is scalar-to-scalar here and keeps its
+    // cast, which is what `Ptr` arithmetic is.
+    let have = func.values[operand.0 as usize].ty.clone();
+    if have != HirType::Erased
+        && *wanted != HirType::Erased
+        && have.is_managed() != wanted.is_managed()
+    {
+        return operand;
+    }
     let origin = func.values[operand.0 as usize].origin.clone();
 
     // Converting a constant is a constant. Without this the emitted code says

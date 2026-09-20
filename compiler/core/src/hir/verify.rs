@@ -887,6 +887,58 @@ fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
 /// taken out of it first. `Eq` and `Ne` are excluded deliberately -- comparing
 /// two erased values is `nts_value_strict_eq`, which is the whole point of
 /// carrying a tag -- and `Concat` takes managed strings.
+///
+/// # A managed operand is not checked here, and could not be
+///
+/// Measured 2026-09-20. `(new C() as unknown as number) * 2` is accepted by the
+/// lowering with **no refusal** and emits C that does not compile:
+///
+/// ```text
+///     error: pointer cannot be cast to type 'double'
+///         v3 = (double)v0;
+/// ```
+///
+/// Lowering's own output is already ill-typed --- `mul %0, %1 : f64` where `%0`
+/// is `managed<obj#1>` --- so both rules below would fire on it. Neither does,
+/// because **`insert_conversions` runs first and repairs it**: a managed value
+/// where an `f64` is wanted falls through that function's arms to the blanket
+/// `_ => OpKind::Convert(operand)`, and by the time this walk sees the program
+/// both operands agree at `f64`. The verifier is then correct about a program
+/// that is not the one the lowering produced.
+///
+/// The comment on that blanket arm reasons about this exact hazard one case
+/// over: *"a `Convert` is emitted as a C cast -- `(double)v` on a sixteen-byte
+/// struct ... neither of which is C"*. It guards the **erased** boundary and
+/// the managed one falls past it.
+///
+/// **Closed 2026-09-20 by removing the repair rather than adding a rule here.**
+/// `insert_conversions` now leaves a managed-where-scalar mismatch standing ---
+/// there is nothing to convert *to*, since no cast makes a pointer a number ---
+/// and `OperandsDiffer` below reports it against the operator, before any C is
+/// written. All four shapes above now report; all four controls still compile;
+/// 307 examples produce no invalid HIR.
+///
+/// What is still owed is the *sentence*. A verifier failure renders as
+/// `invalid HIR: OperandsDiffer { .. }`, which is Rust's `Debug` in front of a
+/// person --- the defect `representation_word` exists to avoid, one file over.
+/// The better answer is a refusal in the lowering, where `coerce` already has
+/// the words: *an object where a number is wanted*, which is exactly why
+/// `return (new C() as unknown as number)` on its own has always been refused
+/// properly. That is a message change rather than a correctness one now.
+///
+/// The boundary, each arm measured rather than inferred:
+///
+/// ```text
+///     (obj as unknown as number) * 2     bad C
+///     (obj as unknown as number) + 1     bad C
+///     ({a:1} as unknown as number) * 2   bad C
+///     ("x" as unknown as number) * 2     bad C
+///     return (obj as unknown as number)  REFUSED, correctly
+///     (n as unknown as string)           REFUSED, correctly
+///     (v as number) on an `unknown` param   compiles, correct
+/// ```
+///
+/// Pre-existing: a binary built 2026-09-18 emits the same invalid C.
 fn check_operands(func: &Func, problems: &mut Vec<Invalid>) {
     let executed = executed_values(func);
     for (index, op) in func.values.iter().enumerate() {
