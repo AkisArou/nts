@@ -2678,6 +2678,48 @@ fn collect_module_scope(
         if probe.is_within_a_function(id) {
             continue;
         }
+        // **A loop head's variable is not a module binding**, and it got a
+        // global that nothing ever wrote.
+        //
+        // `lower_for` binds the head variable as a **block parameter**,
+        // whatever keyword declared it, so the global sat unwritten while a
+        // closure in the body resolved the same name through module scope --
+        // `reached_by_name` says a name with a global needs no capture -- and
+        // emitted `global.get` against it. So
+        //
+        // ```js
+        // let total = 0;
+        // for (let i = 0; i < 3; i++) { const f = () => i; total += f(); }
+        // ```
+        //
+        // answered **0** at module scope where node answers 3, and the
+        // identical loop *inside a function* was always right: there the
+        // collector never looked, so the ordinary capture path ran. Two
+        // derivations of where `i` lives, agreeing everywhere except the one
+        // place one of them had no business answering.
+        //
+        // A wrong answer that runs, found by a probe sweep against node.
+        // `nts check` cannot see it -- its harness drives exported functions
+        // and this is a statement -- and neither can the test262 census, which
+        // ranks refusals and this compiled and returned a number.
+        //
+        // **`var` is skipped too, and that is the point rather than an
+        // oversight.** `let` is block-scoped so it was never a module binding;
+        // `var` hoists and genuinely is one, but `lower_for` does not write the
+        // global for it either, so the binding was already a local in every way
+        // except the one that produced the wrong answer. Skipping makes module
+        // scope behave exactly like a function body: the closure captures, and
+        // `rebinding_refusal` -- which was never reached before -- refuses a
+        // `var` head by name, as it already does inside a function.
+        //
+        // What that costs is stated rather than assumed: a *function* reading
+        // the head's `var` after the loop no longer resolves it, and refuses.
+        // It previously read the unwritten global and answered zero, so this
+        // trades a wrong answer for a refusal, which is the direction to trade
+        // in.
+        if probe.declared_in_a_loop_head(id) {
+            continue;
+        }
 
         let children = probe.children(id);
         // The *first* child, and only when it is a name. A declaration's name
@@ -9872,6 +9914,15 @@ impl<'a> FuncBuilder<'a> {
     /// a module-scope variable holding a function, an enum, a builtin this
     /// compiler does not provide.
     fn is_module_scope(&self, declaration: NodeId) -> bool {
+        // **A loop head is not module scope**, and `reached_by_name` asks this
+        // rather than the collector: closures are collected first, so it
+        // cannot consult `ModuleScope::variables`. Both call
+        // `declared_in_a_loop_head` for that reason -- one syntactic rule,
+        // because two would disagree again and the disagreement is the defect
+        // this closes.
+        if self.declared_in_a_loop_head(declaration) {
+            return false;
+        }
         let mut at = self.node(declaration).parent;
         for _ in 0..64 {
             // No parent left is the file itself, which is module scope.
@@ -10071,6 +10122,27 @@ impl<'a> FuncBuilder<'a> {
     /// closure either, by the same test the `function` *expression* arm uses.
     fn is_nested_closure(&self, id: NodeId) -> bool {
         self.is_within_a_function(id) && !self.binds_this(id)
+    }
+
+    /// Whether this declaration is a loop head's.
+    ///
+    /// Block-scoped for `let` and `const`; for `var` it hoists, and it is
+    /// treated the same here anyway because `lower_for` binds the head variable
+    /// as a block parameter whatever the keyword. See the call site.
+    fn declared_in_a_loop_head(&self, id: NodeId) -> bool {
+        let Some(list) = self.ancestor(id, syntax::VARIABLE_DECLARATION_LIST) else {
+            return false;
+        };
+        self.node(list).parent.is_some_and(|parent| {
+            matches!(
+                self.kind_of(parent),
+                Some(
+                    syntax::FOR_STATEMENT
+                        | syntax::FOR_IN_STATEMENT
+                        | syntax::FOR_OF_STATEMENT
+                )
+            )
+        })
     }
 
     fn is_within_a_function(&self, id: NodeId) -> bool {
