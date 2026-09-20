@@ -700,6 +700,53 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
     }
 }
 
+/// The values a block actually executes.
+///
+/// **`Func::values` is every value the function ever defined, not every value
+/// it runs.** Dead-code elimination drops a value from its block's `ops` and
+/// leaves the definition behind — values are addressed by index, so removing
+/// one would renumber the rest — and `emit.rs` says the same thing from the
+/// other side: it collects "from the values each block still *executes*, not
+/// from every value the function defines".
+///
+/// So a dead definition is never emitted, and until 2026-09-20 it was still
+/// *verified*. Every pass that fixes types walks `block.ops`;
+/// `specialize::reconcile_stores` is the one that matters here, and it inserts
+/// the conversion a narrowed field needs. A store dropped from its block before
+/// that pass ran therefore kept its old type — correctly, nothing runs it —
+/// and the verifier reported it:
+///
+/// ```text
+/// invalid HIR: StoreType { func: "module#init", what: "a field",
+///   expected: Int { bits: 32, signed: true }, found: Float { bits: 64 } }
+/// ```
+///
+/// **Invalid HIR is the worst outcome available**: `emit-c` writes nothing and
+/// exits 0, so seven files of the slice-1 `test/language` population were
+/// silently unbuilt over a value no backend would have emitted. Found by
+/// tracing `reconcile_stores`, which reported `module#init (0 field sets)`
+/// while the dump showed two.
+///
+/// Narrowing what the verifier looks at is the permissive direction, so it is
+/// worth saying exactly how far it goes: an op no block lists is not in the
+/// emitted program on any backend. If one ever is, that is a defect in the
+/// backend's collection and this is not the check that would find it.
+///
+/// **Reachability is deliberately not consulted.** An op in an unreachable
+/// block is reported as `Unreachable`, which is the finding, and asking
+/// `reachable_blocks` here would be a second derivation of it — one that runs
+/// *before* the edges have been checked, and therefore indexes a dangling
+/// successor. `a_dangling_successor_is_caught` failed with `index out of
+/// bounds: the len is 1 but the index is 9` on the first version of this, which
+/// is the existing code's own ordering saying so: it calls `reachable_blocks`
+/// only after `if !edges_sound { return; }`.
+fn executed_values(func: &Func) -> FxHashSet<super::ValueId> {
+    func.blocks
+        .iter()
+        .flat_map(|block| block.ops.iter().copied())
+        .collect()
+}
+
 fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
     let mut report = |what, expected: &HirType, found: &HirType| {
         if !compatible(found, expected) {
@@ -711,7 +758,11 @@ fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
             });
         }
     };
-    for op in &func.values {
+    let executed = executed_values(func);
+    for (index, op) in func.values.iter().enumerate() {
+        if !executed.contains(&super::ValueId(u32::try_from(index).unwrap_or(u32::MAX))) {
+            continue;
+        }
         match &op.kind {
             // A read is a slot too. Nothing checked it, and the backend that
             // had to name a type for the load chose the *result's* rather than
@@ -837,7 +888,11 @@ fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
 /// two erased values is `nts_value_strict_eq`, which is the whole point of
 /// carrying a tag -- and `Concat` takes managed strings.
 fn check_operands(func: &Func, problems: &mut Vec<Invalid>) {
-    for op in &func.values {
+    let executed = executed_values(func);
+    for (index, op) in func.values.iter().enumerate() {
+        if !executed.contains(&super::ValueId(u32::try_from(index).unwrap_or(u32::MAX))) {
+            continue;
+        }
         let OpKind::Binary { op: bin, lhs, rhs } = &op.kind else {
             continue;
         };
@@ -1339,6 +1394,96 @@ mod tests {
             HirType::Managed(ManagedType::Object(nts_semantic_schema::TypeId(id)))
         };
         assert!(compatible(&object(1), &object(2)));
+    }
+
+    /// A store the function runs is checked; one no block lists is not.
+    ///
+    /// Both arms, because the change that added the second one is the
+    /// permissive direction: a verifier that stopped looking would pass this
+    /// test's *first* arm too if the arm did not exist. The two programs differ
+    /// in exactly one thing — whether the block lists the store.
+    ///
+    /// The live arm is what `reconcile_stores` would have fixed and the dead
+    /// arm is what it never sees: it walks `block.ops`, so a value dropped from
+    /// a block keeps whatever type it had, correctly, since nothing runs it.
+    #[test]
+    fn only_a_store_a_block_runs_is_checked() {
+        use crate::hir::{Field, Layout, ManagedType};
+        use nts_semantic_schema::TypeId;
+
+        let laid_out = Layout {
+            types: vec![TypeId(1)],
+            name: "Holder".to_owned(),
+            interfaces: Vec::new(),
+            fields: vec![Field {
+                name: "count".to_owned(),
+                ty: HirType::Int {
+                    bits: 32,
+                    signed: true,
+                },
+                readonly: false,
+                declared_by: None,
+            }],
+            methods: Vec::new(),
+            base: None,
+        };
+
+        // %0 the object, %1 an f64, %2 the store of %1 into an i32 field.
+        let object = Op {
+            kind: OpKind::ObjectNew { frame: false },
+            ty: HirType::Managed(ManagedType::Object(TypeId(1))),
+            origin: origin(),
+        };
+        let values = vec![
+            object,
+            op(OpKind::ConstFloat(1.0)),
+            op(OpKind::FieldSet {
+                object: ValueId(0),
+                field: 0,
+                value: ValueId(1),
+            }),
+        ];
+
+        let live = {
+            let mut program = func(
+                values.clone(),
+                vec![block(
+                    Vec::new(),
+                    vec![ValueId(0), ValueId(1), ValueId(2)],
+                    Terminator::Return(Some(ValueId(1))),
+                )],
+            );
+            program.layouts = vec![laid_out.clone()];
+            program
+        };
+        let Err(problems) = verify(&live) else {
+            panic!("a store the block runs must be caught, and nothing was reported");
+        };
+        assert!(
+            problems
+                .iter()
+                .any(|p| matches!(p, Invalid::StoreType { what: "a field", .. })),
+            "a store the block runs must be caught: {problems:#?}"
+        );
+
+        let dead = {
+            // The same values, with the store dropped from the block -- which
+            // is what dead-code elimination leaves behind, since values are
+            // addressed by index and removing one would renumber the rest.
+            let mut program = func(
+                values,
+                vec![block(
+                    Vec::new(),
+                    vec![ValueId(0), ValueId(1)],
+                    Terminator::Return(Some(ValueId(1))),
+                )],
+            );
+            program.layouts = vec![laid_out];
+            program
+        };
+        if let Err(problems) = verify(&dead) {
+            panic!("a store no block runs is not in the emitted program: {problems:#?}");
+        }
     }
 
     /// A base has to be laid out as the prefix every backend treats it as.
