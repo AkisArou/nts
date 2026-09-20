@@ -1164,3 +1164,33 @@ The honest version is a wrapper object plus `ToPrimitive` dispatching through
 specification coverage and are absent from real code. It is not on the
 work-list, and this row says so rather than reading as an oversight each time
 the census is ranked.
+
+### The method-arity family, swept 2026-09-21
+
+Every array and string method that takes an optional extra argument **refuses**
+rather than ignoring it, which is the direction that matters --- none of these
+is a wrong answer:
+
+```text
+  "abcabc".lastIndexOf("a", 2)     a string method with this many arguments
+  [1,2,1].indexOf(1, 1)            an array method with this many arguments
+  [1,2,1].lastIndexOf(1, 1)        "
+  [1,2,3].includes(1, 1)           "
+  [1,4].splice(1, 0, 2, 3)         "
+  [1,2,3].fill(0, 1)               "
+```
+
+The mechanism is one table: `numeric_array_method` and its string twin answer
+`(helper, arity, type)`, missing arguments are padded with `Infinity`, and a
+count the helper cannot take is refused. So each of these is a runtime
+signature, not a lowering gap.
+
+Two are cheaper than the rest and worth knowing. `indexOf` with a position
+already works --- `nts_str_index_of_from` exists and the table routes two
+arguments to it --- and `includes(s, pos)` is `index_of_from(...) !== -1`, so it
+needs a comparison after the call rather than a new helper. The others need a
+helper each, on C, LLVM and the JVM, which is what makes this a sitting's work
+rather than a line.
+
+Census value is approximately zero --- `test/language` does not exercise these
+--- so the reason to do it is the node lanes, not this file.
