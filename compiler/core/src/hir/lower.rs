@@ -7121,6 +7121,31 @@ pub fn erasable(ty: &HirType) -> bool {
     )
 }
 
+/// Whether every member of this type is an absence.
+///
+/// `null`, `null | undefined`, `undefined | void` -- types whose whole
+/// inhabitant set is `null` and `undefined`, both of which an erased value
+/// carries a tag for.
+///
+/// A free function because `representation_within` has no `self` to ask, and
+/// [`Lowering::holds_only_absences`] is the method that delegates here. One
+/// derivation: the four positions that consult it -- an array's element, a
+/// tuple's position, an object's field and a merge's parameter -- have to agree
+/// about which types are answerable or a slot and the value put in it disagree.
+fn holds_only_absences(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    let Some(record) = snapshot.types.get(ty.0 as usize) else {
+        return false;
+    };
+    let members: Vec<TypeId> = match &record.kind {
+        TypeKind::Union(members) => members.clone(),
+        _ => vec![ty],
+    };
+    !members.is_empty()
+        && members
+            .iter()
+            .all(|member| absence_of_member(snapshot, *member).is_some())
+}
+
 fn absence_of_member(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Absence> {
     match snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Null => Some(Absence::Null),
@@ -7673,6 +7698,31 @@ fn in_a_slot(representation: HirType) -> HirType {
     }
 }
 
+/// The representation a **slot** takes for an element type.
+///
+/// [`in_a_slot`] over [`representation_within`], plus the step that function
+/// cannot make: a type whose whole inhabitant set is `null` and `undefined` has
+/// no representation at all, so the `?` discarded the array or tuple containing
+/// it rather than reaching the mapping. `[undefined, undefined]` lowered and
+/// `[null, null]` did not, which is the same asymmetry an object's field had.
+///
+/// The four slot positions answer this one way: an array's element, a tuple's
+/// position, an object's field, and a merge's parameter. Narrowing reaches none
+/// of them -- which is what separates this from the `representation_of` change
+/// reverted on 2026-09-13, recorded in
+/// `blockers/a-property-typed-exactly-null`.
+fn slot_for(
+    snapshot: &SemanticSnapshot,
+    element: TypeId,
+    path: &mut Vec<TypeId>,
+    subst: &Substitution,
+) -> Option<HirType> {
+    if holds_only_absences(snapshot, element) {
+        return Some(HirType::Erased);
+    }
+    Some(in_a_slot(representation_within(snapshot, element, path, subst)?))
+}
+
 fn tuple_representation(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
@@ -7683,6 +7733,18 @@ fn tuple_representation(
     let mut shared: Option<HirType> = None;
     let mut mixed = false;
     for element in elements {
+        // **`slot_for` deliberately not used here**, and the control that says
+        // so is `[string | null, number]`. Giving `[null, number]` a
+        // representation of its own means the literal `[null, 5]` builds *that*
+        // layout and then needs a pointer cast to the annotated tuple's -- two
+        // anonymous structs that do not agree about where their shared fields
+        // are. It agreed with node before and refused after, which is the hazard
+        // `array_literal_type` already records one container over: a literal's
+        // own type wins over the slot's and should not.
+        //
+        // An array's element has no such pair, because an array of one
+        // representation is one layout. The tuple position stays with
+        // `in_a_slot` until the literal is taught to prefer the slot.
         let element = in_a_slot(representation_within(snapshot, *element, path, subst)?);
         match &shared {
             Some(existing) if *existing != element => mixed = true,
@@ -8091,7 +8153,7 @@ fn representation_of(
         // for a symbol used as a *value*.
         TypeKind::Symbol => HirType::Managed(ManagedType::Symbol),
         TypeKind::Array(element) => {
-            let element = in_a_slot(representation_within(snapshot, *element, path, subst)?);
+            let element = slot_for(snapshot, *element, path, subst)?;
             HirType::Managed(ManagedType::Array(Box::new(element)))
         }
         // A function value is an object with one method, which is why it shares
@@ -31366,17 +31428,7 @@ impl<'a> FuncBuilder<'a> {
     /// parameter are positions the narrowing never reaches, and that reduction
     /// is `examples/a-slot-that-can-only-be-null`'s `aNarrowedFieldIsNotThis`.
     fn holds_only_absences(&self, ty: TypeId) -> bool {
-        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
-            return false;
-        };
-        let members: Vec<TypeId> = match &record.kind {
-            TypeKind::Union(members) => members.clone(),
-            _ => vec![ty],
-        };
-        !members.is_empty()
-            && members
-                .iter()
-                .all(|member| absence_of_member(self.snapshot, *member).is_some())
+        holds_only_absences(self.snapshot, ty)
     }
 
     fn lower_branching_value(

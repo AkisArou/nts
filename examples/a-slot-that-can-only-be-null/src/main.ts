@@ -18,10 +18,21 @@
 // # Answered where a value needs a width, and nowhere else
 //
 // `Erased` is the one representation carrying a null tag, so it is what a slot
-// that can only hold `null` takes. Asked at two places: an object's **field**,
+// that can only hold `null` takes. Asked at three places: an object's **field**,
 // which needs a member or every offset after it lands where the layout does not
-// say, and a **merge's parameter**, where both arms of a picking operator have
-// to arrive at one width.
+// say; a **merge's parameter**, where both arms of a picking operator have to
+// arrive at one width; and an **array's element**, which `in_a_slot` already
+// names as a slot and could never reach, because a type with no representation
+// never got that far.
+//
+// **A tuple's position is a slot too and is deliberately left out.** Giving
+// `[null, number]` a representation of its own means the literal `[null, 5]`
+// builds *that* layout and then needs a pointer cast to the annotated tuple's —
+// two anonymous structs that do not agree about where their shared fields are.
+// `aNullableTupleStillWorks` below agreed with node before that change and
+// refused after; it is the arm that caught it. An array has no such pair,
+// because an array of one representation is one layout. The difference is not
+// the slot — it is that a tuple literal has a layout of its own to prefer.
 //
 // Deliberately *not* answered in `representation_of` itself. `null` alone as a
 // parameter or a result is a different question — nothing reads those back — and
@@ -82,6 +93,36 @@ export function aLogicalAndThatCanOnlyBeNull(n: number): number {
   const truthy = n >= 0 || n < 0;
   const picked = truthy && null;
   return (picked === null ? 1 : 0) + n * 0;
+}
+
+/** An array whose elements can only be `null`. */
+export function anArrayOfNothingButNull(n: number): number {
+  const xs = [null, null];
+  return xs.length * 10 + (xs[0] === null ? 1 : 0) + n * 0;
+}
+
+/** The `undefined` spelling beside it, which always worked. */
+export function anArrayOfNothingButUndefined(n: number): number {
+  const xs = [undefined, undefined];
+  return xs.length * 10 + (xs[0] === undefined ? 1 : 0) + n * 0;
+}
+
+/**
+ * The control a tuple position failed: an annotated nullable element.
+ *
+ * `[null, 5]` must take the annotation's layout rather than build one of its
+ * own. This agreed with node, refused when the tuple position was given the same
+ * answer as the array's, and agrees again.
+ */
+export function aNullableTupleStillWorks(n: number): number {
+  const t: [string | null, number] = [null, 5];
+  return (t[0] === null ? 1 : 0) * 10 + t[1] + n * 0;
+}
+
+/** The control for an array that is *not* all absences. */
+export function aNullableArrayIsNotThis(n: number): number {
+  const xs: (string | null)[] = ["ab", null];
+  return (xs[0] === null ? 0 : xs[0].length) * 10 + (xs[1] === null ? 1 : 0) + n * 0;
 }
 
 /**
