@@ -2978,6 +2978,19 @@ field read out of the element**, and a **frame-allocated** string beside it —
 temporary concatenated with a heap string is where two ownership analyses have
 to agree about a value that is not on the heap.
 
+**What the HIR shows.** `nts hir --rc` on the failing and passing shapes differ
+in one thing inside the callback — a `concat`, then
+`nts_number_to_string(...) frame[40]`, then `nts_str_append` of the two — and
+the *object-field* shape has all three and passes. So it is not the append and
+not the frame string: the discriminator is a **tuple** element against an object
+field with everything else equal. Two candidates were ruled out rather than
+assumed: the `array.new uninitialized` plus read-then-release of the previous
+element is present in the passing shape too, and the retain/release sets are
+otherwise identical. `nts_str_append`'s in-place path is guarded on
+`a->reserved == 1u` — *"one reference exists and this call is consuming it"* —
+and whether that holds when the left operand came out of a tuple is where the
+reading stopped. No cause is named, deliberately.
+
 **Pre-existing, and measured to be.** The binary from before the
 enumeration-order work fails it identically. It surfaced because
 `the-order-own-properties-enumerate-in` was the first fixture in the corpus to

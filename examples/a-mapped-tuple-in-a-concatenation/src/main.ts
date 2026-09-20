@@ -121,3 +121,36 @@ export function theNumberFirst(n: number): string {
   const ps: [number, string][] = [[1, "a"]];
   return ps.map((e) => e[0].toString() + "=" + e[1]).join(",") + (n < 1 ? "" : "!");
 }
+
+// # What the HIR shows, which is as far as reading got
+//
+// `nts hir --rc` on the failing and passing shapes differ in **one** thing
+// inside the mapped callback:
+//
+//     %12 = concat %10, %11                                   a fresh string
+//     %14 = call.extern nts_number_to_string(%27) frame[40]    a STACK temporary
+//     %15 = call.extern nts_str_append(%12, %14)               appends in place
+//
+// The passing `e[0] + "="` has the `concat` and neither of the other two. But
+// `o.k + "=" + o.v.toString()` over an **object field** has all three and
+// passes, so it is not the append and not the frame string: the discriminator
+// is a **tuple** element against an object field, with everything else equal.
+//
+// Two things were checked and ruled out rather than assumed. The array the
+// callback fills is `array.new uninitialized`, and the counting inserts a
+// read-then-release of the previous element before each store — which looks
+// like releasing garbage on the first iteration and is present in the
+// **passing** shape too. And the retain/release sets of the two functions are
+// otherwise identical, one `retain` of the global and three `release`s each.
+//
+// `nts_str_append`'s in-place path is guarded on `a->reserved == 1u`, and its
+// comment is the interesting sentence: *"one reference exists and this call is
+// consuming it, so nobody can be looking at the units being overwritten. An
+// immortal string — a literal, or frame storage — fails it, which is right:
+// neither is ours to write."* Whether `%12` really holds the only reference
+// when its left operand came out of a tuple is the question this stops at.
+//
+// **No cause is named here on purpose.** Three failing shapes, three passing
+// ones, two ruled-out explanations and the guard to look at is what the next
+// person needs; a guess written down as a cause is worse than none, and this
+// file would be the place it went unchallenged.
