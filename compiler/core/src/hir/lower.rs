@@ -24655,6 +24655,30 @@ impl<'a> FuncBuilder<'a> {
         if let Some(ty) = own {
             return is_an_unsettled_array(ty).then(|| settled(ty));
         }
+        // **A literal with no elements holds nothing, whatever it is typed.**
+        //
+        // The walk below needs the checker to have said `never`. `const [a = 5]
+        // = []` gets no type on the `[]` at all -- the checker assigns none in a
+        // destructuring initializer -- so `empty` was false, the branch above
+        // reported *an array literal of unrepresentable type (an untyped node)*,
+        // and a reader was sent after a representation gap for a literal with
+        // nothing in it.
+        //
+        // Zero elements is syntactic and stronger than the type argument: there
+        // is no element to read at any width, so any width is right. It cannot
+        // reach an array that later grows, because an evolving array gives the
+        // *variable* a type and the literal is lowered against it three sources
+        // earlier -- measured, not assumed. And if it ever did, the consequence
+        // is a store that fails to coerce, which is a refusal and not a wrong
+        // answer.
+        if !self.snapshot.node_types.contains_key(&id)
+            && self.kind_of(id) == Some(syntax::ARRAY_LITERAL_EXPRESSION)
+            && self.children(id).is_empty()
+        {
+            return Some(HirType::Managed(ManagedType::Array(Box::new(
+                HirType::NUMBER,
+            ))));
+        }
         let mut ty = *self.snapshot.node_types.get(&id)?;
         let mut depth = 0usize;
         // The same bound and the same reason as `checker_called_it_unsettled`:
@@ -32473,6 +32497,30 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(element);
         #[allow(clippy::cast_precision_loss)]
         let at = position as f64;
+        // **A source with no element at this position takes the default, and
+        // only the default.** `const [[x] = [1]] = []` reads position 0 of an
+        // array built with length 0, so `exhausted` below is a constant `true`
+        // and the element arm is unreachable -- but both arms still have to
+        // agree on a type, and they cannot: the element is whatever width the
+        // empty literal was given and the default is `number[]`. The refusal
+        // that came out, *a number where an array is wanted*, is about an arm
+        // that never runs.
+        //
+        // Folding it here rather than leaving it to the simplifier, because the
+        // disagreement is raised while the branch is being *built*.
+        //
+        // The test is **syntactic** -- the value is directly an `ArrayNew` with
+        // a constant length -- for the reason `rc.rs` gives for the same shape:
+        // a claim about every path that could reach one is a different and much
+        // larger claim. Growth cannot intervene either, because the reads a
+        // pattern emits follow the literal immediately and nothing is lowered
+        // between them.
+        if let OpKind::ArrayNew { length, .. } = self.values[value.0 as usize].kind
+            && let OpKind::ConstFloat(allocated) = self.values[length.0 as usize].kind
+            && allocated <= at
+        {
+            return self.lower_expression(default).map(Some);
+        }
         let index = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
         // `OpKind::Length`, the plain read. `Place::ArrayLength` is the
         // *compound-assignment* path and refuses on sight -- "reading an array's
