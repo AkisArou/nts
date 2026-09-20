@@ -10,17 +10,26 @@
 // escape and the like, which is exactly the population a lossy mangling
 // collides.
 //
-// **A zero-width joiner is deliberately not among them**, and that is a finding
-// rather than an omission: with `#ZW_\u200c_NJ` in this file, `d8` refuses the
-// whole class --
+// **The zero-width pair is now among them**, and it was a finding before it was
+// a fixture. With `#ZW_\u200c_NJ` here, `d8` used to refuse the whole class --
 //
 //     Field name '$ZW_\u200c_NJ' cannot be represented in dex format.
 //
-// The JVM backend emits a name the class-file format allows and the *dex*
-// format does not, so the Android lane cannot carry it. That is one narrow gap
-// in a different backend from the one this example is about, and putting it in
-// here would make a fixture that tests two things and fails for the other one.
-// It belongs to whoever owns `compiler/codegen/jvm`.
+// -- because `SimpleName` is a list of ranges rather than a rule, and
+// `U+2010..U+2027` picks up after `U+00a1..U+1fff`: everything from `U+2000` to
+// `U+200f` is outside it. ECMAScript reaches into that gap on purpose, since
+// `IdentifierPart` is `ID_Continue` *plus* ZWNJ and ZWJ.
+//
+// Intersected over all 1.1 million codepoints, that is **exactly two
+// characters** -- so `jvm_member_name` maps those two to `$` and leaves the rest
+// of Unicode alone, which is what the general case still wants. The arms below
+// are the two, and `℘` beside them is the control: a non-ASCII character
+// `SimpleName` does admit, which must keep its spelling.
+//
+// Two reasons this lives here rather than in a JVM-only fixture. The characters
+// are an identifier-spelling question, which is what this file is about on every
+// backend; and `d8` is reached through the `dex` gate step, which dexes the whole
+// corpus -- so an example is the only thing that puts a name in front of it.
 //
 // `_uXXXX_` is reversible by construction, so two different characters cannot
 // arrive at one spelling. Two details are deliberate:
@@ -44,6 +53,8 @@ class Spellings {
   #_ = 2;
   #\u{6f} = 3;
   #℘ = 4;
+  #ZW_\u{200c}_NJ = 5;
+  #ZW_\u{200d}_J = 6;
 
   dollar(): number {
     return this.#$;
@@ -61,6 +72,14 @@ class Spellings {
     return this.#℘;
   }
 
+  nonJoiner(): number {
+    return this.#ZW_\u{200c}_NJ;
+  }
+
+  joiner(): number {
+    return this.#ZW_\u{200d}_J;
+  }
+
 
 }
 
@@ -72,10 +91,12 @@ class Spellings {
 export function eachFieldIsItsOwn(n: number): number {
   const s = new Spellings();
   return (
-    s.dollar() * 1000 +
-    s.underscore() * 100 +
-    s.escaped() * 10 +
-    s.weierstrass() +
+    s.dollar() * 100000 +
+    s.underscore() * 10000 +
+    s.escaped() * 1000 +
+    s.weierstrass() * 100 +
+    s.nonJoiner() * 10 +
+    s.joiner() +
     n * 0
   );
 }

@@ -594,6 +594,28 @@ pub fn jvm_member_name(raw: &str) -> String {
             // unicode ranges and a TypeScript identifier may legitimately use
             // them, so mangling those would rename valid programs for a
             // constraint that does not exist.
+            //
+            // **Except for two, and they are exactly two.** `SimpleName` is a
+            // list of ranges rather than a rule, and it has a gap:
+            // `U+2010..U+2027` picks up after `U+00a1..U+1fff`, so everything
+            // from `U+2000` to `U+200f` is outside it. ECMAScript reaches into
+            // that gap on purpose -- `IdentifierPart` is `ID_Continue` *plus*
+            // ZWNJ and ZWJ, named in the grammar because a Persian or Indic
+            // identifier needs them to be spelled correctly.
+            //
+            // Intersecting the two gave 2 codepoints out of the 1.1 million
+            // scanned, and both were confirmed against `d8` rather than read
+            // off the specification: a field `a<ZWJ>b` is refused with "cannot
+            // be represented in dex format" and `a<U+3042>b` in the same class
+            // file is accepted, so the general claim above survives and only
+            // its two exceptions are handled here.
+            //
+            // No hand-written Java can reach this, which is why the runtime jar
+            // never found it: **javac silently strips** ZWNJ and ZWJ from an
+            // identifier, so `int a\u200db;` is a field called `ab`. A compiler
+            // that preserves what the source wrote is the only thing that emits
+            // one, and this is that compiler.
+            '\u{200c}' | '\u{200d}' => '$',
             other if other.is_ascii() && !other.is_ascii_alphanumeric() && other != '_' => '$',
             other => other,
         })
@@ -608,12 +630,28 @@ pub fn jvm_member_name(raw: &str) -> String {
 /// this checks is that the *mangling* above leaves nothing behind that the
 /// format refuses, which is what the test asserts and what the sixty-case sweep
 /// found the one exception to.
+///
+/// **The non-ASCII clause is not a widening of scope, it is the same two
+/// characters.** This predicate read `ch.is_ascii() && ...`, so it agreed with
+/// the mangler on every character the mangler handled and was blind to the two
+/// it did not -- which is the shape that lets a name reach `d8` with nothing in
+/// between saying so. One derivation, asked by both: whatever this rejects, the
+/// mangler above replaces.
 #[must_use]
 pub fn dex_can_spell(name: &str) -> bool {
-    !name.is_empty()
-        && !name.chars().any(|ch| {
-            ch.is_ascii() && !(ch.is_ascii_alphanumeric() || matches!(ch, '$' | '_' | '-'))
-        })
+    !name.is_empty() && !name.chars().any(dex_forbids)
+}
+
+/// The one rule `jvm_member_name` applies and `dex_can_spell` checks.
+///
+/// Split out so the two cannot drift. They did: the mangler grew the zero-width
+/// pair and the predicate would have kept answering `true` for a name holding
+/// one, which is a guard that passes precisely when it is needed.
+fn dex_forbids(ch: char) -> bool {
+    if matches!(ch, '\u{200c}' | '\u{200d}') {
+        return true;
+    }
+    ch.is_ascii() && !(ch.is_ascii_alphanumeric() || matches!(ch, '$' | '_' | '-'))
 }
 
 /// A class's binary name: the same rule, plus the package this backend owns.
@@ -643,6 +681,10 @@ mod jvm_tests {
     /// name arrives carrying, what comes out can be spelled in a dex file. A
     /// seventh forbidden character added to the mangler's `match` is then a
     /// green test rather than a program that verifies and cannot ship.
+    ///
+    /// **Its population is ASCII and that is the whole of its claim**, which is
+    /// what let the zero-width pair through for as long as it did. See
+    /// `the_zero_width_pair_is_mangled_and_nothing_else_outside_ascii_is`.
     #[test]
     fn every_mangled_ascii_name_can_be_spelled_in_dex() {
         for byte in 0x20..=0x7eu8 {
@@ -659,6 +701,39 @@ mod jvm_tests {
         // the sweep above to cover incidentally.
         for raw in ["__@kCount@2", "Benchmark#benchmark", "module#init", "resolve@win32"] {
             assert!(dex_can_spell(&jvm_member_name(raw)), "{raw}");
+        }
+    }
+
+    /// The two characters outside ASCII that DEX refuses and TypeScript allows.
+    ///
+    /// `every_mangled_ascii_name_can_be_spelled_in_dex` above sweeps `0x20..=0x7e`
+    /// and is the reason these went unnoticed: **its population is its claim**,
+    /// and the claim was about ASCII. `SimpleName` is a list of ranges rather
+    /// than a rule, and `U+2010..U+2027` picks up after `U+00a1..U+1fff`, so
+    /// everything from `U+2000` to `U+200f` falls outside it. ECMAScript reaches
+    /// into that gap deliberately: `IdentifierPart` is `ID_Continue` *plus* ZWNJ
+    /// and ZWJ.
+    ///
+    /// Intersecting the two sets over all 1.1 million codepoints gives these two
+    /// and nothing else, so the pair is the whole population and not a sample.
+    /// Both were confirmed against `d8` rather than read off the specification --
+    /// a field `a<ZWJ>b` is refused with "cannot be represented in dex format"
+    /// while `a<U+3042>b` in the same class file is accepted, which is also the
+    /// control for the arm below.
+    #[test]
+    fn the_zero_width_pair_is_mangled_and_nothing_else_outside_ascii_is() {
+        for ch in ['\u{200c}', '\u{200d}'] {
+            let raw = format!("a{ch}b");
+            assert!(!dex_can_spell(&raw), "{ch:?} reached d8 unmangled");
+            assert_eq!(jvm_member_name(&raw), "a$b", "{ch:?} was not mangled");
+        }
+        // The control, and the reason this is two characters and not "non-ASCII":
+        // `SimpleName` admits large unicode ranges, so mangling those would
+        // rename valid programs for a constraint that does not exist.
+        for ch in ['\u{3042}', '\u{00e9}', '\u{3b1}', '\u{10400}'] {
+            let raw = format!("a{ch}b");
+            assert!(dex_can_spell(&raw), "{ch:?} is in SimpleName and was rejected");
+            assert_eq!(jvm_member_name(&raw), raw, "{ch:?} was renamed for no reason");
         }
     }
 

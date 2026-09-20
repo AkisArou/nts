@@ -129,6 +129,23 @@ if (limit > 0) chosen = chosen.slice(0, limit);
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
 const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet)?$/m;
 
+/**
+ * `TS2322 Type 'string' is not assignable to type 'number'.` — code and message.
+ *
+ * **The largest bucket in this census recorded nothing but its own name.** The
+ * `typescript` branch below tested `/^TS\d{4,5}/m` and threw the match away, so
+ * 2,747 of 4,812 files — 57% — arrived as `{why: "typescript"}` and the ranked
+ * refusal list ranked the other 43%. The reasoning for why that is not enough is
+ * already written out one branch further down, for `lowering`: "a run that
+ * records only the bucket can say 413 files are blocked and nothing about what
+ * to fix". The same question, asked of the smaller half only.
+ *
+ * Identifiers are redacted the way `FIRST_REFUSAL`'s are, so that a hundred
+ * files naming a hundred different names rank as one shape — single quotes here
+ * rather than backticks, because that is how TypeScript quotes them.
+ */
+const FIRST_TYPE_ERROR = /^(TS\d{4,5})\s+(.*)$/m;
+
 /** `nts: uncaught <Class>: <message>` — the class comes from the descriptor. */
 const UNCAUGHT = /^nts: uncaught ([A-Za-z_$][A-Za-z0-9_$]*)(?::|$)/m;
 
@@ -191,7 +208,18 @@ function attempt(dir, body) {
     if (diagnostics.includes("frontend transport failed") || diagnostics.includes("panic: ")) {
       return { bucket: "frontend-crash" };
     }
-    if (/^TS\d{4,5}/m.test(diagnostics)) return { bucket: "unsupported", why: "typescript" };
+    const type_error = FIRST_TYPE_ERROR.exec(diagnostics);
+    if (type_error) {
+      return {
+        bucket: "unsupported",
+        why: "typescript",
+        // The code separately from the message: a code is stable across
+        // TypeScript versions and a message is not, so a row keyed on the text
+        // alone silently splits in two the day a wording changes.
+        code: type_error[1],
+        first: type_error[2].replace(/'[^']*'/g, "'X'").trim(),
+      };
+    }
     return { bucket: "unsupported", why: "emit" };
   }
   // `emit-c` exits 0 while refusing, so the diagnostics decide, never the
@@ -212,6 +240,19 @@ function attempt(dir, body) {
       bucket: "unsupported",
       why: "lowering",
       first: first ? first[1].replace(/`[^`]*`/g, "`X`").trim() : undefined,
+      // **The redaction that makes a row rankable destroys the work list.**
+      // The largest actionable row is 147 files of ``\`X\`, a builtin this
+      // compiler does not provide``, and *which* builtin is the entire content
+      // of that row: `Proxy` and `String.raw` rank as one line and are two
+      // different days of work. Ranking wants the shape and acting wants the
+      // names, so both are recorded rather than one derived from the other.
+      //
+      // The names as the compiler quoted them, in order, deduplicated -- a file
+      // naming the same builtin twice is one entry, so a tally over this field
+      // counts files rather than mentions.
+      named: first
+        ? [...new Set(first[1].match(/`[^`]*`/g) ?? [])].map((quoted) => quoted.slice(1, -1))
+        : undefined,
     };
   }
 
