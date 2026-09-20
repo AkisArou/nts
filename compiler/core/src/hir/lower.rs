@@ -22914,6 +22914,67 @@ impl<'a> FuncBuilder<'a> {
     /// Everything else is refused. `String(true)` is `"true"` and an object's
     /// is `toString` off the prototype chain, and neither is a conversion this
     /// compiler has.
+    /// Which absence a node *is*, where it is written as one.
+    ///
+    /// `null`, and `undefined` — the latter being an identifier bound to a
+    /// non-writable property of the global object rather than a keyword, so a
+    /// local of that name shadows it and the binding table is what says so.
+    /// That is the same order `lower_identifier` takes before it reaches
+    /// `lower_absent`, and asking it here keeps the two from disagreeing about
+    /// what the word means.
+    ///
+    /// `void e` is deliberately not one: it has an operand to evaluate, and a
+    /// fold that dropped it would drop its effects.
+    fn absence_written_at(&self, node: NodeId) -> Option<u32> {
+        if self.kind_of(node) == Some(syntax::NULL_KEYWORD) {
+            return Some(super::tags::NULL);
+        }
+        if self.node(node).text.as_deref() != Some("undefined") {
+            return None;
+        }
+        // A **module-scope** `var undefined` is excluded as well as a local
+        // one. `lower_identifier` checks only the binding table before falling
+        // through to `lower_absent`, so the compiler already treats a global of
+        // that name as the absence — but this fold answers `==` too, where the
+        // consequence of being wrong is a wrong answer rather than a refusal.
+        // Declining here leaves the ordinary path to make whatever choice it
+        // makes, which is the conservative direction for a fold to take.
+        match self.node(node).symbol {
+            Some(symbol)
+                if self.bindings.contains_key(&symbol.0)
+                    || self.module.variables.contains_key(&symbol.0) =>
+            {
+                None
+            }
+            _ => Some(super::tags::UNDEFINED),
+        }
+    }
+
+    /// `null === undefined` and its family, answered without lowering either.
+    ///
+    /// `None` unless both sides are absences written in the source and the
+    /// operator is an equality. Strict equality is "the same absence"; loose
+    /// equality is "both are absences", because `null == undefined` is true and
+    /// that is the one coercion this compiler is entitled to do — the two are
+    /// the only values in the language that are loosely equal to each other and
+    /// to nothing else.
+    fn comparison_of_two_absences(
+        &self,
+        lhs: NodeId,
+        operator: NodeId,
+        rhs: NodeId,
+    ) -> Option<bool> {
+        let left = self.absence_written_at(lhs)?;
+        let right = self.absence_written_at(rhs)?;
+        match self.kind_of(operator)? {
+            syntax::EQUALS_EQUALS_EQUALS_TOKEN => Some(left == right),
+            syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN => Some(left != right),
+            syntax::EQUALS_EQUALS_TOKEN => Some(true),
+            syntax::EXCLAMATION_EQUALS_TOKEN => Some(false),
+            _ => None,
+        }
+    }
+
     fn as_string(&mut self, from: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
         let text = HirType::Managed(ManagedType::String);
         match self.values[value.0 as usize].ty {
@@ -38717,16 +38778,43 @@ impl<'a> FuncBuilder<'a> {
                     // Without this an `undefined` written as the right of a
                     // `||` had nothing to ask and was refused for standing in
                     // for something that is not a reference.
+                    //
+                    // **`+` is here for a different reason and the same
+                    // answer.** A string `+` does not pick one side, it
+                    // *converts* both -- and `as_string` already emits the
+                    // literal text for an absence whose type is a string, which
+                    // is what makes `undefined + ""` into `"undefined"`. What
+                    // it needs is for the operand to have that type, and a bare
+                    // `undefined` has none of its own. Inside a `return` the
+                    // declared result supplied it; inside `if (undefined + ""
+                    // !== "undefined")` nothing did.
+                    //
+                    // Safe for the arithmetic `+` because only an absence and a
+                    // literal ask this, and `1 + null` is `TS2365` before the
+                    // compiler sees it.
                     Some(
                         syntax::BAR_BAR_TOKEN
                         | syntax::AMPERSAND_AMPERSAND_TOKEN
-                        | syntax::QUESTION_QUESTION_TOKEN,
+                        | syntax::QUESTION_QUESTION_TOKEN
+                        | syntax::PLUS_TOKEN,
                     ) => self
                         .type_of(parent)
                         .or_else(|| self.contextual_type(parent, depth + 1)),
                     _ => None,
                 }
             }
+            // `cond ? a : null` — the same argument the `||` arm above makes,
+            // one syntax over: a conditional picks one arm or the other and
+            // chooses no type of its own, so what the whole expression is is
+            // what each arm is heading for.
+            //
+            // `(false ? true : null) !== null` is the shape the corpus writes,
+            // and without this the `null` arm had nothing to ask. The condition
+            // is a child too and never reaches here, because only an absence
+            // and a literal consult this and a condition is neither.
+            Some(syntax::CONDITIONAL_EXPRESSION) => self
+                .type_of(parent)
+                .or_else(|| self.contextual_type(parent, depth + 1)),
             // `f(null)` and `new Element(v, null)` — the parameter it fills.
             // The signature is the checker's answer after overload resolution,
             // so this is exact rather than a guess at which overload.
@@ -38792,11 +38880,20 @@ impl<'a> FuncBuilder<'a> {
                 self.contextual_type(parent, depth + 1)
             }
             // Grouping and assertions carry the context through unchanged.
+            //
+            // **A conditional was in this list and is not any more.** It is not
+            // grouping: `cond ? a : b` has a type of its own, the union of its
+            // arms, and skipping straight to the *parent's* context threw that
+            // away. `(false ? true : null) !== null` then asked the comparison,
+            // whose other side is `null`, which has no representation -- so the
+            // arm was refused for standing in for something that is not a
+            // reference while the node one level up said exactly what it was.
+            // Its own arm is above, beside `||` and `??`, which is the company
+            // it belongs in: an operator that picks one side and names no type.
             Some(
                 syntax::PARENTHESIZED_EXPRESSION
                 | syntax::AS_EXPRESSION
-                | syntax::SATISFIES_EXPRESSION
-                | syntax::CONDITIONAL_EXPRESSION,
+                | syntax::SATISFIES_EXPRESSION,
             ) => self.contextual_type(parent, depth + 1),
             _ => None,
         }
@@ -38953,6 +39050,18 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// `void 0` is the idiom this exists for, and it is `undefined` rather than
     /// a number: the operand's *type* does not reach the result.
+    /// `void e`: evaluate `e`, answer `undefined`.
+    ///
+    /// **The answer takes the slot's type where the slot has one**, which is
+    /// the same rule `lower_absent` follows and for the same reason: `void 0`
+    /// *is* the `undefined` literal in every program that writes it, and a
+    /// `HirType::Void` cannot be concatenated. `void 0 + ""` refused with ``a
+    /// conversion to string from a representable type`` -- a sentence about
+    /// `Void`, which is a representation nothing can convert, rather than about
+    /// the program.
+    ///
+    /// Only a *managed* expectation is taken. A numeric one would be a lie:
+    /// `void 0` is not a number, and the checker will not have asked for one.
     fn lower_void(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let operand = *self
             .children(id)
@@ -38960,7 +39069,12 @@ impl<'a> FuncBuilder<'a> {
             .ok_or_else(|| self.unsupported(id, "a `void` with no operand"))?;
         self.lower_expression(operand)?;
         let origin = self.origin(id);
-        Ok(self.push(OpKind::ConstUndefined, HirType::Void, origin))
+        let ty = self
+            .contextual_type(id, 0)
+            .or_else(|| self.expecting.clone())
+            .filter(|ty| matches!(ty, HirType::Erased) || ty.is_managed())
+            .unwrap_or(HirType::Void);
+        Ok(self.push(OpKind::ConstUndefined, ty, origin))
     }
 
     /// **A relational operator over objects compared their addresses**, and
@@ -39119,6 +39233,31 @@ impl<'a> FuncBuilder<'a> {
         }
 
         let token = self.kind_of(*operator).unwrap_or(0);
+
+        // **Both sides absent is a constant**, and it goes first because it is
+        // the most specific question here: neither `null` nor `undefined` has a
+        // representation of its own, and `contextual_type` asks the *other*
+        // side of a comparison — which here is the other absence, so the two
+        // send each other in a circle and both are refused for standing in for
+        // something that is not a reference.
+        //
+        // ```text
+        // null !== null          false
+        // undefined !== null     true    (strict)
+        // undefined != null      false   (loose: they coerce to each other)
+        // ```
+        //
+        // Not a fold for speed. A comparison between two absences is decided by
+        // which absences they are and nothing else — there is no value to
+        // compare at run time and no type for one to have. Placed above
+        // `erased_absence_test` for exactly that reason: that one is a *tag*
+        // test on a value that was read, and it tried to lower one of these
+        // sides to have a tag to read.
+        if let Some(answer) = self.comparison_of_two_absences(*lhs_node, *operator, *rhs_node) {
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::ConstBool(answer), HirType::Bool, origin));
+        }
+
         // `v === undefined` on an erased value is a tag test, and neither
         // operand is ever built -- `undefined` has no representation of its
         // own, only a tag.

@@ -672,7 +672,7 @@ of the surface therefore costs nothing.
 | ✅ | objects — a flat struct with a layout `examples/key-order-follows-the-program` carries what fixes the field order, and `examples/references` the objects that hold other objects, which is where a store has to do more than write. |
 | ✅ | typed arrays: all eight kinds, as `NtsArray` with a narrow element **Enumeration checked 2026-09-14, and it is exact.** No single example carries eight, so this row cites the suite rather than a directory: across `examples/`, eight distinct spellings appear and they are precisely the eight this row claims — `Uint8` (79 uses), `Uint16` (14), `Float64` (9), `Int32` (6), `Uint32` (5), `Float32` (4), `Int16` (3), `Int8` (2). The three JavaScript typed arrays that do **not** appear are `Uint8ClampedArray`, `BigInt64Array` and `BigUint64Array`, and all three are accounted for elsewhere in this file rather than missing — the clamping one under `instanceof` against a natively-represented type, the other two in §16's table. So "all eight" is the right number and not a round one. `examples/typed-arrays` states the shape the row depends on — a typed array is a **view** onto an `ArrayBuffer` — and `examples/typed-array-aliasing` the consequence, two views naming the same bytes. |
 | ✅ | `unknown`, unions, optional properties — one 16-byte tagged value `examples/optional-properties` carries `x?: T`, and `examples/optional-unassigned` the field a constructor never writes. `examples/unknown` is the value with a representation and no facts; `examples/unions` the tag; `examples/unknown-references` a reference inside one, and `examples/unknown-returns` what a caller does with one. **`any` sites left this row on 2026-09-18.** It had been ✅ here while §3534 of this same file said `any` is refused in *every* position — parameter, property, return — and `representation_of` has no `TypeKind::Any` arm to this day: `any` falls to the generic unrepresentable-type refusal, wearing the same sentence as every other one, which is also why no census can rank it. The `unknown` half of the row was always true and is what the examples beside it exercise. |
-| ✅ | `null` and `undefined`, as two values — see below for what a pointer can hold `examples/nullable` carries them, under the claim that a nullable type costs nothing. |
+| ✅ | `null` and `undefined`, as two values — see below for what a pointer can hold `examples/nullable` carries them, under the claim that a nullable type costs nothing. **Three positions where the context did not say what an absence stands for were closed on 2026-09-20** — `examples/an-absence-with-no-slot`, 261 cases across 9 functions on all five variants, six refusals on the compiler before it. Neither `null` nor `undefined` has a representation of its own, so `lower_absent` takes one from the context and `contextual_type` is the single function that answers *what does this position want*. **A conditional was in that function's grouping list**, beside parentheses and `as`, which carries the *parent's* context through unchanged — wrong, because a conditional has a type of its own, the union of its arms. `(false ? true : null) !== null` then asked the comparison, whose other side is `null`, and got nothing; it has its own arm now, beside `||` and `??`, which is the company it belongs in. **A string `+` is the second**: `undefined + ""` is `"undefined"` and `as_string` already emits exactly that text for an absence whose type is a string — what it needed was for the operand to *have* that type, which a `return` supplied and an `if` condition did not. **Both sides at once is the third**, and it is a constant rather than a context question: `null !== null` sent the two operands in a circle, each asking the other side of the comparison. It is decided by which absences they are and nothing else, so it is answered **above** `erased_absence_test` — that one is a *tag* test on a value that was read, and it was trying to lower one of these sides to have a tag to read. `null == undefined` is true and is the one coercion in the language holding between exactly these two values. **`void e` takes the same route**, since `void 0` is how the corpus spells `undefined`; its operand is still evaluated, which `voidStillEvaluates` pins by counting a call the fold would have dropped. The row's ranked refusal went 20 files to 11; what is left is `var x = null` at module scope, `throw null`, and `eval`. |
 | ✅ | `typeof` — including `"function"` for a closure and `"object"` for `null` `examples/typeof` carries the plain case — `typeof x` where `x` has a single known primitive type — and `examples/unknown-truthiness` the tagged one. |
 | ✅ | `Map`, `Set` — one insertion-ordered table, keys and values as tagged values — `examples/map-and-set`, twenty-one `new Map` and five `new Set`. It exercises the *operations* and never iterates one; that claim is `examples/iteration` |
 | ✅ | the polymorphic `this` — the receiver's own pointer, which costs nothing `examples/fluent-this` carries it, as `ref(): this` — the return that makes a fluent interface work. |
@@ -2925,6 +2925,54 @@ larger than the result, none at all, a computed one so the differential's own
 inputs reach it, and a multi-character separator. **6 refusals** on the
 pre-change binary.
 
+#### A dead store the verifier checked and no pass could fix (fixed)
+
+Seven files of the slice-1 `test/language` population produced
+
+```text
+invalid HIR: StoreType { func: "module#init", what: "a field",
+  expected: Int { bits: 32, signed: true }, found: Float { bits: 64 } }
+```
+
+which is the worst outcome available: `emit-c` writes nothing and exits 0, so
+they were silently unbuilt.
+
+The store was real and the types did disagree. **Nothing ran it.** Dead-code
+elimination had dropped it from its block's `ops` and left the definition in
+`Func::values`, because values are addressed by index and removing one would
+renumber the rest — and `emit.rs` already said so from the other side, that it
+collects "from the values each block still *executes*, not from every value the
+function defines".
+
+So `specialize::reconcile_stores`, which inserts the conversion a narrowed field
+needs, walks `block.ops` and never saw the store; `verify::check_stores` walked
+`&func.values` and did. **Neither is wrong on its own**: the defect is that one
+collection means "the program" to the fixer and a different one means it to the
+checker, and nothing compared them. It surfaces only for an op that is dead
+*before* the fixer runs, which is rare enough to hide and not rare enough never
+to happen — it arrived here because making generators-that-yield-nothing lower
+let these programs reach a stage they had never reached.
+
+`executed_values` is the one answer now, asked by `check_stores` and
+`check_operands`. It deliberately does not consult `reachable_blocks`: an op in
+an unreachable block is separately reported as `Unreachable`, and asking would
+be a second derivation of reachability — one that runs before the edges are
+checked, which panicked `a_dangling_successor_is_caught` with `index out of
+bounds: the len is 1 but the index is 9`. The existing code's own ordering said
+so, calling `reachable_blocks` only after `if !edges_sound { return }`.
+
+Narrowing a checker is the **permissive** direction, so it carries a two-arm
+test — `only_a_store_a_block_runs_is_checked` — whose arms differ in exactly one
+thing: whether the block lists the store. Without the live arm, a verifier that
+stopped looking entirely would pass. What the change gives up is stated rather
+than assumed: an op no block lists is not in the emitted program on any backend,
+and if one ever is, that is a defect in the backend's collection and this is not
+the check that would find it.
+
+The diagnosis took a trace rather than a reading: `reconcile_stores` reported
+`module#init (0 field sets)` while `nts hir` showed two, and that one line ended
+a long and wrong hunt through the narrowing passes.
+
 #### `typeof null` and `typeof undefined` (fixed)
 
 Both are constants — `"object"` and `"undefined"` — and both were refused as
@@ -2935,6 +2983,14 @@ The refusal came from **lowering the operand**, which the general `typeof` path
 does before consulting the value's representation, and a bare `null` has none to
 lower into. Answering from the checker's type instead skips nothing: `typeof`
 evaluates its operand, and the operand here is a keyword with no effects to run.
+
+**Three more positions in that family were closed on 2026-09-20** — a
+conditional's arm, an operand of a string `+`, and a comparison whose *both*
+sides are absences. All three are the same shape as this one: a sentence about
+storage for a value the program does say the type of, one node up. The first two
+are `contextual_type` arms and the third is a constant, answered above
+`erased_absence_test` because that is a tag test on a value that was read.
+`examples/an-absence-with-no-slot` carries them.
 
 **`typeof x` where `x` is a `const` holding `null` is still refused**, and so is
 `typeof g()` where `g` returns `null`. Those are the null-representation family
