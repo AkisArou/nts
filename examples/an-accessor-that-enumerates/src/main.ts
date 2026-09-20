@@ -123,8 +123,20 @@ const instance = new Shaped();
 //
 // The checker's member list is *own-first* and a layout is *base-first*, so
 // walking properties unconditionally renamed `Object.keys(new Derived())` from
-// `a,b,c,d` to `c,d,a,b`. Nothing in the corpus enumerated an inherited class,
-// so the gate was green on it; a probe against node was what said otherwise.
+// `a,b,c,d` to `c,d,a,b`.
+//
+// **The corpus already covered this and the gate caught it.** A probe found it
+// first, minutes earlier, only because the gate takes forty and was still
+// running --- and the commit that fixed it claimed the gate "was green on it
+// and always would have been", which was an assumption written as a fact.
+// `key-order-follows-the-program` and `key-order-through-an-extended-interface`
+// are two examples that exist for exactly this, and the run said so:
+// `^ fell from 296 to 294`.
+//
+// The arms below are still worth having --- they put the failure next to its
+// cause rather than two directories away --- but the lesson is the opposite of
+// the one first written down. Before claiming nothing covers a thing, look for
+// a fixture named after it.
 //
 // The list keeps the layout's order unless a literal accessor is present ---
 // and an accessor only ever reaches it from a literal, where layout order,
