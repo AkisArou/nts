@@ -16933,6 +16933,31 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
         let layout = self.layout_of(id, type_id)?;
+        // **A function object's own properties are not its layout's fields.**
+        //
+        // `Object.keys(SomeClass)` answered `[]` where node answers
+        // `["x","y"]`: a class value is function-typed, its layout is `Fn__1`
+        // with no fields at all, and an empty field list walks to an empty
+        // array. A wrong answer that compiled, and one indistinguishable from
+        // the right answer for a plain function.
+        //
+        // Asked of the **type** rather than of the layout's name. The first
+        // version tested `is_constructor_name(&layout.name)`, on the reasoning
+        // that a class object is a `Ctor_` --- and the layout that arrives here
+        // is `Fn__1`, so it never fired. A probe cannot tell that from a guard
+        // whose controls all pass; an `eprintln!` in this function could, and
+        // `nts types` says plainly that `Statics` is `Function(SignatureId(0))`.
+        //
+        // A plain function's `[]` was only accidentally right: `fn.foo = 1` is
+        // an own enumerable property and nothing here models one, so what this
+        // gives up is an answer that was never derived.
+        if self.is_function_typed(argument) {
+            return Err(self.unsupported(
+                id,
+                "an `Object` static over a function object, whose own properties are not \
+                 fields of it -- a class's statics are globals",
+            ));
+        }
         Ok((type_id, layout))
     }
 

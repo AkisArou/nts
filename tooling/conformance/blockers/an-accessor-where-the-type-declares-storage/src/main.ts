@@ -68,3 +68,19 @@ export function readsTheGetter(): number {
 export function callsTheMethod(): number {
   return methodForAField.m();
 }
+
+// # A second wrong answer of the same shape, found beside this one
+//
+// `Object.keys(SomeClass)` answered `[]` where node answers `["x","y"]`. A
+// class value is **function-typed**, its layout is `Fn__1` with no fields, and
+// an empty field list walks to an empty array --- wrongness that is
+// indistinguishable from the right answer for a plain function, which is why
+// nothing noticed.
+//
+// It is refused in `own_layout` now, and the guard had to be written twice.
+// The first version tested `is_constructor_name(&layout.name)` on the
+// reasoning that a class object is a `Ctor_`; the layout that arrives is
+// `Fn__1`, so it never fired --- and a guard that never fires passes every
+// control written to check it does not break the ordinary case. An
+// `eprintln!` in that function answered in one run what re-reading the
+// condition did not, which is the same lesson as the note above.
