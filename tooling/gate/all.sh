@@ -1118,9 +1118,10 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # `a-for-of-that-assigns`. 273 on 2026-09-20 for
   # `a-nested-array-whose-elements-narrow`, 274 the same day for
   # `a-hole-in-an-array-literal`, 275 for
-  # `a-parenthesised-assignment-target` and 276 for
-  # `an-absence-with-no-slot`.
-  backend_examples 276 "through the LLVM backend, counting" "" 14 ); }
+  # `a-parenthesised-assignment-target`, 276 for
+  # `an-absence-with-no-slot` and 277 for
+  # `an-instanceof-against-a-builtin`.
+  backend_examples 277 "through the LLVM backend, counting" "" 14 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -1147,7 +1148,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # `a-for-of-that-assigns`. The JVM's `exact` floor below took all six in the
 # same runs and at the same numbers.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 277 "through the LLVM backend" "" 14 ); }
+  backend_examples 278 "through the LLVM backend" "" 14 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1407,7 +1408,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   status=$?
   printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
   [ "$status" -eq 0 ] || return 1
-  backend_examples 277 "through the JVM backend" exact 10 ); }
+  backend_examples 278 "through the JVM backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
