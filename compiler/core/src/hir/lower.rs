@@ -3263,6 +3263,23 @@ fn growth_can_fill(ty: &HirType) -> bool {
 /// `for (… of [[]])` — and they still refuse, because nothing in those
 /// programs says what the inner array holds. The refusal names the empty
 /// literal now instead of blaming the representation.
+/// The same type with every uninhabited element replaced by a width.
+///
+/// The answer [`is_an_unsettled_array`] asks for. Recursive rather than one
+/// level, because `never[][]` is reached through an array whose element is
+/// itself unsettled and a one-level replacement would leave the inner one.
+fn settled(ty: &HirType) -> HirType {
+    match ty {
+        HirType::Managed(ManagedType::Array(element)) if **element == HirType::Never => {
+            HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)))
+        }
+        HirType::Managed(ManagedType::Array(element)) => {
+            HirType::Managed(ManagedType::Array(Box::new(settled(element))))
+        }
+        other => other.clone(),
+    }
+}
+
 fn is_an_unsettled_array(ty: &HirType) -> bool {
     match ty {
         HirType::Managed(ManagedType::Array(element)) => {
@@ -24562,7 +24579,53 @@ impl<'a> FuncBuilder<'a> {
         false
     }
 
-    fn lower_array_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+    /// An array type for a literal the checker typed `never` all the way down.
+    ///
+    /// The companion to [`Self::checker_called_it_unsettled`], which decides
+    /// *that* this happened; this decides what to do about it. Both walk the same
+    /// two sources, because a representation exists for `never[]` (an array whose
+    /// element is `HirType::Never`) and does not for `never[][]`, so neither
+    /// source answers for both nodes on its own.
+    ///
+    /// Returns `None` for anything that is not uninhabited, so it can only ever
+    /// decide a case the three sources above already refused.
+    fn a_stand_in_for_nothing(&self, id: NodeId, own: Option<&HirType>) -> Option<HirType> {
+        if let Some(ty) = own {
+            return is_an_unsettled_array(ty).then(|| settled(ty));
+        }
+        let mut ty = *self.snapshot.node_types.get(&id)?;
+        let mut depth = 0usize;
+        // The same bound and the same reason as `checker_called_it_unsettled`:
+        // every step is strictly inwards, so this terminates without a visited
+        // set.
+        for _ in 0..32 {
+            match self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind) {
+                Some(TypeKind::Array(element)) => {
+                    depth += 1;
+                    ty = *element;
+                }
+                Some(TypeKind::Never) => {
+                    let mut built = HirType::NUMBER;
+                    for _ in 0..depth {
+                        built = HirType::Managed(ManagedType::Array(Box::new(built)));
+                    }
+                    return (depth > 0).then_some(built);
+                }
+                _ => return None,
+            }
+        }
+        None
+    }
+
+    /// The element type an array literal is built at.
+    ///
+    /// Its own question, and a long one: four sources are consulted in a fixed
+    /// order and each is there because a different corpus needed it, so the
+    /// reasons are longer than the code. Separated from [`Self::lower_array_literal`]
+    /// so that the lowering reads as what it does -- decide a type, reject a
+    /// hole, then build a tuple or an array -- rather than as a hundred lines of
+    /// which ninety are about one `let`.
+    fn array_literal_type(&mut self, id: NodeId) -> Result<HirType, Diagnostic> {
         // Whether the checker's own answer was `never[]`, which is the empty
         // literal. Held separately because it decides the *message*: when the
         // three sources below all fail, describing the node's type says "an
@@ -24571,6 +24634,9 @@ impl<'a> FuncBuilder<'a> {
         // missing is a type for the literal to take, and only the branch that
         // discarded `never[]` knows that.
         let own = self.type_of(id);
+        // Kept because the chain below consumes `own`, and the last resort needs
+        // to know whether there was a representation to settle or nothing at all.
+        let own_shape = own.clone();
         // **Asked of the checker's type, not of the representation.** `[[]]` is
         // `never[][]`, whose *representation* is `None` -- an array of `never`
         // has no element storage -- so `own` is absent and the one-level test
@@ -24586,7 +24652,7 @@ impl<'a> FuncBuilder<'a> {
         // `for (… of [[]])`.
         let empty = own.as_ref().is_some_and(is_an_unsettled_array)
             || self.checker_called_it_unsettled(id);
-        let ty = own
+        own
             // `[]` is typed `never[]`, which is the checker saying the literal
             // decides nothing -- the slot it goes into does. So the expected
             // type wins over it.
@@ -24641,6 +24707,32 @@ impl<'a> FuncBuilder<'a> {
             //
             // Last, so this can only decide what was previously refused.
             .or_else(|| self.contextual_type(id, 0))
+            // **And where every source above is silent because there is nothing
+            // to say**, which is what `never` means rather than a gap.
+            //
+            // `[]` is typed `never[]` and `[[]]` is `never[][]`. No value of type
+            // `never` exists, so no program can read an element out of either --
+            // a read has type `never` and the checker refuses every use of it. An
+            // element width is therefore unobservable here, and refusing for want
+            // of one refuses a program that could not have told the difference.
+            //
+            // `suspend::yielded_slot` already made this choice and states the
+            // argument: a generator that yields nothing still needs a slot with a
+            // width, "sound because nothing can read it". This is the same
+            // uninhabited element one container along, so it takes the same
+            // `HirType::NUMBER` rather than a second answer to one question.
+            //
+            // **It cannot reach an evolving array**, which is the case where a
+            // width would be observable: `const xs = []; xs[0] = "s"` gives the
+            // *variable* an evolved type and the literal is lowered against it,
+            // so all three of number, string and `push` already lowered before
+            // this existed and none of them arrives here. Checked rather than
+            // reasoned -- the arms are in `examples/an-array-of-nothing`.
+            //
+            // 15 files of the slice-1 `test/language` population: 12 are
+            // `for (... of [[]])` with a destructuring head, and 3 are a bare
+            // `[];` whose value is discarded.
+            .or_else(|| self.a_stand_in_for_nothing(id, own_shape.as_ref()))
             .ok_or_else(|| {
                 if empty {
                     self.unsupported(
@@ -24650,7 +24742,10 @@ impl<'a> FuncBuilder<'a> {
                 } else {
                     self.unrepresentable(id, "an array literal")
                 }
-            })?;
+            })
+    }
+    fn lower_array_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let ty = self.array_literal_type(id)?;
         self.holds_a_hole(id, Some(&ty))?;
         // `[a, b]` where the slot is a tuple. Written the same way as an array
         // and meaning something else: a fixed number of slots of their own
