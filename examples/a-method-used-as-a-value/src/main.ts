@@ -286,3 +286,75 @@ class Defaulted {
 export function aDefaultedParameter(n: number): number {
   return new Defaulted().handed([]) * 100 + new Defaulted().handed([n]);
 }
+
+// # A generator method used as a value
+//
+// Refused by name until 2026-09-20 — 40 files of the slice-1 `test/language`
+// population, every one `private-gen-meth-*`, of which **36 now pass**.
+//
+// Calling a generator produces its *frame*, whose type is synthetic and
+// per-declaration (`managed<generator#0>`), while the type the checker gives
+// the call is the abstract `Generator<…>` object that a wrapping closure is
+// declared with. The two disagreed — `Closure8#call(…) -> managed<obj#31>`
+// returning a `managed<generator#0>` — which is invalid HIR and so no output
+// at all.
+//
+// **Nothing was done to fix it.** `suspend::yielded_slot` made the abstract
+// `Generator<…>` representable for an uninhabited element, and a frame's
+// layout already has that class as its *base* — so the two are one pointer and
+// `compatible` has always permitted the upcast, at a return as much as at an
+// argument. The refusal was written against a state of the world that a change
+// three commits later removed, and nothing would have said so: **a refusal does
+// not fail when it stops being necessary.** It was found by re-running the
+// census row, not by reading the comment that explained it.
+
+class Rows {
+  *#pairs(): Generator<number, void, unknown> {
+    yield 1;
+    yield 2;
+  }
+
+  get pairs(): () => Generator<number, void, unknown> {
+    return this.#pairs;
+  }
+
+  *plain(): Generator<number, void, unknown> {
+    yield 4;
+  }
+}
+
+/** Through a getter, which is the shape the corpus writes. */
+export function throughAGetter(n: number): number {
+  let total = 0;
+  for (const v of new Rows().pairs()) {
+    total = total + v;
+  }
+  return total + n * 0;
+}
+
+/** Directly off the instance, with no getter in the way. */
+export function offTheInstance(n: number): number {
+  const g = new Rows().plain;
+  let total = 0;
+  for (const v of g()) {
+    total = total + v;
+  }
+  return total + n * 0;
+}
+
+/** And one that yields nothing, which is where the representation came from. */
+class Silent {
+  *#none(): Generator<never, void, unknown> {}
+
+  get none(): () => Generator<never, void, unknown> {
+    return this.#none;
+  }
+}
+
+export function aSilentGeneratorMethodAsAValue(n: number): number {
+  let count = 0;
+  for (const v of new Silent().none()) {
+    count = count + 1;
+  }
+  return count + n * 0;
+}

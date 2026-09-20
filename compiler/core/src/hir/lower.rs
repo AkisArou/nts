@@ -1787,34 +1787,31 @@ fn refusal_for_a_method_value(probe: &FuncBuilder, method: NodeId) -> Option<&'s
     if uses_its_receiver(probe, method) {
         return Some(RECEIVER_IS_NOT_BOUND);
     }
-    // **A generator method, whose closure would have to carry a frame.**
-    // Calling a generator produces its *frame*, and the frame's type is
-    // synthetic and per-declaration -- `managed<generator#0>`. The type the
-    // checker gives the call is the abstract `Generator<…>` object, and a
-    // wrapping closure is declared with that one, so the value that flows and
-    // the type that describes it disagree: `Closure8#call(…) -> managed<obj#31>`
-    // returning a `managed<generator#0>`.
+    // **A generator method was refused here and is not any more**, as of
+    // 2026-09-20, and how it was cleared is the part worth keeping.
     //
-    // That is **invalid HIR**, which is worse than a refusal -- `emit-c` prints
-    // `refusing to emit code from invalid HIR`, writes nothing and exits 0. It
-    // is 36 files of the slice-1 `test/language` population, every one
-    // `private-gen-meth-*`, and they refused before a method could be used as a
-    // value at all. Refused by name until the closure can be declared at the
-    // frame type the method actually returns.
-    if probe
-        .node(method)
-        .modifiers
-        .contains(nts_semantic_schema::DeclarationModifiers::GENERATOR)
-    {
-        return Some(GENERATOR_METHOD_AS_A_VALUE);
-    }
+    // Calling a generator produces its *frame*, whose type is synthetic and
+    // per-declaration -- `managed<generator#0>` -- while the type the checker
+    // gives the call is the abstract `Generator<…>` object a wrapping closure
+    // is declared with. The two disagreed: `Closure8#call(…) -> managed<obj#31>`
+    // returning a `managed<generator#0>`, which is **invalid HIR** and so no
+    // output at all.
+    //
+    // Nothing was done to this function. `suspend::yielded_slot` made the
+    // abstract `Generator<…>` representable for an uninhabited element, and a
+    // frame's layout already has that class as its *base* -- so the two are one
+    // pointer and `compatible` has always permitted the upcast, at a return as
+    // much as at an argument. The refusal was written against a state of the
+    // world that a change three commits later removed, and nothing would have
+    // said so: a refusal does not fail when it stops being necessary.
+    //
+    // Found by re-running the census row rather than by reading this comment,
+    // which is the general shape -- **clearing one refusal publishes what stood
+    // behind it, and sometimes what stood behind it was another refusal.** 40
+    // files of the slice-1 `test/language` population, every one
+    // `private-gen-meth-*`.
     None
 }
-
-/// Why a generator method cannot be used as a value here.
-const GENERATOR_METHOD_AS_A_VALUE: &str =
-    "a generator method used as a value, whose closure would have to be declared at the frame \
-     type the method returns rather than at the abstract `Generator` the call site sees";
 
 /// Why a method whose body reads `this` cannot be used as a value here.
 const RECEIVER_IS_NOT_BOUND: &str =
