@@ -163,12 +163,146 @@ pub fn node_handle(encoder_index: u32, kind: u16, path: &str) -> String {
     format!("{encoder_index}.{kind}.{path}")
 }
 
+/// Whether tsgo will answer about this node rather than panicking.
+///
+/// A second filter beside the `NodeList` one, and for the same reason: a batch
+/// is lost as a whole. This one is worse than lost --- the process **dies**.
+///
+/// `import.defer(...)` is the case. Upstream asserts, in `checkMetaProperty`,
+/// that nothing asks for the type of the `import.defer` node when it is the
+/// callee of a call:
+///
+/// ```go
+/// debug.Assert(!ast.IsCallExpression(node.Parent) || node.Parent.Expression() != node,
+///     "Trying to get the type of `import.defer` in `import.defer(...)`")
+/// ```
+///
+/// which is right --- a deferred dynamic import is typed as a whole by the
+/// call, and the callee has no type of its own --- and our batches ask about
+/// *every* node, so they walk straight into it. `getSymbolsAtLocations` reaches
+/// it through `getSymbolAtLocation` -> `checkExpression`, and the panic crosses
+/// the transport as a failed request, which ends the compile with no
+/// diagnostic and no file named. 18 test262 files did exactly that.
+///
+/// The condition is upstream's, restated rather than widened, so `import.meta`
+/// is untouched: it cannot be a callee, and it already refuses cleanly at
+/// lowering as *"a meta property"*. Which is what `import.defer` now does too.
+#[must_use]
+pub fn tsgo_will_answer(nodes: &[nts_semantic_schema::NodeRecord], index: usize) -> bool {
+    use nts_semantic_schema::{NodeId, NodeKind};
+
+    let Some(node) = nodes.get(index) else {
+        return true;
+    };
+    if node.kind != NodeKind::Syntax(syntax::META_PROPERTY) {
+        return true;
+    }
+    let Some(parent) = node.parent.and_then(|id| nodes.get(id.0 as usize)) else {
+        return true;
+    };
+    if parent.kind != NodeKind::Syntax(syntax::CALL_EXPRESSION) {
+        return true;
+    }
+    let Ok(arena) = u32::try_from(index) else {
+        return true;
+    };
+    parent.children.first() != Some(&NodeId(arena))
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
     use serde_json::json;
+
+    mod asking_tsgo {
+        use nts_diagnostics::{Location, SourceId, Span};
+        use nts_semantic_schema::{
+            DeclarationModifiers, NodeData, NodeId, NodeKind, NodeRecord, Origin, syntax,
+        };
+
+        use super::super::tsgo_will_answer;
+
+        fn node(kind: u16, parent: Option<NodeId>, children: Vec<NodeId>) -> NodeRecord {
+            NodeRecord {
+                kind: NodeKind::Syntax(kind),
+                origin: Origin::source(Location {
+                    file: SourceId(0),
+                    span: Span::new(0, 1),
+                }),
+                parent,
+                children,
+                symbol: None,
+                flags: 0,
+                modifiers: DeclarationModifiers::default(),
+                native: None,
+                data: NodeData::Children {
+                    present: 0,
+                    small: 0,
+                },
+                text: None,
+            }
+        }
+
+        /// `import.defer('x')` --- node 1 is the meta property, and it is the
+        /// callee. This is the shape upstream asserts against.
+        fn a_deferred_import() -> Vec<NodeRecord> {
+            vec![
+                node(syntax::CALL_EXPRESSION, None, vec![NodeId(1), NodeId(2)]),
+                node(syntax::META_PROPERTY, Some(NodeId(0)), Vec::new()),
+                node(syntax::STRING_LITERAL, Some(NodeId(0)), Vec::new()),
+            ]
+        }
+
+        #[test]
+        fn a_deferred_imports_callee_is_not_asked_about() {
+            assert!(!tsgo_will_answer(&a_deferred_import(), 1));
+        }
+
+        #[test]
+        fn every_other_node_of_that_call_still_is() {
+            let nodes = a_deferred_import();
+            assert!(tsgo_will_answer(&nodes, 0), "the call itself");
+            assert!(tsgo_will_answer(&nodes, 2), "the specifier");
+        }
+
+        /// The control that matters: `import.meta` cannot be a callee, so it
+        /// keeps its symbol and its existing clean refusal at lowering. A guard
+        /// that excluded every meta property would pass the test above and
+        /// change this one.
+        #[test]
+        fn a_meta_property_that_is_not_a_callee_is_asked_about() {
+            let argument = vec![
+                node(syntax::CALL_EXPRESSION, None, vec![NodeId(1), NodeId(2)]),
+                node(syntax::IDENTIFIER, Some(NodeId(0)), Vec::new()),
+                node(syntax::META_PROPERTY, Some(NodeId(0)), Vec::new()),
+            ];
+            assert!(tsgo_will_answer(&argument, 2));
+
+            let alone = vec![node(syntax::META_PROPERTY, None, Vec::new())];
+            assert!(tsgo_will_answer(&alone, 0));
+        }
+
+        #[test]
+        fn a_meta_property_under_something_that_is_not_a_call_is_asked_about() {
+            let nodes = vec![
+                node(
+                    syntax::PROPERTY_ACCESS_EXPRESSION,
+                    None,
+                    vec![NodeId(1), NodeId(2)],
+                ),
+                node(syntax::META_PROPERTY, Some(NodeId(0)), Vec::new()),
+                node(syntax::IDENTIFIER, Some(NodeId(0)), Vec::new()),
+            ];
+            assert!(tsgo_will_answer(&nodes, 1), "`import.meta.url`");
+        }
+
+        #[test]
+        fn an_index_past_the_table_is_answerable() {
+            assert!(tsgo_will_answer(&a_deferred_import(), 99));
+        }
+    }
 
     fn response(flags: u32, value: Option<serde_json::Value>) -> TypeResponse {
         TypeResponse {

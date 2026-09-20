@@ -1288,6 +1288,11 @@ fn resolve_types(
             let NodeKind::Syntax(kind) = node.kind else {
                 return None;
             };
+            // See `types::tsgo_will_answer`: the same batch-losing shape as the
+            // list above, except that this one takes the process with it.
+            if !types::tsgo_will_answer(&snapshot.nodes, index) {
+                return None;
+            }
             let arena = u32::try_from(index).unwrap_or(u32::MAX);
             Some((
                 NodeId(arena),

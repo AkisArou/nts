@@ -128,6 +128,12 @@ pub fn resolve(
             let NodeKind::Syntax(kind) = node.kind else {
                 return None;
             };
+            // And the node tsgo asserts nothing will ask about. Filtered here
+            // rather than handled at the response, because the failure is a
+            // *panic* -- there is no response to handle.
+            if !super::types::tsgo_will_answer(&snapshot.nodes, index) {
+                return None;
+            }
             let arena = u32::try_from(index).unwrap_or(u32::MAX);
             Some((
                 NodeId(arena),
