@@ -45,7 +45,7 @@ worth running before `NeedsRepresentation` exists.
 | `lowers` | 500 | 481 | accepted — **not** verified correct |
 | `unsupported` | 936 | 425 | a lowering refusal; **this is the census** |
 | TypeScript error | 8,875 | 1,603 | 107 / 65 codes, before lowering is reached |
-| `frontend-crash` | 134 | 18 | a `tsgo` panic, not a gap of ours |
+| `frontend-crash` | 134 | 18 | a `tsgo` panic; **closed 2026-09-20** --- see the correction below |
 | distinct first refusals | **49** | 37 | |
 
 Slice 1 is the better instrument for the language: it is the slice with no
@@ -132,6 +132,17 @@ emits it. The row it cited is about something else entirely.
 
 ## Two upstream crashes, found by running the corpus
 
+> **Closed 2026-09-20, and the second one's cause is corrected below.** Both
+> families now produce a diagnostic. The sentence *"neither is a gap here"* was
+> half right and the wrong half was load-bearing: the panics are upstream's, and
+> **the fatality was ours**. tsgo recovers each one and answers with an error;
+> our side turned that error into a dead compile. `types_at` had handled exactly
+> this since it was written --- bisect a failed batch, answer `None` for a single
+> location that still fails --- and no other request did.
+>
+> So the correct reading of this bucket was never "someone else's bug". It was
+> "the one place that degrades does not cover these paths".
+
 134 files panic the vendored TypeScript frontend, in two distinct families.
 Neither is a gap here, and they have their own bucket so they cannot be folded
 into the refusal ranking or the typecheck column.
@@ -161,6 +172,41 @@ let x: number;
 
 Nested array destructuring assignment against an **empty** nested array
 literal. A flat `[x] = [1]` is fine, and so is a non-empty `[[x]] = [[1]]`.
+
+**That minimisation named the wrong construct**, and it took four more probes to
+see it. The precondition is an empty tuple **nested inside another tuple**, and
+destructuring has nothing to do with it:
+
+```ts
+const nest: [[]] = [[]];   // panics; no destructuring anywhere
+const e: [] = [];          // fine --- the same empty tuple, not nested
+```
+
+The reduction had removed everything *except* the destructuring, so the one
+thing left standing looked like the cause. What the accepted spelling has is
+`types_at`: a top-level type goes through the batch that bisects and degrades,
+so the identical upstream failure is swallowed there and fatal here. One bug,
+fatal on one path and invisible on the other, and a reduction that removed the
+precondition along with everything else.
+
+The cause is in tsgo's **API layer**, not its checker: `newTypeResponse` reads
+`ObjectFlagsTuple` off a type and calls `AsTupleType()`, but an instantiated
+tuple's data is a `TypeReference` and the tupleness lives on its target. Five
+shapes reached it through three different requests, and only `getTypeAtLocations`
+survived:
+
+```
+const nest: [[]] = [[]]           getTypeArguments
+[[x]] = [[]]                      getTypeArguments
+[[x, y]] = [[]]                   getTypeArguments
+({ a: [x] } = { a: [] })          getTypesOfSymbols
+import.defer('./x.js')            getSymbolsAtLocations   (the other family)
+```
+
+Both now answer with a refusal or a TypeScript error. The degradation is
+`Unknown` rather than an empty tuple on purpose: the failing programs *contain*
+an empty tuple, so answering with one would look right on exactly them and give
+every other tuple the wrong arity in silence.
 
 ## The first conformance result — 486 of 2,527
 
@@ -888,7 +934,7 @@ for all seven.
 | `strict-pass` | **1,534** | compiled **and ran**, agreeing with the expectation |
 | `unsupported` | 3,257 | refused, by TypeScript or by lowering |
 | `threw` | 3 | ran and threw — the wrong-answer column |
-| `frontend-crash` | 18 | a `tsgo` panic, not a gap of ours |
+| `frontend-crash` | 18 | a `tsgo` panic; **closed 2026-09-20** --- see the correction above |
 
 Of the refusals:
 
