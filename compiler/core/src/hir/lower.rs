@@ -10386,15 +10386,39 @@ impl<'a> FuncBuilder<'a> {
     /// if (i !== 10) throw new Test262Error(…);
     /// ```
     ///
-    /// — passed before and refused after, so the global was being written after
-    /// all and the claim that `var` "was already a local in every way except
-    /// the one that produced the wrong answer" was false.
+    /// — passed before and refused after, so skipping `var` cost the read its
+    /// binding and the claim that `var` "was already a local in every way
+    /// except the one that produced the wrong answer" was false.
     ///
-    /// `var` hoists, so its head declaration really is a module binding. What
-    /// it leaves unfixed is a closure over a `for` loop's `var` at module
-    /// scope, which answers the loop's first value rather than its last; that
-    /// is the status quo rather than a regression, and it has a blocker for the
-    /// in-function case.
+    /// **The conclusion held and the reason given for it did not.** This said
+    /// "the global was being written after all", and it is not written at all.
+    /// Measured 2026-09-20, `for (var i = 0; i < 3; i++) {}` and then:
+    ///
+    /// ```text
+    ///     const snap = i;                 3    module scope, agrees with node
+    ///     function f() { return i; }      0    node says 3
+    ///     const g = () => i;  g()         0    node says 3
+    /// ```
+    ///
+    /// So the three files above pass because a module-scope read resolves to
+    /// the loop's own binding, not because a global behind it holds 3. Skipping
+    /// `var` took that binding away, which is what broke them — a different
+    /// mechanism reaching the same verdict, and the verdict is still don't skip.
+    ///
+    /// **And the unfixed part is wider than a closure.** It was recorded as
+    /// "a closure over a `for` loop's `var` at module scope"; the second line
+    /// above has no closure in it. Any *function* reading such a name answers
+    /// the loop's first value. The in-function case has a blocker and refuses
+    /// by name; this one compiles and is silently wrong, which is the worse
+    /// half and is the one without a fixture.
+    ///
+    /// Pre-existing rather than introduced by the skip: a binary built
+    /// 2026-09-18 answers 0 for both, identically.
+    ///
+    /// The mechanism above is measured; the explanation for it — that
+    /// `lower_for` binds the head as a block parameter and never stores through
+    /// to the global, so only readers *outside* that block see the unwritten
+    /// one — is read off the code and has not been separately confirmed.
     fn declared_in_a_loop_head(&self, id: NodeId) -> bool {
         let Some(list) = self.ancestor(id, syntax::VARIABLE_DECLARATION_LIST) else {
             return false;
