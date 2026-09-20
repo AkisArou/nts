@@ -7652,10 +7652,19 @@ fn representation_within(
 /// is the right trade for a slot that exists only to be compared against
 /// `undefined`.
 ///
-/// Asked at the two places a representation becomes a **slot** — an array's
-/// element and a tuple's position. A function's result, a parameter and a
-/// binding are not slots in this sense: they hand `undefined` back by having
-/// nothing there, which is what `Void` already means.
+/// Asked at the three places a representation becomes a **slot** — an array's
+/// element, a tuple's position, and a binding declared without an initializer.
+///
+/// The third was excluded here, on the grounds that "a function's result, a
+/// parameter and a binding are not slots in this sense: they hand `undefined`
+/// back by having nothing there". True of a result and a parameter, and false of
+/// the binding [`Lowering::unwritten`] makes: that name is *carried* from its
+/// declaration to its first assignment, through block parameters and merges, so
+/// it has to be a value, and `Void` is not one. `var g;` read before anything
+/// writes it refused for want of a zero.
+///
+/// A result and a parameter stay excluded, and that is still the right line:
+/// nothing reads them back.
 fn in_a_slot(representation: HirType) -> HirType {
     if matches!(representation, HirType::Void) {
         HirType::Erased
@@ -32489,10 +32498,27 @@ impl<'a> FuncBuilder<'a> {
     /// pointer, so `ConstNull` is that `undefined` rather than a stand-in for
     /// it; a scalar union is erased, where it is spelled out.
     fn unwritten(&mut self, name: NodeId, declaration: NodeId) -> Result<ValueId, Diagnostic> {
-        let ty = self
-            .type_of(name)
-            .or_else(|| self.evolved_type(name))
-            .ok_or_else(|| self.unsupported(declaration, "a declaration without an initializer"))?;
+        // **A name neither source can type is one nothing ever writes**, and
+        // `undefined` is the whole of what it holds.
+        //
+        // `var g;` with no annotation and no assignment is `any` to the checker,
+        // which has no representation, so both sources declined and the
+        // declaration was refused -- including where `g` is never mentioned
+        // again. `var g; g = 2;` lowered, and so did `var g: number;`: the
+        // refusal was exactly the case with the *least* in it.
+        //
+        // Erased is the honest slot rather than a guess. If nothing writes the
+        // name then `undefined` is what every read sees, which is node's answer;
+        // and if something does write it after all, an erased slot holds
+        // whatever that is, so being wrong about the premise costs a
+        // representation and not an answer. `evolved_type` answering is what
+        // keeps a narrower slot where one is provable -- this is reached only
+        // when it does not.
+        let ty = in_a_slot(
+            self.type_of(name)
+                .or_else(|| self.evolved_type(name))
+                .unwrap_or(HirType::Erased),
+        );
         let origin = self.origin(declaration);
         let kind = match &ty {
             HirType::Bool => OpKind::ConstBool(false),
@@ -32501,8 +32527,25 @@ impl<'a> FuncBuilder<'a> {
             HirType::Float { .. } => OpKind::ConstFloat(0.0),
             // An integer here would be `specialize`'s doing, and it has not run
             // yet; anything else is a type with no zero to name.
+            //
+            // `Void` is not among them any more: it arrives for `var g;` that
+            // nothing assigns -- the checker types it `any` and the
+            // representation is "nothing" -- and `in_a_slot` above is the one
+            // place that maps a widthless representation to the one that can
+            // hold an `undefined`. Its doc carries why a carried binding is a
+            // slot and a result is not.
+            //
+            // **Named, because the sentence without it is about the wrong
+            // thing.** "A declaration without an initializer" describes every
+            // `let x;` in the language, and the ones that reach here are the
+            // subset whose *type* has no zero -- which is what a reader has to
+            // act on and what a census row has to rank by.
             _ => {
-                return Err(self.unsupported(declaration, "a declaration without an initializer"));
+                let named = representation_word(&ty);
+                return Err(self.unsupported(
+                    declaration,
+                    &format!("a declaration with no initializer, of {named}, which has no zero"),
+                ));
             }
         };
         Ok(self.push(kind, ty, origin))
