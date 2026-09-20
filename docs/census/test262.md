@@ -610,6 +610,81 @@ through an `Erase` and `width_of` judged an arithmetic result by its operands
 alone. `typescript.md`'s `negative-zero` row carries it. Those three were
 **reported as passes** for as long as the census has existed.
 
+
+### 1,506 of 4,812, and what is left after the non-goals
+
+Measured 2026-09-20 from a binary built at `a555bbe9`, over all of
+`test/language`, slice 1. **It predates the two commits after it** — the
+property-order fix and the module-scope loop-head fix — which are corrections
+to *answers* rather than to refusals, so the refusal counts below stand and the
+`strict-pass` figure is a floor.
+
+The progression over one night, each figure from a run whose three self-checks
+held: **1,167 → 1,253 → 1,378 → 1,458 → 1,506**. The five largest movers were
+generators that yield nothing (176 files), elisions in array literals (56), a
+generator method used as a value (40), assignment-target shapes (18), and
+`instanceof Array`/`Object` (16).
+
+`an emitter refusal` reads 0 for the first time. It was 7, and those seven were
+not a gap: the verifier checked stores that **no block executes**, which
+dead-code elimination leaves in `Func::values` while every pass that repairs a
+type walks `block.ops`. `emit-c` wrote nothing and exited 0 for all seven.
+
+| | files | |
+| --- | ---: | --- |
+| selected | 4,812 | |
+| `strict-pass` | **1,506** | compiled **and ran**, agreeing with the expectation |
+| `unsupported` | 3,285 | refused, by TypeScript or by lowering |
+| `threw` | 3 | ran and threw — the wrong-answer column |
+| `frontend-crash` | 18 | a `tsgo` panic, not a gap of ours |
+
+Of the refusals:
+
+| | files | |
+| --- | ---: | --- |
+| a TypeScript error | 2,747 | before lowering is reached |
+| a lowering refusal | 538 | **this is the census** |
+| an emitter refusal | 0 | |
+| a link failure | 0 | |
+
+#### The ranked list is not a work list until the non-goals come out of it
+
+| | files | |
+| --- | ---: | --- |
+| a builtin — 138 of them `eval` | 147 | |
+| a regular-expression literal | 38 | |
+| `new Boolean` / `Number` / `String` | 28 | |
+| `any`, and `unknown` conversions | 74 | |
+| **everything else** | **251** | the actionable list |
+
+`eval` is the largest single row in the census and will never be built: an
+ahead-of-time compiler has no answer for dynamic code. Boxed primitives need
+`ToPrimitive`, which this compiler does not have and has refused to
+approximate everywhere else it comes up. A regular-expression literal needs an
+engine, and `quickjs` is the recorded answer rather than a Rust crate.
+
+**`any` is not in that company.** `docs/any-unknown.md` is explicit that it is
+*not started* rather than declined — `NeedsRepresentation` is the named design
+and has no occurrences in the compiler. It is counted apart here because it is
+one piece of work rather than a list of gaps, not because nobody will do it.
+
+Top of what is left:
+
+| files | first refusal |
+| ---: | --- |
+| 36 | a parameter of unrepresentable type (`X`) |
+| 16 | an `X` against something this compiler has no class for |
+| 15 | a module-scope variable of unrepresentable type (`X`) |
+| 15 | an empty array literal in a position that does not say what it holds |
+| 14 | `X`, which `X` does not declare |
+| 14 | `X` and `X` both need the C name `X` |
+| 12 | `X` or `X` where what it stands in for is not a reference |
+| 9 | a declaration without an initializer |
+| 9 | `X`, a value of type `X` called as a function, where the type does not say which function it is |
+| 9 | an array literal of unrepresentable type (an untyped node) |
+| 8 | a shorthand in an assignment pattern, whose name resolves to the property |
+| 7 | a static field of an anonymous class |
+
 ## What this census cannot see
 
 Printed by the instrument on every run, not left to a reader.
@@ -649,6 +724,11 @@ Printed by the instrument on every run, not left to a reader.
   written to distrust itself.
 
 ## Status
+
+**1,506 of 4,812 as of 2026-09-20**, up from 1,167 the day before; 538 lowering
+refusals, of which **251 are actionable** once `eval`, boxed primitives, regular
+expressions and `any` are taken out. The section above carries the numbers so a
+stale claim here is a diff rather than a re-reading.
 
 Advisory. `docs/conformance/test262.md` says larger reports stay advisory until
 coverage is broad enough to set a meaningful gate, and a twenty-minute run is a
