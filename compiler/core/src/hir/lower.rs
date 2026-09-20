@@ -1238,6 +1238,18 @@ fn property_order<'a>(names: impl Iterator<Item = &'a str>) -> Vec<(usize, Strin
         .collect()
 }
 
+/// Which `lib.d.ts` name an `instanceof` names, where it is one this compiler
+/// answers without a class. See [`FuncBuilder::instanceof_builtin`].
+#[derive(Clone, Copy)]
+enum Builtin {
+    Array,
+    Object,
+    Function,
+    /// A name nothing a compiled program holds can be an instance of, so the
+    /// answer is `false` whatever the operand.
+    Never,
+}
+
 /// The `n` behind a synthetic closure type id. The inverse of [`closure_type`].
 fn closure_index(ty: TypeId) -> usize {
     (ty.0.saturating_sub(super::SYNTHETIC_CLOSURES)) as usize
@@ -21205,9 +21217,24 @@ impl<'a> FuncBuilder<'a> {
         lhs: NodeId,
         rhs: NodeId,
     ) -> Result<Option<ValueId>, Diagnostic> {
-        let array = match self.node(rhs).text.as_deref() {
-            Some("Array") => true,
-            Some("Object") => false,
+        let wanted = match self.node(rhs).text.as_deref() {
+            Some("Array") => Builtin::Array,
+            Some("Object") => Builtin::Object,
+            Some("Function") => Builtin::Function,
+            // **Nothing a compiled program holds is a `RegExp`**, which is the
+            // argument `instanceof_native` already makes for `WeakMap`,
+            // `WeakSet` and `WeakRef`: the test is not unanswerable, it is
+            // answerable and the answer is `false`. Guarded on the fact rather
+            // than asserting it, so the day a regular expression represents
+            // this falls through to the refusal it has today.
+            Some("RegExp")
+                if self
+                    .type_named("RegExp")
+                    .and_then(|ty| self.represent(ty))
+                    .is_none() =>
+            {
+                Builtin::Never
+            }
             _ => return Ok(None),
         };
         // Declared by the program rather than by `lib.d.ts` means it is an
@@ -21220,11 +21247,38 @@ impl<'a> FuncBuilder<'a> {
         {
             return Ok(None);
         }
-        if array {
+        if matches!(wanted, Builtin::Array) {
             return self.decide_is_array(id, lhs).map(Some);
         }
         let value = self.lower_expression(lhs)?;
-        let answer = match &self.values[value.0 as usize].ty {
+        let ty = self.values[value.0 as usize].ty.clone();
+        // A function value is an object with one method, so it is an `Object`
+        // as well as a `Function` -- which is what JavaScript says, and is why
+        // this is one test over the same representation rather than two.
+        if matches!(wanted, Builtin::Function) {
+            let answer = match &ty {
+                HirType::Managed(ManagedType::Object(at)) => {
+                    super::is_closure_type(*at)
+                        || matches!(
+                            self.snapshot.types.get(at.0 as usize).map(|r| &r.kind),
+                            Some(TypeKind::Function(_))
+                        )
+                }
+                HirType::Erased | HirType::NativePointer(_) => return Ok(None),
+                _ => false,
+            };
+            let origin = self.origin(id);
+            return Ok(Some(
+                self.push(OpKind::ConstBool(answer), HirType::Bool, origin),
+            ));
+        }
+        if matches!(wanted, Builtin::Never) {
+            let origin = self.origin(id);
+            return Ok(Some(
+                self.push(OpKind::ConstBool(false), HirType::Bool, origin),
+            ));
+        }
+        let answer = match &ty {
             // The primitive/object line.
             HirType::Managed(ManagedType::String | ManagedType::Symbol) => false,
             HirType::Managed(_) => true,
@@ -21243,6 +21297,8 @@ impl<'a> FuncBuilder<'a> {
             self.push(OpKind::ConstBool(answer), HirType::Bool, origin),
         ))
     }
+
+    
 
     /// The first object type declared with this name.
     fn type_named(&self, wanted: &str) -> Option<TypeId> {
@@ -36347,6 +36403,29 @@ impl<'a> FuncBuilder<'a> {
         let name = self
             .called_member_name(member)
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
+
+        // **`toString` on an array *is* `join()`**, and the specification says
+        // so in as many words: `Array.prototype.toString` calls the array's
+        // `join` when it is callable, which for an ordinary array it is. The
+        // separator is the comma `join` already defaults to, so this is a
+        // rename rather than a second implementation -- and the numeric and
+        // reference paths below each get it, which is why the rename is here
+        // and not in either of them.
+        //
+        // `[1, 2].toString()` is `"1,2"`, `[].toString()` is `""`, and a hole
+        // or a `null` contributes nothing between its commas. All three are
+        // whatever `join` answers, which is the point: one implementation
+        // cannot disagree with itself.
+        //
+        // Only with no arguments. `Array.prototype.toString` takes none, and a
+        // call that passes one is something else -- most likely a method on a
+        // subclass -- which keeps its own refusal rather than being silently
+        // reinterpreted.
+        let name = if name == "toString" && arguments.is_empty() {
+            "join".to_owned()
+        } else {
+            name
+        };
 
         // The runtime's array helpers read the block at one width:
         // `nts_array_index_of` takes a `const double *`. A narrower element

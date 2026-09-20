@@ -108,3 +108,53 @@ export function throughTheHierarchy(n: number): number {
   const c = p instanceof Derived ? 1 : 0;
   return a * 100 + b * 10 + c;
 }
+
+// # `Function`, and a name nothing can be an instance of
+//
+// A function value here is a **closure class** — an object with one method —
+// so `f instanceof Function` is a question about the representation, and
+// `f instanceof Object` is `true` for the same value, which is what JavaScript
+// says. One test over one representation rather than two.
+//
+// `RegExp` is the other kind of answer: **nothing a compiled program holds can
+// be one**, because a regular expression has no representation here, so the
+// test is not unanswerable — it is answerable and the answer is `false`. That
+// is the argument `instanceof_native` already makes for `WeakMap`, `WeakSet`
+// and `WeakRef`, and it is **guarded on the fact rather than asserting it**:
+// the day a regular expression represents, this falls through to the refusal
+// it has today rather than quietly answering `false` about a real value.
+
+function named(n: number): number {
+  return n;
+}
+
+const arrow = (n: number): number => n;
+
+export function aFunctionIsAFunction(n: number): number {
+  const f = named;
+  const a = f instanceof Function ? 1 : 0;
+  const b = arrow instanceof Function ? 1 : 0;
+  return a * 10 + b + (n < 1 ? 0 : 0);
+}
+
+/** And is an `Object` too, which is the same representation answering twice. */
+export function aFunctionIsAlsoAnObject(n: number): number {
+  return (arrow instanceof Object ? 1 : 0) + (n < 1 ? 0 : 0);
+}
+
+/** Things that are not functions, which a rule reading "managed" gets wrong. */
+export function whatIsNotAFunction(n: number): number {
+  const p = new Point();
+  const a = numbers instanceof Function ? 1 : 0;
+  const b = p instanceof Function ? 1 : 0;
+  return a * 10 + b + (n < 1 ? 0 : 0);
+}
+
+/** Nothing is a `RegExp`, including a function and an array. */
+export function nothingIsARegExp(n: number): number {
+  const p = new Point();
+  const a = p instanceof RegExp ? 1 : 0;
+  const b = numbers instanceof RegExp ? 1 : 0;
+  const c = arrow instanceof RegExp ? 1 : 0;
+  return a * 100 + b * 10 + c + (n < 1 ? 0 : 0);
+}

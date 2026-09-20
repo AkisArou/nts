@@ -100,3 +100,58 @@ export function signedBytes(): number {
 export function strings(): number {
   return checksum(["alpha", "beta", "gamma"].join(", "));
 }
+
+// # `toString` on an array **is** `join()`
+//
+// The specification says so in as many words: `Array.prototype.toString` calls
+// the array's `join` when it is callable, which for an ordinary array it is.
+// The separator is the comma `join` already defaults to, so the lowering is a
+// **rename** before dispatch rather than a second implementation — one that
+// could disagree with `join` about a hole, an empty array, or how a number is
+// formatted.
+//
+// It refused as ``toString`, where an array has only `length``, which is a true
+// sentence about the layout — an array has no methods in it — and a misleading
+// one about the program.
+//
+// **It moves no corpus row, and that was worth finding out before claiming
+// one.** The 7 files that surfaced behind `instanceof Array` carrying this
+// message do not *call* it:
+//
+//     if (array.toString !== Array.prototype.toString) { … }
+//
+// They read `toString` as a **value** and compare it with the one on
+// `Array.prototype`, which needs function identity for a prototype method and
+// is a much larger thing. This is the method every other program calls, and
+// that is the whole of its case.
+//
+// Only with **no arguments**. `Array.prototype.toString` takes none, and a call
+// that passes one is something else, most likely a method on a subclass, which
+// keeps its own refusal rather than being silently reinterpreted.
+
+export function numbersToString(): number {
+  return checksum([1, 2, 3].toString());
+}
+
+export function stringsToString(): number {
+  return checksum(["alpha", "beta"].toString());
+}
+
+/** Empty is `""`, which `join` already answers and this must not differ on. */
+export function emptyToString(): number {
+  const xs: number[] = [];
+  return checksum(xs.toString());
+}
+
+/** One element has no separator in it at all. */
+export function singleToString(): number {
+  return checksum([7].toString());
+}
+
+/**
+ * The control: `join` with a separator still takes it. A rename that dropped
+ * the arguments would pass every arm above and lose this one.
+ */
+export function joinStillTakesASeparator(): number {
+  return checksum([1, 2, 3].join("-"));
+}

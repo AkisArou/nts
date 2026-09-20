@@ -40,6 +40,14 @@
 // `T | undefined` under this flag and narrows only at the parent, so the access
 // node cannot tell the two apart on its own.
 //
+// **A typed array keeps the trap as well**, and for the same sentence one
+// container over: a `uint8` slot has nowhere to put an `undefined` either.
+// `new Uint8Array(2)[5]` reads the slot where node answers `undefined`, which
+// is a wrong answer rather than an abort and is measured rather than assumed —
+// the pre-session binary answers identically, so it is this bargain and not a
+// regression. Written down here because this file is where a reader looks for
+// the boundary, and the boundary was stated for `number[]` only.
+//
 // An `unknown[]` keeps the trap too, for now, because its slot *can* hold the
 // absence: paying a call to discover that buys nothing.
 // `benches/cases/erasure-stored-unknown` reads `values[i]` 200,000 times in its
