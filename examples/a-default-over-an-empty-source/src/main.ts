@@ -14,6 +14,15 @@
 // `theForHeadSpelling` below are the arms, and the second is the shape the nine
 // `statements/for/dstr` files actually write.
 //
+// **What the older binary does with this file, precisely.** It refuses seven
+// constructs and `nts check` then reports *"nothing to check: no exported
+// function has scalar arguments and a scalar result"* --- not a disagreement,
+// which is what a first reading of that line called it. Five of the seven are
+// `a name from an enclosing scope`, from other work in the same session, so the
+// comparison does not isolate this change; the one that does is the last line,
+// `an empty array of unrepresentable type (any)`. Today the file refuses
+// nothing and agrees with node on 203 cases across 7 functions.
+//
 // Nothing was widened that `tsc` does not already allow: `const [x] = []`
 // **without** a default is TS2493 --- "Tuple type '[]' of length '0' has no
 // element at index '0'" --- so the only shapes that reach this are ones where
