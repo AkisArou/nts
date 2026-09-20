@@ -23329,9 +23329,71 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// `void e` is deliberately not one: it has an operand to evaluate, and a
     /// fold that dropped it would drop its effects.
+    /// Whether this expression computes nothing and cannot fail doing it.
+    ///
+    /// `void 0` is `undefined` and the commonest way to write it, but `void` is
+    /// an operator over an arbitrary expression: `void f()` calls `f`. So the
+    /// fold is allowed only where the operand is a literal, which is every
+    /// spelling a program uses to mean the constant and none that does work.
+    fn voids_a_literal(&self, node: NodeId) -> bool {
+        self.kind_of(node) == Some(syntax::VOID_EXPRESSION)
+            && self.children(node).first().is_some_and(|operand| {
+                matches!(
+                    self.kind_of(*operand),
+                    Some(
+                        syntax::NUMERIC_LITERAL
+                            | syntax::STRING_LITERAL
+                            | syntax::TRUE_KEYWORD
+                            | syntax::FALSE_KEYWORD
+                            | syntax::NULL_KEYWORD
+                    )
+                )
+            })
+    }
+
     fn absence_written_at(&self, node: NodeId) -> Option<u32> {
+        // **Parentheses around an absence change nothing about which one it is.**
+        // `(null) !== null` is the grammar's cover production and ordinary
+        // JavaScript, and the test the compiler makes here is on the node's
+        // *kind*: a `PARENTHESIZED_EXPRESSION` is not a `NULL_KEYWORD`, so the
+        // fold declined and the ordinary path then asked for a representation of
+        // `null`, which there is none of.
+        //
+        // Only `null` was affected. The `undefined` branch below reads the
+        // node's text rather than its kind, and a parenthesised `undefined`
+        // still spells itself -- which is why `(undefined) !== undefined`
+        // lowered beside `(null) !== null` refusing, and why this looked like a
+        // question about `null` rather than about parentheses.
+        //
+        // Unwrapped here for the reason `place_of` gives for doing the same:
+        // *which absence is written here* is one question and this is the
+        // function that answers it. 12 files of the slice-1 `test/language`
+        // population, all `expressions/grouping`.
+        if self.kind_of(node) == Some(syntax::PARENTHESIZED_EXPRESSION)
+            && let Some(inner) = self.children(node).into_iter().next()
+        {
+            return self.absence_written_at(inner);
+        }
         if self.kind_of(node) == Some(syntax::NULL_KEYWORD) {
             return Some(super::tags::NULL);
+        }
+        // **`void 0` is `undefined` written the other way**, and folding it here
+        // is what stops it being lowered at all.
+        //
+        // Without this the operands are lowered, and a `void` with no contextual
+        // type takes `HirType::Void` -- which the C backend writes as `(void)0`
+        // and then assigns to a variable:
+        //
+        // ```c
+        //   v57 = (void)0;     /* 'v57' undeclared; invalid use of void expression */
+        // ```
+        //
+        // A program that compiled and emitted C that does not. Pre-existing --
+        // identical on the binary at 23666c14 -- and reached the moment the
+        // parenthesis fixes above stopped refusing the file one line earlier,
+        // which is the ordinary way a refusal hides the defect behind it.
+        if self.voids_a_literal(node) {
+            return Some(super::tags::UNDEFINED);
         }
         if self.node(node).text.as_deref() != Some("undefined") {
             return None;
