@@ -1187,6 +1187,57 @@ fn closure_type(index: usize) -> TypeId {
     TypeId(id)
 }
 
+/// Own property names in the order the language enumerates them, with the slot
+/// each one came from.
+///
+/// **Array indices first, ascending numerically; then the rest in insertion
+/// order.** That is `OrdinaryOwnPropertyKeys`, and this compiler gave the
+/// layout's order for everything -- so
+///
+/// ```js
+/// Object.keys({ b: 1, a: 2, 2: 3, 1: 4 })
+/// ```
+///
+/// answered `["b", "a", "2", "1"]` where node answers `["1", "2", "b", "a"]`.
+/// A wrong answer rather than a refusal, in a builtin ordinary code calls, and
+/// **the comment on `decide_object_keys` named the exception without
+/// implementing it**: "insertion order, which is what `Object.keys` is
+/// specified to give for string keys *that are not array indices*".
+///
+/// Four consumers were wrong together -- `Object.keys`, `Object.entries`,
+/// `Object.values` and `for...in`, the last through `decide_object_keys` --
+/// which is why this returns the **permutation** rather than a name list: a
+/// column reads its value from the layout's slot and writes it at the
+/// enumeration position, and those are two different numbers.
+///
+/// An **array index** is the specification's `CanonicalNumericIndexString`
+/// restricted to integers below 2^32 - 1, which is exactly "the decimal
+/// spelling round-trips". `"01"`, `"1.0"` and `"-1"` are ordinary string keys
+/// and stay where they were written, which the round-trip test says without a
+/// second rule to keep in step.
+///
+/// Found by probing against node; no corpus file reported it.
+fn property_order<'a>(names: impl Iterator<Item = &'a str>) -> Vec<(usize, String)> {
+    let mut indices: Vec<(u32, usize, String)> = Vec::new();
+    let mut rest: Vec<(usize, String)> = Vec::new();
+    for (slot, name) in names.enumerate() {
+        match name.parse::<u32>() {
+            // `u32::MAX` is not an array index: the specification stops one
+            // short so that `length` can hold the count.
+            Ok(index) if index != u32::MAX && index.to_string() == name => {
+                indices.push((index, slot, name.to_owned()));
+            }
+            _ => rest.push((slot, name.to_owned())),
+        }
+    }
+    indices.sort_unstable_by_key(|(index, _, _)| *index);
+    indices
+        .into_iter()
+        .map(|(_, slot, name)| (slot, name))
+        .chain(rest)
+        .collect()
+}
+
 /// The `n` behind a synthetic closure type id. The inverse of [`closure_type`].
 fn closure_index(ty: TypeId) -> usize {
     (ty.0.saturating_sub(super::SYNTHETIC_CLOSURES)) as usize
@@ -16194,7 +16245,8 @@ impl<'a> FuncBuilder<'a> {
         // Lowered for its effects before anything else, exactly as
         // `Object.keys` does: `Object.values(f())` calls `f`.
         let object = self.lower_expression(argument)?;
-        let (_, layout) = self.own_layout(id, argument)?;
+        let (owner, layout) = self.own_layout(id, argument)?;
+        let enumerable = self.enumerable_fields(owner, &layout);
         let what = if pairs { "`Object.entries`" } else { "`Object.values`" };
         let ty = self
             .type_of(id)
@@ -16205,7 +16257,7 @@ impl<'a> FuncBuilder<'a> {
         let element = (*element).clone();
         let origin = self.origin(id);
         #[allow(clippy::cast_precision_loss)]
-        let count = layout.fields.len() as f64;
+        let count = enumerable.len() as f64;
         let length = self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin.clone());
         let array = self.push(
             OpKind::ArrayNew {
@@ -16215,9 +16267,17 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin.clone(),
         );
-        for (at, field) in layout.fields.clone().into_iter().enumerate() {
+        // **The output position and the field index are two different
+        // numbers**, and they were one. `property_order` puts array indices
+        // first, so `{ 2: 3, 1: 4 }` enumerates field 1 before field 0 -- the
+        // slot a value is read from stays the layout's and only the position it
+        // lands at changes.
+        let ordered = property_order(enumerable.iter().map(|(_, name)| name.as_str()));
+        for (position, (at, _)) in ordered.into_iter().enumerate() {
+            let slot = enumerable[at].0;
+            let field = layout.fields[slot].clone();
             #[allow(clippy::cast_precision_loss)]
-            let position = at as f64;
+            let position = position as f64;
             let index = self.push(
                 OpKind::ConstFloat(position),
                 HirType::NUMBER,
@@ -16226,7 +16286,7 @@ impl<'a> FuncBuilder<'a> {
             let read = self.push(
                 OpKind::FieldGet {
                     object,
-                    field: u32::try_from(at).unwrap_or(u32::MAX),
+                    field: u32::try_from(slot).unwrap_or(u32::MAX),
                 },
                 field.ty.clone(),
                 origin.clone(),
@@ -16382,12 +16442,57 @@ impl<'a> FuncBuilder<'a> {
 
     /// The own property names an `Object` static answers about.
     fn own_names(&mut self, id: NodeId, argument: NodeId) -> Result<Vec<String>, Diagnostic> {
-        let (_, layout) = self.own_layout(id, argument)?;
-        Ok(layout
+        let (ty, layout) = self.own_layout(id, argument)?;
+        let enumerable = self.enumerable_fields(ty, &layout);
+        Ok(
+            property_order(enumerable.iter().map(|(_, name)| name.as_str()))
+                .into_iter()
+                .map(|(at, _)| enumerable[at].1.clone())
+                .collect(),
+        )
+    }
+
+    /// The layout's fields that are **properties**, each with the slot it sits in.
+    ///
+    /// A `#private` field is storage and is not a property: `Object.keys(new
+    /// C())` does not mention it and `for...in` does not visit it. This listed
+    /// it, which is a wrong answer rather than a refusal.
+    ///
+    /// **Asked of the declaration, not of the name.** `#h` and `"#h"` are two
+    /// different members that a layout spells identically, and
+    /// `class C { "#h" = 1 }` and `const o = { "#h": 1 }` are ordinary
+    /// enumerable properties that both work today — so a prefix test would
+    /// break two working cases to fix one broken one, which is measured rather
+    /// than assumed. `PropertyRecord::declaration` points at the node, and a
+    /// private member names itself with a `PRIVATE_IDENTIFIER`.
+    ///
+    /// A field the snapshot has no property for is **kept**: a tuple's `_0`, a
+    /// closure's capture and an anonymous object type's member have no
+    /// `PropertyRecord` to ask, and they reach here only through paths that
+    /// have already decided they are enumerable.
+    fn enumerable_fields(&self, ty: TypeId, layout: &Layout) -> Vec<(usize, String)> {
+        let properties = match self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind) {
+            Some(TypeKind::Object { properties }) => properties.clone(),
+            _ => Vec::new(),
+        };
+        layout
             .fields
             .iter()
-            .map(|field| field.name.clone())
-            .collect())
+            .enumerate()
+            .filter(|(_, field)| {
+                let Some(property) = properties.iter().find(|p| p.name == field.name) else {
+                    return true;
+                };
+                let Some(declaration) = property.declaration else {
+                    return true;
+                };
+                !self
+                    .children(declaration)
+                    .into_iter()
+                    .any(|child| self.kind_of(child) == Some(syntax::PRIVATE_IDENTIFIER))
+            })
+            .map(|(at, field)| (at, field.name.clone()))
+            .collect()
     }
 
     /// The first optional property a type declares, where it has one.

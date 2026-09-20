@@ -2925,6 +2925,89 @@ larger than the result, none at all, a computed one so the differential's own
 inputs reach it, and a multi-character separator. **6 refusals** on the
 pre-change binary.
 
+#### A mapped tuple in a concatenation, under reference counting (open)
+
+```ts
+const ps: [string, number][] = [["a", 1], ["b", 2]];
+ps.map((e) => e[0] + "=" + e[1].toString()).join(",")
+```
+
+is correct on C, LLVM and the JVM and **answers freed memory under `rc`** — 28
+of 29 cases disagree with node. `examples/a-mapped-tuple-in-a-concatenation`
+carries it and `tooling/gate/rc.sh`'s `known_failing` lists it, so a wrong
+answer stays counted rather than absorbed.
+
+Each half passes on its own, and so does the same work written as a `for...of`:
+
+```text
+ps.map((e) => e[0] + "=")            fine
+ps.map((e) => e[1].toString())       fine
+for (const e of ps) { … both … }     fine
+xs.map((v) => "v=" + v.toString())   fine, no tuple
+```
+
+So it needs three things at once: the callback inlined by `map`, a **managed
+field read out of the element**, and a **frame-allocated** string beside it —
+`nts_number_to_string` emits `frame[40]`, a stack temporary, and a stack
+temporary concatenated with a heap string is where two ownership analyses have
+to agree about a value that is not on the heap.
+
+**Pre-existing, and measured to be.** The binary from before the
+enumeration-order work fails it identically. It surfaced because
+`the-order-own-properties-enumerate-in` was the first fixture in the corpus to
+write the shape — the revealing change is not the cause, and that example was
+rewritten to use a walk so a fixture tests one thing and the defect is named
+after itself.
+
+#### The order own properties enumerate in (fixed)
+
+**Array indices first, ascending numerically; then the rest in insertion
+order.** That is `OrdinaryOwnPropertyKeys`, and this compiler gave the layout's
+order for everything — which is insertion order and nothing else — so
+
+```js
+Object.keys({ b: 1, a: 2, 2: 3, 1: 4 })
+```
+
+answered `["b", "a", "2", "1"]` where node answers `["1", "2", "b", "a"]`.
+
+A **wrong answer rather than a refusal**, in a builtin ordinary code calls, and
+no corpus file reported it: the census ranks refusals, and this compiled, ran
+and produced a different list. It was found by a probe sweep against node,
+which is the only instrument here that can see it.
+
+**Four consumers were wrong together** — `Object.keys`, `Object.entries`,
+`Object.values` and `for...in`, the last through `decide_object_keys`, so three
+call sites and one rule. `property_order` returns the **permutation** rather
+than a name list for exactly that reason: a column reads its value from the
+layout's slot and writes it at the enumeration position, and those are two
+different numbers. `entriesAreReordered` is the arm that fails if they are
+conflated — the names come out right and the values are paired with the wrong
+ones.
+
+An **array index** is the specification's `CanonicalNumericIndexString`
+restricted to integers below 2^32 − 1, which is exactly "the decimal spelling
+round-trips". `"01"`, `"1.0"` and `"-1"` are ordinary string keys and stay where
+they were written; one test rather than a list of special cases, so there is no
+second rule to keep in step.
+
+**The comment on `decide_object_keys` named this exception without implementing
+it** — *"insertion order, which is what `Object.keys` is specified to give for
+string keys that are not array indices"*. A precondition stated in prose beside
+code that does not meet it.
+
+**A `#private` field was listed too**, and is not a property: it is storage,
+and `Object.keys(new C())` does not mention it. The test is the **declaration**,
+not the name — `#h` and `"#h"` are two different members a layout spells
+identically, and `class C { "#h" = 1 }` and `const o = { "#h": 1 }` are ordinary
+enumerable properties that both worked before the change, so a prefix test would
+have broken two working cases to fix one broken one. That is measured rather
+than assumed, and both are arms of the example.
+
+`examples/the-order-own-properties-enumerate-in` is 377 cases across 13
+functions on all five variants; the pre-session binary **disagrees with node on
+203 of them**.
+
 #### A dead store the verifier checked and no pass could fix (fixed)
 
 Seven files of the slice-1 `test/language` population produced

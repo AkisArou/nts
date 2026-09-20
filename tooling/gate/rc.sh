@@ -79,7 +79,29 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # Listed rather than left failing, and listed with the cause rather than the
 # symptom: a name here with no explanation is how `module-state` sat as a
 # "baseline artifact" for two months while being a dropped initializer.
-known_failing="this-in-a-field-initializer"
+# `a-mapped-tuple-in-a-concatenation`, from 2026-09-20. A `.map` whose callback
+# concatenates a **string read out of a tuple element** with a number converted
+# in the same expression --
+#
+#     ps.map((e) => e[0] + "=" + e[1].toString()).join(",")
+#
+# -- answers freed memory here and is correct on C, LLVM and the JVM. Each half
+# passes on its own, and so does the same work written as a `for...of`: it needs
+# the callback inlined by `map`, a managed field read out of the element, and a
+# **frame-allocated** string beside it, since `nts_number_to_string` emits
+# `frame[40]`. A stack temporary concatenated with a heap string is where two
+# ownership analyses have to agree about a value that is not on the heap.
+#
+# Pre-existing, and measured to be: the binary from before the enumeration-order
+# work fails it identically. It surfaced because
+# `the-order-own-properties-enumerate-in` was the first fixture in the corpus to
+# write the shape -- the revealing change is not the cause, and the example that
+# revealed it was rewritten to use a walk so that a fixture tests one thing.
+#
+# Listed rather than left failing, and listed with the cause rather than the
+# symptom: a name here with no explanation is how `module-state` sat as a
+# "baseline artifact" for two months while being a dropped initializer.
+known_failing="this-in-a-field-initializer a-mapped-tuple-in-a-concatenation"
 
 crowded=8
 cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )
