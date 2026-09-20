@@ -3143,6 +3143,23 @@ fn settled_global_type(probe: &FuncBuilder, name_node: NodeId) -> Option<HirType
                 .filter(|_| written_as_a_dense_prefix(probe, name_node))
         })
         .or(declared)
+        // **An evolving global initialised with an absence holds both.**
+        // `var x = null; x = 2` settles on `f64` above, because that is what
+        // every reference is; the `null` the slot carries until the assignment
+        // is not a reference and is not in that answer. Storing an erased
+        // `null` into an `f64` global is the mismatch that came back as "an
+        // erased value where a concrete representation is wanted", one step
+        // past the literal's own refusal.
+        //
+        // A *reference* evolution needs nothing: a nullable pointer already
+        // holds the absence, which is why `string | null` is one pointer.
+        .map(|ty| {
+            if ty.is_scalar() && initialized_with_an_absence(probe, name_node) {
+                HirType::Erased
+            } else {
+                ty
+            }
+        })
         // **A module-scope variable is a slot**, and the sixth position to ask
         // this. `var a;` that nothing assigns is `HirType::Void` -- a type with
         // no width -- and a global has to have one, so `storable` refused it.
@@ -3183,6 +3200,27 @@ fn settled_global_type(probe: &FuncBuilder, name_node: NodeId) -> Option<HirType
 /// A name with no indexed writes at all passes: it is filled by `push`, which
 /// appends by definition. Conservative where they are mixed, which is a shape
 /// nothing in the corpus writes.
+/// Whether this declaration's initializer is `null` or `undefined` written out.
+///
+/// The declaration's own observation, which [`Lowering::evolved_type`] does not
+/// have: it walks the nodes carrying the symbol and skips the name, so
+/// `var x = null; x = 2` settles on `f64` -- every *reference* is a number by
+/// then -- and the absence the slot has to hold until the assignment is nowhere
+/// in that answer.
+fn initialized_with_an_absence(probe: &FuncBuilder, name_node: NodeId) -> bool {
+    let Some(declaration) = probe.node(name_node).parent else {
+        return false;
+    };
+    if probe.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION) {
+        return false;
+    }
+    probe.children(declaration).into_iter().any(|child| {
+        probe.kind_of(child) == Some(syntax::NULL_KEYWORD)
+            || (probe.kind_of(child) == Some(syntax::IDENTIFIER)
+                && probe.node(child).text.as_deref() == Some("undefined"))
+    })
+}
+
 fn written_as_a_dense_prefix(probe: &FuncBuilder, name_node: NodeId) -> bool {
     let Some(symbol) = probe.node(name_node).symbol else {
         return false;
@@ -39880,6 +39918,65 @@ impl<'a> FuncBuilder<'a> {
     /// `null` as `null`, which is true and useless: what a backend needs is the
     /// reference type the absence is standing in for, and that is a property of
     /// the position rather than of the token.
+    /// The storage a declaration gives the absence written as its initializer.
+    ///
+    /// Three sources, in order, and the order is the whole of it.
+    ///
+    /// **The written annotation first.** Not the *name's* type: the checker
+    /// narrows the name by the initializer, so `let head: Element | null = null`
+    /// types `head` as `null` right there -- true, and not what the storage is.
+    ///
+    /// **Then the name's own type**, for a declaration that has no annotation
+    /// to read.
+    ///
+    /// **Then what the references settled on**, which is the step that was
+    /// missing. `var x = null; x = 2` has no annotation and no representable
+    /// type at the name, so both sources above decline and the `null` was
+    /// refused for standing in for something that is not a reference -- while
+    /// the binding one node up was a `number` by then.
+    ///
+    /// That last source needs widening, and the reason is worth stating because
+    /// it is not obvious: [`Self::evolved_type`] walks the nodes carrying the
+    /// symbol and **skips the declaration's own name**, so it answers `f64` for
+    /// `var x = null; x = 2` -- every *reference* is a number. The `null` the
+    /// slot carries until the assignment is not a reference and is nowhere in
+    /// that answer, so the slot has to be the erased value that holds both. The
+    /// annotated spelling reaches exactly that through the first source and
+    /// lowered the whole time.
+    ///
+    /// **Scalars only, and the arm that says so is a native pointer.**
+    /// `let held: Ptr<c_int> | null = null` is refused because a module-scope
+    /// variable has no storage for a native pointer, and that refusal is what
+    /// `local_addresses_cannot_outlive_or_free_their_storage` depends on:
+    /// widening it to erased let a stack address escape into a global. A
+    /// nullable *reference* needs nothing either -- a pointer already holds the
+    /// absence, which is why `string | null` is one pointer and not a tag. Only
+    /// a `bool`, an integer or a double has no room for an absence beside it.
+    fn what_the_declaration_holds(&self, parent: NodeId, id: NodeId) -> Option<HirType> {
+        let annotated = self
+            .children(parent)
+            .into_iter()
+            .filter(|child| *child != id && self.kind_of(*child) != Some(syntax::IDENTIFIER))
+            .find_map(|child| self.type_of(child));
+        if let Some(ty) = annotated {
+            return Some(ty);
+        }
+        let name = self
+            .children(parent)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))?;
+        if let Some(ty) = self.type_of(name) {
+            return Some(ty);
+        }
+        self.evolved_type(name).map(|ty| {
+            if ty.is_scalar() {
+                HirType::Erased
+            } else {
+                ty
+            }
+        })
+    }
+
     fn contextual_type(&self, id: NodeId, depth: u32) -> Option<HirType> {
         if depth > 8 {
             return None;
@@ -39909,22 +40006,7 @@ impl<'a> FuncBuilder<'a> {
             // and a parameter default. The declaration names the type.
             Some(
                 syntax::VARIABLE_DECLARATION | syntax::PROPERTY_DECLARATION | syntax::PARAMETER,
-            ) => self
-                .children(parent)
-                .into_iter()
-                // The written annotation, which is every child but the name and
-                // the initializer this came from. Not the *name's* type: the
-                // checker narrows it by the initializer, so `let head: Element
-                // | null = null` types `head` as `null` right there -- true,
-                // and not what the storage is.
-                .filter(|child| *child != id && self.kind_of(*child) != Some(syntax::IDENTIFIER))
-                .find_map(|child| self.type_of(child))
-                .or_else(|| {
-                    self.children(parent)
-                        .into_iter()
-                        .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
-                        .and_then(|name| self.type_of(name))
-                }),
+            ) => self.what_the_declaration_holds(parent, id),
             // `x = null`, `p.next = null` — what the left side holds. And
             // `at !== null` — whatever the other side is, since a comparison
             // against the absent value is a comparison in that side's type.
