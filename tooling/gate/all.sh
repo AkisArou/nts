@@ -1130,7 +1130,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # counting floor is the one that moves when a fixture stops failing
   # under `rc` rather than when a new example lands. 281 for
   # `an-identifier-c-cannot-spell`.
-  backend_examples 295 "through the LLVM backend, counting" "" 14 ); }
+  backend_examples 296 "through the LLVM backend, counting" "" 14 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -1157,7 +1157,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # `a-for-of-that-assigns`. The JVM's `exact` floor below took all six in the
 # same runs and at the same numbers.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 296 "through the LLVM backend" "" 14 ); }
+  backend_examples 297 "through the LLVM backend" "" 14 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1417,7 +1417,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   status=$?
   printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
   [ "$status" -eq 0 ] || return 1
-  backend_examples 296 "through the JVM backend" exact 10 ); }
+  backend_examples 297 "through the JVM backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

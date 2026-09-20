@@ -1121,3 +1121,22 @@ time.
 A third of what is left is out of reach by design: **148 of the 467
 non-TypeScript refusals are `eval`**, against 39 for regular-expression literals
 and 32 for `Iterable` as a parameter.
+
+### The shorthand assignment row, closed 2026-09-21
+
+`({ x } = p)` was **10 files** of the slice-1 population, refused as *"a
+shorthand in an assignment pattern, whose name resolves to the property"*. The
+refusal named a real hazard --- the symbol on that node is the property's, so a
+store through it lands where nothing reads --- and treated the remedy as
+unavailable, needing `getShorthandAssignmentValueSymbol` from the frontend.
+
+It was available. The object *literal* path resolves the identical node by name
+with `shorthand_value_symbol`: local first because a local shadows, and a
+refusal when two bindings of the name are in scope rather than a coin toss that
+compiles. The assignment path asks the same question, so it now calls the same
+function, and `place_of`'s tail was split into `place_for_symbol` so "where does
+this name write" has one derivation reached two ways.
+
+Whether those 10 now pass is the next census and is not claimed here --- the
+compiler reports one blocker at a time, and the previous row of 5 taught that
+lesson the expensive way.

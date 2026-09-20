@@ -23019,6 +23019,9 @@ impl<'a> FuncBuilder<'a> {
     fn assign_pattern(&mut self, target: NodeId, value: ValueId) -> Result<(), Diagnostic> {
         let object = self.kind_of(target) == Some(syntax::OBJECT_LITERAL_EXPRESSION);
         for (position, element) in self.children(target).into_iter().enumerate() {
+            // Set only by the shorthand arm below, where the node's own symbol
+            // is the wrong one to write through.
+            let mut shorthand: Option<nts_semantic_schema::SymbolId> = None;
             let (property, destination) = if object {
                 let parts = self.children(element);
                 match (self.kind_of(element), parts.as_slice()) {
@@ -23036,11 +23039,30 @@ impl<'a> FuncBuilder<'a> {
                     // `({ x: x } = p)` is the one that works, and this is
                     // refused rather than guessed at by name -- a guess would
                     // be wrong exactly where a local shadows an outer one.
+                    // `({ x } = p)`: one identifier standing for both the
+                    // property and the variable it writes to. Resolved by
+                    // `shorthand_value_symbol`, which is the lookup the object
+                    // *literal* path has always used for the same node --- by
+                    // name, local first because a local shadows, and refusing
+                    // outright when two bindings of that name are in scope
+                    // rather than tossing a coin that compiles.
+                    //
+                    // Writing through the node's own symbol is what this
+                    // refused to do, and correctly: that symbol is the
+                    // property's, so the store went somewhere nothing reads and
+                    // `x` silently kept its old value.
+                    (Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT), [name]) => {
+                        let text = self.node(*name).text.clone().ok_or_else(|| {
+                            self.unsupported(element, "a shorthand without a name")
+                        })?;
+                        let symbol = self.shorthand_value_symbol(*name, &text)?;
+                        shorthand = Some(symbol);
+                        (*name, *name)
+                    }
                     (Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT), _) => {
-                        return Err(self.unsupported(
-                            element,
-                            "a shorthand in an assignment pattern, whose name resolves to the property",
-                        ));
+                        return Err(
+                            self.unsupported(element, "a shorthand property of unexpected shape")
+                        );
                     }
                     _ => {
                         return Err(self.unsupported(
@@ -23127,7 +23149,10 @@ impl<'a> FuncBuilder<'a> {
                 self.assign_pattern(destination, read)?;
                 continue;
             }
-            let place = self.place_of(destination)?;
+            let place = match shorthand {
+                Some(symbol) => self.place_for_symbol(destination, symbol)?,
+                None => self.place_of(destination)?,
+            };
             self.write_place(destination, &place, read)?;
         }
         Ok(())
@@ -23373,6 +23398,21 @@ impl<'a> FuncBuilder<'a> {
             .node(target)
             .symbol
             .ok_or_else(|| self.unsupported(target, "assignment to a computed target"))?;
+        self.place_for_symbol(target, symbol)
+    }
+
+    /// Where a *named* place writes, given the symbol it names.
+    ///
+    /// Split from [`Self::place_of`] because a shorthand in an assignment
+    /// pattern has the right node and the wrong symbol on it: `({ x } = p)` is
+    /// one node whose symbol is the **property's**, and the variable's comes
+    /// from [`Self::shorthand_value_symbol`]. Both paths answer "where does
+    /// this name write" and there is one derivation of it.
+    fn place_for_symbol(
+        &mut self,
+        target: NodeId,
+        symbol: nts_semantic_schema::SymbolId,
+    ) -> Result<Place, Diagnostic> {
         // No alias resolution here, unlike the read: assigning to an imported
         // binding is a type error, so an alias symbol cannot be the target of
         // an assignment in a program that got this far.
