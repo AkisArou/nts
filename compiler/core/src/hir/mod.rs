@@ -1199,8 +1199,43 @@ pub fn zero_of(ty: &HirType) -> OpKind {
 /// The rule is reference counting's. `rc.rs` pairs every store of a value that
 /// `may_hold_a_reference` with a **load of what the slot held**, so that the old
 /// reference can be released; at `index == length` there is no such slot and
-/// nothing to load. So a counted element keeps today's abort, and the arrays
-/// that grow are the ones whose elements are numbers, booleans and the like.
+/// nothing to load.
+///
+/// **The obstacle is the load's *bounds*, not the slot's contents**, and reading
+/// it the other way cost a day. A counted element keeps today's abort, which is
+/// bad -- `const xs: string[] = []; xs[0] = "ab"` aborts with
+///
+/// ```text
+///   nts: refused: index 0 is outside [0, 0)
+/// ```
+///
+/// in a program that compiled clean, and ten arms give the boundary: number and
+/// boolean grow, string, object and array abort, annotated or evolving, empty or
+/// not, while `xs.push("ab")` grows the same array correctly.
+///
+/// The attempt that does not work is to give the appended slot a null so the
+/// load finds one. That fixes the *contents* and the load never gets that far:
+/// `rc::load_slot` emits its `ArrayGet` with the store's own `checked` flag and
+/// **before** the store, so at `index == length` the read itself is out of range
+/// and traps. The append has not happened yet. Visible in the counted HIR:
+///
+/// ```text
+///   %26 = array.get %2[%4] : managed<str>
+///   array.set %2[%4] = %9
+///   release %26
+/// ```
+///
+/// What it needs is a read that answers *nothing* out of range rather than
+/// faulting -- the semantics a detached view already has -- expressed as an op
+/// all three backends render, or a store that releases the old value inside the
+/// helper that resolves the slot. `examples/a-growing-write-of-a-counted-element`
+/// carries the measurements and both designs.
+///
+/// **`holds_a_pointer` would be the predicate, not `may_hold_a_reference`**,
+/// when that lands. `HirType::Erased` answers yes to the wider question and no
+/// to the narrower: an erased slot is a tagged value whose zero is `undefined`
+/// rather than a null pointer. `zero_of` holds both zeroes and
+/// `holds_a_pointer`'s own doc holds the crash that taught the distinction.
 ///
 /// Asked of the array's element type rather than of the stored value: the
 /// stored value may be a narrower type than the slot, and it is the slot that
@@ -2306,6 +2341,41 @@ pub fn operands_of(kind: &OpKind) -> Vec<ValueId> {
     verify::operands(kind)
 }
 
+/// Whether a checked store names a slot the allocation already made.
+///
+/// **A literal's own initialising stores cannot grow it**: `ArrayNew` made the
+/// slots and each store names one of them by a constant. That sentence was a
+/// comment inside [`allocated_length_is_exact`] and nowhere else, so
+/// [`arrays_can_grow`] -- asking the neighbouring question, "can anything in
+/// this program change a length" -- did not know it, and counted a literal's own
+/// initialisation as growth.
+///
+/// What that costs is whole-program: `arrays_can_grow` is asked once and its
+/// answer disables length folding everywhere. `tooling/memory/cases/cyclic-array`
+/// contains no index write at all -- `const listA: Leaf[] = [first]` and two
+/// field stores -- and went from 8 operations and 0 collector candidates to 9
+/// and 1 the moment a counted element became growable, because one of its two
+/// literals lowers its initialising store `checked` and the other does not.
+/// That case's `expected` had predicted the shape of it: "the naive column is
+/// where the cost reappears if it ever stops".
+///
+/// Returns `false` for everything it cannot see -- a non-constant index, an
+/// array that is not a local allocation, a length that is not a constant -- so
+/// it can only ever say a store is *safe*, never that one is dangerous.
+#[must_use]
+fn store_names_a_slot_that_exists(func: &Func, array: ValueId, index: ValueId) -> bool {
+    let OpKind::ArrayNew { length, .. } = func.values[array.0 as usize].kind else {
+        return false;
+    };
+    let OpKind::ConstFloat(allocated) = func.values[length.0 as usize].kind else {
+        return false;
+    };
+    matches!(
+        func.values[index.0 as usize].kind,
+        OpKind::ConstFloat(at) if at >= 0.0 && at < allocated
+    )
+}
+
 /// Whether an array's allocated length is still its length.
 ///
 /// `[1, 2, 3].length` is 3, and that is what lets an index into a literal be
@@ -2329,23 +2399,11 @@ pub fn allocated_length_is_exact(func: &Func, array: ValueId, growable: bool) ->
         // all.
         return true;
     }
-    // A literal's own initialising stores cannot grow it: `ArrayNew` made the
-    // slots and each store names one of them by a constant.
-    let allocated = match func.values[array.0 as usize].kind {
-        OpKind::ArrayNew { length, .. } => match func.values[length.0 as usize].kind {
-            OpKind::ConstFloat(n) => n,
-            _ => -1.0,
-        },
-        _ => -1.0,
-    };
     if func.values.iter().any(|op| {
         let OpKind::ArraySet { array: t, index, checked: true, .. } = &op.kind else {
             return false;
         };
-        if *t != array {
-            return false;
-        }
-        !matches!(func.values[index.0 as usize].kind, OpKind::ConstFloat(at) if at >= 0.0 && at < allocated)
+        *t == array && !store_names_a_slot_that_exists(func, array, *index)
     }) {
         return false;
     }
@@ -2407,9 +2465,13 @@ pub fn arrays_can_grow(program: &Program) -> bool {
                 // up.
                 OpKind::ArraySet {
                     array,
+                    index,
                     checked: true,
                     ..
-                } => array_write_may_grow(func, *array),
+                } => {
+                    array_write_may_grow(func, *array)
+                        && !store_names_a_slot_that_exists(func, *array, *index)
+                }
                 OpKind::Call {
                     callee: Callee::External(name),
                     ..

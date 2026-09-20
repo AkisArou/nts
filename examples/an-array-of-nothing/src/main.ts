@@ -97,10 +97,9 @@ export function evolvesToNumbers(n: number): number {
  * `array_write_may_grow` says why, honestly: `rc.rs` pairs a counted store with a
  * load of what the slot held so the old reference can be released, and at
  * `index == length` there is no such slot, so "a counted element keeps today's
- * abort". Pre-existing — identical on the binary at 23666c14 — and filed as
- * `blockers/a-growing-write-of-a-counted-element`, because a documented
- * limitation that arrives as a runtime abort with no diagnostic is the one
- * failure mode a caller cannot act on.
+ * abort". Pre-existing — identical on the binary at 23666c14 — and measured in
+ * `examples/a-growing-write-of-a-counted-element`, which carries the ten arms
+ * and the reason the obvious fix does not work.
  */
 export function evolvesToStrings(n: number): number {
   const xs = [];
