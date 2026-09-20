@@ -1079,3 +1079,45 @@ So the check now prints **what the files refuse with** beside the flag, because
 that single line is what refutes it. It is a pointer to something worth reading,
 not a verdict: the compiler reports one blocker at a time, so a refusal in a
 file declaring feature A very often names feature B.
+
+## Census 19 — what the crash fixes cost and bought
+
+Run 2026-09-20/21 over the same 4,812 slice-1 files, diffed **per file** against
+census 18 rather than against its headline. The compiler moved by the closure
+globals and the two tsgo crash fixes; the spread and enumeration work landed
+after this run pinned its binary and is not in it.
+
+```text
+                        18       19
+  strict-pass         1577     1576     (-1)
+  frontend-crash        18        0    (-18)
+  unsupported         3214     3232    (+18)
+  infrastructure-error   0        1     (+1)
+
+  gained 0    regressed 1
+```
+
+**The bucket that emptied is the result.** All 18 crashes were
+`import.defer(...)`, and they are now TypeScript errors (`TS18060`, and a second
+diagnostic for a fixture module that does not resolve). None of them passes, and
+none was ever going to: the point is that a compile of an unrelated file no
+longer ends with a Go stack trace and no diagnostic. The `+18` in `unsupported`
+is exactly that bucket moving, which is why the two numbers match.
+
+**The one regression is the instrument, and it says so.** The single file that
+moved is `identifiers/part-unicode-7.0.0-escaped.js`, and it moved to
+`infrastructure-error` — the bucket added on 2026-09-20 to separate a harness
+failure from a compiler one. Compiled directly it is clean and instant on *both*
+binaries, so what it recorded is contention: this census ran alongside a full
+gate and several hundred probe compilations. Without that bucket it would have
+landed in `threw` and read as a correctness regression.
+
+**Zero gained, and that was predicted rather than excused.** The closure-global
+work was filed against a row of 5 files; all 5 are still `unsupported`, the one
+in this slice now stopping on something else. A row's size is what it would
+clear *if nothing stood behind it*, and the compiler reports one blocker at a
+time.
+
+A third of what is left is out of reach by design: **148 of the 467
+non-TypeScript refusals are `eval`**, against 39 for regular-expression literals
+and 32 for `Iterable` as a parameter.
