@@ -25995,6 +25995,28 @@ impl<'a> FuncBuilder<'a> {
             // A method or an accessor is not storage. It was lowered as a
             // function of its own by `lower_object_literal_members`, and the
             // layout has no field for it to be written to.
+            //
+            // **Unless it does**, which is the half this skipped silently. The
+            // sentence above is true of the literal's *own* type and false when
+            // the literal is built at a declared one:
+            //
+            // ```ts
+            //   interface WithGetter { readonly a: number }
+            //   const o: WithGetter = { get a(): number { return 3; } };
+            //   o.a        // answered 0; node says 3
+            // ```
+            //
+            // `WithGetter` declares `a` as **storage**, so the layout has a slot
+            // for it, the accessor was skipped, and the slot kept the zero a
+            // fresh allocation has. No refusal, no diagnostic, three backends
+            // agreeing on the same wrong number because it is what the slot
+            // holds.
+            //
+            // Refused rather than answered, and it has to be: the slot wants a
+            // value and JavaScript re-runs the getter on every read, so calling
+            // it once at construction would be a different program. What the
+            // representation would need is an accessor that a *field* read can
+            // dispatch to, which is a feature rather than a repair.
             if matches!(
                 self.kind_of(property),
                 Some(
@@ -26003,7 +26025,26 @@ impl<'a> FuncBuilder<'a> {
                         | syntax::SET_ACCESSOR
                 )
             ) {
-                continue;
+                // **Its own name child, because `property_name` refuses this
+                // shape on purpose** --- "a `get accessor` in an object
+                // literal" is one of the messages it exists to give. Asking it
+                // here and taking `.ok()` swallowed that refusal and fell
+                // straight back to `continue`, so the first version of this
+                // guard did nothing at all and every control still passed.
+                let occupies = self
+                    .children(property)
+                    .first()
+                    .and_then(|name| self.literal_name(*name))
+                    .filter(|name| layout.index_of(name).is_some());
+                let Some(name) = occupies else {
+                    continue;
+                };
+                return Err(self.unsupported(
+                    property,
+                    &format!(
+                        "`{name}`, supplied as an accessor or method where the type declares storage for it"
+                    ),
+                ));
             }
             // The name first, then the slot, then the value. At the field's
             // type, like every other slot a value meets: an optional field is
