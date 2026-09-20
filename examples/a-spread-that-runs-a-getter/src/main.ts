@@ -51,6 +51,15 @@
 //     for (const k in src)        "b"    node "ab"
 //     Object.values(src).length    1     node 2
 //     Object.entries(src)          same omission
+//     Object.hasOwn(src, "a")     false  node true
+//
+// **And `"a" in src` answers `true`, correctly.** That is the useful half: the
+// same question, asked two ways, answered differently by one compiler. `in`
+// goes through `declares(type, key)` --- a question about the *type*, which
+// knows perfectly well that `a` is a member --- and enumeration goes through
+// `enumerable_fields`, a question about the *layout*, which holds storage and
+// has no entry for a call. So the information is not missing; one of the two
+// derivations is asking the wrong object.
 //
 // A getter on an object literal **is** an own enumerable property, so all four
 // are wrong answers that compile. The boundary is already right on the other
@@ -61,7 +70,9 @@
 // # Why it was not fixed with the spread
 //
 // `enumerable_fields` answers `(layout slot, name)`, and the whole difficulty
-// is that a getter has no slot. Its two callers want different halves:
+// is that a getter has no slot. `lower_in` is the shape to copy for the *names*
+// --- ask the type --- and the values are the part that still needs a slot or a
+// call decided per member. Its two callers want different halves:
 // `own_names` needs only the name, and `decide_object_columns` reads
 // `layout.fields[slot]` to emit a `FieldGet`. So the return type has to say
 // *how* to get each value --- a slot or a call --- rather than assuming one.
