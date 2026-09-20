@@ -2342,13 +2342,30 @@ fn write_standalone(
     sources: &[&str],
     linking: bool,
     witness: bool,
+    declined: &[String],
 ) -> Result<()> {
     // A program that is only declarations has nothing to evaluate, and calling
     // a function that was never emitted is a link error.
+    //
+    // **The HIR having it is not the same as the backend emitting it.** This
+    // asked `program.funcs` alone, and an emitter *decline* -- `NTS2008`, a
+    // value the C backend cannot erase yet -- removes the body afterwards. So
+    // `main.c` declared `module__init`, called it, and nothing defined it:
+    //
+    //     const m = new Map<string, bigint>();   // NTS2008 on the erase
+    //     main.c:(.text+0x12): undefined reference to `module__init'
+    //
+    // `emit-c` printed the decline on stderr and **exited 0**, having written a
+    // program that cannot link. `Emitted::refused` exists for exactly this
+    // question -- "did the body get emitted" -- and its doc records the same
+    // failure for the Node-API wrapper, which was taught to consult it. The
+    // executable path was not, so the story happened a second time one output
+    // over.
     let initializes = program
         .funcs
         .iter()
-        .any(|func| func.name == hir::lower::MODULE_INIT);
+        .any(|func| func.name == hir::lower::MODULE_INIT)
+        && !declined.iter().any(|name| name == hir::lower::MODULE_INIT);
     std::fs::write(
         out.join(nts_codegen_c::UV_HOST_HEADER_NAME),
         nts_codegen_c::UV_HOST_HEADER,
@@ -5958,7 +5975,36 @@ fn write_c_output(
     // comes with it, because a program needs a loop and an embedder with its
     // own supplies a different one.
     if standalone {
-        write_standalone(program, out, &extra, emission.linking, !emitted.witness.is_empty())?;
+        // **A standalone program whose module initialiser was declined does
+        // nothing, and must say so.** Dropping the call from `main.c` above
+        // makes the artifact *consistent* -- it links -- and consistency is not
+        // the whole of the question: a program that evaluates none of its
+        // top-level code and exits 0 is a quieter failure than one that will not
+        // link, and the quiet one is the worse of the two.
+        //
+        // So the decline is fatal here rather than a note. `emit-c` printed
+        // `NTS2008` on stderr and exited 0 while writing an unlinkable program;
+        // the artifact is fixed above and the exit status is fixed here, because
+        // either alone leaves a way to believe the build worked.
+        if program
+            .funcs
+            .iter()
+            .any(|func| func.name == hir::lower::MODULE_INIT)
+            && emitted.refused.iter().any(|name| name == hir::lower::MODULE_INIT)
+        {
+            anyhow::bail!(
+                "this program's top-level code was declined by the C backend, so a standalone \
+                 build would evaluate none of it; the decline is reported above"
+            );
+        }
+        write_standalone(
+            program,
+            out,
+            &extra,
+            emission.linking,
+            !emitted.witness.is_empty(),
+            &emitted.refused,
+        )?;
         return Ok(Wrote {
             sources: std::iter::once("program.c".to_owned())
                 .chain(extra.iter().map(|name| (*name).to_owned()))

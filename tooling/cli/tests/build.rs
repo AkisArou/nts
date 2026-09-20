@@ -371,6 +371,58 @@ export default defineConfig({ products: { runner: app.cli({ entry: "./src/main.t
     );
 }
 
+/// A standalone build whose module initialiser the *backend* declined fails.
+///
+/// **An emitter decline is invisible to every instrument that reads lowering.**
+/// `Map<string, bigint>` lowers perfectly -- `nts hir` says "nothing refused" --
+/// and the C backend then declines the erase, `NTS2008`, because a bigint
+/// payload in a tagged value needs retain and release that switch on the tag.
+/// The body of `module#init` goes away after the HIR has been pronounced well.
+///
+/// What that produced: `main.c` declared and called `module__init`, nothing
+/// defined it, and `emit-c` exited 0 having written a program that cannot link.
+/// `drop_orphaned_bodies` records the same story for the Node-API wrapper --
+/// which was taught to consult `Emitted::refused` -- and the executable path was
+/// not, so it happened a second time one output over.
+///
+/// Dropping the call alone is not the fix and would be the worse half of it: the
+/// artifact then links and evaluates none of its top-level code, which is the
+/// quieter failure. The build has to fail, and this is where that is asserted.
+#[test]
+fn a_declined_module_initializer_fails_a_standalone_build() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let project = fixture(
+        "build-declined-init",
+        r#"
+import { defineConfig, app } from "@nts/config";
+export default defineConfig({ products: { runner: app.cli({ entry: "./src/main.ts" }) } });
+"#,
+    );
+    // Top-level code whose erase the C backend declines. The `Map` is what puts
+    // the bigint through an erased slot; in every other position -- a local, a
+    // field, an array element, a tuple, a parameter, a return, a module global --
+    // a bigint is an ordinary `__int128` and compiles.
+    std::fs::write(
+        project.join("src/main.ts"),
+        "const m = new Map<string, bigint>();\nm.set(\"k\", 3n);\nlet seen = 0;\nconst v = m.get(\"k\");\nseen = v === undefined ? 0 : 1;\n",
+    )
+    .expect("writing the program");
+    let run = build(&project, &[]);
+    assert!(
+        !run.ok,
+        "a standalone build with a declined initialiser reported success:\n{}{}",
+        run.stdout, run.stderr,
+    );
+    assert!(
+        run.stderr.contains("declined") || run.stdout.contains("declined"),
+        "the failure did not say the top-level code was declined:\n{}{}",
+        run.stdout, run.stderr,
+    );
+}
+
 /// A build that drops functions says so, rather than reporting an artifact.
 ///
 /// `emit-c` prints each refusal and exits zero on purpose -- most are declines,
