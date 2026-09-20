@@ -39389,6 +39389,20 @@ impl<'a> FuncBuilder<'a> {
         }
         let parent = self.syntactic_parent(id)?;
         match self.kind_of(parent) {
+            // **A `throw` erases whatever it is given**, which `lower_throw`
+            // says in its own words: "`catch (e)` is `unknown`. That is the
+            // language's own answer to what a handler receives, and taking it
+            // means `throw "text"` and `throw new Error(m)` are one operation at
+            // one representation". So the context here is erased, and that is
+            // enough for `lower_absent` -- an erased slot has a tag for each
+            // absence, so it takes the early return there and never asks for a
+            // reference to stand in for.
+            //
+            // `throw undefined` and `throw null` are ordinary JavaScript and
+            // were refused as ``null` or `undefined` where what it stands in for
+            // is not a reference``: true of the node and false of the program,
+            // because the statement one level up had already decided.
+            Some(syntax::THROW_STATEMENT) => Some(HirType::Erased),
             // `return null` — whatever the enclosing function promised.
             Some(syntax::RETURN_STATEMENT) => {
                 let owner = self.enclosing_callable(parent)?;

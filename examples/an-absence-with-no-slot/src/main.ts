@@ -4,7 +4,7 @@
 // and a compiled program needs to know whether that is a null `NtsString *` or
 // a null `NtsObj_Point *`. So `lower_absent` takes the type from the context,
 // and `contextual_type` is the one function that answers "what does this
-// position want". Three positions were missing from it, and each was a refusal
+// position want". Four positions were missing from it, and each was a refusal
 // — ``null` or `undefined` where what it stands in for is not a reference`` —
 // about a value the program *does* say the type of, one node up.
 //
@@ -107,6 +107,56 @@ export function anAbsenceAgainstAValue(n: number): number {
 }
 
 /** And an absence in a position that always worked: a declared slot. */
+/**
+ * A `throw`, which erases whatever it is given.
+ *
+ * `throw undefined` and `throw null` are ordinary JavaScript and were refused,
+ * while `throw "x"` and `throw new Error(m)` lowered — the asymmetry that says
+ * the statement had an answer and the walk was not asking it. `lower_throw`
+ * states it: "`catch (e)` is `unknown`. That is the language's own answer to
+ * what a handler receives, and taking it means `throw "text"` and
+ * `throw new Error(m)` are one operation at one representation". An erased slot
+ * has a tag for each absence, so `lower_absent` takes its early return and never
+ * asks what the absence stands in for.
+ *
+ * Four test262 files sat behind this, and clearing it moved two of them to the
+ * *next* blocker rather than to a pass: `'Actual: ' + e` on a caught value is a
+ * conversion to string from something that can hold an object, which is its own
+ * refusal with its own reasons written down in `as_string`.
+ */
+export function thrownAbsences(n: number): number {
+  let sawUndefined = 0;
+  let sawNull = 0;
+  try {
+    throw undefined;
+  } catch (e) {
+    sawUndefined = e === undefined ? 1 : 0;
+  }
+  try {
+    throw null;
+  } catch (e) {
+    sawNull = e === null ? 1 : 0;
+  }
+  return sawUndefined * 10 + sawNull + n * 0;
+}
+
+/** The control: a thrown string and a thrown `Error` already worked. */
+export function thrownValues(n: number): number {
+  let length = 0;
+  let message = 0;
+  try {
+    throw "abcd";
+  } catch (e) {
+    length = (e as string).length;
+  }
+  try {
+    throw new Error("xyz");
+  } catch (e) {
+    message = (e as Error).message.length;
+  }
+  return length * 10 + message + n * 0;
+}
+
 export function aDeclaredSlot(n: number): number {
   const s: string | null = n < 1 ? null : "here";
   return s === null ? 1 : 0;
