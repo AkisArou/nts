@@ -1140,3 +1140,27 @@ this name write" has one derivation reached two ways.
 Whether those 10 now pass is the next census and is not claimed here --- the
 compiler reports one blocker at a time, and the previous row of 5 taught that
 lesson the expensive way.
+
+### Boxed primitives: 30 files, declined on purpose
+
+`new Boolean(true)`, `new Number(1)`, `new String("x")` --- 30 files of the
+slice, concentrated in the coercion suites (`bitwise-not`,
+`greater-than-or-equal`, and their neighbours). Every one of them uses the
+wrapper only in a position that immediately coerces it back:
+
+```js
+if (~new Boolean(true) !== -2) { … }
+```
+
+**The cheap version is a wrong answer.** Lowering `new Boolean(v)` to `v` makes
+all 30 pass and makes `typeof new Boolean(true)` answer `"boolean"` where the
+language says `"object"`, and `new Boolean(false)` truthy-test as false where an
+object is always truthy. That is trading a measurable number for an unmeasurable
+defect, in a profile whose whole argument is that the compiled answer is the
+same answer.
+
+The honest version is a wrapper object plus `ToPrimitive` dispatching through
+`valueOf` --- representation work for three constructs that exist for
+specification coverage and are absent from real code. It is not on the
+work-list, and this row says so rather than reading as an oversight each time
+the census is ranked.
