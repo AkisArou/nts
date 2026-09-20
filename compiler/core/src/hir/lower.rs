@@ -10405,20 +10405,33 @@ impl<'a> FuncBuilder<'a> {
     /// `var` took that binding away, which is what broke them — a different
     /// mechanism reaching the same verdict, and the verdict is still don't skip.
     ///
-    /// **And the unfixed part is wider than a closure.** It was recorded as
-    /// "a closure over a `for` loop's `var` at module scope"; the second line
-    /// above has no closure in it. Any *function* reading such a name answers
-    /// the loop's first value. The in-function case has a blocker and refuses
-    /// by name; this one compiles and is silently wrong, which is the worse
-    /// half and is the one without a fixture.
+    /// **And the unfixed part is wider than a closure, in two directions.**
+    ///
+    /// It was recorded as "a closure over a `for` loop's `var` at module
+    /// scope". The second line above has no closure in it: *any* function
+    /// reading such a name is wrong. And it is not only `for` — all three head
+    /// forms, with a body-assigned `var` as the control that stays right:
+    ///
+    /// ```text
+    ///     for (var i = 0; i < 3; i++) {}     f() -> 0            node 3
+    ///     for (var e of [10, 20, 30]) {}     f() -> 0            node 30
+    ///     for (var k in { a: 1, b: 2 }) {}   f() -> undefined    node "b"
+    ///     var b; for (…) { b = j; }          f() -> 2            node 2
+    /// ```
+    ///
+    /// **The answer is the global's zero, not "the loop's first value"**, and
+    /// that phrasing survived because the only shape ever tried was
+    /// `for (var i = 0; …)`, where the two are both 0. `for...of` separates
+    /// them: the first value is 10 and the answer is 0.
+    ///
+    /// Which settles the mechanism rather than leaving it inferred. The head is
+    /// bound as a block parameter and **nothing ever stores through to the
+    /// global**, so a reader outside that block sees a slot that was never
+    /// written. The body-assigned control is right because an ordinary
+    /// assignment does store.
     ///
     /// Pre-existing rather than introduced by the skip: a binary built
-    /// 2026-09-18 answers 0 for both, identically.
-    ///
-    /// The mechanism above is measured; the explanation for it — that
-    /// `lower_for` binds the head as a block parameter and never stores through
-    /// to the global, so only readers *outside* that block see the unwritten
-    /// one — is read off the code and has not been separately confirmed.
+    /// 2026-09-18 answers identically.
     fn declared_in_a_loop_head(&self, id: NodeId) -> bool {
         let Some(list) = self.ancestor(id, syntax::VARIABLE_DECLARATION_LIST) else {
             return false;
