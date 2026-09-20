@@ -1,12 +1,23 @@
 // `const [[x, y, z] = [4, 5, 6]] = []` — a destructuring default whose source
 // has no element at that position, so the default is the only arm that runs.
 //
-// **Module scope, and that is the whole population.** Inside a function the same
-// `[]` is typed `any[]` by the checker's evolving-array inference and refuses as
-// *an empty array of unrepresentable type (any)*, which is the `any` question
-// and a different row. At module scope the checker assigns the literal **no type
-// at all**, which is the case below. Both spellings were written and measured;
-// only one of them is what these nine files contain.
+// **Module scope was the whole population, and the function form is closed
+// too, as of 2026-09-21.** This used to read: inside a function the same `[]`
+// is typed `any[]` and refuses as *an empty array of unrepresentable type
+// (any)*, "which is the `any` question and a different row". It was not a
+// different row. The local declaration path intercepted an empty literal before
+// `lower_array_literal` could reach it and demanded an annotation or an evolved
+// type, so the stand-in that already answered at module scope was never asked.
+//
+// The guard asks first now, and a literal with nothing in it falls through to
+// the ordinary arm and the same answer. `theFunctionSpelling` and
+// `theForHeadSpelling` below are the arms, and the second is the shape the nine
+// `statements/for/dstr` files actually write.
+//
+// Nothing was widened that `tsc` does not already allow: `const [x] = []`
+// **without** a default is TS2493 --- "Tuple type '[]' of length '0' has no
+// element at index '0'" --- so the only shapes that reach this are ones where
+// every position has a default and the source is never read.
 //
 // Two things were wrong and they compounded.
 //
@@ -68,4 +79,24 @@ export function oneEachWay(n: number): number {
 /** The control for the other direction: nothing absent, nothing folded. */
 export function nothingIsAbsent(n: number): number {
   return both * 10 + present + n * 0;
+}
+
+export function theFunctionSpelling(n: number): number {
+  const [x = 23] = [];
+  return x * 10 + n;
+}
+
+export function theForHeadSpelling(n: number): number {
+  let iterations = 0;
+  let seen = 0;
+  for (const [x = 23] = []; iterations < 1; ) {
+    seen = x;
+    iterations += 1;
+  }
+  return seen * 10 + iterations + n;
+}
+
+export function aNestedDefaultInsideAFunction(n: number): number {
+  const [[y = 7] = []] = [];
+  return y * 10 + n;
 }

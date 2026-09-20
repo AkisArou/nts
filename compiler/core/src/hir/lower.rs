@@ -33103,9 +33103,25 @@ impl<'a> FuncBuilder<'a> {
             // `const out: number[] = []` says so — so the annotation supplies
             // what the literal cannot.
             let value = match initializer {
+                // **Only when the declaration actually says what it holds.**
+                //
+                // `const out: number[] = []` and a name whose later writes
+                // settle an element type both reach this and want the slot's
+                // representation. `const [x = 23] = []` has neither: the
+                // checker assigns no type to a `[]` in a destructuring
+                // initializer, so this refused as *an empty array of
+                // unrepresentable type (any)* --- while the identical line at
+                // module scope compiled, because that path lowers the literal
+                // and `a_stand_in_for_nothing` answers for it.
+                //
+                // So the guard asks first, and a literal with nothing in it
+                // falls through to the ordinary arm below and the same
+                // stand-in. Zero elements is syntactic and stronger than any
+                // type argument --- there is no element to read at any width.
                 Some(initializer)
                     if self.kind_of(initializer) == Some(syntax::ARRAY_LITERAL_EXPRESSION)
-                        && self.children(initializer).is_empty() =>
+                        && self.children(initializer).is_empty()
+                        && (self.type_of(name).is_some() || self.evolved_type(name).is_some()) =>
                 {
                     let declared = self
                         .type_of(name)
