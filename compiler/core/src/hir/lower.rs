@@ -14,8 +14,9 @@
 
 use nts_diagnostics::{Diagnostic, Location};
 use nts_semantic_schema::{
-    DeclarationModifiers, LiteralValue, NodeData, NodeId, NodeKind, Origin, PropertyRecord,
-    SemanticSnapshot, SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind, TypeRecord, syntax,
+    DeclarationModifiers, LiteralValue, MemberKind, NodeData, NodeId, NodeKind, Origin,
+    PropertyRecord, SemanticSnapshot, SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind,
+    TypeRecord, syntax,
 };
 
 use super::facts::Facts;
@@ -16614,17 +16615,18 @@ impl<'a> FuncBuilder<'a> {
             .fields
             .iter()
             .enumerate()
+            // **Any property of that name that is not private keeps the
+            // field.** `find` on the name alone took whichever came first, and
+            // `class C { #m = 44; ["#m"] = 4 }` records two properties named
+            // `"#m"` -- so a layout slot belonging to the computed one was
+            // dropped from `Object.keys` because the private one was found
+            // first. `any(|p| ... )` asks the question the filter means.
             .filter(|(_, field)| {
-                let Some(property) = properties.iter().find(|p| p.name == field.name) else {
+                let mut named = properties.iter().filter(|p| p.name == field.name).peekable();
+                if named.peek().is_none() {
                     return true;
-                };
-                let Some(declaration) = property.declaration else {
-                    return true;
-                };
-                !self
-                    .children(declaration)
-                    .into_iter()
-                    .any(|child| self.kind_of(child) == Some(syntax::PRIVATE_IDENTIFIER))
+                }
+                named.any(|property| !self.declared_with_a_private_name(property))
             })
             .map(|(at, field)| (at, field.name.clone()))
             .collect()
@@ -20985,9 +20987,27 @@ impl<'a> FuncBuilder<'a> {
         let Some(declaration) = property.declaration else {
             return false;
         };
+        // **The *name* child, not any child.** `any` here reads the initializer
+        // too, and an initializer may mention a private name without the member
+        // being one:
+        //
+        // ```js
+        //   class C { #m = 44; ["#m"] = this.#m / 11; }
+        // ```
+        //
+        // Both members are recorded as a property named `"#m"` -- the language
+        // lets them coexist and they are different properties -- and the second
+        // one's declaration carries `this.#m` in its initializer. Reading every
+        // child called the computed one private too, so `hasOwnProperty("#m")`
+        // and `"#m" in this` both answered `false` where node answers `true`.
+        //
+        // test262 writes three files for exactly this collision
+        // (`*-is-not-clobbered-by-computed-property`), which is how it was
+        // caught: two of them went from a refusal to a *wrong answer*, which the
+        // census reports as `threw` and is the one direction not to trade in.
         self.children(declaration)
-            .into_iter()
-            .any(|child| self.kind_of(child) == Some(syntax::PRIVATE_IDENTIFIER))
+            .first()
+            .is_some_and(|name| self.kind_of(*name) == Some(syntax::PRIVATE_IDENTIFIER))
     }
 
     /// Whether a type declares this key.
@@ -26697,6 +26717,57 @@ impl<'a> FuncBuilder<'a> {
             if !property.kind.is_stored() {
                 continue;
             }
+            // **A repeated `#private` name is one member; a `#private` name and
+            // a string key spelled the same are two.**
+            //
+            // The rule here was "skip a `#`-named property when a field of that
+            // name is already kept", which collapsed both. `class C { #m = 44;
+            // ["#m"] = this.#m / 11 }` is legal and declares *two* properties --
+            // the checker records both, with different declarations -- and this
+            // dropped the computed one, so one slot answered for both and
+            // `this.#m` read 4 where node reads 44. A wrong answer that compiled
+            // and ran, on this binary and on 23666c14 alike.
+            //
+            // Asked of the whole property list rather than of the fields kept so
+            // far, because the private half may not be a field at all: `get #m()`
+            // is an accessor, `is_stored` skips it above, and `this.#m` then
+            // resolved to the computed *slot* instead of dispatching to the
+            // getter -- the `private-getter-is-not-clobbered-by-computed-property`
+            // variant, which a fields-only test missed.
+            //
+            // **A private `Method` is excluded and that is not a loose end.** A
+            // method is held by the dispatch table and never has a slot, so
+            // `#m() {}` beside `["#m"] = 0` is two members this compiler already
+            // keeps apart -- `private-method-is-not-clobbered-by-computed-property`
+            // passes. Refusing it too was measured and cost that file, which is
+            // how the line between the three kinds was found rather than
+            // guessed.
+            //
+            // Refused rather than given two slots. Two slots means a name a
+            // `#private` member can be addressed by and a string key cannot --
+            // a mangling through the layout, both field paths and all three
+            // backends -- and until that exists a refusal naming the collision
+            // is the direction to trade in.
+            if property.name.starts_with('#')
+                && !self.declared_with_a_private_name(property)
+                && properties.iter().any(|other| {
+                    other.name == property.name
+                        && self.declared_with_a_private_name(other)
+                        && !matches!(other.kind, MemberKind::Method)
+                })
+            {
+                return Err(self.unsupported(
+                    id,
+                    &format!(
+                        "a computed property `{}`, whose name is also a private member's",
+                        property.name
+                    ),
+                ));
+            }
+            // The original rule, which survives inside the one above: a member
+            // listed twice by the checker's flattened view -- a base's private
+            // field seen again through a subclass -- is the same member both
+            // times, and both sightings are `#private` declarations.
             if property.name.starts_with('#')
                 && fields.iter().any(|kept| kept.name == property.name)
             {
@@ -33354,6 +33425,92 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// Split out of [`Self::lower_method_call`] so the optional-chained form can
     /// hand it a receiver that has been narrowed inside the present arm.
+    /// `o.hasOwnProperty(k)`, answered from the layout.
+    ///
+    /// **It is `in` minus everything inherited**, which is the whole of the
+    /// difference and the reason this cannot reuse `lower_in`. `in` walks the
+    /// prototype chain -- `"valueOf" in {}` is true, and `lower_in` carries the
+    /// list of `Object.prototype`'s names for it -- and `hasOwnProperty` asks
+    /// only about the object's own storage. So a *method* answers `false`:
+    /// `class C { m() {} }` puts `m` on the prototype, and
+    /// `new C().hasOwnProperty("m")` is `false` in every engine.
+    ///
+    /// Three answers and one refusal, which is the honest split:
+    ///
+    /// ```text
+    ///   a `Field` the type declares      true
+    ///   a `Method` or an `Accessor`      false -- on the prototype, not the object
+    ///   no property of that name         false
+    ///   an optional field                refused; the answer is a presence bit
+    /// ```
+    ///
+    /// A `#private` member answers `false` through the same test `declares`
+    /// makes for `"#m" in o` and `enumerable_fields` makes for `Object.keys`: it
+    /// is not a string-keyed property, and the snapshot spells it as though it
+    /// were. `private-method-is-not-a-own-property.js` asserts exactly that and
+    /// is one of the six files this closes.
+    ///
+    /// The optional case is refused rather than guessed because the object
+    /// header records whether an optional property was written --
+    /// `has_the_slot` reads that bit for `in` -- and answering from the type
+    /// alone would be `true` for a property never assigned.
+    /// The dispatch for [`Self::lower_has_own_property`], separated so that
+    /// `lower_method_on` stays one screen of receiver arms.
+    fn own_property_call(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        held: &HirType,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        let HirType::Managed(ManagedType::Object(ty)) = held else {
+            return None;
+        };
+        (self.literal_name(member).as_deref() == Some("hasOwnProperty"))
+            .then(|| self.lower_has_own_property(id, receiver, *ty, arguments))
+    }
+
+    fn lower_has_own_property(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        type_id: TypeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let [argument] = arguments else {
+            return Err(self.unsupported(id, "`hasOwnProperty` with no argument"));
+        };
+        let Some(key) = self.literal_key(*argument) else {
+            return Err(self.unsupported(
+                *argument,
+                "`hasOwnProperty` whose key is not a literal the compiler can see",
+            ));
+        };
+        let ty = super::generics::concrete(self.snapshot, type_id);
+        let properties = match self.snapshot.types.get(ty.0 as usize).map(|it| &it.kind) {
+            Some(TypeKind::Object { properties }) => properties.clone(),
+            _ => Vec::new(),
+        };
+        let found = properties.iter().find(|property| {
+            property.name == key && !self.declared_with_a_private_name(property)
+        });
+        if let Some(property) = found
+            && property.optional
+        {
+            return Err(self.unsupported(
+                id,
+                "`hasOwnProperty` of an optional property, whose answer is a presence bit",
+            ));
+        }
+        let answer = found.is_some_and(|property| property.kind == MemberKind::Field);
+        // The receiver is still evaluated: `f().hasOwnProperty("x")` calls `f`,
+        // and folding the answer must not fold the call away with it.
+        let _ = receiver;
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::ConstBool(answer), HirType::Bool, origin))
+    }
+
     fn lower_method_on(
         &mut self,
         id: NodeId,
@@ -33511,6 +33668,9 @@ impl<'a> FuncBuilder<'a> {
             self.capability_settle(id, receiver, receiver_node, member, arguments, &held)
         {
             return settled;
+        }
+        if let Some(own) = self.own_property_call(id, receiver, &held, member, arguments) {
+            return own;
         }
         let HirType::Managed(ManagedType::Object(type_id)) = held else {
             // **Name what the receiver is.** Everything above this arm is a
