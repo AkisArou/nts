@@ -98,8 +98,19 @@ if [ "$es" -ne 0 ]; then
     "$(tail -1 "$D/r.txt" | cut -c1-38)"
   exit 0
 fi
-( cd "$D/out" && cc -std=c11 -O2 -I. main.c program.c nts_runtime.c nts_uv_host.c -luv -lm \
-  -o program ) 2>/dev/null || true
+# **Every `.c` the emitter wrote, not a list of the ones it used to write.**
+#
+# This named four files -- `main.c program.c nts_runtime.c nts_uv_host.c` --
+# and the emitter also writes `nts_unicode.c`, which holds `nts_str_to_lower_case`
+# and its neighbours. So any probe touching `toUpperCase` or `toLowerCase`
+# failed to *link* and was reported as `C DID NOT COMPILE`: a false failure
+# naming the compiler for a gap in this line. Found on 2026-09-21 by a
+# generated-expression fuzzer whose first working run reported fifteen
+# "compiler bugs", every one of them this.
+#
+# A hardcoded list is a second derivation of "what does the emitter produce",
+# and the emitter is the one that knows. `*.c` asks it.
+( cd "$D/out" && cc -std=c11 -O2 -I. *.c -luv -lm -o program ) 2>/dev/null || true
 if [ ! -f "$D/out/program.c" ]; then
   printf '  %-34s node=%s  NO C WAS WRITTEN\n' "$label" "$ns"
   exit 0
