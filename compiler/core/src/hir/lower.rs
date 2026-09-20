@@ -7269,6 +7269,16 @@ pub fn erasable(ty: &HirType) -> bool {
 /// derivation: the four positions that consult it -- an array's element, a
 /// tuple's position, an object's field and a merge's parameter -- have to agree
 /// about which types are answerable or a slot and the value put in it disagree.
+/// Where one enumerable member's value comes from.
+///
+/// A field is a slot in the layout. An accessor is a **call**, and has no slot
+/// --- which is the whole of why enumeration used to drop one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Enumerated {
+    Slot(usize),
+    Getter,
+}
+
 fn holds_only_absences(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     let Some(record) = snapshot.types.get(ty.0 as usize) else {
         return false;
@@ -16707,8 +16717,7 @@ impl<'a> FuncBuilder<'a> {
         // lands at changes.
         let ordered = property_order(enumerable.iter().map(|(_, name)| name.as_str()));
         for (position, (at, _)) in ordered.into_iter().enumerate() {
-            let slot = enumerable[at].0;
-            let field = layout.fields[slot].clone();
+            let (source, name) = enumerable[at].clone();
             #[allow(clippy::cast_precision_loss)]
             let position = position as f64;
             let index = self.push(
@@ -16716,16 +16725,51 @@ impl<'a> FuncBuilder<'a> {
                 HirType::NUMBER,
                 origin.clone(),
             );
-            let read = self.push(
-                OpKind::FieldGet {
-                    object,
-                    field: u32::try_from(slot).unwrap_or(u32::MAX),
-                },
-                field.ty.clone(),
-                origin.clone(),
-            );
+            let read = match source {
+                Enumerated::Slot(slot) => {
+                    let field = layout.fields[slot].clone();
+                    self.push(
+                        OpKind::FieldGet {
+                            object,
+                            field: u32::try_from(slot).unwrap_or(u32::MAX),
+                        },
+                        field.ty.clone(),
+                        origin.clone(),
+                    )
+                }
+                // The same call a property read makes, which is what a getter
+                // *is*. `Object.values` runs them, in the order it reports them.
+                Enumerated::Getter => {
+                    let Some(callee) = self.accessor_callee(argument, owner, &name, "get ") else {
+                        // Set-only. The name is enumerable and its value is
+                        // `undefined`, which this array's element has no width
+                        // for -- so it is refused by name rather than answered
+                        // with a zero, which is the thing this whole change is
+                        // about.
+                        return Err(self.unsupported(
+                            id,
+                            &format!(
+                                "`{name}`, a set-only property, in {what} --                                  it enumerates and its value is `undefined`"
+                            ),
+                        ));
+                    };
+                    let returns = self
+                        .declared_type_of(owner, &name)
+                        .and_then(|declared| self.represent(declared))
+                        .unwrap_or_else(|| element.clone());
+                    self.push(
+                        OpKind::Call {
+                            callee,
+                            args: vec![object],
+                            frame: None,
+                        },
+                        returns,
+                        origin.clone(),
+                    )
+                }
+            };
             let value = if pairs {
-                self.entry_pair(id, &element, &field.name, read)?
+                self.entry_pair(id, &element, &name, read)?
             } else {
                 self.coerce(read, &element, id)?
             };
@@ -16903,30 +16947,117 @@ impl<'a> FuncBuilder<'a> {
     /// closure's capture and an anonymous object type's member have no
     /// `PropertyRecord` to ask, and they reach here only through paths that
     /// have already decided they are enumerable.
-    fn enumerable_fields(&self, ty: TypeId, layout: &Layout) -> Vec<(usize, String)> {
+    fn enumerable_fields(&self, ty: TypeId, layout: &Layout) -> Vec<(Enumerated, String)> {
         let properties = match self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind) {
             Some(TypeKind::Object { properties }) => properties.clone(),
             _ => Vec::new(),
         };
-        layout
-            .fields
-            .iter()
-            .enumerate()
-            // **Any property of that name that is not private keeps the
-            // field.** `find` on the name alone took whichever came first, and
-            // `class C { #m = 44; ["#m"] = 4 }` records two properties named
-            // `"#m"` -- so a layout slot belonging to the computed one was
-            // dropped from `Object.keys` because the private one was found
-            // first. `any(|p| ... )` asks the question the filter means.
-            .filter(|(_, field)| {
-                let mut named = properties.iter().filter(|p| p.name == field.name).peekable();
-                if named.peek().is_none() {
-                    return true;
-                }
-                named.any(|property| !self.declared_with_a_private_name(property))
-            })
-            .map(|(at, field)| (at, field.name.clone()))
-            .collect()
+        let keeps = |name: &str| {
+            let mut named = properties.iter().filter(|p| p.name == name).peekable();
+            if named.peek().is_none() {
+                return true;
+            }
+            named.any(|property| !self.declared_with_a_private_name(property))
+        };
+
+        let mut out: Vec<(Enumerated, String)> = Vec::new();
+        // **Accessors first means walking the type, not the layout.**
+        //
+        // A getter is a call and a `Layout` holds storage, so it has no entry
+        // here at all --- which is why every consumer of this list dropped one
+        // silently. The names are on the *type*, which is where `lower_in` asks
+        // and is why `"a" in src` was right while `Object.keys(src)` was not.
+        //
+        // Walked in the type's order rather than appended, because appending
+        // gives `["b", "a"]` for `{ get a() {}, b: 2 }` and node says
+        // `["a", "b"]`. `property_order` reorders array indices afterwards and
+        // is unaffected either way.
+        for property in &properties {
+            if !keeps(&property.name) {
+                continue;
+            }
+            if let Some(at) = layout.index_of(&property.name) {
+                out.push((Enumerated::Slot(at as usize), property.name.clone()));
+            } else if matches!(property.kind, MemberKind::Accessor(_))
+                && self.declared_in_an_object_literal(property)
+            {
+                // **Where it is written, because `own` does not separate
+                // these.** `Object.keys(new C())` must not name `get d()` and
+                // `Object.keys({ get a() {} })` must name `a`, and `own` is
+                // `false` for *both* --- measured, after it was assumed and the
+                // class control went red one way and the literal consumers the
+                // other. A class's accessor lives on the prototype and a
+                // literal's is a property of the object, and the declaration's
+                // parent is what says which was written.
+                out.push((Enumerated::Getter, property.name.clone()));
+            }
+        }
+        // **A field the type has no property for is kept**, which is the case
+        // this function has always had to carry: a tuple's `_0`, a closure's
+        // capture and an anonymous object type's member reach here through
+        // paths that have already decided they are enumerable, and a type with
+        // no properties at all leaves the walk above empty.
+        for (at, field) in layout.fields.iter().enumerate() {
+            if out.iter().any(|(_, name)| *name == field.name) {
+                continue;
+            }
+            if keeps(&field.name) {
+                out.push((Enumerated::Slot(at), field.name.clone()));
+            }
+        }
+        out
+    }
+
+    /// Whether a type declares this name as an accessor of its **own**.
+    ///
+    /// The distinction the layout cannot make: an accessor has no field, so
+    /// "absent from the layout" covers a member that does not exist, a method,
+    /// an inherited accessor, and an own one --- and only the last is an own
+    /// property.
+    fn own_accessor(&self, ty: TypeId, wanted: &str) -> bool {
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return false;
+        };
+        let TypeKind::Object { properties } = &record.kind else {
+            return false;
+        };
+        properties.iter().any(|property| {
+            property.name == wanted
+                && matches!(property.kind, MemberKind::Accessor(_))
+                && self.declared_in_an_object_literal(property)
+        })
+    }
+
+    /// Whether a member is written in an object literal rather than a class.
+    ///
+    /// The question `own` looked like it answered and does not: it is `false`
+    /// for a literal's accessor and for a class's alike. What separates them is
+    /// that a class's accessor is installed on the **prototype** --- not an own
+    /// property, absent from `Object.keys(new C())` --- and a literal's is a
+    /// property of the object itself.
+    ///
+    /// Syntactic on purpose, the same way [`Self::declared_with_a_private_name`]
+    /// is: the distinction is about where the member was written, and the
+    /// declaration node is the only thing that records it.
+    fn declared_in_an_object_literal(&self, property: &PropertyRecord) -> bool {
+        let Some(declaration) = property.declaration else {
+            return false;
+        };
+        // **Whichever comes first going up**, rather than the immediate parent.
+        // The encoder puts members in a node list, so an accessor's parent is
+        // not the literal -- testing for it directly answered `false` for every
+        // literal and the consumers stayed broken while the class controls
+        // passed, which reads exactly like the guard working.
+        let mut at = self.node(declaration).parent;
+        while let Some(node) = at {
+            match self.kind_of(node) {
+                Some(syntax::OBJECT_LITERAL_EXPRESSION) => return true,
+                Some(syntax::CLASS_DECLARATION | syntax::CLASS_EXPRESSION) => return false,
+                _ => {}
+            }
+            at = self.node(node).parent;
+        }
+        false
     }
 
     /// The first optional property a type declares, where it has one.
@@ -17351,7 +17482,17 @@ impl<'a> FuncBuilder<'a> {
             self.values[table.0 as usize].ty
         {
             let layout = self.layout_of(id, ty)?;
+            // An own **accessor** is a property and has no field, so the layout
+            // alone answers `false` for `Object.hasOwn({ get a() {} }, "a")`.
+            // `"a" in o` was right about the same object the whole time, because
+            // it asks the type.
+            //
+            // Still `fields` rather than `declares` for everything else, and the
+            // comment above says why: a method is declared and is not an own
+            // property. `own` is what separates a literal's accessor from a
+            // class's, which sits on the prototype and is not one either.
             layout.fields.iter().any(|field| field.name == wanted)
+                || self.own_accessor(ty, &wanted)
         } else {
             self.own_names(id, argument)?.contains(&wanted)
         };
