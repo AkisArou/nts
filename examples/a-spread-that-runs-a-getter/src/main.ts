@@ -40,6 +40,48 @@
 // and `theOrderTwoGettersRunIn` are the two that would have passed on the broken
 // compiler had they only checked the *value*.
 
+// # The same cause, still wrong in four more places
+//
+// A spread was one consumer of "walk the layout's fields". **Enumeration is
+// four more, and all four still omit an accessor entirely:**
+//
+//     const src = { get a(): number { return 1; }, b: 2 };
+//
+//     Object.keys(src)            "b"    node "a,b"
+//     for (const k in src)        "b"    node "ab"
+//     Object.values(src).length    1     node 2
+//     Object.entries(src)          same omission
+//
+// A getter on an object literal **is** an own enumerable property, so all four
+// are wrong answers that compile. The boundary is already right on the other
+// side and must stay there: a *class* getter lives on the prototype, is not
+// own, and is correctly absent from `Object.keys(new C())` today --- as is a
+// method. Both were probed.
+//
+// # Why it was not fixed with the spread
+//
+// `enumerable_fields` answers `(layout slot, name)`, and the whole difficulty
+// is that a getter has no slot. Its two callers want different halves:
+// `own_names` needs only the name, and `decide_object_columns` reads
+// `layout.fields[slot]` to emit a `FieldGet`. So the return type has to say
+// *how* to get each value --- a slot or a call --- rather than assuming one.
+//
+// Order is part of it. The list is built by walking `layout.fields`, so
+// appending accessors afterwards gives `["b", "a"]` where node says
+// `["a", "b"]`. The source order lives on the type's `properties`, and that
+// walk has to keep the fields a layout has and a type does not: a tuple's
+// `_0`, a closure's capture, an anonymous member, all of which `enumerable_fields`
+// deliberately keeps today.
+//
+// And one case needs a decision rather than a translation. A **setter-only**
+// property is own and enumerable too --- `Object.keys({ set a(n) {}, b: 2 })`
+// is `["a", "b"]` --- and its *value* is `undefined`, which a number slot
+// cannot hold. That is a representation question, not a plumbing one, and it is
+// the reason this is a separate piece of work rather than a larger diff here.
+//
+// `MemberKind::Accessor(Accessor)` already carries Get/Set/GetSet, so nothing
+// needs to be learned from the frontend to do it.
+
 let getterRuns = 0;
 const withAGetter = {
   get computed(): number {
