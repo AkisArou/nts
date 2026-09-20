@@ -78,10 +78,11 @@ where reducing starts rather than a defect.
 | 20 | a parameter of unrepresentable type |
 | 20 | a rest element with no name |
 | 18 | **an omitted expression** — array elisions |
+| ~~15~~ | ~~an empty array literal in a position that does not say what it holds~~ — closed 2026-09-20; `never[]` is the checker saying nothing can be read, so the element width is unobservable |
 | 10 | `X` or `X` where what it stands in for is not a reference |
 | 9 | an `X` against something this compiler has no class for |
 | 8 | a property `X` of unrepresentable type (any) |
-| ~~7~~ | ~~a static field of an anonymous class~~ — closed 2026-09-20; the field takes the same `Type{id}` stand-in its own class's methods already take |
+| ~~7~~ | ~~a static field of an anonymous class~~ — closed 2026-09-20; the field takes the same `Type{id}` stand-in its own class's methods already take. 6 of the 7 pass in census 13; the seventh advanced to `eval` |
 | 5 | assignment to a computed target |
 | 4 | a `X` literal needing more than the 128 bits this compiler gives one |
 | 3 | a try statement, which has code in it |
@@ -611,6 +612,62 @@ alone. `typescript.md`'s `negative-zero` row carries it. Those three were
 **reported as passes** for as long as the census has existed.
 
 
+
+### 1,539 of 4,812, and the row that was 95% a non-goal
+
+Measured 2026-09-20, compiler pinned at `23666c14`, over all of
+`test/language`, slice 1. **1,534 → 1,539**: six improved, all the
+`static #x` files that the anonymous-class row was holding, and one regressed to
+a `link` failure that does not reproduce on the current binary — recorded as
+unexplained rather than attributed, in a run that overlapped three full gates.
+
+Two corrections to the previous section while they are cheap. The 18
+`frontend-crash` files are **not new**: census 12 had the same 18, all
+`import defer`, and a summary that said "crashes at zero" was reading the
+headline rather than the rows. And the `never[]` row below was fixed *after* this
+census pinned its compiler, so its 15 are already gone — `pinCompiler` copies the
+binary at start, which is what makes a census reproducible and what makes its
+number one commit old the moment a fix lands.
+
+#### The redaction that makes a row rankable deletes what it contains
+
+`run262.mjs` replaces quoted identifiers with `X` so that a hundred files naming
+a hundred names rank as one shape. Correct for ranking, and it took the content
+out of the largest row: **147 files of ``\`X\`, a builtin this compiler does not
+provide``**, where *which* builtin is the entire row. Recording the names beside
+the shape answers it in one line:
+
+| files | builtin |
+| ---: | --- |
+| 140 | `eval` |
+| 4 | `Function` |
+| 2 | `Object` |
+| 2 | `RegExp` |
+
+So the biggest actionable row was never actionable: 140 of 147 are `eval`, a
+declared non-goal, and the whole row is worth eight files. Ranking by reach put
+it first for two censuses.
+
+With the non-goals taken out by *name* rather than by message — `eval`, `RegExp`,
+boxed primitives, `any` — the 504 lowering refusals are **191 non-goal and 313
+actionable**, ranked:
+
+| files | first refusal |
+| ---: | --- |
+| 36 | a parameter of unrepresentable type |
+| 28 | a `X` of unrepresentable type |
+| 21 | a module-scope variable of unrepresentable type (an array of any) |
+| 19 | a property of unrepresentable type (any) |
+| 13 | a conversion to string from unknown |
+| 12 | `X` or `X` where what it stands in for is not a reference |
+| 11 | `X`, where an array has only `X` |
+| 10 | a module-scope variable of unrepresentable type |
+| 9 | a declaration without an initializer |
+| 9 | a value called as a function, where the type does not say which function |
+
+Six of the top ten are one question — *what representation does an unannotated
+or `any`-typed thing get* — which is `docs/any-unknown.md`'s subject and not ten
+separate pieces of work.
 
 ### 1,534 of 4,812, and what is left after the non-goals
 
