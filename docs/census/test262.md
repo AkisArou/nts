@@ -649,25 +649,77 @@ declared non-goal, and the whole row is worth eight files. Ranking by reach put
 it first for two censuses.
 
 With the non-goals taken out by *name* rather than by message — `eval`, `RegExp`,
-boxed primitives, `any` — the 504 lowering refusals are **191 non-goal and 313
-actionable**, ranked:
+boxed primitives, `any` — the 504 lowering refusals are **280 non-goal and 224
+actionable**.
+
+Those two numbers were first published as 191 and 313, and the correction is the
+same lesson one turn later: the first pass filtered non-goals by *message text*,
+which does not match `a `new` of unrepresentable type (`Boolean`)`. 28 files of
+`new Boolean`, `new Number`, `new String` and `new Object` sat in the actionable
+column until the filter asked `named` instead. **A filter over redacted text is
+the same mistake as a ranking over redacted text**, and both were made here
+within an hour.
+
+Ranked, after the correction:
 
 | files | first refusal |
 | ---: | --- |
-| 36 | a parameter of unrepresentable type |
-| 28 | a `X` of unrepresentable type |
-| 21 | a module-scope variable of unrepresentable type (an array of any) |
-| 19 | a property of unrepresentable type (any) |
-| 13 | a conversion to string from unknown |
-| 12 | `X` or `X` where what it stands in for is not a reference |
-| 11 | `X`, where an array has only `X` |
-| 10 | a module-scope variable of unrepresentable type |
-| 9 | a declaration without an initializer |
-| 9 | a value called as a function, where the type does not say which function |
+| files | first refusal | what it actually is |
+| ---: | --- | --- |
+| 36 | a parameter of unrepresentable type | **all 36 are `Iterable`** |
+| ~~15~~ | an empty array literal in a position that does not say what it holds | closed after this census pinned its compiler |
+| 13 | a conversion to string from unknown | a decision, not a gap — see below |
+| 12 | `X` or `X` where what it stands in for is not a reference | all 12 are `null` / `undefined` |
+| 11 | `X`, where an array has only `X` | 7 `toString`, 4 `constructor` — prototype identity |
+| 10 | a module-scope variable of unrepresentable type | |
+| 9 | a declaration without an initializer | `{ { var f; } var f }` |
+| 9 | a value called as a function, where the type does not say which function | |
+| 9 | an array literal of unrepresentable type (an untyped node) | |
+| 8 | a shorthand in an assignment pattern, whose name resolves to the property | |
 
-Six of the top ten are one question — *what representation does an unannotated
-or `any`-typed thing get* — which is `docs/any-unknown.md`'s subject and not ten
-separate pieces of work.
+#### What the three biggest rows are, measured rather than ranked
+
+**All 36 of the top row are `Iterable`**, and the boundary is one token wide:
+
+```ts
+function g([...rest]: number[]) {}   // lowers
+function g([...rest]) {}             // `a parameter of unrepresentable type (Iterable)`
+```
+
+An unannotated destructuring parameter with a rest element is typed `Iterable<T>`
+by the checker, and test262 is JavaScript, so none of the 36 carries an
+annotation. This is not a missing case: an `Iterable` parameter must accept an
+array *and* a generator, and this compiler represents an array as `NtsArray *`
+rather than as an object with methods, so it is a question about representing a
+union of representations. `specialize.rs` is not the lever — it chooses integer
+widths and says plainly that signatures are not specialised.
+
+**The 13 `unknown`-to-string files are a decision with its reason written down.**
+`as_string` converts an erased value through `nts_value_to_string`, which spells
+six tags exactly and `abort()`s on the seventh; the seventh is an object, which
+needs `toString` off a prototype chain that a tag cannot resolve. `spells_itself`
+is the predicate that keeps the refusal honest — a union of scalars and absences
+converts, one that can hold an object does not. Closing it means giving the
+*runtime* a way to reach a class's `toString` from an erased value.
+
+**The 11 array-member files want prototype identity**, not a member:
+`array.toString !== Array.prototype.toString` and `array.constructor === Array`.
+Both need `Array` and its prototype as comparable values, which is a different
+feature from the member access the message names.
+
+#### A negative result worth keeping: the `_value` family clears nothing here
+
+`lower_array_method` refuses eight array methods on an array of erased elements
+and names the missing runtime family precisely — `push`, `slice`, `reverse`,
+`join`, `splice`, `fill`, `index_of`, `includes`, beside five `_value` helpers
+that do exist. It is a four-site change with two siblings to copy from, and the
+comment beside it counts 27 of 29 sites in the **node profile**.
+
+In this population it blocks **zero files**. Measured before building it, which
+is the only reason it was not built: `[,,,].toString()` reaches it, and the
+test262 file that looked like it needed it is blocked on `Array.prototype.toString`
+one step earlier. A named work item in one corpus can be worth nothing in
+another, and the message is identical in both.
 
 ### 1,534 of 4,812, and what is left after the non-goals
 
