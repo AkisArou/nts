@@ -476,15 +476,18 @@ if (found.length === 0) {
   // reported `ok  0 agree, 0 differ` because every batch had fallen into a
   // bucket the summary did not mention, and a line that cannot say "nothing
   // ran" reads exactly like a line that says "nothing was wrong".
+  // No leading tool name: `divergence.sh` prints one, and its summary picks the
+  // line containing "agree," --- which read `fuzz-expressions ok fuzz-expressions
+  // ok …` while this printed its own.
   console.log(
-    `fuzz-expressions      ok    ${label}: ${totals.agree} agree, 0 differ, ` +
+    `${label}: ${totals.agree} agree, 0 differ, ` +
       `${totals.refused} refused, ${totals.typescript} rejected by tsc, ` +
       `${totals.other} unusable`,
   );
 } else {
   console.log(
-    `fuzz-expressions      DIFFER  ${label}: ${totals.agree} agree, ` +
-      `${found.length} differ, ${totals.refused} refused`,
+    `${label}: ${totals.agree} agree, ${found.length} differ, ` +
+      `${totals.refused} refused  <-- DIFFER`,
   );
   for (const f of found) {
     console.log(`  ${f.kind.padEnd(10)} ${f.code}`);

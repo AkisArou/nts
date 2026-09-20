@@ -53,7 +53,7 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root" || exit 1
 
 status=0
-for check in skip-audit stale-exclusions fixture-configs self-oracle fuzz-deep-equal "fuzz-timer-order 150"; do
+for check in skip-audit stale-exclusions fixture-configs self-oracle fuzz-deep-equal "fuzz-timer-order 150" "fuzz-expressions 120 1"; do
   started=$(date +%s)
   # `set --` then pass only the arguments that exist. Passing `"${2:-}"` unconditionally
   # handed every argument-less check an empty string, and `fuzz-deep-equal` reads its first
