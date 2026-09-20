@@ -1125,8 +1125,11 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # `a-mapped-tuple-in-a-concatenation` together — the second is in
   # `rc.sh`'s `known_failing`, so it raises the two non-counting floors by
   # one each and the counting one not at all. 279 on the same day for
-  # `a-closure-over-a-module-scope-loop-head`.
-  backend_examples 279 "through the LLVM backend, counting" "" 14 ); }
+  # `a-closure-over-a-module-scope-loop-head`, and 280 when
+  # `an-element-of-a-mapped-array` left `rc.sh`'s `known_failing` -- the
+  # counting floor is the one that moves when a fixture stops failing
+  # under `rc` rather than when a new example lands.
+  backend_examples 280 "through the LLVM backend, counting" "" 14 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
