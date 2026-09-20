@@ -613,6 +613,49 @@ alone. `typescript.md`'s `negative-zero` row carries it. Those three were
 
 
 
+### 1,575 of 4,812, and a day measured end to end
+
+Measured 2026-09-20, compiler pinned at `b260a52c`, over all of `test/language`,
+slice 1. **1,569 → 1,575**: six improved, **none regressed**. Four
+`statements/variable` from the module-global slot, one `statements/for`, and
+`statementList/class-block.js` — the file the last census lost to a `cc`
+internal compiler error, back on its own, which is what "transient" looks like
+when the message is kept.
+
+The day, each step diffed per file against the one before it:
+
+| | |
+| --- | ---: |
+| start | 1,534 |
+| anonymous-class statics | 1,539 |
+| `never[]` literals | 1,548 |
+| parentheses, `void 0`, `throw` | 1,558 |
+| `in`, `hasOwnProperty`, unwritten names | 1,569 |
+| `null` slots, bigint globals, module globals | **1,575** |
+
+**+41, and the more useful number is 0 regressions across six censuses.** Two
+changes were backed out before they landed — a comparison that read `void` as an
+erasable absence, and a tuple position that gave a literal a layout to prefer —
+and both were caught by an arm nobody wrote for them: four examples in the gate
+corpus, and a control added only because the previous revert had taught the
+lesson.
+
+#### What the instruments learned, which outlasts the count
+
+Three refusal channels stopped lying this day, and each was found by a defect it
+had mis-sorted rather than by review:
+
+| channel | it said | it meant |
+| --- | --- | --- |
+| `storable` | "holding a reference" | neither a scalar nor a reference |
+| census `link` | a compiler refusal | a `cc` timeout, or an ICE |
+| `probe.sh` | `C DID NOT COMPILE` | a backend *decline*, or no compiler at all |
+
+The first re-sorted five files into the fix they needed the moment it was
+corrected. The second explained three censuses' worth of unreproducible rows.
+The third would have turned one wrong `NTS_BIN` path into a confident, wrong
+bracket — both arms "failing to compile" reads exactly like agreement.
+
 ### 1,569 of 4,812, and the third `link` row, named at last
 
 Measured 2026-09-20, compiler pinned at `7f213b3b`, over all of `test/language`,
