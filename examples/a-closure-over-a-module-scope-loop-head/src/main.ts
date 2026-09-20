@@ -99,6 +99,30 @@ export function aClosureOverAModuleBinding(n: number): number {
   return readsTheBinding() + n * 0;
 }
 
+// # `var` is not skipped, and that was learned the expensive way
+//
+// For one commit this skipped a `var` head too, reasoning that `lower_for`
+// binds the head variable as a block parameter whatever the keyword, so the
+// global was unwritten either way. **The census said otherwise**: three files
+// that read the head's `var` *after* the loop —
+//
+//     for (var i = 0; i < 10; i++) {}
+//     if (i !== 10) throw new Test262Error(...);
+//
+// — passed before and refused after. So the global *was* being written, and
+// the claim that `var` "was already a local in every way except the one that
+// produced the wrong answer" was false. `var` hoists; its head declaration
+// really is a module binding.
+//
+// **The gate did not catch it and could not have**: no example reads a `for`
+// head's `var` after the loop. A full census run did, by comparing 4,812 files
+// against the same run a few commits earlier.
+//
+// What that leaves unfixed is a closure over a `for` loop's `var` at module
+// scope, which answers the loop's first value rather than its last. That is
+// the status quo rather than a regression, and the in-function case has a
+// blocker of its own.
+//
 // # What still refuses, and why it is not this
 //
 // A `const` declared **inside a module-scope loop body** —

@@ -10136,15 +10136,39 @@ impl<'a> FuncBuilder<'a> {
         self.is_within_a_function(id) && !self.binds_this(id)
     }
 
-    /// Whether this declaration is a loop head's.
+    /// Whether this declaration is a loop head's **`let` or `const`**.
     ///
-    /// Block-scoped for `let` and `const`; for `var` it hoists, and it is
-    /// treated the same here anyway because `lower_for` binds the head variable
-    /// as a block parameter whatever the keyword. See the call site.
+    /// `var` is excluded, and that exclusion was learned the expensive way.
+    /// This function skipped it too for one commit, on the reasoning that
+    /// `lower_for` binds the head variable as a block parameter whatever the
+    /// keyword, so the global was unwritten either way. **The reasoning was
+    /// wrong and the census said so**: three files that read the head's `var`
+    /// *after* the loop —
+    ///
+    /// ```js
+    /// for (var i = 0; i < 10; i++) {}
+    /// if (i !== 10) throw new Test262Error(…);
+    /// ```
+    ///
+    /// — passed before and refused after, so the global was being written after
+    /// all and the claim that `var` "was already a local in every way except
+    /// the one that produced the wrong answer" was false.
+    ///
+    /// `var` hoists, so its head declaration really is a module binding. What
+    /// it leaves unfixed is a closure over a `for` loop's `var` at module
+    /// scope, which answers the loop's first value rather than its last; that
+    /// is the status quo rather than a regression, and it has a blocker for the
+    /// in-function case.
     fn declared_in_a_loop_head(&self, id: NodeId) -> bool {
         let Some(list) = self.ancestor(id, syntax::VARIABLE_DECLARATION_LIST) else {
             return false;
         };
+        if !matches!(
+            nts_semantic_schema::VariableKind::from_flags(self.node(list).flags),
+            nts_semantic_schema::VariableKind::Let | nts_semantic_schema::VariableKind::Const
+        ) {
+            return false;
+        }
         self.node(list).parent.is_some_and(|parent| {
             matches!(
                 self.kind_of(parent),
