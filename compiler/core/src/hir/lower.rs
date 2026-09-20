@@ -3138,8 +3138,33 @@ fn growth_can_fill(ty: &HirType) -> bool {
     !element.may_hold_a_reference()
 }
 
+/// `never[]` at any depth: the checker saying this literal decides nothing.
+///
+/// **At any depth, because `[[]]` decides nothing either.** The one-level
+/// version read `Array(Array(Never))` as settled, so the outer literal kept a
+/// type whose element cannot be represented and the refusal came out as
+///
+/// ```text
+/// an array literal of unrepresentable type (an array of an array of a
+/// representable type)
+/// ```
+///
+/// which contradicts itself and sends its reader after a representation gap
+/// that is not there. That is the exact failure the `empty` flag beside this
+/// exists to avoid, one level in: what is missing is a type for the literal to
+/// take, and only the branch that discarded `never[]` knows it.
+///
+/// 12 files of the slice-1 `test/language` population, all
+/// `for (… of [[]])` — and they still refuse, because nothing in those
+/// programs says what the inner array holds. The refusal names the empty
+/// literal now instead of blaming the representation.
 fn is_an_unsettled_array(ty: &HirType) -> bool {
-    matches!(ty, HirType::Managed(ManagedType::Array(element)) if **element == HirType::Never)
+    match ty {
+        HirType::Managed(ManagedType::Array(element)) => {
+            **element == HirType::Never || is_an_unsettled_array(element)
+        }
+        _ => false,
+    }
 }
 
 /// How a `[key, value]` pair hands over its two halves.
@@ -24066,6 +24091,29 @@ impl<'a> FuncBuilder<'a> {
         ))
     }
 
+    /// Whether the **checker** typed this node `never[]`, at any depth.
+    ///
+    /// The companion to [`is_an_unsettled_array`], which asks the same question
+    /// of a representation. Both are needed and they answer for different
+    /// nodes: a settled outer array of an unsettled inner one has no
+    /// representation at all, so only this one can see it.
+    fn checker_called_it_unsettled(&self, id: NodeId) -> bool {
+        let mut ty = match self.snapshot.node_types.get(&id) {
+            Some(ty) => *ty,
+            None => return false,
+        };
+        // Bounded by the nesting depth a program can write, and every step is
+        // strictly inwards, so this terminates without a visited set.
+        for _ in 0..32 {
+            match self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind) {
+                Some(TypeKind::Array(element)) => ty = *element,
+                Some(TypeKind::Never) => return true,
+                _ => return false,
+            }
+        }
+        false
+    }
+
     fn lower_array_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         // Whether the checker's own answer was `never[]`, which is the empty
         // literal. Held separately because it decides the *message*: when the
@@ -24075,7 +24123,21 @@ impl<'a> FuncBuilder<'a> {
         // missing is a type for the literal to take, and only the branch that
         // discarded `never[]` knows that.
         let own = self.type_of(id);
-        let empty = own.as_ref().is_some_and(is_an_unsettled_array);
+        // **Asked of the checker's type, not of the representation.** `[[]]` is
+        // `never[][]`, whose *representation* is `None` -- an array of `never`
+        // has no element storage -- so `own` is absent and the one-level test
+        // over it could not fire. The message then came out as
+        //
+        //     an array literal of unrepresentable type (an array of an array of
+        //     a representable type)
+        //
+        // which contradicts itself and sends its reader after a representation
+        // gap that is not there. What is missing is a type for the literal to
+        // take, and only the branch that knows the checker said `never` can say
+        // so. 12 files of the slice-1 `test/language` population, all
+        // `for (… of [[]])`.
+        let empty = own.as_ref().is_some_and(is_an_unsettled_array)
+            || self.checker_called_it_unsettled(id);
         let ty = own
             // `[]` is typed `never[]`, which is the checker saying the literal
             // decides nothing -- the slot it goes into does. So the expected
