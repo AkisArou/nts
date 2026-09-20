@@ -2497,11 +2497,26 @@ fn storable(probe: &mut FuncBuilder<'_>, name: NodeId, ty: &HirType) -> Result<(
     // Module state holding a closure is a feature rather than an oversight, so
     // it is refused in those words until it is one.
     if probe.is_function_typed(name) {
-        // A `const` arrow no longer reaches here: it is typed by the closure it
-        // becomes, which is the one object that can ever be in the slot. What
-        // is left is a *mutable* one, where two arrows are two layouts and the
-        // slot cannot be both.
-        return Err("a module-scope `let` holding a function, which may be reassigned with a closure of another layout".to_owned());
+        // **Four conditions arrive here, and the message used to name one of
+        // them -- the wrong one for three.** It said "a module-scope `let`",
+        // and a reader of `const f = c.m` went looking for a `let`. The same
+        // defect `storable`'s first refusal had, one branch up.
+        //
+        // What `closure_typed_global` takes is a name whose initializer *is* a
+        // closure it can name, so the slot's layout is settled by construction.
+        // What is left is every way that fails:
+        //
+        //     let f = a; f = b        two arrows, two layouts, one slot
+        //     const f = c.m           some closure, layout unknown here
+        //     const f = pick()        the same, from a call
+        //     const f = function () { this.x }   binds `this`; not a closure
+        //
+        // The sentence now names what they share -- the initializer does not
+        // fix the layout -- rather than the keyword three of them do not have.
+        return Err(
+            "a module-scope name holding a function, whose closure layout its initializer does not fix"
+                .to_owned(),
+        );
     }
     // The layout, here, because nothing else will build it: every other one is
     // built by a function that uses the type, and a global whose initializer
@@ -2587,9 +2602,20 @@ fn closure_typed_global(
             nts_semantic_schema::VariableKind::Let => !reassigned_anywhere(probe, name_node),
             _ => false,
         })
-        .filter(|node| probe.kind_of(*node) == Some(syntax::ARROW_FUNCTION))?;
+        .filter(|node| {
+            matches!(
+                probe.kind_of(*node),
+                Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION)
+            )
+        })?;
     // A refused closure has no layout to name, so the binding falls through to
     // the ordinary path and is refused there with its own reason.
+    //
+    // **This lookup is also what makes admitting a `function` expression safe.**
+    // One that mentions `this` binds its own, so `is_closure` never recorded it
+    // and `position` finds nothing -- the same fall-through, reached without
+    // asking about `this` a second time. Only the form that is already a
+    // closure gets a global, which is the form an arrow always is.
     let index = closures
         .iter()
         .position(|closure| closure.node == node && closure.refusal.is_none())?;

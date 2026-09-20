@@ -17,9 +17,15 @@
 // written for it and would have let this slot through. It is here because a
 // control that cannot fail proves nothing about the thing it controls.
 //
-// Lifting this is one design rather than a patch: a closure global would need a
-// representation that spans layouts --- a tag and an indirect call --- and that
-// is a different feature from the one the arms above exercise.
+// The last two arms are a *different* reason wearing the same sentence, and
+// that is why the sentence stopped naming a keyword. `fromAMethod` holds some
+// closure whose layout nothing here fixes, and `bindsThis` is not a closure at
+// all --- a `function` that mentions `this` binds its own, so it is absent from
+// the closure table and falls through rather than being tested for.
+//
+// Lifting the first three is one design rather than a patch: a closure global
+// would need a representation that spans layouts --- a tag and an indirect
+// call --- and that is a different feature from the one the example exercises.
 
 const a = 1;
 const b = 2;
@@ -32,6 +38,28 @@ captures = (n: number): number => n + b;
 
 let viaDestructuring = (n: number): number => n + a;
 [viaDestructuring] = [(n: number): number => n + b];
+
+class Holder {
+  v = 3;
+  method(): number {
+    return this.v;
+  }
+}
+const holder = new Holder();
+
+const fromAMethod = holder.method.bind(holder);
+
+const bindsThis = function (this: Holder): number {
+  return this.v;
+};
+
+export function useFromAMethod(): number {
+  return fromAMethod();
+}
+
+export function useBindsThis(): number {
+  return bindsThis.call(holder);
+}
 
 export function usePlain(n: number): number {
   return plain(n);

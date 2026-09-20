@@ -1,13 +1,32 @@
-// expect: a module-scope `let` holding a function, which may be reassigned with a closure of another layout
-//
-// **The refusal names `let` and the declaration below is `const`.** The reason
-// it gives -- that the binding "may be reassigned with a closure of another
-// layout" -- cannot apply to a `const`, which is exactly the property `const`
-// has. So either the check does not distinguish the two, or it does and the
-// message does not.
+// **This was a blocker until 2026-09-20, and the question it asked is answered
+// below by its own last paragraph.** It was filed because the refusal named
+// `let` and the declaration is `const`:
 //
 //     function twice(n: number) { … }          -> lowers
 //     const twice = function (n: number) { … } -> REFUSED, as a `let`
+//
+// and it ended by naming the two possibilities. The first was the right one:
+//
+// > If the reasoning is what gates it, a `const` is already immune and could
+// > lower today.
+//
+// It could. `closure_typed_global` tested the initializer for `ARROW_FUNCTION`
+// and a `function` expression that mentions no `this` **is already a closure** --
+// `is_closure` has said so since the separate refusal for it was removed -- so
+// the layout was there the whole time and only the gate's spelling of the
+// question excluded it. Admitting it needs no `this` test either: the gate looks
+// the node up in the closure table, and a `this`-binding form was never put
+// there.
+//
+// The keyword turned out not to be the question at all. A `let` that nothing
+// ever rewrites holds exactly the object its initializer built, so it takes the
+// same global --- `examples/a-function-held-by-a-name-nothing-rewrites` is that
+// half. The message no longer names a keyword, because four conditions reach it
+// and three of them are not `let`.
+//
+// What is still refused is the part this file identified correctly and which the
+// change above does not touch: **a function read off a value**. That is the
+// `assert` finding below, and it survives intact.
 //
 // # 2026-09-10: this is the whole of `assert`
 //
@@ -99,6 +118,22 @@
 // the next person to read it will look for reassignments that are not there.
 // That is the same defect class as `path`'s `no declaration in the hierarchy`:
 // a true-sounding sentence about something that is not what happened.
+//
+// *Both halves were true.* The `const` was immune, and the message was also
+// describing a condition it was not testing. Kept as written because the value
+// of the paragraph is that it named the two outcomes before either was checked,
+// which is what made the answer cheap to reach.
+//
+// # Which of the seven sites this actually cleared
+//
+// Recorded as a prediction rather than a result, because the node lanes are not
+// rebuilt here and a count of what moved would be a guess. The two `let` sites
+// below are **reassigned** --- that is what late binding is --- so they stay
+// refused, and correctly. `internal/time.ts:68` is a `const` whose initializer
+// is a *name*, which lowered before this and still does. `assert`'s eighteen are
+// the instance-method form and are untouched. So the sites this clears are
+// whichever of the seven are a `function` expression or a never-rewritten arrow,
+// and the number is not claimed here.
 //
 // **7 distinct sites** report this message: web-platform 2, stream 2,
 // internal 2, util 1. **Two are genuinely `let` and the message is right about

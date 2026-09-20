@@ -31,7 +31,16 @@
 // without enumerating its shapes, and treats anything it does not recognise as
 // a write.
 //
-// The arms below are the ones that now compile. The two that must still be
+// # And a `function` expression is the same closure
+//
+// `const e = function () { ... }` was refused too, for no reason that survived
+// being looked at: one that mentions no `this` **is already a closure** --
+// `is_closure` has said so since the refusal for it was removed -- so the
+// layout existed and only the gate's `ARROW_FUNCTION` test stood in the way.
+// Admitting it needs no second `this` test either, because the gate looks the
+// node up in the closure table and a `this`-binding form was never put there.
+//
+// The arms below are the ones that now compile. Those that must still be
 // refused are `blockers/a-function-held-by-a-name-that-is-rewritten`, including
 // the destructured write -- the case that would have passed had this been built
 // on `assigned_symbols`.
@@ -43,6 +52,14 @@ let shifted = (n: number): number => n + offset;
 
 // A `const` arrow, unchanged by any of this and here to stay that way.
 const doubled = (n: number): number => n * 2;
+
+// The `function` spelling of the same thing, in both keywords.
+const halved = function (n: number): number {
+  return n / 2;
+};
+let negated = function (n: number): number {
+  return -n;
+};
 
 // Read, passed and called -- none of which is a write, and each of which the
 // upward walk has to keep saying so about.
@@ -64,4 +81,8 @@ export function throughACall(n: number): number {
 
 export function alongsideAConst(n: number): number {
   return doubled(step(n));
+}
+
+export function throughAFunctionExpression(n: number): number {
+  return halved(negated(n));
 }
