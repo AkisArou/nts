@@ -266,11 +266,34 @@ function attempt(dir, body) {
       maxBuffer: 64 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
     });
-  } catch {
+  } catch (error) {
     // A backend declining a function, or C the compiler will not take. Both are
     // `unsupported`, and this is exactly the gap the census could not see: it
     // measured lowering, and lowering is not building.
-    return { bucket: "unsupported", why: "link" };
+    //
+    // **A refusal and an unmeasurable run must not look alike**, which is the
+    // rule `tooling/differential` already states for its own timeouts and which
+    // this `catch` broke by discarding the error. Two censuses reported exactly
+    // one `link` failure each, on two different files, and **neither
+    // reproduced** -- three runs apiece in isolation, all `strict-pass`. Both
+    // full runs overlapped a gate, so `cc` was competing for the machine and the
+    // timeout here is 180s. A row that reads `link` both for "the toolchain
+    // refused this C" and for "the toolchain did not finish" is one nobody can
+    // act on, and it cost two investigations that ended in "does not reproduce".
+    const timedOut = error?.signal === "SIGTERM" || error?.code === "ETIMEDOUT";
+    if (timedOut) return { bucket: "timeout", why: "link" };
+    // The first line the toolchain said, so the next one is diagnosable from the
+    // rows rather than from a re-run that may not reproduce it. Paths are
+    // stripped: they name a per-process scratch directory, which would make
+    // every row unique and unrankable.
+    const said = `${error?.stdout ?? ""}${error?.stderr ?? ""}`
+      .split("\n")
+      .find((line) => /error|undefined reference|cannot find/i.test(line));
+    return {
+      bucket: "unsupported",
+      why: "link",
+      first: said?.replace(/\/\S*\//g, "").trim().slice(0, 160),
+    };
   }
 
   try {

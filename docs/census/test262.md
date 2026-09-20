@@ -613,6 +613,36 @@ alone. `typescript.md`'s `negative-zero` row carries it. Those three were
 
 
 
+### 1,558 of 4,812, and the `link` row that was never a refusal
+
+Measured 2026-09-20, compiler pinned at `edcad5e2`, over all of `test/language`,
+slice 1. **1,548 → 1,558**: eleven improved — three each of `statements/const`,
+`statements/let` and `statements/variable`, plus `expressions/grouping` and
+`statements/class`.
+
+One row moved to `link`, and it is the **second** census in three to report
+exactly one such row, on a different file each time, and **neither reproduces** —
+three runs apiece in isolation, all `strict-pass`. Both full runs overlapped a
+gate.
+
+#### A refusal and an unmeasurable run must not look alike
+
+`run262.mjs` linked with a 180-second timeout and `catch {}`. So a row reading
+`link` meant *either* "the toolchain refused this C" *or* "the toolchain did not
+finish while a gate had the machine", with nothing to tell them apart and no
+message kept. Two investigations ended in "does not reproduce", which is the
+cost of the missing distinction rather than a fact about the compiler.
+
+It now separates them — a `SIGTERM` or `ETIMEDOUT` is `timeout/link`, not
+`unsupported/link` — and keeps the first line the toolchain said, with paths
+stripped so the row ranks. `tooling/differential` already draws this line for its
+own timeouts and says why: *"A refused construct and an unmeasurable one must not
+look alike."* The census did not, one instrument over.
+
+Both changes are of a kind with the `named` field two sections up: **record what
+failed, not only that it did.** Three rows in this ledger have now been opened by
+that one move.
+
 ### 1,548 of 4,812, and a claim that needed qualifying
 
 Measured 2026-09-20, compiler pinned at `d3dcb637`, over all of `test/language`,
