@@ -56,7 +56,7 @@ node --experimental-strip-types "$D/src/main.ts" >/dev/null 2>"$D/node.txt" && n
 nmsg=$(grep -o "message: '[^']*'" "$D/node.txt" | head -1 | cut -d"'" -f2)
 rm -rf "$D/out"
 NTS_NO_SNAPSHOT_CACHE=1 "${NTS_BIN:-./target/release/nts}" emit-c "$D/tsconfig.json" \
-  --out "$D/out" --main >/dev/null 2>"$D/r.txt" || true
+  --out "$D/out" --main >/dev/null 2>"$D/r.txt" && es=0 || es=$?
 # **The compiler crashing is its own outcome.** It was reported as `C DID NOT
 # COMPILE` -- the output directory is simply absent, and `cc` fails the same way
 # for a missing file as for a bad one, so "the compiler did not survive" and "the
@@ -76,6 +76,26 @@ fi
 if grep -q 'NTS100' "$D/r.txt"; then
   printf '  %-34s node=%s  REFUSED %s\n' "$label" "$ns" \
     "$(grep -m1 -o 'NTS100[0-9] .*' "$D/r.txt" | cut -c9-46)"
+  exit 0
+fi
+# **A backend decline is not a lowering refusal**, and this only looked for the
+# second. `NTS2008` -- a value the C backend cannot erase yet -- leaves the HIR
+# pronounced well by `nts hir` and drops a body afterwards, so the emit wrote
+# some files and not others and the line below said `C DID NOT COMPILE`. That is
+# a true sentence about `cc` and a false one about the program: nothing was
+# wrong with the C, there was none of it to compile.
+if grep -q 'NTS2[0-9][0-9][0-9]' "$D/r.txt"; then
+  printf '  %-34s node=%s  DECLINED %s\n' "$label" "$ns" \
+    "$(grep -m1 -o 'NTS2[0-9][0-9][0-9] .*' "$D/r.txt" | cut -c9-46)"
+  exit 0
+fi
+# And anything else that made `emit-c` exit non-zero. It used to exit 0 for every
+# refusal, so `|| true` above lost nothing; it now fails a standalone build whose
+# module initialiser a backend declined, and swallowing that reported the
+# *toolchain* as the problem.
+if [ "$es" -ne 0 ]; then
+  printf '  %-34s node=%s  EMIT FAILED (%s) %s\n' "$label" "$ns" "$es" \
+    "$(tail -1 "$D/r.txt" | cut -c1-38)"
   exit 0
 fi
 ( cd "$D/out" && cc -std=c11 -O2 -I. main.c program.c nts_runtime.c nts_uv_host.c -luv -lm \
