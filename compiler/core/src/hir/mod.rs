@@ -408,9 +408,16 @@ impl HirType {
     /// two questions differ. An erased value is not a scalar: it is sixteen
     /// bytes that may hold a reference, and the places that ask whether
     /// something fits in a register still need the narrower answer.
+    ///
+    /// **A `bigint` is here for the same reason and was not.** It is an
+    /// `__int128` -- sixteen bytes of value, no allocation and nothing to root
+    /// -- so it is exactly as storable as a `double`, and `is_scalar` excludes
+    /// it only because it does not fit in a register. A `bigint` *local*
+    /// compiled and `let total: bigint = 1n` at module scope did not, refused
+    /// as "a module-scope variable holding a reference", which a bigint is not.
     #[must_use]
     pub const fn can_be_global(&self) -> bool {
-        self.is_scalar() || self.may_hold_a_reference()
+        self.is_scalar() || self.may_hold_a_reference() || matches!(self, Self::BigInt)
     }
 }
 

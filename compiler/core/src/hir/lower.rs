@@ -2476,8 +2476,16 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
 /// long enough without them and because each is a way the same thing goes
 /// wrong: a global whose type the backend cannot emit.
 fn storable(probe: &mut FuncBuilder<'_>, name: NodeId, ty: &HirType) -> Result<(), String> {
+    // **Named, because the sentence without it was about something else.**
+    // `can_be_global` admits scalars, references and erased values, so what
+    // reaches here is what is *none* of those -- and the message said "holding a
+    // reference", which is the opposite of the condition. It sent a reader
+    // looking for a reference in `let total: bigint = 1n`.
     if !ty.can_be_global() {
-        return Err("a module-scope variable holding a reference".to_owned());
+        return Err(format!(
+            "a module-scope variable of {}, which a global has no storage for",
+            representation_word(ty)
+        ));
     }
     // A function type is `Managed(Object(..))` like any other object, and a
     // global of one holds a *closure* -- a different object, with its own
