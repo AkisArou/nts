@@ -10430,6 +10430,12 @@ impl<'a> FuncBuilder<'a> {
     /// written. The body-assigned control is right because an ordinary
     /// assignment does store.
     ///
+    /// Eight further statement forms were checked and all agree with node --- a
+    /// `var` written in a `switch`, a `try`, a `catch`, a `finally`, a nested
+    /// loop's body, a `do`/`while`, and one declared inside an `if` block. So
+    /// the extent is the head binding and nothing else, which is worth as much
+    /// as the failing cases: a fix that changes any of these has overreached.
+    ///
     /// Pre-existing rather than introduced by the skip: a binary built
     /// 2026-09-18 answers identically.
     fn declared_in_a_loop_head(&self, id: NodeId) -> bool {
