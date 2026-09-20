@@ -370,16 +370,33 @@ export function aSilentGeneratorMethodAsAValue(n: number): number {
 // sentence about the layout and a misleading one about the program, which
 // names the function in its own source.
 //
-// **The corpus row this looks like does not move, and that is worth saying.**
-// The 10 `private-*-method-name` files read `.name` off a private method
-// reached *through a getter*, so the value's static type is the declared
-// function type rather than the closure class — and one function type can hold
-// any function with that signature, so the name is not a property of it.
-// Following the value back to the closure that produced it is dataflow, not a
-// type lookup, and this does not do it. What works is a function value read
-// **directly**: a plain function, a method, a static method, a generator
-// method. A private method read as `this.#m` is the same anonymous-type case
-// and is still refused.
+// **Two ways a value is a named function here**, and the second reaches further
+// than it first looked.
+//
+// A **closure class** is one per declaration and final, so `ClosureInfo::node`
+// is the declaration it was made for. That covers a function value read
+// directly: a plain function, a method, a static method, a generator method.
+//
+// A value whose static type is a **function type** covers the rest. I recorded
+// here that it could not — that the `private-*-method-name` files read `.name`
+// through a getter, so "one function type can hold any function with that
+// signature" and following the value back would be dataflow. **That was wrong,
+// and checking it took one probe.** An *unannotated* getter returning
+// `this.#method` has the private method's **own** function type, whose symbol
+// is declared by the method — so the name is one lookup away and no dataflow
+// is involved. 14 of those 17 files now pass.
+//
+// What made the claim look true was my own probe: I wrote the getter with an
+// explicit `(n: number) => number`, which really is an anonymous type with no
+// declaration behind it, and read the refusal as the general case. The corpus
+// writes no annotation. **A fixture that differs from the corpus in one
+// incidental way can confirm a limitation that is not there.**
+//
+// An anonymous signature written in an annotation still refuses, and should:
+// one such type can hold any function with that signature, so there is no name
+// to give. The three files left in that row are a different question again —
+// `array.toString !== Array.prototype.toString`, which needs function identity
+// for a prototype method.
 //
 // An **arrow** is not covered either: `const beta = () => 1` has
 // `beta.name === "beta"` in JavaScript, by NamedEvaluation off the *binding*
@@ -436,4 +453,30 @@ export function theValueStillCalls(n: number): number {
   const m = new Names().twice;
   const s = Names.from;
   return m(n) + s(n);
+}
+
+class Hidden {
+  #method(n: number): number {
+    return n;
+  }
+
+  getPrivateMethod() {
+    return this.#method;
+  }
+}
+
+/**
+ * The corpus's shape: `.name` off a **private** method reached through an
+ * unannotated getter. The `#` stays, which is what the test asserts, and it
+ * needs `member_name_of` rather than `declared_name` — a private method's name
+ * node is a `PRIVATE_IDENTIFIER`, and looking for an `IDENTIFIER` reports that
+ * the method has no name.
+ */
+export function aPrivateMethodsName(n: number): string {
+  return new Hidden().getPrivateMethod().name + (n < 1 ? "" : "!");
+}
+
+/** And it still calls, which a rule that replaced the value would lose. */
+export function thePrivateMethodStillCalls(n: number): number {
+  return new Hidden().getPrivateMethod()(n);
 }

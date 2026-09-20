@@ -26042,11 +26042,55 @@ impl<'a> FuncBuilder<'a> {
     /// `"#method"`, which is what the corpus asserts — 10 files of the slice-1
     /// `test/language` population, all `private-*-method-name`.
     fn function_name(&mut self, id: NodeId, type_id: TypeId, member: &str) -> Option<ValueId> {
-        if member != "name" || !super::is_closure_type(type_id) {
+        if member != "name" {
             return None;
         }
-        let node = self.closures.get(closure_index(type_id))?.node;
-        let name = self.declared_name(node)?;
+        // Two ways a value can be a named function here, and the second is the
+        // one the corpus writes.
+        //
+        // A **closure class** is one per declaration and final, so
+        // `ClosureInfo::node` is the declaration it was made for. That covers
+        // a method or a function read directly: `new C().twice`.
+        //
+        // A value whose static type is a **function type** covers the rest,
+        // and it reaches further than it looks. `get method() { return
+        // this.#method; }` gives the read the private method's *own* function
+        // type, whose symbol is declared by the method -- so the name is one
+        // lookup away even though the value has passed through a getter and
+        // the closure class is no longer in its type. 16 files of the slice-1
+        // `test/language` population are exactly that shape, all
+        // `private-*-method-name`, and they were refused as ``name`, which
+        // `__#1@#method` does not declare`` -- a true sentence about a layout
+        // with no fields, naming the frontend's mangling of the very
+        // declaration that answers the question.
+        //
+        // A function type the program never declared -- an anonymous signature
+        // written in an annotation -- has no declaration to ask and falls
+        // through to the ordinary refusal, which is right: one such type can
+        // hold any function with that signature, so there is no name to give.
+        let node = if super::is_closure_type(type_id) {
+            self.closures.get(closure_index(type_id))?.node
+        } else {
+            let record = self.snapshot.types.get(type_id.0 as usize)?;
+            if !matches!(record.kind, TypeKind::Function(_)) {
+                return None;
+            }
+            let symbol = record.symbol?;
+            *self
+                .snapshot
+                .symbols
+                .get(symbol.0 as usize)?
+                .declarations
+                .first()?
+        };
+        // `member_name_of` rather than `declared_name`, because a private
+        // method's name node is a `PRIVATE_IDENTIFIER` and `declared_name`
+        // looks for an `IDENTIFIER` -- the same distinction `lower_bound_method`
+        // records, where it cost `#twice` a refusal saying it had no name. The
+        // `#` stays, which is what `c.getPrivateMethod().name === "#method"`
+        // asserts.
+        let name = member_name_of(self.snapshot, node)
+            .or_else(|| self.declared_name(node))?;
         let origin = self.origin(id);
         Some(self.push(
             OpKind::ConstString(name),
