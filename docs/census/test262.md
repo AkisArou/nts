@@ -1237,3 +1237,38 @@ empty-literal fall-through that also caught bare identifiers and emitted
 uncompilable C for `const xs = []; xs.push("a")`. It cannot have produced these
 gains: all nine `for/dstr` files are *patterns*, which the correction kept, and
 six of the fourteen were re-run against the corrected binary and still pass.
+
+### What the shorthand row cleared into, 2026-09-21
+
+Ten files refused as *"a shorthand in an assignment pattern"*. Four passed once
+the one-child form worked; six moved to *"a shorthand property of unexpected
+shape"*, which is the `({ x = 1 } = o)` spelling; one of those passed once the
+three-child node shape was matched. The remaining five stop on **three
+different** things, none of them shorthand:
+
+```text
+  obj-id-init-assignment-missing   destructuring something with no fields
+  obj-id-init-in                   destructuring something with no fields
+  obj-id-init-order                destructuring something with no fields
+  obj-id-init-assignment-undef     a conditional of unrepresentable type
+  obj-id-init-evaluation           `x`, which `an anonymous type` does not declare
+```
+
+That is one row of ten becoming five passes and three new rows, which is what a
+work-list looks like from underneath and why a row's size is never a forecast.
+
+**The `no fields` three are `for ({ x = 1 } of [{}])`** --- a bare `{}` as the
+source. Probed in four spellings, and the split is *not* where it looks:
+
+```text
+  ({ x = 1 } = {} as { x?: number })   works
+  ({ x = 1 } = {})                     works
+  const { y = 2 } = {} as { y?: number }   works
+  const { y = 2 } = {}                 REFUSED
+```
+
+So it is not assignment-versus-binding and not the default. `pattern_element_read`
+and `read_for_pattern` have the *same* structure and the same refusal, which
+means what differs is the type the checker gives the `{}` --- contextual in
+three of the four spellings and the bare `{}` type in the fourth. The next step
+is `nts types` on the two binding spellings, not a change to either walk.
