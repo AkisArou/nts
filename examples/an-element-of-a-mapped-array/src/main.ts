@@ -4,57 +4,47 @@
 //     const ys = xs.map((s) => s + "!");
 //     ys[0]
 //
-// Correct on C, LLVM and the JVM. **Wrong under reference counting**, where it
-// disagrees with node and the bytes read back are freed memory. Listed in
-// `tooling/gate/rc.sh`'s `known_failing`, which is what keeps a wrong answer
-// counted rather than absorbed.
+// Correct on C, LLVM and the JVM, and **freed memory under reference
+// counting** until 2026-09-20.
 //
-// # This fixture was named after a cause, and the cause was wrong
+// # The cause
 //
-// It arrived as *"a mapped tuple in a concatenation"* — `Object.entries(o)
-// .map((e) => e[0] + "=" + e[1].toString()).join(",")` — and a first boundary
-// said it needed three things at once: two or more elements, a number
-// conversion, and a **tuple** element. Every one of those was measured, and
-// the conclusion was still wrong, because each comparison changed more than
-// one thing at a time. The shape above has no tuple, no number, no conversion
-// and no concatenation of two reads, and it fails.
+// `map` allocates its result with `nts_array_new_uninitialized`, and
+// `rc::load_slot` was reading each slot *before* writing it, so that it could
+// release whatever the slot held. Nothing held anything: the slots had never
+// been written, so `nts_release` was handed whatever the allocator last left
+// there and decremented a header belonging to something else.
 //
-// What actually separates the failing shapes from the passing ones is **how
-// the result is read**:
+// The runtime says the invariant in its own words — `nts_array_new_uninitialized`
+// exists because "every slot is written", and `NTS_POISON` fills the storage
+// with `0xA5` precisely so that a slot nobody wrote stops reading as zero. This
+// pass made that false in the one build where the slots are pointers.
 //
-//     ys[0]                        fails
-//     for (const y of ys) { … }    fails
-//     ys.join(",")                 passes
-//     ys.length                    passes
-//     xs.map(…).join(",")          passes
+// **It looked benign for a long time**, and the same runtime comment says why:
+// a *fresh* page is zero and `nts_release(NULL)` returns, which is exactly the
+// measurement recorded there. A reused allocation is not zero.
 //
-// `join` and `length` are runtime calls that read the array's storage
-// themselves. An element read the compiled program performs — `array.get` —
-// is what hands back freed memory. And the callback has to **produce a new
-// string**: `xs.map((s) => s)` passes, and so does reading an element of an
-// array that was written as a literal.
+// The store no longer reads a slot it can see was never written. The test is
+// syntactic — the array operand is *directly* the `ArrayNew` — rather than a
+// claim about every path that could reach one: where an uninitialised array is
+// filled somewhere the pass cannot see, the release comes back and is as
+// correct as it was.
 //
-// # The original shape, kept
+// # Why it looked like three unrelated bugs
 //
-// `mappedTupleInAConcatenation` is the program this started from. It ends in
-// `join`, which passes in the small shape above, so it is a *second* failing
-// combination rather than an instance of the first — and that is why it stays:
-// two failing shapes that a single explanation has to cover.
+// It is **data-dependent** — what the allocator last left in that memory — so
+// each spelling failed a different number of the differential's cases, and
+// shapes that differed only in allocation order looked like different bugs.
+// `ys.join(",")` and `ys.length` pass because they read the storage inside the
+// runtime rather than handing an element back, which made "how the result is
+// read" look causal when it was a symptom.
 //
-// # What is ruled out
-//
-// Each checked rather than assumed. It is **not** the ownership optimiser:
-// `NTS_RC_NAIVE=1` — every retain and release the model asks for and none of
-// the analysis that removes them — fails identically, so the disagreement is
-// in the counting model or the runtime. It is **not** the frame-allocated
-// string `nts_number_to_string` writes into, since `[e[1]].join("")` in its
-// place fails too and the smallest shape has no number in it. It is **not**
-// the source array, which reads back correctly afterwards. And it is **not**
-// the `array.new uninitialized` plus read-then-release of the previous
-// element, which the passing shapes have as well.
-//
-// **No cause is named here.** The last one was measured, written down, and
-// wrong; what this file is for is the shapes.
+// This fixture was first named `a-mapped-tuple-in-a-concatenation`, after a
+// boundary that said the defect needed two or more elements, a number
+// conversion and a **tuple** element. All three were measured and all three
+// were wrong, because every comparison changed more than one thing at a time.
+// The arms below are kept in both shapes — the small one and the original —
+// because between them they are what finally located it.
 
 const words: string[] = ["a", "b"];
 

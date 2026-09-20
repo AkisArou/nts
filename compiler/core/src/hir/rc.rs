@@ -671,6 +671,42 @@ fn load_slot(
                 .unwrap_or_else(|| func.values[value.0 as usize].ty.clone()),
             func.values[value.0 as usize].origin.clone(),
         ),
+        // **An array created *uninitialized* has nothing in its slots to give
+        // back**, and reading one to release it is a wild pointer.
+        //
+        // `nts_array_new_uninitialized` says so in its own comment: the
+        // invariant is "every slot is written", and `NTS_POISON` fills the
+        // storage with `0xA5` precisely so that a slot nobody wrote stops
+        // reading as zero. This pass was *reading* every slot before writing
+        // it, so the invariant was false in the one build where the values are
+        // pointers -- and `nts_release` of whatever the allocator last left
+        // there decrements a header that belongs to something else.
+        //
+        // It looked benign for a long time because a *fresh* page is zero and
+        // `nts_release(NULL)` returns, which is exactly the measurement quoted
+        // in that comment. A reused allocation is not zero.
+        //
+        //     const ys = xs.map((s) => s + "!");
+        //     ys[0]                                    freed memory, under `rc`
+        //
+        // Data-dependent, which is what made it look like three unrelated
+        // shapes: `ys.join(",")` and `ys.length` pass because they read the
+        // storage inside the runtime rather than handing an element back.
+        //
+        // The test is deliberately **syntactic** -- the array operand is
+        // *directly* the `ArrayNew` -- rather than a claim about every path
+        // that could reach one. Where an uninitialised array is filled
+        // somewhere this cannot see, the release comes back and is as correct
+        // as it was; where it is filled here, it is filled once per slot by
+        // construction, which is what the flag means.
+        OpKind::ArraySet { array, .. }
+            if matches!(
+                func.values[array.0 as usize].kind,
+                OpKind::ArrayNew { zeroed: false, .. }
+            ) =>
+        {
+            return None;
+        }
         OpKind::ArraySet {
             array,
             index,

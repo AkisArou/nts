@@ -79,6 +79,9 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # Listed rather than left failing, and listed with the cause rather than the
 # symptom: a name here with no explanation is how `module-state` sat as a
 # "baseline artifact" for two months while being a dropped initializer.
+# Listed rather than left failing, and listed with the cause rather than the
+# symptom: a name here with no explanation is how `module-state` sat as a
+# "baseline artifact" for two months while being a dropped initializer.
 # `an-element-of-a-mapped-array`, from 2026-09-20. Reading an element of an
 # array that `map` produced --
 #
@@ -111,7 +114,7 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # Listed rather than left failing, and listed with the cause rather than the
 # symptom: a name here with no explanation is how `module-state` sat as a
 # "baseline artifact" for two months while being a dropped initializer.
-known_failing="this-in-a-field-initializer an-element-of-a-mapped-array"
+known_failing="this-in-a-field-initializer"
 
 crowded=8
 cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )
