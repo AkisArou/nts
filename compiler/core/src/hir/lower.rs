@@ -2568,10 +2568,25 @@ fn closure_typed_global(
     probe: &mut FuncBuilder,
     closures: &[ClosureInfo],
     kind: nts_semantic_schema::VariableKind,
+    name_node: NodeId,
     initializer: Option<NodeId>,
 ) -> Option<HirType> {
     let node = initializer
-        .filter(|_| kind == nts_semantic_schema::VariableKind::Const)
+        .filter(|_| match kind {
+            nts_semantic_schema::VariableKind::Const => true,
+            // **A `let` nothing ever writes again is a `const` in the only way
+            // that matters here.** The slot has to hold every closure that can
+            // reach it, and a closure's layout is its captures -- so two arrows
+            // are two layouts and the refusal below is right about `let f = a;
+            // f = b`. It was also refusing `let f = a` on its own, where the
+            // initializer builds the one object that can ever be in the slot.
+            //
+            // `var` is left out rather than forgotten: it hoists, so the global
+            // is readable before the initializer runs, and what it holds until
+            // then is a question this does not answer.
+            nts_semantic_schema::VariableKind::Let => !reassigned_anywhere(probe, name_node),
+            _ => false,
+        })
         .filter(|node| probe.kind_of(*node) == Some(syntax::ARROW_FUNCTION))?;
     // A refused closure has no layout to name, so the binding falls through to
     // the ordinary path and is refused there with its own reason.
@@ -2579,6 +2594,42 @@ fn closure_typed_global(
         .iter()
         .position(|closure| closure.node == node && closure.refusal.is_none())?;
     Some(HirType::Managed(ManagedType::Object(closure_type(index))))
+}
+
+/// Whether anything but its own declaration can write this name.
+///
+/// Asked of a module-scope `let` holding an arrow, where the answer decides
+/// whether the slot has one closure layout or an unknown number of them.
+///
+/// **Every reference, not every assignment.** The available walk --
+/// [`FuncBuilder::assigned_symbols`] -- takes an assignment and reports the
+/// names it writes, and it reports a bare identifier only: `[f] = pair` writes
+/// `f` through an array literal and that walk says nothing was written. Reading
+/// it that way would have widened a slot the program does reassign, which is
+/// the one direction that turns a clean refusal into a build the backend
+/// cannot type. So this starts from the *references* and asks whether each one
+/// stands on the target side of something, which covers destructuring at any
+/// depth for free.
+///
+/// Unrecognised positions are writes. The cost of a false positive is that a
+/// refusal stays, and the cost of a false negative is a miscompile.
+fn reassigned_anywhere(probe: &FuncBuilder, name_node: NodeId) -> bool {
+    let Some(symbol) = probe.node(name_node).symbol else {
+        return true;
+    };
+    for at in 0..probe.snapshot.nodes.len() {
+        let Ok(index) = u32::try_from(at) else {
+            return true;
+        };
+        let id = NodeId(index);
+        if id == name_node || probe.node(id).symbol != Some(symbol) {
+            continue;
+        }
+        if probe.stands_on_the_target_side(id) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Declare a global holding a closure, with the initializer deferred to
@@ -2930,7 +2981,7 @@ fn collect_module_scope(
             }
         }
 
-        if let Some(ty) = closure_typed_global(&mut probe, closures, kind, initializer) {
+        if let Some(ty) = closure_typed_global(&mut probe, closures, kind, *name_node, initializer) {
             declare_a_closure_global(&mut scope, &mut probe, *name_node, symbol, ty, initializer);
             continue;
         }
@@ -15044,6 +15095,52 @@ impl<'a> FuncBuilder<'a> {
             .copied()
             .filter(|symbol| self.bindings.contains_key(symbol))
             .collect())
+    }
+
+    /// Whether a reference is written through, at any nesting depth.
+    ///
+    /// Walks *up* from the reference, because the thing that makes a name a
+    /// target can be arbitrarily far above it: `f` in `[[f]] = pairs` is two
+    /// literals below the `=`. The token test is
+    /// [`Self::assigned_symbols`]'s, called rather than restated -- two
+    /// derivations of "which operators write" would eventually disagree, and
+    /// this one is the safety-critical copy.
+    fn stands_on_the_target_side(&self, reference: NodeId) -> bool {
+        let mut child = reference;
+        while let Some(parent) = self.node(child).parent {
+            match self.kind_of(parent) {
+                Some(syntax::BINARY_EXPRESSION) => {
+                    if let [target, operator, _] = self.children(parent).as_slice() {
+                        let token = self.kind_of(*operator).unwrap_or(0);
+                        let writes = token == syntax::EQUALS_TOKEN
+                            || compound_operator(token).is_some()
+                            || logical_assignment(token).is_some();
+                        if writes && *target == child {
+                            return true;
+                        }
+                    }
+                }
+                Some(syntax::PREFIX_UNARY_EXPRESSION | syntax::POSTFIX_UNARY_EXPRESSION) => {
+                    return true;
+                }
+                // A head writes its target once per iteration. Which child that
+                // is goes unasked on purpose: being wrong about the position
+                // would miss a write, and being indifferent only keeps a
+                // refusal for `for (const k in f)`, where `f` is merely read.
+                Some(syntax::FOR_IN_STATEMENT | syntax::FOR_OF_STATEMENT) => return true,
+                // A second declaration of one symbol is `var`, which this is
+                // not reached for -- but a name that acquires one later is a
+                // name with two initializers, so it counts.
+                Some(syntax::VARIABLE_DECLARATION)
+                    if self.children(parent).first() == Some(&child) =>
+                {
+                    return true;
+                }
+                _ => {}
+            }
+            child = parent;
+        }
+        false
     }
 
     fn assigned_symbols(&self, root: NodeId, into: &mut Vec<u32>) {
