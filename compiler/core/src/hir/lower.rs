@@ -17016,13 +17016,30 @@ impl<'a> FuncBuilder<'a> {
         // where the layout order, the property order and the source order are
         // the same thing. So where there is none, this is the walk it always
         // was, bit for bit.
-        let has_a_literal_member_without_storage = properties.iter().any(|property| {
-            matches!(
-                property.kind,
-                MemberKind::Accessor(_) | MemberKind::Method
-            ) && self.declared_in_an_object_literal(property)
-        });
-        if !has_a_literal_member_without_storage {
+        // **One derivation of "a member with no storage".** It is asked twice
+        // --- once to decide whether the order has to change at all, once per
+        // member while walking --- and a getter and a method differ here only
+        // in which variant they produce. Two copies of the condition would be
+        // two places to forget that `own` is not what separates a literal's
+        // accessor from a class's.
+        //
+        // **Where it is written, because `own` does not separate these.**
+        // `Object.keys(new C())` must not name `get d()` and
+        // `Object.keys({ get a() {} })` must name `a`, and `own` is `false` for
+        // *both* --- measured, after it was assumed and the class control went
+        // red one way and the literal consumers the other. A class's member
+        // lives on the prototype; a literal's is a property of the object.
+        let without_storage = |property: &PropertyRecord| match property.kind {
+            MemberKind::Accessor(_) if self.declared_in_an_object_literal(property) => {
+                Some(Enumerated::Getter)
+            }
+            MemberKind::Method if self.declared_in_an_object_literal(property) => {
+                Some(Enumerated::Method)
+            }
+            _ => None,
+        };
+
+        if !properties.iter().any(|property| without_storage(property).is_some()) {
             return layout
                 .fields
                 .iter()
@@ -17033,42 +17050,24 @@ impl<'a> FuncBuilder<'a> {
         }
 
         let mut out: Vec<(Enumerated, String)> = Vec::new();
-        // **Accessors first means walking the type, not the layout.**
+        // **Walking the type, not the layout.**
         //
         // A getter is a call and a `Layout` holds storage, so it has no entry
-        // here at all --- which is why every consumer of this list dropped one
+        // there at all --- which is why every consumer of this list dropped one
         // silently. The names are on the *type*, which is where `lower_in` asks
         // and is why `"a" in src` was right while `Object.keys(src)` was not.
         //
-        // Walked in the type's order rather than appended, because appending
-        // gives `["b", "a"]` for `{ get a() {}, b: 2 }` and node says
-        // `["a", "b"]`. `property_order` reorders array indices afterwards and
-        // is unaffected either way.
+        // In the type's order rather than appended, because appending gives
+        // `["b", "a"]` for `{ get a() {}, b: 2 }` and node says `["a", "b"]`.
+        // `property_order` reorders array indices afterwards either way.
         for property in &properties {
             if !keeps(&property.name) {
                 continue;
             }
             if let Some(at) = layout.index_of(&property.name) {
                 out.push((Enumerated::Slot(at as usize), property.name.clone()));
-            } else if matches!(property.kind, MemberKind::Method)
-                && self.declared_in_an_object_literal(property)
-            {
-                // A **class's** method is on the prototype and is not an own
-                // property; a literal's is. The same line that separates the
-                // two accessors separates these.
-                out.push((Enumerated::Method, property.name.clone()));
-            } else if matches!(property.kind, MemberKind::Accessor(_))
-                && self.declared_in_an_object_literal(property)
-            {
-                // **Where it is written, because `own` does not separate
-                // these.** `Object.keys(new C())` must not name `get d()` and
-                // `Object.keys({ get a() {} })` must name `a`, and `own` is
-                // `false` for *both* --- measured, after it was assumed and the
-                // class control went red one way and the literal consumers the
-                // other. A class's accessor lives on the prototype and a
-                // literal's is a property of the object, and the declaration's
-                // parent is what says which was written.
-                out.push((Enumerated::Getter, property.name.clone()));
+            } else if let Some(kind) = without_storage(property) {
+                out.push((kind, property.name.clone()));
             }
         }
         // **A field the type has no property for is kept**, which is the case
