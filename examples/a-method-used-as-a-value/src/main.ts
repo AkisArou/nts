@@ -358,3 +358,82 @@ export function aSilentGeneratorMethodAsAValue(n: number): number {
   }
   return count + n * 0;
 }
+
+// # `f.name`
+//
+// A function value here is a **closure class**, one per declaration and final,
+// so its name is a property of the class rather than of the value — and
+// `ClosureInfo::node` is the declaration it was made for. There is nothing to
+// read at run time and no field to lay out, so the answer is a constant.
+//
+// It refused as ``name`, which `an anonymous type` does not declare`` — a true
+// sentence about the layout and a misleading one about the program, which
+// names the function in its own source.
+//
+// **The corpus row this looks like does not move, and that is worth saying.**
+// The 10 `private-*-method-name` files read `.name` off a private method
+// reached *through a getter*, so the value's static type is the declared
+// function type rather than the closure class — and one function type can hold
+// any function with that signature, so the name is not a property of it.
+// Following the value back to the closure that produced it is dataflow, not a
+// type lookup, and this does not do it. What works is a function value read
+// **directly**: a plain function, a method, a static method, a generator
+// method. A private method read as `this.#m` is the same anonymous-type case
+// and is still refused.
+//
+// An **arrow** is not covered either: `const beta = () => 1` has
+// `beta.name === "beta"` in JavaScript, by NamedEvaluation off the *binding*
+// rather than off the function, and this reads the declaration.
+
+function namedAlpha(n: number): number {
+  return n;
+}
+
+class Names {
+  twice(n: number): number {
+    return n * 2;
+  }
+
+  *rows(): Generator<number, void, unknown> {
+    yield 1;
+  }
+
+  static from(n: number): number {
+    return n;
+  }
+}
+
+/** A plain function used as a value. */
+export function aFunctionsName(n: number): string {
+  const f = namedAlpha;
+  return f.name + (n < 1 ? "" : "!");
+}
+
+/** A method. */
+export function aMethodsName(n: number): string {
+  const m = new Names().twice;
+  return m.name + (n < 1 ? "" : "!");
+}
+
+/** A generator method, whose value is the same kind of closure. */
+export function aGeneratorMethodsName(n: number): string {
+  const g = new Names().rows;
+  return g.name + (n < 1 ? "" : "!");
+}
+
+/** A static, which has no receiver to bind. */
+export function aStaticMethodsName(n: number): string {
+  const s = Names.from;
+  return s.name + (n < 1 ? "" : "!");
+}
+
+/**
+ * The control: the value still calls. A change that answered `.name` by
+ * replacing the closure with its name would pass every arm above and lose
+ * this one.
+ */
+export function theValueStillCalls(n: number): number {
+  const m = new Names().twice;
+  const s = Names.from;
+  return m(n) + s(n);
+}

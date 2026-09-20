@@ -16951,7 +16951,44 @@ impl<'a> FuncBuilder<'a> {
             // and been found by something other than reading it -- here, a
             // build log from another session listing it as one of five roots
             // under `ERR_INVALID_ARG_TYPE`. A refusal is a claim and it ages.
-            TypeKind::Any | TypeKind::Unknown | TypeKind::Union(_) => {
+            // **A type parameter, which specialization has already made
+            // concrete.** The checker's type at this node is still `T`, so the
+            // catch-all below answered `false` for every instantiation:
+            //
+            // ```ts
+            // function check<T>(x: T): boolean { return Array.isArray(x); }
+            // check([1])   // node says true, this said false
+            // ```
+            //
+            // `Substitution` maps a `TypeId` to a *representation*, not to
+            // another `TypeId`, so there is no concrete checker type to read
+            // here — the representation is the only concrete thing, and by
+            // this point it is `isArray<str>`'s or `isArray<[f64]>`'s rather
+            // than the parameter's.
+            //
+            // A tuple is still an `Array` in the language and is an object
+            // here, which is why the object arm asks the snapshot rather than
+            // answering `false`: `Managed(Object(at))` carries the id, so the
+            // one thing the representation cannot say on its own is available
+            // one lookup away. A typed array is a `View` and is correctly not
+            // an Array.
+            //
+            // Found by probing `instanceof Array` against node, which routes
+            // here; the same defect was live in `Array.isArray` and had no
+            // corpus file to report it.
+            TypeKind::TypeParameter { .. }
+                if !matches!(self.values[subject.0 as usize].ty, HirType::Erased) =>
+            {
+                match &self.values[subject.0 as usize].ty {
+                    HirType::Managed(ManagedType::Array(_)) => true,
+                    HirType::Managed(ManagedType::Object(at)) => matches!(
+                        self.snapshot.types.get(at.0 as usize).map(|r| &r.kind),
+                        Some(TypeKind::Tuple(_))
+                    ),
+                    _ => false,
+                }
+            }
+            TypeKind::Any | TypeKind::Unknown | TypeKind::Union(_) | TypeKind::TypeParameter { .. } => {
                 let origin = self.origin(id);
                 let erased = match self.values[subject.0 as usize].ty {
                     HirType::Erased => subject,
@@ -20908,6 +20945,9 @@ impl<'a> FuncBuilder<'a> {
         if let Some(answer) = self.instanceof_native(id, lhs, rhs)? {
             return Ok(answer);
         }
+        if let Some(answer) = self.instanceof_builtin(id, lhs, rhs)? {
+            return Ok(answer);
+        }
         let Some(class) = class else {
             return Err(self.unsupported(
                 rhs,
@@ -20945,6 +20985,86 @@ impl<'a> FuncBuilder<'a> {
         // an object is one inline word.
         let value = self.erased(value, &origin);
         Ok(self.push(OpKind::InstanceOf { value, classes }, HirType::Bool, origin))
+    }
+
+    /// `e instanceof Array` and `e instanceof Object`.
+    ///
+    /// **Neither is a class here and neither can be.** An array is a runtime
+    /// object with a length and no layout, and `Object` is not a declaration at
+    /// all -- so the class search in [`Self::lower_instanceof`] has nothing to
+    /// find, and the refusal that followed, *"an `instanceof` against something
+    /// this compiler has no class for"*, was true about the representation and
+    /// useless about the question. The same argument `instanceof_native` makes
+    /// for a typed array, where all nine share one struct and one descriptor.
+    ///
+    /// **`Array` is `decide_is_array`**, the function `Array.isArray` already
+    /// asks, rather than a second rule beside it. Two answers to "is this an
+    /// array" would be two things to keep right, and the existing one is right
+    /// about two cases a representation test gets wrong: a **tuple** is an
+    /// `Array` in the language however this compiler lays it out, and a *typed*
+    /// array is not one although it shares the representation. It also answers
+    /// an **erased** operand at run time from the descriptor's kind, so
+    /// `instanceof Array` inherits that for free.
+    ///
+    /// `Object` is the other half and is not a class test at all: it asks
+    /// whether a value is an object, and a **string** and a **symbol** are
+    /// managed values here and *primitives* in the language. That arm looks
+    /// unreachable and is not. TypeScript rejects a primitive left operand
+    /// outright -- `TS2358 The left-hand side of an 'instanceof' expression
+    /// must be of type 'any', an object type or a type parameter` -- so no
+    /// direct spelling reaches it; **a type parameter does**, since a generic
+    /// is specialized per instantiation and `isObject("text")` arrives with a
+    /// `Managed(String)` operand. Node answers `false` for it.
+    ///
+    /// An erased `Object` operand keeps refusing: the tag says "a reference"
+    /// and a string is one too, so the tag alone does not draw this line.
+    ///
+    /// 16 files of the slice-1 `test/language` population reach the refusal --
+    /// 7 `Array`, 7 `Object`, and one each of `RegExp` and `Function`, which
+    /// stay refused.
+    fn instanceof_builtin(
+        &mut self,
+        id: NodeId,
+        lhs: NodeId,
+        rhs: NodeId,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let array = match self.node(rhs).text.as_deref() {
+            Some("Array") => true,
+            Some("Object") => false,
+            _ => return Ok(None),
+        };
+        // Declared by the program rather than by `lib.d.ts` means it is an
+        // ordinary class and the hierarchy search is the right answer.
+        if self
+            .node(rhs)
+            .symbol
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .is_some_and(|symbol| !symbol.declarations.is_empty())
+        {
+            return Ok(None);
+        }
+        if array {
+            return self.decide_is_array(id, lhs).map(Some);
+        }
+        let value = self.lower_expression(lhs)?;
+        let answer = match &self.values[value.0 as usize].ty {
+            // The primitive/object line.
+            HirType::Managed(ManagedType::String | ManagedType::Symbol) => false,
+            HirType::Managed(_) => true,
+            // An erased value's tag says "a reference", and a string is one
+            // too, so the tag does not draw this line. A native pointer is not
+            // a JavaScript value at all. Both are refused rather than guessed
+            // at, and they share an arm because they share an answer -- which
+            // is *nothing to say*, not a `false`.
+            HirType::Erased | HirType::NativePointer(_) => return Ok(None),
+            // Every scalar. Unreachable through a direct spelling (TS2358) and
+            // reachable through a type parameter, which is why it is here.
+            _ => false,
+        };
+        let origin = self.origin(id);
+        Ok(Some(
+            self.push(OpKind::ConstBool(answer), HirType::Bool, origin),
+        ))
     }
 
     /// The first object type declared with this name.
@@ -25649,6 +25769,35 @@ impl<'a> FuncBuilder<'a> {
     /// storage -- which is why an accessor may not be laid out as a field:
     /// emitting the load would read whatever sits at that offset. The third is
     /// the refusal, which names the member.
+    /// `f.name`, which a compiled program knows at compile time.
+    ///
+    /// A function value here is a **closure class**, one per declaration and
+    /// final, so the name is a property of the class rather than of the value
+    /// — and `ClosureInfo::node` is the declaration it was made for. There is
+    /// nothing to read at run time and no field to lay out.
+    ///
+    /// `None` where the declaration has no name of its own, which is the arrow
+    /// case: `const beta = () => 1` has `beta.name === "beta"` in JavaScript,
+    /// by `NamedEvaluation` off the *binding*, and this does not implement it.
+    /// Falling through leaves the ordinary refusal, which names the member.
+    ///
+    /// A private method keeps its `#`: `c.getPrivateMethod().name` is
+    /// `"#method"`, which is what the corpus asserts — 10 files of the slice-1
+    /// `test/language` population, all `private-*-method-name`.
+    fn function_name(&mut self, id: NodeId, type_id: TypeId, member: &str) -> Option<ValueId> {
+        if member != "name" || !super::is_closure_type(type_id) {
+            return None;
+        }
+        let node = self.closures.get(closure_index(type_id))?.node;
+        let name = self.declared_name(node)?;
+        let origin = self.origin(id);
+        Some(self.push(
+            OpKind::ConstString(name),
+            HirType::Managed(ManagedType::String),
+            origin,
+        ))
+    }
+
     fn member_that_is_not_a_field(
         &mut self,
         id: NodeId,
@@ -25656,6 +25805,9 @@ impl<'a> FuncBuilder<'a> {
         type_id: TypeId,
         member_name: &str,
     ) -> Result<ValueId, Diagnostic> {
+        if let Some(answer) = self.function_name(id, type_id, member_name) {
+            return Ok(answer);
+        }
         if let Some(callee) = self.accessor_callee(id, type_id, member_name, "get ") {
             let ty = self
                 .type_of(id)
@@ -29099,6 +29251,24 @@ impl<'a> FuncBuilder<'a> {
         let helper = match *element {
             HirType::Managed(_) => "nts_array_slice_ref",
             HirType::Float { bits: 64 } => "nts_array_slice",
+            // **An erased element is not a typed array**, and saying so cost a
+            // reader nothing until arrays of them existed. `[...xs]` where
+            // `xs` is `(number | undefined)[]` -- which is what an array
+            // literal with a hole in it now is -- landed on the arm below and
+            // was reported as a copy of a typed array, a construct the program
+            // does not contain.
+            //
+            // The phrasing is the one the array methods already use for this
+            // element, so the family reads as one thing: `forEach`, `map` and
+            // `join` all refuse an array of erased elements with the same
+            // sentence.
+            HirType::Erased => {
+                return Err(self.unsupported(
+                    inner,
+                    "a copy of an array of erased elements, which needs a `_value` helper this \
+                     runtime does not have",
+                ));
+            }
             // `slice` reads the elements as doubles or as pointers, and a
             // narrower one is neither. The array methods refuse the same shape
             // for the same reason.
