@@ -47,26 +47,34 @@
 // and its value is `undefined`, which the element has no width for. That is a
 // representation decision and it is not made here.
 //
-// # What is still missing, one spelling over
+// # A method shorthand, which is the same seam
 //
-// A **method shorthand** on an object literal is an own enumerable property in
-// JavaScript and is still dropped, while the same function written as a
-// property is not:
+// A **method shorthand** on an object literal is an own enumerable property
+// too, and it was dropped by the same three consumers:
 //
 //     const o = { m(): number { return 1; }, v: 2 };
 //     Object.keys(o)                "v"      node "m,v"
+//     for (const k in o)            "v"      node "mv"
 //     Object.hasOwn(o, "m")         false    node true
 //
-//     const p = { m: (): number => 1, v: 2 };
-//     Object.keys(p)                "m,v"    already correct
+// `"m" in o` and `{ ...o }` were right already --- the same two that were right
+// about the accessor, for the same reason. So this file is about members with
+// **no layout storage**, of which an accessor and a literal's method are the
+// two kinds.
 //
-// One semantics, two spellings, two answers. It is the same shape as the
-// accessor --- a method has no layout field either --- and it is left out
-// because its *value* is a function object rather than a number, which
-// `Object.values` has to build rather than read. The names half would be a line
-// beside the accessor arm; the values half is the work.
+// **The names enumerate; the value is refused by name.** A method's value is a
+// function object, and `bound_method` --- the thing that builds one --- reads
+// the member off a property-access node, which an enumeration does not have. So
+// `Object.values({ m() {}, v: 2 })` says
 //
-// The comment in `Object.hasOwn`'s own lookup asserts the opposite --- "a
+//     `m`, a method of an object literal, in `Object.values` --
+//     it enumerates and its value is a function object
+//
+// where it used to return an array one element short. A refusal that names the
+// construct in place of a quietly wrong length is the trade, and the remaining
+// work is a closure built from a receiver and a name.
+//
+// The comment in `Object.hasOwn`'s own lookup asserted the opposite --- "a
 // method is declared and is not an own property" --- which is true of a
 // **class** method, on the prototype, and false of this one.
 
@@ -157,6 +165,13 @@ class Shadowing extends Base {
 }
 const shadowing = new Shadowing();
 
+const withAMethod = {
+  describe(): number {
+    return 1;
+  },
+  plainValue: 2,
+};
+
 // Observed once, in module order, so every export below is a pure read.
 const runsBefore = runs;
 const twoGetterValues = Object.values(twoGetters).join("");
@@ -228,4 +243,28 @@ export function inheritedFieldsComeFirst(): string {
 
 export function aShadowedFieldKeepsItsFirstPosition(): string {
   return Object.keys(shadowing).join(",");
+}
+
+export function aMethodShorthandEnumerates(): string {
+  return Object.keys(withAMethod).join(",");
+}
+
+export function forInVisitsAMethodShorthand(): string {
+  let seen = "";
+  for (const key in withAMethod) {
+    seen += key;
+  }
+  return seen;
+}
+
+export function hasOwnFindsAMethodShorthand(n: number): number {
+  return (Object.hasOwn(withAMethod, "describe") ? 1 : 0) * 10 + n;
+}
+
+export function aMethodShorthandIsStillCallable(n: number): number {
+  return withAMethod.describe() * 10 + n;
+}
+
+export function aPrototypeMethodIsNotOwn(n: number): number {
+  return (Object.hasOwn(instance, "method") ? 1 : 0) * 10 + n;
 }

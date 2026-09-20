@@ -7277,6 +7277,12 @@ pub fn erasable(ty: &HirType) -> bool {
 enum Enumerated {
     Slot(usize),
     Getter,
+    /// A method written in an object literal. It **enumerates** --- node lists
+    /// `m` in `Object.keys({ m() {}, v: 2 })` --- and its value is a function
+    /// object, which is why it is a case of its own rather than a `Getter`:
+    /// there is no getter to call, and building the closure needs a receiver
+    /// and a name where `bound_method` wants a property-access node.
+    Method,
 }
 
 fn holds_only_absences(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
@@ -16726,6 +16732,19 @@ impl<'a> FuncBuilder<'a> {
                 origin.clone(),
             );
             let read = match source {
+                // Its value is a function object. `bound_method` builds one and
+                // wants a property-access node to read the member off, which
+                // this does not have --- so the name enumerates and the value
+                // is refused, rather than the array quietly coming back one
+                // element short, which is what it did before.
+                Enumerated::Method => {
+                    return Err(self.unsupported(
+                        id,
+                        &format!(
+                            "`{name}`, a method of an object literal, in {what} --                              it enumerates and its value is a function object"
+                        ),
+                    ));
+                }
                 Enumerated::Slot(slot) => {
                     let field = layout.fields[slot].clone();
                     self.push(
@@ -16972,11 +16991,13 @@ impl<'a> FuncBuilder<'a> {
         // where the layout order, the property order and the source order are
         // the same thing. So where there is none, this is the walk it always
         // was, bit for bit.
-        let has_a_literal_accessor = properties.iter().any(|property| {
-            matches!(property.kind, MemberKind::Accessor(_))
-                && self.declared_in_an_object_literal(property)
+        let has_a_literal_member_without_storage = properties.iter().any(|property| {
+            matches!(
+                property.kind,
+                MemberKind::Accessor(_) | MemberKind::Method
+            ) && self.declared_in_an_object_literal(property)
         });
-        if !has_a_literal_accessor {
+        if !has_a_literal_member_without_storage {
             return layout
                 .fields
                 .iter()
@@ -17004,6 +17025,13 @@ impl<'a> FuncBuilder<'a> {
             }
             if let Some(at) = layout.index_of(&property.name) {
                 out.push((Enumerated::Slot(at as usize), property.name.clone()));
+            } else if matches!(property.kind, MemberKind::Method)
+                && self.declared_in_an_object_literal(property)
+            {
+                // A **class's** method is on the prototype and is not an own
+                // property; a literal's is. The same line that separates the
+                // two accessors separates these.
+                out.push((Enumerated::Method, property.name.clone()));
             } else if matches!(property.kind, MemberKind::Accessor(_))
                 && self.declared_in_an_object_literal(property)
             {
@@ -17041,6 +17069,9 @@ impl<'a> FuncBuilder<'a> {
     /// an inherited accessor, and an own one --- and only the last is an own
     /// property.
     fn own_accessor(&self, ty: TypeId, wanted: &str) -> bool {
+        // Named for the case it was written for; a literal's **method** is an
+        // own property by the same rule and is answered here rather than in a
+        // second walk that could disagree with this one.
         let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
             return false;
         };
@@ -17049,7 +17080,10 @@ impl<'a> FuncBuilder<'a> {
         };
         properties.iter().any(|property| {
             property.name == wanted
-                && matches!(property.kind, MemberKind::Accessor(_))
+                && matches!(
+                    property.kind,
+                    MemberKind::Accessor(_) | MemberKind::Method
+                )
                 && self.declared_in_an_object_literal(property)
         })
     }
