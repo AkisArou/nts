@@ -2951,52 +2951,60 @@ They read `toString` as a **value** and compare it with the one on
 `Array.prototype`, which needs function identity for a prototype method and is a
 much larger thing. `examples/array-join` carries the arms and says so.
 
-#### A mapped tuple in a concatenation, under reference counting (open)
+#### An element of a mapped array, under reference counting (open)
 
 ```ts
-const ps: [string, number][] = [["a", 1], ["b", 2]];
-ps.map((e) => e[0] + "=" + e[1].toString()).join(",")
+const xs: string[] = ["a", "b"];
+const ys = xs.map((s) => s + "!");
+ys[0]
 ```
 
-is correct on C, LLVM and the JVM and **answers freed memory under `rc`** — 28
-of 29 cases disagree with node. `examples/a-mapped-tuple-in-a-concatenation`
-carries it and `tooling/gate/rc.sh`'s `known_failing` lists it, so a wrong
-answer stays counted rather than absorbed.
+is correct on C, LLVM and the JVM and **answers freed memory under `rc`**.
+`examples/an-element-of-a-mapped-array` carries it and `tooling/gate/rc.sh`'s
+`known_failing` lists it, so a wrong answer stays counted rather than absorbed.
 
-Each half passes on its own, and so does the same work written as a `for...of`:
+What separates the failing shapes from the passing ones is **how the result is
+read**:
 
 ```text
-ps.map((e) => e[0] + "=")            fine
-ps.map((e) => e[1].toString())       fine
-for (const e of ps) { … both … }     fine
-xs.map((v) => "v=" + v.toString())   fine, no tuple
+ys[0]                        fails
+for (const y of ys) { … }    fails
+ys.join(",")                 passes
+ys.length                    passes
 ```
 
-So it needs three things at once: the callback inlined by `map`, a **managed
-field read out of the element**, and a **frame-allocated** string beside it —
-`nts_number_to_string` emits `frame[40]`, a stack temporary, and a stack
-temporary concatenated with a heap string is where two ownership analyses have
-to agree about a value that is not on the heap.
+`join` and `length` read the storage inside the runtime; an element read the
+compiled program performs — `array.get` — is what hands back freed memory. The
+callback also has to *produce* a new string: `xs.map((s) => s)` passes, and so
+does reading an element of an array written as a literal.
 
-**What the HIR shows.** `nts hir --rc` on the failing and passing shapes differ
-in one thing inside the callback — a `concat`, then
-`nts_number_to_string(...) frame[40]`, then `nts_str_append` of the two — and
-the *object-field* shape has all three and passes. So it is not the append and
-not the frame string: the discriminator is a **tuple** element against an object
-field with everything else equal. Two candidates were ruled out rather than
-assumed: the `array.new uninitialized` plus read-then-release of the previous
-element is present in the passing shape too, and the retain/release sets are
-otherwise identical. `nts_str_append`'s in-place path is guarded on
-`a->reserved == 1u` — *"one reference exists and this call is consuming it"* —
-and whether that holds when the left operand came out of a tuple is where the
-reading stopped. **It is not the ownership optimiser**, which is the elimination worth having: `NTS_RC_NAIVE=1` — counting with every retain and release the model asks for and none of the analysis that removes them — fails on the same 28 of 29 cases, so the disagreement is in the counting *model* or the runtime rather than in `own.rs` deciding a reference is redundant. No cause is named, deliberately.
+**This was recorded once with the wrong boundary, and the correction is the
+part worth keeping.** It arrived as *"a mapped tuple in a concatenation"* —
+`ps.map((e) => e[0] + "=" + e[1].toString()).join(",")` — with a boundary
+saying it needed two or more elements, a number conversion, and a **tuple**
+element. Each of those was measured. The conclusion was still wrong, because
+every comparison changed more than one thing at a time: dropping the tuple also
+dropped the number, adding a literal prefix also changed which operand was
+fresh. The smallest failing program has no tuple, no number, no conversion and
+no concatenation of two reads. The fixture was renamed with the correction,
+because a fixture named after a cause is a claim like any other.
+
+The original shape is kept as a second arm: it ends in `join`, which the small
+shape passes, so it is a *second* failing combination that one explanation has
+to cover.
+
+**Ruled out**, each checked rather than assumed: the ownership optimiser
+(`NTS_RC_NAIVE=1`, every retain and release the model asks for and none of the
+analysis that removes them, fails identically — so this is the counting model
+or the runtime); the frame-allocated string `nts_number_to_string` writes into;
+the source array, which reads back correctly afterwards; and the
+`array.new uninitialized` plus read-then-release of the previous element, which
+the passing shapes have too.
 
 **Pre-existing, and measured to be.** The binary from before the
 enumeration-order work fails it identically. It surfaced because
 `the-order-own-properties-enumerate-in` was the first fixture in the corpus to
-write the shape — the revealing change is not the cause, and that example was
-rewritten to use a walk so a fixture tests one thing and the defect is named
-after itself.
+write such a shape.
 
 #### The order own properties enumerate in (fixed)
 

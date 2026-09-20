@@ -79,29 +79,39 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # Listed rather than left failing, and listed with the cause rather than the
 # symptom: a name here with no explanation is how `module-state` sat as a
 # "baseline artifact" for two months while being a dropped initializer.
-# `a-mapped-tuple-in-a-concatenation`, from 2026-09-20. A `.map` whose callback
-# concatenates a **string read out of a tuple element** with a number converted
-# in the same expression --
+# `an-element-of-a-mapped-array`, from 2026-09-20. Reading an element of an
+# array that `map` produced --
 #
-#     ps.map((e) => e[0] + "=" + e[1].toString()).join(",")
+#     const ys = xs.map((s) => s + "!");
+#     ys[0]
 #
-# -- answers freed memory here and is correct on C, LLVM and the JVM. Each half
-# passes on its own, and so does the same work written as a `for...of`: it needs
-# the callback inlined by `map`, a managed field read out of the element, and a
-# **frame-allocated** string beside it, since `nts_number_to_string` emits
-# `frame[40]`. A stack temporary concatenated with a heap string is where two
-# ownership analyses have to agree about a value that is not on the heap.
+# -- answers freed memory here and is correct on C, LLVM and the JVM. What
+# separates it from the shapes that pass is **how the result is read**: `ys[0]`
+# and a `for...of` fail, while `ys.join(",")` and `ys.length` pass, because
+# those two read the storage inside the runtime rather than through an
+# `array.get` the compiled program performs. The callback also has to *produce*
+# a new string: `xs.map((s) => s)` passes.
 #
-# Pre-existing, and measured to be: the binary from before the enumeration-order
-# work fails it identically. It surfaced because
+# **The fixture was first named for a cause that turned out to be wrong**, and
+# the name went with it: it arrived as `a-mapped-tuple-in-a-concatenation`, with
+# a boundary saying it needed two or more elements, a number conversion and a
+# tuple element. All three were measured and the conclusion was still wrong,
+# because each comparison changed more than one thing. The smallest failing
+# program has none of them.
+#
+# Not the ownership optimiser -- `NTS_RC_NAIVE=1` fails identically -- and not
+# the frame-allocated string, the source array, or the uninitialised result
+# array, each ruled out rather than assumed.
+#
+# Pre-existing, and measured to be: the binary from before the
+# enumeration-order work fails it identically. It surfaced because
 # `the-order-own-properties-enumerate-in` was the first fixture in the corpus to
-# write the shape -- the revealing change is not the cause, and the example that
-# revealed it was rewritten to use a walk so that a fixture tests one thing.
+# write such a shape.
 #
 # Listed rather than left failing, and listed with the cause rather than the
 # symptom: a name here with no explanation is how `module-state` sat as a
 # "baseline artifact" for two months while being a dropped initializer.
-known_failing="this-in-a-field-initializer a-mapped-tuple-in-a-concatenation"
+known_failing="this-in-a-field-initializer an-element-of-a-mapped-array"
 
 crowded=8
 cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )
