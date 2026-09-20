@@ -1,4 +1,16 @@
-// expect: emit-c --napi -> emits-addon nts_napi_Holder__get_bytes, NULL, NULL, napi_default
+// expect: emit-c --napi -> emits-addon nts_napi_Holder__get_u0020_bytes, NULL, NULL, napi_default
+//
+// The symbol grew a `_u0020_` on 2026-09-20 and nothing failed. A getter's
+// internal member name is `get bytes`, space included, and the C mangling used
+// to fold every non-identifier character to `_` -- so `get bytes` and a
+// hypothetical `get_bytes` produced one symbol. Making it injective spelled the
+// space out, which renamed this callback without changing anything it does.
+//
+// Worth being explicit that the rename is all that moved: the JS-visible name is
+// still `"bytes"` and the callback is still in the *getter* slot with
+// `napi_default`, which is the whole of what this fixture was filed to guard.
+// `blockers-check` reports a stale expectation as FIXED rather than failing, so
+// this read as good news for a day.
 //
 // A class whose surface is *accessors*, which is the shape `string_decoder`
 // needs and the one a methods-only class arm would satisfy by name and get

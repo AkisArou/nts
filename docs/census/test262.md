@@ -81,7 +81,7 @@ where reducing starts rather than a defect.
 | 10 | `X` or `X` where what it stands in for is not a reference |
 | 9 | an `X` against something this compiler has no class for |
 | 8 | a property `X` of unrepresentable type (any) |
-| 7 | a static field of an anonymous class |
+| ~~7~~ | ~~a static field of an anonymous class~~ — closed 2026-09-20; the field takes the same `Type{id}` stand-in its own class's methods already take |
 | 5 | assignment to a computed target |
 | 4 | a `X` literal needing more than the 128 bits this compiler gives one |
 | 3 | a try statement, which has code in it |
@@ -772,7 +772,10 @@ those are `TS7008` and never got that far.
 Corrected to the honest denominator, one survives — and it is still not a
 finding. Those 7 files refuse with *"a static field of an anonymous class"*,
 which is a different gap; a private static field lowers perfectly well, checked
-against three controls.
+against three controls. (That gap closed on 2026-09-20 and the 7 are expected
+back on the next census. The account is kept in the past tense it was written
+in, because what it records is how an instrument's first run was refuted, and
+that reading is what the row is here to preserve.)
 
 So the check now prints **what the files refuse with** beside the flag, because
 that single line is what refutes it. It is a pointer to something worth reading,

@@ -3412,23 +3412,33 @@ fn collect_static_fields(
             .into_iter()
             .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
             .and_then(|child| probe.node(child).text.clone());
-        let Some(class_name) = class_name else {
-            // An anonymous class has no name to qualify with. Refused rather
-            // than numbered, because a `static` is addressed by name from
-            // source -- `C.s` -- and a number here is a name no source can be
-            // traced back to. A *method* is different and does take the
-            // numbered stand-in: nothing outside the program names it, so
-            // `Type17#m` is a symbol and not a spelling anyone has to read.
-            //
-            // Reachable for the first time now that `enclosing_class` sees a
-            // class expression. Before that an anonymous class was only
-            // `export default class`, and the two cases want the same answer.
-            scope.unsupported.insert(
-                symbol.0,
-                "a static field of an anonymous class".to_owned(),
-            );
-            continue;
-        };
+        // **An anonymous class takes the same stand-in its own methods do.**
+        //
+        // This refused, on the grounds that "a `static` is addressed by name
+        // from source -- `C.s` -- and a number here is a name no source can be
+        // traced back to", while noting that a *method* does take the numbered
+        // stand-in because nothing outside the program names it.
+        //
+        // The same is true of the field. This name reaches exactly one place:
+        // the label on a `Global`, which nothing outside the compiled program
+        // reads and which `unshared_name` below already disambiguates. `C.s` is
+        // resolved by *symbol* -- `scope.variables.insert(symbol.0, global)` on
+        // the last lines here -- so the spelling decides nothing, and a reader
+        // of a dump gets `Type17.s` beside the `Type17` layout and the
+        // `Type17#m` methods rather than a name that is absent from all three.
+        //
+        // `nominal_or_stand_in` is that one derivation, and `instance_type_of`
+        // is what turns a class *expression*'s constructor type into the
+        // instance type the layout and the methods are named for -- asking the
+        // node's type directly would name the field after `#2` while the
+        // methods beside it say `#7`.
+        //
+        // 7 files of the slice-1 `test/language` population, all `static #$`
+        // and friends in a `var C = class { … }`.
+        let class_name = class_name.unwrap_or_else(|| {
+            instance_type_of(snapshot, class)
+                .map_or_else(|| "class".to_owned(), |ty| nominal_or_stand_in(snapshot, ty))
+        });
         let Some(ty) = probe.type_of(name_node) else {
             scope.unsupported.insert(
                 symbol.0,

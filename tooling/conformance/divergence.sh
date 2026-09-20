@@ -40,12 +40,20 @@
 #
 # `differential-ts.mjs --all` is excluded for cost rather than doubt -- it is minutes,
 # not seconds, and it is clean over 22 modules.
+#
+# `fixture-configs` joined on 2026-09-20 and is the odd one out: it compares nothing with
+# node, it reads no TypeScript, and it finishes instantly. It is here because the thing it
+# checks -- that a `tsconfig.json`'s `extends` names a file that exists -- is invisible to
+# every other step by construction. A fixture whose config resolves to nothing still
+# compiles, still runs, and still agrees with node; it simply does so under different
+# options than its directory claims. Eighteen were live when it was written, the oldest
+# for two weeks, and no instrument in the repository could have named one.
 set -uo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root" || exit 1
 
 status=0
-for check in skip-audit stale-exclusions self-oracle fuzz-deep-equal "fuzz-timer-order 150"; do
+for check in skip-audit stale-exclusions fixture-configs self-oracle fuzz-deep-equal "fuzz-timer-order 150"; do
   started=$(date +%s)
   # `set --` then pass only the arguments that exist. Passing `"${2:-}"` unconditionally
   # handed every argument-less check an empty string, and `fuzz-deep-equal` reads its first
@@ -68,7 +76,7 @@ for check in skip-audit stale-exclusions self-oracle fuzz-deep-equal "fuzz-timer
     # ends with its per-file `ok (child)` list and `stale-exclusions` with a caveat, so
     # `tail -1` reported neither tool's result.
     summary="$(printf '%s' "$output" \
-      | grep -E 'entr\(ies\)|exclusion\(s\)|local test\(s\)|agree,' \
+      | grep -E 'entr\(ies\)|exclusion\(s\)|local test\(s\)|agree,|tsconfig\(s\)' \
       | tail -1)"
     printf '  %-20s ok   %2ss  %s\n' "$check" "$elapsed" "$(printf '%s' "${summary:-$(printf '%s' "$output" | tail -1)}" | sed 's/^ *//' | cut -c1-96)"
   else
