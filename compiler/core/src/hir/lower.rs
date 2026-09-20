@@ -3143,6 +3143,20 @@ fn settled_global_type(probe: &FuncBuilder, name_node: NodeId) -> Option<HirType
                 .filter(|_| written_as_a_dense_prefix(probe, name_node))
         })
         .or(declared)
+        // **A module-scope variable is a slot**, and the sixth position to ask
+        // this. `var a;` that nothing assigns is `HirType::Void` -- a type with
+        // no width -- and a global has to have one, so `storable` refused it.
+        //
+        // `Lowering::unwritten` reached the same answer this morning for the
+        // function-scope spelling of the identical program, through the same
+        // `in_a_slot`. The two scopes disagreed because only one of them asked.
+        //
+        // 5 files of the slice-1 `test/language` population, and finding that
+        // they were this took correcting the message first: they all read "a
+        // module-scope variable holding a reference", which is the opposite of
+        // the condition and gave no hint they were the `var g;` case one scope
+        // out.
+        .map(in_a_slot)
 }
 
 /// Are this name's indexed writes `[0]`, `[1]`, ... in that order?

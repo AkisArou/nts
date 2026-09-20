@@ -30,9 +30,48 @@
 // 9 files of the slice-1 `test/language` population; 5 pass and 4 advance to
 // `eval`, which is a declared non-goal.
 //
+// # The same program at module scope, found by fixing a message
+//
+// `var a;` at *module* scope is the identical question and was refused
+// separately, because `settled_global_type` never asked `in_a_slot` -- a global
+// needs a width and `Void` has none.
+//
+// What hid it was the sentence. `storable` refused with **"a module-scope
+// variable holding a reference"**, which is the opposite of its own condition:
+// what reaches it is a type that is *neither* a scalar nor a reference. Five
+// test262 files sat under that message and nothing in it suggested they were
+// this file's case one scope out. Correcting the message to name the
+// representation made all five read "of nothing", and then they were obvious.
+//
+// A refusal that describes the wrong thing does not just fail to help — it
+// actively sorts a file away from the fix it needs.
+//
 // The refusal that remains for a type with no zero now **names the type**:
 // "a declaration without an initializer" describes every `let x;` in the
 // language, and the ones that reach it are the subset whose type has no zero.
+
+let declaredAndNeverWritten: undefined;
+let anotherOne: undefined;
+
+/**
+ * The module-scope spelling, which needed its own answer.
+ *
+ * Written `let x: undefined;` rather than `var x;` because the *unannotated*
+ * form is TS7005 under this repository's config — `noImplicitAny` rejects a
+ * module-scope `var` with no initializer that a function reads. The test262
+ * files reach the compiler because they read theirs at module scope, where the
+ * checker infers from control flow. `HirType::Void` is what both produce.
+ */
+export function aModuleGlobalWithNoWidth(n: number): number {
+  return (declaredAndNeverWritten === undefined ? 1 : 0) + n * 0;
+}
+
+/** Several at once, which is how the corpus writes them. */
+export function severalOfThem(n: number): number {
+  const a = declaredAndNeverWritten === undefined ? 1 : 0;
+  const b = anotherOne === undefined ? 1 : 0;
+  return a * 10 + b + n * 0;
+}
 
 /** Declared, never assigned, never read. */
 export function neverMentionedAgain(n: number): number {
