@@ -3371,9 +3371,39 @@ fn written_as_a_dense_prefix(probe: &FuncBuilder, name_node: NodeId) -> bool {
 /// the settled type started arriving.
 ///
 /// Lifting this is one design rather than a patch -- an explicit reserve before
-/// `rc.rs`'s load, so the slot exists by the time anything reads it -- and it
-/// lifts the annotated spelling at the same time, which diverges from node
-/// today for the same reason.
+/// `rc.rs`'s load, so the slot exists by the time anything reads it.
+///
+/// # This guards one spelling of four, measured 2026-09-21
+///
+/// The sentence above used to end "and it lifts the annotated spelling at the
+/// same time, which diverges from node today for the same reason". That is
+/// true and it is a quarter of the picture. Growing an array of **references**
+/// by an index write, with `xs[0] = "a"` on an empty one:
+///
+/// ```text
+///     const xs = [];          at module scope   REFUSED here      <- this
+///     const xs: string[] = []; at module scope  ABORTS at run time
+///     const xs = [];          in a function     ABORTS at run time
+///     const xs: string[] = []; in a function    ABORTS at run time
+/// ```
+///
+/// The abort is `nts: refused: index 0 is outside [0, 0)`, exit 134, with
+/// **zero compile-time refusals** -- which is the failure this function's third
+/// paragraph describes and then guards against in one position out of four.
+/// Pre-existing: a binary built 2026-09-18 aborts identically.
+///
+/// Two controls place it exactly. An array of **numbers** grows by index write
+/// in every position and agrees with node, and `push` works in every position
+/// for references too -- so what is unsupported is the *growing index write*
+/// on a counted element, not growth and not references.
+///
+/// Extending this check is not the fix. It is asked of a declaration, and the
+/// other three spellings have a perfectly good declared type; what distinguishes
+/// them is what the program later *does* to the name. Either a program-wide
+/// question like [`written_as_a_dense_prefix`] asked of every array-typed
+/// binding, or a bounds-analysis one -- refuse a write `bounds.rs` can prove is
+/// past the end -- and the second is the one that would also catch `xs[9] = v`
+/// on a populated array.
 fn growth_can_fill(ty: &HirType) -> bool {
     let HirType::Managed(ManagedType::Array(element)) = ty else {
         return true;
