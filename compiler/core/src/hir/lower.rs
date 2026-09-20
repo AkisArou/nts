@@ -25872,7 +25872,9 @@ impl<'a> FuncBuilder<'a> {
                  field-by-field copy, and only a value with a layout has fields to walk",
             ));
         };
-        let from = self.layout_of(source, from)?;
+        let from_type = from;
+        let from = self.layout_of(source, from_type)?;
+        let mut copied: Vec<u32> = Vec::new();
         for (at, field) in from.fields.iter().enumerate() {
             let Some(target) = into.index_of(&field.name) else {
                 continue;
@@ -25888,6 +25890,52 @@ impl<'a> FuncBuilder<'a> {
             );
             let want = into.fields[target as usize].ty.clone();
             let read = self.coerce(read, &want, property)?;
+            self.field_set(object, target, read, origin);
+            copied.push(target);
+        }
+
+        // **A getter has no field, so the walk above cannot see it.**
+        //
+        // `Layout` holds storage, and an accessor is a call rather than
+        // storage --- `Accessor`'s own doc says emitting a field load for one
+        // "reads whatever happens to sit at that offset". A layout therefore
+        // has no entry for `get a()`, and this loop did not skip it *wrongly*
+        // so much as never meet it: the source's fields are walked, `a` is not
+        // one, and the target's `a` kept the zero it was allocated with.
+        //
+        // That is silent. `{ ...src }` compiled, ran, and answered 0 where node
+        // answers the getter's value, and the getter did not run at all --- so
+        // a spread also dropped whatever side effect it had.
+        //
+        // The names come from the *target*, because that is what has slots to
+        // fill, and `accessor_callee` is asked against the **source's** type, so
+        // a name the literal writes itself is not an accessor there and is left
+        // for the code that writes it. Anything the field walk already copied is
+        // skipped, so a plain field is never read twice.
+        for (target, want) in into.fields.iter().enumerate() {
+            let Ok(target) = u32::try_from(target) else {
+                continue;
+            };
+            if copied.contains(&target) {
+                continue;
+            }
+            let Some(callee) = self.accessor_callee(source, from_type, &want.name, "get ") else {
+                continue;
+            };
+            let returns = self
+                .declared_type_of(from_type, &want.name)
+                .and_then(|declared| self.represent(declared))
+                .unwrap_or_else(|| want.ty.clone());
+            let read = self.push(
+                OpKind::Call {
+                    callee,
+                    args: vec![value],
+                    frame: None,
+                },
+                returns,
+                origin.clone(),
+            );
+            let read = self.coerce(read, &want.ty.clone(), property)?;
             self.field_set(object, target, read, origin);
         }
         Ok(())
