@@ -1,60 +1,64 @@
 // expect: NTS1001 `null` or `undefined` where what it stands in for is not a reference
 //
-// **The property itself is fixed; what refuses now is the control.** Kept
-// because the analysis below was right and the control's claim was not.
-//
-// A property whose type is exactly `null` lowers as of 2026-09-20: `fields_of`
-// gives it an `Erased` slot, which is the one representation carrying a null
-// tag, and `declared_field_type` hands the literal the same answer so that the
-// two do not disagree. That second half is the fix this file asked for in as
-// many words —
-//
-//     "The contextual type at the literal should come from the layout the field
-//      path already decided, rather than from the checker's type a second time.
-//      The field path maps `Void | Never` to `Erased` and nothing tells the
-//      literal; two derivations of one fact, disagreeing in the gap between
-//      them."
-//
-// — and it is why the change is not the one reverted on 2026-09-13.
-// `TypeKind::Null => HirType::Erased` in `representation_of` broke on narrowing:
-// after `b.f = null` the checker narrows a `string | null` *field read* to
-// `null`, and a blanket answer sends the conversion down the tagged path while
-// the storage is still a pointer. A **declared** field's type and a merge's
-// parameter are positions narrowing never reaches, and that reduction is a
-// control in `examples/a-slot-that-can-only-be-null`.
-//
-// # The control was wrong, and clearing the refusal in front of it showed that
-//
-// This file said of `value?: null`: *"optional, which routes through `Erased`
-// and compiles"*, and offered it as the pair that made the required form
-// surprising. It does not compile, and it did not before: identical on the
-// binary built at 23666c14. It was never reached, because the required form
-// refused first — so the sentence was never tested, and a fixture's prose is not
-// executed.
-//
-// What refuses is the **comparison**, not the field and not the literal.
-// `o.value === undefined` where `value?: null` is `null | undefined`: both sides
-// are absences and the read is an erased tag, so the test is between a tag and a
-// constant. `erased_absence_test` is where that lives and this shape does not
-// reach it. `{ v: null | undefined }` compared against `null` is the same thing
-// written without the `?`.
-//
-// # It is a root, and its count understates it
-//
-// `refusal-census.mjs --top=204` read the original at **9 things, 11 sites, 9
-// modules**. What sits behind it does not appear under it: an arm of a
-// discriminated union carrying `value: null` has no layout, so reading the
-// *discriminant* — which every arm has — refuses too. That is
-// `util/src/deep-equal.ts`'s `loosePrimitiveProbe`, and the `value: null` half
-// of it is what has just been answered.
+// **The property is fixed; the comparison is not.** A property whose type is
+// exactly `null` lowered from 2026-09-20 -- `fields_of` gives it an `Erased`
+// slot and `declared_field_type` hands the literal the same answer -- and what
+// still refuses is `o.value === undefined` where the declared type is
+// `null | undefined`.
 //
 // # Why `undefined` was answered and `null` was not
 //
-// `representation_of` has had an arm for `undefined` for as long as it has
-// existed and has none for `null`. Each name has a *second* job and only one of
-// them forced an answer: `undefined` doubles as the result of a function that
-// returns nothing, so returns demanded it; `null` doubles as nothing, so no
-// position did.
+// `representation_of` maps `Void | Undefined` to `HirType::Void` and has no arm
+// for `TypeKind::Null`. Each name has a second job and only one forced an
+// answer: `undefined` doubles as the result of a function returning nothing, so
+// returns demanded it; `null` doubles as nothing, so no position did.
+//
+// # It was a root, and its count understated it
+//
+// `refusal-census.mjs --top=204` read it at **9 things, 11 sites, 9 modules**.
+// What sat behind it did not appear under it: an arm of a discriminated union
+// carrying `value: null` has no layout, so reading the *discriminant* -- which
+// every arm has -- refused too. That is `util/src/deep-equal.ts`'s
+// `loosePrimitiveProbe`, and its `value: null` half is now answered.
+//
+// # Two repairs reverted, and what separates them from the one that landed
+//
+// **1. `TypeKind::Null => HirType::Erased` in `representation_of`** (2026-09-13).
+// Three characters, agreed with node on every example, red on narrowing: after
+// `b.f = null` the checker narrows a `string | null` *field read* to `null`, and
+// a blanket answer sends the conversion down the tagged path while the storage
+// is still a pointer.
+//
+// **2. Letting the comparison fall back to erased** (2026-09-20). The gate here
+// is `type_of(value) == Erased`, and a field declared `null | undefined` has no
+// type of its own while its slot is plainly erased -- so reading the *checker's*
+// type and asking whether every member is an absence looks like the same
+// question. It is not: **`void` is an absence too**, and an optional call's
+// result is `void` with no width rather than an erased tag. Four examples went
+// from agreeing with node to disagreeing --
+// `an-optional-call-that-returns-void`, `an-optional-method-called-optionally`,
+// `void-and-comma`, `an-absence-in-parentheses` -- which the gate caught and a
+// probe of this shape alone would not have.
+//
+// What landed answers only where a value needs a **width** and narrowing cannot
+// reach: a declared field's type, and a merge's parameter.
+// `examples/a-slot-that-can-only-be-null` holds both, with the narrowing
+// reduction as a control.
+//
+// # What this needs
+//
+// The comparison has to ask what the *slot* holds rather than what the node's
+// type is, and to tell a slot-backed erased value from a widthless `void`. The
+// first is what `declared_field_type` now does for the literal; the second is
+// the part neither has.
+//
+// # The control that was false
+//
+// This file offered `value?: null` as "optional, which routes through `Erased`
+// and compiles", the pair that made the required form surprising. It does not
+// compile, and did not on 23666c14 either -- it was never reached, because the
+// required form refused first. A fixture's prose is not executed, so a sentence
+// behind a refusal is never tested. It is the one under test now.
 
 type Alternate = { kind: "alternate"; value: null };
 
