@@ -2985,6 +2985,8 @@ filled somewhere the pass cannot see, the release comes back and is as correct
 as it was. The `rc` and `memory` steps are green, so nothing leaked and no
 count moved.
 
+**How far the fix reaches, measured.** Thirteen shapes were swept under `rc` — an element read of a result produced by `map`, `filter`, `slice`, `concat`, a spread, `toReversed`, `toSorted`, `Object.keys` and `Object.entries`, plus nested and chained maps. **Three were broken and are fixed**: `map`, a map producing arrays, and a map of a map; the other ten always passed. Measured by removing the guard and re-running the sweep rather than inferred from the cause — *"every operation that allocates its result uninitialised"* would have been the tidy claim and is not what the evidence says.
+
 **Why it looked like three unrelated bugs.** It is data-dependent — what the
 allocator last left in that memory — so each spelling failed a different number
 of the differential's cases, and shapes differing only in allocation order

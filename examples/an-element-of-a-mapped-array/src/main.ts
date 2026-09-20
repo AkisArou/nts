@@ -30,6 +30,19 @@
 // filled somewhere the pass cannot see, the release comes back and is as
 // correct as it was.
 //
+// # How far the fix reaches, measured
+//
+// Thirteen shapes were swept under `rc` — a read of an element produced by
+// `map`, `filter`, `slice`, `concat`, a spread, `toReversed`, `toSorted`,
+// `Object.keys` and `Object.entries`, plus nested and chained maps. **Three
+// were broken and are fixed**: `map`, a map producing arrays, and a map of a
+// map. The other ten always passed.
+//
+// That was measured by removing the guard and re-running the sweep, not
+// inferred from the cause. "Every operation that allocates its result
+// uninitialised" would have been the tidy claim and it is not what the
+// evidence says.
+//
 // # Why it looked like three unrelated bugs
 //
 // It is **data-dependent** — what the allocator last left in that memory — so
