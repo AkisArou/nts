@@ -33145,12 +33145,31 @@ impl<'a> FuncBuilder<'a> {
                 //
                 // So the guard asks first, and a literal with nothing in it
                 // falls through to the ordinary arm below and the same
-                // stand-in. Zero elements is syntactic and stronger than any
-                // type argument --- there is no element to read at any width.
+                // stand-in --- **but only when the declaration is a pattern**.
+                //
+                // "Zero elements is syntactic and stronger than any type
+                // argument" is true of the literal and false of the *variable*.
+                // `const xs = []; xs.push("a")` names an array that does not
+                // stay empty: the stand-in gives it `[f64]`, the push puts an
+                // `NtsString *` in it, and the emitted C is
+                // `nts_array_push(v1, v2)` against `double` --- which clang
+                // refuses, with no diagnostic of ours. Measured the same night
+                // the fall-through was added, by pairing an inferred
+                // declaration against an annotated one.
+                //
+                // A binding pattern cannot be grown. `const [x = 23] = []`
+                // reads positions that do not exist and takes their defaults,
+                // and the name never outlives the destructuring, so the element
+                // width really is unobservable there.
                 Some(initializer)
                     if self.kind_of(initializer) == Some(syntax::ARRAY_LITERAL_EXPRESSION)
                         && self.children(initializer).is_empty()
-                        && (self.type_of(name).is_some() || self.evolved_type(name).is_some()) =>
+                        && !matches!(
+                            self.kind_of(name),
+                            Some(
+                                syntax::ARRAY_BINDING_PATTERN | syntax::OBJECT_BINDING_PATTERN
+                            )
+                        ) =>
                 {
                     let declared = self
                         .type_of(name)

@@ -14,6 +14,24 @@
 // `theForHeadSpelling` below are the arms, and the second is the shape the nine
 // `statements/for/dstr` files actually write.
 //
+// **The fall-through is for a binding *pattern* only, and the first version was
+// not.** Written as "a literal with nothing in it falls through", it also caught
+// `const xs = []` --- a plain name, which does not stay empty. The stand-in gave
+// it `[f64]`, `xs.push("a")` put an `NtsString *` in it, and the emitted C was
+// `nts_array_push(v1, v2)` against a `double`: uncompilable, with no diagnostic
+// of ours, where the previous binary had refused the declaration outright.
+//
+// "Zero elements is syntactic and stronger than any type argument" is true of
+// the *literal* and false of the *variable*. A pattern cannot be grown --- it
+// reads positions that do not exist, takes their defaults, and the name never
+// outlives the destructuring --- and a bare identifier can. So the arm is taken
+// for an identifier, which refuses when nothing says what it holds, exactly as
+// before.
+//
+// Found within the hour, by pairing an inferred declaration against an
+// annotated one across eight constructs. The two `push` spellings answer
+// identically to the 2026-09-18 binary again; only the pattern moved.
+//
 // **What the older binary does with this file, precisely.** It refuses seven
 // constructs and `nts check` then reports *"nothing to check: no exported
 // function has scalar arguments and a scalar result"* --- not a disagreement,
