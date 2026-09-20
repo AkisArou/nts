@@ -16,7 +16,22 @@
 // `HirType::NUMBER` rather than a second answer to one question.
 //
 // 15 files of the slice-1 `test/language` population: 12 `for (… of [[]])` with
-// a destructuring head, and 3 a bare `[];` whose value is discarded.
+// a destructuring head, and 3 a bare `[];` whose value is discarded. **Eight of
+// them pass and seven advance to a different refusal**, which forces a
+// qualification on the sentence above.
+//
+// "Unobservable" is true of the *program* and not of this compiler. No source
+// can read an element of `never[]`. But the lowering carries the element type
+// into a destructuring pattern's expectations, and a pattern that wants a shape
+// rejects a width:
+//
+//     for (const [[x] = [1]] of [[]]) {}    a number where an array is wanted
+//     for (const [{ q } = {}] of [[]]) {}   a number where an object is wanted
+//
+// Six files refuse that way now, naming what the pattern wanted rather than the
+// literal — a better refusal, and still a refusal. Closing them means taking the
+// element type from the pattern's own **default**, which is the only thing that
+// ever runs over an empty array, and that is a different question from this one.
 //
 // # The controls, and what they are controlling for
 //

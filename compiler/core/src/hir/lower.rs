@@ -24793,7 +24793,26 @@ impl<'a> FuncBuilder<'a> {
             //
             // 15 files of the slice-1 `test/language` population: 12 are
             // `for (... of [[]])` with a destructuring head, and 3 are a bare
-            // `[];` whose value is discarded.
+            // `[];` whose value is discarded. **8 of them pass and 7 advance**,
+            // which is the honest split and worth the qualification it forces.
+            //
+            // "Unobservable" is true of the *program* and not of this compiler.
+            // No source can read an element of `never[]` -- the read has type
+            // `never` and the checker refuses every use of it -- but the
+            // lowering carries the element type into a destructuring pattern's
+            // expectations, and a pattern that wants a shape rejects a width:
+            //
+            // ```js
+            //   for (const [[x] = [1]] of [[]]) {}   // a number where an array is wanted
+            //   for (const [{ q } = {}] of [[]]) {}  // a number where an object is wanted
+            // ```
+            //
+            // Those six refuse with a message naming what the pattern wanted,
+            // which is a better refusal than the one they had and still a
+            // refusal. What would close them is taking the element type from the
+            // pattern's own default -- the array is empty, so the default is the
+            // only thing that ever runs -- and that is a different question from
+            // this one.
             .or_else(|| self.a_stand_in_for_nothing(id, own_shape.as_ref()))
             .ok_or_else(|| {
                 if empty {

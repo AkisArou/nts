@@ -613,6 +613,40 @@ alone. `typescript.md`'s `negative-zero` row carries it. Those three were
 
 
 
+### 1,548 of 4,812, and a claim that needed qualifying
+
+Measured 2026-09-20, compiler pinned at `d3dcb637`, over all of `test/language`,
+slice 1. **1,539 → 1,548: nine improved, none regressed.** Five
+`statements/for-of`, three `statementList`, one `expressions/class`.
+
+The `never[]` row is **gone — 15 to 0** — and nine passing out of fifteen is the
+number that matters, because the other six moved to a different refusal and that
+refutes half of the argument the fix was made on.
+
+#### "Unobservable" was true of the program and false of the compiler
+
+The fix reasons that an array literal the checker typed `never[]` can take any
+element width, because no value of type `never` exists and so no program can read
+an element out of one. That part holds. What does not is the step after it:
+
+```js
+for (const [[x] = [1]] of [[]]) {}    // a number where an array is wanted
+for (const [{ q } = {}] of [[]]) {}   // a number where an object is wanted
+```
+
+The *lowering* carries the element type into a destructuring pattern's
+expectations, and a pattern that wants a shape rejects a width. Six files refuse
+that way now. It is a better refusal — it names what the pattern wanted instead
+of the literal — and it is still a refusal, and the sentence "the element width
+is unobservable" had to be narrowed in both the compiler and the example to say
+which observer.
+
+What would close those six: take the element type from the pattern's own
+**default**, which over an empty array is the only thing that ever runs.
+
+The seventh advanced to *a conditional of unrepresentable type (any)*, which is
+the `any` question and not this one.
+
 ### 1,539 of 4,812, and the row that was 95% a non-goal
 
 Measured 2026-09-20, compiler pinned at `23666c14`, over all of
