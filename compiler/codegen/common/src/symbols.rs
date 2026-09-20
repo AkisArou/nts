@@ -412,6 +412,37 @@ pub fn unspellable_in_c(name: &str) -> Option<String> {
 /// against. Names this backend generates itself (`v0`, `t0`, `b0`) are mangled
 /// the same way, so a function called `v0` cannot shadow a parameter.
 #[must_use]
+/// One character of a qualified name, as C may spell it.
+///
+/// **The replacement this does was not injective**, and the collision was
+/// reachable from ordinary source. Every character outside an identifier used
+/// to become a single `_`, so `C` declaring `#$` and `#_` produced `C___`
+/// twice and the program was refused with ``$` and `_` both need the C name
+/// `C___``. 14 files of the slice-1 `test/language` population are that, all
+/// of them the generated tests for identifiers spelled with `$`, `℘`, a
+/// zero-width joiner and the like.
+///
+/// `_uXXXX_` is reversible by construction, so two different characters cannot
+/// arrive at one spelling. The test is **ASCII** alphanumeric rather than
+/// `char::is_alphanumeric`, which is Unicode-aware and would let `℘` through
+/// into a C identifier that no compiler accepts -- the previous version asked
+/// the Unicode question and then replaced the character anyway, so the two
+/// halves disagreed about what an identifier is.
+///
+/// A raw `_` still passes through, which keeps every ordinary name unchanged:
+/// this function is on the path of every emitted method, and churning
+/// `Class__method` into something else would be a diff across the whole
+/// backend for no one's benefit. The cost is that a source name containing the
+/// literal text `_u0024_` could still collide with an escaped `$` -- which
+/// `emit.rs` detects and refuses by name, as it did before, so the backstop is
+/// unchanged and only the need for it is rarer.
+fn escaped(c: char) -> String {
+    if c.is_ascii_alphanumeric() || c == '_' {
+        return c.to_string();
+    }
+    format!("_u{:04x}_", c as u32)
+}
+
 pub fn c_identifier(name: &str) -> String {
     // A qualified name carries punctuation no C identifier may: `Class#method`
     // for a method, `Class.method` for a static one, `Class<id>` for one
@@ -428,7 +459,9 @@ pub fn c_identifier(name: &str) -> String {
             .replace('#', "__")
             .replace('.', "___")
             .replace('@', "____")
-            .replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
+            .chars()
+            .map(escaped)
+            .collect();
     }
     let generated = matches!(name.as_bytes().first(), Some(b'v' | b't' | b'b'))
         && name.len() > 1

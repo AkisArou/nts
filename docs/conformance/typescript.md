@@ -2951,6 +2951,49 @@ They read `toString` as a **value** and compare it with the one on
 `Array.prototype`, which needs function identity for a prototype method and is a
 much larger thing. `examples/array-join` carries the arms and says so.
 
+#### An identifier C cannot spell (fixed)
+
+`Class#method` is mangled to a C name, and every character outside
+`[A-Za-z0-9_]` became a single `_`. That is **not injective**: a class
+declaring `#$` and `#_` produced `C___` twice, and the program was refused with
+``$` and `_` both need the C name `C___``.
+
+**14 files of the slice-1 `test/language` population, and all 14 now pass** —
+the generated tests for identifiers spelled with `$`, a Unicode escape, a
+zero-width joiner and the like, which is exactly the population a lossy
+mangling collides. `examples/an-identifier-c-cannot-spell` is 87 cases across 3
+functions; the pre-session binary declines a function in it.
+
+`_uXXXX_` is reversible by construction, so two characters cannot arrive at one
+spelling. Two details are deliberate. The test is **ASCII** alphanumeric rather
+than `char::is_alphanumeric`, which is Unicode-aware — the previous version
+asked the Unicode question and then replaced the character anyway, so its two
+halves disagreed about what an identifier is, and a character
+`is_alphanumeric` accepts would have gone into a C identifier no compiler
+accepts. And a raw `_` still passes through, leaving every ordinary name
+unchanged: this function is on the path of every emitted method, and churning
+`Class__method` would be a diff across the whole backend for nobody's benefit.
+
+What that costs is stated rather than assumed: a source name containing the
+literal text `_u0024_` could still collide with an escaped `$`, which `emit.rs`
+detects and refuses by name exactly as before. The backstop is unchanged and
+only the need for it is rarer.
+
+**A separate gap in a different backend, found by the same example (open).** A
+field named with a **zero-width joiner** — `#ZW_\u200c_NJ` — makes `d8` refuse
+the whole class:
+
+```text
+Field name '$ZW_\u200c_NJ' cannot be represented in dex format.
+```
+
+The JVM backend emits a name the class-file format allows and the *dex* format
+does not, so the Android lane cannot carry it. The example does not include one:
+a fixture that tested the C mangling and also failed the `dex` step would be
+testing two things and reporting the wrong one. It belongs to whoever owns
+`compiler/codegen/jvm`, and the shape is the whole of the report — dex's
+`SimpleName` is narrower than the JVM's, and nothing mangles for it.
+
 #### An element of a mapped array, under reference counting (fixed)
 
 ```ts
