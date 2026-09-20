@@ -172,6 +172,38 @@ const withAMethod = {
   plainValue: 2,
 };
 
+// **Destructuring is the seventh consumer**, and it refused rather than
+// answering short. `const { a } = o` landed on `absent_member`, which said the
+// member had "a type that has no representation (number)" --- wrong twice: a
+// `number` represents fine, and the member is not absent. `read_for_pattern`
+// asks the layout for a slot, a getter has none, and the refusal it fell into
+// was about a third thing entirely.
+//
+// It calls the getter now, and only after the layout has been asked, so an
+// ordinary field keeps its `FieldGet`. A getter reached through a **class**
+// works here too --- unlike enumeration, a destructuring is a *read*, and a
+// prototype accessor is perfectly readable; it is only not an *own property*.
+// That is the distinction those two consumers draw differently and correctly.
+let destructuredRuns = 0;
+const forDestructuring = {
+  get computed(): number {
+    destructuredRuns += 1;
+    return 1;
+  },
+  plain: 2,
+};
+const { computed: destructuredGetter, plain: destructuredField } =
+  forDestructuring;
+const runsAfterDestructuring = destructuredRuns;
+
+class WithAReadableGetter {
+  base = 3;
+  get doubled(): number {
+    return this.base * 2;
+  }
+}
+const { doubled: fromAPrototypeGetter } = new WithAReadableGetter();
+
 // Observed once, in module order, so every export below is a pure read.
 const runsBefore = runs;
 const twoGetterValues = Object.values(twoGetters).join("");
@@ -267,4 +299,18 @@ export function aMethodShorthandIsStillCallable(n: number): number {
 
 export function aPrototypeMethodIsNotOwn(n: number): number {
   return (Object.hasOwn(instance, "method") ? 1 : 0) * 10 + n;
+}
+
+export function destructuringCallsTheGetter(n: number): number {
+  return destructuredGetter * 100 + destructuredField * 10 + n;
+}
+
+export function destructuringRanItExactlyOnce(): number {
+  return runsAfterDestructuring;
+}
+
+/// A prototype accessor is readable even though it is not an own property,
+/// which is why destructuring takes it and `Object.keys` does not.
+export function destructuringReadsThroughAPrototype(n: number): number {
+  return fromAPrototypeGetter * 10 + n;
 }

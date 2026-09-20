@@ -33391,10 +33391,36 @@ impl<'a> FuncBuilder<'a> {
             let name = self
                 .literal_name(property)
                 .ok_or_else(|| self.unsupported(element, "a computed property name"))?;
-            let Some(field) = layout
+            let field = layout
                 .index_of(&name)
-                .or_else(|| Self::symbol_keyed(&layout, &name))
-            else {
+                .or_else(|| Self::symbol_keyed(&layout, &name));
+            let Some(field) = field else {
+                // **A getter has no slot, and destructuring is a read.**
+                // `const { a } = o` where `a` is an accessor landed on
+                // `absent_member`, which said the member had "a type that has
+                // no representation (number)" --- false twice over: `number`
+                // represents fine, and the member is not absent. The seventh
+                // consumer of the same seam as `{ ...src }` and `Object.keys`,
+                // and the same answer: call it.
+                //
+                // Only after the layout has been asked, so a plain field keeps
+                // its `FieldGet` and nothing about the ordinary path changes.
+                if let Some(callee) = self.accessor_callee(element, type_id, &name, "get ") {
+                    self.refuse_unguarded_iterator_value(element, value, &name)?;
+                    let returns = self
+                        .declared_type_of(type_id, &name)
+                        .and_then(|declared| self.represent(declared))
+                        .ok_or_else(|| self.absent_member(element, type_id, &name))?;
+                    return Ok(self.push(
+                        OpKind::Call {
+                            callee,
+                            args: vec![value],
+                            frame: None,
+                        },
+                        returns,
+                        origin,
+                    ));
+                }
                 return Err(self.absent_member(element, type_id, &name));
             };
             // A binding element is not an access, so the proof below answers
