@@ -14,8 +14,8 @@
 
 use nts_diagnostics::{Diagnostic, Location};
 use nts_semantic_schema::{
-    DeclarationModifiers, LiteralValue, NodeData, NodeId, NodeKind, Origin, SemanticSnapshot,
-    SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind, TypeRecord, syntax,
+    DeclarationModifiers, LiteralValue, NodeData, NodeId, NodeKind, Origin, PropertyRecord,
+    SemanticSnapshot, SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind, TypeRecord, syntax,
 };
 
 use super::facts::Facts;
@@ -16998,7 +16998,7 @@ impl<'a> FuncBuilder<'a> {
         // through to the layout for every property whose presence the type
         // settles.
         if let HirType::Managed(ManagedType::Object(ty)) = self.values[table.0 as usize].ty
-            && self.declares(ty, &wanted) == Declares::Optionally
+            && self.declares(ty, &wanted, true) == Declares::Optionally
         {
             let origin = self.origin(id);
             let bit = match self.presence_of_key(ty, &wanted) {
@@ -20267,9 +20267,10 @@ impl<'a> FuncBuilder<'a> {
         lhs: NodeId,
         rhs: NodeId,
         key: &str,
+        brand: bool,
     ) -> Result<ValueId, Diagnostic> {
         // `None` for an ordinary key, which is every key but a private name.
-        let owner = self.brand_owner(lhs, self.private_name_key(lhs).is_some())?;
+        let owner = self.brand_owner(lhs, brand)?;
         // Every object type the program has, not every *class*: an object
         // literal typed by an interface has a layout and no entry in the
         // hierarchy, and asking the hierarchy answered `false` for
@@ -20288,7 +20289,7 @@ impl<'a> FuncBuilder<'a> {
             .filter_map(|at| u32::try_from(at).ok().map(TypeId))
             .collect();
         for class in candidates {
-            match self.declares(class, key) {
+            match self.declares(class, key, brand) {
                 Declares::Always => declaring.push(class),
                 // An optional property is refused for a *union* arm and is
                 // refused here for the same reason: the slot exists whether or
@@ -20645,6 +20646,11 @@ impl<'a> FuncBuilder<'a> {
         if matches!(self.type_of(rhs), Some(HirType::NativePointer(_))) {
             return Err(self.unsupported(id, "an `in` test through an opaque C pointer"));
         }
+        // **Which spelling the key was written in**, which decides whether a
+        // `#private` member can answer it. `#m in o` is the ergonomic brand
+        // check; `"#m" in o` asks for a string-keyed property of that name, and
+        // a `#private` member is not one. See [`Self::declares`].
+        let brand = self.private_name_key(lhs).is_some();
         let Some(key) = self.private_name_key(lhs).or_else(|| self.literal_key(lhs)) else {
             return Err(self.unsupported(
                 lhs,
@@ -20750,7 +20756,7 @@ impl<'a> FuncBuilder<'a> {
         // a compiled program gains no classes. So this is not a different
         // operation, it is the same one with a wider set.
         if self.is_the_object_type(ty) {
-            return self.lower_in_over_every_class(id, lhs, rhs, &key);
+            return self.lower_in_over_every_class(id, lhs, rhs, &key, brand);
         }
         // A `Record<string, V>`, whose membership is a *runtime* question.
         //
@@ -20825,7 +20831,7 @@ impl<'a> FuncBuilder<'a> {
         members.sort_unstable_by_key(|ty| ty.0);
         members.dedup();
 
-        let (declaring, optional) = self.arms_declaring(rhs, &members, &key)?;
+        let (declaring, optional) = self.arms_declaring(rhs, &members, &key, brand)?;
         let origin = self.origin(id);
         if !optional.is_empty() {
             return self.in_by_presence(id, rhs, &members, &optional, &key);
@@ -20840,11 +20846,12 @@ impl<'a> FuncBuilder<'a> {
         rhs: NodeId,
         members: &[TypeId],
         key: &str,
+        brand: bool,
     ) -> Result<(Vec<TypeId>, Vec<TypeId>), Diagnostic> {
         let mut declaring: Vec<TypeId> = Vec::new();
         let mut optional: Vec<TypeId> = Vec::new();
         for member in members {
-            match self.declares(*member, key) {
+            match self.declares(*member, key, brand) {
                 Declares::Always => declaring.push(*member),
                 Declares::Never => {}
                 // Answered from the header rather than from the slot, which is
@@ -20967,7 +20974,41 @@ impl<'a> FuncBuilder<'a> {
             && !modifiers.contains(nts_semantic_schema::DeclarationModifiers::ABSTRACT)
     }
 
-    fn declares(&self, ty: TypeId, key: &str) -> Declares {
+    /// Whether this property is a `#private` member rather than a string key.
+    ///
+    /// **The two are spelled identically in the snapshot.** `class C { #m }` and
+    /// `{ "#m": 1 }` both produce a property named `"#m"`, and only the
+    /// declaration tells them apart -- a `#private` member's declaration has a
+    /// `PRIVATE_IDENTIFIER` child. The same test [`Self::enumerable_fields`]
+    /// makes for `Object.keys`, which is where it was first needed.
+    fn declared_with_a_private_name(&self, property: &PropertyRecord) -> bool {
+        let Some(declaration) = property.declaration else {
+            return false;
+        };
+        self.children(declaration)
+            .into_iter()
+            .any(|child| self.kind_of(child) == Some(syntax::PRIVATE_IDENTIFIER))
+    }
+
+    /// Whether a type declares this key.
+    ///
+    /// `private_names_match` is **false where the key was written as a string**,
+    /// and that is the whole of the difference between `#m in o` and
+    /// `"#m" in o`. The first is the ergonomic brand check and is true; the
+    /// second asks for a string-keyed property called `#m`, which a `#private`
+    /// member is not -- `"#m" in this` answered **true** here and `false` in
+    /// node, a wrong answer that compiled and ran.
+    ///
+    /// Rejecting a key that begins with `#` would not do, because `{ "#m": 1 }`
+    /// is a legal object with a string key spelled that way and `"#m" in it` is
+    /// true. The question is about the *property*, so it is asked of the
+    /// declaration.
+    ///
+    /// The three callers that are not the `in` operator pass `true` and keep
+    /// today's answer: two ask about an optional property's presence bit by its
+    /// declared name, and `has_the_slot` is reached from `o.m?.()` and from a
+    /// comparison, where a `#private` member named through `this.#m` does match.
+    fn declares(&self, ty: TypeId, key: &str, private_names_match: bool) -> Declares {
         let ty = super::generics::concrete(self.snapshot, ty);
         let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
             return Declares::NotAnObject;
@@ -20975,7 +21016,10 @@ impl<'a> FuncBuilder<'a> {
         let TypeKind::Object { properties } = &record.kind else {
             return Declares::NotAnObject;
         };
-        match properties.iter().find(|property| property.name == key) {
+        match properties.iter().find(|property| {
+            property.name == key
+                && (private_names_match || !self.declared_with_a_private_name(property))
+        }) {
             Some(property) if property.optional => Declares::Optionally,
             Some(_) => Declares::Always,
             None => Declares::Never,
@@ -23852,7 +23896,7 @@ impl<'a> FuncBuilder<'a> {
         let layout = self.layouts.iter().find(|layout| layout.types.contains(&ty))?;
         Some(super::presence::of(
             layout,
-            |candidate| self.declares(ty, candidate) == Declares::Optionally,
+            |candidate| self.declares(ty, candidate, true) == Declares::Optionally,
             key,
         ))
     }
@@ -40275,7 +40319,7 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<Option<(ValueId, ValueId)>, Diagnostic> {
         let mut declaring: Vec<TypeId> = (0..self.snapshot.types.len())
             .filter_map(|at| u32::try_from(at).ok().map(TypeId))
-            .filter(|class| matches!(self.declares(*class, key), Declares::Always))
+            .filter(|class| matches!(self.declares(*class, key, true), Declares::Always))
             .collect();
         declaring.sort_unstable_by_key(|ty| ty.0);
         declaring.dedup();

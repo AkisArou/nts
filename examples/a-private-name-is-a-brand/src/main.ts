@@ -8,6 +8,20 @@
 //
 // A private name cannot be computed and cannot be forged, so the set of classes
 // declaring it is known at compile time and the test is an instance test.
+//
+// # The other spelling, which is not the same question
+//
+// `"#list" in value` is a **string** key that happens to be spelled with a `#`,
+// and a `#private` member is not a string-keyed property — node answers `false`.
+// This compiler answered `true`: `declares` matched on the property's *name*,
+// and `class C { #m }` and `{ "#m": 1 }` both produce a property named `"#m"`.
+// A wrong answer that compiled and ran, in the row the census cannot rank.
+//
+// Rejecting any key beginning with `#` would be wrong in the other direction:
+// `{ "#m": 1 }` is a legal object and `"#m" in it` is `true`. The question is
+// about the *property*, not the key, so it is asked of the declaration — the
+// same test `enumerable_fields` already makes so that `Object.keys` leaves
+// `#private` members out.
 
 class Holder {
   #list: number;
@@ -70,6 +84,31 @@ class Derived extends Holder {}
 
 class Unrelated {
   other = 1;
+}
+
+/**
+ * The string spelling of a private name, which no object has as a key.
+ *
+ * `false` for both the declaring class and a stranger: this is not a brand check
+ * at all, and reading it as one is what made it answer `true`.
+ */
+export function theStringSpellingIsNotTheBrand(n: number): number {
+  const held = new Holder(n);
+  const mine = "#list" in held ? 1 : 0;
+  const theirs = "#list" in new Decoy(n) ? 1 : 0;
+  return mine * 10 + theirs;
+}
+
+/**
+ * The control in the other direction: a string key that really is spelled `#`.
+ *
+ * `{ "#list": 1 }` has that key and `in` must say so. A fix that rejected every
+ * key beginning with `#` would answer 0 here, and this is the arm that catches
+ * it.
+ */
+export function aStringKeySpelledWithAHash(n: number): number {
+  const table: Record<string, number> = { "#list": n };
+  return "#list" in table ? 1 : 0;
 }
 
 export function ownInstance(n: number): boolean {
