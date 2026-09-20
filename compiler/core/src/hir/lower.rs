@@ -26804,9 +26804,32 @@ impl<'a> FuncBuilder<'a> {
             // `Never` joins it. A field typed `never` can hold nothing, so any
             // read is unreachable -- and the struct still needs a member, or
             // every offset after it lands somewhere the layout does not say.
-            let field_ty = match self.represent(property.ty).ok_or_else(|| {
-                self.unrepresentable_member(id, "a property", &property.name, property.ty)
-            })? {
+            // **`null` is the third of them and had no representation at all.**
+            // `Void` and `Never` reach the arm below because `representation_of`
+            // gives them one; `TypeKind::Null` has no arm there, so
+            // `{ attr: null }` was refused as "a property of unrepresentable
+            // type (null)" while `{ attr: undefined }` compiled -- the same
+            // control pair as the paragraph above, one type over.
+            //
+            // The reasoning is the paragraph above's: a field typed `null` can
+            // hold nothing but `null`, so no read of it can be anything else,
+            // and the struct still needs a member or every offset after it
+            // lands where the layout does not say. `Erased` has a null tag,
+            // which makes it the slot that can hold the one value there is.
+            //
+            // Answered here rather than in `representation_of`, deliberately.
+            // `null` alone as a *parameter* or a *result* is not this question
+            // -- nothing reads those back -- and a representation given there
+            // would change what a function returning `null` hands over, which is
+            // a much larger claim than a field needing a width.
+            let held = if self.holds_only_absences(property.ty) {
+                HirType::Erased
+            } else {
+                self.represent(property.ty).ok_or_else(|| {
+                    self.unrepresentable_member(id, "a property", &property.name, property.ty)
+                })?
+            };
+            let field_ty = match held {
                 HirType::Void | HirType::Never => HirType::Erased,
                 held => held,
             };
@@ -31315,6 +31338,47 @@ impl<'a> FuncBuilder<'a> {
     /// both sides *must not* be evaluated: `a && expensive()` does not call
     /// `expensive` when `a` is falsy, and in a language with side effects that
     /// is a semantic difference rather than an optimization.
+    /// Whether every member of this type is an absence.
+    ///
+    /// `null`, `null | undefined`, `undefined | void` -- types whose whole
+    /// inhabitant set is `null` and `undefined`, both of which an erased value
+    /// carries a tag for. [`Self::only_absences`] is the same question asked of
+    /// a node.
+    ///
+    /// **`undefined` alone had a representation and `null` alone did not.**
+    /// `representation_of` maps `Void | Undefined` to `HirType::Void` and has no
+    /// arm for `TypeKind::Null`, so `{ attr: null }` and `c ? null : null` were
+    /// refused while the `undefined` spelling of each compiled. The blocker
+    /// fixture records why the name asymmetry exists: `undefined` doubles as the
+    /// result of a function returning nothing, so returns forced an answer for
+    /// it, and nothing forced one for `null`.
+    ///
+    /// Asked at the places a value needs a **width** -- an object's field and a
+    /// merge's parameter -- and answered with `Erased`.
+    ///
+    /// **Deliberately not answered in `representation_of` itself, and that is
+    /// the whole of why this is not the change that was reverted.**
+    /// `TypeKind::Null => HirType::Erased` there was tried on 2026-09-13, agreed
+    /// with node on every example, and broke on narrowing: after `b.f = null`
+    /// the checker narrows a `string | null` *field read* to `null`, and a
+    /// blanket answer sends the conversion down the tagged path while the
+    /// storage is still a pointer. A declared field's type and a merge's
+    /// parameter are positions the narrowing never reaches, and that reduction
+    /// is `examples/a-slot-that-can-only-be-null`'s `aNarrowedFieldIsNotThis`.
+    fn holds_only_absences(&self, ty: TypeId) -> bool {
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return false;
+        };
+        let members: Vec<TypeId> = match &record.kind {
+            TypeKind::Union(members) => members.clone(),
+            _ => vec![ty],
+        };
+        !members.is_empty()
+            && members
+                .iter()
+                .all(|member| absence_of_member(self.snapshot, *member).is_some())
+    }
+
     fn lower_branching_value(
         &mut self,
         id: NodeId,
@@ -31322,9 +31386,16 @@ impl<'a> FuncBuilder<'a> {
         then_branch: Branch,
         else_branch: Branch,
     ) -> Result<ValueId, Diagnostic> {
-        let ty = self
-            .type_of(id)
-            .ok_or_else(|| self.unrepresentable(id, "a conditional"))?;
+        // A merge's parameter is a slot: both arms have to arrive at one width.
+        // `c ? null : null` has none, for the reason [`Self::holds_only_absences`]
+        // carries, and `Erased` is the representation that holds the one value
+        // such a merge can carry.
+        let ty = match self.snapshot.node_types.get(&id).copied() {
+            Some(ty) if self.holds_only_absences(ty) => HirType::Erased,
+            _ => self
+                .type_of(id)
+                .ok_or_else(|| self.unrepresentable(id, "a conditional"))?,
+        };
         self.lower_branching_value_at(id, ty, condition, then_branch, else_branch)
     }
 
@@ -39667,11 +39738,6 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(literal, ty, origin))
     }
 
-    /// The type an expression is expected to have, from where it sits.
-    ///
-    /// Only for the literals that have no type of their own. The checker types
-    /// `null` as `null`, which is true and useless: what a backend needs is the
-    /// reference type the absence is standing in for, and that is a property of
     /// The declared type of the field an object literal's property fills.
     ///
     /// Split out of [`Self::contextual_type`] only for its length; the reason
@@ -39693,9 +39759,52 @@ impl<'a> FuncBuilder<'a> {
             return None;
         };
         let declared = properties.iter().find(|property| property.name == name)?;
-        self.represent(declared.ty)
+        // **The same answer `fields_of` gave the slot**, which is the fix the
+        // `a-property-typed-exactly-null` fixture asked for in as many words:
+        // "the contextual type at the literal should come from the layout the
+        // field path already decided, rather than from the checker's type a
+        // second time. The field path maps `Void | Never` to `Erased` and
+        // nothing tells the literal; two derivations of one fact, disagreeing in
+        // the gap between them."
+        //
+        // So `{ value: null }` got a field and the `null` written into it was
+        // still refused, because this asked the checker again and got nothing.
+        if self.holds_only_absences(declared.ty) {
+            return Some(HirType::Erased);
+        }
+        match self.represent(declared.ty)? {
+            HirType::Void | HirType::Never => Some(HirType::Erased),
+            held => Some(held),
+        }
     }
 
+    /// What an operator that *picks a side* is heading for.
+    ///
+    /// `a || b`, `a ?? b`, `a && b` and `c ? a : b` choose no type of their own:
+    /// the result is one operand or the other, so what each operand is heading
+    /// for is what the whole expression is. Both arms of `contextual_type` asked
+    /// this and asked it separately, which is two derivations of one sentence.
+    ///
+    /// The `null` step is the reason they are one now. `c ? null : null` and
+    /// `false || null` have no representation and are exactly `null`, so the
+    /// node's own type answers nothing and the operands were refused for want of
+    /// a reference to stand in for -- while the expression one level up had
+    /// already decided. `lower_branching_value` gives that merge an erased slot,
+    /// and this is what tells the operands so. See [`Self::holds_only_absences`].
+    fn what_the_whole_expression_is(&self, parent: NodeId, depth: u32) -> Option<HirType> {
+        self.type_of(parent)
+            .or_else(|| {
+                let ty = self.snapshot.node_types.get(&parent).copied()?;
+                self.holds_only_absences(ty).then_some(HirType::Erased)
+            })
+            .or_else(|| self.contextual_type(parent, depth + 1))
+    }
+
+    /// The type an expression is expected to have, from where it sits.
+    ///
+    /// Only for the literals that have no type of their own. The checker types
+    /// `null` as `null`, which is true and useless: what a backend needs is the
+    /// reference type the absence is standing in for, and that is a property of
     /// the position rather than of the token.
     fn contextual_type(&self, id: NodeId, depth: u32) -> Option<HirType> {
         if depth > 8 {
@@ -39786,9 +39895,7 @@ impl<'a> FuncBuilder<'a> {
                         | syntax::AMPERSAND_AMPERSAND_TOKEN
                         | syntax::QUESTION_QUESTION_TOKEN
                         | syntax::PLUS_TOKEN,
-                    ) => self
-                        .type_of(parent)
-                        .or_else(|| self.contextual_type(parent, depth + 1)),
+                    ) => self.what_the_whole_expression_is(parent, depth),
                     _ => None,
                 }
             }
@@ -39801,9 +39908,9 @@ impl<'a> FuncBuilder<'a> {
             // and without this the `null` arm had nothing to ask. The condition
             // is a child too and never reaches here, because only an absence
             // and a literal consult this and a condition is neither.
-            Some(syntax::CONDITIONAL_EXPRESSION) => self
-                .type_of(parent)
-                .or_else(|| self.contextual_type(parent, depth + 1)),
+            Some(syntax::CONDITIONAL_EXPRESSION) => {
+                self.what_the_whole_expression_is(parent, depth)
+            }
             // `f(null)` and `new Element(v, null)` — the parameter it fills.
             // The signature is the checker's answer after overload resolution,
             // so this is exact rather than a guess at which overload.
@@ -40471,20 +40578,10 @@ impl<'a> FuncBuilder<'a> {
     /// [`Self::absences_of`] being non-empty, which only says the type *admits*
     /// one beside something real.
     fn only_absences(&self, node: NodeId) -> bool {
-        let Some(ty) = self.snapshot.node_types.get(&node) else {
-            return false;
-        };
-        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
-            return false;
-        };
-        let members: Vec<TypeId> = match &record.kind {
-            TypeKind::Union(members) => members.clone(),
-            _ => vec![*ty],
-        };
-        !members.is_empty()
-            && members
-                .iter()
-                .all(|member| absence_of_member(self.snapshot, *member).is_some())
+        self.snapshot
+            .node_types
+            .get(&node)
+            .is_some_and(|ty| self.holds_only_absences(*ty))
     }
 
     /// `v === undefined` where `v` is erased, as the tag test it is.

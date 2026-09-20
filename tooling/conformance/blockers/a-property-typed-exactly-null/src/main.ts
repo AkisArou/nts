@@ -1,84 +1,60 @@
-// expect: a property `value` of unrepresentable type (null)
+// expect: NTS1001 `null` or `undefined` where what it stands in for is not a reference
 //
-// A property whose type is exactly `null` — one value, carrying nothing.
+// **The property itself is fixed; what refuses now is the control.** Kept
+// because the analysis below was right and the control's claim was not.
+//
+// A property whose type is exactly `null` lowers as of 2026-09-20: `fields_of`
+// gives it an `Erased` slot, which is the one representation carrying a null
+// tag, and `declared_field_type` hands the literal the same answer so that the
+// two do not disagree. That second half is the fix this file asked for in as
+// many words —
+//
+//     "The contextual type at the literal should come from the layout the field
+//      path already decided, rather than from the checker's type a second time.
+//      The field path maps `Void | Never` to `Erased` and nothing tells the
+//      literal; two derivations of one fact, disagreeing in the gap between
+//      them."
+//
+// — and it is why the change is not the one reverted on 2026-09-13.
+// `TypeKind::Null => HirType::Erased` in `representation_of` broke on narrowing:
+// after `b.f = null` the checker narrows a `string | null` *field read* to
+// `null`, and a blanket answer sends the conversion down the tagged path while
+// the storage is still a pointer. A **declared** field's type and a merge's
+// parameter are positions narrowing never reaches, and that reduction is a
+// control in `examples/a-slot-that-can-only-be-null`.
+//
+// # The control was wrong, and clearing the refusal in front of it showed that
+//
+// This file said of `value?: null`: *"optional, which routes through `Erased`
+// and compiles"*, and offered it as the pair that made the required form
+// surprising. It does not compile, and it did not before: identical on the
+// binary built at 23666c14. It was never reached, because the required form
+// refused first — so the sentence was never tested, and a fixture's prose is not
+// executed.
+//
+// What refuses is the **comparison**, not the field and not the literal.
+// `o.value === undefined` where `value?: null` is `null | undefined`: both sides
+// are absences and the read is an erased tag, so the test is between a tag and a
+// constant. `erased_absence_test` is where that lives and this shape does not
+// reach it. `{ v: null | undefined }` compared against `null` is the same thing
+// written without the `?`.
 //
 // # It is a root, and its count understates it
 //
-// `refusal-census.mjs --top=204` reads this at **9 things, 11 sites, 9
+// `refusal-census.mjs --top=204` read the original at **9 things, 11 sites, 9
 // modules**. What sits behind it does not appear under it: an arm of a
 // discriminated union carrying `value: null` has no layout, so reading the
-// *discriminant* — which every arm has — refuses too.
+// *discriminant* — which every arm has — refuses too. That is
+// `util/src/deep-equal.ts`'s `loosePrimitiveProbe`, and the `value: null` half
+// of it is what has just been answered.
 //
-//     a property typed exactly `null` has no representation
-//       -> that arm of the union has no layout
-//          -> `kind` on a union one of whose members has no layout
-//
-// That is `util/src/deep-equal.ts`'s `loosePrimitiveProbe`: four arms, two
-// carrying `value: null` and `value: undefined`, two carrying nothing, and the
-// other three lower perfectly well.
-//
-// # Why `undefined` is answered and `null` is not
+// # Why `undefined` was answered and `null` was not
 //
 // `representation_of` has had an arm for `undefined` for as long as it has
-// existed and has none for `null`. Each name has a *second* job, and only one
-// of them forced an answer: `undefined` doubles as the return type of a
-// function that returns nothing, so returns demanded it; `null` doubles as
-// nothing, so no position did.
-//
-// # Two repairs attempted on 2026-09-13, both measured, both reverted
-//
-// **1. `TypeKind::Null => HirType::Erased` in `representation_of`.** Three
-// characters. Every example agreed on all three backends, refusals fell by 15
-// to 19 in each of four modules — and `tooling/sweep` went red:
-//
-//     error: passing 'NtsString *' to parameter of incompatible type 'NtsValue'
-//       v26 = nts_value_tag(v18);           in field_s_null
-//
-// Reduced to twelve lines:
-//
-//     class Held { f: string | null; constructor(v: string | null) { this.f = v } }
-//     const b = new Held(n > 0 ? "a" : null);
-//     const before = String(b.f) + String(b.f === null);
-//     b.f = null;
-//     return before + "|" + String(b.f) + String(b.f === null);
-//
-// After `b.f = null` the checker **narrows** `b.f` to type `null`. A blanket
-// `Erased` then sends the conversion down the tagged path while the storage is
-// still a pointer. So `null`'s representation genuinely depends on what it is
-// standing in for, and the missing arm is not an oversight — it is the absence
-// of a single right answer.
-//
-// **2. Reading a `Void` contextual type as erased** — which fixed the twin case
-// and **landed**, once the bug it uncovered was fixed. It turned 12 of 24 addons
-// into `refusing to emit code from invalid HIR` on its own, `NotDominated`
-// inside a generator resume, because the refusal had been standing in front of a
-// generator-resume path and removing it was the first thing ever to compile one.
-//
-// The bug was in `hir::suspend`: a rejection handler can read any value live
-// before the `await`, and `crossing` spilled what was *passed* to the handler
-// without spilling what its body reads. `live_in` of the handler is the set.
-// `examples/a-slot-typed-exactly-undefined` holds the result.
-//
-// So the twin is closed and this is not, which is the opposite of where the day
-// started — `null` looked like the easier half because it was the one with a
-// missing arm rather than a disagreement between two.
-//
-// # What it actually needs
-//
-// The contextual type at the literal should come from the **layout** the field
-// path already decided, rather than from the checker's type a second time. The
-// field path maps `Void | Never` to `Erased` and nothing tells the literal; two
-// derivations of one fact, disagreeing in the gap between them. That is the fix
-// for both halves and it is not three characters.
-//
-// # Three controls
-//
-//     `value?: null`      optional, which routes through `Erased` and compiles
-//     `value: string`     an ordinary payload
-//     a no-payload arm    `{ kind: "none" }`, which always worked
-//
-// The first is the pair that makes this surprising: optionality already has the
-// representation the required form is refused for.
+// existed and has none for `null`. Each name has a *second* job and only one of
+// them forced an answer: `undefined` doubles as the result of a function that
+// returns nothing, so returns demanded it; `null` doubles as nothing, so no
+// position did.
 
 type Alternate = { kind: "alternate"; value: null };
 
