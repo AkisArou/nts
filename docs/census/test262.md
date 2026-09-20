@@ -613,6 +613,42 @@ alone. `typescript.md`'s `negative-zero` row carries it. Those three were
 
 
 
+### 1,569 of 4,812, and the third `link` row, named at last
+
+Measured 2026-09-20, compiler pinned at `7f213b3b`, over all of `test/language`,
+slice 1. **1,558 → 1,569**: twelve improved, across `statements/class`,
+`block-scope/syntax`, `statements/let`, `for-in`, `for`, and both logical
+operators.
+
+One row moved to `link` — the **third** census in a row to report exactly one —
+and this time it said what happened:
+
+```
+statementList/class-block.js   quickjs/dtoa.c:1353:8:
+                               internal compiler error: Segmentation fault
+```
+
+`cc` segfaulted on a *runtime* source the program does not contain, in a census
+sharing the machine with a gate. The file passes on its own, twice — and so did
+the two before it, which is all anyone could say until the message was kept one
+section ago.
+
+So the classification gains a third outcome. A toolchain that crashes, is killed,
+or runs out of memory is `infrastructure-error` — the bucket the runner already
+has for "this run could not measure anything" — rather than `unsupported`, where
+it reads as a refusal the compiler made. Five branches now separate:
+
+| what happened | bucket |
+| --- | --- |
+| `SIGTERM` / `ETIMEDOUT` | `timeout/link` |
+| ICE, `Killed`, out of memory | `infrastructure-error` |
+| a `cc` error | `unsupported/link`, with the line |
+| an `ld` undefined reference | `unsupported/link`, with the line |
+| anything else | `unsupported/link` |
+
+Three censuses spent one row each on this and two investigations ended in "does
+not reproduce". The cost was never the compiler; it was a `catch {}`.
+
 ### 1,558 of 4,812, and the `link` row that was never a refusal
 
 Measured 2026-09-20, compiler pinned at `edcad5e2`, over all of `test/language`,

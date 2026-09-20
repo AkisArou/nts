@@ -282,17 +282,32 @@ function attempt(dir, body) {
     // act on, and it cost two investigations that ended in "does not reproduce".
     const timedOut = error?.signal === "SIGTERM" || error?.code === "ETIMEDOUT";
     if (timedOut) return { bucket: "timeout", why: "link" };
+    const said = `${error?.stdout ?? ""}${error?.stderr ?? ""}`;
+    // **The toolchain crashing is not the program's fault**, and the third
+    // unexplained `link` row in as many censuses is what named it:
+    //
+    //     quickjs/dtoa.c:1353:8: internal compiler error: Segmentation fault
+    //
+    // `cc` segfaulted on a *runtime* source the program does not contain, under
+    // a census sharing the machine with a gate. The file passes on its own, and
+    // so did the two before it -- which is all anyone could say until the
+    // message was kept. `infrastructure-error` is the bucket the runner already
+    // has for "this run could not measure anything", and it belongs here rather
+    // than in `unsupported`, where it reads as a refusal the compiler made.
+    if (/internal compiler error|Segmentation fault|Killed|out of memory/i.test(said)) {
+      return { bucket: "infrastructure-error", why: "the toolchain did not survive the link" };
+    }
     // The first line the toolchain said, so the next one is diagnosable from the
     // rows rather than from a re-run that may not reproduce it. Paths are
     // stripped: they name a per-process scratch directory, which would make
     // every row unique and unrankable.
-    const said = `${error?.stdout ?? ""}${error?.stderr ?? ""}`
+    const line = said
       .split("\n")
-      .find((line) => /error|undefined reference|cannot find/i.test(line));
+      .find((text) => /error|undefined reference|cannot find/i.test(text));
     return {
       bucket: "unsupported",
       why: "link",
-      first: said?.replace(/\/\S*\//g, "").trim().slice(0, 160),
+      first: line?.replace(/\/\S*\//g, "").trim().slice(0, 160),
     };
   }
 
