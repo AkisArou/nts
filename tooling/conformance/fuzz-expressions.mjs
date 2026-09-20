@@ -150,6 +150,16 @@ function numberExpr(depth) {
     () => `${arrayExpr(depth - 1)}.length`,
     () => `(${boolExpr(depth - 1)} ? ${n()} : ${n()})`,
     () => `Number(${s()})`,
+    // A member read off a literal, which is the seam six consumers were wrong
+    // about on 2026-09-20. A getter here is a *call* that looks like a load.
+    () => `({ k: ${n()} }).k`,
+    () => `({ get k(): number { return ${n()}; } }).k`,
+    () => `({ a: ${n()}, b: ${n()} }).b`,
+    // A fixed three-element literal, indexed in range: an out-of-range read is
+    // a known wrong answer (`[] as number[]` then `[0]` gives 0 where node
+    // gives `undefined`) and generating it would report noise, not news.
+    () => `[${n()}, ${n()}, ${n()}][${int(0, 2)}]`,
+    () => `(${n()} ?? 0)`,
   ])();
 }
 
@@ -176,6 +186,10 @@ function stringExpr(depth) {
     () => `String(${n()})`,
     () => `${arrayExpr(depth - 1)}.join(${stringLiteral()})`,
     () => `(${boolExpr(depth - 1)} ? ${s()} : ${s()})`,
+    () => `({ k: ${s()} }).k`,
+    () => `({ get k(): string { return ${s()}; } }).k`,
+    () => `[${s()}, ${s()}][${int(0, 1)}]`,
+    () => `(() => ${s()})()`,
   ])();
 }
 
@@ -203,6 +217,11 @@ function boolExpr(depth) {
     () => `Number.isInteger(${n()})`,
     () => `Number.isFinite(${n()})`,
     () => `Number.isNaN(${n()})`,
+    () => `({ k: ${b()} }).k`,
+    () => `${arrayExpr(depth - 1)}.includes(${numberExpr(0)})`,
+    () => `${arrayExpr(depth - 1)}.some((v: number): boolean => v > ${int(-2, 2)})`,
+    () => `${arrayExpr(depth - 1)}.every((v: number): boolean => v >= ${int(-2, 2)})`,
+    () => `(${s()} in { a: 1 } ? true : false)`,
   ])();
 }
 
