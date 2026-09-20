@@ -33811,6 +33811,28 @@ impl<'a> FuncBuilder<'a> {
                 }
                 continue;
             }
+            // **`const { y = 2 } = {}` is refused and the fix is not here.**
+            //
+            // It reads *"destructuring something with no fields"*, and the
+            // checker types that `{}` as `Object { properties: [] }` --- so the
+            // absence of `y` is a compile-time fact, the language says the read
+            // is `undefined`, and the default is the only arm. `nts types` shows
+            // the annotated spelling, `{} as { y?: number }`, carrying `y` as an
+            // optional field, which is why that one has always worked.
+            //
+            // A guard here asking `declared_type_of` never fires, because the
+            // value's *representation* is `Erased` rather than
+            // `Managed(Object(..))` --- a literal with no members gets no
+            // layout. Written, built, and measured: it changed nothing and
+            // every control still passed, which is what a guard that never runs
+            // looks like from the outside.
+            //
+            // What it needs is the source's **checker type** reaching this walk.
+            // `bind_pattern` has a `ValueId` and no node, and its three callers
+            // --- a declaration, a nested pattern, a `for...of` head --- name
+            // the source differently, so threading it is a signature change
+            // rather than a lookup. Three files of the census slice wait on it.
+            //
             // Asked *before* the read, because for an array element with a
             // default the read is the thing being avoided.
             //
