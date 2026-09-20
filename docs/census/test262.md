@@ -1194,3 +1194,46 @@ rather than a line.
 
 Census value is approximately zero --- `test/language` does not exercise these
 --- so the reason to do it is the node lanes, not this file.
+
+## Census 20 — 1,576 to 1,590, and every file attributed
+
+Same 4,812 slice-1 files, diffed per file against census 19.
+
+```text
+                        19       20
+  strict-pass         1576     1590    (+14)
+  unsupported         3232     3219    (-13)
+  infrastructure-error   1        0     (-1)
+
+  gained 14    regressed 0
+```
+
+**Thirteen of the fourteen are real and each is attributed to a row.**
+
+- **9** in `statements/for/dstr/*-ary-ptrn-elem-*`: `const [x = 23] = []`, a
+  destructuring default over an empty array **inside a function**. The local
+  declaration path intercepted an empty literal before `lower_array_literal`
+  could reach it and demanded an annotation, so the stand-in that already
+  answered at module scope was never asked. All three keyword spellings ---
+  `const`, `let`, `var` --- moved together, which is what says the fix is the
+  path and not the construct.
+- **4** in `statements/for-of/dstr/`: `for ({ x } of …)` and `for ([{ x }] of …)`,
+  the shorthand in an assignment pattern, resolved by the same
+  `shorthand_value_symbol` the object-literal path has always used.
+
+The fourteenth is `identifiers/part-unicode-7.0.0-escaped.js`, which census 19
+recorded as `infrastructure-error` under load and which compiles clean and
+instant on every binary. **Not a gain**, and counting it as one would be the
+instrument reporting on its own contention.
+
+**The shorthand row was priced at 10 and 4 moved.** That is the same lesson the
+closure row taught at 5-and-0: a row's size is what it would clear if nothing
+stood behind it, and the compiler reports one blocker at a time. The remaining
+six now stop on something else, which the next census will name.
+
+One caveat, stated because the numbers cannot show it: this census pinned its
+binary at `cb3d6afe`, which carried a regression corrected an hour later --- an
+empty-literal fall-through that also caught bare identifiers and emitted
+uncompilable C for `const xs = []; xs.push("a")`. It cannot have produced these
+gains: all nine `for/dstr` files are *patterns*, which the correction kept, and
+six of the fourteen were re-run against the corrected binary and still pass.
