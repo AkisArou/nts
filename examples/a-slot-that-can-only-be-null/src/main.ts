@@ -51,6 +51,33 @@
 // remain are `for…in` over a `Function("…")` result, which is a declared
 // non-goal.
 
+// # The position still refused, and why it is not the same one line
+//
+// A **bare binding** typed exactly `null` --- `const n: null = null`, local or
+// module-scope --- is still refused as ``null` or `undefined` where what it
+// stands in for is not a reference``, and its `undefined` spelling compiles.
+// That is the same asymmetry this file exists about, in the one position it
+// does not close.
+//
+// It looks like a one-line fix: have `what_the_declaration_holds` answer
+// `Erased` when the annotation `holds_only_absences`, so `lower_absent` takes
+// its early return. **The `undefined` spelling already works by accident of
+// exactly that** --- `undefined` maps to `Void`, and `Void` is in that early
+// return's list beside `Erased`.
+//
+// It is left undone because `holds_only_absences` counts `Void` as an absence,
+// and that is the predicate that has already gone wrong once here. Reading
+// "every member is an absence" in the comparison path gave an optional call's
+// result the tag path, and four examples in this corpus stopped agreeing with
+// node --- caught by the gate, reverted the same day. `void` has no width; a
+// null-only *slot* is given one. The two questions are one sentence apart and
+// have different answers.
+//
+// So the work is a narrower predicate --- absences that are not `void` --- and
+// the arms that must not move are the four this corpus already has. Priced at
+// 2 files in one census slice and 10 in another, which is why it has not been
+// worth the care yet rather than why it is wrong.
+
 const nulled = { attr: null };
 const both: { left: null; right: undefined } = { left: null, right: undefined };
 
