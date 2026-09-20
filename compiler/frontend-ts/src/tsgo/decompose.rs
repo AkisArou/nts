@@ -520,14 +520,46 @@ impl<'a> Decomposer<'a> {
         // — the property that lets it be laid out flat rather than as a pointer
         // and a length.
         if self.client.is_tuple_type(self.handle, &self.project, ty)? {
-            let args = self.client.type_arguments(self.handle, &self.project, ty)?;
-            return Ok(TypeKind::Tuple(self.intern_all(snapshot, &args, walk)));
+            // **A server error here is an answer, not an end.** tsgo cannot
+            // encode a tuple that *contains* an empty tuple: `newTypeResponse`
+            // reads `ObjectFlagsTuple` off the type and calls `AsTupleType()`,
+            // but an instantiated tuple's data is a `TypeReference` and the
+            // tupleness lives on its target, so the cast panics ---
+            //
+            //     interface conversion: checker.TypeData is
+            //     *checker.TypeReference, not *checker.TupleType
+            //
+            // --- and the recovered panic comes back as a rejected request.
+            // `const nest: [[]] = [[]]` is the whole precondition; a bare
+            // `const e: [] = []` is fine, because a top-level type goes through
+            // `types_at`, which bisects and degrades a poisonous node to
+            // `None`. This path had no such degradation and ended the compile
+            // with no diagnostic and no file named.
+            //
+            // **`Unknown`, not `Tuple(vec![])`.** The empty tuple is what the
+            // failing case happens to contain, so answering with it would look
+            // right on this program and quietly give every other tuple the
+            // wrong arity. `Unknown` is what is actually known, and lowering
+            // refuses it by name.
+            return match self.client.type_arguments(self.handle, &self.project, ty) {
+                Ok(args) => Ok(TypeKind::Tuple(self.intern_all(snapshot, &args, walk))),
+                Err(TsgoError::Server { .. }) => Ok(TypeKind::Unknown),
+                Err(other) => Err(other),
+            };
         }
 
         // An array is an object type. Decomposing one as an ordinary object yields
         // `length`, `push`, `map` and the rest of the prototype.
         if self.client.is_array_type(self.handle, &self.project, ty)? {
-            let args = self.client.type_arguments(self.handle, &self.project, ty)?;
+            // The same degradation, for the same reason: an array whose element
+            // type tsgo could not encode is an array whose element type we do
+            // not know. The `is_empty()` fallback below is a different
+            // condition --- a genuine empty answer --- and keeps its own.
+            let args = match self.client.type_arguments(self.handle, &self.project, ty) {
+                Ok(args) => args,
+                Err(TsgoError::Server { .. }) => return Ok(TypeKind::Unknown),
+                Err(other) => return Err(other),
+            };
             let ids = self.intern_all(snapshot, &args, walk);
             return Ok(ids
                 .first()
@@ -680,9 +712,25 @@ impl<'a> Decomposer<'a> {
         }
 
         let symbol_ids: Vec<u32> = properties.iter().map(|s| s.id).collect();
-        let types = self
+        // The same upstream encoding failure as the tuple path above, reached
+        // through a different request: a property whose type is a tuple
+        // containing an empty tuple --- `{ a: [] }` in
+        // `({ a: [x] } = { a: [] })` --- cannot be encoded, and
+        // `getTypesOfSymbols` comes back rejected.
+        //
+        // Degraded for the whole object rather than per property, because the
+        // results are zipped positionally with `properties` and a batch that
+        // failed has no positions. Coarser than it could be and in the safe
+        // direction: an object whose members are not all known is `Unknown`,
+        // which lowering refuses, rather than an object silently missing one.
+        let types = match self
             .client
-            .types_of_symbols(self.handle, &self.project, symbol_ids)?;
+            .types_of_symbols(self.handle, &self.project, symbol_ids)
+        {
+            Ok(types) => types,
+            Err(TsgoError::Server { .. }) => return Ok(TypeKind::Unknown),
+            Err(other) => return Err(other),
+        };
         let ids = self.intern_all(snapshot, &types, walk);
         let own = Self::own_member_names(snapshot, ty, &self.interned);
 
