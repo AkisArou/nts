@@ -16741,7 +16741,7 @@ impl<'a> FuncBuilder<'a> {
                     return Err(self.unsupported(
                         id,
                         &format!(
-                            "`{name}`, a method of an object literal, in {what} --                              it enumerates and its value is a function object"
+                            "`{name}`, a method of an object literal, in {what} -- it enumerates and its value is a function object"
                         ),
                     ));
                 }
@@ -16768,7 +16768,7 @@ impl<'a> FuncBuilder<'a> {
                         return Err(self.unsupported(
                             id,
                             &format!(
-                                "`{name}`, a set-only property, in {what} --                                  it enumerates and its value is `undefined`"
+                                "`{name}`, a set-only property, in {what} -- it enumerates and its value is `undefined`"
                             ),
                         ));
                     };
@@ -23308,7 +23308,7 @@ impl<'a> FuncBuilder<'a> {
         if name == "done" && self.is_a_provided_iterator_result(&layout) {
             return Err(self.unsupported(
                 target,
-                "assigning to an iterator result's `done`, which would move the guard that                  decides whether its `value` may be read without moving what `value` holds",
+                "assigning to an iterator result's `done`, which would move the guard that decides whether its `value` may be read without moving what `value` holds",
             ));
         }
         Ok(Place::Field { object, field })
@@ -28883,7 +28883,7 @@ impl<'a> FuncBuilder<'a> {
             if args.len() > 1 {
                 return Err(self.unsupported(
                     id,
-                    "a `super(...)` with arguments into a bound Java class, whose generated                      constructor takes none",
+                    "a `super(...)` with arguments into a bound Java class, whose generated constructor takes none",
                 ));
             }
             self.initialize_fields(id, object, type_id, owed)?;
