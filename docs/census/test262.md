@@ -611,30 +611,30 @@ alone. `typescript.md`'s `negative-zero` row carries it. Those three were
 **reported as passes** for as long as the census has existed.
 
 
-### 1,506 of 4,812, and what is left after the non-goals
 
-Measured 2026-09-20 from a binary built at `a555bbe9`, over all of
-`test/language`, slice 1. **It predates the two commits after it** — the
-property-order fix and the module-scope loop-head fix — which are corrections
-to *answers* rather than to refusals, so the refusal counts below stand and the
-`strict-pass` figure is a floor.
+### 1,534 of 4,812, and what is left after the non-goals
+
+Measured 2026-09-20, compiler pinned at `22bbf635`, over all of
+`test/language`, slice 1.
 
 The progression over one night, each figure from a run whose three self-checks
-held: **1,167 → 1,253 → 1,378 → 1,458 → 1,506**. The five largest movers were
-generators that yield nothing (176 files), elisions in array literals (56), a
-generator method used as a value (40), assignment-target shapes (18), and
-`instanceof Array`/`Object` (16).
+held: **1,167 → 1,253 → 1,378 → 1,458 → 1,506 → 1,534**. Every step was diffed
+against the run before it, per file rather than by headline — which is how the
+one regression of the night was found: a change that gated green took 1,506 to
+1,502, four files that read a `for` head's `var` after the loop, and nothing in
+the gate could have said so. See "the gate is a floor" below.
 
-`an emitter refusal` reads 0 for the first time. It was 7, and those seven were
-not a gap: the verifier checked stores that **no block executes**, which
-dead-code elimination leaves in `Func::values` while every pass that repairs a
-type walks `block.ops`. `emit-c` wrote nothing and exited 0 for all seven.
+`an emitter refusal` and `a link failure` both read 0. The first was 7, and
+those seven were not a gap: the verifier was checking stores that **no block
+executes**, which dead-code elimination leaves in `Func::values` while every
+pass that repairs a type walks `block.ops`. `emit-c` wrote nothing and exited 0
+for all seven.
 
 | | files | |
 | --- | ---: | --- |
 | selected | 4,812 | |
-| `strict-pass` | **1,506** | compiled **and ran**, agreeing with the expectation |
-| `unsupported` | 3,285 | refused, by TypeScript or by lowering |
+| `strict-pass` | **1,534** | compiled **and ran**, agreeing with the expectation |
+| `unsupported` | 3,257 | refused, by TypeScript or by lowering |
 | `threw` | 3 | ran and threw — the wrong-answer column |
 | `frontend-crash` | 18 | a `tsgo` panic, not a gap of ours |
 
@@ -643,7 +643,7 @@ Of the refusals:
 | | files | |
 | --- | ---: | --- |
 | a TypeScript error | 2,747 | before lowering is reached |
-| a lowering refusal | 538 | **this is the census** |
+| a lowering refusal | 510 | **this is the census** |
 | an emitter refusal | 0 | |
 | a link failure | 0 | |
 
@@ -652,10 +652,10 @@ Of the refusals:
 | | files | |
 | --- | ---: | --- |
 | a builtin — 138 of them `eval` | 147 | |
-| a regular-expression literal | 38 | |
+| a regular-expression literal | 39 | |
 | `new Boolean` / `Number` / `String` | 28 | |
 | `any`, and `unknown` conversions | 74 | |
-| **everything else** | **251** | the actionable list |
+| **everything else** | **222** | the actionable list |
 
 `eval` is the largest single row in the census and will never be built: an
 ahead-of-time compiler has no answer for dynamic code. Boxed primitives need
@@ -673,17 +673,17 @@ Top of what is left:
 | files | first refusal |
 | ---: | --- |
 | 36 | a parameter of unrepresentable type (`X`) |
-| 16 | an `X` against something this compiler has no class for |
-| 15 | a module-scope variable of unrepresentable type (`X`) |
+| 16 | a module-scope variable of unrepresentable type (`X`) |
 | 15 | an empty array literal in a position that does not say what it holds |
-| 14 | `X`, which `X` does not declare |
-| 14 | `X` and `X` both need the C name `X` |
 | 12 | `X` or `X` where what it stands in for is not a reference |
+| 11 | `X`, where an array has only `X` |
 | 9 | a declaration without an initializer |
 | 9 | `X`, a value of type `X` called as a function, where the type does not say which function it is |
 | 9 | an array literal of unrepresentable type (an untyped node) |
 | 8 | a shorthand in an assignment pattern, whose name resolves to the property |
 | 7 | a static field of an anonymous class |
+| 6 | a method `X` with no declaration in the hierarchy |
+| 6 | a `X` declaration, whose scope-exit disposal |
 
 ## What this census cannot see
 
@@ -725,10 +725,33 @@ Printed by the instrument on every run, not left to a reader.
 
 ## Status
 
-**1,506 of 4,812 as of 2026-09-20**, up from 1,167 the day before; 538 lowering
-refusals, of which **251 are actionable** once `eval`, boxed primitives, regular
+**1,534 of 4,812 as of 2026-09-20**, up from 1,167 the day before; 510 lowering
+refusals, of which **222 are actionable** once `eval`, boxed primitives, regular
 expressions and `any` are taken out. The section above carries the numbers so a
 stale claim here is a diff rather than a re-reading.
+
+### The gate is a floor, not a comparison
+
+`backend_examples` asserts *"at least N examples agree with node"*. Raising the
+floor proves the corpus grew; it cannot prove that nothing already in it moved,
+and it says nothing at all about programs outside `examples/`. The `blockers`
+step asserts refusals are *present*, which a new **over**-refusal satisfies. So
+a working program that starts refusing trips neither — unless an example
+happens to write exactly that shape.
+
+On 2026-09-20 one did not, and a gated-green commit cost four files. What found
+it was this census, diffed row by row against the previous run. **That diff is
+the only instrument in the repository that compares against a previous state
+rather than a floor**, and it belongs after any change to scoping or
+representation:
+
+```sh
+node tooling/census/run262.mjs --nts target/release/nts \
+  --selection selection.jsonl --slice1 --rows rows-new.jsonl
+# then: old bucket == strict-pass && new bucket != strict-pass
+```
+
+A headline moving by four reads as noise. The per-file diff names them.
 
 Advisory. `docs/conformance/test262.md` says larger reports stay advisory until
 coverage is broad enough to set a meaningful gate, and a twenty-minute run is a
