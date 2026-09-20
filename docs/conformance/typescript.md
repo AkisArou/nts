@@ -2989,7 +2989,7 @@ element is present in the passing shape too, and the retain/release sets are
 otherwise identical. `nts_str_append`'s in-place path is guarded on
 `a->reserved == 1u` — *"one reference exists and this call is consuming it"* —
 and whether that holds when the left operand came out of a tuple is where the
-reading stopped. No cause is named, deliberately.
+reading stopped. **It is not the ownership optimiser**, which is the elimination worth having: `NTS_RC_NAIVE=1` — counting with every retain and release the model asks for and none of the analysis that removes them — fails on the same 28 of 29 cases, so the disagreement is in the counting *model* or the runtime rather than in `own.rs` deciding a reference is redundant. No cause is named, deliberately.
 
 **Pre-existing, and measured to be.** The binary from before the
 enumeration-order work fails it identically. It surfaced because

@@ -150,7 +150,58 @@ export function theNumberFirst(n: number): string {
 // neither is ours to write."* Whether `%12` really holds the only reference
 // when its left operand came out of a tuple is the question this stops at.
 //
+// # The boundary, from ten more probes
+//
+// The smallest failing program needs **three** things at once, and each was
+// removed in turn:
+//
+//     two or more elements     one element passes; two and three fail
+//     a number conversion      `e[0] + "x"` over the same two passes, and so
+//                              does `e[0] + e[1]` when both fields are strings
+//     a tuple element          the same expression over an object field passes
+//
+// The conversion is the factor rather than any spelling of it:
+// `e[1].toString()`, `String(e[1])` and `` `${e[0]}${e[1]}` `` all fail, and
+// all three produce the number's text into `frame[40]`, a stack temporary.
+//
+// Things that do **not** matter, each checked rather than assumed: whether the
+// tuple's string is an immortal literal or built at run time (`"a" + "x"`
+// fails too); whether a string literal appears in the chain at all
+// (`e[0] + e[1].toString()` fails); where the tuple is built (inside a function
+// it still fails, but on 1 case of 29 rather than 28 — so it is
+// **data-dependent**, which is what reading back freed memory looks like).
+//
+// And the failure is **not** in the source array. `ps[0][0]` after the map is
+// correct, and so is `mapped.length`. Only *reading the mapped strings* is
+// wrong, which puts it in what the callback returned.
+//
+// **It is not the ownership optimiser either**, which is the elimination worth
+// having: `NTS_RC_NAIVE=1` — counting with every retain and release the model
+// asks for and none of the analysis that removes them — fails on the same 28
+// of 29 cases. So the disagreement is in the counting *model* or in the
+// runtime, and not in `own.rs` deciding a reference is redundant.
+//
+// # The one contract worth checking first
+//
+// `nts_str_append` **consumes its left operand**. Its own tail says so:
+//
+//     if (a->reserved == 1u)            nts_destroy((NtsHeader *)a);
+//     else if (a->reserved != IMMORTAL) nts_release((NtsHeader *)a);
+//
+// and the lowering hands it a **field read**:
+//
+//     %10 = field.get %9.0        the tuple's own string
+//     retain %10
+//     %13 = call.extern nts_str_append(%10, %12)
+//
+// The `retain` is the caller taking the reference the call consumes, so on
+// paper it balances. Whether it balances for a string whose only other holder
+// is the tuple — and whether the in-place path can ever return the tuple's own
+// string as the mapped element, which the later `release` of the mapped array
+// would then take a second count from — is where this stops.
+//
 // **No cause is named here on purpose.** Three failing shapes, three passing
-// ones, two ruled-out explanations and the guard to look at is what the next
-// person needs; a guess written down as a cause is worse than none, and this
-// file would be the place it went unchallenged.
+// ones, a boundary in three dimensions, four ruled-out explanations and the
+// contract to check is what the next person needs; a guess written down as a
+// cause is worse than none, and this file would be the place it went
+// unchallenged.
