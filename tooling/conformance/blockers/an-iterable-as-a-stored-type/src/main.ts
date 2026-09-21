@@ -1,4 +1,12 @@
-// expect: NTS1001 a property `p` of unrepresentable type (a union of `Iterable` | undefined)
+// expect: nothing refused
+//
+// **Closed 2026-09-21** by carrying `Iterable` and its five siblings through
+// decomposition --- six names added to `is_carried`, whose doc says the list
+// is matched "by name rather than by shape deliberately". Kept as the
+// regression guard. The measurement that justified it is below and is the
+// useful part.
+//
+// ---
 //
 // **The largest cause on the compiled axis, measured by site.** 267 of the
 // **1,738** distinct `runtime/node` refusal sites name one of `Iterable`,

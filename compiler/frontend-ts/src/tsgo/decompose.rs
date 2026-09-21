@@ -1203,6 +1203,13 @@ impl<'a> Decomposer<'a> {
                         // layout that makes it mean something.
                         | "IteratorYieldResult"
                         | "IteratorReturnResult"
+                        // EXPERIMENT 2026-09-21: the iteration protocol types.
+                        | "Iterable"
+                        | "Iterator"
+                        | "IterableIterator"
+                        | "AsyncIterable"
+                        | "AsyncIterator"
+                        | "AsyncIterableIterator"
                 )
             })
     }

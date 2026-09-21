@@ -1,4 +1,9 @@
-// expect: a parameter of unrepresentable type (`AsyncIterable`)
+// expect: NTS1001 a `for...of` over `AsyncIterable`
+//
+// **Moved on 2026-09-21**, same cause: the refusal was `a parameter of
+// unrepresentable type (`AsyncIterable`)` and the parameter now lowers.
+// What remains is the loop itself, which is the feature this fixture was
+// always about rather than the annotation on the way in.
 //
 // **The loop form landed on 2026-09-12 and this moved rather than cleared.**
 // It expected `a \`for await\` loop` -- a refusal of the *syntax* -- and now

@@ -1,4 +1,10 @@
-// expect: a function returning `IterableIterator`
+// expect: NTS1001 this array method
+//
+// **Moved on 2026-09-21**, when `Iterable` and its siblings were carried
+// through decomposition. The refusal was `a function returning
+// `IterableIterator``; the return type now has a representation and what
+// stops it is an array method one step further in. The account below is
+// about the original blocker and is kept because the chain is the point.
 //
 // A declared return type of `IterableIterator<number>`, with no generator
 // anywhere. 18 distinct named things across `fs` and `stream`, and the types

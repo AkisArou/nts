@@ -1,4 +1,10 @@
-// expect: a property `source` of unrepresentable type (a union of `Iterable` | undefined)
+// expect: NTS1001 a property `view` of unrepresentable type (a union of `ArrayBufferView` | `ArrayBuffer` | `SharedArrayBuffer` | undefined)
+//
+// **Half of this cleared on 2026-09-21.** The fixture holds two properties
+// and used to report the `Iterable` one first; that type is now carried
+// through decomposition and lowers, so what it reports is the buffer union
+// --- which is the other half and untouched. One fixture, two causes, and
+// the compiler reports one at a time.
 //
 // Four types a class field cannot hold. `string[]` can, so the refusal is about
 // these types and not about fields:
