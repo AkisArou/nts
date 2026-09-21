@@ -150,6 +150,29 @@ most of it is shared code. `AnyView` was 2–7% of every module's cone and three
 four of `string_decoder`'s *own* refusals; both true, not interchangeable, and
 the cone-wide table got quoted against the question it was not built for.
 
+**Occurrences are not sites, and the two rank differently.** The gate's
+`profile` step counted 17,106 refusals across the 26 modules; deduplicated by
+`file:line:column` the same run is **1,738 sites**. The 9.8x is not spread
+evenly: three lines in `runtime/web-platform/src/streams/fifo.ts` were 882 of
+the 17,106, reported once per generic instantiation across the 14 modules that
+import the file. By occurrence they were the largest item in the census; by
+site they are three. The step now prints both --- `N refusal(s) at N site(s)`
+--- and `tooling/census/node-refusals.mjs` is the ranked form.
+
+Ranking by occurrence hides whole causes as well as inflating one. The
+iteration protocol types were **267 sites**, the largest single cause, and no
+ranking had ever shown them: they are spread over *eight* different
+diagnostics, so every census that ranked message texts split them eight ways.
+
+**A before/after inherits the weaker of its two keys.** Having written the
+paragraph above, the very next commit claimed a cascade row went "from 55 sites
+to 158". Both numbers were correctly computed and they were computed
+differently --- 55 on `file:line:column`, 158 on `file:line:column` plus the
+verbatim message, which counts one site twice when it carries two spellings of
+one cause. On one key it is 55 to 78. Recompute *both* sides with one command
+before writing the arrow; a number that has travelled from an earlier command
+has no key attached to it.
+
 **A fix's refusal delta is not a measure of the fix.** `buffer` went 79 to 79
 across a real improvement: five refusals cleared and five appeared behind them.
 A cone sizes a queue rather than a step. Show what replaced them.
@@ -169,6 +192,19 @@ git commit -m "..." -- <paths>
 
 or `tooling/gate/commit-mine.sh -F <message-file> -- <paths>`, which does the
 same and refuses a workspace that does not lint.
+
+**Then read `git show --stat HEAD`.** A path list can capture *nothing*: on
+2026-09-21 a commit made this way contained two files, zero insertions, zero
+deletions --- purely a `git mv`, because `git mv` stages itself while the edits
+beside it were never named. The message, meanwhile, described a compiler fix
+and quoted its verification. What that published was worse than an incomplete
+change: a known-failing program moved into the passing corpus without the fix
+that makes it pass, and the gate reported it four different ways.
+
+A new file needs `git add` first --- a path list cannot see an untracked
+directory, which caught the same session an hour later. Both cost one command
+to notice: a diffstat reading `0 insertions, 0 deletions` under a message about
+a compiler change is unmissable, and nobody had looked.
 
 **This paragraph used to say the opposite** — commit through a private
 `GIT_INDEX_FILE` and `git reset` after — and that recipe removed **1,121 files
