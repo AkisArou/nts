@@ -160,6 +160,25 @@ function numberExpr(depth) {
     // gives `undefined`) and generating it would report noise, not news.
     () => `[${n()}, ${n()}, ${n()}][${int(0, 2)}]`,
     () => `(${n()} ?? 0)`,
+    // Coercion corners: the places a compiled backend can quietly differ from a
+    // double-based interpreter.
+    () => `parseInt(${s()}, ${pick(["10", "16", "2"])})`,
+    () => `parseFloat(${s()})`,
+    // **No implementation-approximated `Math`.** `cbrt`, `hypot`, `log2`,
+    // `pow` with a fractional exponent and their neighbours are the ones the
+    // specification explicitly does *not* require to be exact, and glibc and
+    // V8 differ in the last few bits. This oracle is `assert.sameValue`, so it
+    // reported `Math.cbrt(2)` as a disagreement on its first run with them in.
+    //
+    // `nts check` is the instrument that handles these: it carries a ULP
+    // tolerance and says so --- "13 case(s) matched only to within 4 ULP, in
+    // functions whose result the specification leaves implementation-
+    // approximated". Teaching this one the same tolerance would make it a
+    // second copy of that judgement, so it generates the exact ones instead.
+    () => `Math.fround(${n()})`,
+    () => `Number.parseFloat(String(${n()}))`,
+    () => `${s()}.charCodeAt(${int(0, 4)})`,
+    () => `${s()}.codePointAt(${int(0, 3)}) ?? -1`,
   ])();
 }
 
@@ -221,14 +240,24 @@ function boolExpr(depth) {
     () => `${arrayExpr(depth - 1)}.includes(${numberExpr(0)})`,
     () => `${arrayExpr(depth - 1)}.some((v: number): boolean => v > ${int(-2, 2)})`,
     () => `${arrayExpr(depth - 1)}.every((v: number): boolean => v >= ${int(-2, 2)})`,
-    () => `(${s()} in { a: 1 } ? true : false)`,
+    // `"a" in { a: 1 }` only: the key has to be a literal the compiler can see,
+    // which a generated string expression is not.
+    () => `(${stringLiteral()} in { a: 1, b: 2 } ? true : false)`,
+    () => `(${n()} === ${n()} ? ${b()} : ${b()})`,
+    () => `Object.is(${n()}, ${n()})`,
+    () => `(${arrayExpr(depth - 1)}.length === ${int(0, 3)})`,
   ])();
 }
 
 /** Always `number[]`, so every consumer of one typechecks. */
 function arrayExpr(depth) {
+  // **At least one element.** A generated `[]` refuses as "an array literal
+  // that is not an array" --- a real refusal, and one already covered by
+  // `examples/a-default-over-an-empty-source` and its blockers. Generating it
+  // here spent most of a run's refusal budget re-finding it: 16 of the 20
+  // refused groups across three seeds.
   const items = () =>
-    Array.from({ length: int(0, 3) }, () => numberExpr(0)).join(", ");
+    Array.from({ length: int(1, 3) }, () => numberExpr(0)).join(", ");
   if (depth <= 0) return `[${items()}]`;
   const a = () => arrayExpr(depth - 1);
   return pick([
