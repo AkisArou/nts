@@ -159,9 +159,15 @@ function numberExpr(depth) {
     // a known wrong answer (`[] as number[]` then `[0]` gives 0 where node
     // gives `undefined`) and generating it would report noise, not news.
     () => `[${n()}, ${n()}, ${n()}][${int(0, 2)}]`,
-    // Widened, because `2 ?? 0` is TS2869 --- "right operand is unreachable"
-    // --- and a rejected expression is a wasted sample rather than a finding.
-    () => `(((${n()}) as number | null) ?? 0)`,
+    // **No synthetic `??` over a number.** `2 ?? 0` is TS2869, and widening
+    // with `as number | null` does not help: TypeScript sees through the
+    // assertion on a literal and still calls the right operand unreachable.
+    // It was every one of the nine rejections in a 240-case run.
+    //
+    // `??` is still covered, and genuinely: `codePointAt` returns
+    // `number | undefined`, so the arm below is a real nullish test rather than
+    // one the checker can fold away --- and it is the arm that found
+    // `?? (-1 >>> 4)` answering 0.
     // Coercion corners: the places a compiled backend can quietly differ from a
     // double-based interpreter.
     () => `parseInt(${s()}, ${pick(["10", "16", "2"])})`,
@@ -180,7 +186,19 @@ function numberExpr(depth) {
     () => `Math.fround(${n()})`,
     () => `Number.parseFloat(String(${n()}))`,
     () => `${s()}.charCodeAt(${int(0, 4)})`,
-    () => `${s()}.codePointAt(${int(0, 3)}) ?? -1`,
+    // **Parenthesised, and with a generated right operand.**
+    //
+    // Unparenthesised it composes badly: `??` binds looser than `^` and `>>>`,
+    // so `(x ^ s.codePointAt(0) ?? -1)` puts a never-nullish expression on the
+    // left and TypeScript rejects it as TS2869 --- the last of the generator's
+    // waste.
+    //
+    // The right operand is generated rather than `-1`, because that is what
+    // matters: `?? (-1 >>> 4)` answers 0 where node says 268435455, and
+    // `?? -1`, `?? (5 | 0)` and `?? 268435455` are all correct. A fixed right
+    // operand would never have found it.
+    () => `(${s()}.codePointAt(${int(0, 3)}) ?? ${numberExpr(0)})`,
+    () => `(${s()}.codePointAt(${int(0, 3)}) ?? (${numberExpr(0)} >>> ${int(0, 5)}))`,
   ])();
 }
 
@@ -451,6 +469,7 @@ mkdirSync(dir, { recursive: true });
 const totals = { agree: 0, differ: 0, refused: 0, typescript: 0, panic: 0, other: 0 };
 const refusals = new Map();
 const rejected = new Map();
+const examples = new Map();
 const found = [];
 
 /**
@@ -502,6 +521,10 @@ function measure(exprs, expected, depth = 0) {
     // and the code says which rule it keeps breaking.
     const code = (verdict.detail.match(/^TS\d+/) ?? ["TS?"])[0];
     rejected.set(code, (rejected.get(code) ?? 0) + 1);
+    // At size one the expression *is* the cause, so keep one example per code.
+    // Counting a rejection says the generator wastes samples; naming it says
+    // which arm to fix.
+    if (exprs.length === 1 && !examples.has(code)) examples.set(code, exprs[0].code);
     return;
   }
   if (verdict.kind === "invalid-hir") {
@@ -581,7 +604,10 @@ if (found.length === 0) {
 if (rejected.size > 0) {
   const top = [...rejected.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
   console.log(`  rejected by tsc, by code:`);
-  for (const [code, n] of top) console.log(`    ${String(n).padStart(3)}  ${code}`);
+  for (const [code, n] of top) {
+    const eg = examples.get(code);
+    console.log(`    ${String(n).padStart(3)}  ${code}${eg ? `   e.g. ${eg.slice(0, 68)}` : ""}`);
+  }
 }
 if (refusals.size > 0) {
   const top = [...refusals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
