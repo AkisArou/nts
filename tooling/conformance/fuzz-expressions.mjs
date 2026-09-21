@@ -401,6 +401,12 @@ function compileAndRun(dir, source) {
   if (/^TS\d/m.test(err)) {
     return { kind: "typescript", detail: (err.match(/^TS\d+[^\n]*/m) ?? [""])[0] };
   }
+  // **`invalid HIR` is its own verdict, not a `cc-failed`.** `emit-c` writes
+  // nothing when the verifier rejects the program, so the C step then fails for
+  // want of input --- and reporting that as "the C compiler refused" sends a
+  // reader to `cc` for a bug in a lowering pass. It cost an hour once.
+  const invalid = err.match(/invalid HIR: (\w+ \{[^}]*\})/);
+  if (invalid) return { kind: "invalid-hir", detail: invalid[1] };
   const refusal = err.match(/NTS\d+ ([^\n]*?) is not supported/);
   if (refusal) return { kind: "refused", detail: refusal[1] };
   if (/NTS2\d{3}/.test(err)) {
@@ -418,6 +424,18 @@ function compileAndRun(dir, source) {
       { cwd: join(dir, "out"), stdio: "ignore" },
     );
   } catch {
+    if (process.env.NTS_FUZZ_KEEP) {
+      const kept = join(process.env.NTS_FUZZ_KEEP, `cc-failed-${Date.now()}.ts`);
+      try {
+        writeFileSync(kept, source);
+        const log = execFileSync(
+          "sh",
+          ["-c", `cd ${join(dir, "out")} && cc -std=c11 -O2 -I. *.c -luv -lm -o program 2>&1 | head -5`],
+          { encoding: "utf8" },
+        );
+        console.error(`kept ${kept}\n${log}`);
+      } catch {}
+    }
     return { kind: "cc-failed", detail: "" };
   }
 
@@ -464,6 +482,7 @@ function measure(exprs, expected, depth = 0) {
       verdict.kind === "declined" ||
       verdict.kind === "typescript" ||
       verdict.kind === "cc-failed" ||
+      verdict.kind === "invalid-hir" ||
       verdict.kind === "panic");
   if (splittable) {
     const half = Math.floor(exprs.length / 2);
@@ -483,6 +502,11 @@ function measure(exprs, expected, depth = 0) {
     // and the code says which rule it keeps breaking.
     const code = (verdict.detail.match(/^TS\d+/) ?? ["TS?"])[0];
     rejected.set(code, (rejected.get(code) ?? 0) + 1);
+    return;
+  }
+  if (verdict.kind === "invalid-hir") {
+    totals.panic += exprs.length;
+    found.push({ code: exprs[0].code, kind: "invalid-hir", detail: verdict.detail });
     return;
   }
   if (verdict.kind === "cc-failed" || verdict.kind === "panic") {
@@ -549,8 +573,9 @@ if (found.length === 0) {
       `${totals.refused} refused  <-- DIFFER`,
   );
   for (const f of found) {
-    console.log(`  ${f.kind.padEnd(10)} ${f.code}`);
-    if (f.expected !== undefined) console.log(`             node: ${f.expected}`);
+    console.log(`  ${f.kind.padEnd(11)} ${f.code}`);
+    if (f.expected !== undefined) console.log(`              node: ${f.expected}`);
+    if (f.kind === "invalid-hir") console.log(`              ${f.detail}`);
   }
 }
 if (rejected.size > 0) {
