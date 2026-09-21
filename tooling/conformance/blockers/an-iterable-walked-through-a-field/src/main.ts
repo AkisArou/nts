@@ -29,19 +29,48 @@
 // through an interface-typed slot leaves the protocol walk asking a hierarchy
 // that has no entry.
 //
-// The two interface spellings fail in different places, which is why they wear
-// different messages:
+// # Three messages, two classifications, one feature
 //
-//   * a **user** interface stops before `protocol_walk` runs at all, with
-//     `a `for...of` over a value that is not ...`;
-//   * `Iterable<T>` reaches `protocol_walk`, gets a mangled name out of
-//     `symbol_property_name`, and then `callee_for` finds nothing:
-//     `hierarchy.declaring(type_id, "__@iterator@NN")` is `None`.
+// Measured by compiling each spelling rather than read off one truncated
+// probe line:
+//
+// ```text
+//   static type     implementation              message
+//   -------------   -------------------------   -------------------------
+//   interface Seq   *[Symbol.iterator]()        a `for...of` over a value
+//                   (a generator method)        that is not a generator
+//
+//   interface Seq   [Symbol.iterator]()         a generator walked in a
+//                   returning a hand-written    program with none
+//                   iterator object
+//
+//   Iterable<T>     either                      a method `__@iterator@NN`
+//                                               with no declaration in the
+//                                               hierarchy
+// ```
+//
+// **Both user-interface spellings land in `generator_dispatch`**, which is the
+// finding: an interface-typed receiver is classified as a *generator* walk
+// whatever it actually holds. The first fails because the interface's layout
+// has no method at `generator_slot`; the second because a program containing
+// no generators has no `generator_slot` at all. Neither reaches
+// `protocol_walk`, which is the walk they want. Two unlike sentences, one
+// wrong classification.
+//
+// `Iterable<T>` *does* reach `protocol_walk` --- that is what carrying it
+// through decomposition bought --- and then `callee_for` finds
+// `hierarchy.declaring(type_id, "__@iterator@NN")` is `None`. That cause is
+// narrower than "interfaces do not reach the hierarchy":
+// `collect_interfaces` records symbol-keyed members correctly (`member_name`
+// falling back to `symbol_member_name`), but it walks `INTERFACE_DECLARATION`
+// **nodes in the snapshot**, and `Iterable<T>` is declared in TypeScript's
+// lib, where there is no node to walk. Carrying the type gave it a
+// representation; it did not give it a declaration node.
 //
 // So the feature is **iterating through an interface**, not teaching arrays a
-// method. `callee_for` already emits `Callee::Virtual` where the hierarchy has
-// a slot --- the gap is that an interface's symbol-keyed member never reaches
-// the hierarchy, so the dispatch it would use is never considered.
+// method, and it spans the walk classification as well as the hierarchy.
+// `callee_for` already emits `Callee::Virtual` wherever the hierarchy has a
+// slot, so the dispatch is built and what is missing is reaching it.
 //
 // `is_carried`'s own doc predicted the shape of this: "the cascades rise,
 // which is the shape to expect and not a regression: a function that used to
