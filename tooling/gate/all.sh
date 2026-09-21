@@ -445,6 +445,27 @@ profile() {
     # gives a silent construct a message leaves this unchanged, and code that
     # stops being emitted lowers it.
     #
+    # **It can also fall for a good reason, and 2026-09-21 is the case to
+    # read before assuming otherwise.** Carrying the iteration protocol types
+    # took refusals from 17,106 to 16,223 *and* definitions from 23,934 to
+    # 23,127 -- both down, which is the combination that looks like code loss.
+    # It was not. Every module lost 71 to 75, uniformly, which is the shape of
+    # a shared dependency rather than of a regression, and comparing function
+    # *names* with the generic type-ids normalised
+    #
+    #     sed -E "s/_u003c_[0-9]+_u003e_/_u003c_T_u003e_/g" | sort -u
+    #
+    # gave **0 gone** in every module checked. `Fifo<T>` instantiations fell
+    # from 259 to 183 -- monomorphisation collapsing, because the carried types
+    # merged instantiations that had been distinct -- while `stream` and `http`
+    # each gained **40 new functions** (`AsyncPipeline`, `AsyncConsumerState`,
+    # `AsyncShareController` and their neighbours) and `assert` gained `fetch`.
+    # Emitted C moved -2.3% for `assert` and +0.9% for `stream`.
+    #
+    # So: when this number falls, normalise the generic ids and diff the name
+    # sets before calling it a regression. Fewer copies of one generic is not
+    # less code, and it is the direction a compiler for performance wants.
+    #
     # Counted from the artefact rather than asked of the compiler, because a
     # second `nts hir` per module would double the step. Generated C indents
     # every control-flow keyword, so a line starting at column zero and ending
