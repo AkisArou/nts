@@ -1292,6 +1292,16 @@ export default defineConfig({
 /// reaches. `ANDROID_HOME` and `HOME` are both pointed at a directory that does
 /// not exist, because the search falls back to `~/Android/Sdk` and a test that
 /// only cleared the first would pass here and fail on a developer's laptop.
+///
+/// **And `node` is pinned before `HOME` goes.** The config is evaluated by
+/// `node`, found on `PATH` unless `NTS_NODE` says otherwise -- and on a
+/// machine where `node` is a version-manager shim, the shim needs `$HOME` to
+/// find the real binary and exits 126 with nothing on stderr once it cannot.
+/// The build then reports `evaluating nts.config.ts failed:` with an empty
+/// reason, before the SDK check this test exists for is reached. Measured
+/// 2026-09-22 under an asdf shim: the same command with the real binary
+/// first on `PATH` gives the refusal. So the real path is asked for while
+/// `HOME` is still intact, and handed to the build as `NTS_NODE`.
 #[test]
 fn an_apk_with_no_android_sdk_names_the_variable() {
     let frontend =
@@ -1300,6 +1310,18 @@ fn an_apk_with_no_android_sdk_names_the_variable() {
         skip("the tsgo frontend");
         return;
     }
+    let node = std::env::var("NTS_NODE").unwrap_or_else(|_| "node".to_owned());
+    let Some(node) = Command::new(&node)
+        .args(["-p", "process.execPath"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .filter(|path| !path.is_empty())
+    else {
+        skip("node");
+        return;
+    };
     let project = fixture("build-apk-no-sdk", ANDROID_APP);
     let nowhere = project.join("no-sdk-here");
     let output = Command::new(env!("CARGO_BIN_EXE_nts"))
@@ -1308,6 +1330,7 @@ fn an_apk_with_no_android_sdk_names_the_variable() {
         .env("ANDROID_HOME", &nowhere)
         .env("ANDROID_SDK_ROOT", &nowhere)
         .env("HOME", &nowhere)
+        .env("NTS_NODE", node)
         .output()
         .expect("running nts build");
     let stderr = String::from_utf8_lossy(&output.stderr);
