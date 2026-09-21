@@ -199,6 +199,11 @@ function numberExpr(depth) {
     // operand would never have found it.
     () => `(${s()}.codePointAt(${int(0, 3)}) ?? ${numberExpr(0)})`,
     () => `(${s()}.codePointAt(${int(0, 3)}) ?? (${numberExpr(0)} >>> ${int(0, 5)}))`,
+    () => `(Number.MAX_SAFE_INTEGER - ${int(0, 3)})`,
+    () => `(${n()} + ${n()} * ${n()})`,
+    () => `${arrayExpr(depth - 1)}.reduce((a: number, b: number): number => a + b, 0)`,
+    () => `${arrayExpr(depth - 1)}.indexOf(${numberExpr(0)})`,
+    () => `${s()}.lastIndexOf(${stringLiteral()})`,
   ])();
 }
 
@@ -229,6 +234,16 @@ function stringExpr(depth) {
     () => `({ get k(): string { return ${s()}; } }).k`,
     () => `[${s()}, ${s()}][${int(0, 1)}]`,
     () => `(() => ${s()})()`,
+    // `+` with a number on one side is ToString, which is not `String(x)` for
+    // every value --- `-0`, `1e21` and `1e-7` each have their own spelling.
+    () => `(${s()} + ${n()})`,
+    () => `(${n()} + ${s()})`,
+    () => `${s()}.split(${stringLiteral()}).join(${stringLiteral()})`,
+    () => `${arrayExpr(depth - 1)}.map((v: number): string => String(v)).join("")`,
+    () => `(${s()}.at(${int(-3, 3)}) ?? "!")`,
+    () => `String.fromCharCode(${int(65, 90)}, ${int(97, 122)})`,
+    () => `${s()}.replaceAll(${stringLiteral()}, ${stringLiteral()})`,
+    () => `${s()}.split("").reverse().join("")`,
   ])();
 }
 
@@ -267,6 +282,12 @@ function boolExpr(depth) {
     // `"a" in { a: 1 }` only: the key has to be a literal the compiler can see,
     // which a generated string expression is not.
     () => `(${stringLiteral()} in { a: 1, b: 2 } ? true : false)`,
+    () => `(${s()} > ${s()})`,
+    () => `(${s()} <= ${s()})`,
+    () => `(${arrayExpr(depth - 1)}.length > ${int(0, 3)})`,
+    () => `Number.isSafeInteger(${n()})`,
+    () => `(typeof ${s()} === "string")`,
+    () => `(typeof ${n()} === "number")`,
     () => `((${n()}) as number === (${n()}) as number ? ${b()} : ${b()})`,
     () => `Object.is(${n()}, ${n()})`,
     () => `(${arrayExpr(depth - 1)}.length === ${int(0, 3)})`,
