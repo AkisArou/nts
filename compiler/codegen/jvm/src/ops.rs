@@ -4128,17 +4128,31 @@ impl Emitter<'_> {
         // -- and this one emitted `ior` with two doubles on the stack, which is
         // an unloadable class.
         //
-        // The narrowing is exact rather than a conversion: `|` applies
-        // `ToInt32` to both operands first, so what reaches here is an integral
-        // value that was *widened* to a double, and `d2i` undoes the widening.
-        // Same reason C's cast is exact.
+        // **The narrowing is not exact, and `d2i` is the wrong instruction --
+        // this file says so twice elsewhere.**
+        //
+        // This used to read "`|` applies `ToInt32` to both operands first, so
+        // what reaches here is an integral value that was *widened* to a
+        // double", citing C's cast as the same argument. Both were wrong
+        // together: `"".codePointAt(0) ?? (-1 >>> 4)` reaches here with
+        // `4294967295.0`, which is integral and does **not** fit in an `int`.
+        // `d2i` saturates to `Integer.MAX_VALUE` and the answer came back
+        // 134217727 where node says 268435455; C's `(int32_t)` was undefined on
+        // the same value.
+        //
+        // `toInt32` is ECMAScript's conversion --- wrap modulo 2^32 --- and is
+        // what [`Self::adapt`] and the `ToInt32` unary already use at this
+        // boundary. Via `Kind::Double` because the helper is `(D)I` and an
+        // operand may be a `Float`.
         if matches!(
             op,
             BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr | BinOp::UShr
         ) && matches!(kind, Kind::Double | Kind::Float)
         {
-            self.push_as(code, pool, lhs, Kind::Int, &origin)?;
-            self.push_as(code, pool, rhs, Kind::Int, &origin)?;
+            self.push_as(code, pool, lhs, Kind::Double, &origin)?;
+            code.invoke_static(&origin, pool, RUNTIME, "toInt32", "(D)I");
+            self.push_as(code, pool, rhs, Kind::Double, &origin)?;
+            code.invoke_static(&origin, pool, RUNTIME, "toInt32", "(D)I");
             match op {
                 BinOp::BitAnd => code.bitwise(&origin, insn::AND, Kind::Int),
                 BinOp::BitOr => code.bitwise(&origin, insn::OR, Kind::Int),

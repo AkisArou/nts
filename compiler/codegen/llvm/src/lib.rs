@@ -3096,7 +3096,17 @@ fn arithmetic(
         return extremum(func, out, op, lhs, rhs);
     }
     let float = matches!(func.values[lhs.0 as usize].ty, HirType::Float { .. });
-    if float && matches!(op, BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor) {
+    if float
+        && matches!(
+            op,
+            BinOp::BitAnd
+                | BinOp::BitOr
+                | BinOp::BitXor
+                | BinOp::Shl
+                | BinOp::Shr
+                | BinOp::UShr
+        )
+    {
         return Ok(float_bitwise(out, op, lhs, rhs));
     }
     let ty = ty_of(&func.values[lhs.0 as usize].ty, func)?;
@@ -3121,25 +3131,48 @@ fn arithmetic(
 /// `examples/module-numbers`, which is the first example to put a `| 0` in a
 /// branch beside a NaN.
 ///
-/// `fptosi` is exact here for the same reason C's cast is: JavaScript's `|`
-/// applies `ToInt32` to both operands first, so the lowering has already emitted
-/// `nts_to_int32` and what reaches this is an integral value widened to a
-/// double. The narrowing is undoing that widening, not performing a conversion.
+/// **Not `fptosi`.** This used to say "`fptosi` is exact here for the same
+/// reason C's cast is: JavaScript's `|` applies `ToInt32` to both operands
+/// first, so what reaches this is an integral value widened to a double".
+/// Integral it is; in range it is not. `4294967295.0` reaches here from
+/// `ToUint32`, and `fptosi` of a value outside `i32` is **poison** in LLVM,
+/// exactly as C's cast is undefined and the JVM's `d2i` saturates. All three
+/// backends carried the same argument, each citing another, and C and the JVM
+/// answered `0` and `134217727` where node says `268435455`.
 ///
-/// Shifts do not arrive: the C backend routes every one of them through a
-/// helper, because JavaScript masks the count to five bits and LLVM's `shl` is
-/// poison past the width.
+/// `nts_to_int32_fn` is ECMAScript's conversion --- wrap modulo 2^32 --- and it
+/// is a real call rather than an instruction precisely because no target has
+/// this as one.
+///
+/// **Shifts arrive too, and used to be declined.** `NTS3001 the operator UShr
+/// on this representation` was honest and meant a program the other two lanes
+/// compiled did not render here. They are spelled inline rather than through a
+/// helper: JavaScript masks the count to five bits, which is an `and i32 …, 31`
+/// and removes the poison LLVM's `shl` has past the width. `>>>` answers a
+/// `uint32`, so it widens with `uitofp` where the others use `sitofp`.
 fn float_bitwise(out: &str, op: BinOp, lhs: ValueId, rhs: ValueId) -> String {
     let instruction = match op {
         BinOp::BitAnd => "and",
         BinOp::BitOr => "or",
-        _ => "xor",
+        BinOp::BitXor => "xor",
+        BinOp::Shl => "shl",
+        BinOp::Shr => "ashr",
+        _ => "lshr",
     };
+    let shift = matches!(op, BinOp::Shl | BinOp::Shr | BinOp::UShr);
+    let count = if shift {
+        format!("{out}.c = and i32 {out}.r, 31\n  ")
+    } else {
+        String::new()
+    };
+    let right = if shift { format!("{out}.c") } else { format!("{out}.r") };
+    // `>>>` is the one bitwise result that is a `uint32` rather than an `int32`.
+    let widen = if matches!(op, BinOp::UShr) { "uitofp" } else { "sitofp" };
     format!(
-        "{out}.l = fptosi double {0} to i32\n  \
-         {out}.r = fptosi double {1} to i32\n  \
-         {out}.v = {instruction} i32 {out}.l, {out}.r\n  \
-         {out} = sitofp i32 {out}.v to double",
+        "{out}.l = call i32 @nts_to_int32_fn(double {0})\n  \
+         {out}.r = call i32 @nts_to_int32_fn(double {1})\n  \
+         {count}{out}.v = {instruction} i32 {out}.l, {right}\n  \
+         {out} = {widen} i32 {out}.v to double",
         name(lhs),
         name(rhs)
     )

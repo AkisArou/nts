@@ -3739,6 +3739,28 @@ fn binary_text(
     let integral = holds_an_integer(&op.ty);
     // Cast decided per *operand*, from its own type. Deciding it from the
     // result's would emit `v14 | v15` with `v15` a double, which is not C.
+    // **`(int32_t)x` on a double is not `ToInt32(x)`.**
+    //
+    // Every bitwise operator here --- `&`, `|`, `^` and the three shifts ---
+    // takes its operands as `int32_t`, and JavaScript defines them through
+    // `ToInt32`/`ToUint32`, which wrap modulo 2^32. C's conversion is
+    // *undefined* for a double outside the `int32_t` range, so
+    //
+    //     "".codePointAt(0) ?? (-1 >>> 4)
+    //
+    // answered 0 where node says 268435455: the shift's operand had reached
+    // here as a double holding 4294967295, and `(int32_t)4294967295.0` is not a
+    // number C promises anything about.
+    //
+    // `nts_to_uint32` is ECMAScript's own conversion, and casting its
+    // `uint32_t` to `int32_t` gives the bits the helpers want --- ToInt32 and
+    // ToUint32 differ in signedness alone and agree bit for bit.
+    //
+    // An operand already narrowed to `i32` is passed through, which is why this
+    // was so hard to see: `-1 >>> 4` on its own is folded to a constant, and
+    // giving the specializer a *second* site that computes it is enough to
+    // narrow the first --- so the bug disappeared whenever the reduction added
+    // a direct shift to check the arithmetic.
     let cast = |value: ValueId| {
         if matches!(
             func.values[value.0 as usize].ty,
@@ -3746,7 +3768,7 @@ fn binary_text(
         ) {
             value_name(value)
         } else {
-            format!("(int32_t){}", value_name(value))
+            format!("(int32_t)nts_to_uint32({})", value_name(value))
         }
     };
     let wrap = |text: String| {
