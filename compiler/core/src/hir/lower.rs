@@ -512,6 +512,34 @@ fn is_anonymous_shape(name: &str) -> bool {
     matches!(name, "__object" | "__type" | "__class")
 }
 
+/// Why `new SharedArrayBuffer` refuses while the *type* lowers.
+///
+/// `representation_within` answers `ManagedType::Buffer` for a
+/// `SharedArrayBuffer`, which is what lets the
+/// `ArrayBufferView | ArrayBuffer | SharedArrayBuffer` unions the corpus writes
+/// lower at all --- 81 refusal sites in `runtime/node`.
+///
+/// `lower_new_provided` then dispatches on that representation and cannot tell
+/// the two apart, so `new SharedArrayBuffer(8)` built a value carrying
+/// `ArrayBuffer`'s descriptor and `s instanceof ArrayBuffer` answered **true**
+/// where node answers false. Measured rather than reasoned about: the probe
+/// came back `DISAGREE node=0 nts=1`. That is a wrong answer where this was a
+/// missing one, which is the more expensive of the two.
+///
+/// Refused at the *name*, because one line further on the program is a
+/// `Buffer` and the question can no longer be asked. It costs two sites in the
+/// corpus, both of which refused before this change as well since the type had
+/// no representation at all. What it buys is that with no way to construct
+/// one, every value a compiled program holds at that representation really is
+/// an `ArrayBuffer`, so `instanceof` stays right for the values that exist.
+///
+/// Lifting it means a descriptor of its own --- the way `Map` and `Set` share
+/// one struct and are told apart by a bit --- after which `new` and
+/// `instanceof` both work rather than both refusing.
+const SHARED_BUFFER_REFUSAL: &str =
+    "`new SharedArrayBuffer`, which would carry `ArrayBuffer`'s descriptor and answer \
+     `instanceof ArrayBuffer` with `true`";
+
 fn collect_anonymous_objects(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
@@ -8280,6 +8308,39 @@ fn provided_representation(
     // whether or not `maxByteLength` was passed, so a parameter declared
     // `ArrayBuffer` may be either and the type cannot say which.
     if named(snapshot, ty) == Some("ArrayBuffer") {
+        return Some(HirType::Managed(ManagedType::Buffer));
+    }
+
+    // **A `SharedArrayBuffer` is the same bytes**, and the same representation.
+    //
+    // It was in no list at all -- the name appears nowhere else in this
+    // compiler -- so every signature naming one refused, and the shape the
+    // corpus writes is a *union*:
+    //
+    //     ArrayBufferView | ArrayBuffer | SharedArrayBuffer | undefined
+    //
+    // 67 property sites and 27 parameter sites in `runtime/node` carry that
+    // union, and it reads as a union problem. It is not: `ArrayBuffer` alone
+    // lowers, `ArrayBufferView` alone lowers, `ArrayBufferView | ArrayBuffer`
+    // lowers, and every refusing spelling has `SharedArrayBuffer` in it. One
+    // missing member, ~94 sites.
+    //
+    // **Sharing a representation is not sharing an identity.** `instanceof` is
+    // a descriptor check at run time rather than a question about the static
+    // type, so two types that lay out identically can still be told apart --
+    // which is exactly how `Map` and `Set` share one struct and one
+    // `holds_values` bit. What this compiler does not yet have is a descriptor
+    // for a shared buffer, so the two operations that would need one refuse by
+    // name below rather than answering from `ArrayBuffer`'s:
+    //
+    //   * `new SharedArrayBuffer(n)` -- nothing allocates with that descriptor;
+    //   * `x instanceof SharedArrayBuffer` -- `nts_is_buffer` would answer
+    //     `true` for a plain `ArrayBuffer`, which is a wrong answer where this
+    //     is a missing one.
+    //
+    // Both refused before this too, because the type had no representation at
+    // all, so nothing that used to compile changes.
+    if named(snapshot, ty) == Some("SharedArrayBuffer") {
         return Some(HirType::Managed(ManagedType::Buffer));
     }
 
@@ -29008,6 +29069,10 @@ impl<'a> FuncBuilder<'a> {
             .text
             .clone()
             .ok_or_else(|| self.unsupported(callee, "a computed constructor"))?;
+
+        if class == "SharedArrayBuffer" {
+            return Err(self.unsupported(callee, SHARED_BUFFER_REFUSAL));
+        }
 
         // **Before the provided-error path, not after it.**
         //

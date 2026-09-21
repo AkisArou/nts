@@ -1,4 +1,13 @@
-// expect: NTS1001 a property `view` of unrepresentable type (a union of `ArrayBufferView` | `ArrayBuffer` | `SharedArrayBuffer` | undefined)
+// expect: nothing refused
+//
+// **Closed 2026-09-21, in two halves, and kept as the regression guard.** The
+// `Iterable` half went when the iteration protocol types were carried through
+// decomposition; the `ArrayBufferView | ArrayBuffer | SharedArrayBuffer |
+// undefined` half went when `SharedArrayBuffer` got a representation --- it was
+// the only member of that union without one, and it took the whole union with
+// it. Two unrelated causes in one fixture, cleared hours apart.
+//
+// ---
 //
 // **Half of this cleared on 2026-09-21.** The fixture holds two properties
 // and used to report the `Iterable` one first; that type is now carried
