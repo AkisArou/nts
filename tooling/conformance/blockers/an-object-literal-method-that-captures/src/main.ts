@@ -1,86 +1,79 @@
-// expect: NTS1001 `base`, a name from an enclosing scope
+// expect: NTS1001 `n`, a name from an enclosing scope
+//
+// An object literal whose **method** reads a local of the enclosing function.
+// Written as an arrow property, the identical program lowers:
+//
+// ```text
+// const o = { go(): number { return n * 2; } };      REFUSED
+// const o = { go: (): number => n * 2 };             lowers
+// ```
+//
+// # Isolated one factor at a time
+//
+// ```text
+// method capturing a local      REFUSED  `n`, a name from an enclosing scope
+// getter capturing a local      REFUSED  the same
+// arrow property capturing it   lowers
+// method at module scope        lowers   -- `n` is a global, reached by name
+// method capturing nothing      lowers
+// ```
+//
+// So it is neither object literals nor methods: it is a literal *member* that
+// needs a capture environment and has none.
+//
+// # Why
+//
+// `collect_closures` treats `ARROW_FUNCTION` and `FUNCTION_EXPRESSION` as
+// closures and nothing else. A literal's method is lowered by
+// `lower_object_literal_members` through `lower_method_of(literal, member,
+// Some(instance))` -- a **method**, which gets `this` and no captures. An arrow
+// property is a closure, which is why the two spellings differ.
+//
+// # 24 of the 35 sites in that census row
+//
+// `runtime/node/events/src/main.ts:1791` is the shape, and it is not a corner:
+//
+//     const iterator: EventAsyncIterator = {
+//       next(): Promise<IteratorResult<unknown>> {
+//         if (unconsumedEvents.size > 0) { ... }        // enclosing locals
+//       },
+//       [Symbol.asyncIterator](): AsyncIterableIterator<unknown> {
+//         return iterator;
+//       },
+//       [kWatermarkData]: {
+//         get size(): number { return unconsumedEvents.size; },
+//         get isPaused(): boolean { return paused; },
+//       },
+//     };
+//
+// # A narrow route exists, and the guard for it is already written
+//
+// A method's `this` is the object and an arrow's is the enclosing function, so
+// the two spellings are equivalent **exactly when the body does not use its
+// receiver** -- and `uses_its_receiver` (`lower.rs:981`) answers that today,
+// walking into arrows because they inherit `this` and counting `super` as the
+// receiver under another name. `refusal_for_a_method_value` already relies on
+// it for the same kind of question.
+//
+// So: collect a literal's `METHOD_DECLARATION`, `GET_ACCESSOR` and
+// `SET_ACCESSOR` as closures when `!uses_its_receiver`, and the existing
+// capture machinery supplies the environment. `lower_object_literal_members`
+// then lowers those members as closure-valued properties rather than methods.
+//
+// A member that *does* use `this` keeps the refusal, which is honest: it needs
+// both a receiver and an environment, and that is the general feature rather
+// than this one.
+//
+// Enumeration is unaffected either way -- a method shorthand and an arrow
+// property are both own enumerable properties in JavaScript, which is what
+// `enumerable_fields` already answers.
 
-// A **method shorthand** on an object literal that closes over a local.
-//
-//     const adapter = { read(): number { return base + 1; } };
-//
-// The two other spellings of the same thing both work:
-//
-//     { read: (): number => base + 1 }              an arrow property
-//     { read: function (): number { … } }           a function-expression property
-//
-// So this is not "closures in object literals"; it is one syntax of three, and
-// the one a program reaches for when it is writing an adapter.
-//
-// # Demand, measured 2026-09-18
-//
-// **33 distinct sites** in the profile, and they are one idiom: an object
-// literal standing in for an interface, whose methods read the locals of the
-// function that built it.
-//
-//     web-platform/src/streams/readable.ts:3174   pull(controller) { … position … }
-//     web-platform/src/http1/transport.ts:191     read(maxBytes) { return reader.some(maxBytes) }
-//     web-platform/src/cache/store.ts:115         pull(controller) { … chunks[index++] … }
-//
-// That makes it the largest cluster of `a name from an enclosing scope` and the
-// fourteenth item overall by distinct site.
-//
-// # Why it is not a small fix, which is the point of this file
-//
-// `f(x): number` is a method the dispatch table holds and `f: (x) => number` is
-// storage — the ledger row for a function held in a field says so, and the
-// checker is what says which. A method has no environment; a closure carries
-// one. So a capturing method has to become storage.
-//
-// **And storage is a property of the *type*, while capture is a property of the
-// *literal*.** `layout_of` builds one layout per type id, every literal of that
-// type shares it, and two literals of one type may differ in whether their
-// methods capture:
-//
-//     function make(seed: number) {
-//       const a: Reader = { read() { return seed; } };   // captures
-//       const b: Reader = { read() { return 0; } };      // does not
-//       return [a, b];
-//     }
-//
-// Both are `Reader`. One layout. So the decision cannot be made at the literal:
-// it is "does **any** literal of this type have a capturing method", which is a
-// whole-program question of the kind the compiler already answers for class
-// tokens and for the hierarchy — `decompose.rs` already registers every
-// anonymous object type carrying a member, which is where the set would come
-// from.
-//
-// The three routes, so whoever takes it starts from the analysis:
-//
-//   every object-literal method becomes storage
-//     — uniform, no whole-program pass, and it changes the representation of a
-//       shape that works today and was deliberately chosen; the ledger row
-//       defends the dispatch table and `examples/a-method-on-an-object-literal`
-//       guards it
-//   per type, by a pass over all literals of that type
-//     — correct and confined, and the pass is the work: a type whose methods
-//       are storage in one function and a table in another is the bug this
-//       avoids, so the answer has to be computed before any layout is built
-//   an environment pointer on the object, filled per literal
-//     — keeps the table, adds one field to every literal of a type that needs
-//       it, and needs the same whole-program question answered first, so it is
-//       the second route plus a representation choice rather than an
-//       alternative to it
-//
-// A `FIXED` here means one of the three was built. A `CHANGED` means the
-// refusal moved, which is worth reading: the message names the captured name,
-// so a different name means a different shape reached it.
-
-interface Reader {
-  read(): number;
-}
-
-export function adapter(n: number): number {
-  const base = n * 2;
-  const reader: Reader = {
-    read(): number {
-      return base + 1;
+export function captured(x: number): number {
+  const n = 5 + (x - x);
+  const o = {
+    go(): number {
+      return n * 2;
     },
   };
-  return reader.read();
+  return o.go();
 }
