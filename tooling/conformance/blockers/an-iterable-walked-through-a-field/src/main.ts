@@ -49,13 +49,19 @@
 //                                               hierarchy
 // ```
 //
-// **Both user-interface spellings land in `generator_dispatch`**, which is the
-// finding: an interface-typed receiver is classified as a *generator* walk
-// whatever it actually holds. The first fails because the interface's layout
-// has no method at `generator_slot`; the second because a program containing
-// no generators has no `generator_slot` at all. Neither reaches
-// `protocol_walk`, which is the walk they want. Two unlike sentences, one
-// wrong classification.
+// **That table is now out of date for the first two rows**, and the way it was
+// wrong is worth keeping. I wrote that an interface-typed receiver is
+// "classified as a generator walk whatever it actually holds" and that neither
+// spelling reaches `protocol_walk`. Probing each `generator_walk` call site
+// says both *do* reach it --- `arm3 -> protocol_walk -> generator_walk` --- and
+// the misclassification happened one step later, inside `protocol_walk`, on
+// the type of the iterator it had just built. `collect_interfaces` records
+// symbol-keyed members, so the hierarchy had `[Symbol.iterator]` all along.
+//
+// Fixed in the commit that adds `blockers/an-iterable-behind-an-interface`,
+// which carries the measured trace. Both user-interface spellings now say
+// `a method `next` with no declaration in the hierarchy`, which is the real
+// obstacle: `Iterator<T>` is a lib type with no declaration node.
 //
 // `Iterable<T>` *does* reach `protocol_walk` --- that is what carrying it
 // through decomposition bought --- and then `callee_for` finds

@@ -19408,7 +19408,22 @@ impl<'a> FuncBuilder<'a> {
         // the frame, and the call it wants is the one pushed a line above. That
         // is why this is here and not before the push: a generator has to be
         // walked where it was made, and this is where it was made.
-        if self.generator_element_of(&iterator_ty).is_some() {
+        // **`reserved` is what knows a frame was made**, and the paragraph above
+        // says so in its own words: "what came back is a frame, which is
+        // *resumed*". The test used to be `generator_element_of(&iterator_ty)`,
+        // which asks whether the *declared return type* looks like a generator
+        // --- and for a receiver whose static type is an **interface** the
+        // declared return is `Iterator<T>`, which satisfies it while the value
+        // is an ordinary iterator object rather than a frame.
+        //
+        //     class Two { *[Symbol.iterator](): Iterator<number> { … } }
+        //     const s = new Two();             lowered  (iterator_ty is a frame)
+        //     const s: Seq = new Two();        refused  (iterator_ty is TypeId(5))
+        //
+        // Same object, and only the annotation differs. `reserved` is `Some`
+        // exactly when the member's declaration is one of this program's
+        // generators, which is exactly when the call produced a frame.
+        if reserved.is_some() {
             return self.generator_walk(sequence, iterator);
         }
 
