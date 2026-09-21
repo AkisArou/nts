@@ -1,4 +1,12 @@
-// expect: NTS1001 a module-scope variable of unrepresentable type (an array of any)
+// expect: nothing refused
+//
+// **Closed 2026-09-21, by asking the pushes.** `pushed_element_type` settles
+// the element from the *arguments* of the `push` calls, which is the one
+// place the information exists in a program the checker gave up on. This
+// fixture is kept as the regression guard for it; the account below is the
+// useful part and is why the answer was not where it was first looked for.
+//
+// ---
 //
 // The **read** decides whether the declaration lowers, which is not a property
 // of the declaration at all:
@@ -46,9 +54,9 @@
 // *an empty array of unrepresentable type*. One cause, two diagnostics, which
 // is worth knowing before either is counted.
 //
-// Until then this refuses, which is honest: a refusal names the construct,
-// where the alternative would be inventing an element type the checker
-// declined to.
+// Two arms deliberately still refuse, and have their own fixtures beside
+// this one: push mixed with an indexed write, and pushes of disagreeing
+// types. Both would mean inventing a width the checker declined to give.
 //
 // # Why it is worth having as a fixture
 //

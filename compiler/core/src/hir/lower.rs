@@ -3246,6 +3246,19 @@ fn settled_declaration_type(probe: &FuncBuilder, name_node: NodeId) -> Option<Hi
                     Some(_) => growth_can_fill(ty),
                 })
         })
+        // **And failing that, what the pushes supply.** Reached only when no
+        // reference carried a type at all, which is the evolving array the
+        // checker never resolved; `pushed_element_type` carries why that
+        // happens and why the arguments are the only place left to ask.
+        //
+        // Guarded on there being no indexed writes, for the reason the arm
+        // above is: an array filled both ways is the mixed shape that stays
+        // conservative, and `Some(0)` is exactly "filled by push alone".
+        .or_else(|| {
+            matches!(dense_prefix_writes(probe, name_node), Some(0))
+                .then(|| pushed_element_type(probe, name_node))
+                .flatten()
+        })
         .or(declared)
         // **An evolving global initialised with an absence holds both.**
         // `var x = null; x = 2` settles on `f64` above, because that is what
@@ -3426,6 +3439,87 @@ fn dense_prefix_writes(probe: &FuncBuilder, name_node: NodeId) -> Option<u32> {
         }
     }
     Some(seen)
+}
+
+/// The element type an evolving array's `push` calls supply.
+///
+/// **The one place the information exists** for a name the checker has given
+/// up on. `const xs = []` is TypeScript's *evolving* array and stays `any[]`
+/// until a reference forces the element type to be resolved; `xs[0]` forces it
+/// and `xs.join(",")` forces it, but `xs.length` does not --- `length` is on
+/// the array whatever it holds --- and neither does the receiver of the `push`
+/// that supplies the type. So
+///
+/// ```text
+/// const xs = []; xs.push(7); xs[0];      lowered
+/// const xs = []; xs.push(7); xs.length;  refused
+/// ```
+///
+/// differed only in the expression that read the result, which is not a
+/// property of the declaration at all. [`Lowering::evolved_type`] saw no type
+/// at *any* reference in the second --- not an unsettled `never[]` it could
+/// skip, which is the case its own comment is about, but nothing to settle
+/// from.
+///
+/// Asked of the **arguments** rather than of any reference, which is where the
+/// checker did record an answer. Every push must agree: two pushing different
+/// types is a union, and a dense array has one width.
+///
+/// Only meaningful where the name has no indexed writes --- the caller checks
+/// that with [`dense_prefix_writes`] --- because an array filled both ways is
+/// the mixed shape that stays conservative.
+fn pushed_element_type(probe: &FuncBuilder, name_node: NodeId) -> Option<HirType> {
+    let symbol = probe.node(name_node).symbol?;
+    let mut settled: Option<HirType> = None;
+    for at in 0..probe.snapshot.nodes.len() {
+        let id = NodeId(u32::try_from(at).ok()?);
+        if id == name_node || probe.node(id).symbol != Some(symbol) {
+            continue;
+        }
+        // The name as the *receiver* of `.push`, and not as its argument:
+        // `ys.push(xs)` mentions `xs` too, and says nothing about what `xs`
+        // holds.
+        let Some(access) = probe.node(id).parent else {
+            continue;
+        };
+        if probe.kind_of(access) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            continue;
+        }
+        let parts = probe.children(access);
+        let [receiver, member] = parts.as_slice() else {
+            continue;
+        };
+        if *receiver != id || probe.literal_name(*member).as_deref() != Some("push") {
+            continue;
+        }
+        // And that access standing as the callee, so a `push` merely named --
+        // `const f = xs.push` -- supplies nothing.
+        let Some(call) = probe.node(access).parent else {
+            continue;
+        };
+        if probe.kind_of(call) != Some(syntax::CALL_EXPRESSION) {
+            continue;
+        }
+        let children = probe.children(call);
+        let [callee, arguments @ ..] = children.as_slice() else {
+            continue;
+        };
+        if *callee != access {
+            continue;
+        }
+        for argument in arguments {
+            // A type the checker did not record, or one that disagrees with a
+            // sibling, leaves the name exactly as unrepresentable as it was.
+            // Answering anything here would be inventing a width.
+            let ty = probe.type_of(*argument)?;
+            match &settled {
+                Some(known) if *known != ty => return None,
+                Some(_) => {}
+                None => settled = Some(ty),
+            }
+        }
+    }
+    settled.map(|element| HirType::Managed(ManagedType::Array(Box::new(element))))
 }
 
 /// Can the writes that settled this type actually be performed?
