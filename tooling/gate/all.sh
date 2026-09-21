@@ -426,6 +426,18 @@ profile() {
     out=$("'"${NTS_BIN:-$root/target/release/nts}"'" emit-c "$m" \
             --out "'"$work"'/$name" --napi 2>&1)
     printf "%s" "$out" | grep -c "NTS1001" > "'"$work"'/$name.refusals"
+    # **And the sites, because the count above is occurrences.** One source
+    # line is reported once per generic instantiation and once per module that
+    # imports the file, and those multipliers are not spread evenly: three
+    # lines in runtime/web-platform/src/streams/fifo.ts were 882 of 17,106 on
+    # 2026-09-21, a 294x multiplier on a single construct, and they were the
+    # largest item in the census. Deduplicated the same run is ~1,741 sites.
+    #
+    # Both are printed so neither can be read as the other. The ceiling still
+    # sits on occurrences, which is what every number in the comments below
+    # was measured in; the site count is here to rank work, which occurrences
+    # cannot do. `tooling/census/node-refusals.mjs` is the ranked form.
+    printf "%s" "$out" | grep -oE "^[^ ]*: NTS1001" > "'"$work"'/$name.sites"
     printf "%s" "$out" | grep -q "panicked at" && echo "$name" > "'"$work"'/$name.crashed"
     # **The second number, which moves differently.** A refusal count cannot
     # tell a fix that makes one *speak* from a regression that *removes* code:
@@ -471,10 +483,11 @@ profile() {
     exit 0
   ' _
   refusals=$(cat "$work"/*.refusals 2>/dev/null | awk '{s+=$1} END {print s+0}')
+  sites=$(cat "$work"/*.sites 2>/dev/null | sort -u | awk 'END {print NR+0}')
   defined=$(cat "$work"/*.defined 2>/dev/null | awk '{s+=$1} END {print s+0}')
   crashed=$(cat "$work"/*.crashed 2>/dev/null)
-  printf '  %s modules emitted, %s refusal(s), %s definition(s)\n' \
-    "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)" "$refusals" "$defined"
+  printf '  %s modules emitted, %s refusal(s) at %s site(s), %s definition(s)\n' \
+    "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)" "$refusals" "$sites" "$defined"
   # The ceiling. Lower it when a feature earns it -- and raise it when the
   # CORPUS earns it, which is new and is now the faster of the two.
   #
