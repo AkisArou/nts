@@ -3214,7 +3214,7 @@ fn managed_word(managed: &ManagedType) -> &'static str {
 /// The two filters are the price of taking the settled one. Every write that
 /// settles an evolving array's type *grows* it, so the type is only usable
 /// where those writes can actually be performed: not for a counted element
-/// ([`growth_can_fill`]) and not out of order ([`written_as_a_dense_prefix`]).
+/// ([`growth_can_fill`]) and not out of order ([`dense_prefix_writes`]).
 /// Failing either, the unsettled type is handed back rather than nothing, which
 /// keeps the diagnostic the literal gives -- it names the construct, where a
 /// global of unrepresentable type does not.
@@ -3224,10 +3224,27 @@ fn settled_declaration_type(probe: &FuncBuilder, name_node: NodeId) -> Option<Hi
         .clone()
         .filter(|ty| !is_an_unsettled_array(ty))
         .or_else(|| {
+            // **`growth_can_fill` is a question about *indexed* writes**, and
+            // its own doc says so: "those writes are `xs[0] = v` on an array
+            // that does not have a slot 0 yet, so every one of them grows". A
+            // name filled by `push` has no such write --- `nts_array_push_ref`
+            // appends a reference perfectly well --- so requiring it there
+            // rejects a type nothing was going to grow by index.
+            //
+            // `examples/growable` is the case: `const parts = []` filled by
+            // `parts.push("p" + String(i))` in a loop. It lowered until this
+            // derivation was shared with locals, and then refused, because the
+            // element is counted and the filter did not ask whether any indexed
+            // write existed. `dense_prefix_writes` answers both halves at once
+            // -- whether the indexed writes are an in-order prefix, and how
+            // many there were.
             probe
                 .evolved_type(name_node)
-                .filter(growth_can_fill)
-                .filter(|_| written_as_a_dense_prefix(probe, name_node))
+                .filter(|ty| match dense_prefix_writes(probe, name_node) {
+                    None => false,
+                    Some(0) => true,
+                    Some(_) => growth_can_fill(ty),
+                })
         })
         .or(declared)
         // **An evolving global initialised with an absence holds both.**
@@ -3315,14 +3332,13 @@ fn initialized_with_an_absence(probe: &FuncBuilder, name_node: NodeId) -> bool {
     })
 }
 
-fn written_as_a_dense_prefix(probe: &FuncBuilder, name_node: NodeId) -> bool {
-    let Some(symbol) = probe.node(name_node).symbol else {
-        return false;
-    };
+fn dense_prefix_writes(probe: &FuncBuilder, name_node: NodeId) -> Option<u32> {
+    let symbol = probe.node(name_node).symbol?;
     let mut expected = 0.0_f64;
+    let mut seen = 0_u32;
     for at in 0..probe.snapshot.nodes.len() {
         let Ok(index) = u32::try_from(at) else {
-            return false;
+            return None;
         };
         let id = NodeId(index);
         if id == name_node || probe.node(id).symbol != Some(symbol) {
@@ -3398,15 +3414,18 @@ fn written_as_a_dense_prefix(probe: &FuncBuilder, name_node: NodeId) -> bool {
         if token != syntax::EQUALS_TOKEN {
             match declared_literal(probe, *subscript) {
                 Some(value) if value < expected => continue,
-                _ => return false,
+                _ => return None,
             }
         }
         match declared_literal(probe, *subscript) {
-            Some(value) if (value - expected).abs() < f64::EPSILON => expected += 1.0,
-            _ => return false,
+            Some(value) if (value - expected).abs() < f64::EPSILON => {
+                expected += 1.0;
+                seen += 1;
+            }
+            _ => return None,
         }
     }
-    true
+    Some(seen)
 }
 
 /// Can the writes that settled this type actually be performed?
@@ -3456,7 +3475,7 @@ fn written_as_a_dense_prefix(probe: &FuncBuilder, name_node: NodeId) -> bool {
 /// Extending this check is not the fix. It is asked of a declaration, and the
 /// other three spellings have a perfectly good declared type; what distinguishes
 /// them is what the program later *does* to the name. Either a program-wide
-/// question like [`written_as_a_dense_prefix`] asked of every array-typed
+/// question like [`dense_prefix_writes`] asked of every array-typed
 /// binding, or a bounds-analysis one -- refuse a write `bounds.rs` can prove is
 /// past the end -- and the second is the one that would also catch `xs[9] = v`
 /// on a populated array.
