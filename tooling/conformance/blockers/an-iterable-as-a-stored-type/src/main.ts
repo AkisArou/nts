@@ -1,0 +1,68 @@
+// expect: NTS1001 a property `p` of unrepresentable type (a union of `Iterable` | undefined)
+//
+// **The largest cause on the compiled axis, measured by site.** 267 of the
+// ~1,741 unique `runtime/node` refusal sites name one of `Iterable`,
+// `Iterator`, `AsyncIterable`, `AsyncIterator` or `AsyncIterableIterator`.
+// The next largest is `an array of WeakRef` at 49.
+//
+// That ranking only appears once the census is deduplicated. By *occurrence*
+// these are scattered under several messages and the top row is a three-line
+// generic in `runtime/web-platform` repeated 294 times --
+// `tooling/census/node-refusals.mjs` is the ranked form and its header carries
+// why the two orders differ.
+//
+// # It is not the union
+//
+// The message most of them wear is `a union of `AsyncIterableIterator` |
+// undefined`, which reads like a union problem. It is not:
+//
+// ```text
+//   class H { p: AsyncIterableIterator<number> }               refused
+//   class H { p: AsyncIterableIterator<number> | undefined }   refused
+//   class H { p?: AsyncIterableIterator<number> }              refused
+//   interface P { n: number } class H { p: P | undefined }     lowered
+// ```
+//
+// The union machinery is fine --- `T | undefined` for a managed `T` is a
+// nullable pointer and costs nothing, which `representation_within`'s own
+// comment explains at length. The member has no representation on its own, and
+// the union merely reports it. A probe of the union spelling alone would have
+// sent a reader to the wrong function: the compiler reports one blocker at a
+// time, so the standalone arm has to be written beside it to see that.
+//
+// # What is missing is a representation, not a protocol
+//
+// `Walk::Protocol` already calls `next()`, reads `done`, reads `value`, and
+// `abstract_generator_kind`'s comment says `Iterator<T>` and
+// `IterableIterator<T>` "are satisfied by a hand-written object with a `next`,
+// and that shape already works as a protocol object". So iterating one of
+// these works where the *static* type is a shape with a layout.
+//
+// What refuses is holding one: a field, a parameter, a return. `Iterable<T>`
+// is `{ [Symbol.iterator](): Iterator<T> }` --- a structural type whose only
+// member is keyed on a well-known symbol --- and `layout_of` has no layout for
+// it, so `representation_within` answers `None`.
+//
+// # Why `Erased` is not the answer
+//
+// It is the representation `object` and `unknown` get, and it is a tag and a
+// payload, so it *can* hold one. But `Walk::Protocol` needs a layout to find
+// `next` on, and an erased value has none --- storing an iterable as erased
+// would move the refusal from the field to every `for...of` over it, which is
+// the more common operation. Whatever representation these get has to keep the
+// protocol walk working.
+//
+// `builtin.rs` is where a provided layout would go; it exists for exactly this
+// shape and its header explains what stopped `Error` being decomposed.
+
+class H {
+  p: Iterable<number> | undefined;
+  constructor() {
+    this.p = undefined;
+  }
+}
+
+export function touch(x: number): number {
+  const h = new H();
+  return x + (h.p === undefined ? 1 : 0);
+}
