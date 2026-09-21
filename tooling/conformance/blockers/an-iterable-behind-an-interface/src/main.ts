@@ -44,6 +44,37 @@
 // same shape as `an-iterable-as-a-stored-type` before it was closed, one level
 // in: carrying a type gives it a representation, not a declaration node.
 //
+// # The obvious fix was tried and is wrong, measured
+//
+// The members *are* in the snapshot --- `nts types` shows
+// `#7 `Iterator` Object { properties: [PropertyRecord { name: "next", ... }] }`
+// --- so registering them in the hierarchy from the type record, the way
+// `collect_interfaces` does from a declaration node, looks like a dozen lines.
+//
+// It makes things worse, and `collect_anonymous_objects` says why fifty lines
+// away: "registering the second makes `declaring` resolve a call to a function
+// nobody wrote". With the lib interfaces registered, `callee_for` answers
+// `Callee::Direct("Iterator#next")` and `Callee::Direct("Iterable#__@iterator@19")`,
+// and the refusal becomes a **cascade**:
+//
+//     NTS1003 `module#init` cannot be compiled because it calls
+//             `Iterable#__@iterator@19`, which was refused above
+//     NTS1003 module evaluation was dropped whole rather than cut here
+//
+// Measured over `runtime/node`: roots fall 1,576 -> 1,561 sites and cascades
+// rise 9,842 -> 9,948. Fifteen refusals move out of the root column by
+// becoming a hundred-odd cascades, and the four probe shapes go from a *local*
+// refusal to module evaluation being dropped whole --- a bigger blast radius
+// for the same program. Reverted.
+//
+// **The reason it cannot work that way**: a class satisfies `Iterable<T>`
+// *structurally*, without writing `implements`, so there is no edge to number
+// a dispatch slot against. `callee_for` emits `Callee::Virtual` only where
+// `hierarchy.overridden` and `slot_for` agree, and neither can for a type no
+// implementor declares. Whatever closes this needs structural dispatch, or a
+// provided layout in `builtin.rs` the way `IteratorResult` got one --- not a
+// hierarchy entry.
+//
 // # Measured
 //
 // The guard change moves **no corpus number**: `runtime/node` is 16,223
