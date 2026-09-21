@@ -22619,10 +22619,31 @@ impl<'a> FuncBuilder<'a> {
         // an abort is what node does when nobody catches -- so the divergence
         // is exactly a handler existing, which is what this refuses.
         //
-        // Any call, rather than only one that can reach a `throw`. The precise
-        // rule wants a transitive "can throw" over the call graph and would
-        // refuse fewer; this is the version the node lane priced against its own
-        // axis and accepted, and the argument that decided it is worth keeping:
+        // **The precise rule, and this paragraph used to say otherwise.** It
+        // read "any call, rather than only one that can reach a `throw`. The
+        // precise rule wants a transitive `can throw` over the call graph and
+        // would refuse fewer" -- and that refinement was since built and the
+        // sentence was not updated. `calls_compiled_code` ends with
+        // `self.throwing.contains(&symbol.0)`, over the fixpoint
+        // `throwing_symbols` computes, so the transitive rule is live:
+        //
+        //     try { r = pure(4) } catch { }        lowers
+        //     try { r = outer(3) } catch { }       lowers, and `outer` calls
+        //                                          `inner`, neither throwing
+        //     try { r = bad(1) } catch { }         refused
+        //     try { r = mid(1) } catch { }         refused, `mid` calls `bad`
+        //
+        // `a_call_that_cannot_throw_still_compiles` pins the second of those.
+        // A comment describing this compiler as cruder than it is sends the
+        // next reader to build what is already here, which is the more
+        // expensive direction for a stale sentence to be wrong in.
+        //
+        // What remains is therefore *calls that genuinely can raise* -- 74
+        // sites in `runtime/node`, every one of them this message -- and
+        // closing those is real cross-call exception propagation rather than a
+        // sharper predicate.
+        //
+        // The argument that decided the original shape is still worth keeping:
         // **the defect is masked by the boundary today.** A module has to
         // publish a function before a caught throw inside it can be reached, and
         // `assert` -- the most throw-heavy module in the profile -- fails 13 of
