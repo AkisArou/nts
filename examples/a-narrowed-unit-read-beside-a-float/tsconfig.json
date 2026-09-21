@@ -1,5 +1,5 @@
 {
-  "extends": "../../../../tsconfig.fixtures.json",
+  "extends": "../../tsconfig.fixtures.json",
   "include": [
     "src"
   ]

@@ -4137,6 +4137,27 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
             checks_removed += bounds::eliminate_checks(func, analysis, &field_lengths);
         }
+        // **This pass narrows, so something has to reconcile after it.**
+        //
+        // Removing a bounds check is not only removing a branch: an unchecked
+        // `str.unit` is an `i32` where the checked one was an `f64`, which the
+        // comment above its first run says in its own words --- "a code unit
+        // stayed floating point until this ran". Every earlier narrowing is
+        // followed by `insert_conversions` or by `reconcile`; this one was the
+        // last thing to touch the program, and its consumers were left holding
+        // the old width.
+        //
+        // `({ k: "ABC" }).k.charCodeAt(2) - Math.floor(0.1)` reached the
+        // verifier as `OperandsDiffer { i32, f64 }` from a lowering whose own
+        // output was well typed, and `emit-c` then wrote nothing. It needed an
+        // *inline* object literal, because only that lets the field read be
+        // forwarded to the stored constant, which is what lets this pass prove
+        // the index in range at all.
+        //
+        // Found by instrumenting each stage in turn: no mismatch existed after
+        // the specialize loop, after `narrow_widths`, after `reconcile`, after
+        // `dce` or after `place_allocations` --- and one did after this.
+        conversions += reconcile(&mut program);
     }
     let checks_kept = program
         .funcs

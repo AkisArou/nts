@@ -1,5 +1,17 @@
-// `({ k: "ABC" }).k.charCodeAt(2) - Math.floor(0.1)` is rejected by the
-// verifier, so `emit-c` writes nothing:
+// **Closed 2026-09-21.** `bounds::eliminate_checks` runs a *second* time at the
+// very end of `prepare_unverified`, after `reconcile`, after `dce`, after
+// `place_allocations` --- and removing a bounds check is not only removing a
+// branch: an unchecked `str.unit` is an `i32` where the checked one was an
+// `f64`. Every earlier narrowing is followed by `insert_conversions` or by
+// `reconcile`; this one was the last thing to touch the program, so its
+// consumers kept the old width. One `reconcile` after it is the fix.
+//
+// The account below is kept because how it was found is the useful part.
+//
+// ---
+//
+// `({ k: "ABC" }).k.charCodeAt(2) - Math.floor(0.1)` was rejected by the
+// verifier, so `emit-c` wrote nothing:
 //
 //     invalid HIR: OperandsDiffer { func: "f", op: "-",
 //                                   left: Int { bits: 32, signed: true },
@@ -51,9 +63,29 @@
 // **nothing**: at reconcile time the two operands still agree, and the mismatch
 // is introduced by something that runs *after* it.
 //
-// Two of the obvious candidates are ruled out, by disabling each in turn and
-// re-running this file: **`narrow_widths` is not it and `forward_stores` is not
-// it** --- the mismatch survives without either, together or apart.
+// # How it was found: a probe after every stage
+//
+// Reading did not do it. Three candidate passes were ruled out by disabling
+// each and re-running --- `narrow_widths`, `forward_stores` --- and
+// `reconcile`'s own binary arm, which already converts both operands to the
+// operator's type, was shown never to fire by an `eprintln!` inside it.
+//
+// What settled it was printing every mismatched binary op after each stage:
+//
+// ```text
+//   after specialize loop            2 binary op(s), none mismatched
+//   after narrow_widths              none
+//   before reconcile                 none
+//   after reconcile                  none
+//   after dce                        none
+//   after place_allocations          none
+//   after the final eliminate_checks subtracting Sub left=i32 right=f64   <--
+// ```
+//
+// Six stages clean and the seventh not. The pass responsible had already said
+// so in its own first run's comment --- "a code unit stayed floating point
+// until this ran ... It runs again at the end" --- and nobody had connected
+// that to the fact that nothing reconciles after the second run.
 //
 // So the narrowing is older than both. `bounds::eliminate_checks` and
 // `narrow_storage` run *before* the specialization loop, and the comment above
