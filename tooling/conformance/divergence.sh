@@ -41,6 +41,22 @@
 # `differential-ts.mjs --all` is excluded for cost rather than doubt -- it is minutes,
 # not seconds, and it is clean over 22 modules.
 #
+# `fuzz-statements` joined on 2026-09-21, and it is the expensive one at ~40 seconds
+# for 40 cases. It is here because `fuzz-expressions` beside it had gone quiet in the
+# way an instrument does when its grammar has been widened until it only produces what
+# already works: 1,600 generated expressions across eight fresh seeds, `0 differ` **and
+# `0 refused`**. Every defect found by hand that week lived one level out, in statements
+# --- a declaration, some writes, and a read --- and none of them is expressible as an
+# expression.
+#
+# It generates each body **twice**, once at module scope and once in a function, because
+# those are decided by different code and have disagreed repeatedly. Its refusal map is
+# keyed by the *shape* that produced the refusal rather than by the message, so a wall
+# the generator keeps hitting names a construct instead of ranking a sentence.
+#
+# 40 cases at seed 1 rather than its default, for the same reason `fuzz-timer-order` runs
+# 150 here: the wider sweep is a thing to run deliberately, and the gate wants a floor.
+
 # `fixture-configs` joined on 2026-09-20 and is the odd one out: it compares nothing with
 # node, it reads no TypeScript, and it finishes instantly. It is here because the thing it
 # checks -- that a `tsconfig.json`'s `extends` names a file that exists -- is invisible to
@@ -53,7 +69,7 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root" || exit 1
 
 status=0
-for check in skip-audit stale-exclusions fixture-configs self-oracle fuzz-deep-equal "fuzz-timer-order 150" "fuzz-expressions 120 1"; do
+for check in skip-audit stale-exclusions fixture-configs self-oracle fuzz-deep-equal "fuzz-timer-order 150" "fuzz-expressions 120 1" "fuzz-statements 40 1"; do
   started=$(date +%s)
   # `set --` then pass only the arguments that exist. Passing `"${2:-}"` unconditionally
   # handed every argument-less check an empty string, and `fuzz-deep-equal` reads its first

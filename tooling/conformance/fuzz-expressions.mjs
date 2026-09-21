@@ -49,36 +49,23 @@
 // Seeded, and the seed is printed. A fuzzer whose failures cannot be reproduced
 // is a fuzzer nobody acts on.
 
-import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, "../..");
-const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
-const HARNESS = readFileSync(join(ROOT, "tooling/sweep/probe-harness.ts"), "utf8");
+import { rmSync } from "node:fs";
+import { join } from "node:path";
+import {
+  HARNESS,
+  PRINTER,
+  assertion,
+  compileAndRun,
+  pickers,
+  runOracle,
+  scratch,
+} from "./fuzz-runtime.mjs";
 
 const CASES = Number(process.argv[2] ?? 400);
 const SEED = Number(process.argv[3] ?? 1);
 const BATCH = 40;
 
-/** xorshift32: small, seeded, and the same sequence on every machine. */
-function rng(seed) {
-  let state = seed >>> 0 || 1;
-  return () => {
-    state ^= state << 13;
-    state >>>= 0;
-    state ^= state >> 17;
-    state ^= state << 5;
-    state >>>= 0;
-    return state / 0x1_0000_0000;
-  };
-}
-
-const next = rng(SEED);
-const pick = (xs) => xs[Math.floor(next() * xs.length)];
-const int = (lo, hi) => lo + Math.floor(next() * (hi - lo + 1));
+const { next, pick, int } = pickers(SEED);
 
 /**
  * A number literal that is worth generating.
@@ -331,49 +318,10 @@ function nodeAnswers(dir, exprs) {
   const lines = exprs.map(
     (e, i) => `try { print(${i}, ${e.code}); } catch { print(${i}, undefined); }`,
   );
-  const src = `
-const out = [];
-function print(i, v) {
-  if (typeof v === "number") {
-    out.push(Number.isNaN(v) ? "NaN"
-      : v === Infinity ? "Infinity"
-      : v === -Infinity ? "-Infinity"
-      : Object.is(v, -0) ? "-0"
-      : String(v));
-  } else if (typeof v === "string") {
-    out.push(JSON.stringify(v));
-  } else if (typeof v === "boolean") {
-    out.push(String(v));
-  } else {
-    out.push(null);
-  }
-}
+  return runOracle(dir, `${PRINTER}
 ${lines.join("\n")}
 console.log(JSON.stringify(out));
-`;
-  // **`.ts` and `--experimental-strip-types`, the way `probe.sh` runs node.**
-  // The generated callbacks carry annotations --- `(v: number): number => …`
-  // --- because the *compiled* side needs them under `strict`, and a plain
-  // `.mjs` oracle is a syntax error on the first one.
-  const file = join(dir, "oracle.ts");
-  writeFileSync(file, src);
-  const run = spawnSync(
-    process.execPath,
-    ["--experimental-strip-types", "--no-warnings", file],
-    { encoding: "utf8" },
-  );
-  if (run.status !== 0) {
-    if (process.env.NTS_FUZZ_DEBUG) console.error("oracle failed:", run.stderr);
-    return null;
-  }
-  try {
-    return JSON.parse(run.stdout.trim());
-  } catch {
-    if (process.env.NTS_FUZZ_DEBUG) {
-      console.error("oracle unparseable:", run.stdout.slice(0, 400));
-    }
-    return null;
-  }
+`);
 }
 
 /**
@@ -385,107 +333,12 @@ console.log(JSON.stringify(out));
  */
 function program(exprs, expected) {
   const body = exprs
-    .map((e, i) => {
-      const want = expected[i];
-      if (want === null) return null;
-      if (want === "-0") {
-        return `assert.sameValue(Object.is(${e.code}, -0), true, "#${i}");`;
-      }
-      if (want === "NaN") {
-        return `assert.sameValue(Number.isNaN(${e.code}), true, "#${i}");`;
-      }
-      return `assert.sameValue(${e.code}, ${want}, "#${i}");`;
-    })
+    .map((e, i) => assertion(e.code, expected[i], `#${i}`))
     .filter(Boolean);
   return `${HARNESS}\n${body.join("\n")}\n`;
 }
 
-const TSCONFIG = JSON.stringify(
-  {
-    compilerOptions: {
-      target: "ESNext",
-      module: "ESNext",
-      moduleResolution: "bundler",
-      allowImportingTsExtensions: true,
-      strict: true,
-      noEmit: true,
-    },
-    include: ["src"],
-  },
-  null,
-  2,
-);
-
-/**
- * Compile and run one program.
- *
- * Returns a verdict rather than throwing, because every outcome short of
- * "it disagreed" is information this reports and does not fail on.
- */
-function compileAndRun(dir, source) {
-  mkdirSync(join(dir, "src"), { recursive: true });
-  writeFileSync(join(dir, "tsconfig.json"), TSCONFIG);
-  writeFileSync(join(dir, "src/main.ts"), source);
-  rmSync(join(dir, "out"), { recursive: true, force: true });
-
-  const emit = spawnSync(
-    NTS,
-    ["emit-c", join(dir, "tsconfig.json"), "--out", join(dir, "out"), "--main"],
-    { encoding: "utf8", env: { ...process.env, NTS_NO_SNAPSHOT_CACHE: "1" } },
-  );
-  const err = `${emit.stderr ?? ""}`;
-  if (/^thread '.*panicked at/m.test(err)) {
-    return { kind: "panic", detail: (err.match(/panicked at[^\n]*/) ?? [""])[0] };
-  }
-  if (/^TS\d/m.test(err)) {
-    return { kind: "typescript", detail: (err.match(/^TS\d+[^\n]*/m) ?? [""])[0] };
-  }
-  // **`invalid HIR` is its own verdict, not a `cc-failed`.** `emit-c` writes
-  // nothing when the verifier rejects the program, so the C step then fails for
-  // want of input --- and reporting that as "the C compiler refused" sends a
-  // reader to `cc` for a bug in a lowering pass. It cost an hour once.
-  const invalid = err.match(/invalid HIR: (\w+ \{[^}]*\})/);
-  if (invalid) return { kind: "invalid-hir", detail: invalid[1] };
-  const refusal = err.match(/NTS\d+ ([^\n]*?) is not supported/);
-  if (refusal) return { kind: "refused", detail: refusal[1] };
-  if (/NTS2\d{3}/.test(err)) {
-    return { kind: "declined", detail: (err.match(/NTS2\d{3} [^\n]*/) ?? [""])[0] };
-  }
-
-  try {
-    execFileSync(
-      "cc",
-      [
-        "-std=c11", "-O2", "-I.",
-        ...readdirSync(join(dir, "out")).filter((f) => f.endsWith(".c")),
-        "-luv", "-lm", "-o", "program",
-      ],
-      { cwd: join(dir, "out"), stdio: "ignore" },
-    );
-  } catch {
-    if (process.env.NTS_FUZZ_KEEP) {
-      const kept = join(process.env.NTS_FUZZ_KEEP, `cc-failed-${Date.now()}.ts`);
-      try {
-        writeFileSync(kept, source);
-        const log = execFileSync(
-          "sh",
-          ["-c", `cd ${join(dir, "out")} && cc -std=c11 -O2 -I. *.c -luv -lm -o program 2>&1 | head -5`],
-          { encoding: "utf8" },
-        );
-        console.error(`kept ${kept}\n${log}`);
-      } catch {}
-    }
-    return { kind: "cc-failed", detail: "" };
-  }
-
-  const run = spawnSync(join(dir, "out/program"), [], { encoding: "utf8" });
-  if (run.status === 0) return { kind: "agree", detail: "" };
-  const message = `${run.stderr ?? ""}`.match(/uncaught \w+: (#\d+)/);
-  return { kind: "differ", detail: message ? message[1] : `exit ${run.status}` };
-}
-
-const dir = join(process.env.TMPDIR ?? "/tmp", `nts-fuzz-expr-${process.pid}`);
-mkdirSync(dir, { recursive: true });
+const dir = scratch("expr");
 
 const totals = { agree: 0, differ: 0, refused: 0, typescript: 0, panic: 0, other: 0 };
 const refusals = new Map();
