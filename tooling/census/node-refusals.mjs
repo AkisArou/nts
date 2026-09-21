@@ -32,13 +32,26 @@
 //
 // # What it does not do
 //
-// **Two unique-site counts are possible and they differ.** Keyed by
-// `file:line:column` plus the *verbatim* message the same run is 1,777; keyed
-// by `file:line:column` per *generalised* cause it is 1,741. Neither is wrong.
-// The first asks "how many distinct complaints", the second "how many distinct
-// places, per kind of cause" -- and one line refused for two spellings of one
-// cause is one row here and two there. This file reports the second, because
-// it ranks causes; quote whichever you mean and never the other's number.
+// **Three counts are defensible here and they are not interchangeable.** On
+// the 2026-09-21 run:
+//
+//     1738   distinct sites                 `file:line:column`
+//     1741   (site, generalised cause)      what this file sums
+//     1777   (site, verbatim message)       distinct complaints
+//
+// 1738 -> 1741 is exactly **three** sites that carry two different causes each
+// --- `stream/src/add-abort-signal.ts:39:32`, `buffer/src/main.ts:623:54`,
+// `stream/src/iter/utils.ts:235:2` --- and 1741 -> 1777 is one cause reported
+// in several spellings at one place.
+//
+// This file ranks *causes*, so it sums the second and says so: a site blocked
+// two ways is two pieces of work. The gate prints the first, because a single
+// headline number should be a count of places. `--napi` makes no difference to
+// any of them, which was checked rather than assumed --- with and without it
+// the distinct-site count is 1738.
+//
+// Quote whichever you mean, with its key, and never one number under the
+// other's name.
 //
 // It does not follow cascades. `NTS1003` is a refusal *caused by* another
 // refusal, and this counts `NTS1001` roots only -- see
@@ -103,10 +116,14 @@ for (const m of modules) {
 
 const totalOccurrences = [...occurrences.values()].reduce((a, b) => a + b, 0);
 const totalSites = [...sites.values()].reduce((a, s) => a + s.size, 0);
+const distinctSites = new Set([...sites.values()].flatMap((s) => [...s])).size;
 
+// `totalSites` sums sites per cause, so it is (site, cause) pairs and is named
+// that. `distinctSites` is the count of places, which is what the gate prints.
 console.log(
-  `${modules.length} module(s): ${totalOccurrences} refusal occurrence(s), ` +
-    `${totalSites} unique site(s) -- ${(totalOccurrences / Math.max(totalSites, 1)).toFixed(1)}x`,
+  `${modules.length} module(s): ${totalOccurrences} refusal occurrence(s) at ` +
+    `${distinctSites} site(s), ${totalSites} (site, cause) pair(s) -- ` +
+    `${(totalOccurrences / Math.max(distinctSites, 1)).toFixed(1)}x`,
 );
 console.log();
 console.log("  sites  occurs  cause");

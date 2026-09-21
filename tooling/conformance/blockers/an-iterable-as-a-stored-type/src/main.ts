@@ -1,9 +1,32 @@
 // expect: NTS1001 a property `p` of unrepresentable type (a union of `Iterable` | undefined)
 //
 // **The largest cause on the compiled axis, measured by site.** 267 of the
-// ~1,741 unique `runtime/node` refusal sites name one of `Iterable`,
+// **1,738** distinct `runtime/node` refusal sites name one of `Iterable`,
 // `Iterator`, `AsyncIterable`, `AsyncIterator` or `AsyncIterableIterator`.
-// The next largest is `an array of WeakRef` at 49.
+// `WeakRef` is the next comparable family at 67, on the same key.
+//
+// **It is a cause, not a message row**, and that is why no ranking had shown
+// it. The 267 sites are spread across *eight* different diagnostics ---
+//
+//     715 occurrences  a property `X` of unrepresentable type (...)
+//     381              a parameter of unrepresentable type (...)
+//     378              a function returning `X`
+//      67              a base `X` of unrepresentable type (...)
+//      43              a `X` over `X`
+//      36              a call result of unrepresentable type (...)
+//      10              a conditional of unrepresentable type (...)
+//       5              a function returning a union of `X` | `X`
+//
+// --- so every census that ranked texts split it eight ways. The largest
+// message row is `a property of unrepresentable type` at 343 sites, and
+// **164 of those 343 are this family**: the biggest row in the census is
+// itself nearly half one cause.
+//
+// All figures are `file:line:column` deduplicated, which is the gate's key and
+// the one a count of *places* should use. `node-refusals.mjs` sums
+// (site, cause) pairs instead --- 1,741 against 1,738 --- because a site
+// blocked two ways is two pieces of work; its header lists all three
+// denominators and exactly what separates them.
 //
 // That ranking only appears once the census is deduplicated. By *occurrence*
 // these are scattered under several messages and the top row is a three-line
