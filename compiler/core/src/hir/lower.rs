@@ -28626,6 +28626,44 @@ impl<'a> FuncBuilder<'a> {
                 //
                 // Legal, because the body runs later. Capturing it here would
                 // capture nothing, so it is refused rather than answered.
+                //
+                // **A `new Promise` settler is a different miss and said the
+                // wrong thing about itself.** `resolve` and `reject` are
+                // parameters of the executor arrow, declared as ordinarily as
+                // any parameter -- nothing about them is above its own
+                // declaration. They are absent from `bindings` because
+                // `Settler`'s doc says they are "not values at all": the
+                // executor is lowered at the construction site and a call to
+                // one is the settle it stands for.
+                //
+                // So a closure written *inside* the executor that captures one
+                // was told its program had a use-before-declaration, which it
+                // does not, and 41 of the 48 sites in that census row are this.
+                // The commonest shape in the corpus:
+                //
+                //     new Promise((resolve, reject) => {
+                //       const done = (e: Error | null): void => {
+                //         if (e !== null) { reject(e); return; }
+                //         resolve(v);
+                //       };
+                //       lookupService(host, done);
+                //     });
+                //
+                // Measured rather than assumed: the identical shape written as
+                // a *user* function with two callback parameters lowers, and so
+                // does `new Promise((resolve) => resolve(7))` with no inner
+                // closure. Only the pair refuses.
+                if let Some(settler) = self.settlers.get(&capture.symbol) {
+                    let which = if settler.rejects { "reject" } else { "resolve" };
+                    return self.unsupported(
+                        capture.at,
+                        &format!(
+                            "`{}`, a `new Promise` {which} captured by a closure -- a settler \
+                             is a call this lowering rewrites rather than a value it can hold",
+                            capture.name
+                        ),
+                    );
+                }
                 self.unsupported(
                     capture.at,
                     &format!(
