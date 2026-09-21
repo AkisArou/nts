@@ -8,16 +8,40 @@
 // representation and the walk gets one step further, to looking for
 // `[Symbol.iterator]` on what is actually stored.
 //
-// An array does not declare that method in its hierarchy. `for (const v of
-// xs)` over an array lowers perfectly well --- it is a counted loop over the
-// storage, and no protocol object is built --- but reaching an array *through*
-// an `Iterable<T>` slot means the receiver's static type is the protocol, so
-// the walk asks the hierarchy and the hierarchy has no such member.
+// **It is not about arrays**, which is what this fixture first said. The
+// receiver being an array is incidental; what decides it is whether the
+// receiver's *static* type is a concrete class or an interface:
 //
-// So this is a question about giving the array types a `[Symbol.iterator]`
-// entry that the protocol walk can find, and not about `Iterable` at all.
-// `abstract_generator_kind`'s comment says the protocol "is satisfied by a
-// hand-written object with a `next`" --- an array is not one of those.
+// ```text
+// class Two { *[Symbol.iterator](): Iterator<number> { yield 1; yield 2; } }
+//
+// const s = new Two();                for...of  lowered
+// const s: Seq = new Two();           for...of  refused   (a hand-written
+//                                                          iterable interface)
+// const s: Iterable<number> = new Two();        refused
+// const s: Iterable<number> = [1, 2];           refused
+// ```
+//
+// The same object, iterated four ways. Only the one whose static type is the
+// class works. `for (const v of xs)` over an array lowers too --- that is the
+// counted loop `walk_condition` documents, "an array is the one case where the
+// answer is known and the loop is a counter" --- and reaching *any* value
+// through an interface-typed slot leaves the protocol walk asking a hierarchy
+// that has no entry.
+//
+// The two interface spellings fail in different places, which is why they wear
+// different messages:
+//
+//   * a **user** interface stops before `protocol_walk` runs at all, with
+//     `a `for...of` over a value that is not ...`;
+//   * `Iterable<T>` reaches `protocol_walk`, gets a mangled name out of
+//     `symbol_property_name`, and then `callee_for` finds nothing:
+//     `hierarchy.declaring(type_id, "__@iterator@NN")` is `None`.
+//
+// So the feature is **iterating through an interface**, not teaching arrays a
+// method. `callee_for` already emits `Callee::Virtual` where the hierarchy has
+// a slot --- the gap is that an interface's symbol-keyed member never reaches
+// the hierarchy, so the dispatch it would use is never considered.
 //
 // `is_carried`'s own doc predicted the shape of this: "the cascades rise,
 // which is the shape to expect and not a regression: a function that used to
