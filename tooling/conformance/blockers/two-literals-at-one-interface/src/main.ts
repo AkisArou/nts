@@ -36,6 +36,21 @@
 // So it is not "name them apart": it is "one name, two bodies, chosen by the
 // receiver", which is dispatch and nothing less.
 //
+// # Half of it landed on 2026-09-22, and this half is the one that did not
+//
+// `Hierarchy::stored` lays a type's method out as a field holding a closure
+// when the type's literals supply it with an environment --- or when **two of
+// them supply it at all**, which is exactly this shape: two closures in two
+// slots, and no `T2#twice` to collide on.
+// `examples/an-object-literal-method-that-captures` (`twoPlain`, `mixed`)
+// guards that.
+//
+// Both methods here read `this`, and a closure cannot: it binds its own, the
+// way a `function` does, and so is never collected as one. One such literal
+// at a type settles the type on the table, and this file keeps its refusal
+// for precisely the reason the paragraph above gives --- dispatch is what a
+// `this`-reading method needs, and a field is not dispatch.
+//
 // A `FIXED` here means that landed. `oneLiteral` below is the control that must
 // keep working either way — a single literal at a named interface is a static
 // call and should stay one.

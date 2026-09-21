@@ -104,6 +104,13 @@ function body(i) {
     "classPrivate", "classCounter", "doWhile", "continueInLoop", "labelledContinue",
     "caughtValue", "throwCaught", "stringSlice", "stringSplit", "stringPad",
     "mapOps", "setOps", "arrayFold", "arrayFilterMap", "numberFormat",
+    // 2026-09-22, with `Hierarchy::stored`: an object literal at a
+    // method-signature interface, supplying the method with an environment in
+    // each of its spellings, and two literals at one interface. At module
+    // scope the captured name is reached by name and the method stays on the
+    // table; in the function arm it is a real capture and becomes a field --
+    // so one shape drives both representations against node.
+    "literalAtInterface", "twoLiteralsAtOneInterface",
   ]);
   const xs = v("xs");
   const a = v("a");
@@ -578,6 +585,33 @@ function body(i) {
           `const ${s} = ${xs}.filter((v: number): boolean => v !== 0).map((v: number): number => v + 1);`,
         ],
         read: pick([`${s}.length`, `${s}.reduce((p: number, q: number): number => p + q, 0)`]),
+        type: "number",
+      });
+    case "literalAtInterface": {
+      const spelling = pick([
+        `{ read(): number { return ${a} + 1; } }`,
+        `{ read: (): number => ${a} * 2 }`,
+        `{ read: function (): number { return ${a} - 1; } }`,
+      ]);
+      return tag({
+        stmts: [
+          `interface R__TAG__ { read(): number }`,
+          `const ${a} = ${num()};`,
+          `const ${o}: R__TAG__ = ${spelling};`,
+        ],
+        read: `${o}.read()`,
+        type: "number",
+      });
+    }
+    case "twoLiteralsAtOneInterface":
+      return tag({
+        stmts: [
+          `interface P__TAG__ { left(): number }`,
+          `const ${a} = ${num()};`,
+          `const ${o}: P__TAG__ = { left(): number { return ${a}; } };`,
+          `const ${s}: P__TAG__ = { left(): number { return 1; } };`,
+        ],
+        read: `${o}.left() + ${s}.left()`,
         type: "number",
       });
     case "numberFormat":

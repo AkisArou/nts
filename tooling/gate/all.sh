@@ -1189,9 +1189,10 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # `a-narrowed-module-scope-global`, `a-table-built-from-an-array`,
 # `a-typed-array-from-an-array`, `a-method-used-as-a-value` and
 # `a-for-of-that-assigns`. The JVM's `exact` floor below took all six in the
-# same runs and at the same numbers.
+# same runs and at the same numbers. 306 -> 307 on 2026-09-22 for
+# `an-object-literal-method-that-captures`, on both.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 306 "through the LLVM backend" "" 14 ); }
+  backend_examples 307 "through the LLVM backend" "" 14 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1451,7 +1452,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   status=$?
   printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
   [ "$status" -eq 0 ] || return 1
-  backend_examples 306 "through the JVM backend" exact 10 ); }
+  backend_examples 307 "through the JVM backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

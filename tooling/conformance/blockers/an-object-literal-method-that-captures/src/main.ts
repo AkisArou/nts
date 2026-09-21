@@ -1,5 +1,15 @@
-// expect: NTS1001 `base`, a name from an enclosing scope
-
+// expect: nothing refused
+//
+// **Closed 2026-09-22** by `Hierarchy::stored`: a method a literal of the type
+// supplies with an environment is laid out as the field holding the closure,
+// decided per type by `collect_stored_members` before any layout is built.
+// `examples/an-object-literal-method-that-captures` carries every spelling and
+// the two array entrances closed alongside; this file is kept as the guard
+// for the exact corpus shape, and the analysis below is why it took the form
+// it did.
+//
+// ---
+//
 // A **method shorthand** on an object literal that closes over a local.
 //
 //     const adapter = { read(): number { return base + 1; } };
@@ -108,6 +118,10 @@
 //     12 sites / 10 files   a property the type does not declare
 //      3 sites /  3 files   supplied as an accessor or method where the type
 //                           declares storage for it
+//
+// The third row was a method written for a field the type *does* declare ---
+// `write?: Callback` on a stream's sink --- and is the closure in that slot
+// now; only the accessor half of the message remains.
 //
 // Not every site in the first row is an object-literal method, and not every
 // site in the second is function-valued, so that is a ceiling rather than a

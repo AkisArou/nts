@@ -144,6 +144,26 @@ struct Hierarchy {
     implements: rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
     /// The methods a class declares itself, as opposed to inherits.
     declares: rustc_hash::FxHashMap<TypeId, Vec<String>>,
+    /// The members a type declares as a *method* and lays out as **storage**
+    /// -- a slot holding a closure -- because an object literal built at the
+    /// type supplies them with an environment.
+    ///
+    /// `f(x): number` is a call the dispatch table holds and `f: (x) => number`
+    /// is a field holding a closure; the checker says which, and `fields_of`
+    /// lays out only the second. But a literal that writes
+    /// `{ read() { return base + 1 } }` at `interface Reader { read(): number }`
+    /// has given `read` an environment, and a table method has none. The only
+    /// representation that can carry it is the field.
+    ///
+    /// **A property of the type, decided from every literal of it.** One
+    /// layout serves every value of a type, so a member cannot be storage in
+    /// one literal and a table entry in another; the question is *does any
+    /// literal of this type supply this member with an environment*, and it
+    /// is answered here, before the first layout is built, by
+    /// [`collect_stored_members`]. Keyed by the type id
+    /// `literal_member_owner` answers, which is the one `lower_object_method`
+    /// lays out and asks.
+    stored: rustc_hash::FxHashMap<TypeId, Vec<String>>,
     /// A class's name, which is half of the function name a call emits.
     name: rustc_hash::FxHashMap<TypeId, String>,
     /// The dispatch slot of each overridden method, keyed by the class that
@@ -185,7 +205,37 @@ struct Hierarchy {
     generator_slot: Option<u32>,
 }
 
+/// Where a member's declaration was written, for the questions whose answer is
+/// the prototype: a class's method lives there and a literal's does not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Written {
+    InALiteral,
+    InAClass,
+}
+
 impl Hierarchy {
+    /// Whether a type's method `member` is laid out as storage. See `stored`.
+    fn stores(&self, ty: TypeId, member: &str) -> bool {
+        self.stored
+            .get(&ty)
+            .is_some_and(|members| members.iter().any(|stored| stored == member))
+    }
+
+    /// Whether nothing but an object literal can be a value of `ty`, and
+    /// nothing reads a value of `ty` as some other type.
+    ///
+    /// A class implementing it and an interface extending it are both written
+    /// into `implements`, so one lookup covers both; a base `ty` itself
+    /// extends is the same map's key. Any of the three means a value of the
+    /// type may be an object the type's own layout did not build, or be read
+    /// through a layout that is not its own -- and a member that is a field
+    /// in one and a slot in the other is a `FieldGet` at an index that means
+    /// something else.
+    fn stands_alone(&self, ty: TypeId) -> bool {
+        !self.implements.contains_key(&ty)
+            && !self.implements.values().any(|faces| faces.contains(&ty))
+    }
+
     /// The nearest class at or above `ty` that declares `member`.
     fn declaring(&self, ty: TypeId, member: &str) -> Option<TypeId> {
         let mut at = Some(ty);
@@ -626,6 +676,199 @@ fn collect_anonymous_objects(
     }
 }
 
+/// How the literals of a type supply one of its methods.
+#[derive(Default)]
+struct Supply {
+    /// How many literals of the type write the member at all.
+    literals: usize,
+    /// Whether any of them gives it something a table method cannot hold: a
+    /// body that captures, or a value.
+    with_environment: bool,
+    /// Whether any of them writes it as a method reading `this`, which a
+    /// closure cannot be: it binds its own, the way a `function` does, and the
+    /// collector left it a table method. One such literal settles the type.
+    binds_this: bool,
+}
+
+/// Which of a type's methods an object literal supplies with an environment,
+/// and so must be laid out as storage. See `Hierarchy::stored`.
+///
+/// A member is forced when the type declares it as a method and any literal
+/// built at the type supplies it as
+///
+///   * a method whose body captures --- the collector knows, since a literal's
+///     method is collected like a `function` expression;
+///   * a value: `{ read: () => base + 1 }`, `{ read: function () {…} }`,
+///     `{ read }`. Whatever the value, a table holds functions and not values;
+///   * a second literal of the type supplying it at all. Two literals at one
+///     interface are two implementations, and the table has room for one ---
+///     `lower_object_literal_members` refused the second by name;
+///   * any method at all, where the type is an *instantiation* of a generic
+///     interface. An instantiation has no table -- the hierarchy registers the
+///     declaration's id -- and a slot needs neither a table nor a name.
+///
+/// **Not where a literal of the type reads `this`.** Such a method binds its
+/// own, a closure cannot be it, and one representation serves the type; that
+/// literal keeps the table and a capturing literal beside it keeps its
+/// refusal.
+///
+/// **Only for a type that stands alone.** A class implementing it, an
+/// interface extending it, or a base it extends all mean a value of the type
+/// can be an object its own layout did not build, or be read through a layout
+/// that is not its own; a field in one and a slot in the other is a
+/// `FieldGet` at an index that means something else. Such a type keeps the
+/// refusal it has today. And a class is never one: a literal typed as a class
+/// is structural, and forcing the class's method would break `new`.
+fn collect_stored_members(
+    snapshot: &SemanticSnapshot,
+    probe: &mut FuncBuilder,
+    closures: &[ClosureInfo],
+    hierarchy: &mut Hierarchy,
+) {
+    let mut supplied: rustc_hash::FxHashMap<(TypeId, String), Supply> =
+        rustc_hash::FxHashMap::default();
+    let collected: rustc_hash::FxHashMap<NodeId, &ClosureInfo> =
+        closures.iter().map(|closure| (closure.node, closure)).collect();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::OBJECT_LITERAL_EXPRESSION) {
+            continue;
+        }
+        let literal = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let Some(ty) = probe.literal_member_owner(literal) else {
+            continue;
+        };
+        // An instantiation of a generic interface has no dispatch table: the
+        // hierarchy registers the declaration's type id and a `Box<number>`
+        // is another, so a literal's method there was `a method with no
+        // declaration in the hierarchy` whether or not it captured. A slot
+        // needs no table and no per-instantiation function name, so every
+        // literal method at an instantiation is stored -- which is what
+        // makes `Box<number>` and `Box<string>` two layouts rather than one
+        // name.
+        let instantiated = is_an_instantiation(snapshot, probe, ty);
+        for member in probe.children(literal) {
+            let (with_environment, binds_this) = match probe.kind_of(member) {
+                Some(syntax::METHOD_DECLARATION) => match collected.get(&member) {
+                    Some(closure) => (instantiated || !closure.captures.is_empty(), false),
+                    // Not collected: it reads `this`, or is a generator.
+                    None => (false, true),
+                },
+                Some(syntax::PROPERTY_ASSIGNMENT | syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => {
+                    (true, false)
+                },
+                _ => continue,
+            };
+            let Some(name) = probe.member_name(member) else {
+                continue;
+            };
+            if !declares_a_method_alone(snapshot, probe, ty, &name) {
+                continue;
+            }
+            let supply = supplied.entry((ty, name)).or_default();
+            supply.literals += 1;
+            supply.with_environment |= with_environment;
+            supply.binds_this |= binds_this;
+        }
+    }
+    // A literal reading `this` keeps the whole type on the table, and the
+    // capturing literal beside it keeps the refusal it has today -- one
+    // representation per type, and that one has a body a closure cannot hold.
+    let mut forced: Vec<(TypeId, String)> = supplied
+        .into_iter()
+        .filter(|(_, supply)| {
+            (supply.with_environment || supply.literals > 1) && !supply.binds_this
+        })
+        .map(|(key, _)| key)
+        .collect();
+    // Sorted so the field order a layout gets does not depend on hash order.
+    forced.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
+    for (ty, name) in forced {
+        if !hierarchy.stands_alone(ty) {
+            continue;
+        }
+        if let Some(declared) = hierarchy.declares.get_mut(&ty) {
+            declared.retain(|declared| *declared != name);
+        }
+        hierarchy.stored.entry(ty).or_default().push(name);
+    }
+}
+
+/// Whether `ty` declares `member` as a method of its own: a signature written
+/// on this very interface or type literal, or the method of the anonymous
+/// type an object literal is.
+///
+/// Asked of the member's **declaration** rather than of `own`: the record is
+/// the checker's flattened view, and what this needs is that the member is
+/// written on this type --- inherited from a base, the base's layout holds the
+/// slot and a field here would not be read through it. A class's method is
+/// never one: a literal typed as a class is structural, and the class's `new`
+/// builds a table.
+fn declares_a_method_alone(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    ty: TypeId,
+    member: &str,
+) -> bool {
+    let Some(TypeKind::Object { properties }) = snapshot.types.get(ty.0 as usize).map(|it| &it.kind)
+    else {
+        return false;
+    };
+    let anonymous = named(snapshot, ty).is_none_or(is_anonymous_shape);
+    let declared_here = |owner: NodeId| {
+        snapshot
+            .node_types
+            .get(&owner)
+            .is_some_and(|declared| declares_or_instantiates(snapshot, ty, *declared))
+    };
+    properties.iter().any(|property| {
+        property.name == member
+            && property.kind == nts_semantic_schema::MemberKind::Method
+            && property.declaration.is_some_and(|declaration| match probe.kind_of(declaration) {
+                Some(syntax::METHOD_SIGNATURE) => {
+                    probe.syntactic_parent(declaration).is_some_and(|owner| {
+                        matches!(
+                            probe.kind_of(owner),
+                            Some(syntax::INTERFACE_DECLARATION | syntax::TYPE_LITERAL)
+                        ) && declared_here(owner)
+                    })
+                },
+                Some(syntax::METHOD_DECLARATION) => {
+                    anonymous && probe.declared_in_an_object_literal(property)
+                },
+                _ => false,
+            })
+    })
+}
+
+/// Whether `ty` is the type a declaration carries, or an instantiation of it.
+///
+/// A generic interface's instantiations are their own type ids, each with its
+/// own layout, and what they share with the declaration is its symbol. One
+/// derivation, asked from both sides: `declares_a_method_alone` asks whether
+/// a signature's owner declares `ty`, and `is_an_instantiation` whether `ty`
+/// is such a copy rather than the declaration's own id.
+fn declares_or_instantiates(snapshot: &SemanticSnapshot, ty: TypeId, declared: TypeId) -> bool {
+    let symbol_of = |ty: TypeId| snapshot.types.get(ty.0 as usize).and_then(|record| record.symbol);
+    declared == ty || (symbol_of(ty).is_some() && symbol_of(ty) == symbol_of(declared))
+}
+
+/// Whether `ty` is an instantiation of a generic interface rather than the
+/// declaration's own type.
+fn is_an_instantiation(snapshot: &SemanticSnapshot, probe: &FuncBuilder, ty: TypeId) -> bool {
+    let Some(symbol) = snapshot.types.get(ty.0 as usize).and_then(|record| record.symbol) else {
+        return false;
+    };
+    let Some(record) = snapshot.symbols.get(symbol.0 as usize) else {
+        return false;
+    };
+    record.declarations.iter().any(|declaration| {
+        probe.kind_of(*declaration) == Some(syntax::INTERFACE_DECLARATION)
+            && snapshot.node_types.get(declaration).is_some_and(|declared| {
+                *declared != ty && declares_or_instantiates(snapshot, ty, *declared)
+            })
+    })
+}
+
 fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy: &mut Hierarchy) {
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::INTERFACE_DECLARATION) {
@@ -721,7 +964,7 @@ fn collect_hierarchy(
     closures: &[ClosureInfo],
 ) -> Hierarchy {
     let mut hierarchy = Hierarchy::default();
-    let probe = FuncBuilder::new(snapshot, foreign);
+    let mut probe = FuncBuilder::new(snapshot, foreign);
     let instantiations = super::generics::instantiations(snapshot);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -834,6 +1077,10 @@ fn collect_hierarchy(
 
     collect_interfaces(snapshot, &probe, &mut hierarchy);
     collect_anonymous_objects(snapshot, &probe, &mut hierarchy);
+    // After both, because it edits `declares`: a member that becomes storage
+    // must not also be numbered a slot. Before the slot loop for the same
+    // reason.
+    collect_stored_members(snapshot, &mut probe, closures, &mut hierarchy);
 
     // A slot for every method something overrides, numbered against the class
     // that first declares it. A method nothing overrides gets none, which is why
@@ -1716,10 +1963,24 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
         // free name, and a `function` binds its own. One that never mentions
         // `this` has no such binding to be wrong about, so it is the same
         // closure.
+        //
+        // And an object literal's **method**, under the same rule. Written as
+        // `{ read() { return base + 1 } }` it is a table method with no
+        // environment, and `base` was refused as a name from an enclosing
+        // scope -- 35 sites in `runtime/`, one idiom: a literal standing in
+        // for an interface, reading the locals of the function that built it.
+        // Collected here so its captures are known; whether it *becomes* a
+        // closure is the type's decision, made by `collect_stored_members`
+        // from every literal of the type, and a method it leaves as a table
+        // entry is never asked for. One that mentions `this` binds its own,
+        // the way a `function` does, and stays a table method with a receiver.
         let is_closure = match node.kind {
             NodeKind::Syntax(syntax::ARROW_FUNCTION) => true,
             NodeKind::Syntax(syntax::FUNCTION_EXPRESSION) => !probe.binds_this(id),
             NodeKind::Syntax(syntax::FUNCTION_DECLARATION) => probe.is_nested_closure(id),
+            NodeKind::Syntax(syntax::METHOD_DECLARATION) => {
+                probe.is_a_literal_method(id) && !probe.binds_this(id)
+            }
             _ => false,
         };
         if !is_closure {
@@ -4617,6 +4878,15 @@ fn lower_object_literal_members(
     };
     for member in members_of(snapshot, foreign, literal) {
         let mut builder = shared.builder(snapshot, foreign, Copy::default());
+        // A member the type lays out as storage is a closure, emitted through
+        // `used_closures` from the literal that builds it like every other;
+        // there is no `T#read` to define, and so nothing for a second literal
+        // to collide with.
+        if member_name_of(snapshot, member)
+            .is_some_and(|name| builder.literal_member_is_storage(instance, &name))
+        {
+            continue;
+        }
         match builder.lower_method_of(literal, member, Some(instance)) {
             // **A member's function is named after the type the literal is
             // built at**, so two literals built at one *named* type each
@@ -11605,6 +11875,41 @@ impl<'a> FuncBuilder<'a> {
         "a `function` expression the closure collector did not see".to_owned()
     }
 
+    /// Whether a literal's member named `name` is **storage** on its type:
+    /// a field the type declares -- `write?: Callback` -- or a method the
+    /// type's literals made one (`Hierarchy::stored`). Either way the layout
+    /// has the slot, a method written for it is the closure that goes in, and
+    /// there is no `T#write` to emit. Asked by the literal that fills the slot
+    /// and by the walk that emits member functions, so the two agree.
+    fn literal_member_is_storage(&self, ty: TypeId, name: &str) -> bool {
+        if self.hierarchy.stores(ty, name) {
+            return true;
+        }
+        let Some(TypeKind::Object { properties }) =
+            self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind)
+        else {
+            return false;
+        };
+        properties
+            .iter()
+            .any(|property| property.name == name && property.kind.is_stored())
+    }
+
+    /// Whether a `METHOD_DECLARATION` is a member of an object literal that a
+    /// closure could stand in for.
+    ///
+    /// A class's method is never one -- it has a receiver and a slot -- and a
+    /// generator method keeps its frame, which a closure has no room for, so
+    /// it is left on the path that already refuses it by name.
+    fn is_a_literal_method(&self, id: NodeId) -> bool {
+        self.syntactic_parent(id)
+            .is_some_and(|parent| self.kind_of(parent) == Some(syntax::OBJECT_LITERAL_EXPRESSION))
+            && !self
+                .node(id)
+                .modifiers
+                .contains(nts_semantic_schema::DeclarationModifiers::GENERATOR)
+    }
+
     /// Whether a function expression's own `this` is reachable from its body.
     fn binds_this(&self, id: NodeId) -> bool {
         // `function (this: T, ...)` declares the receiver explicitly, which is
@@ -17684,24 +17989,40 @@ impl<'a> FuncBuilder<'a> {
     /// is: the distinction is about where the member was written, and the
     /// declaration node is the only thing that records it.
     fn declared_in_an_object_literal(&self, property: &PropertyRecord) -> bool {
-        let Some(declaration) = property.declaration else {
-            return false;
-        };
-        // **Whichever comes first going up**, rather than the immediate parent.
-        // The encoder puts members in a node list, so an accessor's parent is
-        // not the literal -- testing for it directly answered `false` for every
-        // literal and the consumers stayed broken while the class controls
-        // passed, which reads exactly like the guard working.
-        let mut at = self.node(declaration).parent;
+        self.declared_within(property) == Some(Written::InALiteral)
+    }
+
+    /// Whether a member is written in a class -- the other answer the walk
+    /// behind [`Self::declared_in_an_object_literal`] gives. A member declared
+    /// as a *signature* in an interface or a type literal is neither.
+    fn declared_in_a_class(&self, property: &PropertyRecord) -> bool {
+        self.declared_within(property) == Some(Written::InAClass)
+    }
+
+    /// The nearest literal or class enclosing a member's declaration.
+    ///
+    /// One walk for both questions, so the two cannot disagree about where the
+    /// boundary is: a literal inside a class method is a literal, and a class
+    /// expression inside a literal is a class.
+    ///
+    /// **Whichever comes first going up**, rather than the immediate parent.
+    /// The encoder puts members in a node list, so an accessor's parent is
+    /// not the literal -- testing for it directly answered `false` for every
+    /// literal and the consumers stayed broken while the class controls
+    /// passed, which reads exactly like the guard working.
+    fn declared_within(&self, property: &PropertyRecord) -> Option<Written> {
+        let mut at = self.node(property.declaration?).parent;
         while let Some(node) = at {
             match self.kind_of(node) {
-                Some(syntax::OBJECT_LITERAL_EXPRESSION) => return true,
-                Some(syntax::CLASS_DECLARATION | syntax::CLASS_EXPRESSION) => return false,
+                Some(syntax::OBJECT_LITERAL_EXPRESSION) => return Some(Written::InALiteral),
+                Some(syntax::CLASS_DECLARATION | syntax::CLASS_EXPRESSION) => {
+                    return Some(Written::InAClass);
+                },
                 _ => {}
             }
             at = self.node(node).parent;
         }
-        false
+        None
     }
 
     /// The first optional property a type declares, where it has one.
@@ -24245,7 +24566,12 @@ impl<'a> FuncBuilder<'a> {
     /// conversion is a named helper rather than a cast left to the backend. The
     /// helper is `static inline` and folds to nothing where the range is
     /// already known, which is the common case in a loop that built the value.
-    fn coerce_element(&mut self, id: NodeId, array: ValueId, value: ValueId) -> ValueId {
+    fn coerce_element(
+        &mut self,
+        id: NodeId,
+        array: ValueId,
+        value: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
         let numeric = |ty: &HirType| matches!(ty, HirType::Int { .. } | HirType::Float { .. });
         // A view coerces exactly as an array does. This is the site the
         // typed-array representation change would most easily have lost: the
@@ -24256,7 +24582,7 @@ impl<'a> FuncBuilder<'a> {
         let HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) =
             self.values[array.0 as usize].ty.clone()
         else {
-            return value;
+            return Ok(value);
         };
         let held = self.values[value.0 as usize].ty.clone();
         // An erased element is the general case rather than a numeric
@@ -24266,13 +24592,23 @@ impl<'a> FuncBuilder<'a> {
         // C compiler then reports -- which is how this was found, four
         // conversion sites after the first.
         if *element == HirType::Erased && held != HirType::Erased {
-            return self.coerce(value, &HirType::Erased, id).unwrap_or(value);
+            return Ok(self.coerce(value, &HirType::Erased, id).unwrap_or(value));
         }
-        if held == *element || !numeric(&element) || !numeric(&held) {
-            return value;
+        if held == *element {
+            return Ok(value);
+        }
+        // **Two references are `coerce`'s question, not a pass-through.** A
+        // class instance stored at an interface-typed index --
+        // `held[1] = new Thing()` on a `Named[]` -- went in unchanged, and a
+        // read through the element's layout then read `id`, a `double`, as
+        // the string pointer `name` is at in the other struct. `coerce`
+        // refuses exactly that at a parameter; here it was the one slot that
+        // never asked. Measured 2026-09-22: SIGSEGV where node answers 3.
+        if !numeric(&element) || !numeric(&held) {
+            return self.coerce(value, &element, id);
         }
         let origin = self.origin(id);
-        match super::builtin::element_coercion(&element) {
+        Ok(match super::builtin::element_coercion(&element) {
             Some(helper) => self.push(
                 OpKind::Call {
                     callee: Callee::External(helper.to_owned()),
@@ -24284,7 +24620,7 @@ impl<'a> FuncBuilder<'a> {
             ),
             // A defined narrowing — `double` to `float` — or nothing at all.
             None => self.push(OpKind::Convert(value), (*element).clone(), origin),
-        }
+        })
     }
 
     /// Both sides of a string `+` have to *be* strings.
@@ -25022,7 +25358,7 @@ impl<'a> FuncBuilder<'a> {
         // [`Self::slot_type`] still names its type, for the caller that wants
         // to build a value at it before the value exists.
         if let Place::Element { array, .. } = *place {
-            return Ok(self.coerce_element(id, array, value));
+            return self.coerce_element(id, array, value);
         }
         let Some(want) = self.slot_type(id, place)? else {
             return Ok(value);
@@ -25646,7 +25982,21 @@ impl<'a> FuncBuilder<'a> {
             // is not meant to be: the member is lowered by a builder with no
             // enclosing bindings, so it refuses inside the method and names the
             // name. `blockers/a-class-capturing-its-enclosing-scope` holds it.
-            Some(syntax::EMPTY_STATEMENT | syntax::CLASS_DECLARATION) => Ok(()),
+            //
+            // An `interface` or a `type` inside a body is the same statement
+            // with even less to it: TypeScript erases both, and the hierarchy
+            // walks every `INTERFACE_DECLARATION` wherever it sits, so a
+            // literal built at a local interface is laid out like one built at
+            // a module-scope one. Found by `fuzz-statements.mjs`, whose function
+            // arm puts each shape's statements in a body: the two shapes that
+            // declare an interface refused as "a `interface declaration`" and
+            // measured nothing.
+            Some(
+                syntax::EMPTY_STATEMENT
+                | syntax::CLASS_DECLARATION
+                | syntax::INTERFACE_DECLARATION
+                | syntax::TYPE_ALIAS_DECLARATION,
+            ) => Ok(()),
             Some(syntax::FUNCTION_DECLARATION) => self.bind_nested_function(id),
             Some(syntax::THROW_STATEMENT) => self.lower_throw(id),
             Some(syntax::TRY_STATEMENT) => self.lower_try(id),
@@ -26231,7 +26581,19 @@ impl<'a> FuncBuilder<'a> {
                 self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone())
             } else {
                 match &wanted_element {
-                    Some(element) => self.lower_expecting(*element_node, element)?,
+                    // **And coerced to it, the way a parameter is.** Lowering
+                    // *expecting* the element type shapes a nested literal and
+                    // checks nothing about a value that arrived with a type of
+                    // its own. `const held: Named[] = [lit, new Thing()]`
+                    // stored a `Thing` at `Named`'s representation with no
+                    // question asked, and `r.name` on it read `id` -- a
+                    // `double` -- as a string pointer: the exact case `coerce`
+                    // refuses at a parameter, reached one container along.
+                    // Measured 2026-09-22: SIGSEGV where node answers 3.
+                    Some(element) => {
+                        let value = self.lower_expecting(*element_node, element)?;
+                        self.coerce(value, element, *element_node)?
+                    },
                     None => self.lower_expression(*element_node)?,
                 }
             };
@@ -26738,15 +27100,42 @@ impl<'a> FuncBuilder<'a> {
                     .children(property)
                     .first()
                     .and_then(|name| self.literal_name(*name))
-                    .filter(|name| layout.index_of(name).is_some());
-                let Some(name) = occupies else {
+                    .and_then(|name| layout.index_of(&name).map(|field| (name, field)));
+                let Some((name, field)) = occupies else {
                     continue;
                 };
+                // **A method written for a slot is the closure that fills it.**
+                // The slot is there for one of two reasons -- the type declares
+                // the member as a field, `write?: Callback`, which is how the
+                // stream sinks and sources are declared; or the type's literals
+                // made a method one (`Hierarchy::stored`) -- and either way the
+                // method was collected the way a `function` expression is, so
+                // `lower_arrow` builds it, captures and all. One that reads
+                // `this` was not collected: it binds its own, a closure cannot
+                // be it, and it is refused here by name rather than as "an
+                // arrow function the collector did not see".
+                //
+                // An accessor stays refused: the slot wants a value and
+                // JavaScript re-runs the getter on every read.
+                if self.kind_of(property) == Some(syntax::METHOD_DECLARATION) {
+                    if self.binds_this(property) {
+                        return Err(self.unsupported(
+                            property,
+                            &format!(
+                                "`{name}`, a method reading `this` where the type declares a \
+                                 field holding a closure"
+                            ),
+                        ));
+                    }
+                    let want = layout.fields[field as usize].ty.clone();
+                    let value = self.lower_arrow(property)?;
+                    let value = self.coerce(value, &want, property)?;
+                    self.field_set(object, field, value, &origin);
+                    continue;
+                }
                 return Err(self.unsupported(
                     property,
-                    &format!(
-                        "`{name}`, supplied as an accessor or method where the type declares storage for it"
-                    ),
+                    &format!("`{name}`, supplied as an accessor where the type declares storage for it"),
                 ));
             }
             // The name first, then the slot, then the value. At the field's
@@ -28004,7 +28393,14 @@ impl<'a> FuncBuilder<'a> {
             // wrote was not in the layout, so reading it answered "`twice`,
             // which `Ops` does not declare" -- a message about the type, for a
             // field this compiler had removed.
-            if !property.kind.is_stored() {
+            //
+            // **Unless the type's literals made it one.** A method a literal
+            // supplies with an environment is laid out as the field holding
+            // the closure -- `Hierarchy::stored` is the decision, made once
+            // from every literal of the type -- and its record's type is the
+            // function type, which is what a `read: () => number` field has,
+            // so it takes the representation that field would.
+            if !property.kind.is_stored() && !self.hierarchy.stores(ty, &property.name) {
                 continue;
             }
             // **A repeated `#private` name is one member; a `#private` name and
@@ -35205,7 +35601,34 @@ impl<'a> FuncBuilder<'a> {
                 "`hasOwnProperty` of an optional property, whose answer is a presence bit",
             ));
         }
-        let answer = found.is_some_and(|property| property.kind == MemberKind::Field);
+        // A field is an own property and a class's method is on the
+        // prototype. That was the whole of the answer, and it was wrong for
+        // the third case: an object *literal's* method is an own property of
+        // the object -- node answers `true` for `{ read() {} }` -- and this
+        // answered `false` for it, on every literal, since the day it was
+        // written. Measured 2026-09-22 against the binary before the stored
+        // members landed: both named and anonymous literals disagreed with
+        // node. A member the type lays out as storage is the same case with
+        // the same answer, since only a literal ever builds one.
+        //
+        // A method the type declares as a *signature* has no answer here: the
+        // value is a literal or a class instance, and only the value knows.
+        // Refused rather than guessed, because the guess was `false` and it
+        // was a wrong answer rather than a missing one.
+        let answer = match found {
+            None => false,
+            Some(property) if property.kind == MemberKind::Field => true,
+            Some(property) if self.hierarchy.stores(ty, &property.name) => true,
+            Some(property) if self.declared_in_an_object_literal(property) => true,
+            Some(property) if self.declared_in_a_class(property) => false,
+            Some(_) => {
+                return Err(self.unsupported(
+                    id,
+                    "`hasOwnProperty` of a method the type declares as a signature, whose \
+                     answer is whether the value is a literal or a class instance",
+                ));
+            },
+        };
         // The receiver is still evaluated: `f().hasOwnProperty("x")` calls `f`,
         // and folding the answer must not fold the call away with it.
         let _ = receiver;
@@ -38816,7 +39239,14 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let mut length = None;
         for argument in arguments {
+            // Coerced, not only lowered expecting: a value with a type of its
+            // own -- a class instance pushed onto an interface-typed array --
+            // was handed to the helper at the element's representation with
+            // no question asked, which is the same pointer cast `coerce`
+            // refuses at a parameter. See `lower_array_literal`, which had the
+            // same hole and the same segfault.
             let value = self.lower_expecting(*argument, element)?;
+            let value = self.coerce(value, element, *argument)?;
             length = Some(self.push(
                 OpKind::Call {
                     callee: Callee::External(helper.to_owned()),

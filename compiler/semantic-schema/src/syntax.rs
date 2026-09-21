@@ -266,6 +266,11 @@ pub const MODULE_DECLARATION: u16 = 268;
 pub const EXPRESSION_WITH_TYPE_ARGUMENTS: u16 = 234;
 /// `value is string`, the return type of a type guard.
 pub const TYPE_PREDICATE: u16 = 183;
+/// `{ read(): number }` written as a type -- the body of `type R = { ... }`
+/// or an inline annotation. Named so a member's declaration can be told to
+/// belong to a type literal rather than an interface or a class, which is
+/// the difference between a shape and a thing with a dispatch table.
+pub const TYPE_LITERAL: u16 = 188;
 /// `...values` in a call or an array literal.
 pub const SPREAD_ELEMENT: u16 = 231;
 pub const HERITAGE_CLAUSE: u16 = 299;
