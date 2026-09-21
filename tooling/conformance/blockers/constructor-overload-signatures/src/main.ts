@@ -1,4 +1,19 @@
-// expect: a method without a body
+// expect: nothing refused
+//
+// **Closed 2026-09-21**, and kept as the regression guard. Two copies of one
+// fact were missing the same arm: a constructor has no `IDENTIFIER` child, so
+// `member_key` could not name it and `is_an_overload_signature` answered
+// "not an overload" for every constructor signature. Fixing that alone was not
+// enough --- `implementation_of`'s own `named` closure had the identical hole,
+// so `new C()` was padded to the arity of the overload the checker matched and
+// the verifier reported `CallArgumentCount { expected: 2, found: 1 }`.
+//
+// The row went 36 sites to 5, and what is left is optional method
+// declarations, which are a different construct with their own fixture.
+//
+// The account below is what the gap looked like from outside.
+//
+// ---
 //
 // TypeScript overload signatures are declarations with no body, and a class
 // that offers two call shapes is written with one per shape plus the

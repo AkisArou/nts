@@ -1006,6 +1006,20 @@ fn uses_its_receiver(probe: &FuncBuilder, method: NodeId) -> bool {
 /// reaches `u32::MAX`: symbols index a table the frontend built.
 const THIS_CAPTURE: u32 = u32::MAX;
 
+/// The member key a constructor is known by.
+///
+/// A constructor has no `IDENTIFIER` child -- `constructor` is a keyword -- so
+/// every place that names a member from its children has to special-case it,
+/// and the two that must agree are [`FuncBuilder::member_key`], which decides
+/// whether a signature is an overload of one, and the emitted name
+/// `format!("{owner}#constructor")` that a call is built against. A third
+/// spelling in `qualified_name` names the same member in a diagnostic.
+///
+/// `"constructor"` also appears in this file as a *JavaScript property name* --
+/// `"constructor" in x`, beside `hasOwnProperty` -- and that is a different
+/// concept that happens to share the text. It is deliberately not this.
+const CONSTRUCTOR_KEY: &str = "constructor";
+
 /// A name the closure body reads and the enclosing scope binds.
 #[derive(Clone, Debug)]
 struct Capture {
@@ -4343,7 +4357,7 @@ fn qualified_name(
         // a constructor has none -- `constructor` is a keyword. So it answers
         // `None` here, and this arm was unreachable from `note_uncompiled`
         // until that function stopped requiring a declared name first.
-        NodeKind::Syntax(syntax::CONSTRUCTOR) => "constructor",
+        NodeKind::Syntax(syntax::CONSTRUCTOR) => CONSTRUCTOR_KEY,
         NodeKind::Syntax(syntax::METHOD_DECLARATION) => declared?,
         _ => return None,
     };
@@ -11091,7 +11105,31 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The name a member is declared under, for comparing two of them.
+    ///
+    /// **A constructor answers before the identifier walk**, because it has no
+    /// `IDENTIFIER` child: `constructor` is a keyword. `qualified_name` already
+    /// carries that fact in its own words -- "`declared_name` returns the text
+    /// of the first `IDENTIFIER` child, and a constructor has none" -- and this
+    /// function had the identical hole.
+    ///
+    /// What it cost: [`Self::is_an_overload_signature`] identifies a signature
+    /// by finding a same-named sibling *with* a body, so a `None` key made
+    /// every constructor overload answer `false`. The signature was then
+    /// lowered like an implementation, and a class with
+    ///
+    /// ```text
+    /// constructor();
+    /// constructor(a: number);
+    /// constructor(a?: number) { ... }
+    /// ```
+    ///
+    /// produced **invalid HIR** -- `emit-c` wrote nothing and exited 0, which
+    /// is the silently-unbuilt shape rather than a refusal. 36 sites in
+    /// `runtime/node`, all of them `buffer`'s `Blob` and `Buffer`.
     fn member_key(&mut self, member: NodeId) -> Option<String> {
+        if self.kind_of(member) == Some(syntax::CONSTRUCTOR) {
+            return Some(CONSTRUCTOR_KEY.to_owned());
+        }
         self.children(member)
             .into_iter()
             .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
@@ -11334,7 +11372,7 @@ impl<'a> FuncBuilder<'a> {
             _ => "",
         };
         let member_name = if is_constructor {
-            "constructor".to_owned()
+            CONSTRUCTOR_KEY.to_owned()
         } else {
             self.member_name(member)
                 .or_else(|| self.symbol_member_name(class, member, instance))
@@ -14802,7 +14840,25 @@ impl<'a> FuncBuilder<'a> {
         if has_body(callee) {
             return callee;
         }
+        // **A constructor is named by its keyword, and this is the third copy
+        // of that fact.** `qualified_name` documents it -- "`declared_name`
+        // returns the text of the first `IDENTIFIER` child, and a constructor
+        // has none" -- and [`Self::member_key`] had the identical hole. Without
+        // the arm below, `named` answers `None` for a constructor signature,
+        // the destructuring on the next line fails, and this hands back the
+        // *signature* as though it were the implementation.
+        //
+        // What that cost: `declared_parameters` follows to the implementation
+        // only when `implementation_of(callee) != callee`, so the arity a call
+        // is padded to came from the overload signature the checker matched.
+        // `new C()` against `constructor(); constructor(a?: number) { ... }`
+        // then passed one argument to a function declared with two, and the
+        // verifier reported `CallArgumentCount { callee: "C#constructor",
+        // expected: 2, found: 1 }` -- invalid HIR, so `emit-c` wrote nothing.
         let named = |node: NodeId| {
+            if self.kind_of(node) == Some(syntax::CONSTRUCTOR) {
+                return Some(CONSTRUCTOR_KEY.to_owned());
+            }
             self.children(node)
                 .into_iter()
                 .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
