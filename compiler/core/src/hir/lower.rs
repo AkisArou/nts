@@ -3194,12 +3194,22 @@ fn managed_word(managed: &ManagedType) -> &'static str {
 /// is a function: `lower_array_literal` will not build one, `evolved_type` must
 /// not let one veto a settled sibling, and `collect_module_scope` must not take
 /// one as a global's type when a sibling settled it.
-/// What a module-scope global is declared to hold.
+/// What a declared name settles on holding.
 ///
 /// **The declaration's own type first, unless it is unsettled.** `var xs = []`
 /// types the declaration `never[]`, which is a `Some`, so an `or_else` beside
-/// it never ran and the global was declared to hold nothing -- and the empty
+/// it never ran and the name was declared to hold nothing -- and the empty
 /// literal then refused for want of a type the assignments had already settled.
+///
+/// **Asked of a declaration and not of a scope**, because the question does not
+/// depend on one. It was written for module scope, and the function-scope
+/// spelling of the identical program asked a shorter question one file-section
+/// away -- `type_of(name).or_else(|| evolved_type(name))`, missing exactly the
+/// `is_an_unsettled_array` filter this exists for. So
+/// `function f() { var xs = []; xs[0] = 7; }` refused where the module-scope
+/// spelling lowered, and the refusal it gave named the empty literal rather
+/// than the asymmetry. [`settled_global_type`] is this plus the one thing that
+/// really is about slots.
 ///
 /// The two filters are the price of taking the settled one. Every write that
 /// settles an evolving array's type *grows* it, so the type is only usable
@@ -3208,7 +3218,7 @@ fn managed_word(managed: &ManagedType) -> &'static str {
 /// Failing either, the unsettled type is handed back rather than nothing, which
 /// keeps the diagnostic the literal gives -- it names the construct, where a
 /// global of unrepresentable type does not.
-fn settled_global_type(probe: &FuncBuilder, name_node: NodeId) -> Option<HirType> {
+fn settled_declaration_type(probe: &FuncBuilder, name_node: NodeId) -> Option<HirType> {
     let declared = probe.type_of(name_node);
     declared
         .clone()
@@ -3237,20 +3247,27 @@ fn settled_global_type(probe: &FuncBuilder, name_node: NodeId) -> Option<HirType
                 ty
             }
         })
-        // **A module-scope variable is a slot**, and the sixth position to ask
-        // this. `var a;` that nothing assigns is `HirType::Void` -- a type with
-        // no width -- and a global has to have one, so `storable` refused it.
-        //
-        // `Lowering::unwritten` reached the same answer this morning for the
-        // function-scope spelling of the identical program, through the same
-        // `in_a_slot`. The two scopes disagreed because only one of them asked.
-        //
-        // 5 files of the slice-1 `test/language` population, and finding that
-        // they were this took correcting the message first: they all read "a
-        // module-scope variable holding a reference", which is the opposite of
-        // the condition and gave no hint they were the `var g;` case one scope
-        // out.
-        .map(in_a_slot)
+}
+
+/// The same, for a name that is a **slot**.
+///
+/// `var a;` that nothing assigns is `HirType::Void` -- a type with no width --
+/// and a global has to have one, so `storable` refused it. That is the sixth
+/// position to ask this, and the only part of the question that is about being
+/// a global rather than about being a declaration.
+///
+/// `Lowering::unwritten` reached the same answer for the function-scope
+/// spelling of the identical program, through this same `in_a_slot`. The two
+/// scopes disagreed because only one of them asked -- which is the whole reason
+/// the rest of the derivation now lives in
+/// [`settled_declaration_type`], where both can reach it.
+///
+/// 5 files of the slice-1 `test/language` population, and finding that they
+/// were this took correcting the message first: they all read "a module-scope
+/// variable holding a reference", which is the opposite of the condition and
+/// gave no hint they were the `var g;` case one scope out.
+fn settled_global_type(probe: &FuncBuilder, name_node: NodeId) -> Option<HirType> {
+    settled_declaration_type(probe, name_node).map(in_a_slot)
 }
 
 /// Are this name's indexed writes `[0]`, `[1]`, ... in that order?
@@ -3338,12 +3355,51 @@ fn written_as_a_dense_prefix(probe: &FuncBuilder, name_node: NodeId) -> bool {
         if *target != access {
             continue;
         }
+        // **Which operators write is asked in one other place**, and this was
+        // the second derivation of it. `stands_on_the_target_side` tests three
+        // things -- `=`, [`compound_operator`], [`logical_assignment`] -- and
+        // its doc says why: "derivations of `which operators write` would
+        // eventually disagree, and this one is the safety-critical copy". This
+        // copy tested `=` alone, so *every other binary operator* counted as a
+        // write, and an ordinary **read** of the name as a left operand
+        //
+        //     const xs = []; xs[0] = 7; xs[1] = 8; return xs[0] + xs[1];
+        //
+        // was taken for a compound assignment and rejected the whole name. The
+        // writes really are a dense prefix there; the `+` is not one of them.
+        //
+        // It looked like a scope asymmetry and is not: the module-scope
+        // spelling of that same expression answers `false` too. The two probes
+        // that suggested a scope difference differed in how they *read* the
+        // array as well as in where it was declared.
+        let token = probe.kind_of(*operator).unwrap_or(0);
+        let writes = token == syntax::EQUALS_TOKEN
+            || compound_operator(token).is_some()
+            || logical_assignment(token).is_some();
+        if !writes {
+            continue;
+        }
         // A compound assignment *reads* the slot before writing it, so it can
-        // never be the write that creates one. Rejected rather than skipped:
-        // treating it as a read would let `xs[9] += 1` settle a type that the
-        // read itself aborts on.
-        if probe.kind_of(*operator) != Some(syntax::EQUALS_TOKEN) {
-            return false;
+        // never be the write that creates one -- `xs[9] += 1` would settle a
+        // type that the read itself aborts on. The same holds for `xs[9] ??= 1`,
+        // which reads the slot to decide whether to write at all.
+        //
+        // **But only past the prefix.** Over a slot the writes before it have
+        // already created, a read-modify-write is just a read, and rejecting it
+        // outright cost two working programs:
+        //
+        //     const xs = []; xs[0] = 1; xs[0] += 4;     // 5, and lowered fine
+        //     const xs = []; xs[0] = 1; xs[0] ??= 9;    // 1, and lowered fine
+        //
+        // Both were accepted before this function was asked about locals at
+        // all, and a blanket rejection turned them into refusals. The index
+        // decides: below `expected` the slot exists, at or above it the
+        // assignment is the thing that would have to create one.
+        if token != syntax::EQUALS_TOKEN {
+            match declared_literal(probe, *subscript) {
+                Some(value) if value < expected => continue,
+                _ => return false,
+            }
         }
         match declared_literal(probe, *subscript) {
             Some(value) if (value - expected).abs() < f64::EPSILON => expected += 1.0,
@@ -33214,9 +33270,23 @@ impl<'a> FuncBuilder<'a> {
                             )
                         ) =>
                 {
-                    let declared = self
-                        .type_of(name)
-                        .or_else(|| self.evolved_type(name))
+                    // **The same derivation module scope uses**, rather than
+                    // a shorter one spelled out again here.
+                    //
+                    // This was `type_of(name).or_else(|| evolved_type(name))`,
+                    // which is what `settled_declaration_type` was before its
+                    // own first bug: `var xs = []` types the declaration
+                    // `never[]`, and a `Some` means the `or_else` beside it
+                    // never runs. So the settled type the writes had already
+                    // proven was never consulted, and
+                    //
+                    //     function f() { var xs = []; xs[0] = 7; xs[1] = 8; }
+                    //
+                    // refused *an empty array of unrepresentable type* where
+                    // the module-scope spelling of the identical program
+                    // lowered and ran. Found by writing the same construct
+                    // twice, once in each placement, and diffing the verdicts.
+                    let declared = settled_declaration_type(self, name)
                         .ok_or_else(|| self.unrepresentable(declaration, "an empty array"))?;
                     self.lower_empty_array(initializer, declared)?
                 }
