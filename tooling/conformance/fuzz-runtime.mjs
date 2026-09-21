@@ -165,17 +165,29 @@ export function compileAndRun(dir, source) {
     return { kind: "declined", detail: (err.match(/NTS2\d{3} [^\n]*/) ?? [""])[0] };
   }
 
-  try {
-    execFileSync(
-      "cc",
-      [
-        "-std=c11", "-O2", "-I.",
-        ...readdirSync(join(dir, "out")).filter((f) => f.endsWith(".c")),
-        "-luv", "-lm", "-o", "program",
-      ],
-      { cwd: join(dir, "out"), stdio: "ignore" },
-    );
-  } catch {
+  // **`cc`'s stderr is captured, because "it did not compile" has two very
+  // different causes.** With `stdio: "ignore"` a `cc-failed` verdict carried no
+  // detail at all, and a generative differential reports one as a finding --- so
+  // a transient `No space left on device` on a 16G `/tmp` shared with a running
+  // gate reads exactly like a compiler emitting invalid C. One did, on
+  // 2026-09-21: a single case in 1,200 that compiled, linked and ran perfectly
+  // when re-run on its own.
+  //
+  // The first error line goes into the verdict, so the two name themselves.
+  const build = spawnSync(
+    "cc",
+    [
+      "-std=c11", "-O2", "-I.",
+      ...readdirSync(join(dir, "out")).filter((f) => f.endsWith(".c")),
+      "-luv", "-lm", "-o", "program",
+    ],
+    { cwd: join(dir, "out"), encoding: "utf8" },
+  );
+  if (build.status !== 0) {
+    const first = `${build.stderr ?? ""}`
+      .split("\n")
+      .find((line) => /error|No space|cannot open|fatal/i.test(line));
+    const detail = (first ?? `exit ${build.status}`).trim().slice(0, 120);
     if (process.env.NTS_FUZZ_KEEP) {
       const kept = join(process.env.NTS_FUZZ_KEEP, `cc-failed-${Date.now()}.ts`);
       try {
@@ -188,7 +200,7 @@ export function compileAndRun(dir, source) {
         console.error(`kept ${kept}\n${log}`);
       } catch {}
     }
-    return { kind: "cc-failed", detail: "" };
+    return { kind: "cc-failed", detail };
   }
 
   const run = spawnSync(join(dir, "out/program"), [], { encoding: "utf8" });

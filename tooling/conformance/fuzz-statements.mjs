@@ -86,10 +86,20 @@ function body(i) {
     "push", "pushThenIndex", "annotatedFill", "scalarMutate", "stringBuild",
     "loopFill", "loopPush", "whileFill", "nestedRead", "varRedeclared",
     "conditionalWrite", "lengthAfterWrites", "reassignedArray", "strings",
+    // Widened 2026-09-21, once every refusal the shapes above produced was a
+    // decision written down. An instrument whose walls are all documented has
+    // stopped being an instrument, which is the same reason
+    // `fuzz-expressions.mjs` needed this file in the first place.
+    "objectFields", "objectMutated", "objectInArray", "destructured",
+    "destructuredWithDefault", "closureOverLet", "closureInLoop", "closureCounter",
+    "tryCatch", "tryFinally", "nestedFunction", "shadowed", "ternaryChain",
+    "switchOnNumber", "labelledBreak", "optionalChain", "optionalChainTest", "nullishDefault",
+    "templateBuild", "templateLength", "forOfArray", "forInObject", "spreadArray", "sortedArray",
   ]);
   const xs = v("xs");
   const a = v("a");
   const s = v("s");
+  const o = v("o");
 
   const tag = (b) => ({ ...b, shape });
   switch (shape) {
@@ -159,7 +169,13 @@ function body(i) {
       const stmts = [`let ${s} = ${word()};`];
       const n = int(1, 3);
       for (let k = 0; k < n; k++) stmts.push(`${s} += ${word()};`);
-      return tag({ stmts, read: pick([s, `${s}.length`]), type: pick(["string", "number"]) === "number" ? "number" : "string" });
+      // The declared type follows the *read*. Drawing it separately put
+      // `number` on a spelling that returns a string, and tsc rejected the
+      // whole batch -- a case the fuzzer could not run rather than one it did.
+      {
+        const read = pick([s, `${s}.length`]);
+        return tag({ stmts, read, type: read === s ? "string" : "number" });
+      }
     }
     case "loopFill":
       return tag({
@@ -226,11 +242,186 @@ function body(i) {
         read: pick([`${xs}.length`, `${xs}[1]`]),
         type: "number",
       });
+    case "objectFields":
+      return tag({
+        stmts: [`const ${o} = { a: ${num()}, b: ${num()} };`],
+        read: pick([`${o}.a`, `${o}.a + ${o}.b`, `${o}.b * 2`]),
+        type: "number",
+      });
+    case "objectMutated":
+      return tag({
+        stmts: [`const ${o} = { a: ${num()}, b: ${num()} };`, `${o}.a = ${num()};`, `${o}.b ${pick(["+=", "-="])} ${num()};`],
+        read: pick([`${o}.a`, `${o}.b`, `${o}.a + ${o}.b`]),
+        type: "number",
+      });
+    case "objectInArray":
+      return tag({
+        stmts: [`const ${xs} = [{ a: ${num()} }, { a: ${num()} }];`],
+        read: pick([`${xs}[0].a`, `${xs}[1].a`, `${xs}.length`]),
+        type: "number",
+      });
+    case "destructured":
+      return tag({
+        stmts: [`const ${o} = { a: ${num()}, b: ${num()} };`, `const { a: ${a}, b: ${s} } = ${o};`],
+        read: pick([a, `${a} + ${s}`]),
+        type: "number",
+      });
+    case "destructuredWithDefault":
+      return tag({
+        stmts: [`const ${xs}: number[] = [${num()}];`, `const [${a} = ${num()}, ${s} = ${num()}] = ${xs};`],
+        read: pick([a, s, `${a} + ${s}`]),
+        type: "number",
+      });
+    case "closureOverLet":
+      return tag({
+        stmts: [`let ${a} = ${num()};`, `const ${s} = (): number => ${a};`, `${a} = ${num()};`],
+        read: `${s}()`,
+        type: "number",
+      });
+    case "closureInLoop":
+      return tag({
+        stmts: [
+          `const ${xs}: (() => number)[] = [];`,
+          `for (let k = 0; k < ${int(2, 4)}; k++) { ${xs}.push((): number => k); }`,
+        ],
+        read: pick([`${xs}[0]()`, `${xs}[1]()`, `${xs}.length`]),
+        type: "number",
+      });
+    case "closureCounter":
+      return tag({
+        stmts: [
+          `let ${a} = 0;`,
+          `const ${s} = (): number => { ${a} = ${a} + 1; return ${a}; };`,
+          `${s}();`,
+          `${s}();`,
+        ],
+        read: pick([a, `${s}()`]),
+        type: "number",
+      });
+    case "tryCatch":
+      return tag({
+        stmts: [
+          `let ${a} = ${num()};`,
+          `try { if (${a} > -99) { throw new Error("x"); } ${a} = 1; } catch { ${a} = ${num()}; }`,
+        ],
+        read: a,
+        type: "number",
+      });
+    case "tryFinally":
+      return tag({
+        stmts: [`let ${a} = ${num()};`, `try { ${a} = ${a} + 1; } finally { ${a} = ${a} * 2; }`],
+        read: a,
+        type: "number",
+      });
+    case "nestedFunction":
+      return tag({
+        stmts: [
+          `function inner${"__TAG__"}(v: number): number { return v * 2 + ${num()}; }`,
+          `const ${a} = inner${"__TAG__"}(${num()});`,
+        ],
+        read: a,
+        type: "number",
+      });
+    case "shadowed":
+      return tag({
+        stmts: [`const ${a} = ${num()};`, `const ${s} = ((): number => { const ${a} = ${num()}; return ${a}; })();`],
+        read: pick([a, s, `${a} + ${s}`]),
+        type: "number",
+      });
+    case "ternaryChain":
+      return tag({
+        stmts: [`const ${a} = ${num()};`, `const ${s} = ${a} > 1 ? ${num()} : ${a} < 0 ? ${num()} : ${num()};`],
+        read: s,
+        type: "number",
+      });
+    case "switchOnNumber":
+      return tag({
+        stmts: [
+          // Annotated, because an unannotated `const` is narrowed to its
+          // literal type and every other `case` is then "not comparable".
+          `const ${a}: number = ${int(0, 3)};`,
+          `let ${s} = 0;`,
+          `switch (${a}) { case 0: ${s} = ${num()}; break; case 1: ${s} = ${num()}; break; default: ${s} = ${num()}; }`,
+        ],
+        read: s,
+        type: "number",
+      });
+    case "labelledBreak":
+      return tag({
+        stmts: [
+          `let ${a} = 0;`,
+          `outer${"__TAG__"}: for (let k = 0; k < 3; k++) { for (let j = 0; j < 3; j++) { if (j === 1) { continue outer${"__TAG__"}; } ${a} = ${a} + 1; } }`,
+        ],
+        read: a,
+        type: "number",
+      });
+    case "optionalChain":
+      return tag({
+        stmts: [`const ${o}: { a?: number } = ${pick([`{ a: ${num()} }`, "{}"])};`],
+        read: `${o}.a ?? ${num()}`,
+        type: "number",
+      });
+    case "optionalChainTest":
+      return tag({
+        stmts: [`const ${o}: { a?: number } = ${pick([`{ a: ${num()} }`, "{}"])};`],
+        read: `${o}.a === undefined`,
+        type: "boolean",
+      });
+    case "nullishDefault":
+      return tag({
+        stmts: [`const ${o}: number | null = ${pick(["null", num()])};`, `const ${a} = ${o} ?? ${num()};`],
+        read: a,
+        type: "number",
+      });
+    case "templateBuild":
+      return tag({
+        stmts: [`const ${a} = ${num()};`, `const ${s} = \`v=\${${a}}!\`;`],
+        read: s,
+        type: "string",
+      });
+    case "templateLength":
+      return tag({
+        stmts: [`const ${a} = ${num()};`, `const ${s} = \`v=\${${a}}!\`;`],
+        read: `${s}.length`,
+        type: "number",
+      });
+    case "forOfArray":
+      return tag({
+        stmts: [
+          `const ${xs}: number[] = [${num()}, ${num()}, ${num()}];`,
+          `let ${a} = 0;`,
+          `for (const v of ${xs}) { ${a} = ${a} + v; }`,
+        ],
+        read: a,
+        type: "number",
+      });
+    case "forInObject":
+      return tag({
+        stmts: [
+          `const ${o}: Record<string, number> = { a: ${num()}, b: ${num()} };`,
+          `let ${a} = 0;`,
+          `for (const k in ${o}) { ${a} = ${a} + ${o}[k]; }`,
+        ],
+        read: a,
+        type: "number",
+      });
+    case "spreadArray":
+      return tag({
+        stmts: [`const ${xs}: number[] = [${num()}, ${num()}];`, `const ${s}: number[] = [...${xs}, ${num()}];`],
+        read: pick([`${s}.length`, `${s}[2]`, `${s}[0]`]),
+        type: "number",
+      });
+    case "sortedArray":
+      return tag({
+        stmts: [`const ${xs}: number[] = [${num()}, ${num()}, ${num()}];`, `const ${s} = ${xs}.slice().sort((p: number, q: number): number => p - q);`],
+        read: pick([`${s}[0]`, `${s}.length`]),
+        type: "number",
+      });
     default:
       return tag({
         stmts: [`const ${s} = ${word()};`, `const ${a} = ${s}.length;`],
-        read: pick([a, `${s}`]),
-        type: pick(["number", "string"]),
+        read: a,
+        type: "number",
       });
   }
 }
@@ -247,7 +438,11 @@ function render(text, suffix) {
   return text
     .replaceAll("__xs", `xs${suffix}`)
     .replaceAll("__a", `a${suffix}`)
-    .replaceAll("__s", `s${suffix}`);
+    .replaceAll("__s", `s${suffix}`)
+    .replaceAll("__o", `o${suffix}`)
+    // Labels and nested function names need the suffix too, and are spelled
+    // with their own marker so they cannot collide with a variable.
+    .replaceAll("__TAG__", `${suffix}`);
 }
 
 function placements(i) {
@@ -298,6 +493,7 @@ function programSource(cases, expected) {
 const dir = scratch("stmt");
 const totals = { agree: 0, differ: 0, refused: 0, typescript: 0, panic: 0, other: 0 };
 const refusals = new Map();
+const rejected = new Map();
 const found = [];
 let armsDisagree = 0;
 
@@ -332,7 +528,11 @@ function measure(cases, expected, depth = 0) {
           totals.refused += 1;
           note(refusals, `${cases[0].shape}: ${verdict.detail}`);
         } else if (verdict.kind === "typescript") {
+          // **Named, because a case tsc rejects is a case this did not run.**
+          // A generator that quietly produces invalid TypeScript shrinks its
+          // own denominator, and the headline count cannot show that.
           totals.typescript += 1;
+          note(rejected, `${cases[0].shape}: ${verdict.detail}`);
         } else if (verdict.kind === "panic") {
           totals.panic += 1;
           found.push({ cases, expected, detail: `PANIC ${verdict.detail}` });
@@ -387,6 +587,12 @@ console.log(
 );
 if (armsDisagree > 0) {
   console.log(`  ${armsDisagree} generated pair(s) node itself answered differently; dropped`);
+}
+if (rejected.size > 0) {
+  console.log("  rejected by tsc (cases this could not run):");
+  for (const [message, count] of [...rejected].sort((a, b) => b[1] - a[1]).slice(0, 6)) {
+    console.log(`    ${String(count).padStart(4)}  ${message}`);
+  }
 }
 if (refusals.size > 0) {
   console.log("  refusals:");
