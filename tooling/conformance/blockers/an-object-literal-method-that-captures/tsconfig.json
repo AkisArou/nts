@@ -1,6 +1,4 @@
 {
-  "extends": "../../../../tsconfig.fixtures.json",
-  "include": [
-    "src"
-  ]
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "." }
 }
