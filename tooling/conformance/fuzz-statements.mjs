@@ -95,6 +95,15 @@ function body(i) {
     "tryCatch", "tryFinally", "nestedFunction", "shadowed", "ternaryChain",
     "switchOnNumber", "labelledBreak", "optionalChain", "optionalChainTest", "nullishDefault",
     "templateBuild", "templateLength", "forOfArray", "forInObject", "spreadArray", "sortedArray",
+    // Widened again 2026-09-21. The 42 shapes above never build a class, and
+    // classes are most of what `runtime/node` is: fields, a constructor, an
+    // accessor, a base and an override. Nor did anything exercise `do`/`while`
+    // with a `continue`, a caught value's own content, or the string and table
+    // operations a program spends its time in.
+    "classField", "classAccessor", "classInherit", "classOverride", "classStatic",
+    "classPrivate", "classCounter", "doWhile", "continueInLoop", "labelledContinue",
+    "caughtValue", "throwCaught", "stringSlice", "stringSplit", "stringPad",
+    "mapOps", "setOps", "arrayFold", "arrayFilterMap", "numberFormat",
   ]);
   const xs = v("xs");
   const a = v("a");
@@ -415,6 +424,166 @@ function body(i) {
       return tag({
         stmts: [`const ${xs}: number[] = [${num()}, ${num()}, ${num()}];`, `const ${s} = ${xs}.slice().sort((p: number, q: number): number => p - q);`],
         read: pick([`${s}[0]`, `${s}.length`]),
+        type: "number",
+      });
+    case "classField":
+      return tag({
+        stmts: [`class K${"__TAG__"} { a = ${num()}; b = ${num()}; }`, `const ${o} = new K${"__TAG__"}();`],
+        read: pick([`${o}.a`, `${o}.a + ${o}.b`]),
+        type: "number",
+      });
+    case "classAccessor":
+      return tag({
+        stmts: [
+          `class K${"__TAG__"} { #v = ${num()}; get v(): number { return this.#v; } set v(n: number) { this.#v = n; } }`,
+          `const ${o} = new K${"__TAG__"}();`,
+          `${o}.v = ${num()};`,
+        ],
+        read: `${o}.v`,
+        type: "number",
+      });
+    case "classInherit":
+      return tag({
+        stmts: [
+          `class B${"__TAG__"} { a = ${num()}; base(): number { return this.a; } }`,
+          `class K${"__TAG__"} extends B${"__TAG__"} { b = ${num()}; }`,
+          `const ${o} = new K${"__TAG__"}();`,
+        ],
+        read: pick([`${o}.base()`, `${o}.a + ${o}.b`]),
+        type: "number",
+      });
+    case "classOverride":
+      return tag({
+        stmts: [
+          `class B${"__TAG__"} { go(): number { return ${num()}; } }`,
+          `class K${"__TAG__"} extends B${"__TAG__"} { override go(): number { return super.go() + ${num()}; } }`,
+          `const ${o}: B${"__TAG__"} = new K${"__TAG__"}();`,
+        ],
+        read: `${o}.go()`,
+        type: "number",
+      });
+    case "classStatic":
+      return tag({
+        stmts: [`class K${"__TAG__"} { static n = ${num()}; static twice(): number { return K${"__TAG__"}.n * 2; } }`],
+        read: pick([`K${"__TAG__"}.n`, `K${"__TAG__"}.twice()`]),
+        type: "number",
+      });
+    case "classPrivate":
+      return tag({
+        stmts: [
+          `class K${"__TAG__"} { #h = ${num()}; bump(): number { this.#h = this.#h + 1; return this.#h; } }`,
+          `const ${o} = new K${"__TAG__"}();`,
+          `${o}.bump();`,
+        ],
+        read: `${o}.bump()`,
+        type: "number",
+      });
+    case "classCounter":
+      return tag({
+        stmts: [
+          `class K${"__TAG__"} { n = 0; add(v: number): number { this.n = this.n + v; return this.n; } }`,
+          `const ${o} = new K${"__TAG__"}();`,
+          `${o}.add(${num()});`,
+        ],
+        read: `${o}.add(${num()})`,
+        type: "number",
+      });
+    case "doWhile":
+      return tag({
+        stmts: [`let ${a} = 0;`, `let ${s} = 0;`, `do { ${s} = ${s} + ${a}; ${a} = ${a} + 1; } while (${a} < ${int(1, 4)});`],
+        read: s,
+        type: "number",
+      });
+    case "continueInLoop":
+      return tag({
+        stmts: [`let ${a} = 0;`, `for (let k = 0; k < 6; k++) { if (k % 2 === 0) { continue; } ${a} = ${a} + k; }`],
+        read: a,
+        type: "number",
+      });
+    case "labelledContinue":
+      return tag({
+        stmts: [
+          `let ${a} = 0;`,
+          `outer${"__TAG__"}: for (let k = 0; k < 3; k++) { for (let j = 0; j < 3; j++) { if (j > k) { continue outer${"__TAG__"}; } ${a} = ${a} + 1; } }`,
+        ],
+        read: a,
+        type: "number",
+      });
+    case "caughtValue":
+      return tag({
+        stmts: [
+          `let ${s} = "";`,
+          `try { throw new Error(${word()}); } catch (e) { ${s} = e instanceof Error ? e.message : "?"; }`,
+        ],
+        read: `${s}.length`,
+        type: "number",
+      });
+    case "throwCaught":
+      return tag({
+        stmts: [
+          `let ${a} = 0;`,
+          `try { if (${num()} >= 0) { throw new RangeError("r"); } ${a} = 1; } catch { ${a} = 2; } finally { ${a} = ${a} + 10; }`,
+        ],
+        read: a,
+        type: "number",
+      });
+    case "stringSlice":
+      return tag({
+        stmts: [`const ${s} = ${word()} + "abcdef";`],
+        read: pick([`${s}.slice(${int(0, 3)}).length`, `${s}.slice(${int(0, 2)}, ${int(3, 6)}).length`, `${s}.indexOf("c")`]),
+        type: "number",
+      });
+    case "stringSplit":
+      return tag({
+        stmts: [`const ${s} = "a,b,,c";`, `const ${xs} = ${s}.split(",");`],
+        read: pick([`${xs}.length`, `${xs}[1].length`, `${xs}.join("-").length`]),
+        type: "number",
+      });
+    case "stringPad":
+      return tag({
+        stmts: [`const ${s} = ${word()};`],
+        read: pick([`${s}.padStart(${int(1, 6)}, "x").length`, `${s}.trim().length`, `${s}.repeat(${int(0, 3)}).length`]),
+        type: "number",
+      });
+    case "mapOps":
+      return tag({
+        stmts: [
+          `const ${o} = new Map<string, number>();`,
+          `${o}.set("a", ${num()});`,
+          `${o}.set("b", ${num()});`,
+        ],
+        read: pick([`${o}.size`, `${o}.get("a") ?? -1`, `${o}.has("c") ? 1 : 0`]),
+        type: "number",
+      });
+    case "setOps":
+      return tag({
+        stmts: [`const ${o} = new Set<number>();`, `${o}.add(${num()});`, `${o}.add(${num()});`],
+        read: pick([`${o}.size`, `${o}.has(0) ? 1 : 0`]),
+        type: "number",
+      });
+    case "arrayFold":
+      return tag({
+        stmts: [`const ${xs}: number[] = [${num()}, ${num()}, ${num()}];`],
+        read: pick([
+          `${xs}.reduce((p: number, q: number): number => p + q, 0)`,
+          `${xs}.filter((v: number): boolean => v > 0).length`,
+          `${xs}.map((v: number): number => v * 2)[1]`,
+        ]),
+        type: "number",
+      });
+    case "arrayFilterMap":
+      return tag({
+        stmts: [
+          `const ${xs}: number[] = [${num()}, ${num()}, ${num()}, ${num()}];`,
+          `const ${s} = ${xs}.filter((v: number): boolean => v !== 0).map((v: number): number => v + 1);`,
+        ],
+        read: pick([`${s}.length`, `${s}.reduce((p: number, q: number): number => p + q, 0)`]),
+        type: "number",
+      });
+    case "numberFormat":
+      return tag({
+        stmts: [`const ${a} = ${num()};`],
+        read: pick([`${a}.toFixed(2).length`, `${a}.toString(16).length`, `Number.isInteger(${a}) ? 1 : 0`]),
         type: "number",
       });
     default:
