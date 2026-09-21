@@ -159,7 +159,9 @@ function numberExpr(depth) {
     // a known wrong answer (`[] as number[]` then `[0]` gives 0 where node
     // gives `undefined`) and generating it would report noise, not news.
     () => `[${n()}, ${n()}, ${n()}][${int(0, 2)}]`,
-    () => `(${n()} ?? 0)`,
+    // Widened, because `2 ?? 0` is TS2869 --- "right operand is unreachable"
+    // --- and a rejected expression is a wasted sample rather than a finding.
+    () => `(((${n()}) as number | null) ?? 0)`,
     // Coercion corners: the places a compiled backend can quietly differ from a
     // double-based interpreter.
     () => `parseInt(${s()}, ${pick(["10", "16", "2"])})`,
@@ -223,9 +225,13 @@ function boolExpr(depth) {
     () => `(${n()} <= ${n()})`,
     () => `(${n()} > ${n()})`,
     () => `(${n()} >= ${n()})`,
-    () => `(${n()} === ${n()})`,
-    () => `(${n()} !== ${n()})`,
-    () => `(${s()} === ${s()})`,
+    // **Widened to the base type.** Two inline literals give TypeScript literal
+    // types, and comparing disjoint ones is TS2367 --- seven of ten rejections
+    // in a 160-case run. The comparison this is testing is the *machine* one,
+    // which the cast does not change.
+    () => `((${n()}) as number === (${n()}) as number)`,
+    () => `((${n()}) as number !== (${n()}) as number)`,
+    () => `((${s()}) as string === (${s()}) as string)`,
     () => `(${s()} < ${s()})`,
     () => `(${b()} && ${b()})`,
     () => `(${b()} || ${b()})`,
@@ -243,7 +249,7 @@ function boolExpr(depth) {
     // `"a" in { a: 1 }` only: the key has to be a literal the compiler can see,
     // which a generated string expression is not.
     () => `(${stringLiteral()} in { a: 1, b: 2 } ? true : false)`,
-    () => `(${n()} === ${n()} ? ${b()} : ${b()})`,
+    () => `((${n()}) as number === (${n()}) as number ? ${b()} : ${b()})`,
     () => `Object.is(${n()}, ${n()})`,
     () => `(${arrayExpr(depth - 1)}.length === ${int(0, 3)})`,
   ])();
@@ -426,6 +432,7 @@ mkdirSync(dir, { recursive: true });
 
 const totals = { agree: 0, differ: 0, refused: 0, typescript: 0, panic: 0, other: 0 };
 const refusals = new Map();
+const rejected = new Map();
 const found = [];
 
 /**
@@ -472,6 +479,10 @@ function measure(exprs, expected, depth = 0) {
   }
   if (verdict.kind === "typescript") {
     totals.typescript += exprs.length;
+    // Counted by code, because "rejected by tsc" is the generator's own waste
+    // and the code says which rule it keeps breaking.
+    const code = (verdict.detail.match(/^TS\d+/) ?? ["TS?"])[0];
+    rejected.set(code, (rejected.get(code) ?? 0) + 1);
     return;
   }
   if (verdict.kind === "cc-failed" || verdict.kind === "panic") {
@@ -541,6 +552,11 @@ if (found.length === 0) {
     console.log(`  ${f.kind.padEnd(10)} ${f.code}`);
     if (f.expected !== undefined) console.log(`             node: ${f.expected}`);
   }
+}
+if (rejected.size > 0) {
+  const top = [...rejected.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  console.log(`  rejected by tsc, by code:`);
+  for (const [code, n] of top) console.log(`    ${String(n).padStart(3)}  ${code}`);
 }
 if (refusals.size > 0) {
   const top = [...refusals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
