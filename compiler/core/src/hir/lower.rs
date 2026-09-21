@@ -10556,6 +10556,35 @@ impl<'a> FuncBuilder<'a> {
             {
                 return format!("`Math.{member}`, not a member of this compiler's `Math`");
             }
+            // **`Date`'s two statics are two different answers**, and the
+            // generic line below gave them one. Its instance methods are
+            // already told apart by name a few hundred lines down --
+            // `getFullYear` "reads a *local* calendar", `toISOString` "has no
+            // way to throw" -- and the statics fell through to the catch-all.
+            //
+            // `Date.now` is a **decision**, and `lower_new_date` already words
+            // it for the same capability: `new Date()` with no argument
+            // refuses as "a clock this compiler has no capability for and no
+            // differential could check". One refusal in two sentences, one of
+            // which said nothing, across 6 sites.
+            //
+            // `Date.UTC` is **not** a clock. It is a pure function of its
+            // arguments -- year, month, day -- returning a millisecond offset,
+            // which is exactly the kind of thing a differential *can* check.
+            // It is absent rather than impossible, and saying so is what keeps
+            // it findable: grouped under the clock it would read as refused on
+            // principle and nobody would look again.
+            if record.name == "Date"
+                && let Some(member) = self.member_read_from(id)
+            {
+                return match member.as_str() {
+                    "now" => "`Date.now`, which reads a clock this compiler has no capability                               for and no differential could check"
+                        .to_owned(),
+                    "UTC" => "`Date.UTC`, which is a pure function of its arguments rather                               than a clock, and is simply not built yet"
+                        .to_owned(),
+                    _ => format!("`Date.{member}`, a global member with no definition here"),
+                };
+            }
             // With the member, when one is being read. `Object` was 44
             // refusals that could not be told apart, and they are not one
             // thing: `Object.keys` is a list the compiler is holding and

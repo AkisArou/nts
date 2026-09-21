@@ -142,7 +142,12 @@ fn what_is_refused_and_why() {
         ("getFullYear", "local"),
         ("getHours", "timezone database"),
         ("getTimezoneOffset", "two machines"),
-        ("Date.now", "no definition here"),
+        // **The same reason in both spellings.** This pinned `no definition
+        // here` -- the catch-all every unimplemented global got -- while the
+        // doc comment above already said what the real answer was. One
+        // decision, and the two sentences did not agree about it until
+        // `Date.now` was told apart from `Date.UTC`, which is *not* a clock.
+        ("Date.now", "no differential could check"),
         ("new Date` with no argument", "no differential could check"),
     ] {
         let found = said
