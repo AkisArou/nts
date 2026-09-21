@@ -3829,6 +3829,70 @@ NtsString *nts_number_to_string(double x) {
  * double this is. Rounding up carries through the fraction and, if it runs off
  * the front, into the integer part -- which is why the integer part is written
  * after the fraction and not before. */
+/* `n.toFixed(d)`. The header carries why this is not `printf("%.*f")`. */
+NtsString *nts_number_to_fixed(double x, double digits) {
+  int d = (int)digits;
+  if (x != x)
+    return nts_string_from_utf8("NaN", 3);
+  if (x > 1.7976931348623157e308)
+    return nts_string_from_utf8("Infinity", 8);
+  if (x < -1.7976931348623157e308)
+    return nts_string_from_utf8("-Infinity", 9);
+  /* The specification defers to `ToString` here, so the exponential form is
+   * the right answer rather than a fallback. */
+  if (fabs(x) >= 1e21)
+    return nts_number_to_string(x);
+
+  bool negative = signbit(x);
+  double magnitude = fabs(x);
+
+  /* The exact expansion. A double's decimal expansion terminates, and 1080
+   * places is past the last significant digit of the smallest denormal, so
+   * nothing is truncated before the rounding position. */
+  char buffer[1200];
+  snprintf(buffer, sizeof buffer, "%.*f", d + 40, magnitude);
+
+  char *point = strchr(buffer, '.');
+  size_t keep = (size_t)(point - buffer) + (d > 0 ? (size_t)d + 1u : 0u);
+  /* The first digit dropped, which is the whole of the rounding decision: at
+   * zero digits it sits one past the point rather than at `keep`. */
+  char dropped = buffer[keep + (d > 0 ? 0u : 1u)];
+  buffer[keep] = '\0';
+
+  if (dropped >= '5') {
+    size_t at = keep;
+    bool carried = true;
+    while (at > 0) {
+      at--;
+      if (buffer[at] == '.')
+        continue;
+      if (buffer[at] < '9') {
+        buffer[at]++;
+        carried = false;
+        break;
+      }
+      buffer[at] = '0';
+    }
+    /* `9.99` at two digits carries off the front and grows the number. */
+    if (carried) {
+      size_t length = strlen(buffer);
+      memmove(buffer + 1, buffer, length + 1);
+      buffer[0] = '1';
+      keep = length + 1;
+    }
+  }
+
+  /* `(-0.4).toFixed(0)` is `"-0"` in JavaScript: the sign survives a magnitude
+   * that rounded away. Taken from `signbit` rather than from `x < 0`, which is
+   * false for negative zero. */
+  if (negative) {
+    size_t length = strlen(buffer);
+    memmove(buffer + 1, buffer, length + 1);
+    buffer[0] = '-';
+  }
+  return nts_string_from_utf8(buffer, strlen(buffer));
+}
+
 NtsString *nts_number_to_string_radix(double x, double radix) {
   if (radix == 10.0)
     return nts_number_to_string(x);

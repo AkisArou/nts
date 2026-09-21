@@ -141,6 +141,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_max_fn", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_min", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_min_fn", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
+    ("nts_number_to_fixed", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
     ("nts_number_to_string", &[Some(HirType::Float { bits: 64 })], None),
     ("nts_number_to_string_into", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_number_to_string_radix", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),

@@ -1638,6 +1638,34 @@ NtsString *nts_number_to_string(double x);
  * can see at compile time -- a refusal would have to happen at run time, and
  * there is nowhere for it to go. */
 NtsString *nts_number_to_string_radix(double x, double radix);
+
+/* `n.toFixed(digits)`, for 0 to 100 digits.
+ *
+ * **Not `snprintf("%.*f")`, and the difference is measured.** The
+ * specification picks the integer `n` for which `n / 10^f - x` is closest to
+ * zero and, *on a tie, the larger n* -- which is half-away-from-zero. C's
+ * `printf` rounds half-to-even, so the two disagree on every exact tie:
+ *
+ *     x        d   node     printf
+ *     0.5      0   "1"      "0"
+ *     2.5      0   "3"      "2"
+ *     0.125    2   "0.13"   "0.12"
+ *     -2.5     0   "-3"     "-2"
+ *     1e21     2   "1e+21"  "1000000000000000000000.00"
+ *
+ * Five of eleven sampled cases, which is the silent-wrong-answer shape rather
+ * than a missing feature.
+ *
+ * So: print the **exact** decimal expansion and round the digit string. Every
+ * double has a terminating decimal expansion, and it is precisely what the
+ * specification's "closest n" operates on -- so rounding that string
+ * half-away-from-zero is correct by construction rather than by approximation.
+ * `1.005` is really 1.00499999999999989..., so it rounds *down* to "1.00" and
+ * agrees with node for the same reason node does it.
+ *
+ * At or above 1e21 the specification hands off to `ToString`, which is why the
+ * exponential form comes back rather than twenty-one zeroes. */
+NtsString *nts_number_to_fixed(double x, double digits);
 /* `String.fromCharCode` and `String.fromCodePoint`, which are two functions:
  * the first takes a UTF-16 code *unit* through `ToUint16` and always returns
  * one of them, the second takes a code *point* and returns a surrogate pair

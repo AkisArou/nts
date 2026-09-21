@@ -1013,6 +1013,45 @@ public final class NtsRuntime {
      * alongside the fraction, so the loop stops as soon as the digits remaining
      * could not change which double this is.
      */
+    /**
+     * {@code n.toFixed(d)}.
+     *
+     * <p>Not {@code String.format("%.2f", x)}: the specification picks the
+     * integer {@code n} for which {@code n / 10^f - x} is closest to zero and,
+     * on a tie, the <em>larger</em> n -- half away from zero. Java's formatter
+     * and C's {@code printf} both round half to even, so the two disagree on
+     * every exact tie: {@code (0.5).toFixed(0)} is {@code "1"} and
+     * {@code (2.5).toFixed(0)} is {@code "3"}.
+     *
+     * <p>{@code new BigDecimal(double)} takes the double's <em>exact</em>
+     * value, which is what the specification's "closest n" operates on, so
+     * {@code HALF_UP} over it is correct by construction rather than by
+     * approximation. {@code 1.005} is really 1.00499999999999989..., so it
+     * rounds down and agrees with node for the reason node does.
+     *
+     * <p>At or above 1e21 the specification defers to {@code ToString}, which
+     * is why the exponential form comes back rather than twenty-one zeroes.
+     */
+    public static String numberToFixed(double x, double digits) {
+        int d = (int) digits;
+        if (Double.isNaN(x)) {
+            return "NaN";
+        }
+        if (Double.isInfinite(x)) {
+            return x > 0 ? "Infinity" : "-Infinity";
+        }
+        if (Math.abs(x) >= 1e21) {
+            return numberToString(x);
+        }
+        String body = new BigDecimal(Math.abs(x))
+                .setScale(d, RoundingMode.HALF_UP)
+                .toPlainString();
+        /* `(-0.4).toFixed(0)` is `"-0"`: the sign survives a magnitude that
+         * rounded away. Taken from the sign bit rather than from `x < 0`,
+         * which is false for negative zero. */
+        return (Double.doubleToRawLongBits(x) < 0 ? "-" : "") + body;
+    }
+
     public static String numberToStringRadix(double x, double radix) {
         if (radix == 10.0) {
             return numberToString(x);

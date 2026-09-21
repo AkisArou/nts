@@ -586,6 +586,10 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         "nts_number_to_string_radix" => {
             (RUNTIME, "numberToStringRadix", "(DD)Ljava/lang/String;")
         }
+        // `String.format("%.2f", x)` is not this either: it rounds half to
+        // even and the specification rounds half away from zero. See
+        // `numberToFixed`.
+        "nts_number_to_fixed" => (RUNTIME, "numberToFixed", "(DD)Ljava/lang/String;"),
         _ => return None,
     })
 }

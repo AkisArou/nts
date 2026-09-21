@@ -34906,6 +34906,145 @@ impl<'a> FuncBuilder<'a> {
         ))
     }
 
+    /// The methods a **number** receiver has here.
+    ///
+    /// Its own function because `lower_method_on` is at the line limit and this
+    /// is the self-contained part: every arm tests the same `name` and none of
+    /// them looks at anything the caller still needs.
+    fn lower_number_method(
+        &mut self,
+        id: NodeId,
+        receiver_node: NodeId,
+        receiver: ValueId,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let name = self.node(member).text.clone().unwrap_or_default();
+        if name == "toString" && arguments.is_empty() {
+            return self.as_string(receiver_node, receiver);
+        }
+        // `n.toString(radix)`, which is three calls from every module's
+        // front door: `ERR_INVALID_ARG_TYPE` renders the offending value
+        // into its message, rendering a control character means a hex
+        // escape, and `code.toString(16)` is that escape. A module cannot
+        // validate an argument without this, and validating arguments is
+        // what node's entry points do first.
+        //
+        // The receiver is widened to `f64` because the runtime takes one
+        // and an `i32` receiver is common -- `charCodeAt` gives one.
+        if name == "toString" && arguments.len() == 1 {
+            let radix = self.lower_expression(arguments[0])?;
+            let radix = self.coerce(radix, &HirType::NUMBER, arguments[0])?;
+            let value = self.coerce(receiver, &HirType::NUMBER, receiver_node)?;
+            let origin = self.origin(id);
+
+            return self.lower_radix_to_string(id, value, radix, &origin);
+        }
+        // `n.toFixed(d)`, which the widened statement fuzzer reached and
+        // nothing else had: 14 draws in 3,000 cases, and the only wall in
+        // that run that was not already a decision.
+        //
+        // The digits are range-checked the way `toString`'s radix is, in
+        // node's own sentence, because the specification throws for the
+        // same reason: a `RangeError` at run time is the answer, and there
+        // is nowhere at compile time to put it.
+        if name == "toFixed" && arguments.len() == 1 {
+            let digits = self.lower_expression(arguments[0])?;
+            let digits = self.coerce(digits, &HirType::NUMBER, arguments[0])?;
+            let value = self.coerce(receiver, &HirType::NUMBER, receiver_node)?;
+            let origin = self.origin(id);
+
+            return self.lower_fixed_to_string(id, value, digits, &origin);
+        }
+        Err(self.unsupported(id, &format!("`{name}` on a number")))
+    }
+
+    /// `n.toFixed(d)`, with the domain the specification gives it.
+    ///
+    /// The same shape as [`Self::lower_radix_to_string`] and for the same
+    /// reason: the bound belongs here rather than in the runtime because a
+    /// provided `RangeError` is a *class* and the runtime has no way to
+    /// construct one.
+    ///
+    /// `nts_number_to_fixed` carries why the formatting is not `printf` -- the
+    /// specification rounds half *away from zero* and C rounds half to even,
+    /// which disagree on every exact tie.
+    fn lower_fixed_to_string(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        digits: ValueId,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = origin.clone();
+        let throwing = self.new_block();
+        let carry_on = self.new_block();
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let below = self.push(
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: digits,
+                rhs: zero,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let checking = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: below,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: checking,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(checking);
+        let hundred = self.push(OpKind::ConstFloat(100.0), HirType::NUMBER, origin.clone());
+        let above = self.push(
+            OpKind::Binary {
+                op: BinOp::Gt,
+                lhs: digits,
+                rhs: hundred,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.terminate(Terminator::Branch {
+            cond: above,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(throwing);
+        // Node's exact sentence: `RangeError: toFixed() digits argument must be
+        // between 0 and 100`.
+        let text = HirType::Managed(ManagedType::String);
+        let message = self.push(
+            OpKind::ConstString(
+                "toFixed() digits argument must be between 0 and 100".to_owned(),
+            ),
+            text,
+            origin.clone(),
+        );
+        self.throw_provided_error_text(id, "RangeError", message)?;
+        if !self.is_terminated() {
+            self.terminate(Terminator::Jump {
+                target: carry_on,
+                args: Vec::new(),
+            });
+        }
+
+        self.switch_to(carry_on);
+        Ok(self.runtime_call(
+            "nts_number_to_fixed",
+            vec![value, digits],
+            HirType::Managed(ManagedType::String),
+            origin,
+        ))
+    }
+
     /// A call to a statically resolved target.
     ///
     /// Requires the frontend's call resolution: without it there is no way to
@@ -35111,28 +35250,7 @@ impl<'a> FuncBuilder<'a> {
             self.values[receiver.0 as usize].ty,
             HirType::Float { .. } | HirType::Int { .. }
         ) {
-            let name = self.node(member).text.clone().unwrap_or_default();
-            if name == "toString" && arguments.is_empty() {
-                return self.as_string(receiver_node, receiver);
-            }
-            // `n.toString(radix)`, which is three calls from every module's
-            // front door: `ERR_INVALID_ARG_TYPE` renders the offending value
-            // into its message, rendering a control character means a hex
-            // escape, and `code.toString(16)` is that escape. A module cannot
-            // validate an argument without this, and validating arguments is
-            // what node's entry points do first.
-            //
-            // The receiver is widened to `f64` because the runtime takes one
-            // and an `i32` receiver is common -- `charCodeAt` gives one.
-            if name == "toString" && arguments.len() == 1 {
-                let radix = self.lower_expression(arguments[0])?;
-                let radix = self.coerce(radix, &HirType::NUMBER, arguments[0])?;
-                let value = self.coerce(receiver, &HirType::NUMBER, receiver_node)?;
-                let origin = self.origin(id);
-
-                return self.lower_radix_to_string(id, value, radix, &origin);
-            }
-            return Err(self.unsupported(id, &format!("`{name}` on a number")));
+            return self.lower_number_method(id, receiver_node, receiver, member, arguments);
         }
 
         // `valueOf` and `toString` on a string are the string. Not a runtime

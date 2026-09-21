@@ -227,6 +227,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_math_tanh", returns: "double", params: &["double"], attributes: &[] },
     Signature { name: "nts_max_fn", returns: "double", params: &["double", "double"], attributes: &[] },
     Signature { name: "nts_min_fn", returns: "double", params: &["double", "double"], attributes: &[] },
+    Signature { name: "nts_number_to_fixed", returns: "ptr", params: &["double", "double"], attributes: &[] },
     Signature { name: "nts_number_to_string", returns: "ptr", params: &["double"], attributes: &[] },
     Signature { name: "nts_number_to_string_into", returns: "ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_number_to_string_radix", returns: "ptr", params: &["double", "double"], attributes: &[] },
