@@ -40,9 +40,25 @@
 // a generated expression no one would write. Pre-existing: a binary built
 // 2026-09-18 rejects it identically.
 //
-// The fix is in the pipeline order or in `reconcile`, which runs *after*
-// `narrow_widths` and did not reconcile this pair. It is not a lowering change:
-// the lowering was right.
+// # Where it is *not*, measured rather than assumed
+//
+// `reconcile` --- `specialize::reconcile_stores` --- **already handles binary
+// operands**: it converts both to the operator's result type, and its arm
+// excludes only `Eq`, `Ne`, `Concat` and erased operands, none of which this
+// is. So the obvious fix is already written.
+//
+// It never fires here. An `eprintln!` in that arm, on exactly this file, prints
+// **nothing**: at reconcile time the two operands still agree, and the mismatch
+// is introduced by something that runs *after* it.
+//
+// That leaves a short list --- `simplify::forward_stores`, `dce::eliminate`,
+// `dce::prune_parameters`, `place_allocations`, `rc::insert` --- and
+// `forward_stores` is the one that also explains the precondition, since
+// replacing the `field.get` with the stored constant is what only an inline
+// literal allows. The next step is a print after each of those, not a change to
+// `reconcile`.
+//
+// It is not a lowering change either: `nts hir` is well typed.
 
 export function subtracting(): number {
   return ({ k: "ABC" }).k.charCodeAt(2) - Math.floor(0.1);
