@@ -1,4 +1,15 @@
-// expect: NTS1001 `reject`, a promise reject captured by a closure
+// expect: nothing refused
+//
+// **Closed 2026-09-21**, and kept as the regression guard. The closure now
+// captures the **promise** rather than the settler and re-derives the settle
+// from it -- `Capture::settles` carries which of the two it is, decided in
+// `collect_closures` because the closure table is built once and cloned. The
+// row went 41 sites to 0.
+//
+// The account below is the useful part: it is why the refusal existed and what
+// the message used to claim.
+//
+// ---
 //
 // The commonest way this corpus builds a promise, and the commonest thing to
 // do inside the executor:

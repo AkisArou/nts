@@ -1010,6 +1010,23 @@ const THIS_CAPTURE: u32 = u32::MAX;
 #[derive(Clone, Debug)]
 struct Capture {
     symbol: u32,
+    /// `Some(rejects)` when the name is a **promise settler** -- `resolve` or
+    /// `reject` from a `new Promise` executor.
+    ///
+    /// A settler is not a value: `Settler`'s doc says so, and a call to one is
+    /// the settle it stands for. So a closure capturing one has nothing in
+    /// `bindings` to copy, and used to be refused.
+    ///
+    /// What it captures instead is the **promise**, and the body re-derives the
+    /// settle from it. That is why this is on the capture rather than on the
+    /// closure: the field holds a `Promise<T>` while the name in the source is
+    /// a function, so every side that reads the field has to know the
+    /// difference.
+    ///
+    /// Decided in `collect_closures`, because `closures` is built once and
+    /// *cloned* into each `FuncBuilder` -- a mark made while lowering the
+    /// enclosing function would never reach the builder that lowers the body.
+    settles: Option<bool>,
     /// The field name, which is the source name: a dump of the layout should
     /// read like the program.
     name: String,
@@ -1569,14 +1586,90 @@ fn taken_as_a_closure(closures: &[ClosureInfo], id: NodeId) -> bool {
         .any(|closure| closure.node == id && !closure.captures.is_empty())
 }
 
-fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
-    let probe = FuncBuilder::probe(snapshot);
+/// Every symbol naming a `new Promise` executor's `resolve` or `reject`, and
+/// which of the two it is.
+///
+/// Wanted by [`collect_closures`] rather than by lowering, for the reason
+/// [`Capture::settles`] gives: the closure table is built once and cloned, so
+/// this has to be known before any body is lowered.
+///
+/// `Promise.withResolvers` settlers are deliberately **not** here. They are
+/// settlers too and a closure capturing one refuses identically, but nothing in
+/// the corpus writes that, and a name list that covers a shape no program uses
+/// is a claim with no evidence behind it. The refusal names the construct, so
+/// the day one appears it says so.
+fn settler_symbols(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+) -> rustc_hash::FxHashMap<u32, bool> {
+    let mut found = rustc_hash::FxHashMap::default();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::NEW_EXPRESSION) {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let children = probe.children(id);
+        let Some(callee) = children.first().copied() else {
+            continue;
+        };
+        if probe.node(callee).text.as_deref() != Some("Promise") {
+            continue;
+        }
+        // **`arguments_of`, not the remaining children.** `new Promise<number>(
+        // (resolve, reject) => ...)` carries its type argument as a child too,
+        // so the first thing after the callee is `number` and the arrow is
+        // never reached. The first version of this walked raw children, found
+        // no executor in any program, and every capture came back `settles:
+        // None` -- a silent miss, because a settler that is not marked simply
+        // takes the refusal it took before.
+        //
+        // `lower_new_promise` reads the executor the same way, which is the
+        // point: two derivations of "which argument is the executor" would
+        // disagree exactly here.
+        let arguments = probe.arguments_of(id);
+        let Some(executor) = arguments.first().copied() else {
+            continue;
+        };
+        if probe.kind_of(executor) != Some(syntax::ARROW_FUNCTION) {
+            continue;
+        }
+        // Position decides which is which, exactly as `lower_new_promise`
+        // decides it: `rejects: at == 1`. One derivation would be better than
+        // two, and this is the cheaper half to keep honest -- the two are
+        // checked against each other by `a-promise-settler-captured-by-a-closure`
+        // answering with the right word.
+        let parameters = probe
+            .children(executor)
+            .into_iter()
+            .filter(|child| probe.kind_of(*child) == Some(syntax::PARAMETER));
+        for (at, parameter) in parameters.enumerate() {
+            let Some(name) = probe
+                .children(parameter)
+                .into_iter()
+                .find(|field| probe.kind_of(*field) == Some(syntax::IDENTIFIER))
+            else {
+                continue;
+            };
+            if let Some(symbol) = probe.node(name).symbol {
+                found.insert(symbol.0, at == 1);
+            }
+        }
+    }
+    found
+}
 
-    // A variable that is *ever* assigned cannot be captured, because this
-    // captures by value and JavaScript captures by reference. For a name
-    // nothing writes to the two are the same thing; for one something writes to
-    // they are observably different, and quietly picking the wrong one would
-    // make a program compute a stale answer rather than fail to compile.
+/// Every symbol something assigns to, anywhere in the program.
+///
+/// A variable that is *ever* assigned cannot be captured, because this captures
+/// by value and JavaScript captures by reference. For a name nothing writes to
+/// the two are the same thing; for one something writes to they are observably
+/// different, and quietly picking the wrong one would make a program compute a
+/// stale answer rather than fail to compile.
+///
+/// Its own function because `collect_closures` is at the line limit and this is
+/// the self-contained half -- a whole-program question, asked once, whose
+/// answer the walk below only reads.
+fn assigned_anywhere(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Vec<u32> {
     let mut assigned = Vec::new();
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind == NodeKind::Syntax(syntax::SOURCE_FILE) {
@@ -1586,6 +1679,14 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
             );
         }
     }
+    assigned
+}
+
+fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
+    let probe = FuncBuilder::probe(snapshot);
+    let settlers = settler_symbols(snapshot, &probe);
+
+    let assigned = assigned_anywhere(snapshot, &probe);
 
     let mut closures = Vec::new();
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -1642,6 +1743,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
         {
             info.captures.push(Capture {
                 symbol: THIS_CAPTURE,
+                settles: None,
                 name: "this".to_owned(),
                 at,
                 forward: false,
@@ -1708,6 +1810,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
             }
             info.captures.push(Capture {
                 symbol: symbol.0,
+                settles: settlers.get(&symbol.0).copied(),
                 name: record.name.clone(),
                 at: *read,
                 by_reference,
@@ -13783,10 +13886,26 @@ impl<'a> FuncBuilder<'a> {
             if let Some(reason) = self.why_the_closure_cannot_be_captured(capture.symbol) {
                 return Err(self.unsupported(capture.at, reason));
             }
-            let held = self
-                .closure_bound_to(capture.symbol)
-                .or_else(|| self.type_of(capture.at))
-                .ok_or_else(|| self.unrepresentable(capture.at, "a captured variable"))?;
+            // **A settler's field holds the promise**, and the checker's type
+            // at the name is the settler's `(value: T) => void`. Asking
+            // `type_of` here would read the field at a function type and the
+            // two sides of the layout would disagree about it -- which is
+            // invalid HIR rather than a refusal, so it is worth the special
+            // case being before the general one rather than a fallback after.
+            //
+            // The promise type comes from the *declaration*, because this
+            // builder has no value in hand: the allocating side put
+            // `settler.result.promise` in the field, and its type is the
+            // promise the enclosing executor is constructing.
+            let held = if capture.settles.is_some() {
+                self.settler_promise_type(capture.at).ok_or_else(|| {
+                    self.unrepresentable(capture.at, "a captured promise settler")
+                })?
+            } else {
+                self.closure_bound_to(capture.symbol)
+                    .or_else(|| self.type_of(capture.at))
+                    .ok_or_else(|| self.unrepresentable(capture.at, "a captured variable"))?
+            };
             // By reference, the field holds the *cell* rather than the value,
             // and the binding below is the cell -- so every read and write of
             // the name in this body goes through it, exactly as it does in the
@@ -13811,6 +13930,25 @@ impl<'a> FuncBuilder<'a> {
                 // Not a name in `bindings` -- `this` is not looked up that way
                 // -- but the receiver every `this` in this body means.
                 self.this = Some(value);
+            } else if let Some(rejects) = capture.settles {
+                // **Re-derive the settler from the captured promise.** The name
+                // is not a value in this body either, so it goes into
+                // `settlers` rather than `bindings` -- and `lower_settler_call`
+                // then works unchanged, which is the whole reason the field
+                // holds a promise rather than anything cleverer.
+                let HirType::Managed(ManagedType::Promise(payload)) = ty.clone() else {
+                    return Err(self.unrepresentable(capture.at, "a captured promise settler"));
+                };
+                self.settlers.insert(
+                    capture.symbol,
+                    Settler {
+                        result: AsyncResult {
+                            promise: value,
+                            payload: *payload,
+                        },
+                        rejects,
+                    },
+                );
             } else {
                 self.bindings.insert(capture.symbol, value);
             }
@@ -13825,6 +13963,31 @@ impl<'a> FuncBuilder<'a> {
             });
         }
         Ok(fields)
+    }
+
+    /// The type of the promise a captured settler settles.
+    ///
+    /// Read from the `new Promise` the parameter belongs to, by walking up from
+    /// the name to the `NewExpression` and taking the checker's type for it.
+    /// The allocating side put that promise in the field; this is the same type
+    /// arrived at from the declaration rather than from a value, because the
+    /// body's builder has no value in hand.
+    fn settler_promise_type(&self, name: NodeId) -> Option<HirType> {
+        // Bounded at 64 like every other parent walk here, and not at 8: the
+        // read is inside a *nested* closure, so the chain to the
+        // `NewExpression` runs call -> if -> block -> arrow -> declaration ->
+        // block -> arrow -> new, and a program with one more `if` around it is
+        // longer still. Eight hops missed the shape this exists for.
+        let mut at = self.node(name).parent;
+        for _ in 0..64 {
+            let here = at?;
+            if self.kind_of(here) == Some(syntax::NEW_EXPRESSION) {
+                let ty = self.type_of(here)?;
+                return matches!(ty, HirType::Managed(ManagedType::Promise(_))).then_some(ty);
+            }
+            at = self.node(here).parent;
+        }
+        None
     }
 
     /// The cell a symbol lives in, where something captures it by reference.
@@ -28569,6 +28732,38 @@ impl<'a> FuncBuilder<'a> {
             // is reached, the binding exists and is final.
             // `this` is not in `bindings` and never was: it is the enclosing
             // function's receiver, which is exactly what an arrow inherits.
+            // **A settler captures the promise, not the settler.** `resolve`
+            // and `reject` are not values -- a call to one is the settle it
+            // stands for -- so there is nothing in `bindings` to copy. What the
+            // body needs in order to settle is the promise, and that *is* a
+            // value, held right here by the executor being lowered inline.
+            //
+            // The field is therefore a `Promise<T>` while the name in the
+            // source is a function, which is why `Capture::settles` exists: the
+            // body's side has to read the field at the same type, and re-derive
+            // the settle from it.
+            if capture.settles.is_some() {
+                let settler = self.settlers.get(&capture.symbol).cloned().ok_or_else(|| {
+                    // The collector saw a `new Promise` executor parameter and
+                    // this builder is not lowering that executor -- which means
+                    // the closure escaped the construction site, and the
+                    // promise it would settle is not in hand.
+                    self.unsupported(
+                        capture.at,
+                        "a promise settler captured outside the executor that names it",
+                    )
+                })?;
+                let value = settler.result.promise;
+                let field_ty = self.values[value.0 as usize].ty.clone();
+                self.field_set(object, u32::try_from(at).unwrap_or(0), value, &origin);
+                fields.push(Field {
+                    name: capture.name.clone(),
+                    ty: field_ty,
+                    readonly: true,
+                    declared_by: None,
+                });
+                continue;
+            }
             if capture.symbol == THIS_CAPTURE {
                 let value = self
                     .this
