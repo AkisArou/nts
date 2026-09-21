@@ -4252,6 +4252,38 @@ fn reshape_calls(program: &mut Program, roots: reachable::Roots<'_>) -> (usize, 
 /// Runs before `reconcile`, which is what inserts the truncation wherever a
 /// value that stayed wide feeds one that did not -- see [`narrow`], where that
 /// boundary is the induction variable and there is exactly one of them.
+///
+/// # That last clause is false, and the counterexample is in the blockers
+///
+/// `reconcile` is `specialize::reconcile_stores`: it puts **stores and block
+/// edges** back in agreement with their slots. A *binary operator's operands*
+/// are neither, and `insert_conversions` --- which does reconcile those --- runs
+/// inside `specialize`, one step **before** this. So a value narrowed here whose
+/// consumer is an arithmetic operator has nothing left to fix it:
+///
+/// ```text
+///   ({ k: "ABC" }).k.charCodeAt(2) - Math.floor(0.1)
+///
+///   nts hir              str.unit … : f64     sub … : f64     well typed
+///   nts hir --prepared   str.unit … : i32     const 0 : f64   OperandsDiffer
+/// ```
+///
+/// The verifier catches it, so it is not a wrong answer --- `emit-c` writes
+/// nothing and reports `invalid HIR: OperandsDiffer { … }`, which is Rust's
+/// `Debug` with no source location.
+///
+/// It is rare because it needs `forward_stores` to have replaced a `field.get`
+/// with the stored constant first, which only an *inline* object literal
+/// allows: a named object, a string literal, or `.length` instead of
+/// `charCodeAt` are all fine. Found by `fuzz-expressions.mjs` at seed 55, from
+/// an expression no one would write, and pre-existing since at least
+/// 2026-09-18.
+///
+/// `blockers/a-narrowed-unit-read-beside-a-float` holds it. The fix is either
+/// ordering --- an operand reconcile after this rather than before --- or
+/// teaching `reconcile_stores` about binary operands, and it should not be
+/// guessed at: the same boundary is where a *managed* value must **not** be
+/// converted, which cost a separate bug the same night.
 fn narrow_widths(program: &mut Program) -> usize {
     program.funcs.iter_mut().map(narrow::narrow_truncated).sum()
 }
