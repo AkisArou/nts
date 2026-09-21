@@ -51,12 +51,20 @@
 // **nothing**: at reconcile time the two operands still agree, and the mismatch
 // is introduced by something that runs *after* it.
 //
-// That leaves a short list --- `simplify::forward_stores`, `dce::eliminate`,
-// `dce::prune_parameters`, `place_allocations`, `rc::insert` --- and
-// `forward_stores` is the one that also explains the precondition, since
-// replacing the `field.get` with the stored constant is what only an inline
-// literal allows. The next step is a print after each of those, not a change to
-// `reconcile`.
+// Two of the obvious candidates are ruled out, by disabling each in turn and
+// re-running this file: **`narrow_widths` is not it and `forward_stores` is not
+// it** --- the mismatch survives without either, together or apart.
+//
+// So the narrowing is older than both. `bounds::eliminate_checks` and
+// `narrow_storage` run *before* the specialization loop, and the comment above
+// the first of them says in its own words that "a code unit stayed floating
+// point until this ran" --- which is this operation. That puts the narrowing
+// before `insert_conversions`, which is the pass that does reconcile binary
+// operands, and makes "why did that not fix it" the question rather than "which
+// pass broke it".
+//
+// The next step is a print inside `insert_conversions` for this `sub`, not a
+// change to `reconcile`.
 //
 // It is not a lowering change either: `nts hir` is well typed.
 
