@@ -28653,13 +28653,20 @@ impl<'a> FuncBuilder<'a> {
                 // a *user* function with two callback parameters lowers, and so
                 // does `new Promise((resolve) => resolve(7))` with no inner
                 // closure. Only the pair refuses.
+                //
+                // **Not `new Promise` by name**, because the same map serves
+                // `Promise.withResolvers`: its destructured `resolve` and
+                // `reject` are settlers too, and a closure capturing one lands
+                // here identically. Saying `new Promise` would be right about
+                // 41 sites and wrong about whichever spelling a reader had in
+                // front of them.
                 if let Some(settler) = self.settlers.get(&capture.symbol) {
                     let which = if settler.rejects { "reject" } else { "resolve" };
                     return self.unsupported(
                         capture.at,
                         &format!(
-                            "`{}`, a `new Promise` {which} captured by a closure -- a settler \
-                             is a call this lowering rewrites rather than a value it can hold",
+                            "`{}`, a promise {which} captured by a closure -- a settler is a \
+                             call this lowering rewrites rather than a value it can hold",
                             capture.name
                         ),
                     );

@@ -1,4 +1,4 @@
-// expect: NTS1001 `reject`, a `new Promise` reject captured by a closure
+// expect: NTS1001 `reject`, a promise reject captured by a closure
 //
 // The commonest way this corpus builds a promise, and the commonest thing to
 // do inside the executor:
@@ -45,6 +45,18 @@
 // function of the identical shape is fine. Only `new Promise`'s executor
 // refuses, and only once something captures a settler -- so this is a gap in
 // one special-cased path rather than a limitation of closures.
+//
+// # `Promise.withResolvers` is the same map
+//
+// Its destructured `resolve` and `reject` go through `self.settlers` too, so a
+// closure capturing one lands on this refusal identically:
+//
+//     const { promise, resolve } = Promise.withResolvers<number>();
+//     const done = (): void => { resolve(5); };     // same refusal
+//
+// The message therefore says *a promise settler* rather than naming
+// `new Promise`, which would be right about the 41 sites and wrong about
+// whichever spelling a reader had in front of them.
 //
 // # Why it cannot be inlined away
 //
