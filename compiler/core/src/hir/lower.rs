@@ -3242,7 +3242,7 @@ fn settled_declaration_type(probe: &FuncBuilder, name_node: NodeId) -> Option<Hi
                 .evolved_type(name_node)
                 .filter(|ty| match dense_prefix_writes(probe, name_node) {
                     None => false,
-                    Some(0) => true,
+                    Some(writes) if writes.count == 0 => true,
                     Some(_) => growth_can_fill(ty),
                 })
         })
@@ -3255,9 +3255,26 @@ fn settled_declaration_type(probe: &FuncBuilder, name_node: NodeId) -> Option<Hi
         // above is: an array filled both ways is the mixed shape that stays
         // conservative, and `Some(0)` is exactly "filled by push alone".
         .or_else(|| {
-            matches!(dense_prefix_writes(probe, name_node), Some(0))
-                .then(|| pushed_element_type(probe, name_node))
-                .flatten()
+            dense_prefix_writes(probe, name_node)
+                .filter(|writes| writes.count == 0)
+                .and_then(|_| pushed_element_type(probe, name_node))
+        })
+        // **And the same question of the indexed writes.** `xs[0] = 7` says
+        // what the element is exactly as `xs.push(7)` does, and an evolving
+        // array read only through `length` is unresolved either way:
+        //
+        //     const xs = []; xs[0] = 7; xs[1] = 8; xs[1];       lowered
+        //     const xs = []; xs[0] = 7; xs[1] = 8; xs.length;   refused
+        //
+        // `growth_can_fill` applies here and not to the push arm, because
+        // these writes really do grow by index -- which is the distinction
+        // that whole function is about.
+        .or_else(|| {
+            dense_prefix_writes(probe, name_node)
+                .filter(|writes| writes.count > 0)
+                .and_then(|writes| writes.element)
+                .map(|element| HirType::Managed(ManagedType::Array(Box::new(element))))
+                .filter(growth_can_fill)
         })
         .or(declared)
         // **An evolving global initialised with an absence holds both.**
@@ -3345,10 +3362,26 @@ fn initialized_with_an_absence(probe: &FuncBuilder, name_node: NodeId) -> bool {
     })
 }
 
-fn dense_prefix_writes(probe: &FuncBuilder, name_node: NodeId) -> Option<u32> {
+/// What a name's indexed writes are, when they are a prefix at all.
+///
+/// One walk, two answers, because both are read off the same assignments and
+/// a second walk over the same nodes is how this function ended up carrying a
+/// third derivation of "which operators write".
+///
+/// `element` is `None` where the writes disagree about what they store, or
+/// where the checker recorded no type for one of them. That is weaker than
+/// `count` failing: the writes can still be a valid prefix whose element type
+/// nobody can name.
+struct IndexedWrites {
+    count: u32,
+    element: Option<HirType>,
+}
+
+fn dense_prefix_writes(probe: &FuncBuilder, name_node: NodeId) -> Option<IndexedWrites> {
     let symbol = probe.node(name_node).symbol?;
     let mut expected = 0.0_f64;
     let mut seen = 0_u32;
+    let mut element: Option<HirType> = None;
     for at in 0..probe.snapshot.nodes.len() {
         let Ok(index) = u32::try_from(at) else {
             return None;
@@ -3378,7 +3411,7 @@ fn dense_prefix_writes(probe: &FuncBuilder, name_node: NodeId) -> Option<u32> {
             continue;
         }
         let operands = probe.children(assignment);
-        let [target, operator, _] = operands.as_slice() else {
+        let [target, operator, stored] = operands.as_slice() else {
             continue;
         };
         if *target != access {
@@ -3437,8 +3470,27 @@ fn dense_prefix_writes(probe: &FuncBuilder, name_node: NodeId) -> Option<u32> {
             }
             _ => return None,
         }
+        // **What the write stores**, collected on the walk that already has
+        // the assignment in hand rather than by a second one over the same
+        // nodes. Two walks deciding "is this an indexed write" is the shape
+        // that put a third answer to "which operators write" in this very
+        // function, and the comment above is what that cost.
+        //
+        // A disagreement between two writes leaves it unsettled rather than
+        // failing the whole walk: the *prefix* is still a prefix, and it is
+        // only the element type the caller cannot have. A dense array has
+        // one width, so two writes of different types settle nothing.
+        match (&element, probe.type_of(*stored)) {
+            (_, None) => element = Some(HirType::Void),
+            (None, Some(ty)) => element = Some(ty),
+            (Some(known), Some(ty)) if *known != ty => element = Some(HirType::Void),
+            (Some(_), Some(_)) => {}
+        }
     }
-    Some(seen)
+    Some(IndexedWrites {
+        count: seen,
+        element: element.filter(|ty| *ty != HirType::Void),
+    })
 }
 
 /// The element type an evolving array's `push` calls supply.
