@@ -24,7 +24,8 @@
 // stop at an unrepresentable property now gets further and stops at the next
 // thing". Measured, the corpus went from 1,738 refusal sites to 1,576 while
 // `a method `X` with no declaration in the hierarchy` went from 55 sites to
-// 158 --- this row rising is most of that.
+// **78** --- this row rising is most of that. (An earlier draft said 158,
+// which was that row counted on a different key; see the example's header.)
 
 class Holder {
   items: Iterable<number>;

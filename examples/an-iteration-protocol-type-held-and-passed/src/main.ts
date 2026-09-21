@@ -35,11 +35,20 @@
 //   after    16,223                        at 1,576
 // ```
 //
-// 162 sites, and the largest message row fell from 343 sites to 188. The new
-// second row is `a method `X` with no declaration in the hierarchy`, up from
-// 55 sites to 158: that is the `[Symbol.iterator]` lookup on an array, which
-// is the next thing in the chain and exactly what `is_carried`'s doc predicts
-// --- "the cascades rise, which is the shape to expect and not a regression".
+// 162 sites, and the largest message row fell from 343 sites to 188. The row
+// that rises is `a method `X` with no declaration in the hierarchy`, **55
+// sites to 78**: that is the `[Symbol.iterator]` lookup on an array, which is
+// the next thing in the chain and exactly what `is_carried`'s doc predicts ---
+// "the cascades rise, which is the shape to expect and not a regression".
+//
+// (That row was first written here as "55 to 158". The 158 came from
+// `sort -u` over whole lines, which keys on file:line:column **plus the
+// verbatim message** and counts one site twice when it carries two spellings
+// of one cause; the 55 it was compared against was on the distinct-site key.
+// Two keys, one comparison. 78 is the distinct-site figure and is what both
+// `--napi` and plain runs give. `node-refusals.mjs`'s header lists the three
+// denominators for exactly this reason, and this is what falling for it looks
+// like two commits after writing that header.)
 //
 // # What still refuses, and has its own fixtures
 //
