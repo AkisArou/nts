@@ -1,4 +1,20 @@
-// expect: NTS1001 a method `next` with no declaration in the hierarchy
+// expect: NTS1003 `summed` cannot be compiled because it calls `Iterator<5>#next`, and no class in this program implements it
+//
+// **The expectation moved on 2026-09-22, one link further in.** It read
+// `NTS1001 a method next with no declaration in the hierarchy` -- the
+// hierarchy had never been told the library `Iterator<T>` declares anything,
+// because `collect_interfaces` walks `INTERFACE_DECLARATION` nodes and a lib
+// type has none. It is told now (`collect_carried_protocols`), so the lookup
+// succeeds and what is missing is the *implementation*: `Two`'s
+// `[Symbol.iterator]` is a generator, and what it returns is a **frame**,
+// whose resume method is not named `next` and which no edge relates to
+// `Iterator<number>`.
+//
+// So the remaining work is wiring a generator frame to the `Iterator<T>` it
+// satisfies -- one more implementer for a slot that now exists. The corpus
+// does not need it: `runtime/node` writes `implements Iterator<ByteBatch>`
+// where it means it, and those lower. This fixture is the shape that does
+// not say so.
 //
 // `for...of` over a value whose **static type is an interface**, where the
 // object behind it iterates perfectly well when named by its class.

@@ -22,11 +22,13 @@
 //! it, the mapping back to source is gone.
 
 pub mod origin;
+pub mod protocol;
 pub mod reachability;
 pub mod schema;
 pub mod syntax;
 
 pub use origin::{GeneratedReason, Origin, ScopeId};
+pub use protocol::{ITERATION, is_an_iteration_protocol, iteration_protocol_of};
 pub use schema::{
     Accessor, CallTarget, ConstantValue, DeclarationModifiers, HeritageKind, IndexSignature,
     LiteralValue, ModuleId, ModuleRecord, NodeData, NodeId, NodeKind, NodeRecord, NativeAttributes, ParameterRecord,

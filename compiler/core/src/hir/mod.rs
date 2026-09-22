@@ -3868,12 +3868,31 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
             {
                 continue;
             }
+            // **"Refused above" is a claim about the output, and it is not
+            // always true.** A callee can be missing because it was refused --
+            // the common case, and there is a diagnostic above to find -- or
+            // because nothing ever declared it, which no diagnostic reports
+            // because nothing went wrong anywhere a source line points at.
+            // `hir::generics` records the second shape twice in its own
+            // comments: "with no refusal above", on a reader who went looking
+            // and found nothing.
+            //
+            // `uncompiled` is where a pass that drops a name says why. Read
+            // here, the sentence names the cause instead of asserting a
+            // refusal the reader cannot find: an interface method with no
+            // implementer says so, and everything else still reads as before.
+            let why = lowered
+                .program
+                .uncompiled
+                .iter()
+                .find(|(name, _)| *name == callee)
+                .map_or_else(
+                    || "which was refused above".to_owned(),
+                    |(_, reason)| format!("and {reason}"),
+                );
             lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
                 "NTS1003",
-                format!(
-                    "`{caller}` cannot be compiled because it calls `{callee}`, \
-                     which was refused above"
-                ),
+                format!("`{caller}` cannot be compiled because it calls `{callee}`, {why}"),
                 origin.location,
             ));
             // **And recorded, not only reported.** The comment above already

@@ -144,6 +144,15 @@ struct Hierarchy {
     implements: rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
     /// The methods a class declares itself, as opposed to inherits.
     declares: rustc_hash::FxHashMap<TypeId, Vec<String>>,
+    /// Which of those types are **interfaces**: a shape with members and no
+    /// body of its own, whether a program declared it or the frontend carried
+    /// it in.
+    ///
+    /// Only used to tell a missing *implementation* from a missing
+    /// *declaration*. A class's method that nothing declares is a compiler
+    /// bug; an interface's method that nothing implements is a program with
+    /// no implementer, and only the second has a sentence worth printing.
+    faces: rustc_hash::FxHashSet<TypeId>,
     /// The members a type declares as a *method* and lays out as **storage**
     /// -- a slot holding a closure -- because an object literal built at the
     /// type supplies them with an environment.
@@ -870,6 +879,7 @@ fn is_an_instantiation(snapshot: &SemanticSnapshot, probe: &FuncBuilder, ty: Typ
 }
 
 fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy: &mut Hierarchy) {
+    let carried = collect_carried_protocols(snapshot, hierarchy);
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::INTERFACE_DECLARATION) {
             continue;
@@ -901,6 +911,7 @@ fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarch
                     .or_else(|| probe.symbol_member_name(id, child, Some(ty)))
             })
             .collect();
+        hierarchy.faces.insert(ty);
         if !declared.is_empty() {
             hierarchy.declares.entry(ty).or_insert(declared);
         }
@@ -943,17 +954,142 @@ fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarch
         let Some(ty) = instance_type_of(snapshot, id) else {
             continue;
         };
+        // **A carried protocol counts as a known interface.** `interfaces` is
+        // the set of types some `INTERFACE_DECLARATION` node declares, and
+        // `Iterable<T>` has no node -- so `class BatchSyncSource implements
+        // SyncByteStream`, where the alias is `Iterable<ByteBatch>`, recorded
+        // no edge at all. The class said what it implements, in the source,
+        // and the compiler dropped it for want of a node to point at.
+        //
+        // Thirty-one classes in `runtime/node` and `runtime/web-platform`
+        // write one of these, directly or through an alias, and each is a
+        // dispatch table that could not be filled: the interface's method had
+        // no implementer to take a body from, so `declare_interface_methods`
+        // declared nothing and every call through the interface reported the
+        // shell missing.
         let faces: Vec<TypeId> = probe
             .children(id)
             .into_iter()
             .filter(|child| probe.kind_of(*child) == Some(syntax::HERITAGE_CLAUSE))
             .flat_map(|clause| probe.children(clause))
             .filter_map(|target| snapshot.node_types.get(&target).copied())
-            .filter(|target| interfaces.contains(target))
+            .flat_map(|target| {
+                let carried = carried.resolve(snapshot, target);
+                if carried.is_empty() { vec![target] } else { carried.to_vec() }
+            })
+            .filter(|target| {
+                interfaces.contains(target) || hierarchy.declares.contains_key(target)
+            })
             .collect();
         if !faces.is_empty() {
             hierarchy.implements.insert(ty, faces);
         }
+    }
+}
+
+/// The iteration protocol's interfaces, whose members no node declares.
+///
+/// Every interface above is found by walking `INTERFACE_DECLARATION` nodes,
+/// and `Iterable<T>` has none: it is declared in `lib.es2015.iterable.d.ts`,
+/// which this snapshot carries as *types* and not as syntax. So the frontend
+/// decomposes it -- see `nts_semantic_schema::protocol`, which is where the
+/// same six names are decided -- and its `[Symbol.iterator]` arrived here as
+/// a property of a type nothing said declared anything.
+///
+/// What that cost: `for (const n of it)` where `it` is a parameter declared
+/// `Iterable<number>` refused with `a method __@iterator@3 with no
+/// declaration in the hierarchy`, a sentence about the hierarchy for a type
+/// the hierarchy had never been told about. A hand-written interface of
+/// exactly the same shape refuses one link later instead, at `next`, because
+/// *it* has a node and this walk finds it.
+///
+/// Read off the type record rather than a declaration, which is the only
+/// source there is. `kind: Method` is what separates a member to dispatch
+/// from a field holding a closure, and it is the same test the node walk
+/// makes with `METHOD_SIGNATURE`.
+fn collect_carried_protocols(snapshot: &SemanticSnapshot, hierarchy: &mut Hierarchy) -> Carried {
+    let mut carried = Carried::default();
+    for (at, record) in snapshot.types.iter().enumerate() {
+        let ty = TypeId(u32::try_from(at).unwrap_or(u32::MAX));
+        let Some(protocol) = nts_semantic_schema::iteration_protocol_of(snapshot, ty) else {
+            continue;
+        };
+        let TypeKind::Object { properties } = &record.kind else {
+            continue;
+        };
+        let declared: Vec<String> = properties
+            .iter()
+            .filter(|property| property.kind == MemberKind::Method)
+            .map(|property| property.name.clone())
+            .collect();
+        if declared.is_empty() {
+            continue;
+        }
+        // Suffixed like any other instantiation: `Iterable<number>` and
+        // `Iterable<string>` are two dispatch roots with two slots, and one
+        // name for both would be one slot for two protocols.
+        hierarchy
+            .name
+            .entry(ty)
+            .or_insert_with(|| format!("{protocol}{}", instantiation_suffix(snapshot, ty)));
+        hierarchy.declares.entry(ty).or_insert(declared);
+        hierarchy.faces.insert(ty);
+        if let Some(symbol) = record.symbol {
+            let arguments = snapshot.type_arguments.get(&ty).cloned().unwrap_or_default();
+            carried.arity.entry(symbol).or_insert(arguments.len());
+            carried.instances.entry((symbol, arguments)).or_default().push(ty);
+        }
+    }
+    carried
+}
+
+/// Which record of a carried protocol carries its members.
+///
+/// The checker writes more than one. `class S implements Iterable<Batch>`
+/// records the heritage target as `Iterable<Batch, any, undefined, S>` --- the
+/// declaration's parameters with the **`this` type appended**, the same shape
+/// `instantiate::instantiation_arguments` truncates for a base --- and leaves
+/// it a placeholder, because nothing reads its members. The record that *has*
+/// the members is the three-argument one the parameter is declared with.
+///
+/// Left unresolved, the `implements` edge points at the placeholder: the class
+/// descends from a type that is not the dispatch root, so
+/// `declare_interface_methods` finds no implementer for the root and every
+/// call through the interface reports a shell that was never declared. The
+/// edge is recorded, the slot exists, and the two are about different ids.
+#[derive(Default)]
+struct Carried {
+    /// The records with the members, by symbol and their own arguments.
+    ///
+    /// **All of them, not the first.** The checker writes `Iterable<Batch>`
+    /// more than once -- two decomposed records with identical arguments --
+    /// and which one a call's receiver is typed with is not the one a
+    /// heritage clause resolves to. An edge to one of the two leaves the
+    /// other a dispatch root nothing implements, which is the same missing
+    /// shell one identity further along.
+    instances: rustc_hash::FxHashMap<(nts_semantic_schema::SymbolId, Vec<TypeId>), Vec<TypeId>>,
+    /// How many arguments that record takes, which is the declaration's arity.
+    arity: rustc_hash::FxHashMap<nts_semantic_schema::SymbolId, usize>,
+}
+
+impl Carried {
+    /// The member-carrying records `ty` names, where `ty` is a protocol at any
+    /// arity. Empty for anything that is not one of them.
+    fn resolve(&self, snapshot: &SemanticSnapshot, ty: TypeId) -> &[TypeId] {
+        let Some(symbol) = snapshot.types.get(ty.0 as usize).and_then(|r| r.symbol) else {
+            return &[];
+        };
+        let Some(&arity) = self.arity.get(&symbol) else {
+            return &[];
+        };
+        let Some(arguments) = snapshot.type_arguments.get(&ty) else {
+            return &[];
+        };
+        if arguments.len() < arity {
+            return &[];
+        }
+        let arguments = arguments[..arity].to_vec();
+        self.instances.get(&(symbol, arguments)).map_or(&[], Vec::as_slice)
     }
 }
 
@@ -7549,6 +7685,23 @@ fn declare_interface_methods(hierarchy: &Hierarchy, program: &mut Program) {
                         _ => false,
                     })
         }) else {
+            // **Recorded, because the cascade cannot say it.** A call through
+            // this interface lowers to a dispatch naming `Owner#member`, and
+            // if nothing declares it the reader gets ``f` cannot be compiled
+            // because it calls `Iterator<5>#next`, which was refused above` --
+            // with no refusal above, because nothing refused anything. The
+            // member exists on the interface and no class in the program
+            // implements it, which is a sentence only this loop is in a
+            // position to write and which has no source line to sit on.
+            //
+            // `uncompiled` is where a name with no function goes; `emit-c`
+            // and the napi wrapper read it to explain an absent export
+            // instead of reporting the effect.
+            program.uncompiled.push((
+                declared,
+                "no class in this program implements it, so its method has no body to declare"
+                    .to_owned(),
+            ));
             continue;
         };
         let mut shell = body.clone();
@@ -7574,6 +7727,45 @@ fn declare_interface_methods(hierarchy: &Hierarchy, program: &mut Program) {
     // Sorted, so one compiler on one input emits them in one order.
     declare.sort_by(|a, b| a.name.cmp(&b.name));
     program.funcs.extend(declare);
+    record_unimplemented_interfaces(hierarchy, program);
+}
+
+/// Say why an interface's method has no function, for the members that never
+/// reached a slot.
+///
+/// A slot is numbered only where something *overrides* -- which for an
+/// interface means "at least one class implements it" -- so an interface
+/// nothing implements has members, no slot, and therefore no shell from the
+/// loop above. A call on such a receiver lowers to a direct call naming
+/// `Owner#member`, the function is never emitted, and the reader gets
+/// "`f` cannot be compiled because it calls `Iterator<5>#next`, which was
+/// refused above" with no refusal above to find.
+///
+/// No shell is declared for these: the call is *direct*, so a shell would be
+/// an abstract declaration something calls for real. What is recorded is the
+/// reason, which `drop_callers_of_refused` reads to say what happened instead
+/// of asserting a refusal that did not occur.
+fn record_unimplemented_interfaces(hierarchy: &Hierarchy, program: &mut Program) {
+    for face in &hierarchy.faces {
+        let Some(owner) = hierarchy.name.get(face) else {
+            continue;
+        };
+        for member in hierarchy.declares.get(face).into_iter().flatten() {
+            let declared = format!("{owner}#{member}");
+            if program.funcs.iter().any(|func| func.name == declared)
+                || program.uncompiled.iter().any(|(name, _)| *name == declared)
+            {
+                continue;
+            }
+            program.uncompiled.push((
+                declared,
+                "no class in this program implements it, so its method has no body to declare"
+                    .to_owned(),
+            ));
+        }
+    }
+    // Sorted, so one compiler on one input records them in one order.
+    program.uncompiled.sort();
 }
 
 /// The declaration a closure call implies: its shape, and no body.

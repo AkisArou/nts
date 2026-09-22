@@ -1315,6 +1315,12 @@ impl<'a> Decomposer<'a> {
     /// any library interface whose members are representable" is the version
     /// that sounds principled and pulls the graph in through the first type
     /// whose members happen to qualify; a name is a decision that can be read.
+    ///
+    /// The six iteration names live in `nts_semantic_schema::protocol` rather
+    /// than here, because the *lowering* needs the same six: carrying a type
+    /// without giving its members a dispatch root leaves a program with
+    /// members nothing can call, and the diagnostic for that points at the
+    /// hierarchy rather than at this list.
     fn is_carried(snapshot: &SemanticSnapshot, slot: TypeId) -> bool {
         snapshot
             .types
@@ -1341,14 +1347,7 @@ impl<'a> Decomposer<'a> {
                         // layout that makes it mean something.
                         | "IteratorYieldResult"
                         | "IteratorReturnResult"
-                        // EXPERIMENT 2026-09-21: the iteration protocol types.
-                        | "Iterable"
-                        | "Iterator"
-                        | "IterableIterator"
-                        | "AsyncIterable"
-                        | "AsyncIterator"
-                        | "AsyncIterableIterator"
-                )
+                ) || nts_semantic_schema::is_an_iteration_protocol(&declared.name)
             })
     }
 

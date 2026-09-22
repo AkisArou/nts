@@ -651,7 +651,17 @@ profile() {
   #                            file prescribes -- generic ids normalised, name
   #                            sets diffed -- reads **526 source functions
   #                            new, 0 gone**.
-  ceiling=15400
+  #     2026-09-22   14939   <- the iteration protocol dispatches. The six
+  #                            library interfaces are carried by the frontend
+  #                            and had no `hierarchy.declares` entry, because
+  #                            that walk reads `INTERFACE_DECLARATION` nodes
+  #                            and a lib type has none -- so `for...of` over a
+  #                            parameter declared `Iterable<T>` refused at the
+  #                            member the type plainly has. Sites 1362 ->
+  #                            1346, definitions 29429 -> 29444, and the two
+  #                            rows it aims at are closed: `a method next`
+  #                            2 -> 0 and `a method __@iterator@N` 16 -> 1.
+  ceiling=15000
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the

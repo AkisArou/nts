@@ -1,4 +1,24 @@
-// expect: emit-c --napi -> NTS1003 `make` cannot be compiled because it calls `Handle#hasRef`, which was refused above
+// expect: emit-c --napi -> NTS1003 `make` cannot be compiled because it calls `Handle#hasRef`, and no class in this program implements it
+//
+// **FIXED 2026-09-22, and kept as a guard.** The cascade names its root now.
+// `Handle` is an interface nothing in this program implements, so its
+// `hasRef` never became a function -- and that is a sentence only the pass
+// that failed to declare it is in a position to write, which is why nothing
+// printed it before. `declare_interface_methods` records the reason on
+// `program.uncompiled`, and `drop_callers_of_refused` reads it instead of
+// asserting a refusal the reader cannot find.
+//
+// The expectation above is the *fixed* output. If it goes back to reading
+// `which was refused above`, this fixture has caught the regression it was
+// converted to catch: 967 cascades in `runtime/node` carry a cause now, and
+// a cascade with no root is again indistinguishable from one whose root
+// scrolled away.
+//
+// What this does not fix is the second instance below, in `os` -- a wrapper
+// missing with no diagnostic at all. An absent *diagnostic* is a different
+// hole from a diagnostic that points nowhere, and nothing here addresses it.
+//
+// The record of the original defect follows, unchanged.
 //
 // **`hir` reports `5 function(s), nothing refused` for this file.** Only
 // `emit-c` produces the cascade, so the expectation has to name the command --

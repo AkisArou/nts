@@ -1,4 +1,17 @@
-// expect: NTS1001 a method `__@iterator@
+// expect: NTS1003 `summed` cannot be compiled because it calls `Iterable<2>#__@iterator@10`, and no class in this program implements it
+//
+// **The expectation moved on 2026-09-22, one link further in.** It read
+// `NTS1001 a method __@iterator@N with no declaration in the hierarchy`,
+// which was the hierarchy answering about a type nobody had told it about:
+// `collect_interfaces` walks `INTERFACE_DECLARATION` nodes and the library
+// `Iterable<T>` has none. `collect_carried_protocols` tells it now, so the
+// lookup succeeds and the missing thing is an *implementer* -- which for an
+// **array** assigned to an `Iterable<T>` is the case this fixture is about,
+// since nothing relates the array to the protocol.
+//
+// The two arms of the table below are now different work: a class that says
+// `implements Iterable<T>` lowers, and an array or a generator frame does
+// not, because neither writes a heritage clause and nothing else wires them.
 //
 // An **array** assigned to an `Iterable<T>`, then walked.
 //
