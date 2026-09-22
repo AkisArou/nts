@@ -153,13 +153,6 @@ pub struct Decomposer<'a> {
     /// They arrive on the response and are gone by the time the walk decides how
     /// to resolve the type, and there is no endpoint that answers them again.
     texts: FxHashMap<u32, Vec<String>>,
-    /// The program's own generic forms met during the main walk, left as
-    /// placeholders there and decomposed in a pass of their own afterwards.
-    /// See `resolve_members`.
-    forms: Vec<u32>,
-    /// Whether the walk is that second pass, in which a form is decomposed
-    /// rather than deferred.
-    decomposing_forms: bool,
 }
 
 impl std::fmt::Debug for Decomposer<'_> {
@@ -196,8 +189,6 @@ impl<'a> Decomposer<'a> {
             file_bases,
             root,
             texts: FxHashMap::default(),
-            forms: Vec::new(),
-            decomposing_forms: false,
         }
     }
 
@@ -283,57 +274,14 @@ impl<'a> Decomposer<'a> {
         // program gets a bigger allowance rather than a truncated graph.
         let allowance = budget.allowance(seeded.len());
         stats.allowance = allowance;
-        self.walk(snapshot, &mut worklist, &seeded, &mut stats, allowance)?;
 
-        // **The program's own generic forms, after everything concrete.** A
-        // form's members are what `hir::instantiate` substitutes to make the
-        // instantiations a generic body implies, and they are decomposed
-        // here rather than in the walk above so that the budget's cutoff can
-        // only ever land on a form: decomposed inline, `runtime/node/buffer`
-        // spent its allowance on them and left ordinary object types as
-        // placeholders, emitting 14 definitions where it emits hundreds. Each
-        // form's members can name further forms -- a base written as
-        // `Base<T, this>` -- so the pass repeats, bounded, on what it found.
-        if !stats.exhausted {
-            self.decomposing_forms = true;
-            for _ in 0..3 {
-                let forms: Vec<u32> = std::mem::take(&mut self.forms);
-                if forms.is_empty() {
-                    break;
-                }
-                for form in &forms {
-                    self.done.remove(form);
-                }
-                let mut worklist = forms;
-                let allowance = stats.decomposed as usize + budget.allowance(worklist.len());
-                self.walk(snapshot, &mut worklist, &seeded, &mut stats, allowance)?;
-                if stats.exhausted {
-                    break;
-                }
-            }
-            self.decomposing_forms = false;
-        }
-        stats.round_trips = self.client.round_trips() - before;
-        Ok(stats)
-    }
-
-    /// Drain a worklist, decomposing each placeholder once, until it is empty
-    /// or `allowance` decompositions have been made in total.
-    fn walk(
-        &mut self,
-        snapshot: &mut SemanticSnapshot,
-        worklist: &mut Vec<u32>,
-        seeded: &FxHashSet<u32>,
-        stats: &mut DecomposeStats,
-        allowance: usize,
-    ) -> Result<(), TsgoError> {
         while let Some(ty) = worklist.pop() {
             if !self.done.insert(ty) {
                 continue;
             }
             if stats.decomposed as usize >= allowance {
                 stats.exhausted = true;
-                return Ok(());
+                break;
             }
 
             let Some(&slot) = self.interned.get(&ty) else {
@@ -374,9 +322,9 @@ impl<'a> Decomposer<'a> {
             // payload alike.
             if Self::is_natively_represented(snapshot, slot) {
                 let mut walk = Walk {
-                    worklist,
-                    stats,
-                    seeded,
+                    worklist: &mut worklist,
+                    stats: &mut stats,
+                    seeded: &seeded,
                 };
                 self.record_type_arguments(snapshot, ty, slot, &mut walk)?;
                 continue;
@@ -387,9 +335,9 @@ impl<'a> Decomposer<'a> {
                 // boundary (for example ErrorConstructor in instanceof).
                 // The boundary stops member graphs, not callable ABI facts.
                 let mut walk = Walk {
-                    worklist,
-                    stats,
-                    seeded,
+                    worklist: &mut worklist,
+                    stats: &mut stats,
+                    seeded: &seeded,
                 };
                 if let Some(kind) = self.resolve_callable(snapshot, ty, &mut walk)? {
                     snapshot.types[slot.0 as usize].kind = kind;
@@ -407,9 +355,9 @@ impl<'a> Decomposer<'a> {
             let texts = self.texts.get(&ty).cloned().unwrap_or_default();
             let kind = {
                 let mut walk = Walk {
-                    worklist,
-                    stats,
-                    seeded,
+                    worklist: &mut worklist,
+                    stats: &mut stats,
+                    seeded: &seeded,
                 };
                 self.resolve(snapshot, ty, bits, &texts, &mut walk)?
             };
@@ -417,7 +365,8 @@ impl<'a> Decomposer<'a> {
             stats.decomposed += 1;
         }
 
-        Ok(())
+        stats.round_trips = self.client.round_trips() - before;
+        Ok(stats)
     }
 
     fn resolve_type_symbol(
@@ -723,36 +672,11 @@ impl<'a> Decomposer<'a> {
             // can use, and leaving it a placeholder loses nothing. Its
             // *arguments* are still recorded above, which is what
             // `ManagedType::Promise` needs.
-            //
-            // **Except a form the program itself declares.** `hir::instantiate`
-            // makes the instantiations a generic body implies -- `Inner<T>`
-            // written inside `Outer<T>` becomes `Inner<number>` when
-            // `Outer<number>` exists -- by substituting the *form's* members,
-            // and a form left a placeholder has none to substitute. The
-            // explosion above is a library's: a program's own generic class has
-            // a finite body, and the budget bounds the rest. A form declared
-            // in a file this snapshot did not decode stays a placeholder, which
-            // keeps `PromiseLike` where it was.
-            //
-            // And a program's own form only while its arguments nest at most
-            // one instantiation deep: `Nest<Nest<T>>` is decomposed, and its
-            // `deeper(): Nest<Nest<Nest<T>>>` is not, because a class whose
-            // method returns a deeper nesting of itself is the library
-            // explosion again, with the budget's cutoff landing on whatever
-            // unrelated type came next. Measured: `Test262Error` in the probe
-            // harness lost its members to it.
             if ids
                 .iter()
                 .any(|argument| mentions_a_type_parameter(snapshot, *argument, 0))
             {
-                let ours = self.declares_a_form_here(snapshot, ty)
-                    && ids.iter().all(|argument| instantiation_nesting(snapshot, *argument, 0) <= 1);
-                if !ours || !self.decomposing_forms {
-                    if ours {
-                        self.forms.push(ty);
-                    }
-                    return Ok(TypeKind::Structured { flags: bits });
-                }
+                return Ok(TypeKind::Structured { flags: bits });
             }
         }
 
@@ -918,33 +842,6 @@ impl<'a> Decomposer<'a> {
 
         stats.round_trips = self.client.round_trips() - before;
         Ok(stats)
-    }
-
-    /// Whether a type's declaring symbol is a class or interface declared in a
-    /// file this snapshot decoded -- the program's own, as against a library's.
-    fn declares_a_form_here(&self, snapshot: &SemanticSnapshot, ty: u32) -> bool {
-        let Some(&slot) = self.interned.get(&ty) else {
-            return false;
-        };
-        let Some(symbol) = snapshot.types.get(slot.0 as usize).and_then(|record| record.symbol)
-        else {
-            return false;
-        };
-        snapshot
-            .symbols
-            .get(symbol.0 as usize)
-            .is_some_and(|symbol| {
-                symbol.declarations.iter().any(|node| {
-                    matches!(
-                        snapshot.nodes.get(node.0 as usize).map(|node| node.kind),
-                        Some(NodeKind::Syntax(
-                            syntax::CLASS_DECLARATION
-                                | syntax::CLASS_EXPRESSION
-                                | syntax::INTERFACE_DECLARATION
-                        ))
-                    )
-                })
-            })
     }
 
     /// Whether a parameter's declaration carries a `?`.
@@ -1704,7 +1601,6 @@ fn declaration_node(handle: &NodeHandle, file_bases: &[(String, u32)]) -> Option
         .map(|(_, base)| *base)?;
     index.checked_sub(1).map(|i| NodeId(i + base))
 }
-
 /// Whether a type is, or is built from, a type parameter.
 ///
 /// A union is the case that matters: `PromiseLike<TResult1 | TResult2>`'s
@@ -1726,33 +1622,6 @@ fn mentions_a_type_parameter(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32
             .any(|member| mentions_a_type_parameter(snapshot, *member, depth + 1)),
         _ => false,
     }
-}
-
-/// How many instantiations of generic types a type nests: `T` is 0, `Box<T>`
-/// is 1, `Box<Box<T>>` is 2. Arrays, unions and functions do not count;
-/// only a type with arguments of its own does.
-fn instantiation_nesting(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32) -> u32 {
-    if depth > 8 {
-        return depth;
-    }
-    let own = u32::from(snapshot.type_arguments.get(&ty).is_some_and(|args| !args.is_empty()));
-    let inner = match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
-        Some(TypeKind::Array(element)) => instantiation_nesting(snapshot, *element, depth + 1),
-        Some(TypeKind::Tuple(items) | TypeKind::Union(items) | TypeKind::Intersection(items)) => items
-            .iter()
-            .map(|item| instantiation_nesting(snapshot, *item, depth + 1))
-            .max()
-            .unwrap_or(0),
-        _ => snapshot
-            .type_arguments
-            .get(&ty)
-            .into_iter()
-            .flatten()
-            .map(|argument| instantiation_nesting(snapshot, *argument, depth + 1))
-            .max()
-            .unwrap_or(0),
-    };
-    own + inner
 }
 
 #[cfg(test)]

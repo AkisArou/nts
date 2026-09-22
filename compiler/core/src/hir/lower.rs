@@ -5260,15 +5260,6 @@ struct Shared {
     /// Copies of ordinary functions specialised to a concrete argument type.
     /// See [`structural_instantiations`].
     structural: Structural,
-    /// What each generic class instantiation binds, by the instance's type.
-    /// A `new` of one runs the class's field initialisers at the `new` site,
-    /// in the caller's builder, and those are written in terms of `T`.
-    ///
-    /// Shared rather than cloned into each builder: a builder is made per
-    /// function, per copy, per literal member and per closure, and cloning a
-    /// map of substitutions -- two hash maps each -- into every one of them
-    /// took `stream` from 15 to 66 seconds. Measured, then shared.
-    class_instances: std::rc::Rc<rustc_hash::FxHashMap<TypeId, Substitution>>,
 }
 
 impl Shared {
@@ -5285,13 +5276,6 @@ impl Shared {
         let mut closures = closures.to_vec();
         let variants = closure_variants(&FuncBuilder::probe(snapshot), &closures, &structural);
         closures.extend(variants);
-        let class_instances = std::rc::Rc::new(
-            super::generics::instantiations(snapshot)
-                .into_values()
-                .flatten()
-                .map(|instance| (instance.ty, instance.substitution))
-                .collect(),
-        );
         Self {
             module: module.clone(),
             hierarchy: hierarchy.clone(),
@@ -5299,7 +5283,6 @@ impl Shared {
             naming: naming(snapshot),
             generics: super::generics::function_instantiations(snapshot),
             structural,
-            class_instances,
         }
     }
 
@@ -5321,7 +5304,6 @@ impl Shared {
         );
         builder.sources = copy.sources;
         builder.retyped = copy.retyped;
-        builder.class_instances = std::rc::Rc::clone(&self.class_instances);
         builder.generic_calls.clone_from(&self.generics.at_call);
         // A structural call names its copy the same way a generic one does, so
         // the naming site needs no second question -- one map, two sources.
@@ -6754,11 +6736,6 @@ fn lower_wanted_closures(
 pub fn lower_with(
     snapshot: &SemanticSnapshot, entry: &[String], foreign: &super::runtime::ForeignTable,
 ) -> Lowered {
-    // The instantiations generic bodies make of other generics, written into
-    // the snapshot first, so every pass below meets them as the checker's
-    // own. See `instantiate`. A clone only where there is something to add.
-    let materialised = super::instantiate::materialise(snapshot);
-    let snapshot = materialised.as_ref().unwrap_or(snapshot);
     let mut lowered = Lowered::default();
     // Closures first, because a module-scope `const f = () => ...` is typed by
     // the *closure* the arrow becomes rather than by its function type, and the
@@ -8568,7 +8545,7 @@ pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType
 /// resolve to: the AST inside a generic method is shared by every
 /// instantiation, so the checker leaves `T` there and this is what turns it
 /// into the machine type for the copy being lowered.
-pub use super::generics::Substitution;
+pub type Substitution = rustc_hash::FxHashMap<TypeId, HirType>;
 
 /// The element type of an `IteratorResult<T, …>`, where this type is one.
 ///
@@ -9255,129 +9232,12 @@ fn decided_representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Dec
         .map(|_| Decided::As(HirType::Managed(ManagedType::Object(ty))))
 }
 
-/// A union whose members all share one representation has that
-/// representation. `0 | 1 | 2` is three literal types and one machine
-/// type, and refusing it would reject the most useful thing TypeScript
-/// can tell this compiler about a parameter.
-///
-/// `T | undefined` and `T | null` are what real TypeScript is made of,
-/// and for a managed `T` they cost nothing: a reference already has a
-/// value that is not an object, and the null pointer is it. So the
-/// absent member is dropped and what is left has to agree.
-///
-/// *One* absent member. `T | null | undefined` has two, and a pointer
-/// has one spare value to spend on them -- so representing it as one
-/// made `null === undefined` answer `true`, which is a wrong answer
-/// rather than a missing feature, and the profile writes that union
-/// thirty-eight times. Two absent members go to an erased value, where
-/// each has a tag of its own.
-///
-/// A number has no spare value. `number | undefined` needs a tag beside
-/// it or a NaN payload inside it, and both change the representation of
-/// every number that could reach the slot — so it is refused rather than
-/// guessed at, as is any union whose members genuinely disagree.
-fn union_representation(
-    snapshot: &SemanticSnapshot,
-    members: &[TypeId],
-    path: &mut Vec<TypeId>,
-    subst: &Substitution,
-) -> Option<HirType> {
-    let mut shared: Option<HirType> = None;
-    // Which absences are present, not how many members carry them:
-    // `void` and `undefined` are the same value, so a union with both
-    // still has one.
-    let mut has_null = false;
-    let mut has_undefined = false;
-    let mut mixed = false;
-    for member in members {
-        match absence_of_member(snapshot, *member) {
-            Some(Absence::Null) => {
-                has_null = true;
-                continue;
-            }
-            Some(Absence::Undefined) => {
-                has_undefined = true;
-                continue;
-            }
-            None => {}
-        }
-        // Each member still has to have a representation of its own:
-        // erasing something is putting it in a payload, and a member
-        // with no representation has nothing to put there.
-        let member = representation_within(snapshot, *member, path, subst)?;
-        match &shared {
-            Some(existing) if *existing != member => mixed = true,
-            _ => shared = Some(member),
-        }
-    }
-    // Nothing left to be, which is not the same as nothing to represent.
-    //
-    // **`undefined | void` is one absence written twice**, and the loop
-    // above already says so -- `absence_of_member` maps both to
-    // `Absence::Undefined`, and the comment at the top of it says "`void`
-    // and `undefined` are the same value, so a union with both still has
-    // one". Then both members `continue`, nothing sets `shared`, and this
-    // line answered `None` for a type whose representation is `Void`,
-    // exactly as either member alone would have been.
-    //
-    // Where it comes from: `x?.m()` where `m` returns `void`. The optional
-    // call is `undefined` when the receiver is nullish and `void` when it
-    // ran, so the conditional it lowers to has that type and
-    // `lower_branching_value` needs a representation for its merge
-    // parameter. **597 sites over 51 distinct locations, 26 modules**, and
-    // the shape is always the same: `this.#observer?.(size)`,
-    // `controller?.abort()`, `capability?.resolve()`.
-    //
-    // `null | undefined` stays `None`, and the distinction is the whole
-    // reason this is a condition rather than a fallthrough: those are *two*
-    // absences, and with no payload beside them there is nothing to tell
-    // the two apart with. One absence needs no tag; two need a value that
-    // is not here.
-    let Some(shared) = shared else {
-        return (has_undefined && !has_null).then_some(HirType::Void);
-    };
-    if matches!(shared, HirType::NativePointer(_)) {
-        return None;
-    }
-    // One representation, and at most one absence for the null pointer
-    // to stand for. Two absences need two values and a pointer has one.
-    let absences = usize::from(has_null) + usize::from(has_undefined);
-    let absence_has_a_home = absences == 0 || (absences == 1 && shared.is_managed());
-    if !mixed && absence_has_a_home {
-        return Some(shared);
-    }
-    // Otherwise a tag says which -- two representations, or an absence
-    // a scalar has no room for.
-    //
-    // This is the same value `unknown` lowers to, and deliberately: a
-    // heterogeneous union is a *closed* erased value where `unknown` is
-    // the open one, and the difference is what the checker knows rather
-    // than what the machine holds. `Erase`, `TagOf`, `Unerase`, the
-    // collector's erased slots and both specialization passes apply
-    // unchanged -- so `number | undefined` costs what it costs and
-    // nothing new had to be built for it.
-    //
-    // The tag domain being smaller than five is not exploited yet. It
-    // is what would let `number | undefined` be a double and a bit
-    // rather than a double and a word, and it is the same question
-    // specialization asks.
-    Some(HirType::Erased)
-}
-
 fn representation_of(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     path: &mut Vec<TypeId>,
     subst: &Substitution,
 ) -> Option<HirType> {
-    // A template this copy instantiates -- `Inner<T>` in `Outer<number>`'s
-    // copy -- is the instantiation `instantiate::materialise` made for it,
-    // `Inner<number>`, which has a record, a layout and copies of its own.
-    // Before everything else, because the template's own record represents
-    // as itself, and that is the one id in the program nothing lays out.
-    if let Some(instance) = subst.instance_of(ty) {
-        return Some(HirType::Managed(ManagedType::Object(instance)));
-    }
     match decided_representation(snapshot, ty) {
         Some(Decided::As(representation)) => return Some(representation),
         Some(Decided::Unrepresentable) => return None,
@@ -9496,7 +9356,109 @@ fn representation_of(
         // it is refused rather than approximated by the widest member.
         TypeKind::Tuple(elements) => tuple_representation(snapshot, ty, elements, path, subst)?,
 
-        TypeKind::Union(members) => union_representation(snapshot, members, path, subst)?,
+        // A union whose members all share one representation has that
+        // representation. `0 | 1 | 2` is three literal types and one machine
+        // type, and refusing it would reject the most useful thing TypeScript
+        // can tell this compiler about a parameter.
+        //
+        // `T | undefined` and `T | null` are what real TypeScript is made of,
+        // and for a managed `T` they cost nothing: a reference already has a
+        // value that is not an object, and the null pointer is it. So the
+        // absent member is dropped and what is left has to agree.
+        //
+        // *One* absent member. `T | null | undefined` has two, and a pointer
+        // has one spare value to spend on them -- so representing it as one
+        // made `null === undefined` answer `true`, which is a wrong answer
+        // rather than a missing feature, and the profile writes that union
+        // thirty-eight times. Two absent members go to an erased value, where
+        // each has a tag of its own.
+        //
+        // A number has no spare value. `number | undefined` needs a tag beside
+        // it or a NaN payload inside it, and both change the representation of
+        // every number that could reach the slot — so it is refused rather than
+        // guessed at, as is any union whose members genuinely disagree.
+        TypeKind::Union(members) => {
+            let mut shared: Option<HirType> = None;
+            // Which absences are present, not how many members carry them:
+            // `void` and `undefined` are the same value, so a union with both
+            // still has one.
+            let mut has_null = false;
+            let mut has_undefined = false;
+            let mut mixed = false;
+            for member in members {
+                match absence_of_member(snapshot, *member) {
+                    Some(Absence::Null) => {
+                        has_null = true;
+                        continue;
+                    }
+                    Some(Absence::Undefined) => {
+                        has_undefined = true;
+                        continue;
+                    }
+                    None => {}
+                }
+                // Each member still has to have a representation of its own:
+                // erasing something is putting it in a payload, and a member
+                // with no representation has nothing to put there.
+                let member = representation_within(snapshot, *member, path, subst)?;
+                match &shared {
+                    Some(existing) if *existing != member => mixed = true,
+                    _ => shared = Some(member),
+                }
+            }
+            // Nothing left to be, which is not the same as nothing to represent.
+            //
+            // **`undefined | void` is one absence written twice**, and the loop
+            // above already says so -- `absence_of_member` maps both to
+            // `Absence::Undefined`, and the comment at the top of it says "`void`
+            // and `undefined` are the same value, so a union with both still has
+            // one". Then both members `continue`, nothing sets `shared`, and this
+            // line answered `None` for a type whose representation is `Void`,
+            // exactly as either member alone would have been.
+            //
+            // Where it comes from: `x?.m()` where `m` returns `void`. The optional
+            // call is `undefined` when the receiver is nullish and `void` when it
+            // ran, so the conditional it lowers to has that type and
+            // `lower_branching_value` needs a representation for its merge
+            // parameter. **597 sites over 51 distinct locations, 26 modules**, and
+            // the shape is always the same: `this.#observer?.(size)`,
+            // `controller?.abort()`, `capability?.resolve()`.
+            //
+            // `null | undefined` stays `None`, and the distinction is the whole
+            // reason this is a condition rather than a fallthrough: those are *two*
+            // absences, and with no payload beside them there is nothing to tell
+            // the two apart with. One absence needs no tag; two need a value that
+            // is not here.
+            let Some(shared) = shared else {
+                return (has_undefined && !has_null).then_some(HirType::Void);
+            };
+            if matches!(shared, HirType::NativePointer(_)) {
+                return None;
+            }
+            // One representation, and at most one absence for the null pointer
+            // to stand for. Two absences need two values and a pointer has one.
+            let absences = usize::from(has_null) + usize::from(has_undefined);
+            let absence_has_a_home = absences == 0 || (absences == 1 && shared.is_managed());
+            if !mixed && absence_has_a_home {
+                return Some(shared);
+            }
+            // Otherwise a tag says which -- two representations, or an absence
+            // a scalar has no room for.
+            //
+            // This is the same value `unknown` lowers to, and deliberately: a
+            // heterogeneous union is a *closed* erased value where `unknown` is
+            // the open one, and the difference is what the checker knows rather
+            // than what the machine holds. `Erase`, `TagOf`, `Unerase`, the
+            // collector's erased slots and both specialization passes apply
+            // unchanged -- so `number | undefined` costs what it costs and
+            // nothing new had to be built for it.
+            //
+            // The tag domain being smaller than five is not exploited yet. It
+            // is what would let `number | undefined` be a double and a bit
+            // rather than a double and a word, and it is the same question
+            // specialization asks.
+            HirType::Erased
+        }
 
         // A type parameter has no representation of its own -- that is what
         // makes it one. It has the representation of whatever this instantiation
@@ -10152,9 +10114,6 @@ struct FuncBuilder<'a> {
     /// meets the same prefix check and the same refusal, and the copy is emitted
     /// and never reached.
     structural_calls: rustc_hash::FxHashMap<NodeId, Retyped>,
-    /// What each generic class instantiation binds, by the instance's type.
-    /// See `Shared::class_instances`.
-    class_instances: std::rc::Rc<rustc_hash::FxHashMap<TypeId, Substitution>>,
     /// Which of *this* copy's own parameters are re-typed, by position. Empty
     /// for every function that is not a structural specialisation.
     retyped: Retyped,
@@ -10327,7 +10286,6 @@ impl<'a> FuncBuilder<'a> {
             qualified: rustc_hash::FxHashMap::default(),
             generic_calls: rustc_hash::FxHashMap::default(),
             structural_calls: rustc_hash::FxHashMap::default(),
-            class_instances: std::rc::Rc::default(),
             retyped: Retyped::new(),
             retyped_symbols: std::collections::BTreeMap::new(),
             in_constructor: false,
@@ -29935,32 +29893,6 @@ impl<'a> FuncBuilder<'a> {
         classes: &[TypeId],
     ) -> Result<(), Diagnostic> {
         let layout = self.layout_of(at, type_id)?;
-        // **Under the instance's substitution.** The initialisers are the
-        // class's, written in terms of `T`, and this runs at the `new` site in
-        // the caller's builder: `head: Link<T> | null = null` in
-        // `List<number>` read `Link<T>` as the *form* here, while the slot it
-        // fills is `Link<number>` -- a `Link` where a `Link` is wanted. The
-        // copy's own methods read `T` through their substitution; the
-        // initialisers get the same one for as long as they are lowered.
-        let outer = self
-            .class_instances
-            .get(&type_id)
-            .cloned()
-            .map(|substitution| std::mem::replace(&mut self.substitution, substitution));
-        let result = self.initialize_declared_fields(at, object, classes, &layout);
-        if let Some(outer) = outer {
-            self.substitution = outer;
-        }
-        result
-    }
-
-    fn initialize_declared_fields(
-        &mut self,
-        at: NodeId,
-        object: ValueId,
-        classes: &[TypeId],
-        layout: &Layout,
-    ) -> Result<(), Diagnostic> {
         for &class in classes {
             // The presence bits this class's *declarations* set, in one store,
             // before its initialisers run. A field declaration defines its
@@ -29969,7 +29901,7 @@ impl<'a> FuncBuilder<'a> {
             // this records writes that happened rather than exempting the
             // question. An initialiser sets its own bit through `field_set`,
             // and setting a bit twice is setting it once.
-            self.initialize_presence(at, object, class, layout);
+            self.initialize_presence(at, object, class, &layout);
             let Some(declaration) = self
                 .snapshot
                 .types

@@ -1,13 +1,4 @@
-// expect: NTS1001 a property `a` of unrepresentable type (a union of an array | undefined)
-//
-// **The expectation moved on 2026-09-22, and it moved toward the cause.** It
-// was `a member of `Box`, a class this compiler has no type for` -- the
-// message a generic class gives when it has no instantiation to lower, which
-// this one had because `never[]` has no representation. The frontend
-// decomposes a program's own generic forms now (`hir::instantiate` needs
-// their members), so `Box<never[]>` is refused at the property whose type
-// has no width, in the words the plain-class control below always used.
-// Same program, same cause, the message one layer in.
+// expect: NTS1001 a member of `Box`, a class this compiler has no type for
 //
 // **99 refusal sites in `runtime/node`**, the second-largest cause once the
 // census is measured by site, and it is none of the three things it looks like.

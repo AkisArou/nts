@@ -264,9 +264,6 @@ pub const ENUM_DECLARATION: u16 = 267;
 /// carry the headers its declarations describe; nothing else reads it.
 pub const MODULE_DECLARATION: u16 = 268;
 pub const EXPRESSION_WITH_TYPE_ARGUMENTS: u16 = 234;
-/// `T` in `class Box<T>`: the declaration of a type parameter, whose parent
-/// is the class, interface or function that owns it.
-pub const TYPE_PARAMETER: u16 = 169;
 /// `value is string`, the return type of a type guard.
 pub const TYPE_PREDICATE: u16 = 183;
 /// `{ read(): number }` written as a type -- the body of `type R = { ... }`

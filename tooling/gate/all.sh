@@ -637,25 +637,7 @@ profile() {
   #                            corpus, which is the shape the paragraph above
   #                            names; the occurrence count is the one number
   #                            here that copies inflate.
-  #     2026-09-22   19822   <- generic instantiation, and the largest raise
-  #                            this number has taken. The same shape, at the
-  #                            scale a whole missing kind of type has: the
-  #                            instantiations a generic body makes of other
-  #                            generics are materialised, each is a class with
-  #                            copies of its methods, and every refusal inside
-  #                            one is counted once more per copy. Definitions
-  #                            rose 23414 -> 29081 on the same corpus, +24%,
-  #                            which is the clause above: definitions up means
-  #                            the corpus earned it. The count that ranks work
-  #                            moved much less -- sites 1412 -> 1451, of which
-  #                            45 are new and 6 are gone, the new ones
-  #                            published by bodies that now lower. Normalising
-  #                            the generic ids and diffing the name sets, the
-  #                            check this file prescribes: **172 source
-  #                            functions new, 1 gone**, and the one is a
-  #                            closure behind a setter that is refused on both
-  #                            sides.
-  ceiling=19950
+  ceiling=15550
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
@@ -1218,10 +1200,9 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # `a-typed-array-from-an-array`, `a-method-used-as-a-value` and
 # `a-for-of-that-assigns`. The JVM's `exact` floor below took all six in the
 # same runs and at the same numbers. 306 -> 307 on 2026-09-22 for
-# `an-object-literal-method-that-captures`, on both, and 308 the same day for
-# `a-generic-instantiated-from-a-generic`.
+# `an-object-literal-method-that-captures`, on both.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 308 "through the LLVM backend" "" 14 ); }
+  backend_examples 307 "through the LLVM backend" "" 14 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1481,7 +1462,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   status=$?
   printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
   [ "$status" -eq 0 ] || return 1
-  backend_examples 308 "through the JVM backend" exact 10 ); }
+  backend_examples 307 "through the JVM backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

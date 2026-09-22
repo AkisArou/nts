@@ -26,7 +26,7 @@
 
 # Deliberate: these exist to hold constructs that refuse, and the count is the
 # point rather than a debt.
-generic-classes-unsupported 1 the constructs the name promises
+generic-classes-unsupported 8 the constructs the name promises
 generator-unsupported 3 the constructs the name promises
 dates-unsupported 6 the constructs the name promises
 async-unsupported 3 the constructs the name promises
