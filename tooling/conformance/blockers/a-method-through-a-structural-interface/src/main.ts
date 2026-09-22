@@ -61,6 +61,42 @@
 // interface members in the hierarchy --- is recorded as measured-and-wrong in
 // `an-iterable-behind-an-interface`: it turns the refusal into a
 // `Callee::Direct` to a function nobody wrote.
+//
+// # The second of the two was built and measured, 2026-09-22
+//
+// **The edge inferred from structural satisfaction, and it costs more than it
+// buys.** A class implements an interface when it declares every method the
+// interface does and each one has the same *shape* --- parameters and result
+// as representations, which is the question a dispatch table asks. That much
+// works: this fixture lowers and agrees with node on every case.
+//
+// Over 25 modules of `runtime/node`, against the same tree without it:
+//
+//     NTS1001 sites       1,346 -> 1,348      0 gone, 2 new
+//     definitions        29,444 -> 29,430
+//     NTS1001            14,939 -> 14,999
+//
+// **Zero sites cleared.** The two new ones carry 60 occurrences of `a `X`
+// where a `X` is wanted, which is a pointer cast between two structs that do
+// not agree about where their shared fields are` --- the hazard the fixture's
+// own paragraph names: an inferred edge makes a class descend from an
+// interface whose layout is not its prefix, and an upcast that is free for a
+// declared base is a cast between unrelated structs here.
+//
+// So the corpus's interface calls are not waiting on the edge. They are
+// waiting on something else, and the 104 sites that read `no class in this
+// program implements it` are mostly satisfied by **object literals** ---
+// `readonly urls: URLParser` in `runtime/web-platform`'s providers --- which
+// have nowhere to write `implements` and no layout that is a prefix of the
+// interface's either. Whatever closes this has to answer the layout question
+// first; the edge is not the hard half.
+//
+// It did find a real defect on its way out. `declare_interface_methods`
+// checked "already declared" against `program.funcs` and not against the
+// shells it had itself queued, so two dispatch roots that `hierarchy.name`
+// spells alike declared the method twice --- `DuplicateFunction`, and six
+// node modules emitting nothing at all. Latent in the tree as it stands, and
+// now a unit test: `two_roots_of_one_name_declare_one_shell`.
 
 interface S {
   go(): number;

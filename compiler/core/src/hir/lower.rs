@@ -7667,7 +7667,17 @@ fn declare_interface_methods(hierarchy: &Hierarchy, program: &mut Program) {
             continue;
         };
         let declared = format!("{owner}#{member}");
-        if program.funcs.iter().any(|func| func.name == declared) {
+        // **And the shells this loop has already made.** The check was against
+        // `program.funcs` alone, and the shells go into `declare` until the
+        // end -- so two roots that `hierarchy.name` spells the same way both
+        // passed it and both were pushed, which `verify` reports as
+        // `DuplicateFunction { name: "StreamTextEncoder#encode" }` and
+        // `emit-c` turns into "refusing to emit code from invalid HIR": no
+        // output, for six modules at once. Latent until something made two
+        // roots of one name, which inferring `implements` structurally did.
+        if program.funcs.iter().any(|func| func.name == declared)
+            || declare.iter().any(|func| func.name == declared)
+        {
             continue;
         }
         // An implementer's own, whichever the walk reaches first -- they agree
@@ -44418,6 +44428,78 @@ mod tests {
             interfaces: Vec::new(),
             base: None,
         }
+    }
+
+    /// Two dispatch roots that `hierarchy.name` spells alike get one shell.
+    ///
+    /// The check for "already declared" read `program.funcs` only, and the
+    /// shells this loop makes are held back until it ends -- so two roots of
+    /// one name both passed it and both were pushed. `verify` calls that
+    /// `DuplicateFunction`, `emit-c` calls it "refusing to emit code from
+    /// invalid HIR", and six of the twenty-six node modules emitted **no
+    /// output at all** the first time something made two such roots.
+    ///
+    /// Latent today: nothing in the tree produces two roots of one name. A
+    /// latent guard is worth what it costs to write, and this one is a test
+    /// rather than a paragraph because the failure it prevents is silent in
+    /// the worst way -- the whole module, with a diagnostic naming a function
+    /// rather than the pass that duplicated it.
+    #[test]
+    fn two_roots_of_one_name_declare_one_shell() {
+        use super::{Hierarchy, ManagedType};
+        use crate::hir::facts::Facts;
+        use crate::hir::{Block, Func, Origin, Param, ParamShape, Terminator};
+        use nts_diagnostics::{Location, SourceId, Span};
+
+        let here = || {
+            Origin::source(Location {
+                file: SourceId(0),
+                span: Span::new(0, 1),
+            })
+        };
+        let receiver = |ty: u32| super::HirType::Managed(ManagedType::Object(TypeId(ty)));
+        let mut hierarchy = Hierarchy::default();
+        // Two roots, one name -- the shape a generic instantiation and its
+        // declaration make, and the one `implements` inference made in bulk.
+        for root in [1_u32, 2] {
+            hierarchy.name.insert(TypeId(root), "Sink".to_owned());
+            hierarchy.declares.insert(TypeId(root), vec!["write".to_owned()]);
+            hierarchy.slots.insert((TypeId(root), "write".to_owned()), root - 1);
+        }
+        // Both roots, in one entry: inserting twice overwrites, and with only
+        // the second edge the first root finds no implementer and declares
+        // nothing -- so the test passed with the fix sabotaged, which is the
+        // hollow arm this file's neighbours keep finding.
+        hierarchy.implements.insert(TypeId(9), vec![TypeId(1), TypeId(2)]);
+        // The implementer, whose body both roots would take a shell from.
+        let mut program = Program::default();
+        program.funcs.push(Func {
+            name: "Impl#write".to_owned(),
+            params: vec![Param {
+                name: "this".to_owned(),
+                ty: receiver(9),
+                shape: ParamShape::Ordinary,
+                origin: here(),
+                known: Facts::TOP,
+            }],
+            return_type: super::HirType::Void,
+            values: Vec::new(),
+            blocks: vec![Block {
+                params: Vec::new(),
+                ops: Vec::new(),
+                terminator: Terminator::Return(None),
+            }],
+            origin: here(),
+            exported: false,
+            initializes_receiver: false,
+            abstract_declaration: false,
+            async_result: None,
+            frame: None,
+        });
+
+        super::declare_interface_methods(&hierarchy, &mut program);
+        let shells = program.funcs.iter().filter(|func| func.name == "Sink#write").count();
+        assert_eq!(shells, 1, "two roots of one name must declare one shell, not two");
     }
 
     /// Two declarations named alike are two layouts named apart, whichever
