@@ -440,6 +440,40 @@ fn generic_classes(
         .collect()
 }
 
+/// Whether a node in an arrow's subtree reads a *name* at all.
+///
+/// The name after a dot is a property, not a binding, and so is the key of
+/// `{ x: 1 }`. Both have symbols, and both are declared outside the arrow, so
+/// without this they would look like captures.
+fn reads_a_name(probe: &FuncBuilder, read: NodeId) -> bool {
+    probe.kind_of(read) == Some(syntax::IDENTIFIER) && !probe.names_a_member(read)
+}
+
+/// Whether a name is a **type parameter** and so never a value to capture.
+///
+/// An annotation inside an arrow mentions one by name like anything else:
+/// `(...args: Arguments) => void` written inside `asRequest<Arguments>` put
+/// `Arguments` in the capture list, and the closure refused with
+/// "`Arguments`, captured above its own declaration, where it has no value
+/// yet" -- a sentence about a binding, for a thing that never had one.
+///
+/// Invisible until a closure inside a generic *function* copy was lowered
+/// under that copy's substitution, because before that the arrow stopped one
+/// link earlier, on the rest parameter's element type.
+///
+/// Every declaration rather than any: a name is a type only if nothing under
+/// it declares a value.
+fn names_only_a_type_parameter(
+    probe: &FuncBuilder,
+    record: &nts_semantic_schema::SymbolRecord,
+) -> bool {
+    !record.declarations.is_empty()
+        && record
+            .declarations
+            .iter()
+            .all(|declaration| probe.kind_of(*declaration) == Some(syntax::TYPE_PARAMETER))
+}
+
 /// Interfaces, which declare methods and implement none of them.
 ///
 /// A method on an interface is a dispatch root: every implementer must be
@@ -2182,13 +2216,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
             let Some(symbol) = probe.node(*read).symbol else {
                 continue;
             };
-            if probe.kind_of(*read) != Some(syntax::IDENTIFIER) {
-                continue;
-            }
-            // The name after a dot is a property, not a binding, and so is the
-            // key of `{ x: 1 }`. Both have symbols, and both are declared
-            // outside the arrow, so without this they would look like captures.
-            if probe.names_a_member(*read) {
+            if !reads_a_name(&probe, *read) {
                 continue;
             }
             if info.captures.iter().any(|had| had.symbol == symbol.0) {
@@ -2197,6 +2225,9 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
             let Some(record) = snapshot.symbols.get(symbol.0 as usize) else {
                 continue;
             };
+            if names_only_a_type_parameter(&probe, record) {
+                continue;
+            }
             // Nothing to capture: a name declared outside the decoded files, or
             // one the arrow declares itself.
             if record.declarations.is_empty()
@@ -5404,29 +5435,58 @@ fn copies_of(
 /// gives a layout — so a closure variant, the copy that makes it and the
 /// builder that lowers it all name one string, and none of them has to derive
 /// it a second way.
-fn class_copies(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<String, ClassCopy> {
-    let mut found = rustc_hash::FxHashMap::default();
+fn class_copies(
+    snapshot: &SemanticSnapshot,
+    generics: &super::generics::GenericFunctions,
+) -> rustc_hash::FxHashMap<String, ClassCopy> {
+    let mut found: rustc_hash::FxHashMap<String, ClassCopy> = rustc_hash::FxHashMap::default();
     for (declaration, instances) in generic_classes(snapshot) {
         for instance in instances {
-            found.insert(
-                instantiation_suffix(snapshot, instance.ty),
-                ClassCopy {
+            found
+                .entry(instantiation_suffix(snapshot, instance.ty))
+                .or_insert(ClassCopy {
                     declaration,
-                    instance: instance.ty,
+                    instance: Some(instance.ty),
                     substitution: instance.substitution,
-                },
-            );
+                    sources: super::generics::Sources::default(),
+                });
+        }
+    }
+    // **And a generic function's copies, which have the same problem.** A
+    // closure written in one is lowered in a builder of its own, and without
+    // the copy's substitution a rest parameter typed `Arguments` is the bare
+    // type parameter again: `fs`'s `asRequest` returns `(...args: Arguments)
+    // => void` and the arrow refused with `a rest parameter whose element
+    // type has no representation` while the copy around it had `Arguments`
+    // pinned to a tuple.
+    //
+    // Sorted, so a suffix two copies somehow spell the same way resolves to
+    // one of them and to the same one on every run.
+    let mut declarations: Vec<(&NodeId, &Vec<super::generics::FunctionInstance>)> =
+        generics.copies.iter().collect();
+    declarations.sort_by_key(|(declaration, _)| declaration.0);
+    for (declaration, copies) in declarations {
+        for copy in copies {
+            found.entry(copy.suffix.clone()).or_insert(ClassCopy {
+                declaration: *declaration,
+                instance: None,
+                substitution: copy.substitution.clone(),
+                sources: copy.sources.clone(),
+            });
         }
     }
     found
 }
 
-/// One copy of a generic class: where it is written, what it is, and what it
-/// binds.
+/// One copy of a generic class or function: where it is written, what it is,
+/// and what it binds.
 struct ClassCopy {
     declaration: NodeId,
-    instance: TypeId,
+    /// The instantiation, for a class. A function's copy is named by its
+    /// arguments and has no type of its own.
+    instance: Option<TypeId>,
     substitution: Substitution,
+    sources: super::generics::Sources,
 }
 
 /// A copy of every closure written inside a generic class, one per copy of it.
@@ -5464,6 +5524,9 @@ fn class_closure_variants(
             if closure.within.is_some() || !probe.is_within(closure.node, copy.declaration) {
                 continue;
             }
+            // A closure the structural pass already varied keeps that
+            // variant: its suffix is the structural copy's, and the two
+            // mechanisms name different things.
             variants.push(ClosureInfo {
                 within: Some(suffix.clone()),
                 ..closure.clone()
@@ -5521,7 +5584,8 @@ impl Shared {
         let mut closures = closures.to_vec();
         let variants = closure_variants(&probe, &closures, &structural);
         closures.extend(variants);
-        let class_copies = class_copies(snapshot);
+        let generics = super::generics::function_instantiations(snapshot);
+        let class_copies = class_copies(snapshot, &generics);
         closures.extend(class_closure_variants(&probe, &closures, &class_copies));
         let class_instances = std::rc::Rc::new(
             super::generics::instantiations(snapshot)
@@ -5535,7 +5599,7 @@ impl Shared {
             hierarchy: hierarchy.clone(),
             closures,
             naming: naming(snapshot),
-            generics: super::generics::function_instantiations(snapshot),
+            generics,
             structural,
             class_instances,
             class_copies,
@@ -6991,7 +7055,13 @@ fn lower_wanted_closures(
                     .within
                     .as_ref()
                     .and_then(|suffix| shared.class_copies.get(suffix))
-                    .map(|copy| copy.instance),
+                    .and_then(|copy| copy.instance),
+                sources: closures[index]
+                    .within
+                    .as_ref()
+                    .and_then(|suffix| shared.class_copies.get(suffix))
+                    .map(|copy| copy.sources.clone())
+                    .unwrap_or_default(),
                 ..Copy::default()
             },
         );

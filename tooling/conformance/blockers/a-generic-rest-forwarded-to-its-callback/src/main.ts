@@ -1,4 +1,24 @@
-// expect: a captured variable of unrepresentable type (the type parameter `A`)
+// expect: nothing refused -- FIXED, kept as a guard
+//
+// **FIXED 2026-09-22, and kept as a guard.** Ten functions, nothing refused.
+// `nts check` says "nothing to check: no exported function has scalar
+// arguments and a scalar result", so the guard is the *emit*: the arrow
+// lowers, which is what every expectation this fixture has carried was
+// about.
+//
+// Two things closed it, and the second was only reachable once the first
+// landed. A closure written inside a copy of a generic **function** is
+// lowered under that copy's substitution now -- the same rule a copy of a
+// generic *class* got earlier the same day, and for the same reason: without
+// it the capture is stored at the copy's type and read at the
+// declaration's. And with the substitution in hand the arrow stopped on the
+// next link, which was not a real one: `(...args: A) => void` mentions `A`
+// by name, the capture walk took every identifier with a symbol, and a
+// **type parameter** was put in the capture list and refused as "captured
+// above its own declaration, where it has no value yet" -- a sentence about
+// a binding, for a thing that never had one.
+//
+// The record of the original defect follows unchanged.
 //
 // **The rest parameter itself is no longer the blocker.** As of 2026-09-11 the
 // frontend decomposes an instantiated tuple, so `A = []` and `A = [number]`
