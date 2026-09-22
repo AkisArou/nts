@@ -88,6 +88,53 @@
 // So it earns its place as a diagnosis fix rather than a capability one, and
 // this fixture is what makes that checkable.
 
+// # 2026-09-22: the *library* interface fails one step earlier, and why
+//
+// This fixture's `Seq` is written here, so `collect_interfaces` -- which walks
+// `INTERFACE_DECLARATION` **nodes** -- records its symbol-keyed member and the
+// walk gets as far as `next`. `Iterable<T>` has no declaration node in the
+// snapshot at all, so it gets no `hierarchy.declares` entry, and a `for...of`
+// over a value declared as the library type stops one link earlier:
+//
+//     function over(it: Iterable<number>) { for (const n of it) … }
+//         a method `__@iterator@3` with no declaration in the hierarchy
+//
+//     function over(it: Seq)            { for (const n of it) … }
+//         a method `next` with no declaration in the hierarchy
+//
+// Two sentences, one cause, at two depths -- the shape this fixture's header
+// already describes, one level up.
+//
+// **The value is held constant and only the annotation moves**, and the arm
+// that matters is a *parameter*: a `const s: Iterable<number> = new Two()`
+// lowers, because the initialiser gives the concrete class and nothing has to
+// dispatch. The four-arm probe that once read "interface refuses, class
+// lowers" used locals, so three of its four arms were answering about
+// narrowing rather than about dispatch.
+//
+// Measured, not guessed: giving every carried protocol type a
+// `hierarchy.declares` entry read off its type record's `Method` properties
+// moves the library arm to exactly where the hand-written one is --
+// `Iterable<23>#__@iterator@3, which was refused above`. What is missing then
+// is the same for both: `declare_interface_methods` builds an interface
+// method's shell from an implementer's body it finds by `descends_from`, and
+// a class that satisfies a protocol *structurally* -- which is every one of
+// them, since nobody writes `implements Iterable<number>` -- has no edge to
+// descend from. So the remaining work is wiring structural conformance to the
+// protocol interfaces, and the `declares` half is a prerequisite rather than
+// the fix.
+//
+// Two fixtures move under that experiment and no others do -- this one and
+// `an-iterable-walked-through-a-field`, each losing the lookup half of its
+// refusal and reporting the missing shell instead. Existing fixtures changing
+// on their own is the independent evidence that a change did what its
+// measurement claims.
+//
+// Worth the size: `a method X with no declaration in the hierarchy` is the
+// largest cause on the compiled axis as of 2026-09-22, **240 of 1,362
+// `runtime/node` refusal sites**, and about a hundred of them are
+// `__@iterator@N`.
+
 interface Seq {
   [Symbol.iterator](): Iterator<number>;
 }
