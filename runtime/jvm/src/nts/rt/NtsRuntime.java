@@ -1046,10 +1046,12 @@ public final class NtsRuntime {
         String body = new BigDecimal(Math.abs(x))
                 .setScale(d, RoundingMode.HALF_UP)
                 .toPlainString();
-        /* `(-0.4).toFixed(0)` is `"-0"`: the sign survives a magnitude that
-         * rounded away. Taken from the sign bit rather than from `x < 0`,
-         * which is false for negative zero. */
-        return (Double.doubleToRawLongBits(x) < 0 ? "-" : "") + body;
+        /* `x < 0`, as the specification says. `(-0.4).toFixed(0)` is `"-0"`
+         * because -0.4 < 0 -- the sign survives a magnitude that rounded
+         * away -- and `(-0).toFixed(2)` is `"0.00"` because -0 < 0 is false.
+         * The sign bit, which this read until 2026-09-22, answers both with a
+         * `-`; `fuzz-statements.mjs` found the difference at seed 35. */
+        return (x < 0 ? "-" : "") + body;
     }
 
     public static String numberToStringRadix(double x, double radix) {

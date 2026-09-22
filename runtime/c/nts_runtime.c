@@ -3843,7 +3843,12 @@ NtsString *nts_number_to_fixed(double x, double digits) {
   if (fabs(x) >= 1e21)
     return nts_number_to_string(x);
 
-  bool negative = signbit(x);
+  /* `x < 0`, as the specification says, and not the sign bit: `(-0).toFixed(2)`
+   * is `"0.00"` in node and `(-0.4).toFixed(0)` is `"-0"` -- the sign survives
+   * a magnitude that rounds away because -0.4 < 0, and negative zero has no
+   * sign to survive because -0 < 0 is false. The sign bit answers both with a
+   * `-`, and `fuzz-statements.mjs` found the difference at seed 35. */
+  bool negative = x < 0;
   double magnitude = fabs(x);
 
   /* The exact expansion. A double's decimal expansion terminates, and 1080

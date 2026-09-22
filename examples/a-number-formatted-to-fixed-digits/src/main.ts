@@ -73,9 +73,16 @@ export function carries(n: number): string {
   return (9.995 + (n - n)).toFixed(2);
 }
 
-// The sign survives a magnitude that rounded away.
+// The sign survives a magnitude that rounded away: -0.4 < 0, so `"-0"`.
 export function negativeZero(n: number): string {
   return (-0.4 + (n - n)).toFixed(0);
+}
+
+// And negative zero itself has no sign to keep: -0 < 0 is false, so `"0.00"`.
+// The runtime read the sign bit until 2026-09-22 and answered `"-0.00"`;
+// `fuzz-statements.mjs` found it at seed 35.
+export function minusZero(n: number): string {
+  return (-0 * (n + 1)).toFixed(2);
 }
 
 export function plain(n: number): string {
