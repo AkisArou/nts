@@ -1167,6 +1167,20 @@ struct ClosureInfo {
     /// through `this`, not through the enclosing scope, so field 0 is the whole
     /// environment and `bind_captures` starts after it.
     binds_receiver: bool,
+    /// The structural copy this closure is a variant for, by suffix, or
+    /// `None` for the closure as written.
+    ///
+    /// A closure is lowered once, and a copy that re-types a parameter it
+    /// captures cannot use that one: its field holds a `Thing` where the body
+    /// reads a `Named`. So `closure_variants` gives each such (closure, copy)
+    /// pair a closure of its own -- same node, same captures, the re-typed
+    /// ones at the copy's types -- and `lower_arrow` inside the copy names the
+    /// variant. The variant's body is lowered in the copy's context, so the
+    /// calls in it name the copies the enclosing body's do.
+    within: Option<String>,
+    /// The captured symbols a variant re-types, at the copy's types. Empty
+    /// for the closure as written.
+    retyped_captures: std::collections::BTreeMap<u32, HirType>,
 }
 
 /// File a method read as a value under the closure it will become.
@@ -1992,6 +2006,8 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
             refusal: None,
             wraps: false,
             binds_receiver: false,
+            within: None,
+            retyped_captures: std::collections::BTreeMap::new(),
         };
 
         let mut subtree = Vec::new();
@@ -2242,6 +2258,8 @@ fn collect_function_values(
         refusal: None,
         wraps: true,
         binds_receiver: false,
+        within: None,
+        retyped_captures: std::collections::BTreeMap::new(),
     }));
     closures.extend(bound.into_iter().map(|declaration| ClosureInfo {
         node: declaration,
@@ -2249,6 +2267,8 @@ fn collect_function_values(
         refusal: refusal_for_a_method_value(probe, declaration),
         wraps: true,
         binds_receiver: true,
+        within: None,
+        retyped_captures: std::collections::BTreeMap::new(),
     }));
 }
 
@@ -4445,148 +4465,328 @@ struct Structural {
     /// What each call site names, and which parameters its callee's copy
     /// re-typed — the second half is what the *caller* needs, so it coerces its
     /// argument to the copy's parameter rather than the declaration's.
-    at_call: rustc_hash::FxHashMap<NodeId, (String, Retyped)>,
+    ///
+    /// **Per enclosing copy.** The outer key is the suffix of the copy the call
+    /// is lowered *in* -- `""` for the original -- because the same call node
+    /// answers differently in different copies: `inner(s)` inside `outer`
+    /// passes a `Named` in the original and a `Thing` in `outer`'s copy over
+    /// `Thing`. A builder takes the original's answers and lets its own copy's
+    /// override them. Keyed by suffix rather than by (declaration, suffix)
+    /// because a call node lives in exactly one function, so two functions'
+    /// copies sharing a suffix cannot collide in the inner map.
+    at_call: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<NodeId, (String, Retyped)>>,
+}
+
+/// A copy whose body has yet to be walked for the calls it makes.
+struct PendingCopy {
+    declaration: NodeId,
+    retyped: Retyped,
+    suffix: String,
 }
 
 fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy) -> Structural {
     let mut found = Structural::default();
-    // One probe for the whole pass. `layout_of` builds a layout on demand from
-    // the snapshot, which is the only way to ask about prefixes before lowering
-    // has run — layouts accumulate *during* lowering, so a pass that runs first
-    // has none to read.
-    //
-    // Its layouts are **discarded**. `layout_of` is not a query: two of the four
-    // `collect_layouts` calls merge a builder's layouts into the program, and a
-    // probe whose layouts reached the program would materialise a struct for
-    // every type this pass asks about.
     let mut probe = FuncBuilder::probe(snapshot);
     probe.hierarchy = hierarchy.clone();
 
-    let mut calls: Vec<(&NodeId, &nts_semantic_schema::CallTarget)> =
-        snapshot.call_targets.iter().collect();
-    // Sorted, so one compiler on one input emits its copies in one order.
+    // Every call in the program, in the original's context: an argument's type
+    // is what the checker says it is.
+    let mut calls: Vec<(NodeId, NodeId)> = snapshot
+        .call_targets
+        .iter()
+        .filter_map(|(call, target)| target.callee.map(|callee| (*call, callee)))
+        .collect();
     calls.sort_by_key(|(call, _)| call.0);
+    let mut pending: Vec<PendingCopy> = Vec::new();
+    for (call, callee) in &calls {
+        let actual = |argument: NodeId| snapshot.node_types.get(&argument).copied();
+        record_structural_call(&mut found, &mut pending, &probe, "", *call, *callee, actual);
+    }
 
-    for (call, target) in calls {
-        let Some(declaration) = target.callee else {
-            continue;
-        };
-        // A generic function's copies come from `function_instantiations`, and a
-        // function cannot be specialised twice over.
-        if is_generic_function(snapshot, declaration) {
-            continue;
-        }
-        let Some(signature) = super::generics::declared_signature(snapshot, declaration) else {
-            continue;
-        };
-        let parameters: Vec<TypeId> = signature.parameters.iter().map(|p| p.ty).collect();
-        let arguments = probe.arguments_of(*call);
-
-        let mut retyped = Retyped::new();
-        let mut spelled = Vec::new();
-        for (at, (declared, argument)) in parameters.iter().zip(&arguments).enumerate() {
-            // **An object literal is built to order, so it has no layout to
-            // cast from.** `lower_object_literal` builds one at its *contextual*
-            // type -- the parameter's declared type -- and this pass was keying
-            // the copy on the literal's own checker type. Two derivations of
-            // "what shape is this argument", which agree until the literal
-            // supplies a value for a `?` property: the checker then types that
-            // property as present on the literal and optional on the
-            // declaration, the layouts differ, and the call refuses with
-            // ``a pointer cast between two structs that do not agree about
-            // where their shared fields are``.
-            //
-            // Measured as the modifier and not the representation:
-            // `encoding?: string` given `"u"` refuses, `encoding: string |
-            // undefined` given `"u"` does not, and the two have the same
-            // representation.
-            //
-            // Skipping it here makes the declared type the single answer, which
-            // is also the one that produces fewer copies -- every call passing
-            // an `Options`-shaped literal shares the declaration.
-            if probe.kind_of(*argument) == Some(syntax::OBJECT_LITERAL_EXPRESSION) {
-                continue;
-            }
-            let Some(actual) = snapshot.node_types.get(argument).copied() else {
+    // **Then every copy, to a fixpoint.** A copy re-types a parameter, and a
+    // call in its body that passes that parameter on hands the callee the
+    // concrete type -- which the original's walk above cannot see, because
+    // the checker still says `Named` there. Without this, `outer`'s copy over
+    // `Thing` called the *original* `inner` with a `Thing`, and `coerce`
+    // refused the cast the copy exists to avoid: `runtime/node/stream` is
+    // chains of exactly this shape, `onWritableConstructed(stream)` handing
+    // `stream` to `clearBuffer`, `finishMaybe`, `errorOrDestroy`. A parameter
+    // passed as itself, or a `const` alias of one, carries the copy's type
+    // (`retyped_symbols_of`); a `let`, a field read, or a call result is what
+    // the checker says, as in the original.
+    // Each copy is walked once, so this ends: the set of copies is bounded by
+    // the concrete types the program has.
+    while let Some(copy) = pending.pop() {
+        let symbols = retyped_symbols_of(&probe, copy.declaration, &copy.retyped);
+        for call in calls_in_the_body_of(&probe, copy.declaration) {
+            let Some(callee) = snapshot.call_targets.get(&call).and_then(|it| it.callee) else {
                 continue;
             };
-            if actual == *declared {
-                continue;
-            }
-            // Both sides have to be object types for this to be a pointer cast
-            // at all. A number where a number is wanted is not this question.
-            let (Some(HirType::Managed(ManagedType::Object(want))), Some(HirType::Managed(
-                ManagedType::Object(have),
-            ))) = (probe.represent(*declared), probe.represent(actual))
-            else {
-                continue;
+            let actual = |argument: NodeId| {
+                let as_retyped = probe
+                    .node(argument)
+                    .symbol
+                    .filter(|_| probe.kind_of(argument) == Some(syntax::IDENTIFIER))
+                    .and_then(|symbol| symbols.get(&symbol.0))
+                    .and_then(|ty| match ty {
+                        HirType::Managed(ManagedType::Object(have)) => Some(*have),
+                        _ => None,
+                    });
+                as_retyped.or_else(|| snapshot.node_types.get(&argument).copied())
             };
-            if want == have {
-                continue;
-            }
-            // Already sound: a base's fields keep their offsets in a subclass, so
-            // that cast is the no-op the comment describes and a copy would be
-            // one more function for nothing.
-            // **A closure or a signature is not a field-layout question**, and
-            // specialising one is a different feature with a different name.
-            //
-            // `laid_out_as_a_prefix` opens with exactly this guard and answers
-            // `true` for them, so skipping prefixes had been carrying it by
-            // accident. Specialising prefixes removed that cover and
-            // `blockers/callback-binding` regressed at once: a `declare
-            // function` taking a callback got a copy, and the emitted prototype
-            // stopped being `void nts_take_callback(NtsHeader *)` -- the very
-            // shape that fixture exists to hold.
-            //
-            // A guard inherited from a call whose answer happened to include it
-            // is not a guard. It has to be its own test, here, where the
-            // question is asked.
-            if super::is_closure_type(*declared)
-                || super::is_closure_type(actual)
-                || probe.is_a_signature(*declared)
-                || probe.is_a_signature(actual)
-            {
-                continue;
-            }
-            // **A prefix is specialised too**, which is not obvious and was
-            // measured rather than assumed. On C and LLVM a prefix cast is
-            // already the no-op `laid_out_as_a_prefix` describes, so a copy
-            // there buys nothing. The JVM relates classes by **name**: coinciding
-            // offsets are not a relation, `getfield Counted.n` needs the object
-            // to *be* a `Counted`, and that lane refused
-            // `examples/a-structural-cast-that-is-a-prefix` for a year of
-            // evenings on exactly that.
-            //
-            // Skipping prefixes here left it refusing. Specialising them closes
-            // it, because a copy over `Prefixed` takes a `Prefixed` and there is
-            // no cast to relate anything. The cost is one more function on a
-            // lane where a copy is a static method and the constant pool has two
-            // orders of magnitude spare.
-            retyped.insert(
-                u32::try_from(at).unwrap_or(u32::MAX),
-                HirType::Managed(ManagedType::Object(have)),
+            record_structural_call(
+                &mut found,
+                &mut pending,
+                &probe,
+                &copy.suffix,
+                call,
+                callee,
+                actual,
             );
-            spelled.push(format!("{at}obj{}", have.0));
-        }
-        if retyped.is_empty() {
-            continue;
-        }
-        // `@` cannot appear in a TypeScript identifier, so a copy's name cannot
-        // collide with a declared one — the same trick the generic suffix uses,
-        // with a different marker so the two are told apart by eye.
-        let suffix = format!("@{}", spelled.join("_"));
-        found
-            .at_call
-            .insert(*call, (suffix.clone(), retyped.clone()));
-        let copies = found.copies.entry(declaration).or_default();
-        if !copies.iter().any(|(_, at)| *at == suffix) {
-            copies.push((retyped, suffix));
         }
     }
     for copies in found.copies.values_mut() {
         copies.sort_by(|a, b| a.1.cmp(&b.1));
     }
     found
+}
+
+/// Decide what one call names, given what each argument actually is.
+///
+/// `actual` answers the argument's type in the context the call is being
+/// walked in: the checker's type in the original, and the copy's for a
+/// parameter the copy re-typed. A callee copy seen for the first time is
+/// queued so its own body gets walked.
+fn record_structural_call(
+    found: &mut Structural,
+    pending: &mut Vec<PendingCopy>,
+    probe: &FuncBuilder,
+    within: &str,
+    call: NodeId,
+    callee: NodeId,
+    actual: impl Fn(NodeId) -> Option<TypeId>,
+) {
+    let snapshot = probe.snapshot;
+    if is_generic_function(snapshot, callee) {
+        return;
+    }
+    let Some(signature) = super::generics::declared_signature(snapshot, callee) else {
+        return;
+    };
+    let parameters: Vec<TypeId> = signature.parameters.iter().map(|p| p.ty).collect();
+    let arguments = probe.arguments_of(call);
+
+    let mut retyped = Retyped::new();
+    let mut spelled = Vec::new();
+    for (at, (declared, argument)) in parameters.iter().zip(&arguments).enumerate() {
+        if probe.kind_of(*argument) == Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+            continue;
+        }
+        let Some(actual) = actual(*argument) else {
+            continue;
+        };
+        if actual == *declared {
+            continue;
+        }
+        let (Some(HirType::Managed(ManagedType::Object(want))), Some(HirType::Managed(
+            ManagedType::Object(have),
+        ))) = (probe.represent(*declared), probe.represent(actual))
+        else {
+            continue;
+        };
+        if want == have {
+            continue;
+        }
+        if super::is_closure_type(*declared)
+            || super::is_closure_type(actual)
+            || probe.is_a_signature(*declared)
+            || probe.is_a_signature(actual)
+        {
+            continue;
+        }
+        retyped.insert(
+            u32::try_from(at).unwrap_or(u32::MAX),
+            HirType::Managed(ManagedType::Object(have)),
+        );
+        spelled.push(format!("{at}obj{}", have.0));
+    }
+    if retyped.is_empty() {
+        return;
+    }
+    let suffix = format!("@{}", spelled.join("_"));
+    found
+        .at_call
+        .entry(within.to_owned())
+        .or_default()
+        .insert(call, (suffix.clone(), retyped.clone()));
+    let copies = found.copies.entry(callee).or_default();
+    if !copies.iter().any(|(_, at)| *at == suffix) {
+        copies.push((retyped.clone(), suffix.clone()));
+        // Walked only where a copy will be lowered: `function_copies` makes
+        // copies of plain function declarations, and a method's or an
+        // accessor's would be a context no builder ever runs in.
+        if probe.kind_of(callee) == Some(syntax::FUNCTION_DECLARATION) {
+            pending.push(PendingCopy {
+                declaration: callee,
+                retyped,
+                suffix,
+            });
+        }
+    }
+}
+
+/// The calls a function's body makes, in source order -- the closures in it
+/// included, and not a nested function declaration or class.
+///
+/// A closure inside a copy is lowered in the copy's context (`closure_variants`
+/// gives it a closure of its own where it captures a re-typed parameter), so
+/// its calls are decided here with the copy's: the captured symbol is the
+/// parameter's symbol, so `actual` sees it the same way. A nested *function
+/// declaration* is a function of its own with its own copies, and a class's
+/// methods are lowered by the class.
+fn calls_in_the_body_of(probe: &FuncBuilder, declaration: NodeId) -> Vec<NodeId> {
+    fn walk(probe: &FuncBuilder, id: NodeId, into: &mut Vec<NodeId>) {
+        match probe.kind_of(id) {
+            Some(
+                syntax::FUNCTION_DECLARATION
+                | syntax::METHOD_DECLARATION
+                | syntax::CLASS_DECLARATION
+                | syntax::CLASS_EXPRESSION,
+            ) => return,
+            Some(syntax::CALL_EXPRESSION) => into.push(id),
+            _ => {}
+        }
+        for child in &probe.node(id).children {
+            walk(probe, *child, into);
+        }
+    }
+    let mut calls = Vec::new();
+    for child in &probe.node(declaration).children {
+        walk(probe, *child, &mut calls);
+    }
+    calls
+}
+
+/// The symbols a copy re-types, at the copy's types: its parameters by
+/// position, and every `const` in its body initialised from one of them.
+///
+/// **One derivation for the two things that read it** -- the call walk, which
+/// decides what a call passing the symbol names, and `closure_variants`, which
+/// decides what a closure capturing it reads. A `const stream = source;` is
+/// how node's own code hands a parameter to a closure, and the alias carries
+/// the copy's value like the parameter does; a `let` can be reassigned to
+/// something the checker's type admits and the copy's does not, so it is
+/// what the checker says. To a fixpoint, for an alias of an alias.
+fn retyped_symbols_of(
+    probe: &FuncBuilder,
+    declaration: NodeId,
+    retyped: &Retyped,
+) -> std::collections::BTreeMap<u32, HirType> {
+    let parameters = probe.parameter_symbols(declaration);
+    let seeds: std::collections::BTreeMap<u32, HirType> = retyped
+        .iter()
+        .filter_map(|(at, ty)| {
+            let symbol = parameters.get(*at as usize).copied().flatten()?;
+            Some((symbol, ty.clone()))
+        })
+        .collect();
+    with_const_aliases(probe, declaration, seeds)
+}
+
+/// `seeds`, plus every `const` in `root`'s body initialised from one of them,
+/// to a fixpoint. The alias half of `retyped_symbols_of`, on its own for a
+/// closure variant, whose seeds are its re-typed captures.
+fn with_const_aliases(
+    probe: &FuncBuilder,
+    root: NodeId,
+    mut symbols: std::collections::BTreeMap<u32, HirType>,
+) -> std::collections::BTreeMap<u32, HirType> {
+    if symbols.is_empty() {
+        return symbols;
+    }
+    let mut declarations = Vec::new();
+    probe.subtree(root, &mut declarations);
+    let aliases: Vec<(u32, u32)> = declarations
+        .into_iter()
+        .filter(|node| probe.kind_of(*node) == Some(syntax::VARIABLE_DECLARATION))
+        .filter(|node| probe.declaration_kind(*node) == nts_semantic_schema::VariableKind::Const)
+        .filter_map(|node| {
+            let children = probe.children(node);
+            let [name, .., initializer] = children.as_slice() else {
+                return None;
+            };
+            if probe.kind_of(*name) != Some(syntax::IDENTIFIER)
+                || probe.kind_of(*initializer) != Some(syntax::IDENTIFIER)
+            {
+                return None;
+            }
+            Some((probe.node(*name).symbol?.0, probe.node(*initializer).symbol?.0))
+        })
+        .collect();
+    loop {
+        let mut grew = false;
+        for (alias, of) in &aliases {
+            if symbols.contains_key(alias) {
+                continue;
+            }
+            if let Some(ty) = symbols.get(of).cloned() {
+                symbols.insert(*alias, ty);
+                grew = true;
+            }
+        }
+        if !grew {
+            return symbols;
+        }
+    }
+}
+
+/// A closure of its own for each closure a structural copy re-types a
+/// capture of. See `ClosureInfo::within`.
+///
+/// For every copy `(declaration, retyped, suffix)`, every closure written
+/// inside `declaration` that captures a parameter the copy re-typed gets a
+/// variant: same node and captures, `within` the copy, the re-typed captures
+/// at the copy's types. Closures that capture nothing the copy changed serve
+/// every copy as written. Appended after the closures as written, so every
+/// lookup that takes the first closure at a node keeps finding the plain one.
+fn closure_variants(
+    probe: &FuncBuilder,
+    closures: &[ClosureInfo],
+    structural: &Structural,
+) -> Vec<ClosureInfo> {
+    let mut variants = Vec::new();
+    let mut copies: Vec<(&NodeId, &Vec<(Retyped, String)>)> = structural.copies.iter().collect();
+    copies.sort_by_key(|(declaration, _)| declaration.0);
+    for (declaration, copies) in copies {
+        for (retyped, suffix) in copies {
+            let retyped_symbols = retyped_symbols_of(probe, *declaration, retyped);
+            if retyped_symbols.is_empty() {
+                continue;
+            }
+            for closure in closures {
+                if closure.within.is_some() || !probe.is_within(closure.node, *declaration) {
+                    continue;
+                }
+                let retyped_captures: std::collections::BTreeMap<u32, HirType> = closure
+                    .captures
+                    .iter()
+                    .filter_map(|capture| {
+                        let ty = retyped_symbols.get(&capture.symbol)?;
+                        Some((capture.symbol, ty.clone()))
+                    })
+                    .collect();
+                if retyped_captures.is_empty() {
+                    continue;
+                }
+                variants.push(ClosureInfo {
+                    within: Some(suffix.clone()),
+                    retyped_captures,
+                    ..closure.clone()
+                });
+            }
+        }
+    }
+    variants
 }
 
 /// Record why an exported function was not compiled, for the wrapper to say.
@@ -5072,13 +5272,17 @@ impl Shared {
         hierarchy: &Hierarchy,
         closures: &[ClosureInfo],
     ) -> Self {
+        let structural = structural_instantiations(snapshot, hierarchy);
+        let mut closures = closures.to_vec();
+        let variants = closure_variants(&FuncBuilder::probe(snapshot), &closures, &structural);
+        closures.extend(variants);
         Self {
             module: module.clone(),
             hierarchy: hierarchy.clone(),
-            closures: closures.to_vec(),
+            closures,
             naming: naming(snapshot),
             generics: super::generics::function_instantiations(snapshot),
-            structural: structural_instantiations(snapshot, hierarchy),
+            structural,
         }
     }
 
@@ -5096,18 +5300,26 @@ impl Shared {
             self.hierarchy.clone(),
             self.closures.clone(),
             copy.substitution,
-            copy.suffix,
+            copy.suffix.clone(),
         );
         builder.sources = copy.sources;
         builder.retyped = copy.retyped;
         builder.generic_calls.clone_from(&self.generics.at_call);
         // A structural call names its copy the same way a generic one does, so
         // the naming site needs no second question -- one map, two sources.
-        for (call, (suffix, bindings)) in &self.structural.at_call {
-            builder.generic_calls.insert(*call, suffix.clone());
-            builder
-                .structural_calls
-                .insert(*call, bindings.clone());
+        //
+        // The original's answers first and this copy's on top: a call whose
+        // argument is a parameter this copy re-typed names a different callee
+        // copy than it does in the original, and every other call names the
+        // same one. See `Structural::at_call`.
+        let contexts = [String::new(), copy.suffix].into_iter();
+        for calls in contexts.filter_map(|context| self.structural.at_call.get(&context)) {
+            for (call, (suffix, bindings)) in calls {
+                builder.generic_calls.insert(*call, suffix.clone());
+                builder
+                    .structural_calls
+                    .insert(*call, bindings.clone());
+            }
         }
         wire_naming(&mut builder, &self.naming);
         builder
@@ -6471,6 +6683,49 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     lower_with(snapshot, &[], &rustc_hash::FxHashMap::default())
 }
 
+/// Lower every closure a function body asked for, and every closure those
+/// ask for in turn, each once.
+///
+/// In the context of the copy it is a variant for, so the calls in its body
+/// name what the copy's do -- and, for the closure as written, in the
+/// original's, which every function body gets from `Shared::builder` and
+/// closure bodies did not until the variants needed it. A closure body is a
+/// function like any other and takes the whole of the naming; this site used
+/// to take two of its four fields, see `wire_naming`, which `Shared::builder`
+/// calls.
+fn lower_wanted_closures(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    shared: &Shared,
+    closures: &[ClosureInfo],
+    lowered: &mut Lowered,
+    wanted: &mut std::collections::BTreeSet<usize>,
+) {
+    let mut done: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
+    while let Some(index) = wanted.iter().copied().find(|at| !done.contains(at)) {
+        done.insert(index);
+        let mut builder = shared.builder(
+            snapshot,
+            foreign,
+            Copy {
+                suffix: closures[index].within.clone().unwrap_or_default(),
+                ..Copy::default()
+            },
+        );
+        builder.retyped_symbols = with_const_aliases(
+            &FuncBuilder::probe(snapshot),
+            closures[index].node,
+            closures[index].retyped_captures.clone(),
+        );
+        match builder.lower_closure(index, &closures[index]) {
+            Ok(func) => lowered.program.funcs.push(func),
+            Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+        }
+        wanted.extend(builder.used_closures.iter().copied());
+        collect_layouts(&mut lowered.program, builder.layouts);
+    }
+}
+
 /// As [`lower`], told which source files the project named as its roots.
 ///
 /// `entry` is `SourceFile::uri` values -- `nts-workspace:///src/main.ts` -- and
@@ -6502,6 +6757,10 @@ pub fn lower_with(
     let refused =
         mark_refused_initializers(snapshot, &mut module, &hierarchy, &closures, &mut lowered);
     let shared = Shared::whole_program(snapshot, &module, &hierarchy, &closures);
+    // With the variants `Shared` added: every walk below that asks which
+    // closures exist, and the loop that lowers them, sees the same list the
+    // builders do.
+    let closures = shared.closures.clone();
     // Which declarations the walk refused, by node. See the note where they are
     // inserted: a refusal's *location* is the offending construct and routinely
     // sits outside the declaration it refused, so a span test cannot answer
@@ -6589,7 +6848,10 @@ pub fn lower_with(
             continue;
         }
         for copy in copies {
+            let retyped_symbols =
+                retyped_symbols_of(&FuncBuilder::probe(snapshot), id, &copy.retyped);
             let mut builder = shared.builder(snapshot, foreign, copy);
+            builder.retyped_symbols = retyped_symbols;
             match builder.lower_function(id) {
                 Ok(func) => lowered.program.funcs.push(func),
                 Err(diagnostic) => {
@@ -6629,26 +6891,7 @@ pub fn lower_with(
     // A worklist rather than a pass, because a closure body can allocate
     // another one. Taken in index order, so one compiler on one input emits its
     // functions in one order.
-    let mut done: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
-    while let Some(index) = wanted.iter().copied().find(|at| !done.contains(at)) {
-        done.insert(index);
-        let mut builder = FuncBuilder::within(
-            snapshot, foreign,
-            module.clone(),
-            hierarchy.clone(),
-            closures.clone(),
-        );
-        // A closure body is a function like any other and takes the whole of
-        // the naming; this site used to take two of its four fields. See
-        // `wire_naming`.
-        wire_naming(&mut builder, &shared.naming);
-        match builder.lower_closure(index, &closures[index]) {
-            Ok(func) => lowered.program.funcs.push(func),
-            Err(diagnostic) => lowered.diagnostics.push(diagnostic),
-        }
-        wanted.extend(builder.used_closures.iter().copied());
-        collect_layouts(&mut lowered.program, builder.layouts);
-    }
+    lower_wanted_closures(snapshot, foreign, &shared, &closures, &mut lowered, &mut wanted);
 
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
     declare_unfilled_signatures(&hierarchy, &mut lowered.program);
@@ -7104,8 +7347,26 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
             }
             // A declared name beats a generated one, and the two functions that
             // mention a type may be discovered in either order.
+            //
+            // **Through the same uniqueness rule as a push.** This rename
+            // used to adopt the declared name unasked, and a second
+            // `TransformOptions` -- `stream/iter/pull.ts` declares one beside
+            // `stream/transform.ts`'s -- reached it by merging into an
+            // anonymous `{ signal }` layout that had been pushed first: the
+            // merged layout took the name the other `TransformOptions` already
+            // held, and the program verified as `DuplicateLayout` with nothing
+            // emitted. The push path had been suffixing for a year; this path
+            // was the one that could still produce the name twice.
             if generated_name(&existing.name) && !generated_name(&layout.name) {
-                existing.name = layout.name;
+                let taken = existing.types.first().copied();
+                let renamed = unshared_layout_name_for(&program.layouts, &layout.name, taken);
+                let index = program
+                    .layouts
+                    .iter()
+                    .position(|known| known.types.first().copied() == taken);
+                if let Some(index) = index {
+                    program.layouts[index].name = renamed;
+                }
             }
         } else {
             program
@@ -7144,14 +7405,24 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
 /// The JVM backend takes its class names from this field, so a rename is
 /// visible there; it was named to that session before it landed.
 fn unshared_layout_name(existing: &[Layout], mut layout: Layout) -> Layout {
-    if !existing.iter().any(|known| known.name == layout.name) {
-        return layout;
-    }
-    let Some(ty) = layout.types.first() else {
-        return layout;
-    };
-    layout.name = format!("{}{}", layout.name, ty.0);
+    layout.name = unshared_layout_name_for(existing, &layout.name, layout.types.first().copied());
     layout
+}
+
+/// `name`, or `name{id}` where another layout already holds it.
+///
+/// The one rule behind both ways a layout comes to be named: pushed under its
+/// own name, or renamed on merge when a declared name beats a generated one.
+/// A layout that *is* the holder -- its first type id is `own` -- keeps the
+/// name; anything else sharing it is the collision this exists for.
+fn unshared_layout_name_for(existing: &[Layout], name: &str, own: Option<TypeId>) -> String {
+    let held_elsewhere = existing
+        .iter()
+        .any(|known| known.name == name && known.types.first().copied() != own);
+    match (held_elsewhere, own) {
+        (true, Some(ty)) => format!("{name}{}", ty.0),
+        _ => name.to_owned(),
+    }
 }
 
 /// A function type's signature as the ids it is made of, or `None` when the
@@ -9846,6 +10117,13 @@ struct FuncBuilder<'a> {
     /// Which of *this* copy's own parameters are re-typed, by position. Empty
     /// for every function that is not a structural specialisation.
     retyped: Retyped,
+    /// The symbols this copy re-types, at the copy's types: the re-typed
+    /// parameters and every `const` alias of them -- `retyped_symbols_of` --
+    /// or, for a closure variant, its re-typed captures and their aliases. A
+    /// binding of one of these takes the copy's type rather than the
+    /// declaration's, which is how `const stream = source;` in a copy over
+    /// `Writable` holds a `Writable` and not a cast to the interface.
+    retyped_symbols: std::collections::BTreeMap<u32, HirType>,
     /// Whether this function is a constructor.
     ///
     /// The one place a `readonly` field may be written: TypeScript permits it
@@ -10009,6 +10287,7 @@ impl<'a> FuncBuilder<'a> {
             generic_calls: rustc_hash::FxHashMap::default(),
             structural_calls: rustc_hash::FxHashMap::default(),
             retyped: Retyped::new(),
+            retyped_symbols: std::collections::BTreeMap::new(),
             in_constructor: false,
             hierarchy: Hierarchy::default(),
             base: None,
@@ -11893,6 +12172,18 @@ impl<'a> FuncBuilder<'a> {
         properties
             .iter()
             .any(|property| property.name == name && property.kind.is_stored())
+    }
+
+    /// Whether `id` sits inside `ancestor`'s subtree.
+    fn is_within(&self, id: NodeId, ancestor: NodeId) -> bool {
+        let mut at = self.node(id).parent;
+        while let Some(node) = at {
+            if node == ancestor {
+                return true;
+            }
+            at = self.node(node).parent;
+        }
+        false
     }
 
     /// Whether a `METHOD_DECLARATION` is a member of an object literal that a
@@ -14247,6 +14538,44 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
+    /// The type a closure's body reads a capture as -- before any cell it
+    /// sits in.
+    ///
+    /// **One derivation for the two sides of a capture.** The body reads the
+    /// field at this type (`bind_captures`), so the closure that builds the
+    /// object has to store it at this type too (`lower_arrow`) -- and it did
+    /// not: it stored the *value's* type, which agrees with this everywhere
+    /// except inside a structural copy, where a parameter re-typed to `Thing`
+    /// was stored into a field the body reads as `Named`. `s.name` in the
+    /// arrow then read `id` as a string pointer: SIGSEGV where node answers
+    /// 4, on the binary before this as well. The store is coerced to this
+    /// now, and refuses where the cast is not a prefix, as a parameter would.
+    ///
+    /// **A settler's field holds the promise**, and the checker's type at the
+    /// name is the settler's `(value: T) => void`. Asking `type_of` for it
+    /// would read the field at a function type and the two sides of the
+    /// layout would disagree about it -- invalid HIR rather than a refusal,
+    /// so the special case comes before the general one. The promise type
+    /// comes from the *declaration*, because the reading side has no value in
+    /// hand: the allocating side put `settler.result.promise` in the field,
+    /// and its type is the promise the enclosing executor is constructing.
+    fn captured_as(&self, info: &ClosureInfo, capture: &Capture) -> Result<HirType, Diagnostic> {
+        // A variant reads a re-typed capture at the copy's type: the same
+        // answer the copy's own parameter has, which is what makes the field
+        // agree with the value the copy stores in it.
+        if let Some(ty) = info.retyped_captures.get(&capture.symbol) {
+            return Ok(ty.clone());
+        }
+        if capture.settles.is_some() {
+            return self
+                .settler_promise_type(capture.at)
+                .ok_or_else(|| self.unrepresentable(capture.at, "a captured promise settler"));
+        }
+        self.closure_bound_to(capture.symbol)
+            .or_else(|| self.type_of(capture.at))
+            .ok_or_else(|| self.unrepresentable(capture.at, "a captured variable"))
+    }
+
     fn bind_captures(
         &mut self,
         receiver: ValueId,
@@ -14258,26 +14587,7 @@ impl<'a> FuncBuilder<'a> {
             if let Some(reason) = self.why_the_closure_cannot_be_captured(capture.symbol) {
                 return Err(self.unsupported(capture.at, reason));
             }
-            // **A settler's field holds the promise**, and the checker's type
-            // at the name is the settler's `(value: T) => void`. Asking
-            // `type_of` here would read the field at a function type and the
-            // two sides of the layout would disagree about it -- which is
-            // invalid HIR rather than a refusal, so it is worth the special
-            // case being before the general one rather than a fallback after.
-            //
-            // The promise type comes from the *declaration*, because this
-            // builder has no value in hand: the allocating side put
-            // `settler.result.promise` in the field, and its type is the
-            // promise the enclosing executor is constructing.
-            let held = if capture.settles.is_some() {
-                self.settler_promise_type(capture.at).ok_or_else(|| {
-                    self.unrepresentable(capture.at, "a captured promise settler")
-                })?
-            } else {
-                self.closure_bound_to(capture.symbol)
-                    .or_else(|| self.type_of(capture.at))
-                    .ok_or_else(|| self.unrepresentable(capture.at, "a captured variable"))?
-            };
+            let held = self.captured_as(info, capture)?;
             // By reference, the field holds the *cell* rather than the value,
             // and the binding below is the cell -- so every read and write of
             // the name in this body goes through it, exactly as it does in the
@@ -29189,10 +29499,19 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_arrow(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        // The variant for this copy where there is one, else the closure as
+        // written. See `ClosureInfo::within`.
         let index = self
             .closures
             .iter()
-            .position(|closure| closure.node == id)
+            .position(|closure| {
+                closure.node == id && closure.within.as_deref() == Some(self.suffix.as_str())
+            })
+            .or_else(|| {
+                self.closures
+                    .iter()
+                    .position(|closure| closure.node == id && closure.within.is_none())
+            })
             .ok_or_else(|| self.unsupported(id, "an arrow function the collector did not see"))?;
         let info = self.closures[index].clone();
         if let Some(reason) = info.refusal {
@@ -29356,7 +29675,7 @@ impl<'a> FuncBuilder<'a> {
                     ),
                 )
             })?;
-            let field_ty = self.values[value.0 as usize].ty.clone();
+            let (value, field_ty) = self.stored_capture(&info, capture, value)?;
             self.field_set(object, u32::try_from(at).unwrap_or(0), value, &origin);
             fields.push(Field {
                 name: capture.name.clone(),
@@ -29385,6 +29704,52 @@ impl<'a> FuncBuilder<'a> {
     /// `new Box<number>(xs)` arrives as `[Box, number, xs]` -- so they are
     /// dropped by asking the same question tsgo asks. Nothing structural
     /// distinguishes them: a list is not a node here.
+    /// What a closure stores for a capture, and at what type.
+    ///
+    /// A cell is stored as itself -- the body unwraps it -- and any other
+    /// capture at the type the body will read it as. See `captured_as` for
+    /// the crash this replaces.
+    ///
+    /// **Two different object types here is refused, not cast.** The value is
+    /// a `Thing` and the body reads a `Named` only inside a structural copy
+    /// that re-types a captured parameter, and `closure_variants` gives every
+    /// such closure a variant whose field reads the copy's type -- so this
+    /// fires only where no variant applies, which is a closure the collector
+    /// and the copy disagree about. A prefix-compatible pair would pass
+    /// `coerce` on C and LLVM by luck of layout and be declined on the JVM,
+    /// which relates classes by name, so the three lanes would disagree about
+    /// one program; refused the same way everywhere instead.
+    fn stored_capture(
+        &mut self,
+        info: &ClosureInfo,
+        capture: &Capture,
+        value: ValueId,
+    ) -> Result<(ValueId, HirType), Diagnostic> {
+        let have = self.values[value.0 as usize].ty.clone();
+        if self.cell_of(capture.symbol).is_some() {
+            return Ok((value, have));
+        }
+        let held = self.captured_as(info, capture)?;
+        if let (
+            HirType::Managed(ManagedType::Object(have)),
+            HirType::Managed(ManagedType::Object(want)),
+        ) = (&have, &held)
+            && have != want
+        {
+            return Err(self.unsupported(
+                capture.at,
+                &format!(
+                    "`{}`, a `{}` captured by a closure that reads it as a `{}` -- a parameter \
+                     this copy re-typed, in a closure the copy does not",
+                    capture.name,
+                    self.name_of_type(*have).unwrap_or("an anonymous type"),
+                    self.name_of_type(*want).unwrap_or("an anonymous type"),
+                ),
+            ));
+        }
+        Ok((self.coerce(value, &held, capture.at)?, held))
+    }
+
     fn arguments_of(&self, id: NodeId) -> Vec<NodeId> {
         self.children(id)
             .into_iter()
@@ -34327,7 +34692,18 @@ impl<'a> FuncBuilder<'a> {
             // binding the raw double instead left the declared type and the
             // stored representation disagreeing, and `typeof held` then matched
             // neither the primitive path nor the erased one.
-            let value = match self.type_of(name) {
+            //
+            // **Unless this copy re-types the name.** `const stream = source;`
+            // where the copy re-typed `source` to `Writable` is a `Writable`,
+            // and coercing it to the `WritableImplementation` the declaration
+            // says would be the very cast the copy exists to avoid. See
+            // `retyped_symbols`.
+            let declared = self
+                .retyped_symbols
+                .get(&symbol.0)
+                .cloned()
+                .or_else(|| self.type_of(name));
+            let value = match declared {
                 Some(declared) => self.coerce(value, &declared, declaration)?,
                 None => value,
             };
@@ -43728,6 +44104,69 @@ enum Branch {
 
 #[cfg(test)]
 mod tests {
+    use super::super::{Field, Layout, Program};
+    use super::TypeId;
+
+    fn layout(name: &str, ty: u32, fields: &[&str]) -> Layout {
+        Layout {
+            types: vec![TypeId(ty)],
+            name: name.to_owned(),
+            fields: fields
+                .iter()
+                .map(|field| Field {
+                    name: (*field).to_owned(),
+                    ty: super::HirType::NUMBER,
+                    declared_by: None,
+                    readonly: false,
+                })
+                .collect(),
+            methods: Vec::new(),
+            interfaces: Vec::new(),
+            base: None,
+        }
+    }
+
+    /// Two declarations named alike are two layouts named apart, whichever
+    /// way the second one arrives.
+    ///
+    /// The push path suffixed a taken name for a year. The **rename on
+    /// merge** -- a declared name beating a generated one -- adopted it
+    /// unasked, and that is the order `zlib` produced: `stream/transform.ts`'s
+    /// 24-field `TransformOptions` pushed first, an anonymous `{ signal }`
+    /// second, and `stream/iter/pull.ts`'s one-field `TransformOptions`
+    /// third, merging into the anonymous one by shape and taking a name the
+    /// first already held. `verify` reported `DuplicateLayout` and the module
+    /// emitted nothing. Both orders below must end with two distinct names.
+    #[test]
+    fn a_second_declaration_of_one_name_is_named_apart_on_merge_too() {
+        // The push order the push path already handled.
+        let mut program = Program::default();
+        super::collect_layouts(&mut program, vec![layout("Options", 1, &["a", "b", "c"])]);
+        super::collect_layouts(&mut program, vec![layout("Options", 7, &["signal"])]);
+        let names: Vec<&str> = program.layouts.iter().map(|it| it.name.as_str()).collect();
+        assert_eq!(names, ["Options", "Options7"]);
+
+        // The merge order that produced the duplicate: the big declared one,
+        // then an anonymous shape, then the small declared one that merges
+        // into the anonymous shape and would take its declared name.
+        let mut program = Program::default();
+        super::collect_layouts(&mut program, vec![layout("Options", 1, &["a", "b", "c"])]);
+        super::collect_layouts(&mut program, vec![layout("Type5", 5, &["signal"])]);
+        super::collect_layouts(&mut program, vec![layout("Options", 7, &["signal"])]);
+        let names: Vec<&str> = program.layouts.iter().map(|it| it.name.as_str()).collect();
+        assert_eq!(program.layouts.len(), 2, "the two one-field shapes merge");
+        assert_eq!(names, ["Options", "Options5"]);
+        assert_eq!(program.layouts[1].types, [TypeId(5), TypeId(7)]);
+
+        // And the control: a declared name still beats a generated one where
+        // nothing holds it.
+        let mut program = Program::default();
+        super::collect_layouts(&mut program, vec![layout("Type5", 5, &["signal"])]);
+        super::collect_layouts(&mut program, vec![layout("Options", 7, &["signal"])]);
+        assert_eq!(program.layouts.len(), 1);
+        assert_eq!(program.layouts[0].name, "Options");
+    }
+
     /// A foreign layout's name is its identity, like the three families beside
     /// it in `nominal_name`.
     ///

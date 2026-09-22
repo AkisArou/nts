@@ -20,6 +20,9 @@
 //
 // Specialisation needs the concrete type at the call. Two places do not have
 // one, and they fail differently, which is the reason this file still exists.
+// (A third -- a copy's own body passing its parameter on -- was here until
+// 2026-09-22 and is the control `throughTwoCalls` now: copies are walked to a
+// fixpoint, so a parameter handed on carries the copy's type.)
 //
 // # An array of the interface type, which refuses
 //
@@ -76,7 +79,14 @@ export function atACall(n: number): number {
   return readName(new Thing(n)) + n * 0;
 }
 
-/** Under test: a copy's own body needs a copy. Refused -- specialisation is not transitive. */
+/**
+ * Control since 2026-09-22: a copy's own body needs a copy, and gets one.
+ * Specialisation is transitive now -- `structural_instantiations` walks each
+ * copy's body and a parameter passed on as itself carries the copy's type --
+ * so this lowers, and `examples/a-structural-cast-that-is-not-a-prefix`
+ * guards the chains. Kept here as the control beside the two that still
+ * refuse.
+ */
 function describe(v: Named): number {
   return readName(v) * 2;
 }

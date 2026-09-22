@@ -48,22 +48,46 @@
 // copies must read *different* offsets. One copy serving both would answer one of
 // them wrongly, and with a single implementor that mistake is invisible.
 //
-// # What is not here: specialisation is not transitive
+// # Transitive, since 2026-09-22
 //
 // `describe(v: Named) { readName(v) }` called with a `Thing` gets a copy, and
-// **inside that copy the call to `readName` is a new mismatch** -- `v` is a
-// `Thing` there and `readName` still declares `Named`. The pass reads argument
-// types from the source, where `v` is declared `Named`, so it never sees it.
-// That case refuses, and it lives in
-// `blockers/a-structural-cast-that-is-not-a-prefix` rather than here: a refused
-// function leaves the differential silently, so this file would report agreement
-// over the functions that lowered and go green having stopped testing it.
+// inside that copy the call to `readName` is a new mismatch: `v` is a `Thing`
+// there and `readName` still declares `Named`. The pass used to read argument
+// types from the source, where `v` is declared `Named`, so it never saw it,
+// and the copy called the *original* `readName` with a `Thing` -- exactly the
+// cast the copy exists to avoid, refused by `coerce`. `runtime/node/stream` is
+// chains of this shape: `onWritableConstructed(stream)` handing `stream` to
+// `clearBuffer`, `finishMaybe`, `errorOrDestroy`.
 //
-// It is also why the profile's *site* count for this refusal went up rather than
-// down -- copies add bodies, and a body that needs a copy of its own is a new
-// site. The count that matters did not move: `fs` emits 1615 functions before
-// and after, because a copy replaces the plain version wherever every call to it
-// was specialised.
+// `structural_instantiations` walks every copy's body now, to a fixpoint. A
+// parameter passed on **as itself**, or a `const` alias of one -- node's own
+// code writes `const stream = source;` before handing it on -- carries the
+// copy's type and the callee gets a copy of its own; a `let`, a field read
+// or a call result is what the checker says, as in the original. Inside the
+// copy the alias is *bound* at the copy's type too, or its own declaration
+// would be the cast the copy exists to avoid. Each copy is walked once, so
+// the walk ends. `Structural::at_call` is keyed by the enclosing copy,
+// because the same call node names different callee copies in different
+// copies.
+//
+// # A capture inside a copy, which segfaulted and is a closure of its own now
+//
+// An arrow inside a copy that captures the re-typed parameter stored a
+// `Thing` into a closure field the arrow's body reads as `Named` -- the
+// building side typed the field by the *value* and the reading side by the
+// checker, and only inside a copy do the two differ. `s.name` in the arrow
+// read `id` as a string pointer: signal 11 where node answers 4, on the
+// binary before the transitive walk as well.
+//
+// A closure is lowered once, so the copy cannot re-type it. `closure_variants`
+// gives every closure a copy re-types a capture of a closure of its own: the
+// same node and captures, the re-typed ones at the copy's types, lowered in
+// the copy's context so the calls in its body name what the copy's do.
+// `captured_as` is the one derivation both sides of a capture use, and a
+// capture whose two types still differ -- which no variant leaves -- is
+// refused by name rather than cast, on every lane, because the
+// prefix-compatible spelling would pass here by luck of layout and be
+// declined on the JVM. (`capturedInAnArrow`, `capturedTwice`, below.)
 
 interface Named {
   name: string;
@@ -151,3 +175,64 @@ export function twoImplementors(n: number): number {
   return readSize(new Small(n)) * 100 + readSize(new Large(n));
 }
 
+
+/** A copy's body passing its parameter on: `describe`'s copy calls `readName`'s. */
+function describe(v: Named): number {
+  return readName(v) * 2;
+}
+
+export function throughTwoCalls(n: number): number {
+  return describe(new Thing(n)) + n * 0;
+}
+
+/** Three deep, and the innermost is the one reading the field. */
+function relay(v: Named): number {
+  return describe(v) + 1;
+}
+
+export function throughThreeCalls(n: number): number {
+  return relay(new Thing(n)) + n * 0;
+}
+
+/** Two callers with different layouts through one chain: two chains of copies. */
+export function twoChains(n: number): number {
+  return relay(new Thing(n)) * 100 + relay(new Prefixed(n)) + n * 0;
+}
+
+/** A copy calling itself: the same copy, not a new one per depth. */
+function countDown(v: Named, depth: number): number {
+  if (depth <= 0) {
+    return v.name.length;
+  }
+  return countDown(v, depth - 1) + 1;
+}
+
+export function recursiveChain(n: number): number {
+  return countDown(new Thing(n), n & 3);
+}
+
+/** An arrow inside a copy capturing the re-typed parameter: a variant of the closure. */
+function viaArrow(v: Named): number {
+  const read = (): number => v.name.length;
+  return read() + 1;
+}
+
+export function capturedInAnArrow(n: number): number {
+  return viaArrow(new Thing(n)) + n * 0;
+}
+
+/** Two callers, two variants of one closure, reading two different offsets. */
+export function capturedTwice(n: number): number {
+  return viaArrow(new Thing(n)) * 100 + viaArrow(new Prefixed(n)) + n * 0;
+}
+
+/** A `const` alias of the parameter, passed on and captured: both carry the copy's type. */
+function viaAlias(source: Named): number {
+  const stream = source;
+  const read = (): number => stream.name.length;
+  return readName(stream) * 10 + read();
+}
+
+export function throughAnAlias(n: number): number {
+  return viaAlias(new Thing(n)) + n * 0;
+}

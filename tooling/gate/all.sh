@@ -629,7 +629,15 @@ profile() {
   # breach with definitions *up* is the corpus earning a raise, which is the
   # case the paragraph above describes and the one the message below used to
   # misreport.
-  ceiling=16300
+  #     2026-09-22   15303   <- literal methods as storage, and the gate said so
+  #     2026-09-22   15433   <- transitive structural copies: a copy is a body,
+  #                            and every refusal inside one is counted once
+  #                            more per copy. Sites fell 1431 -> 1412 and
+  #                            definitions rose 23129 -> 23414 on the same
+  #                            corpus, which is the shape the paragraph above
+  #                            names; the occurrence count is the one number
+  #                            here that copies inflate.
+  ceiling=15550
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
@@ -1163,8 +1171,10 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # `an-element-of-a-mapped-array` left `rc.sh`'s `known_failing` -- the
   # counting floor is the one that moves when a fixture stops failing
   # under `rc` rather than when a new example lands. 281 for
-  # `an-identifier-c-cannot-spell`.
-  backend_examples 305 "through the LLVM backend, counting" "" 14 ); }
+  # `an-identifier-c-cannot-spell`. 306 on 2026-09-22, when the gate for
+  # `4ff149b6` asked for it: 306 of 307 pass under `rc`, with
+  # `this-in-a-field-initializer` the known one.
+  backend_examples 306 "through the LLVM backend, counting" "" 14 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
