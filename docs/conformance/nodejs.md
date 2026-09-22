@@ -3372,6 +3372,101 @@ They are two causes in a 50/50 split, and the only reason to know that rather
 than guess is that the reasons were counted per module instead of read off one
 of them.
 
+## 2026-09-22: the lever above is a quarter of what it was, and the surface did not move
+
+Re-measured on the gate binaries at `4be51fba` and `88c751e9` — the two ends of
+a day in which the compiler lane landed generic instantiation, the iteration
+protocol, and a copy of a generic function per instantiation of the class that
+calls it. Over 25 modules of `runtime/node` with `--napi`:
+
+    definitions            23,414 -> 29,852      +27%
+    NTS1001 sites           1,412 ->  1,309
+    names published            139 ->    139
+
+**Not one module publishes a single name more.** Six thousand more definitions,
+a hundred fewer refusal sites, and the export surface is identical — module for
+module, not merely in total.
+
+The two causes this document sizes above have changed places. Counted the same
+way over the same ten modules:
+
+    module                 cannot name   not compiled   wrappers missing
+    assert                     19             0              24
+    console                     0             0               4
+    events                      3             0              17
+    stream                      0             0              74
+    url                         0             0              13
+    zlib                        1             0              66
+    querystring                 0             0               5
+    string_decoder              1             0               2
+    diagnostics_channel         0             0               7
+    dgram                       0             0               2
+    -----------------------------------------------------------------
+                               24             0             214
+
+`cannot name` was 82 and is **24**, nineteen of them in `assert` alone.
+`not compiled` was 74 and is **0**. So the sentence above — "82 export sites
+across ten modules, and it is half of everything standing between this profile
+and a green module" — is no longer true, and `export-class` is not the largest
+lever.
+
+**What replaced it is the cascade.** Over all 26 modules there are 502 exports
+with no wrapper, and the reason, counted:
+
+    it calls `X`, which was refused above           181   (114 exports,
+                                                           38 namespace members,
+                                                           29 class constructors)
+    is not a function this backend can name          38
+    exported as a value of type `X`, which does not cross   31
+    a namespace member whose function was not compiled      17
+    an erased value where a concrete representation is wanted  17
+    takes an object                                  16
+    a call inside a `try`, whose `throw` would not reach this handler  14
+
+So the export surface is gated by the *refusal queue*, and the queue's head is
+no longer anything about exporting. `stream` went from 29 counted failures to
+74 and publishes the same four names: more of it compiles, more of it is
+therefore *attempted*, and each attempt stops at whatever its body reaches
+first.
+
+**Which makes the reading of this axis a subtraction rather than a count.**
+Clearing refusals moved the compiled measure 27% and this one by zero, so the
+two are not proxies for each other and a day spent on either says nothing about
+the other.
+
+### So the queue was measured by depth, and it has a head
+
+For each export whose wrapper says *it calls `X`, which was refused above*,
+whether `X` is itself a caller in another cascade — a depth-one cascade is one
+fix from publishing, a deeper one is not:
+
+    one refusal away        143
+    deeper                   38
+
+And the 143 are not spread thin. Ranked by how many exports each refused
+callee blocks:
+
+    asRequest<[erased]x2>        16   fs
+    oneShot@main                 11
+    displayBytePath              11
+    Zlib#constructor              7
+    oneShotSync@2obj10338         7
+    validateOptions               6
+    toUnixTimestamp               4
+    syncTransform@1obj10228       4
+
+The head is one refusal at one line. `asRequest` returns `(...args:
+Arguments) => void` where `Arguments extends unknown[]`, the copy pins
+`Arguments` to a tuple of erased values, and `fs/src/request.ts:31` refuses
+with *a rest parameter whose element type has no representation*. Sixteen `fs`
+exports are behind that one sentence, and it already has a fixture:
+`blockers/a-generic-rest-forwarded-to-its-callback`.
+
+This is the ranking `prize.mjs` exists to produce, for the export axis rather
+than the compiled one: **what clears, not what reaches**. A refusal with a
+hundred occurrences and no export behind it publishes nothing; this one has
+two occurrences and sixteen.
+
 ## Eleven modules started compiling and not one gained a passing test
 
 Measured on `target/release/nts` at 15:39, pinned to scratch, from a worktree at
