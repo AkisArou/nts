@@ -637,7 +637,21 @@ profile() {
   #                            corpus, which is the shape the paragraph above
   #                            names; the occurrence count is the one number
   #                            here that copies inflate.
-  ceiling=15550
+  #     2026-09-22   15046   <- generic instantiation, and the first landing
+  #                            in a while that moves this number *down* while
+  #                            emitting more code. The instantiations a
+  #                            generic body makes of other generics are
+  #                            materialised, so `a member of X, a class this
+  #                            compiler has no type for` went 99 sites to
+  #                            **0** -- and the copies those instantiations
+  #                            earn are bodies, which is the direction that
+  #                            inflates this. The two cancelled and then
+  #                            some: definitions 23414 -> 29429 on the same
+  #                            corpus, sites 1412 -> 1362, and the check this
+  #                            file prescribes -- generic ids normalised, name
+  #                            sets diffed -- reads **526 source functions
+  #                            new, 0 gone**.
+  ceiling=15400
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
@@ -1200,9 +1214,11 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # `a-typed-array-from-an-array`, `a-method-used-as-a-value` and
 # `a-for-of-that-assigns`. The JVM's `exact` floor below took all six in the
 # same runs and at the same numbers. 306 -> 307 on 2026-09-22 for
-# `an-object-literal-method-that-captures`, on both.
+# `an-object-literal-method-that-captures`, on both, and 308 the same day for
+# `a-generic-instantiated-from-a-generic`, checked on c, llvm, jvm and both
+# reference-counting lanes at 261 cases across 9 functions.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 307 "through the LLVM backend" "" 14 ); }
+  backend_examples 308 "through the LLVM backend" "" 14 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1462,7 +1478,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   status=$?
   printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
   [ "$status" -eq 0 ] || return 1
-  backend_examples 307 "through the JVM backend" exact 10 ); }
+  backend_examples 308 "through the JVM backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

@@ -30,7 +30,52 @@
 use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, SymbolId, TypeId, TypeKind, syntax};
 use rustc_hash::FxHashMap;
 
-use super::lower::{Substitution, representation};
+use super::HirType;
+use super::instantiate::{Owner, Sigma, Templates, sigma_of_instance};
+use super::lower::representation;
+
+/// What a copy stands for.
+///
+/// Each type parameter's representation -- what `T` *is* in this copy -- and
+/// each template the copy contains resolved to the instantiation it makes of
+/// it: `new Inner<T>` inside `Outer<number>`'s copy is `Inner<number>`, a
+/// record `instantiate::materialise` wrote and `representation_of` answers
+/// for the template's id. The first is what a body's expressions need, the
+/// second what its object types need; one value carries both so a copy cannot
+/// have one without the other.
+#[derive(Debug, Clone, Default)]
+pub struct Substitution {
+    types: FxHashMap<TypeId, HirType>,
+    instances: FxHashMap<TypeId, TypeId>,
+}
+
+impl Substitution {
+    #[must_use]
+    pub fn get(&self, parameter: &TypeId) -> Option<&HirType> {
+        self.types.get(parameter)
+    }
+
+    pub fn insert(&mut self, parameter: TypeId, representation: HirType) -> Option<HirType> {
+        self.types.insert(parameter, representation)
+    }
+
+    #[must_use]
+    pub fn contains_key(&self, parameter: &TypeId) -> bool {
+        self.types.contains_key(parameter)
+    }
+
+    /// The instantiation this copy makes of a template, where it makes one.
+    #[must_use]
+    pub fn instance_of(&self, template: TypeId) -> Option<TypeId> {
+        self.instances.get(&template).copied()
+    }
+
+    /// Wire the templates a copy of `owner` under `sigma` resolves.
+    fn with_instances(mut self, templates: &Templates, owner: Owner, sigma: &Sigma) -> Self {
+        self.instances = templates.instances(owner, sigma);
+        self
+    }
+}
 
 /// One instantiation of one generic class.
 #[derive(Debug, Clone)]
@@ -109,6 +154,7 @@ pub fn instantiations(snapshot: &SemanticSnapshot) -> FxHashMap<SymbolId, Vec<In
     }
 
     let declared = declared_types(snapshot);
+    let templates = Templates::new(snapshot);
 
     let mut found: FxHashMap<SymbolId, Vec<Instantiation>> = FxHashMap::default();
     for (symbol, members) in groups {
@@ -157,6 +203,9 @@ pub fn instantiations(snapshot: &SemanticSnapshot) -> FxHashMap<SymbolId, Vec<In
                 }
             }
             if usable {
+                let sigma = sigma_of_instance(snapshot, declaration, ty);
+                let substitution =
+                    substitution.with_instances(&templates, Owner::Type(symbol), &sigma);
                 instances.push(Instantiation { ty, substitution });
             }
         }
@@ -249,6 +298,7 @@ pub struct GenericFunctions {
 #[must_use]
 pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions {
     let mut found = GenericFunctions::default();
+    let templates = Templates::new(snapshot);
     for (call, target) in &snapshot.call_targets {
         let Some(declaration) = target.callee else {
             continue;
@@ -319,6 +369,9 @@ pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions 
         found.at_call.insert(*call, suffix.clone());
         let copies = found.copies.entry(declaration).or_default();
         if !copies.iter().any(|copy| copy.suffix == suffix) {
+            let sigma: Sigma = sources.iter().map(|(k, v)| (*k, *v)).collect();
+            let substitution =
+                substitution.with_instances(&templates, Owner::Function(declaration), &sigma);
             copies.push(FunctionInstance {
                 substitution,
                 sources,

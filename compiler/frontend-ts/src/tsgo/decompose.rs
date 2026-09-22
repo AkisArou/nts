@@ -88,6 +88,16 @@ impl Budget {
     }
 }
 
+/// How far the second pass follows a generic form's members.
+///
+/// A level is one breadth-first step: the forms, then their members, then
+/// theirs. The closure of that is the whole library's graph at the form's own
+/// parameter -- `runtime/node/util` reached 148,638 distinct types and its
+/// budget following it -- and one level alone is not enough, because the
+/// global `Array` that `deep-equal` reads is the *type of a member* rather
+/// than a member. Three carries a base written as `Base<T, this>` as well.
+const LEVELS: usize = 3;
+
 /// The mutable state a decomposition walk carries.
 ///
 /// Bundled because it is the same three values everywhere, and threading them
@@ -153,6 +163,16 @@ pub struct Decomposer<'a> {
     /// They arrive on the response and are gone by the time the walk decides how
     /// to resolve the type, and there is no endpoint that answers them again.
     texts: FxHashMap<u32, Vec<String>>,
+    /// The program's own generic forms met during the main walk, left as
+    /// placeholders there and decomposed in a pass of their own afterwards.
+    /// See `resolve_members`.
+    forms: Vec<u32>,
+    /// Whether the walk is that second pass, in which a form is decomposed
+    /// rather than deferred.
+    decomposing_forms: bool,
+    /// What the second pass discovered, held back for its next level rather
+    /// than followed in this one. See `resolve_members`.
+    deferred: Vec<u32>,
 }
 
 impl std::fmt::Debug for Decomposer<'_> {
@@ -189,6 +209,9 @@ impl<'a> Decomposer<'a> {
             file_bases,
             root,
             texts: FxHashMap::default(),
+            forms: Vec::new(),
+            decomposing_forms: false,
+            deferred: Vec::new(),
         }
     }
 
@@ -274,14 +297,78 @@ impl<'a> Decomposer<'a> {
         // program gets a bigger allowance rather than a truncated graph.
         let allowance = budget.allowance(seeded.len());
         stats.allowance = allowance;
+        self.walk(snapshot, &mut worklist, &seeded, &mut stats, allowance)?;
 
+        // **The program's own generic forms, after everything concrete.** A
+        // form's members are what `hir::instantiate` substitutes to make the
+        // instantiations a generic body implies, and they are decomposed
+        // here rather than in the walk above so that the budget's cutoff can
+        // only ever land on a form: decomposed inline, `runtime/node/buffer`
+        // spent its allowance on them and left ordinary object types as
+        // placeholders, emitting 14 definitions where it emits hundreds. Each
+        // form's members can name further forms -- a base written as
+        // `Base<T, this>` -- so the pass repeats, bounded, on what it found.
+        if !stats.exhausted {
+            self.decomposing_forms = true;
+            // A form deferred above, then the members of those forms, then
+            // theirs: `LEVELS` of a breadth-first walk rather than its
+            // closure. Two is what carries a member's own type -- the global
+            // `Array` that `deep-equal` reads is one -- and three is what
+            // carries a base written as `Base<T, this>`; past that the growth
+            // is the library's rather than the program's.
+            let mut level: Vec<u32> = std::mem::take(&mut self.forms);
+            for form in &level {
+                // Deferred in the first pass, so each is marked done with a
+                // placeholder recorded. This pass is what resolves it.
+                self.done.remove(form);
+            }
+            for _ in 0..LEVELS {
+                if level.is_empty() {
+                    break;
+                }
+                // **The run's own allowance, never a smaller one.** This was
+                // `decomposed + allowance(level.len())` -- an allowance sized
+                // for the level alone, on top of what the first pass had
+                // spent. For a handful of forms that is `FLOOR` more, and on
+                // `runtime/node/util` it meant 17,450 where the run's budget
+                // is 126,656: the pass stopped on its own arithmetic with
+                // seven eighths of the allowance unspent, and the graph was
+                // declared partial.
+                let allowance = allowance.max(stats.decomposed as usize + budget.allowance(level.len()));
+                self.walk(snapshot, &mut level, &seeded, &mut stats, allowance)?;
+                if stats.exhausted {
+                    break;
+                }
+                level = std::mem::take(&mut self.deferred);
+                // A form met while resolving a form is one the next level
+                // resolves rather than one left behind.
+                level.append(&mut self.forms);
+            }
+            self.deferred.clear();
+            self.forms.clear();
+            self.decomposing_forms = false;
+        }
+        stats.round_trips = self.client.round_trips() - before;
+        Ok(stats)
+    }
+
+    /// Drain a worklist, decomposing each placeholder once, until it is empty
+    /// or `allowance` decompositions have been made in total.
+    fn walk(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        worklist: &mut Vec<u32>,
+        seeded: &FxHashSet<u32>,
+        stats: &mut DecomposeStats,
+        allowance: usize,
+    ) -> Result<(), TsgoError> {
         while let Some(ty) = worklist.pop() {
             if !self.done.insert(ty) {
                 continue;
             }
             if stats.decomposed as usize >= allowance {
                 stats.exhausted = true;
-                break;
+                return Ok(());
             }
 
             let Some(&slot) = self.interned.get(&ty) else {
@@ -322,9 +409,9 @@ impl<'a> Decomposer<'a> {
             // payload alike.
             if Self::is_natively_represented(snapshot, slot) {
                 let mut walk = Walk {
-                    worklist: &mut worklist,
-                    stats: &mut stats,
-                    seeded: &seeded,
+                    worklist,
+                    stats,
+                    seeded,
                 };
                 self.record_type_arguments(snapshot, ty, slot, &mut walk)?;
                 continue;
@@ -335,9 +422,9 @@ impl<'a> Decomposer<'a> {
                 // boundary (for example ErrorConstructor in instanceof).
                 // The boundary stops member graphs, not callable ABI facts.
                 let mut walk = Walk {
-                    worklist: &mut worklist,
-                    stats: &mut stats,
-                    seeded: &seeded,
+                    worklist,
+                    stats,
+                    seeded,
                 };
                 if let Some(kind) = self.resolve_callable(snapshot, ty, &mut walk)? {
                     snapshot.types[slot.0 as usize].kind = kind;
@@ -355,9 +442,9 @@ impl<'a> Decomposer<'a> {
             let texts = self.texts.get(&ty).cloned().unwrap_or_default();
             let kind = {
                 let mut walk = Walk {
-                    worklist: &mut worklist,
-                    stats: &mut stats,
-                    seeded: &seeded,
+                    worklist,
+                    stats,
+                    seeded,
                 };
                 self.resolve(snapshot, ty, bits, &texts, &mut walk)?
             };
@@ -365,8 +452,7 @@ impl<'a> Decomposer<'a> {
             stats.decomposed += 1;
         }
 
-        stats.round_trips = self.client.round_trips() - before;
-        Ok(stats)
+        Ok(())
     }
 
     fn resolve_type_symbol(
@@ -672,11 +758,36 @@ impl<'a> Decomposer<'a> {
             // can use, and leaving it a placeholder loses nothing. Its
             // *arguments* are still recorded above, which is what
             // `ManagedType::Promise` needs.
+            //
+            // **Except a form the program itself declares.** `hir::instantiate`
+            // makes the instantiations a generic body implies -- `Inner<T>`
+            // written inside `Outer<T>` becomes `Inner<number>` when
+            // `Outer<number>` exists -- by substituting the *form's* members,
+            // and a form left a placeholder has none to substitute. The
+            // explosion above is a library's: a program's own generic class has
+            // a finite body, and the budget bounds the rest. A form declared
+            // in a file this snapshot did not decode stays a placeholder, which
+            // keeps `PromiseLike` where it was.
+            //
+            // And a program's own form only while its arguments nest at most
+            // one instantiation deep: `Nest<Nest<T>>` is decomposed, and its
+            // `deeper(): Nest<Nest<Nest<T>>>` is not, because a class whose
+            // method returns a deeper nesting of itself is the library
+            // explosion again, with the budget's cutoff landing on whatever
+            // unrelated type came next. Measured: `Test262Error` in the probe
+            // harness lost its members to it.
             if ids
                 .iter()
                 .any(|argument| mentions_a_type_parameter(snapshot, *argument, 0))
             {
-                return Ok(TypeKind::Structured { flags: bits });
+                let ours = self.declares_a_form_here(snapshot, ty)
+                    && ids.iter().all(|argument| is_a_type_parameter(snapshot, *argument));
+                if !ours || !self.decomposing_forms {
+                    if ours {
+                        self.forms.push(ty);
+                    }
+                    return Ok(TypeKind::Structured { flags: bits });
+                }
             }
         }
 
@@ -842,6 +953,33 @@ impl<'a> Decomposer<'a> {
 
         stats.round_trips = self.client.round_trips() - before;
         Ok(stats)
+    }
+
+    /// Whether a type's declaring symbol is a class or interface declared in a
+    /// file this snapshot decoded -- the program's own, as against a library's.
+    fn declares_a_form_here(&self, snapshot: &SemanticSnapshot, ty: u32) -> bool {
+        let Some(&slot) = self.interned.get(&ty) else {
+            return false;
+        };
+        let Some(symbol) = snapshot.types.get(slot.0 as usize).and_then(|record| record.symbol)
+        else {
+            return false;
+        };
+        snapshot
+            .symbols
+            .get(symbol.0 as usize)
+            .is_some_and(|symbol| {
+                symbol.declarations.iter().any(|node| {
+                    matches!(
+                        snapshot.nodes.get(node.0 as usize).map(|node| node.kind),
+                        Some(NodeKind::Syntax(
+                            syntax::CLASS_DECLARATION
+                                | syntax::CLASS_EXPRESSION
+                                | syntax::INTERFACE_DECLARATION
+                        ))
+                    )
+                })
+            })
     }
 
     /// Whether a parameter's declaration carries a `?`.
@@ -1505,7 +1643,19 @@ impl<'a> Decomposer<'a> {
                 if !walk.seeded.contains(&response.id) && !self.done.contains(&response.id) {
                     walk.stats.discovered += 1;
                 }
-                walk.worklist.push(response.id);
+                // **The second pass advances a level at a time.** Its
+                // discoveries are held here rather than pushed back into the
+                // worklist it is draining, so one walk is one level of a
+                // form's members rather than the transitive closure of them:
+                // followed all the way, `runtime/node/util` went from 11,012
+                // distinct types to 148,638 and past its budget, because a
+                // member at the form's own parameters reaches the library's
+                // whole graph at that parameter.
+                if self.decomposing_forms {
+                    self.deferred.push(response.id);
+                } else {
+                    walk.worklist.push(response.id);
+                }
                 id
             })
             .collect()
@@ -1601,6 +1751,7 @@ fn declaration_node(handle: &NodeHandle, file_bases: &[(String, u32)]) -> Option
         .map(|(_, base)| *base)?;
     index.checked_sub(1).map(|i| NodeId(i + base))
 }
+
 /// Whether a type is, or is built from, a type parameter.
 ///
 /// A union is the case that matters: `PromiseLike<TResult1 | TResult2>`'s
@@ -1623,6 +1774,15 @@ fn mentions_a_type_parameter(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32
         _ => false,
     }
 }
+
+/// Whether a type *is* a type parameter, rather than merely mentioning one.
+fn is_a_type_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    matches!(
+        snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+        Some(TypeKind::TypeParameter { .. })
+    )
+}
+
 
 #[cfg(test)]
 mod tests {

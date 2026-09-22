@@ -218,3 +218,49 @@ export function twoParameters(seed: number): number {
   const e = new Entry<number, string>(seed, "qq");
   return e.key * 10 + e.value.length;
 }
+
+// A generic class extending a generic one **at its own type parameter**. The
+// checker writes the base as `Container<T, this>` -- the declaration's, which
+// has no layout because `u: U` has no width -- and never makes
+// `Container<number>` itself. `hir::instantiate` settles every
+// instantiation's bases under its own substitution, so `Boxed<number>` has
+// `Container<number>` as its base, made for it. Landed 2026-09-22; it lived
+// in `generic-classes-unsupported` before that. `Container` is the one
+// declared above, whose `Numbers` extends it at a concrete argument -- the
+// two shapes side by side is the point.
+
+class Boxed<T> extends Container<T> {
+  constructor(v: T) {
+    super(v);
+  }
+  read(): T {
+    return this.peek();
+  }
+}
+
+export function genericBase(seed: number): number {
+  return new Boxed<number>(seed).read();
+}
+
+// A generic class constructing **itself at its own type parameters**. Inside
+// the copy for `Flip<number, string>` the substitution says `Flip<V, K>` is
+// `Flip<string, number>`, and no such type existed in the program: the
+// checker instantiates a class where the source names one, and the source
+// names it only generically. `hir::instantiate` materialises it from the
+// template under the copy's substitution, so the two copies -- `<number,
+// string>` and `<string, number>` -- are both made. Landed 2026-09-22.
+// (`Flip` rather than `Entry`, which the declaration-detection case above
+// already declares.)
+class Flip<K, V> {
+  constructor(
+    public key: K,
+    public value: V,
+  ) {}
+  swapped(): Flip<V, K> {
+    return new Flip<V, K>(this.value, this.key);
+  }
+}
+
+export function selfInstantiating(seed: number): number {
+  return new Flip<number, string>(seed, "qq").swapped().value;
+}
