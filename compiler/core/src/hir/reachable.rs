@@ -52,9 +52,9 @@
 //! does not merely cost bytes, it costs the surviving code its proofs — and by
 //! the time the linker sees the program, the damage is in the object file.
 
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{Callee, Func, Layout, OpKind, Program};
+use super::{Callee, Func, OpKind, Program};
 
 /// Where a walk over the call graph starts.
 #[derive(Debug, Clone, Copy)]
@@ -121,6 +121,7 @@ pub enum Roots<'a> {
 /// declarations with no bodies. Hence the implementations, not just the layout.
 fn callback_targets<'p>(
     program: &'p Program,
+    hierarchy: &Hierarchy,
     func: &'p Func,
     args: &[super::ValueId],
 ) -> Vec<&'p str> {
@@ -128,16 +129,61 @@ fn callback_targets<'p>(
         .iter()
         .flat_map(|arg| super::carried_values(func, *arg))
         .map(|arg| &func.values[arg.0 as usize].ty);
-    super::exposure::reachable_types(program, types)
+    super::exposure::reachable_types(program, &hierarchy.layouts, types)
         .into_iter()
-        .filter_map(|ty| match ty {
-            super::HirType::Managed(super::ManagedType::Object(ty)) => Some(*ty),
-            _ => None,
-        })
-        .filter_map(|ty| program.layouts.iter().position(|layout| layout.types.contains(&ty)))
-        .flat_map(|at| implementations(program, at))
-        .flat_map(|layout| layout.methods.iter().filter_map(Option::as_deref))
+        .filter_map(|ty| hierarchy.layouts.of(ty))
+        .flat_map(|at| hierarchy.implementations(at))
+        .flat_map(|at| program.layouts[at].methods.iter().filter_map(Option::as_deref))
         .collect()
+}
+
+/// The layout list read as a tree, once, for a walk that asks of it per call.
+///
+/// Both questions below are searches over the whole list -- which layout holds
+/// a type, which layouts derive from a layout -- and `callback_names` asks them
+/// for every external call in the program, inside a pass that itself runs once
+/// per round of the interprocedural fixpoint. Read once, they are lookups.
+struct Hierarchy {
+    layouts: super::fields::LayoutIndex,
+    /// The layouts whose base is each layout, by index.
+    derived: Vec<Vec<usize>>,
+}
+
+impl Hierarchy {
+    fn build(program: &Program) -> Self {
+        let layouts = super::fields::LayoutIndex::build(program);
+        let mut derived = vec![Vec::new(); program.layouts.len()];
+        for (at, layout) in program.layouts.iter().enumerate() {
+            if let Some(base) = layout.base.and_then(|base| layouts.of_class(base)) {
+                derived[base].push(at);
+            }
+        }
+        Self { layouts, derived }
+    }
+
+    /// A layout and everything that derives from it, transitively.
+    ///
+    /// For the external-argument rule: a value declared as a base may be any of
+    /// its implementations at run time, and the runtime calls through the table
+    /// of whichever it actually got.
+    ///
+    /// Breadth-first with a seen set rather than recursion, because a malformed
+    /// hierarchy that reaches itself is a wrong answer here and a stack
+    /// overflow with recursion -- and this runs on every external call in the
+    /// program.
+    fn implementations(&self, at: usize) -> Vec<usize> {
+        let mut seen = vec![at];
+        let mut frontier = vec![at];
+        while let Some(base) = frontier.pop() {
+            for derived in &self.derived[base] {
+                if !seen.contains(derived) {
+                    seen.push(*derived);
+                    frontier.push(*derived);
+                }
+            }
+        }
+        seen
+    }
 }
 
 /// Every function the runtime can call, across the whole program.
@@ -148,6 +194,7 @@ fn callback_targets<'p>(
 /// invokes is exactly on the far side of it.
 #[must_use]
 pub fn callback_names(program: &Program) -> Vec<&str> {
+    let hierarchy = Hierarchy::build(program);
     let mut found = Vec::new();
     for func in &program.funcs {
         for op in &func.values {
@@ -159,7 +206,7 @@ pub fn callback_names(program: &Program) -> Vec<&str> {
             else {
                 continue;
             };
-            for name in callback_targets(program, func, args) {
+            for name in callback_targets(program, &hierarchy, func, args) {
                 if !found.contains(&name) {
                     found.push(name);
                 }
@@ -167,29 +214,6 @@ pub fn callback_names(program: &Program) -> Vec<&str> {
         }
     }
     found
-}
-
-/// A layout and everything that derives from it, transitively.
-///
-/// For the external-argument rule: a value declared as a base may be any of
-/// its implementations at run time, and the runtime calls through the table of
-/// whichever it actually got.
-///
-/// Breadth-first with a seen set rather than recursion, because a malformed
-/// hierarchy that reaches itself is a wrong answer here and a stack overflow
-/// with recursion -- and this runs on every external call in the program.
-fn implementations(program: &Program, at: usize) -> Vec<&Layout> {
-    let mut seen = vec![at];
-    let mut frontier = vec![at];
-    while let Some(base) = frontier.pop() {
-        for (index, layout) in program.layouts.iter().enumerate() {
-            if program.base_layout(layout) == Some(base) && !seen.contains(&index) {
-                seen.push(index);
-                frontier.push(index);
-            }
-        }
-    }
-    seen.into_iter().filter_map(|index| program.layouts.get(index)).collect()
 }
 
 pub fn undeclared<'a>(program: &Program, declared: &'a [String]) -> Vec<&'a str> {
@@ -356,12 +380,23 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
 
 /// Remove every function the roots cannot reach, and report how many.
 pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
+    // Both indexes read the program once for questions this walk asks per
+    // name and per external call: which function answers to a name, and which
+    // layouts a value's own can be at run time. Searched instead, each is a
+    // pass over the whole program inside a loop over the whole program.
+    let by_name: FxHashMap<&str, usize> = program
+        .funcs
+        .iter()
+        .enumerate()
+        .map(|(at, func)| (func.name.as_str(), at))
+        .collect();
+    let hierarchy = Hierarchy::build(program);
     let mut reached: FxHashSet<&str> = FxHashSet::default();
     let mut pending: Vec<&str> = root_names(program, roots);
     reached.extend(pending.iter().copied());
 
     while let Some(name) = pending.pop() {
-        let Some(func) = program.funcs.iter().find(|func| func.name == name) else {
+        let Some(func) = by_name.get(name).map(|at| &program.funcs[*at]) else {
             continue;
         };
         for op in &func.values {
@@ -378,8 +413,9 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             // the compiler does not ask about a new operation that reaches a
             // function without calling it.
             if let OpKind::NativeBridge { closure, .. } = &op.kind {
-                for target in callback_targets(program, func, std::slice::from_ref(closure)) {
-                    if let Some(callee) = program.funcs.iter().find(|f| f.name == target)
+                let bridged = std::slice::from_ref(closure);
+                for target in callback_targets(program, &hierarchy, func, bridged) {
+                    if let Some(callee) = by_name.get(target).map(|at| &program.funcs[*at])
                         && reached.insert(callee.name.as_str())
                     {
                         pending.push(callee.name.as_str());
@@ -412,7 +448,9 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
                 // supplies it -- but a *closure* handed to one is called back
                 // through its method table, which is what `setTimeout` does
                 // with its callback.
-                Callee::External(_) | Callee::Native(_) => callback_targets(program, func, args),
+                Callee::External(_) | Callee::Native(_) => {
+                    callback_targets(program, &hierarchy, func, args)
+                }
                 Callee::Virtual { slot, .. } | Callee::Closure { slot } => program
                     .layouts
                     .iter()
@@ -421,7 +459,7 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
                     .collect(),
             };
             for target in targets {
-                if let Some(callee) = program.funcs.iter().find(|f| f.name == target)
+                if let Some(callee) = by_name.get(target).map(|at| &program.funcs[*at])
                     && reached.insert(callee.name.as_str())
                 {
                     pending.push(callee.name.as_str());

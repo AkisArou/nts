@@ -100,6 +100,7 @@ pub(super) fn analyze(
     analyses: &[Analysis],
     exposed: &FxHashSet<(usize, u32)>,
 ) -> FieldFacts {
+    let layouts = LayoutIndex::build(program);
     // By layout while collecting, because a store names one type and the
     // aliasing question is about layouts. Expanded to types at the end.
     let mut stored: FxHashMap<(usize, u32), Facts> = FxHashMap::default();
@@ -114,7 +115,7 @@ pub(super) fn analyze(
             else {
                 continue;
             };
-            let Some(layout) = layout_of(program, &func.values[object.0 as usize].ty) else {
+            let Some(layout) = layouts.of(&func.values[object.0 as usize].ty) else {
                 continue;
             };
             // A managed field holds a pointer, and the numeric domain has
@@ -188,6 +189,7 @@ pub(super) fn representations(
     analyses: &[Analysis],
     exposed: &FxHashSet<(usize, u32)>,
 ) -> FieldWidths {
+    let layouts = LayoutIndex::build(program);
     // What every store into each field, by layout, is worth.
     let mut stored: FxHashMap<(usize, u32), Facts> = FxHashMap::default();
     for (index, func) in program.funcs.iter().enumerate() {
@@ -200,7 +202,7 @@ pub(super) fn representations(
             else {
                 continue;
             };
-            let Some(layout) = layout_of(program, &func.values[object.0 as usize].ty) else {
+            let Some(layout) = layouts.of(&func.values[object.0 as usize].ty) else {
                 continue;
             };
             if !is_number(program, layout, *field) {
@@ -406,6 +408,7 @@ pub(super) fn parameter_lengths(
 /// length.
 #[must_use]
 pub fn lengths(program: &Program, analyses: &[Analysis]) -> FieldFacts {
+    let layouts = LayoutIndex::build(program);
     let mut stored: FxHashMap<(usize, u32), Facts> = FxHashMap::default();
     let mut grown: rustc_hash::FxHashSet<(usize, u32)> = rustc_hash::FxHashSet::default();
 
@@ -417,8 +420,7 @@ pub fn lengths(program: &Program, analyses: &[Analysis]) -> FieldFacts {
                     field,
                     value,
                 } => {
-                    let Some(layout) = layout_of(program, &func.values[object.0 as usize].ty)
-                    else {
+                    let Some(layout) = layouts.of(&func.values[object.0 as usize].ty) else {
                         continue;
                     };
                     let entry: &mut Facts = stored.entry((layout, *field)).or_insert(Facts::BOTTOM);
@@ -432,8 +434,7 @@ pub fn lengths(program: &Program, analyses: &[Analysis]) -> FieldFacts {
                         else {
                             continue;
                         };
-                        if let Some(layout) = layout_of(program, &func.values[object.0 as usize].ty)
-                        {
+                        if let Some(layout) = layouts.of(&func.values[object.0 as usize].ty) {
                             grown.insert((layout, *field));
                         }
                     }
@@ -540,15 +541,42 @@ fn is_number(program: &Program, layout: usize, field: u32) -> bool {
         .is_some_and(|field| matches!(field.ty, HirType::Float { .. } | HirType::Int { .. }))
 }
 
-/// The layout an object-typed value refers to.
-pub(super) fn layout_of(program: &Program, ty: &HirType) -> Option<usize> {
-    let HirType::Managed(ManagedType::Object(id)) = ty else {
-        return None;
-    };
-    program
-        .layouts
-        .iter()
-        .position(|layout| layout.types.contains(id))
+/// Which layout each object type belongs to.
+pub(super) struct LayoutIndex(FxHashMap<super::TypeId, usize>);
+
+impl LayoutIndex {
+    /// Read the layouts once, so that every question after is a lookup.
+    ///
+    /// This is a whole-program question asked per *operation*: which layout a
+    /// field store writes into, which one an external call could hand to the
+    /// runtime. Answering it by searching the layout list is a scan per
+    /// operation, and both of those walks run once per round of the
+    /// interprocedural fixpoint -- so the search was multiplied by the number
+    /// of layouts, the number of operations and the number of rounds at once.
+    pub(super) fn build(program: &Program) -> Self {
+        let mut of_type = FxHashMap::default();
+        for (at, layout) in program.layouts.iter().enumerate() {
+            for ty in &layout.types {
+                // First wins, as `position` did: a type claimed by two layouts
+                // belongs to the earlier one for every reader of this.
+                of_type.entry(*ty).or_insert(at);
+            }
+        }
+        Self(of_type)
+    }
+
+    /// Where this type's layout is, if it has one.
+    pub(super) fn of(&self, ty: &HirType) -> Option<usize> {
+        let HirType::Managed(ManagedType::Object(id)) = ty else {
+            return None;
+        };
+        self.0.get(id).copied()
+    }
+
+    /// Where this class's layout is, if it has one.
+    pub(super) fn of_class(&self, id: super::TypeId) -> Option<usize> {
+        self.0.get(&id).copied()
+    }
 }
 
 /// The one closure class a field can hold, where a field holds only one.
@@ -631,6 +659,7 @@ fn held_by(func: &super::Func, value: super::ValueId) -> Held {
 /// to see all of them.
 #[must_use]
 pub fn closures(program: &Program) -> FieldClosures {
+    let layouts = LayoutIndex::build(program);
     let mut stored: FxHashMap<(usize, u32), Held> = FxHashMap::default();
     for func in &program.funcs {
         for op in &func.values {
@@ -642,7 +671,7 @@ pub fn closures(program: &Program) -> FieldClosures {
             else {
                 continue;
             };
-            let Some(layout) = layout_of(program, &func.values[object.0 as usize].ty) else {
+            let Some(layout) = layouts.of(&func.values[object.0 as usize].ty) else {
                 continue;
             };
             let entry = stored.entry((layout, *field)).or_insert(Held::Absent);
@@ -704,6 +733,7 @@ pub fn closures(program: &Program) -> FieldClosures {
 /// subclass every day. A closure's `call` takes its own class, and the
 /// receiver's static type is the *signature* layout, so this is that same cast.
 pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
+    let layouts = LayoutIndex::build(program);
     // Resolved against the program before anything is rewritten, because the
     // rewrite needs `&mut` and the lookup needs `&`.
     let mut rewrites: Vec<(usize, usize, String, super::ValueId, super::TypeId)> = Vec::new();
@@ -734,7 +764,8 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
             let Some(class) = class else {
                 continue;
             };
-            let Some(name) = layout_of(program, &HirType::Managed(ManagedType::Object(class)))
+            let Some(name) = layouts
+                .of_class(class)
                 .and_then(|layout| program.layouts[layout].methods.get(*slot as usize))
                 .and_then(Option::as_ref)
             else {

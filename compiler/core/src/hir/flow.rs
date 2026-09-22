@@ -235,16 +235,15 @@ type Refinements = FxHashMap<ValueId, Facts>;
 /// Pairs `(a, b)` for which `a < b` is known.
 type Relations = Vec<(ValueId, ValueId)>;
 
-/// What the rest of the program contributes to one function's analysis.
+/// What the whole program contributes to every function's analysis.
 ///
-/// Empty means "assume nothing", which is what a function analyzed on its own
-/// must do. Neither field can be inferred from inside the function: a parameter
-/// is written by callers and a call's result by the callee.
-#[derive(Debug, Default, Clone)]
-pub struct Context {
-    /// Facts for each parameter, overriding the declared type. Absent entries
-    /// fall back to the declaration.
-    pub params: Vec<Facts>,
+/// One interprocedural round builds these once and every function reads them,
+/// which is why a [`Context`] borrows them rather than holding a copy: the
+/// copy was a clone of a map with one `String` per function, made once per
+/// function per round, and on a 3,000-function module that quadratic was
+/// three quarters of the compile.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Whole {
     /// What each function returns, by name.
     pub returns: FxHashMap<String, Facts>,
     /// What a dispatch through each slot returns: the join over every
@@ -274,30 +273,54 @@ pub struct Context {
     /// program. The same idea as [`Self::field_facts`] for the other kind of
     /// container. See [`super::elements`].
     pub element_facts: super::elements::ElementFacts,
-    /// Interval bounds for loop-carried values, from counting iterations.
-    ///
-    /// The value domain cannot derive these: it knows what one round does, not
-    /// how many rounds there are. See [`super::loops`].
-    pub caps: FxHashMap<ValueId, Facts>,
     /// Whether any array in the program can change length.
     ///
     /// A whole-program answer, because the question is about what could happen
     /// to an array between its allocation and a read of its length -- and that
     /// is not a local question. See [`super::arrays_can_grow`].
     pub growable: bool,
+}
+
+/// What the rest of the program contributes to one function's analysis.
+///
+/// Empty means "assume nothing", which is what a function analyzed on its own
+/// must do. Neither part can be inferred from inside the function: a parameter
+/// is written by callers and a call's result by the callee.
+#[derive(Debug, Clone, Copy)]
+pub struct Context<'a> {
+    /// Facts for each parameter, overriding the declared type. Absent entries
+    /// fall back to the declaration.
+    pub params: &'a [Facts],
+    /// Interval bounds for loop-carried values, from counting iterations.
+    ///
+    /// The value domain cannot derive these: it knows what one round does, not
+    /// how many rounds there are. See [`super::loops`].
+    pub caps: &'a FxHashMap<ValueId, Facts>,
     /// How long the array each parameter points at can be, per slot.
     ///
     /// The other way a reference arrives. A method reading `this.flags` has no
     /// allocation in front of it, and neither does one taking `flags` as an
     /// argument -- and the second is the shape of every function that is handed
     /// a buffer to work on.
-    pub param_lengths: Vec<Facts>,
+    pub param_lengths: &'a [Facts],
+    /// What every function reads this round.
+    pub whole: &'a Whole,
 }
 
 /// Compute what is provable about every value in a function, alone.
 #[must_use]
 pub fn analyze(func: &Func) -> Analysis {
-    analyze_with(func, &Context::default())
+    let whole = Whole::default();
+    let caps = FxHashMap::default();
+    analyze_with(
+        func,
+        &Context {
+            params: &[],
+            caps: &caps,
+            param_lengths: &[],
+            whole: &whole,
+        },
+    )
 }
 
 /// Compute what is provable, given what the rest of the program contributes.
@@ -380,7 +403,7 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
                 func,
                 context,
                 BlockId(u32::try_from(index).unwrap_or(0)),
-                refinements,
+                &refinements,
                 &mut values,
                 &mut entry,
             );
@@ -394,8 +417,8 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
         values,
         less_than: relations(func, &entry),
         refined: entry.into_iter().map(Option::unwrap_or_default).collect(),
-        growable: context.growable,
-        param_lengths: context.param_lengths.clone(),
+        growable: context.whole.growable,
+        param_lengths: context.param_lengths.to_vec(),
     }
 }
 
@@ -489,8 +512,9 @@ fn parameter_facts(func: &Func, context: &Context, slot: u32) -> Facts {
 /// has a known result. Anything else is a wall.
 fn call_result(context: &Context, callee: &Callee) -> Facts {
     match callee {
-        Callee::Direct(name) => context.returns.get(name).copied().unwrap_or(Facts::TOP),
+        Callee::Direct(name) => context.whole.returns.get(name).copied().unwrap_or(Facts::TOP),
         Callee::Virtual { slot, .. } | Callee::Closure { slot } => context
+            .whole
             .slot_returns
             .get(slot)
             .copied()
@@ -676,6 +700,7 @@ fn field_facts(context: &Context, object: &super::HirType, field: u32) -> Facts 
         return Facts::TOP;
     };
     context
+        .whole
         .field_facts
         .get(&(*ty, field))
         .copied()
@@ -770,7 +795,7 @@ fn transfer_op(
                 // call may come back longer, and the object does not move so
                 // every reference sees the new length.
                 OpKind::ArrayNew { length, .. }
-                    if super::allocated_length_is_exact(func, *array, context.growable) =>
+                    if super::allocated_length_is_exact(func, *array, context.whole.growable) =>
                 {
                     lookup(refinements, values, *length).narrow(bound)
                 }
@@ -796,6 +821,7 @@ fn transfer_op(
         // what an exported global gets: a writer outside the compiled set is
         // not in any join this program can take.
         OpKind::GlobalGet(global) => context
+            .whole
             .global_facts
             .get(global)
             .copied()
@@ -828,6 +854,7 @@ fn transfer_op(
                 // for a declared typed array that is the only fact there
                 // is: nothing narrowed it, so nothing recorded it.
                 let stored = context
+                    .whole
                     .element_facts
                     .get(element.as_ref())
                     .copied()
@@ -859,11 +886,26 @@ fn transfer_op(
     }
 }
 
+/// Run one block, then hand its successors what it proved.
+///
+/// **A value's own result is not recorded here.** It used to be: every
+/// operation in the block inserted its fact into the path's refinements, which
+/// each outgoing edge then copied into its target and every later round joined
+/// again -- so the map a block carried grew to the whole function, and the work
+/// of an edge grew with it.
+///
+/// The insertion never said anything: what it recorded was `values[value]`
+/// itself, which is what [`lookup`] falls back to when the value is absent. The
+/// two differ only in staleness -- a pinned fact is the one the value had when
+/// the edge was taken, and `values` only ever grows -- so reading through the
+/// fall-back is the *fresher* answer, and at the fixpoint the two agree by
+/// construction. What a refinement map holds now is what only an edge can say:
+/// a guard's narrowing and a block parameter's argument.
 fn transfer_block(
     func: &Func,
     context: &Context,
     block: BlockId,
-    mut refinements: Refinements,
+    refinements: &Refinements,
     values: &mut [Facts],
     entry: &mut [Option<Refinements>],
 ) -> bool {
@@ -880,7 +922,7 @@ fn transfer_block(
 
     for &value in &record.ops {
         let op = &func.values[value.0 as usize];
-        let computed = transfer_op(func, context, op, &refinements, values);
+        let computed = transfer_op(func, context, op, refinements, values);
         // Monotone: a value's fact only grows as more paths reach it, so joining
         // rather than assigning keeps the iteration from oscillating.
         let slot = &mut values[value.0 as usize];
@@ -889,13 +931,12 @@ fn transfer_block(
             *slot = joined;
             changed = true;
         }
-        refinements.insert(value, joined);
     }
 
     match &record.terminator {
         Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {}
         Terminator::Jump { target, args } => {
-            changed |= send(func, *target, args, &refinements, values, entry);
+            changed |= send(func, *target, args, refinements, values, entry);
         }
         Terminator::Branch {
             cond,
@@ -906,8 +947,8 @@ fn transfer_block(
         } => {
             // Each edge carries what taking it proves. This is the only place
             // a value learns something its definition did not say.
-            let on_then = refine_edge(func, &refinements, values, *cond, true);
-            let on_else = refine_edge(func, &refinements, values, *cond, false);
+            let on_then = refine_edge(func, refinements, values, *cond, true);
+            let on_else = refine_edge(func, refinements, values, *cond, false);
             changed |= send(func, *then_target, then_args, &on_then, values, entry);
             changed |= send(func, *else_target, else_args, &on_else, values, entry);
         }
@@ -925,30 +966,57 @@ fn send(
     values: &[Facts],
     entry: &mut [Option<Refinements>],
 ) -> bool {
-    let mut outgoing = refinements.clone();
-    for (param, arg) in func.blocks[target.0 as usize].params.iter().zip(args) {
-        outgoing.insert(*param, lookup(refinements, values, *arg));
-    }
-
+    let params = &func.blocks[target.0 as usize].params;
     let slot = &mut entry[target.0 as usize];
     let Some(existing) = slot else {
+        // The first edge to arrive owns the map: nothing to join against, so
+        // this is the one path that builds one.
+        let mut outgoing = refinements.clone();
+        for (param, arg) in params.iter().zip(args) {
+            outgoing.insert(*param, lookup(refinements, values, *arg));
+        }
         *slot = Some(outgoing);
         return true;
     };
 
+    // **Joined from the caller's map rather than from a copy of it.** This
+    // built `outgoing` -- a clone of every refinement on the path -- for every
+    // edge of every block on every round, and then read it once. The
+    // arithmetic below is the same; what is gone is one map allocation per
+    // edge, which on a module of three thousand functions was the largest
+    // single cost of the whole compile.
+    //
+    // The target's own parameters are handled after, and skipped here, because
+    // an argument overrides whatever a back edge refined the parameter to --
+    // which is what the copy expressed by inserting over it.
     let mut changed = false;
-    for (value, incoming) in outgoing {
-        let previous = existing
-            .get(&value)
-            .copied()
-            .unwrap_or(values[value.0 as usize]);
-        let joined = previous.join(incoming);
-        if joined != previous {
-            existing.insert(value, joined);
-            changed = true;
+    for (value, incoming) in refinements {
+        if params.contains(value) {
+            continue;
         }
+        changed |= join_into(existing, *value, *incoming, values);
+    }
+    for (param, arg) in params.iter().zip(args) {
+        changed |= join_into(existing, *param, lookup(refinements, values, *arg), values);
     }
     changed
+}
+
+/// Join one value's fact into a block's entry state, reporting whether it moved.
+///
+/// An absent entry means the value has only its own definition so far, which is
+/// what `values` holds.
+fn join_into(existing: &mut Refinements, value: ValueId, incoming: Facts, values: &[Facts]) -> bool {
+    let previous = existing
+        .get(&value)
+        .copied()
+        .unwrap_or(values[value.0 as usize]);
+    let joined = previous.join(incoming);
+    if joined == previous {
+        return false;
+    }
+    existing.insert(value, joined);
+    true
 }
 
 /// What a value holds here: what an edge refined it to, or its own definition.

@@ -14,6 +14,7 @@ pub(super) struct Exposure {
 /// containers. Compute once per analysis, outside its numeric fixpoint.
 #[must_use]
 pub(super) fn analyze(program: &Program, outward: &FxHashSet<&str>) -> Exposure {
+    let layouts = super::fields::LayoutIndex::build(program);
     let mut pending = Vec::new();
     for func in &program.funcs {
         if outward.contains(func.name.as_str()) {
@@ -37,10 +38,10 @@ pub(super) fn analyze(program: &Program, outward: &FxHashSet<&str>) -> Exposure 
         }
     }
     let mut exposed = Exposure::default();
-    for ty in reachable_types(program, pending) {
+    for ty in reachable_types(program, &layouts, pending) {
         match ty {
             HirType::Managed(ManagedType::Object(_)) => {
-                let Some(at) = super::fields::layout_of(program, ty) else {
+                let Some(at) = layouts.of(ty) else {
                     continue;
                 };
                 let layout = &program.layouts[at];
@@ -66,6 +67,7 @@ pub(super) fn analyze(program: &Program, outward: &FxHashSet<&str>) -> Exposure 
 /// uses the same traversal as field and element facts, including nested closures.
 pub(super) fn reachable_types<'p>(
     program: &'p Program,
+    layouts: &super::fields::LayoutIndex,
     seeds: impl IntoIterator<Item = &'p HirType>,
 ) -> FxHashSet<&'p HirType> {
     let mut pending: Vec<_> = seeds.into_iter().collect();
@@ -76,7 +78,7 @@ pub(super) fn reachable_types<'p>(
         }
         match ty {
             HirType::Managed(ManagedType::Object(_)) => {
-                if let Some(at) = super::fields::layout_of(program, ty) {
+                if let Some(at) = layouts.of(ty) {
                     pending.extend(program.layouts[at].fields.iter().map(|field| &field.ty));
                 }
             }

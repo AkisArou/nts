@@ -61,28 +61,26 @@ const ROUND_CAP: u32 = 32;
 const FEEDBACK_CAP: u32 = 4;
 
 /// What the whole program contributes to each function's analysis.
+///
+/// The whole-program maps -- returns, slot returns, fields, elements, globals
+/// -- live in one [`flow::Whole`] that every function *borrows*. They were
+/// seven separate fields cloned into each function's `Context`, which is a copy
+/// of a map with one entry per function, per function, per round: quadratic in
+/// the size of the module, and on `runtime/node/stream` three quarters of the
+/// compile.
 struct Crossing {
     /// Facts for each function's parameters, by function index.
     params: Vec<Vec<Facts>>,
-    /// What each function returns, by name.
-    returns: FxHashMap<String, Facts>,
-    /// What a dispatch through each slot returns.
-    slot_returns: FxHashMap<u32, Facts>,
-    /// What each object field can hold, over every store in the program.
-    fields: super::fields::FieldFacts,
-    /// What the elements of each array type can hold, over every store in the
-    /// program. Keyed on the element type rather than on the array, for the
-    /// aliasing reason [`super::elements`] gives.
-    elements: super::elements::ElementFacts,
-    /// What each module-scope variable can hold, over every store in the
-    /// program. In this fixpoint for the same reason fields are: a global is
-    /// written with what a call produced and read to make the next call's
-    /// argument, and outside the loop it would be one round stale.
-    globals: super::globals::GlobalFacts,
     /// How long the array each parameter points at can be, per function and
     /// slot. In this fixpoint rather than beside it because it is read from the
     /// arguments at every call, which is what this loop already walks.
     param_lengths: Vec<Vec<Facts>>,
+    /// Everything every function reads: returns, dispatch returns, and what
+    /// fields, elements and globals hold across the program. Fields, elements
+    /// and globals are in this fixpoint for the same reason returns are -- a
+    /// field is written with what a call produced and read to make the next
+    /// call's argument, so outside the loop each would be one round stale.
+    whole: flow::Whole,
 }
 
 /// Analyze every function, letting facts cross between them.
@@ -137,33 +135,36 @@ fn settle(
         .collect();
 
     let exposed = super::exposure::analyze(program, outward);
-    let mut crossing = Crossing {
-        params: seed(program, outward),
-        // BOTTOM rather than absent, for the same reason parameters start
-        // there: an absent entry reads as TOP at the use, and a function whose
-        // result depends on its own result then converges to TOP. `fib`
-        // returns `fib(n - 1) + fib(n - 2)`.
-        returns: program
-            .funcs
-            .iter()
-            .map(|func| (func.name.clone(), Facts::BOTTOM))
-            .collect(),
-        slot_returns: FxHashMap::default(),
-        // Not empty: an absent entry reads as TOP at the use, and a field
-        // whose value depends on its own then settles at TOP in round one and
-        // never moves. See `fields::initial`.
-        fields: super::fields::initial(program, &exposed.fields),
-        elements: FxHashMap::default(),
-        globals: FxHashMap::default(),
-        param_lengths: no_lengths(program),
-    };
     // A property of the whole program rather than of a round: whether anything
     // in it can change an array's length.
     let growable = super::arrays_can_grow(program);
-    let mut analyses = analyze_all(program, &crossing, caps, growable);
+    let mut crossing = Crossing {
+        params: seed(program, outward),
+        param_lengths: no_lengths(program),
+        whole: flow::Whole {
+            // BOTTOM rather than absent, for the same reason parameters start
+            // there: an absent entry reads as TOP at the use, and a function
+            // whose result depends on its own result then converges to TOP.
+            // `fib` returns `fib(n - 1) + fib(n - 2)`.
+            returns: program
+                .funcs
+                .iter()
+                .map(|func| (func.name.clone(), Facts::BOTTOM))
+                .collect(),
+            slot_returns: FxHashMap::default(),
+            // Not empty: an absent entry reads as TOP at the use, and a field
+            // whose value depends on its own then settles at TOP in round one
+            // and never moves. See `fields::initial`.
+            field_facts: super::fields::initial(program, &exposed.fields),
+            element_facts: FxHashMap::default(),
+            global_facts: FxHashMap::default(),
+            growable,
+        },
+    };
+    let mut analyses = analyze_all(program, &crossing, caps);
 
     for _ in 0..ROUND_CAP {
-        analyses = analyze_all(program, &crossing, caps, growable);
+        analyses = analyze_all(program, &crossing, caps);
 
         // Rebuilt from nothing each round rather than accumulated, so that this
         // is a Kleene iteration over the whole system and not a monotone drift
@@ -212,24 +213,24 @@ fn settle(
         } else {
             super::fields::parameter_lengths(program, &analyses, outward)
         };
+        let whole = flow::Whole {
+            returns,
+            slot_returns,
+            field_facts: fields,
+            element_facts: elements,
+            global_facts: globals,
+            growable,
+        };
         if params == crossing.params
-            && returns == crossing.returns
-            && slot_returns == crossing.slot_returns
-            && fields == crossing.fields
-            && elements == crossing.elements
-            && globals == crossing.globals
             && param_lengths == crossing.param_lengths
+            && whole == crossing.whole
         {
             break;
         }
         crossing = Crossing {
             params,
-            returns,
-            slot_returns,
-            fields,
-            elements,
-            globals,
             param_lengths,
+            whole,
         };
     }
     analyses
@@ -287,8 +288,11 @@ fn analyze_all(
     program: &Program,
     crossing: &Crossing,
     caps: &[FxHashMap<ValueId, Facts>],
-    growable: bool,
 ) -> Vec<Analysis> {
+    // A function with no loop bounds of its own borrows this rather than
+    // making an empty map, which is the same allocation `Context` used to make
+    // for every function in the program on every round.
+    let nothing = FxHashMap::default();
     program
         .funcs
         .iter()
@@ -297,15 +301,10 @@ fn analyze_all(
             flow::analyze_with(
                 func,
                 &Context {
-                    params: crossing.params[index].clone(),
-                    returns: crossing.returns.clone(),
-                    growable,
-                    param_lengths: crossing.param_lengths[index].clone(),
-                    slot_returns: crossing.slot_returns.clone(),
-                    field_facts: crossing.fields.clone(),
-                    global_facts: crossing.globals.clone(),
-                    element_facts: crossing.elements.clone(),
-                    caps: caps.get(index).cloned().unwrap_or_default(),
+                    params: &crossing.params[index],
+                    param_lengths: &crossing.param_lengths[index],
+                    caps: caps.get(index).unwrap_or(&nothing),
+                    whole: &crossing.whole,
                 },
             )
         })
