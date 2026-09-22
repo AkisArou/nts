@@ -189,34 +189,28 @@ fn a_static_member_of_a_generic_class_is_emitted_once() {
     assert_eq!(unwraps, 2, "one `Factory#unwrap` per copy, in {names:?}");
 }
 
-/// The shapes that have no instantiation to copy from are refused, not guessed.
+/// The shape that has no instantiation to copy from is refused, not guessed.
 ///
-/// Each export of the fixture must be refused, and the file says why for each:
-/// a generic base at a type parameter, a generic method on a generic class, and
-/// a class constructing itself at its own parameters.
+/// The fixture held three until 2026-09-22 -- a generic base at a type
+/// parameter, a class constructing itself at its own parameters, and a generic
+/// method on a generic class -- and `hir::instantiate` landed the first two,
+/// which moved to `examples/generic-classes` as the fixture's own header says
+/// to. The generic method is what is left: `U` is decided per call site, and
+/// the class copy per `new`, so one copy of the class is not one copy of the
+/// method.
 #[test]
 fn a_generic_class_with_no_copy_to_make_is_refused() {
     let Some(lowered) = lowered("generic-classes-unsupported") else {
         return;
     };
-    // The member that cannot be copied, for each of the three. The exported
-    // functions calling them survive this stage and are dropped by
-    // `drop_callers_of_refused` afterwards, which is a later question than the
-    // one here: what matters is that no body was emitted for a copy that could
-    // not be made.
+    // The member that cannot be copied. The exported function calling it
+    // survives this stage and is dropped by `drop_callers_of_refused`
+    // afterwards, which is a later question than the one here: what matters is
+    // that no body was emitted for a copy that could not be made.
     let names = names(&lowered);
-    for member in ["#read", "#map", "#swapped"] {
-        assert!(
-            !names.iter().any(|name| name.contains(member)),
-            "`{member}` has no instantiation to copy from and must be refused, in {names:?}"
-        );
-    }
-    // A `Boxed<T>` copy would need `Container<number>` as its base, and nothing
-    // in the program names that type -- so the class contributes nothing at all
-    // rather than a constructor with no base.
     assert!(
-        !names.iter().any(|name| name.starts_with("Boxed")),
-        "a generic base at a type parameter leaves no copy, in {names:?}"
+        !names.iter().any(|name| name.contains("#map")),
+        "`#map` has no instantiation to copy from and must be refused, in {names:?}"
     );
     assert!(
         !lowered.diagnostics.is_empty(),

@@ -37,6 +37,7 @@ pub mod fold;
 pub mod generics;
 pub mod globals;
 pub mod guards;
+pub mod instantiate;
 pub mod interprocedural;
 pub mod layout;
 pub mod liveness;
