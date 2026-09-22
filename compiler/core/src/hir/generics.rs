@@ -27,7 +27,9 @@
 //! against an instantiation's gives the map from `T` to `number` that the bodies
 //! need. That map is the whole of what this module computes.
 
-use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, SymbolId, TypeId, TypeKind, syntax};
+use nts_semantic_schema::{
+    NodeId, NodeKind, SemanticSnapshot, SignatureRecord, SymbolId, TypeId, TypeKind, syntax,
+};
 use rustc_hash::FxHashMap;
 
 use super::HirType;
@@ -258,6 +260,15 @@ pub struct GenericFunctions {
     pub copies: FxHashMap<nts_semantic_schema::NodeId, Vec<FunctionInstance>>,
     /// The suffix each *call site* appends to its callee's name.
     pub at_call: FxHashMap<nts_semantic_schema::NodeId, String>,
+    /// And the suffix a call names *inside one copy of a generic class*,
+    /// where the two differ.
+    ///
+    /// Keyed by the instantiation whose copy the call is lowered in. A call
+    /// written in a generic body binds its callee's parameters to the
+    /// enclosing class's, so the same call node names `extract<f64>` in one
+    /// copy and `extract<u8>` in another -- exactly what `Structural::at_call`
+    /// carries for a re-typed argument, one mechanism along.
+    pub at_call_in: FxHashMap<TypeId, FxHashMap<nts_semantic_schema::NodeId, String>>,
     /// Generic declarations a call *reached* and could not pin down, and the
     /// type parameters that stayed unbound.
     ///
@@ -314,26 +325,42 @@ pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions 
             continue;
         }
 
-        let mut substitution = Substitution::default();
-        let mut sources = Sources::default();
-        for (parameter, argument) in generic.parameters.iter().zip(&actual.parameters) {
-            unify(
+        let Pinned {
+            substitution,
+            sources,
+            deferred,
+        } = pin_down(snapshot, generic, actual);
+
+        // **A call inside a generic body is one copy short.** Everything it
+        // left deferred is pinned to a parameter of an enclosing class, and
+        // that class's instantiations say what each is: `extractSizeAlgorithm
+        // (strategy)` in `WritableStream<W>`'s constructor pins `T` to `W`,
+        // and `W` is `number` in one copy and `Uint8Array` in another.
+        //
+        // One copy of the callee per instantiation, and `at_call_in` records
+        // which copy the call names *in that copy* -- the same shape
+        // `Structural::at_call` uses, and for the same reason: one call node
+        // answers differently in different copies of the function around it.
+        if !deferred.is_empty()
+            && generic.type_parameters.iter().all(|parameter| {
+                substitution.contains_key(parameter) || deferred.contains_key(parameter)
+            })
+        {
+            expand_within_a_generic(
                 snapshot,
-                parameter.ty,
-                argument.ty,
-                &mut substitution,
-                &mut sources,
-                0,
+                &templates,
+                &mut found,
+                &Deferred {
+                    call: *call,
+                    declaration,
+                    parameters: &generic.type_parameters,
+                    substitution: &substitution,
+                    sources: &sources,
+                    bound_to: &deferred,
+                },
             );
+            continue;
         }
-        unify(
-            snapshot,
-            generic.return_type,
-            actual.return_type,
-            &mut substitution,
-            &mut sources,
-            0,
-        );
 
         // Every type parameter has to have been pinned down, and to something
         // this compiler can represent. One that was not is a call this cannot
@@ -425,6 +452,7 @@ fn unify(
     actual: TypeId,
     into: &mut Substitution,
     sources: &mut Sources,
+    deferred: &mut Sources,
     depth: u32,
 ) {
     // A type's structure is a graph, not a tree -- a signature can mention a
@@ -437,9 +465,18 @@ fn unify(
     }
     if is_parameter(snapshot, generic) {
         let actual = concrete(snapshot, actual);
-        if let Some(ty) = representation(snapshot, actual)
-            && !is_parameter(snapshot, actual)
-        {
+        // **Pinned to a type parameter is pinned, one copy short.** A call
+        // written inside a generic body binds the callee's `T` to the
+        // enclosing `W`, which has no representation and so never reached
+        // `into` -- the call counted as unpinned and the callee was refused as
+        // `a generic function no call pins down`. It is recorded here instead,
+        // and `function_instantiations` makes one copy per instantiation of
+        // whatever declares `W`. See `Templates::bindings_of`.
+        if is_parameter(snapshot, actual) {
+            deferred.insert(generic, actual);
+            return;
+        }
+        if let Some(ty) = representation(snapshot, actual) {
             into.insert(generic, ty);
             // **The representation is not enough to name the copy.** `[number]`
             // and `[number, number]` both represent as an array of `f64` and so
@@ -453,6 +490,7 @@ fn unify(
         }
         return;
     }
+    let (generic_id, actual_id) = (generic, actual);
     let (Some(generic), Some(actual)) = (
         snapshot.types.get(generic.0 as usize),
         snapshot.types.get(actual.0 as usize),
@@ -460,7 +498,30 @@ fn unify(
         return;
     };
     if let (TypeKind::Array(inner), TypeKind::Array(against)) = (&generic.kind, &actual.kind) {
-        unify(snapshot, *inner, *against, into, sources, depth + 1);
+        unify(snapshot, *inner, *against, into, sources, deferred, depth + 1);
+    }
+    // **And through an instantiation's arguments**, which is where the rest of
+    // the corpus's unpinned calls were. A parameter `stream:
+    // WritableStream<T>` against an argument of type `WritableStream<W>` pins
+    // `T` to `W` and nothing here looked: the descent had an arm for an array
+    // and an arm for a signature, so a type parameter reachable only through
+    // another generic's arguments was never bound and the call counted as
+    // pinning nothing.
+    //
+    // Both sides must be instantiations of the *same* generic. Two unrelated
+    // ones with equal arity would pair arguments that have nothing to do with
+    // each other, and a wrong binding is worse than a missing one -- it names
+    // a copy the call does not make.
+    if generic.symbol.is_some() && generic.symbol == actual.symbol {
+        let ours = snapshot.type_arguments.get(&generic_id);
+        let theirs = snapshot.type_arguments.get(&actual_id);
+        if let (Some(ours), Some(theirs)) = (ours, theirs)
+            && ours.len() == theirs.len()
+        {
+            for (ours, theirs) in ours.iter().zip(theirs) {
+                unify(snapshot, *ours, *theirs, into, sources, deferred, depth + 1);
+            }
+        }
     }
     // **Through a function type, which is where the corpus's largest root
     // lives.** Until 2026-09-15 this function bound a type parameter only from
@@ -493,7 +554,7 @@ fn unify(
         && declared.parameters.len() == resolved.parameters.len()
     {
         for (declared, resolved) in declared.parameters.iter().zip(&resolved.parameters) {
-            unify(snapshot, declared.ty, resolved.ty, into, sources, depth + 1);
+            unify(snapshot, declared.ty, resolved.ty, into, sources, deferred, depth + 1);
         }
         unify(
             snapshot,
@@ -501,8 +562,135 @@ fn unify(
             resolved.return_type,
             into,
             sources,
+            deferred,
             depth + 1,
         );
+    }
+}
+
+/// What one call binds its callee's type parameters to.
+struct Pinned {
+    substitution: Substitution,
+    sources: Sources,
+    /// Pinned to an *enclosing* generic's parameter rather than to a type:
+    /// one copy short of a copy. See `unify`.
+    deferred: Sources,
+}
+
+/// Unify a generic signature against the one the checker resolved for a call.
+///
+/// Lifted out of [`function_instantiations`] for length, on the seam the
+/// function already had: everything here is about one call's *arguments*, and
+/// everything left is about what to do with the answer.
+fn pin_down(
+    snapshot: &SemanticSnapshot,
+    generic: &SignatureRecord,
+    actual: &SignatureRecord,
+) -> Pinned {
+    let mut pinned = Pinned {
+        substitution: Substitution::default(),
+        sources: Sources::default(),
+        deferred: Sources::default(),
+    };
+    for (parameter, argument) in generic.parameters.iter().zip(&actual.parameters) {
+        unify(
+            snapshot,
+            parameter.ty,
+            argument.ty,
+            &mut pinned.substitution,
+            &mut pinned.sources,
+            &mut pinned.deferred,
+            0,
+        );
+    }
+    unify(
+        snapshot,
+        generic.return_type,
+        actual.return_type,
+        &mut pinned.substitution,
+        &mut pinned.sources,
+        &mut pinned.deferred,
+        0,
+    );
+    pinned
+}
+
+/// One call that pinned its callee's parameters to an enclosing generic's.
+struct Deferred<'a> {
+    call: nts_semantic_schema::NodeId,
+    declaration: nts_semantic_schema::NodeId,
+    parameters: &'a [TypeId],
+    substitution: &'a Substitution,
+    sources: &'a Sources,
+    /// Each of the callee's parameters that is bound to an enclosing one.
+    bound_to: &'a Sources,
+}
+
+/// Make the callee's copies a call inside a generic body implies.
+///
+/// One per instantiation of the enclosing generic: whatever `W` is in that
+/// copy is what the callee's `T` is there. A binding the enclosing generic has
+/// no instantiation for makes no copy, which leaves the call exactly as
+/// unpinned as it was -- the refusal it already had, rather than a new one.
+///
+/// **Every deferred parameter has to come from one instantiation.** A callee
+/// pinned to two enclosing parameters is fine -- they are bound together, by
+/// the same copy -- and one pinned to parameters of two *different* generics
+/// is not: there is no single copy to name. Those are left unpinned.
+fn expand_within_a_generic(
+    snapshot: &SemanticSnapshot,
+    templates: &Templates,
+    found: &mut GenericFunctions,
+    call: &Deferred<'_>,
+) {
+    // The instantiations of whatever declares the first deferred parameter,
+    // which is the copy every other one must be bound by too.
+    let mut deferred: Vec<(TypeId, TypeId)> =
+        call.bound_to.iter().map(|(k, v)| (*k, *v)).collect();
+    deferred.sort();
+    let Some((_, first)) = deferred.first().copied() else {
+        return;
+    };
+    for (instance, _) in templates.bindings_of(first) {
+        let mut substitution = call.substitution.clone();
+        let mut sources = call.sources.clone();
+        let mut bound = true;
+        for (parameter, within) in &deferred {
+            let Some((_, what)) = templates
+                .bindings_of(*within)
+                .into_iter()
+                .find(|(at, _)| *at == instance)
+            else {
+                bound = false;
+                break;
+            };
+            let Some(representation) = representation(snapshot, what) else {
+                bound = false;
+                break;
+            };
+            substitution.insert(*parameter, representation);
+            sources.insert(*parameter, what);
+        }
+        if !bound {
+            continue;
+        }
+        let suffix = suffix_of(snapshot, call.parameters, &substitution, &sources);
+        found
+            .at_call_in
+            .entry(instance)
+            .or_default()
+            .insert(call.call, suffix.clone());
+        let sigma: Sigma = sources.iter().map(|(k, v)| (*k, *v)).collect();
+        let substitution =
+            substitution.with_instances(templates, Owner::Function(call.declaration), &sigma);
+        let copies = found.copies.entry(call.declaration).or_default();
+        if !copies.iter().any(|copy| copy.suffix == suffix) {
+            copies.push(FunctionInstance {
+                substitution,
+                sources,
+                suffix,
+            });
+        }
     }
 }
 

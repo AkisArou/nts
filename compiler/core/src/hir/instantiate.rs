@@ -141,6 +141,8 @@ pub struct Templates<'a> {
     /// The templates -- records with arguments that mention exactly one other
     /// generic's parameters -- by that generic.
     by_owner: FxHashMap<Owner, Vec<TypeId>>,
+    /// Which generic declares each type parameter.
+    owners: FxHashMap<TypeId, Owner>,
 }
 
 impl<'a> Templates<'a> {
@@ -211,7 +213,48 @@ impl<'a> Templates<'a> {
             index,
             declarations,
             by_owner: templates,
+            owners,
         }
+    }
+
+    /// Every instantiation of the generic that declares `parameter`, with what
+    /// that parameter is bound to in each.
+    ///
+    /// The question a *call* inside a generic body asks: `extractSize(strategy)`
+    /// written in `WritableStream<W>` pins the callee's `T` to `W`, which is
+    /// not a type anything can be compiled for -- but `W` is `number` in one
+    /// copy of the class and `Uint8Array` in another, and those are.
+    ///
+    /// Only a class or interface parameter. A *function*'s parameter is bound
+    /// by its own call sites, which is the mechanism this one is an extension
+    /// of rather than a case of.
+    #[must_use]
+    pub fn bindings_of(&self, parameter: TypeId) -> Vec<(TypeId, TypeId)> {
+        let Some(Owner::Type(symbol)) = self.owners.get(&parameter).copied() else {
+            return Vec::new();
+        };
+        let Some(&declaration) = self.declarations.get(&symbol) else {
+            return Vec::new();
+        };
+        let parameters = arguments(self.snapshot, declaration);
+        let Some(at) = parameters.iter().position(|p| *p == parameter) else {
+            return Vec::new();
+        };
+        let mut found: Vec<(TypeId, TypeId)> = self
+            .index
+            .iter()
+            .filter(|((of, args), ty)| {
+                *of == symbol && **ty != declaration && args.len() == parameters.len()
+            })
+            .filter_map(|((_, args), ty)| {
+                let bound = *args.get(at)?;
+                (!mentions_a_parameter(self.snapshot, bound)).then_some((*ty, bound))
+            })
+            .collect();
+        // Sorted, so one compiler on one input makes the copies in one order.
+        found.sort();
+        found.dedup();
+        found
     }
 
     /// The templates a copy of `owner` under `sigma` resolves, each to the

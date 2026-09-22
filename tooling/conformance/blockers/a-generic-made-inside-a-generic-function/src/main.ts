@@ -1,4 +1,24 @@
-// expect: NTS1001 a generic function no call pins down (the type parameter `T`)
+// expect: nothing refused -- FIXED, kept as a guard
+//
+// **FIXED 2026-09-22, and kept as a guard.** Both arms lower and agree with
+// node on all 58 cases. The record of the defect follows unchanged, because
+// the shape is worth keeping and this guard is what stops it coming back.
+//
+// A call written inside a generic body pins its callee's `T` to the enclosing
+// `W`, which is not a type anything can be compiled for -- so the call
+// counted as pinning nothing and the callee was refused. `unify` records that
+// binding now instead of dropping it, and `function_instantiations` makes one
+// copy of the callee per instantiation of whatever declares `W`:
+// `Templates::bindings_of` says what `W` is in each, and `at_call_in` says
+// which copy the call names inside which copy of the class.
+//
+// Two more things had to move with it. `unify` descends through an
+// instantiation's **arguments** -- a parameter `stream: WritableStream<T>`
+// against an argument `WritableStream<W>` pins `T` to `W`, and the descent
+// had arms for an array and a signature and none for this. And a closure
+// written in a generic class body is lowered under that copy's substitution,
+// or it reads a capture at the declaration's type while the copy stored the
+// instantiation's.
 
 // A generic class made inside a generic **function**, where the function's own
 // argument comes from an enclosing generic class rather than from a concrete

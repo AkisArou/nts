@@ -1,4 +1,17 @@
-// expect: NTS1001 a captured variable of unrepresentable type (the type parameter `T`)
+// expect: nothing refused -- FIXED, kept as a guard
+//
+// **FIXED 2026-09-22, and kept as a guard.** Both arms lower and agree with
+// node on all 58 cases, and it was closed by a change aimed at something
+// else -- a closure written in a generic class body is lowered under that
+// copy's substitution now, which is the first of the two halves this fixture
+// asked for. The second, the stored-members pass resolving a template-typed
+// literal to each instantiation, turned out not to be needed: with the
+// capture typed by the copy, `literal_member_is_storage` answers the same for
+// every copy and the literal's method is laid out once.
+//
+// A fixture fixed by a change that did not name it is the evidence that the
+// cause was one and the two descriptions were two. The record follows
+// unchanged.
 
 // An object literal built at a generic interface **from inside another
 // generic**:

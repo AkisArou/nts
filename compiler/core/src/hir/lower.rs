@@ -5039,6 +5039,9 @@ fn function_copies(
                 sources: instance.sources.clone(),
                 retyped: Retyped::new(),
                 suffix: instance.suffix.clone(),
+                // A copy of a generic *function*: its own parameters are
+                // bound, and there is no enclosing class copy to answer for.
+                instance: None,
             })
             .collect();
     }
@@ -5075,6 +5078,12 @@ struct Copy {
     sources: super::generics::Sources,
     retyped: Retyped,
     suffix: String,
+    /// The instantiation this is a copy *of*, where it is a generic class's.
+    ///
+    /// A call written in a generic body names a different copy of its callee
+    /// in each copy of the class around it, and that is the key those answers
+    /// are held under. See `generics::GenericFunctions::at_call_in`.
+    instance: Option<TypeId>,
 }
 
 /// Whether a function declaration has type parameters of its own.
@@ -5293,6 +5302,13 @@ fn lower_class(
                 foreign,
                 Copy {
                     substitution: substitution.clone(),
+                    instance,
+                    // The suffix its closures are keyed under, so an arrow in
+                    // this body picks the variant lowered under this copy's
+                    // substitution. See `class_closure_variants`.
+                    suffix: instance
+                        .map(|ty| instantiation_suffix(snapshot, ty))
+                        .unwrap_or_default(),
                     ..Copy::default()
                 },
             );
@@ -5382,6 +5398,81 @@ fn copies_of(
     )
 }
 
+/// Every copy of a generic class, by the suffix its closures are keyed under.
+///
+/// The suffix is the instantiation's, the same one `instantiation_suffix`
+/// gives a layout — so a closure variant, the copy that makes it and the
+/// builder that lowers it all name one string, and none of them has to derive
+/// it a second way.
+fn class_copies(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<String, ClassCopy> {
+    let mut found = rustc_hash::FxHashMap::default();
+    for (declaration, instances) in generic_classes(snapshot) {
+        for instance in instances {
+            found.insert(
+                instantiation_suffix(snapshot, instance.ty),
+                ClassCopy {
+                    declaration,
+                    instance: instance.ty,
+                    substitution: instance.substitution,
+                },
+            );
+        }
+    }
+    found
+}
+
+/// One copy of a generic class: where it is written, what it is, and what it
+/// binds.
+struct ClassCopy {
+    declaration: NodeId,
+    instance: TypeId,
+    substitution: Substitution,
+}
+
+/// A copy of every closure written inside a generic class, one per copy of it.
+///
+/// **A closure body is lowered once, in a builder of its own**, and that
+/// builder had no substitution — so a `this` captured inside
+/// `ByteTeeBranch<18494>` was *stored* at the copy's type and *read* at the
+/// declaration's, and `zlib` emitted
+///
+/// ```text
+/// NtsObj_ByteTeeBranch * v2;
+/// v2 = v0->this;      // the field is a NtsObj_ByteTeeBranch_18494_ *
+/// ```
+///
+/// which clang refuses. `captured_as` is the one derivation both sides use and
+/// it answers `type_of(capture.at)` — correct in each builder, and the two
+/// builders disagreed about what the enclosing class was.
+///
+/// Same shape as the structural variants beside it, one axis over: there the
+/// copy re-types a *parameter* and the variant records which, here the copy
+/// binds a *type parameter* and the variant is lowered under its
+/// substitution. `retyped_captures` stays empty because nothing is re-typed
+/// name by name — the substitution answers every capture at once.
+fn class_closure_variants(
+    probe: &FuncBuilder,
+    closures: &[ClosureInfo],
+    copies: &rustc_hash::FxHashMap<String, ClassCopy>,
+) -> Vec<ClosureInfo> {
+    let mut suffixes: Vec<(&String, &ClassCopy)> = copies.iter().collect();
+    // Sorted, so one compiler on one input numbers the closures one way.
+    suffixes.sort_by(|a, b| a.0.cmp(b.0));
+    let mut variants = Vec::new();
+    for (suffix, copy) in suffixes {
+        for closure in closures {
+            if closure.within.is_some() || !probe.is_within(closure.node, copy.declaration) {
+                continue;
+            }
+            variants.push(ClosureInfo {
+                within: Some(suffix.clone()),
+                ..closure.clone()
+            });
+        }
+    }
+    variants
+}
+
 /// What every function's lowering needs from the program around it.
 ///
 /// Bundled because each of these is decided once for the whole program and read
@@ -5405,6 +5496,14 @@ struct Shared {
     /// map of substitutions -- two hash maps each -- into every one of them
     /// took `stream` from 15 to 66 seconds. Measured, then shared.
     class_instances: std::rc::Rc<rustc_hash::FxHashMap<TypeId, Substitution>>,
+    /// What a copy of a generic *class* is, by the suffix its closures are
+    /// keyed under: the instantiation and what it binds.
+    ///
+    /// A closure written in a generic class body is lowered once, in a builder
+    /// of its own, and that builder has to be the copy's — or the field it
+    /// reads its capture from and the value the copy stored there are two
+    /// types. See `closure_variants`.
+    class_copies: rustc_hash::FxHashMap<String, ClassCopy>,
 }
 
 impl Shared {
@@ -5418,9 +5517,12 @@ impl Shared {
         closures: &[ClosureInfo],
     ) -> Self {
         let structural = structural_instantiations(snapshot, hierarchy);
+        let probe = FuncBuilder::probe(snapshot);
         let mut closures = closures.to_vec();
-        let variants = closure_variants(&FuncBuilder::probe(snapshot), &closures, &structural);
+        let variants = closure_variants(&probe, &closures, &structural);
         closures.extend(variants);
+        let class_copies = class_copies(snapshot);
+        closures.extend(class_closure_variants(&probe, &closures, &class_copies));
         let class_instances = std::rc::Rc::new(
             super::generics::instantiations(snapshot)
                 .into_values()
@@ -5436,6 +5538,7 @@ impl Shared {
             generics: super::generics::function_instantiations(snapshot),
             structural,
             class_instances,
+            class_copies,
         }
     }
 
@@ -5473,6 +5576,16 @@ impl Shared {
                 builder
                     .structural_calls
                     .insert(*call, bindings.clone());
+            }
+        }
+        // And the calls this copy of a *generic class* makes, which name their
+        // callee's copy over whatever the class's parameters are bound to
+        // here. On top of the program-wide answers for the same reason the
+        // structural ones are: a call with nothing deferred names the same
+        // copy everywhere, and one that deferred names this copy's.
+        if let Some(calls) = copy.instance.and_then(|at| self.generics.at_call_in.get(&at)) {
+            for (call, suffix) in calls {
+                builder.generic_calls.insert(*call, suffix.clone());
             }
         }
         wire_naming(&mut builder, &self.naming);
@@ -6863,6 +6976,22 @@ fn lower_wanted_closures(
             foreign,
             Copy {
                 suffix: closures[index].within.clone().unwrap_or_default(),
+                // **Under the enclosing copy's substitution, where the
+                // closure is one of a generic class's.** Without it the body
+                // reads a capture at the declaration's type while the copy
+                // stored the instantiation's, which reaches C as an
+                // assignment between two structs.
+                substitution: closures[index]
+                    .within
+                    .as_ref()
+                    .and_then(|suffix| shared.class_copies.get(suffix))
+                    .map(|copy| copy.substitution.clone())
+                    .unwrap_or_default(),
+                instance: closures[index]
+                    .within
+                    .as_ref()
+                    .and_then(|suffix| shared.class_copies.get(suffix))
+                    .map(|copy| copy.instance),
                 ..Copy::default()
             },
         );
