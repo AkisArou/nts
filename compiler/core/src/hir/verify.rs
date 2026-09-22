@@ -791,6 +791,33 @@ fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
                     report("a global", &slot.ty, &func.values[value.0 as usize].ty);
                 }
             }
+            // **And a field read is a slot too**, for the reason the array
+            // read above gives and in the same words -- it was written for
+            // arrays and not for fields, so nothing asked whether a load's
+            // type is the one the layout holds.
+            //
+            // What it catches: a value whose type says one class and a layout
+            // whose field says another. Generic instantiation produced exactly
+            // that on 2026-09-22 -- a copy read `writerState.stream` as
+            // `WritableStreamState<Uint8Array>` from a layout whose field is
+            // `WritableStreamState<W>` -- and the two structs are
+            // prefix-compatible, so `coerce` had nothing to say and the C
+            // emitter wrote `v2 = v1->stream` between them. It reached a
+            // person as nine lines of `-Wincompatible-pointer-types` from
+            // clang, three modules away from the pass that caused it, and
+            // would have reached the JVM as a verifier error at class load.
+            OpKind::FieldGet { object, field } => {
+                if let HirType::Managed(super::ManagedType::Object(ty)) =
+                    &func.values[object.0 as usize].ty
+                    && let Some(layout) = program
+                        .layouts
+                        .iter()
+                        .find(|layout| layout.types.contains(ty))
+                    && let Some(slot) = layout.fields.get(*field as usize)
+                {
+                    report("a field read", &slot.ty, &op.ty);
+                }
+            }
             OpKind::FieldSet {
                 object,
                 field,
@@ -1536,6 +1563,65 @@ mod tests {
         if let Err(problems) = verify(&dead) {
             panic!("a store no block runs is not in the emitted program: {problems:#?}");
         }
+    }
+
+    /// A field *read* is a slot too, and nothing asked until 2026-09-22.
+    ///
+    /// The same program as `only_a_store_a_block_runs_is_checked`, read
+    /// instead of written: an `i32` field loaded as an `f64`. `FieldSet` has
+    /// been checked against the layout for a long time and `ArrayGet` since
+    /// the backend picked the result's type over the element's; `FieldGet`
+    /// was the one of the four nobody had written down.
+    #[test]
+    fn a_field_read_is_checked_against_the_layout() {
+        use crate::hir::{Field, Layout, ManagedType};
+        use nts_semantic_schema::TypeId;
+
+        let laid_out = Layout {
+            types: vec![TypeId(1)],
+            name: "Holder".to_owned(),
+            interfaces: Vec::new(),
+            fields: vec![Field {
+                name: "count".to_owned(),
+                ty: HirType::Int { bits: 32, signed: true },
+                readonly: false,
+                declared_by: None,
+            }],
+            methods: Vec::new(),
+            base: None,
+        };
+
+        // %0 the object, %1 the read of its `i32` field, typed `f64`.
+        let values = vec![
+            Op {
+                kind: OpKind::ObjectNew { frame: false },
+                ty: HirType::Managed(ManagedType::Object(TypeId(1))),
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::FieldGet { object: ValueId(0), field: 0 },
+                ty: HirType::Float { bits: 64 },
+                origin: origin(),
+            },
+        ];
+        let mut program = func(
+            values,
+            vec![block(
+                Vec::new(),
+                vec![ValueId(0), ValueId(1)],
+                Terminator::Return(None),
+            )],
+        );
+        program.layouts = vec![laid_out];
+        let Err(problems) = verify(&program) else {
+            panic!("a field read of the wrong type must be caught, and nothing was reported");
+        };
+        assert!(
+            problems
+                .iter()
+                .any(|p| matches!(p, Invalid::StoreType { what: "a field read", .. })),
+            "the read must be reported against the layout: {problems:#?}"
+        );
     }
 
     /// A base has to be laid out as the prefix every backend treats it as.
