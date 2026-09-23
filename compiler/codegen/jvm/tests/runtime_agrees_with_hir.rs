@@ -195,4 +195,9 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// Measured, not chosen. Most are deliberate -- `Date`, `RegExp` and the
 /// generator helpers are refused on every backend -- and the rest are the
 /// queue. It may fall; it may not rise.
-const REFUSED_FLOOR: usize = 73;
+///
+/// 75 since the C-boundary helpers: `nts_string_to_cstring`,
+/// `nts_cstring_release` and the `nts_closure_*` three exist to hand a string
+/// or a closure to a C function, and this lane refuses native calls outright,
+/// so it has no call that could reach them. Deliberate, and not the queue.
+const REFUSED_FLOOR: usize = 75;
