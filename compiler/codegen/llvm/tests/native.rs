@@ -680,6 +680,91 @@ fn compatible_c_aliases_share_one_symbol_in_both_backends() {
     }
 }
 
+/// A `Class` handle is passed where an ancestor is declared, on both backends.
+///
+/// The C side stores the button's address and checks that each ancestor-typed
+/// parameter receives exactly that address -- an upcast in `GObject`'s layout is
+/// the same pointer, so anything else is a wrong conversion that happened to
+/// compile. The emitted C spells the conversion as a cast to the ancestor's
+/// tag, which the separately compiled prototypes then check.
+#[test]
+fn a_class_handle_upcasts_to_its_ancestors_on_both_backends() {
+    let source = r#"
+import type { Class, c_int } from "c:types";
+type GObject = Class<"_GObject">;
+type GtkWidget = Class<"_GtkWidget", GObject>;
+type GtkButton = Class<"_GtkButton", GtkWidget>;
+declare function button_new(): GtkButton;
+declare function widget_is(w: GtkWidget): c_int;
+declare function object_is(o: GObject): c_int;
+declare function widget_or_null_is(w: GtkWidget | null): c_int;
+export function run(): number {
+    const b = button_new();
+    return widget_is(b) + object_is(b) * 10 + widget_or_null_is(b) * 100;
+}
+"#;
+    let Some((dir, prepared)) = prepare("class-upcast", source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    assert!(c.writer.text().contains("(struct _GtkWidget *)"), "no conversion to the ancestor was emitted");
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("native.c"), r"
+struct _GObject { int kind; };
+struct _GtkWidget { struct _GObject parent; };
+struct _GtkButton { struct _GtkWidget parent; };
+static struct _GtkButton the_button;
+struct _GtkButton *button_new(void) { return &the_button; }
+int widget_is(struct _GtkWidget *w) { return (void *)w == (void *)&the_button; }
+int object_is(struct _GObject *o) { return (void *)o == (void *)&the_button; }
+int widget_or_null_is(struct _GtkWidget *w) { return (void *)w == (void *)&the_button; }
+").unwrap();
+    std::fs::write(dir.join("caller.c"), r#"
+#include "program.h"
+int main(void) { return run() == 111.0 ? 0 : 1; }
+"#).unwrap();
+    for file in ["native.c", "caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+    }
+    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+        assert!(Command::new(dir.join(executable)).status().unwrap().success(), "{executable}");
+    }
+}
+
+/// A downcast written as an assertion is refused by lowering.
+///
+/// TypeScript accepts `widget as GtkButton`: the two types overlap, which is
+/// all an assertion asks. A compiler trusting the checker would hand C a
+/// widget where a button is read, at a fabricated offset -- a wrong answer
+/// rather than a refusal. `upcasts_to` would refuse the conversion too; the
+/// assertion is stopped before it gets there, and this is the arm that says so.
+#[test]
+fn a_class_downcast_by_assertion_is_refused() {
+    let source = r#"
+import type { Class } from "c:types";
+type GObject = Class<"_GObject">;
+type GtkWidget = Class<"_GtkWidget", GObject>;
+type GtkButton = Class<"_GtkButton", GtkWidget>;
+declare function widget_new(): GtkWidget;
+declare function button_label(b: GtkButton): void;
+export function run(): void {
+    button_label(widget_new() as GtkButton);
+}
+"#;
+    let Some((_, prepared)) = prepare("class-downcast", source) else { return; };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("asserted to be an opaque C pointer")),
+        "a downcast by assertion was not refused: {:?}",
+        prepared.diagnostics
+    );
+}
+
 /// A `string` parameter reaches C as NUL-terminated UTF-8, on both backends
 /// and both providers.
 ///

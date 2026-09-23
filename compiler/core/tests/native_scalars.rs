@@ -210,7 +210,7 @@ fn opaque_pointee_identity_does_not_depend_on_signature_position() {
             let prepared = hir::prepare(&snapshot).unwrap();
             assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
             let run = prepared.program.funcs.iter().find(|f| f.name == "run").unwrap();
-            let pointer = HirType::NativePointer(hir::native::Pointee::Opaque("_Counter".to_owned()));
+            let pointer = HirType::NativePointer(hir::native::Pointee::Opaque("_Counter".into()));
             if name == "result" { assert_eq!(run.return_type, pointer); }
             else { assert_eq!(run.params[0].ty, pointer); }
         }
@@ -257,7 +257,7 @@ fn native_memory_verifier_rejects_corrupted_widths_and_indices() {
         match arm {
             "read" => func.values[load].ty = HirType::NUMBER,
             "index" => func.values[index.0 as usize].ty = HirType::NUMBER,
-            "opaque" => func.values[pointer.0 as usize].ty = HirType::NativePointer(hir::native::Pointee::Opaque("Hidden".to_owned())),
+            "opaque" => func.values[pointer.0 as usize].ty = HirType::NativePointer(hir::native::Pointee::Opaque("Hidden".into())),
             _ => {
                 let stored = func.values.iter().find_map(|op| match op.kind {
                     hir::OpKind::NativeStore { value, .. } => Some(value), _ => None,

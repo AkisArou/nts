@@ -54,7 +54,22 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         return pointer_within(snapshot, payload, visiting);
     }
     if let Some(tag) = marker(snapshot, ty, "___c_opaque") {
-        return Some(Pointee::Opaque(text(snapshot, tag)?.to_owned()));
+        return Some(Pointee::Opaque(text(snapshot, tag)?.into()));
+    }
+    // `Class<Tag, Parent>` -- an opaque pointee with a hierarchy. The chain is
+    // a tuple of string literals, root first, ending in a `...string[]` rest,
+    // which the snapshot flattens to one trailing `string` element: the tags
+    // are the literal prefix and the last of them is this handle's own.
+    if let Some(chain) = marker(snapshot, ty, "___c_chain") {
+        let TypeKind::Tuple(elements) = &snapshot.types.get(chain.0 as usize)?.kind else {
+            return None;
+        };
+        let mut tags: Vec<String> = elements
+            .iter()
+            .map_while(|element| text(snapshot, *element).map(str::to_owned))
+            .collect();
+        let tag = tags.pop()?;
+        return Some(Pointee::Opaque(super::Handle { tag, ancestors: tags }));
     }
     // `Flexible<T>` -- `T name[]`, storage with no extent. Read before the
     // pointer cases for the reason the others are: it is the thing a pointer to

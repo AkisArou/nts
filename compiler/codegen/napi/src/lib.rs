@@ -4035,7 +4035,7 @@ mod tests {
     #[test]
     fn native_pointers_have_no_javascript_marshalling_path() {
         use nts_core::hir::native::{Pointee, Scalar};
-        for pointee in [Pointee::Opaque("Counter".to_owned()), Pointee::Scalar(Scalar::UInt8)] {
+        for pointee in [Pointee::Opaque("Counter".into()), Pointee::Scalar(Scalar::UInt8)] {
             let pointer = HirType::NativePointer(pointee);
             assert!(cross(&pointer, &[], &FxHashSet::default()).is_none());
             let array = HirType::Managed(ManagedType::Array(Box::new(pointer)));

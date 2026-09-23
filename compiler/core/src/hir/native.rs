@@ -236,7 +236,8 @@ impl Type {
 /// An opaque tag identifies a foreign object but permits no memory access.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Pointee {
-    Opaque(String),
+    /// A C struct this program holds only pointers to, by its tag.
+    Opaque(Handle),
     Scalar(Scalar),
     /// `T name : width` -- a member occupying `width` bits of a `T`-sized
     /// storage unit, packed with the bit-fields beside it.
@@ -335,6 +336,58 @@ pub enum Pointee {
     /// happen through the pointer value, one op later, and a backend reading
     /// only that value would have to trace it back to learn what it points at.
     Unaligned(Box<Pointee>),
+}
+
+/// An opaque pointee: the C struct tag, and the tags it may become without a
+/// cast.
+///
+/// `ancestors` is root first and excludes `tag` -- a `GtkButton` is
+/// `_GtkButton` with `["_GObject", "_GInitiallyUnowned", "_GtkWidget"]`. Empty
+/// for a plain `Opaque<"Counter">`, which converts to nothing but itself.
+/// Read from `Class<Tag, Parent>` in `c:types`, whose chain TypeScript already
+/// checks for assignability; this is the second of those two guards.
+///
+/// Dereferences to the tag, which is what every C spelling of it needs.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Handle {
+    pub tag: String,
+    pub ancestors: Vec<String>,
+}
+
+impl Handle {
+    /// Whether a pointer to this may be passed where one to `to` is wanted:
+    /// `to`'s whole chain is a strict prefix of this one's.
+    #[must_use]
+    pub fn upcasts_to(&self, to: &Self) -> bool {
+        self.ancestors.len() > to.ancestors.len()
+            && self.ancestors.starts_with(&to.ancestors)
+            && self.ancestors[to.ancestors.len()] == to.tag
+    }
+}
+
+impl From<String> for Handle {
+    fn from(tag: String) -> Self {
+        Self { tag, ancestors: Vec::new() }
+    }
+}
+
+impl From<&str> for Handle {
+    fn from(tag: &str) -> Self {
+        tag.to_owned().into()
+    }
+}
+
+impl std::ops::Deref for Handle {
+    type Target = String;
+    fn deref(&self) -> &String {
+        &self.tag
+    }
+}
+
+impl std::fmt::Display for Handle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.tag)
+    }
 }
 
 /// C storage order is declaration order, never the managed layout order.
@@ -543,11 +596,20 @@ impl Pointee {
     /// typed pointer, are the conversions mistakes are made of, and C requires a
     /// cast for both. TypeScript refuses them too, `ConstPtr<T>` not satisfying
     /// `Ptr<T>`; this is the second of two guards rather than the only one.
+    ///
+    /// **And one conversion C does not do, which a class hierarchy does.** A
+    /// `GtkButton *` is a `GtkWidget *` because `GObject` lays every instance out
+    /// with its parent's instance struct first -- the conversion C spells
+    /// `GTK_WIDGET(button)`. Only upward, and only along the chain the handle
+    /// was declared with: a downcast is a runtime question
+    /// (`g_type_check_instance_is_a`), and `widget as GtkButton` typechecks in
+    /// TypeScript because the two overlap, so this is where it is refused.
     #[must_use]
     pub fn converts_to(&self, to: &Self) -> bool {
         match to {
             Self::Void => true,
             Self::Const(inner) => self == &**inner || self.converts_to(inner),
+            Self::Opaque(to) => matches!(self, Self::Opaque(from) if from.upcasts_to(to)),
             _ => false,
         }
     }
@@ -1203,3 +1265,46 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
 
 pub(crate) mod schema;
 pub use schema::{is_layout, pointer, storage};
+
+#[cfg(test)]
+mod handles {
+    use super::{Handle, Pointee};
+
+    fn class(chain: &[&str]) -> Pointee {
+        let (tag, ancestors) = chain.split_last().expect("a chain has a tag");
+        Pointee::Opaque(Handle {
+            tag: (*tag).to_owned(),
+            ancestors: ancestors.iter().map(|&a| a.to_owned()).collect(),
+        })
+    }
+
+    /// Upward along the declared chain, and nowhere else.
+    ///
+    /// The downward and sideways arms are the ones TypeScript cannot be
+    /// trusted with alone: `widget as GtkButton` typechecks, because the two
+    /// types overlap.
+    #[test]
+    fn a_handle_converts_upward_along_its_chain_and_nowhere_else() {
+        let object = class(&["_GObject"]);
+        let widget = class(&["_GObject", "_GtkWidget"]);
+        let button = class(&["_GObject", "_GtkWidget", "_GtkButton"]);
+        let label = class(&["_GObject", "_GtkWidget", "_GtkLabel"]);
+        let plain = Pointee::Opaque("_GtkWidget".into());
+
+        assert!(button.converts_to(&widget));
+        assert!(button.converts_to(&object));
+        assert!(widget.converts_to(&object));
+        assert!(button.converts_to(&Pointee::Const(Box::new(widget.clone()))));
+        assert!(button.converts_to(&Pointee::Void));
+
+        assert!(!widget.converts_to(&button), "downcast");
+        assert!(!label.converts_to(&button), "sibling");
+        assert!(!button.converts_to(&button), "a conversion to itself is equality, not this");
+        // Same tag, no chain: a plain `Opaque` is a different declaration of
+        // the struct, and nothing says it is the same class.
+        assert!(!button.converts_to(&plain));
+        assert!(!plain.converts_to(&widget));
+        // A chain that shares the parent's tag but not its ancestry.
+        assert!(!class(&["_Other", "_GtkWidget", "_GtkButton"]).converts_to(&widget));
+    }
+}

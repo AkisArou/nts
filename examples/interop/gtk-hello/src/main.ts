@@ -2,6 +2,8 @@
 // button, clicks the button twice through the signal system, and quits. The
 // printed count is what build.sh checks.
 import {
+  g_application_quit,
+  g_application_run,
   gtk_application_new,
   gtk_application_window_new,
   gtk_button_new,
@@ -11,9 +13,7 @@ import {
   hello_click,
   hello_on_activate,
   hello_on_clicked,
-  hello_quit,
   hello_report,
-  hello_run,
   hello_unref,
   type GtkApplication,
   type GtkWidget,
@@ -35,7 +35,7 @@ function onActivate(app: GtkApplication, state: Ptr<State>): void {
   gtk_window_present(hello_as_window(window));
   hello_click(button);
   hello_click(button);
-  hello_quit(app);
+  g_application_quit(app);
 }
 
 // Heap, not `local`: the activate handler is retained by the application, so
@@ -49,7 +49,7 @@ function main(): void {
   // control, must not find each other on the session bus.
   const app = gtk_application_new("dev.nts.GtkHello", 0x20 as c_uint);
   hello_on_activate(app, onActivate, state);
-  const status = hello_run(app);
+  const status = g_application_run(app, 0 as c_int, null);
   hello_unref(app);
   hello_report(state.clicks as c_int, status);
   free(state);

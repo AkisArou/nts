@@ -26,12 +26,6 @@ void hello_click(GtkWidget *button) {
   g_signal_emit_by_name(button, "clicked");
 }
 
-int hello_run(GtkApplication *app) {
-  return g_application_run(G_APPLICATION(app), 0, NULL);
-}
-
-void hello_quit(GtkApplication *app) { g_application_quit(G_APPLICATION(app)); }
-
 void hello_unref(GtkApplication *app) { g_object_unref(app); }
 
 void hello_report(int clicks, int status) {

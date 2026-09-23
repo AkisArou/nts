@@ -13,6 +13,31 @@ declare module "c:types" {
   // Construct and destroy it through the library's functions. `| null` admits
   // a null pointer. The phantom field is never readable or constructible.
   export type Opaque<Name extends string> = { readonly __c_opaque: Name };
+  // An opaque pointer with a single-inheritance hierarchy, as GObject lays
+  // out: every instance struct begins with its parent's, so a `GtkButton *`
+  // is a `GtkWidget *` and C spells the conversion `GTK_WIDGET(b)`.
+  //
+  //     type GObject = Class<"_GObject">;
+  //     type GtkWidget = Class<"_GtkWidget", GObject>;
+  //     type GtkButton = Class<"_GtkButton", GtkWidget>;
+  //
+  // A `GtkButton` is accepted where a `GtkWidget` goes, and nothing converts
+  // downward or sideways: the chain is a tuple of tags, root first, and a
+  // child's is its parent's with one more tag, so TypeScript's own tuple
+  // assignability is the upcast rule. The compiler reads the same chain and
+  // refuses what an `as` assertion would otherwise let through. `Tag` is the
+  // C struct tag, as for `Opaque`.
+  export type Class<Tag extends string, Parent extends ClassChain | null = null> = {
+    readonly __c_chain: readonly [...ChainOf<Parent>, Tag, ...string[]];
+  };
+  // What a `Class` is, for the constraint above; not a type to write.
+  export type ClassChain = { readonly __c_chain: readonly string[] };
+  // A parent's tags, without the rest element that keeps the chain open.
+  // Read head by head because inferring the prefix before a rest element in
+  // one pattern degrades to `string[]` -- which made every chain assignable to
+  // every other.
+  type ChainOf<P> = P extends { readonly __c_chain: infer C } ? Tags<C> : [];
+  type Tags<T> = T extends readonly [infer H extends string, ...infer R] ? [H, ...Tags<R>] : [];
   // Struct is a layout description. The optional second argument names a
   // foreign C struct tag; application code normally uses the binding's alias.
   export type Struct<Fields, Tag extends string = ""> = {

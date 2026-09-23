@@ -15,8 +15,9 @@ struct hello_state {
   int clicks;
 };
 
-// Handle casts: `GTK_WINDOW(w)` is a macro and one `Opaque` tag cannot become
-// another.
+// A downcast: `gtk_application_window_new` returns a `GtkWidget *`, and
+// `GTK_WINDOW(w)` is a checked cast, which is a runtime question and not a
+// conversion the compiler can prove. Upcasts need nothing here.
 GtkWindow *hello_as_window(GtkWidget *widget);
 // `g_signal_connect` is a macro over a `GCallback`-typed function, and the
 // signal name is a string.
@@ -28,9 +29,8 @@ void hello_on_clicked(GtkWidget *button,
                       struct hello_state *state);
 // `g_signal_emit_by_name` is variadic and takes a string.
 void hello_click(GtkWidget *button);
-// `G_APPLICATION(app)`: a cast again.
-int hello_run(GtkApplication *app);
-void hello_quit(GtkApplication *app);
+// `g_object_unref` takes a `gpointer`, which a `Class` handle cannot be
+// passed as yet; and whose reference it gives up is the ownership question.
 void hello_unref(GtkApplication *app);
 // Output: a compiled program has no `console` without the node modules, and
 // `c:*` has no stdio.

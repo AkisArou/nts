@@ -5,13 +5,18 @@
  * @ntsHeader "hello.h"
  */
 declare module "c:gtk-hello" {
-  import type { Opaque, Ptr, Struct, c_int, c_uint } from "c:types";
+  import type { Class, Ptr, Struct, c_char, c_int, c_uint } from "c:types";
 
-  // GTK spells these `typedef struct _GtkWidget GtkWidget`, so the tag is the
-  // underscored one.
-  export type GtkApplication = Opaque<"_GtkApplication">;
-  export type GtkWidget = Opaque<"_GtkWidget">;
-  export type GtkWindow = Opaque<"_GtkWindow">;
+  // The instance hierarchy, root first, as GObject lays it out. GTK spells
+  // these `typedef struct _GtkWidget GtkWidget`, so each tag is the
+  // underscored one. `GInitiallyUnowned` is not a tag of its own -- it is
+  // `typedef struct _GObject GInitiallyUnowned` -- so a widget's parent is
+  // `GObject` here.
+  export type GObject = Class<"_GObject">;
+  export type GApplication = Class<"_GApplication", GObject>;
+  export type GtkApplication = Class<"_GtkApplication", GApplication>;
+  export type GtkWidget = Class<"_GtkWidget", GObject>;
+  export type GtkWindow = Class<"_GtkWindow", GtkWidget>;
   export type State = Struct<{ clicks: c_int }, "hello_state">;
 
   // GTK itself. `flags` is `GApplicationFlags`, an enum whose values are all
@@ -22,6 +27,8 @@ declare module "c:gtk-hello" {
   export function gtk_button_new(): GtkWidget;
   export function gtk_window_set_child(window: GtkWindow, child: GtkWidget | null): void;
   export function gtk_window_present(window: GtkWindow): void;
+  export function g_application_run(app: GApplication, argc: c_int, argv: Ptr<Ptr<c_char>> | null): c_int;
+  export function g_application_quit(app: GApplication): void;
 
   // The shim.
   export function hello_as_window(widget: GtkWidget): GtkWindow;
@@ -36,8 +43,6 @@ declare module "c:gtk-hello" {
     state: Ptr<State>,
   ): void;
   export function hello_click(button: GtkWidget): void;
-  export function hello_run(app: GtkApplication): c_int;
-  export function hello_quit(app: GtkApplication): void;
   export function hello_unref(app: GtkApplication): void;
   export function hello_report(clicks: c_int, status: c_int): void;
 }
