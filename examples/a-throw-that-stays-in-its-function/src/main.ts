@@ -129,3 +129,47 @@ export function crossingTwoFrames(n: number): number {
     return -1;
   }
 }
+
+// Compiles, and the `finally` runs **before** the handler. A raise reaching a
+// `try` with a `finally` between it and the `catch` takes the same path a
+// lexical `throw` takes, so the handler edge this feature adds composes with
+// the exit stack rather than going around it.
+//
+// Order-sensitive on purpose: `1` then `2` is 12, a handler that skipped the
+// `finally` answers 2, and one that ran it afterwards answers 21. A test that
+// only asked "was it caught" agrees with all three.
+//
+// `trace` is a **local**, so the handler has to carry it as a block parameter --
+// the "one parameter for each name the edges disagree about" machinery in
+// `lower_try`, exercised by an edge that is not a `throw`.
+export function finallyRunsBeforeTheHandler(n: number): number {
+  let trace = 0;
+  try {
+    try {
+      return raises(n);
+    } finally {
+      trace = trace * 10 + 1;
+    }
+  } catch {
+    return trace * 10 + 2;
+  }
+}
+
+// And two of them, which is 112: each `finally` between the raise and the
+// handler runs, innermost first.
+export function everyFinallyBetweenRuns(n: number): number {
+  let trace = 0;
+  try {
+    try {
+      try {
+        return raises(n);
+      } finally {
+        trace = trace * 10 + 1;
+      }
+    } finally {
+      trace = trace * 10 + 1;
+    }
+  } catch {
+    return trace * 10 + 2;
+  }
+}
