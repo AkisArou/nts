@@ -3467,6 +3467,79 @@ than the compiled one: **what clears, not what reaches**. A refusal with a
 hundred occurrences and no export behind it publishes nothing; this one has
 two occurrences and sixteen.
 
+### Correction, 2026-09-23: depth-one by the first-named callee is not depth-one
+
+The ranking above reads each wrapper's *one* named callee and calls the export
+one fix away if that callee is not itself blocked. A wrapper names one callee
+and an export can be behind several, so the number is a **lower bound on depth**
+and the table is a lower bound on cost.
+
+Measured on `df492d3d`, which cleared `displayBytePath` -- an eleven-export row
+in the table above:
+
+    displayBytePath          11 -> 0
+    check                     6 -> 15
+    fs wrappers missing     123 -> 123
+
+Eleven exports left that row and the module published nothing: nine of them
+turned up behind `check`, which is the *second* callee their wrappers reach and
+which the instrument had no way to see. The one export `df492d3d` did publish --
+`querystring` 2 -> 3, the first movement on this axis in two days -- was behind
+one callee and really was one fix away.
+
+So read the depth table as **"at least this deep"**, and expect a cleared head
+to redistribute rather than to publish. The measure that decides is still
+`names published`, which is why it is the one quoted in commit messages.
+
+### And the largest compiled cause is three causes, 2026-09-23
+
+`a pointer cast between two structs that do not agree about where their shared
+fields are` is the #1 row on the compiled axis at **77 distinct sites**. It was
+one sentence over three facts with three different repairs, which `6943bcff`
+separated. Over the same 25 modules:
+
+    the target declares more fields than the source holds     18 sites
+    the target names a field the source has no slot for       37 sites
+    every field is there and the order is wrong               23 sites
+
+(one site reports two of them.) **55 of 77 are an absence** -- there is nothing
+at any offset for the reader to load -- and no ordering convention reaches
+either kind. `blockers/an-options-bag-widened-by-assignment` carries that
+reduction and records why the structural-copy machinery cannot help: a copy
+re-types a *parameter*, and what has no storage here is the object, so every
+copy relocates the cast one call further down.
+
+The 23 that really are an ordering question are almost all option bags --
+`DuplexOptions -> ReadableOptions`, `TransformOptions -> DuplexOptions`,
+`ZlibOptions -> CompressionStreamOptions`, `SpawnOptions -> SpawnSyncOptions`.
+`fields_of` lays a type out in the order the checker's `PropertyRecord`s arrive
+in, and tsgo lists a type's **own** members before its inherited ones, so
+`interface Wide extends Narrow` puts `Narrow`'s fields last and is not laid out
+with `Narrow` as a prefix. Classes do not have this problem, because
+`put_bases_first` already reorders a subclass against its base and remaps every
+access; interfaces do not go through it. That is the shape of a fix for this
+column, and it is a layout change, so it needs its own before-and-after.
+
+### And the copy machinery covers one of five routes to an interface type
+
+Measured on `6943bcff`, one class, one interface, five bindings:
+
+    read(new WithBase())                 a call argument      LOWERS
+    const s: Slice = new WithBase()      an annotated local   refuses
+    function make(): Slice { return … }  a declared return    refuses
+    this.slice = new WithBase()          a field at the type  refuses
+    let s: Slice = …; s = new WithBase() a later assignment   refuses
+
+`record_structural_call` re-types a **parameter**, so the one route that passes
+through a parameter is the one that works and the machinery has nothing to say
+about a slot, a return, or a variable. `blockers/an-interface-reached-by-five-
+routes` holds the arms and the control -- the same class without `extends Base`
+lowers on every one of them, because then the interface really is its prefix.
+
+That also settles what a field-order convention could do for this fixture:
+nothing. `WithBase extends Base` owes slot 0 to `Base`, `Slice` wants `b` there,
+and one object has one linear layout.
+
 ## Eleven modules started compiling and not one gained a passing test
 
 Measured on `target/release/nts` at 15:39, pinned to scratch, from a worktree at

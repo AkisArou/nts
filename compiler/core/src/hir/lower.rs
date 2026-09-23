@@ -13753,6 +13753,18 @@ impl<'a> FuncBuilder<'a> {
                 first: to.fields[from.fields.len()].name.clone(),
             });
         }
+        // **A target field the source does not hold at all**, which the counts
+        // above do not catch: two option bags of six fields each, four of them
+        // shared, is not a widening and is not an ordering problem either.
+        if let Some(absent) = to
+            .fields
+            .iter()
+            .find(|want| !from.fields.iter().any(|have| same_slot(want, have)))
+        {
+            return Some(NotAPrefix::Missing {
+                name: absent.name.clone(),
+            });
+        }
         to.fields.iter().zip(from.fields.iter()).enumerate().find_map(|(at, (want, have))| {
             (!same_slot(want, have)).then(|| NotAPrefix::Disagrees {
                 at,
@@ -44530,17 +44542,22 @@ pub(super) fn same_slot(want: &Field, have: &Field) -> bool {
 
 /// Why a pointer cast from one object layout to another is not a no-op.
 ///
-/// **Two facts wore one sentence, and they have different repairs.** The
+/// **Three facts wore one sentence, and they have different repairs.** The
 /// refusal used to read "a pointer cast between two structs that do not agree
-/// about where their shared fields are" for both of these, and it is a
-/// description of one of them:
+/// about where their shared fields are" for all of them, and it describes the
+/// last:
 ///
 /// - the target declares *more* fields than the source holds, so the extra ones
 ///   have no storage at any offset. Nothing about ordering reaches it -- it is a
 ///   **widening**, and what it needs is a representation an interface can have
 ///   independently of the object that arrives at it;
+/// - the target names a field the source does not hold at all, at a count that
+///   does not say so -- two option bags of six fields each, four of them
+///   shared. The same absence as a widening, arriving without the arithmetic;
 /// - the two hold the same fields in a different order, which really is an
-///   offset question, and laying the fields out the same way answers it.
+///   offset question, and laying the fields out the same way answers it. This
+///   is the only one of the three a layout convention could reach, which is the
+///   point of separating it from the two that look like it.
 ///
 /// Reading the first as the second costs a day. `runtime/node/zlib` passes an
 /// `IteratorZlibOptions` where an `IteratorEngineOptions` is wanted, and the
@@ -44551,8 +44568,8 @@ pub(super) fn same_slot(want: &Field, have: &Field) -> bool {
 /// split is what makes "how much of this is cheap" a question with an answer.
 /// See `tooling/conformance/blockers/an-options-bag-widened-by-assignment`.
 ///
-/// The two sentences are deliberately *not* prefixes of one another: a fixture
-/// or a census matching on text has to pick one.
+/// The sentences are deliberately *not* prefixes of one another: a fixture or a
+/// census matching on text has to pick one.
 enum NotAPrefix {
     /// The target declares fields the source has no storage for.
     Widens {
@@ -44561,7 +44578,11 @@ enum NotAPrefix {
         /// The first target field past the end of the source.
         first: String,
     },
-    /// Both layouts have a field at this slot and it is not the same field.
+    /// The source holds no field of this name and type anywhere, at a count
+    /// that does not make it a widening.
+    Missing { name: String },
+    /// Every target field is in the source and the order is wrong -- and this
+    /// is the only one of the three a layout convention could answer.
     Disagrees {
         at: usize,
         wanted: String,
@@ -44581,6 +44602,11 @@ impl NotAPrefix {
                 "a `{from}` where a `{to}` is wanted -- a `{to}` declares {wanted} fields and a \
                  `{from}` holds {held}, so `{first}` has no storage at any offset and a pointer \
                  cast cannot widen a struct"
+            ),
+            Self::Missing { name } => format!(
+                "a `{from}` where a `{to}` is wanted -- a `{to}` holds `{name}` and a `{from}` \
+                 has no field of that name and type, so a pointer cast leaves the read with \
+                 nothing to land on"
             ),
             Self::Disagrees { at, wanted, held } => format!(
                 "a `{from}` where a `{to}` is wanted, which is a pointer cast between two \
