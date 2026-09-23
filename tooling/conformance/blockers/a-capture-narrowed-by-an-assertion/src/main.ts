@@ -43,6 +43,38 @@
 // way `retyped_captures` already records the structural answer, so that the
 // body reads exactly what the construction site wrote.
 //
+// # The obvious fix was tried and produces a *decline*, 2026-09-23
+//
+// The guard above sits in front of a `coerce` that the `this` capture three
+// lines earlier already uses -- "the type the body will read it at, not the
+// type in hand" -- so the first thing to try is letting `coerce` answer here
+// too. It must not answer for *classes*: the guard is deliberately stricter
+// than `coerce` there, because a prefix-compatible cast between two class
+// layouts passes on C and LLVM by luck and is declined by the JVM, which is
+// why the guard was written. But neither of these is a class. Both are
+// **signature** types, and a slot typed `(x: number) => void` is what every
+// closure-typed field in the program already is: the object behind it is a
+// closure whose own class carries the `call`.
+//
+// So: skip the guard when both sides are `TypeKind::Function`. The capture
+// refusal goes, and this file then reports
+//
+//     NTS1001 a spread of an array whose elements are not the parameter's
+//     NTS2006 an object type with no layout: type 24
+//
+// The second is a **decline** -- the C emitter failing rather than a
+// construct being named -- and trading a refusal for one of those is the
+// wrong direction however many sites it clears. Type 24 is another signature
+// type, and materialising the *capture's* type at the coercion does not
+// close it: the one with no layout is reached elsewhere, at the call that
+// takes `instrument`'s result. So whatever lays signature layouts out is not
+// reached on this path at all, and that is the thing to find before the
+// guard is touched again.
+//
+// Reverted rather than landed. `write-the-library-type-by-hand` records the
+// same trap from the other side: a refusal becoming a decline is worse, and
+// it has to be bounded rather than assumed.
+//
 // # The link after it, for whoever gets there
 //
 // With the capture settled, the next refusal in this file is `a spread of an
