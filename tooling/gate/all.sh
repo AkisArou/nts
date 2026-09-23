@@ -1808,7 +1808,9 @@ interop() {
   # Counted from `git ls-files`, not from the directory: three lanes share this
   # working tree and an untracked example is not in the pinned tree the gate
   # builds. `ls examples/interop/*/build.sh` said 21 while the answer was 20.
-  interop_floor=20
+  #
+  # 21: `native-closure` (`580e25bb`), a capturing closure handed to C.
+  interop_floor=21
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"
