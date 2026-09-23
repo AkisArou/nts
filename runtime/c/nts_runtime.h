@@ -60,6 +60,42 @@
 #define NTS_READS_ONLY
 #endif
 
+/* # A new helper below owes a row to four tables, in four crates
+ *
+ * Declaring a function here is not the whole of adding one. Four places encode
+ * a fact about this header, each checked by a test that lives beside *it*
+ * rather than beside this file -- so a helper that forgets one reds a lane that
+ * never calls it, in a crate its author was not editing. Three of the four did
+ * exactly that on 2026-09-23, one per commit, to two different sessions.
+ *
+ *   1. `compiler/codegen/llvm/src/signatures.rs` -- a row, in **sorted**
+ *      position. The table is binary-searched and a test in that crate asserts
+ *      the order.
+ *
+ *   2. `compiler/codegen/c/src/emit.rs`, `ERASES_CLASS` -- a row `(name, n)`
+ *      for **each parameter that takes an `NtsHeader *`**, sorted. A test reads
+ *      this header's text and compares, so it will tell you which parameters
+ *      qualify rather than leaving you to judge.
+ *
+ *   3. `runtime::READS_ONLY` -- must agree with `NTS_READS_ONLY` here, checked
+ *      by `compiler/core/tests/runtime_signatures.rs`. Marking a helper `pure`
+ *      is a promise to the optimiser and not a description: a function taking
+ *      no arguments and reading a slot another call writes must **not** carry
+ *      it, or a second call may be answered from the first. `nts_raising` is
+ *      the worked example, and the `returns_nonnull` note on
+ *      `NTS_ALLOCATES_OR_NULL` above is the same hazard one attribute over.
+ *
+ *   4. `compiler/codegen/jvm/src/ops.rs`, `external` -- a mapping, **or** a
+ *      raised `REFUSED_FLOOR` in
+ *      `compiler/codegen/jvm/tests/runtime_agrees_with_hir.rs` when the JVM
+ *      lane deliberately renders no such call. That floor ratchets on purpose;
+ *      its own comment argues that it is the instrument that should speak in
+ *      its crate rather than in somebody's gate step.
+ *
+ * Written here because this is where the writer is. The tests are the readers
+ * and each of them already says what it wants; what none of them could say is
+ * how many others there are. */
+
 /* The longest array or string this runtime will build: 2^31 - 2.
  *
  * `2^31` rather than `2^32` so that a length is an `int32` and the loop counter
