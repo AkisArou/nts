@@ -15,6 +15,14 @@
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
+/* Darwin reads `_POSIX_C_SOURCE` as "hide everything POSIX does not name",
+ * and `malloc/malloc.h` -- which `cutils.h` includes on Apple for
+ * `malloc_size` -- then uses `malloc_zone_t` before the typedef it just hid.
+ * `_DARWIN_C_SOURCE` restores the full surface. It is not a missing SDK: zig's
+ * bundled Darwin headers and a real SDK fail the same way without it. */
+#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
+#define _DARWIN_C_SOURCE
+#endif
 
 #include "nts_runtime.h"
 
