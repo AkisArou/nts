@@ -15488,7 +15488,20 @@ impl<'a> FuncBuilder<'a> {
         call: NodeId,
         arguments: &[NodeId],
     ) -> Result<Vec<ValueId>, Diagnostic> {
-        self.lower_arguments_gathering(call, arguments, None)
+        self.lower_arguments_gathering(call, arguments, None, None)
+    }
+
+    /// The same, for a call that has a receiver.
+    ///
+    /// Only a *default* reads it, and only a default written `this`. See the
+    /// `Omitted::Default` arm.
+    fn lower_arguments_on(
+        &mut self,
+        call: NodeId,
+        arguments: &[NodeId],
+        receiver: ValueId,
+    ) -> Result<Vec<ValueId>, Diagnostic> {
+        self.lower_arguments_gathering(call, arguments, None, Some(receiver))
     }
 
     /// The same, for a callee whose rest parameter is not a rest *array*.
@@ -15503,7 +15516,7 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
         tail: &HirType,
     ) -> Result<Vec<ValueId>, Diagnostic> {
-        self.lower_arguments_gathering(call, arguments, Some(tail))
+        self.lower_arguments_gathering(call, arguments, Some(tail), None)
     }
 
     fn lower_arguments_gathering(
@@ -15511,6 +15524,7 @@ impl<'a> FuncBuilder<'a> {
         call: NodeId,
         arguments: &[NodeId],
         tail: Option<&HirType>,
+        receiver: Option<ValueId>,
     ) -> Result<Vec<ValueId>, Diagnostic> {
         // Where the callee's rest parameter starts, if it has one. Everything
         // from there is one array rather than one argument each.
@@ -15624,6 +15638,22 @@ impl<'a> FuncBuilder<'a> {
                     // caller has its own binding for the same symbol: `f`
                     // calling `f(2)` would otherwise leave its own `a` pointing
                     // at the argument it just passed.
+                    // **And `this` is the receiver of *this* call.**
+                    //
+                    // The same argument one paragraph up, for the other name a
+                    // default can read. JavaScript evaluates a default in the
+                    // callee's scope, where `this` is whatever the call was
+                    // made on; evaluating it here left `self.this` holding the
+                    // *caller's* receiver, which for a free function is
+                    // nothing at all. So `Buffer.prototype.toString(encoding?,
+                    // start = 0, end = this.length)` refused with ``this`
+                    // outside a method` -- a sentence about the source, which
+                    // says `this` inside a method -- at every call that omits
+                    // `end` from a function with no receiver of its own.
+                    //
+                    // 35 occurrences in `fs` alone, and `displayBytePath` is
+                    // one of them: eleven `fs` exports are behind that call.
+                    let outer_this = receiver.map(|receiver| self.this.replace(receiver));
                     let names = self.parameter_symbols(callee);
                     let mut shadowed = Vec::new();
                     for (at, symbol) in names.iter().enumerate().take(args.len()) {
@@ -15656,6 +15686,9 @@ impl<'a> FuncBuilder<'a> {
                             Some(value) => self.bindings.insert(symbol, value),
                             None => self.bindings.remove(&symbol),
                         };
+                    }
+                    if let Some(outer) = outer_this {
+                        self.this = outer;
                     }
                     let value = lowered?;
                     self.coerce_to_parameter(call, args.len(), value, node)?
@@ -30872,7 +30905,7 @@ impl<'a> FuncBuilder<'a> {
             .unwrap_or(class);
 
         let mut args = vec![object];
-        args.extend(self.lower_arguments(id, &arguments)?);
+        args.extend(self.lower_arguments_on(id, &arguments, object)?);
         // **A TypeScript class extending a bound Java one.** `class Panel
         // extends View` allocates a `Panel` -- ours, and a real subclass of
         // `com/example/ui/View` -- and then has to run the *jar's* constructor
@@ -38882,7 +38915,7 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let callee = self.closure_callee(id, callee_node, receiver)?;
         let mut args = vec![receiver];
-        args.extend(self.lower_arguments(id, arguments)?);
+        args.extend(self.lower_arguments_on(id, arguments, receiver)?);
         self.finish_closure_call(id, receiver, callee, args)
     }
 
@@ -41858,7 +41891,7 @@ impl<'a> FuncBuilder<'a> {
         let callee = self.callee_for(id, type_id, &member_name)?;
 
         let mut args = vec![receiver];
-        args.extend(self.lower_arguments(id, arguments)?);
+        args.extend(self.lower_arguments_on(id, arguments, receiver)?);
         // Calling a generator produces its **frame**, not the `Generator<T, …>`
         // the checker says -- that interface describes an object this compiler
         // does not build. The plain-call path says the same thing three hundred
@@ -42100,7 +42133,7 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let mut args = vec![receiver];
-        args.extend(self.lower_arguments(id, arguments)?);
+        args.extend(self.lower_arguments_on(id, arguments, receiver)?);
         let origin = self.origin(id);
         // A `super(...)` produces nothing; `super.m()` produces whatever `m`
         // does, and the checker typed the call node accordingly.

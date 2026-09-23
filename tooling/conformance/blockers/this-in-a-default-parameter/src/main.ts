@@ -1,4 +1,24 @@
-// expect: `this` outside a method
+// expect: nothing refused -- FIXED, kept as a guard
+//
+// **FIXED 2026-09-23, and kept as a guard.** Seven functions, nothing
+// refused, and it agrees with node on every case.
+//
+// A default is evaluated where JavaScript evaluates it -- at the call that
+// omitted the argument -- and the machinery for that already bound the
+// *callee's earlier parameters* to the values the caller had computed, so a
+// default reading `a` works. `this` is the other name a default can read and
+// nothing bound it, so the lowering used the **caller's** receiver: for a
+// free function that is nothing at all, and the refusal said so in a
+// sentence about the source that was false. `lower_arguments_on` passes the
+// call's receiver now, and the `Omitted::Default` arm swaps it into
+// `self.this` for as long as the default is being lowered, beside the
+// parameter bindings it already swaps.
+//
+// The controls below are what made it diagnosable: `bodyRead` and
+// `fromConst` lowered while `fromThis` did not, which separates the position
+// from the receiver. They are the guard now.
+//
+// The record of the original defect follows unchanged.
 //
 // A default parameter initializer that reads `this`. Node's `buffer` writes
 // this and so does much of `lib`:

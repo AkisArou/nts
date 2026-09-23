@@ -669,7 +669,16 @@ profile() {
   #                            number has seen go the right way: definitions
   #                            29444 -> 29852 with **381 source functions
   #                            new and 0 gone**, sites 1346 -> 1309.
-  ceiling=14800
+  #     2026-09-23   14651   <- a default parameter that reads `this` is
+  #                            evaluated with the receiver of the call that
+  #                            omitted it. `Buffer#toString(…, end =
+  #                            this.length)` is the shape, 35 occurrences in
+  #                            `fs` alone. Definitions 29861 -> 29968, **116
+  #                            source functions new and 0 gone**, sites
+  #                            1305 -> 1298 -- and one more *published* name,
+  #                            139 -> 140, which is the first time that
+  #                            number has moved in this lane's memory.
+  ceiling=14700
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
