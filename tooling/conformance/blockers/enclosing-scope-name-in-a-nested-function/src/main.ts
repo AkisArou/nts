@@ -1,7 +1,15 @@
 // expect: a name from an enclosing scope
 //
-// What is **left** of this row after 2026-09-13: a nested function that reads a
-// local of its enclosing function **and binds its own `this`**.
+// What is **left** of this row after 2026-09-24: a nested function that reads a
+// local of its enclosing function **and reads its own `this`**.
+//
+// It said *binds* until 2026-09-24, and the subject below said it with a
+// `this: unknown` parameter its body never touched -- so the fixture tested an
+// annotation. A `this` parameter is erased before any backend sees it, and
+// `binds_this` now decides on the body, which cleared 78 occurrences across ten
+// modules from one construct in `events`. The subject now reads `this.offset`,
+// and `annotatedButUnread` beside it is the control that says which of the two
+// the refusal is about.
 //
 // # The row closed for everything else
 //
@@ -59,12 +67,39 @@ export function control(columns: number, index: number): number {
   return index * columns;
 }
 
-/** Under test: captures, and binds its own `this`. */
+/**
+ * Under test: captures, and **reads** its own `this`.
+ *
+ * This used to be `function visit(this: unknown, index: number)` whose body
+ * never mentioned `this` -- so it tested the *annotation* rather than the
+ * receiver, and it lowered the moment `binds_this` started deciding on the
+ * body. A `this` parameter is erased before any backend sees it; only a body
+ * that reads one needs a receiver, which is the representation question this
+ * row is actually about. `examples/a-this-parameter-the-body-never-reads`
+ * carries the half that landed.
+ */
 export function subject(columns: number): number {
-  function visit(this: unknown, index: number): number {
+  function visit(this: { offset: number }, index: number): number {
+    return index * columns + this.offset;
+  }
+  return visit.call({ offset: 1 }, 2);
+}
+
+/**
+ * The control that separates the two: the same capture, `this` annotated and
+ * never read. It lowers, and if it ever stops, the subject above is refusing
+ * for the annotation rather than for the receiver.
+ */
+export function annotatedButUnread(columns: number): number {
+  // Named `inspect` rather than `visit` for the reason the header gives about
+  // `withoutThis`: two nested functions of one name in one file is `a second
+  // function named `visit``, a different row that would be reported as this
+  // one. The comment three lines above the subject says so, and I did it
+  // anyway on the first attempt.
+  function inspect(this: unknown, index: number): number {
     return index * columns;
   }
-  return visit.call(undefined, 2);
+  return inspect.call(undefined, 2);
 }
 
 /**

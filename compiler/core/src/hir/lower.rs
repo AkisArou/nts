@@ -13165,17 +13165,37 @@ impl<'a> FuncBuilder<'a> {
 
     /// Whether a function expression's own `this` is reachable from its body.
     fn binds_this(&self, id: NodeId) -> bool {
-        // `function (this: T, ...)` declares the receiver explicitly, which is
-        // how a wrapper says it forwards one.
-        if self.children(id).into_iter().any(|child| {
-            self.kind_of(child) == Some(syntax::PARAMETER)
-                && self
-                    .children(child)
-                    .into_iter()
-                    .any(|part| self.node(part).text.as_deref() == Some("this"))
-        }) {
-            return true;
-        }
+        // **The body decides, and a `this` parameter on its own does not.**
+        //
+        // `function (this: T, ...)` declares nothing at run time: TypeScript's
+        // `this` parameter is a type annotation about the *caller's* receiver,
+        // erased before any backend sees it -- `lower_param` already answers
+        // `Ok(Vec::new())` for it. So a body that never mentions `this` cannot
+        // observe which receiver it was called with, and is a closure like any
+        // other.
+        //
+        // This used to return `true` on the parameter alone, and what it cost
+        // was one construct behind sixty-four cascades. `events`'
+        // `onceRecord` writes
+        //
+        //     const wrapper: Listener = function (this: unknown, ...args) {
+        //         ... target.removeListener(type, wrapper) ...
+        //     };
+        //
+        // whose `this` is annotated and never read, so `EventEmitter#once` and
+        // `#prependOnceListener` were refused, and with them `Readable#once`,
+        // `Socket#_read`, `Socket#_final` and four `Utf8Stream` methods across
+        // ten modules. The refusal also said `uses its own `this`` about a body
+        // that does not.
+        //
+        // **What the old test was protecting is kept, and it is the real
+        // hazard.** `why_not_arrow` records it: a wrapper that forwards the
+        // caller's receiver -- `util`'s `promisified` and `callbackified` are
+        // the live ones -- becomes silently wrong as an arrow, which rebinds
+        // `this` to module scope. Both read `this` in their bodies (`this,`
+        // into `Reflect.apply`, and `maybeCb.bind(this)`), so the body walk
+        // still catches them. Checked against those two rather than argued
+        // from the example in the doc.
         let mut found = false;
         for child in &self.node(id).children {
             self.mentions_this(*child, &mut found);
