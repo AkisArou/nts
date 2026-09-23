@@ -39007,14 +39007,27 @@ impl<'a> FuncBuilder<'a> {
         string: &super::native::ReturnedString,
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
-        let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "a returned string"))?;
-        let copy = if string.nullable { "nts_string_from_cstring" } else { "nts_string_from_required_cstring" };
-        let value = self.runtime_call(copy, vec![pointer], ty, origin.clone());
+        let value = if string.array {
+            // Every element copied, so the array is the program's whatever C
+            // does with its own afterwards. `required` is the declaration's
+            // promise that C returns one, which a NULL breaks.
+            let required = self.push(OpKind::ConstBool(!string.nullable), HirType::Bool, origin.clone());
+            let ty = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String))));
+            self.runtime_call("nts_strings_from_cstrings", vec![pointer, required], ty, origin.clone())
+        } else {
+            let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "a returned string"))?;
+            let copy = if string.nullable { "nts_string_from_cstring" } else { "nts_string_from_required_cstring" };
+            self.runtime_call(copy, vec![pointer], ty, origin.clone())
+        };
         if let Some(free) = &string.free {
             let release = super::native::Function {
                 name: free.clone(),
                 convention: super::native::Convention::C,
-                parameters: vec![super::native::Type::Pointer(super::native::Pointee::Void)],
+                parameters: vec![if string.array {
+                    target.result.clone()
+                } else {
+                    super::native::Type::Pointer(super::native::Pointee::Void)
+                }],
                 result: super::native::Type::Void,
                 retention: vec![super::native::Retention::Unknown],
                 variadic: None,
@@ -39370,7 +39383,14 @@ impl<'a> FuncBuilder<'a> {
             // A string the caller frees is `char *` in C, and a borrowed one
             // `const char *`: that is how C libraries spell whose it is, GLib's
             // `gchar *` for transfer-full among them. The witness compares.
-            native.result = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
+            // And an owned array is `char **` for the same reason, GLib's
+            // `gchar **`, which the free function is declared taking.
+            native.result = if string.array {
+                let char = super::native::Pointee::Scalar(super::native::Scalar::Char);
+                super::native::Type::Pointer(super::native::Pointee::Pointer(Box::new(char)))
+            } else {
+                super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char))
+            };
         }
         if let Some(names) = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.no_escape.as_ref()) {
             if names.is_empty() { return Err(self.unsupported(call, "@ntsNoEscape needs at least one native-pointer parameter")); }

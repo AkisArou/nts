@@ -122,7 +122,7 @@ declarations. Landed:
 | `892eba61` | Strings C returns, copied, and freed by `@ntsFree` (`g_free` for transfer-full). |
 
 Measured on this machine's GTK 4.22:
-**8507 functions bound**, 418 of them typed signal connects.
+**8565 functions bound**, 418 of them typed signal connects.
 
 **Typed signals.** A signal has no C prototype, so the binder emits one typed
 view of `g_signal_connect_data` per class and signal:
@@ -179,11 +179,20 @@ array is a table holding only the terminator, never NULL. Refused without
 runs through the generated `g_application_run(app, ["gir"])`; its shim is
 down to the varargs `g_signal_emit_by_name` and output.
 
+**String arrays out.** A function returning a `string[]` returns C's
+NULL-terminated `char **`, whose every element is copied
+(`nts_strings_from_cstrings`) before `@ntsFree` releases C's -- `g_strfreev`,
+declared taking `char **`. Borrowed unless `@ntsFree` says otherwise, the
+rule a returned `string` follows: `const char * const *` then, `char **`
+owned, which is GLib's spelling for 267 of the 300 such results; the rest are
+refused rather than declared in a spelling the header contradicts. A result
+is a plain `string[]`, with no markers to follow it into the program's
+variables. `gtk-gir` splits a string with `g_strsplit`.
+
 **Still refused, ranked by count:**
 
 - 643: GIR marks the function not introspectable.
-- 395: arrays -- returned string arrays (68 would clear) and byte buffers in
-  (51) are the next two shapes.
+- 337: arrays -- byte buffers in (51 would clear) are the next shape.
 - 300: out parameters the caller allocates (a struct the callee fills in).
 - 189: async-scope callbacks, which should become Promises.
 - 153: `gpointer` results and `gconstpointer` parameters.

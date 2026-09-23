@@ -4482,6 +4482,30 @@ char **nts_strings_to_cstrings(const NtsArray *array) {
 
 void nts_cstrings_release(char **c) { free((void *)c); }
 
+NtsArray *nts_strings_from_cstrings(const char *const *c, bool required) {
+  if (c == NULL) {
+    if (required) {
+      fprintf(stderr, "nts: a C function declared to return an array of "
+                      "strings returned NULL\n");
+      abort();
+    }
+    return NULL;
+  }
+  uint32_t count = 0;
+  while (c[count] != NULL) {
+    if (count == UINT32_MAX) {
+      fprintf(stderr, "nts: out of memory\n");
+      abort();
+    }
+    count++;
+  }
+  NtsArray *array = nts_array_new(&nts_desc_ref, count);
+  for (uint32_t at = 0; at < count; at++) {
+    NTS_ITEMS(array, NtsString *)[at] = nts_string_from_cstring(c[at]);
+  }
+  return array;
+}
+
 /* Every answer is its own allocation today; see the header for why the source
  * string is passed anyway. */
 void nts_cstring_release(const NtsString *s, const char *c) {

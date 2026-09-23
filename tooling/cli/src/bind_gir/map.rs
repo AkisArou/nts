@@ -559,6 +559,7 @@ impl<'a> Mapper<'a> {
                 Ok((Mapped { ts: ts.to_owned(), c }, owned.then(|| "g_free".to_owned())))
             }
             TypeRef::Missing => Ok((Mapped { ts: "void".to_owned(), c: Type::Void }, None)),
+            TypeRef::Array(array) => Self::returned_strings(result, array),
             _ => self.typed(result).map(|mapped| (mapped, None)),
         }
     }
@@ -671,6 +672,32 @@ impl<'a> Mapper<'a> {
             ts: format!("Ptr<{local} | null> | null"),
             c: Type::Pointer(Pointee::Pointer(Box::new(handle))),
         })
+    }
+
+    /// A returned NULL-terminated array of strings, as a `string[]` the
+    /// compiler copies: `GLib`'s `gchar **` the caller frees with `g_strfreev`,
+    /// or a `const gchar * const *` it borrows. Those two spellings are the
+    /// compiler's for the two ownerships, and they are what GIR says for
+    /// nearly every such result; any other is refused rather than declared
+    /// in a spelling the header would contradict.
+    fn returned_strings(result: &Param, array: &ArrayRef) -> Result<(Mapped, Option<String>), Reason> {
+        let element = array.element.as_deref().ok_or(Reason::Array)?;
+        if !(element == "utf8" || element == "filename") || !array.zero_terminated || array.length.is_some() {
+            return Err(Reason::Array);
+        }
+        let spelling: String =
+            array.c_type.as_deref().ok_or(Reason::Array)?.replace("gchar", "char").replace("GStrv", "char**").split_whitespace().collect();
+        let char = Pointee::Scalar(Scalar::Char);
+        let (c, free) = match (result.transfer, spelling.as_str()) {
+            (Transfer::Full, "char**") => (Type::Pointer(Pointee::Pointer(Box::new(char))), Some("g_strfreev".to_owned())),
+            (Transfer::None, "constchar*const*") => (
+                Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))))),
+                None,
+            ),
+            _ => return Err(Reason::Array),
+        };
+        let ts = if result.nullable { "string[] | null" } else { "string[]" };
+        Ok((Mapped { ts: ts.to_owned(), c }, free))
     }
 
     /// An in parameter or an instance.

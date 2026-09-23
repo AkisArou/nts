@@ -2049,3 +2049,81 @@ export function run(): number { return walked(["a"]); }
         prepared.diagnostics
     );
 }
+
+/// C returning arrays of strings, one the caller frees and one it borrows.
+const RETURNED_STRINGS_LIBRARY: &str = r#"
+#include <stdlib.h>
+#include <string.h>
+static int freed;
+static char *copy(const char *text) { char *out = malloc(strlen(text) + 1); strcpy(out, text); return out; }
+char **owned(void) {
+    char **out = malloc(3 * sizeof *out);
+    out[0] = copy("alpha"); out[1] = copy("\xce\xb2" "eta"); out[2] = NULL;
+    return out;
+}
+void owned_free(char **names) { for (char **p = names; *p; p++) free(*p); free(names); freed++; }
+int freed_count(void) { return freed; }
+static const char *const fixed[] = { "one", NULL };
+static const char *const none[] = { NULL };
+const char *const *borrowed(int which) { return which == 0 ? NULL : which == 1 ? fixed : none; }
+"#;
+
+/// A `string[]` C returns, as the NULL-terminated `char **` it is: each
+/// element copied, so the array is the program's, and C's released by the
+/// declaration's `@ntsFree` -- which is declared taking `char **`, the
+/// array's own type, where a string's free takes `void *`.
+///
+/// Borrowed unless `@ntsFree` says otherwise, which is the rule a returned
+/// `string` follows: `const char * const *` then, `char **` owned. The
+/// counter is what shows the free ran exactly once per call, and after the
+/// copy -- the copy reads C's array, so the other order reads freed memory.
+/// `null` is NULL, and an empty array is an empty array.
+#[test]
+fn a_returned_string_array_is_copied_and_freed_on_both_backends() {
+    let source = r#"
+import type { c_int } from "c:types";
+/** @ntsFree owned_free */
+declare function owned(): string[];
+declare function freed_count(): c_int;
+declare function borrowed(which: c_int): string[] | null;
+export function run(): number {
+    const first = owned();
+    const second = owned();
+    const fixed = borrowed(1 as c_int);
+    const none = borrowed(2 as c_int);
+    return first.length * 100000 + second[1].length * 10000 + freed_count() * 1000
+        + (fixed === null ? 900 : fixed.length * 100 + (fixed[0] === "one" ? 10 : 0))
+        + (none === null ? 9 : none.length) + (borrowed(0 as c_int) === null ? 0 : 5000000);
+}
+"#;
+    let Some((dir, prepared)) = prepare("returned-strings", source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    assert!(text.contains("char * * owned(void)"), "an owned array is not `char **`");
+    assert!(text.contains("const char * const * borrowed(int)"), "a borrowed array is not `const char * const *`");
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("native.c"), RETURNED_STRINGS_LIBRARY).unwrap();
+    std::fs::write(
+        dir.join("caller.c"),
+        "#include \"program.h\"\n#include <stdio.h>\nint main(void) { printf(\"%.0f\\n\", run()); return 0; }\n",
+    )
+    .unwrap();
+    for file in ["native.c", "caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+    }
+    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+        let run = Command::new(dir.join(executable)).output().unwrap();
+        assert!(run.status.success(), "{executable}");
+        // Two elements; "βeta" is 4 units; freed twice; one borrowed "one";
+        // an empty array; NULL for `null`.
+        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "242110", "{executable}");
+    }
+}

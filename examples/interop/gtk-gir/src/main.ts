@@ -11,6 +11,8 @@
 //                 a key file loaded and read, and the `GError **` slot beside
 //                 each call was left null
 //   error-set 0   a missing key wrote a `GError` into that slot, which is freed
+//   split=a|b|c   `g_strsplit` returned a `char **`, copied into a `string[]`
+//                 and released by the binding's `g_strfreev`
 //   cast-ok       `asGtkBox` answers the box `gtk_box_new` returned as a widget
 //   cast-null     `asGtkLabel` answers null for that same box
 //   clicked 1     a typed signal handler, connected through the generated
@@ -44,6 +46,7 @@ import {
   g_key_file_load_from_data,
   g_key_file_new,
   g_key_file_unref,
+  g_strsplit,
   g_timeout_add_full,
   type GError,
 } from "c:GLib-2.0";
@@ -87,6 +90,8 @@ function outParameters(): void {
     error[0] = null;
   }
   g_key_file_unref(keys);
+
+  gir_log("split=" + g_strsplit("a,b,c", ",", -1 as c_int).join("|"));
 }
 
 function main(): void {

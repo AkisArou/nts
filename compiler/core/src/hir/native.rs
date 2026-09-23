@@ -75,6 +75,11 @@ pub struct ReturnedString {
     /// ownership="full"`; a hand-written binding should add it only where the
     /// library's documentation says the caller frees the result.
     pub free: Option<String>,
+    /// A NULL-terminated array of strings rather than one, returned as a
+    /// `string[]` and copied into one. The free function then takes the
+    /// array's own C type -- `g_strfreev(gchar **)` -- where a string's takes
+    /// `void *`, which is `g_free`'s and `free`'s.
+    pub array: bool,
 }
 
 /// What one C parameter of a foreign function receives.
@@ -1055,7 +1060,14 @@ impl Function {
             roles.push(Role::Plain);
         }
         let returns_string = if abi.is_none() { returned_string(snapshot, signature.return_type) } else { None };
-        let result = if returns_string.is_some() {
+        let returned_array = if abi.is_none() { returned_strings(snapshot, signature.return_type) } else { None };
+        let result = if returned_array.is_some() {
+            // Borrowed until `@ntsFree` says otherwise, which makes it
+            // `char **`: the rule a returned `string` follows, and GLib's own
+            // spelling of both.
+            let char = Pointee::Scalar(Scalar::Char);
+            Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char)))))))
+        } else if returns_string.is_some() {
             Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char))))
         } else {
             abi_type(signature.return_type)
@@ -1076,7 +1088,9 @@ impl Function {
             // that has the declaration node.
             declared_at: None,
             roles,
-            returns_string,
+            returns_string: returned_array
+                .map(|nullable| ReturnedString { nullable, free: None, array: true })
+                .or(returns_string),
         })
     }
 }
@@ -1697,8 +1711,27 @@ fn returned_string(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<ReturnedSt
     is_string(snapshot, ty).then(|| ReturnedString {
         nullable: !matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::String)),
         free: None,
+        array: false,
     })
 }
+/// A returned `string[]`, or `string[] | null` -- whether it is nullable --
+/// read from C's NULL-terminated `char **`.
+///
+/// Plain, where a parameter is `CStrings<Q>`: a result is the program's own
+/// value, so markers on it would follow it into every variable it is stored
+/// in. The spelling is decided the way a returned string's is instead.
+fn returned_strings(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<bool> {
+    let kind_of = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let is_array = |id: TypeId| matches!(kind_of(id), Some(TypeKind::Array(element)) if matches!(kind_of(*element), Some(TypeKind::String)));
+    if is_array(ty) {
+        return Some(false);
+    }
+    let TypeKind::Union(parts) = kind_of(ty)? else { return None };
+    let [a, b] = parts.as_slice() else { return None };
+    let null = |id: TypeId| matches!(kind_of(id), Some(TypeKind::Null));
+    ((null(*a) && is_array(*b)) || (null(*b) && is_array(*a))).then_some(true)
+}
+
 /// Whether `name` could be a C function's name: what `@ntsFree` may say.
 #[must_use]
 pub fn is_c_identifier(name: &str) -> bool {
