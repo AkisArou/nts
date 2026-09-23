@@ -12563,6 +12563,18 @@ impl<'a> FuncBuilder<'a> {
             .any(|child| self.kind_of(child) == Some(syntax::BLOCK))
     }
 
+    /// Whether this program defines the function a call resolved to, and so
+    /// whether the call is a direct one or a call to C.
+    ///
+    /// Through `implementation_of`, because the declaration a call resolves to
+    /// need not be the one with the body -- an overload signature has none,
+    /// and the implementation beside it does. `lower_call` chooses the callee
+    /// by it and `parameter_representation` types an `object` parameter by
+    /// it, so the two cannot disagree about an overloaded function.
+    fn defines(&self, declaration: NodeId) -> bool {
+        self.has_a_body(self.implementation_of(declaration))
+    }
+
     /// `what` is interpolated into a sentence, so it has to end in a noun.
     ///
     /// "a global this compiler does not provide" became "…does not provide is
@@ -14302,13 +14314,29 @@ impl<'a> FuncBuilder<'a> {
         // `object` at a call to a native declaration is C's `void *`: any
         // handle converts to it, and a managed value is refused by `coerce`,
         // which is what keeps a TypeScript object's heap address from C.
-        let native = self
+        //
+        // Two conditions, each the one the rest of the compiler already uses,
+        // because each was once got wrong here by asking a nearby question:
+        //
+        // - **Native** is what `lower_call` means by it: a `function` this
+        //   program declares and does not define. "No body" alone is not that
+        //   -- an interface's method signature has none either, and reading
+        //   it as C refused `hook.init(…, resource)` in `async_hooks.emitInit`.
+        // - **The C convention** is what `native::Function::from_signature`
+        //   maps `object` to `void *` under: no `@ntsAbi`. Under
+        //   `@ntsAbi managed` the object itself is passed, which is what
+        //   `nts_on_collected(resource, …)` takes.
+        let in_c = self
             .snapshot
             .call_targets
             .get(&call)
             .and_then(|target| target.callee)
-            .is_some_and(|declaration| !self.has_a_body(declaration));
-        if native && super::native::is_object_pointer(self.snapshot, ty) {
+            .is_some_and(|declaration| {
+                self.kind_of(declaration) == Some(syntax::FUNCTION_DECLARATION)
+                    && !self.defines(declaration)
+                    && self.node(declaration).native.as_ref().and_then(|n| n.abi.as_deref()).is_none()
+            });
+        if in_c && super::native::is_object_pointer(self.snapshot, ty) {
             return Some(HirType::NativePointer(super::native::Pointee::Void));
         }
         self.represent(ty)
@@ -38864,9 +38892,7 @@ impl<'a> FuncBuilder<'a> {
         // Methods did not have this because a method call takes its name from
         // the hierarchy rather than from the declaration; a plain function has
         // only the declaration to ask.
-        let defined = target
-            .callee
-            .is_some_and(|declaration| self.has_a_body(self.implementation_of(declaration)));
+        let defined = target.callee.is_some_and(|declaration| self.defines(declaration));
 
         // A callee with no declaration in the compiled set at all. A `declare
         // function` the *program* wrote is an FFI import and stays external --

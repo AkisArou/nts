@@ -891,6 +891,27 @@ export function run(): void { takes({ x: 1 }); }
         "a managed object reached a `void *`: {:?}",
         prepared.diagnostics
     );
+
+    // And only where C takes it. An interface's method signature has no body
+    // either, and reading that as C refused `async_hooks.emitInit`, which
+    // hands its `resource: object` to `hook.init` -- a TypeScript function.
+    let interface = r"
+interface Hook { init(resource: object): number }
+class Counter implements Hook { init(resource: object): number { return resource === null ? 0 : 1; } }
+export function run(): number { const hook: Hook = new Counter(); return hook.init({ x: 1 }); }
+";
+    let Some((_, prepared)) = prepare("object-interface", interface) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "a TypeScript method taking `object` was read as C: {:?}", prepared.diagnostics);
+
+    // Nor under `@ntsAbi managed`, whose convention passes the object itself:
+    // `async_hooks.registerDestroyHook` hands one to `nts_on_collected`.
+    let managed_abi = r"
+/** @ntsAbi managed */
+declare function keep(value: object): void;
+export function run(): void { keep({ x: 1 }); }
+";
+    let Some((_, prepared)) = prepare("object-managed-abi", managed_abi) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "an `@ntsAbi managed` object parameter was read as C: {:?}", prepared.diagnostics);
 }
 
 /// A downcast written as an assertion is refused by lowering.

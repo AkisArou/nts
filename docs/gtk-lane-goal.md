@@ -189,7 +189,15 @@ The binder's `*.refused.txt` is the queue.
 
 ## Rules this lane keeps
 
-These are inherited from `native-lane-goal.md` and not repeated here: two arms per claim, one variable per arm, explicit-path commits, three states for a gate verdict. Two are specific to GTK:
+These are inherited from `native-lane-goal.md` and not repeated here: two arms per claim, one variable per arm, explicit-path commits, three states for a gate verdict. Three are specific to GTK:
 
 - **`G_DEBUG=fatal-criticals` on every run.** A GTK critical is a line on stderr and the program continues, which is exactly the silently wrong answer the controls exist to catch.
 - **The shim is a ledger.** A function in `native/*.h` that outlives the capability it stood in for is the first thing to look for in review.
+- **A change to how calls lower is bracketed over `runtime/node`.** Every GTK
+  example calls C, so a rule about the C boundary is tested there only in the
+  direction that cannot hurt. `78d5eb8b` typed `object` as `void *` wherever
+  a callee had no body, which also caught an interface method and an
+  `@ntsAbi managed` runtime call: `async_hooks.emitInit` stopped compiling,
+  and with it callers in fs, http, net and timers, while every check this lane
+  ran stayed green. Build all node modules with the previous binary and the
+  new one (`NTS_ADDON_OUT` apart) and diff the refusals.
