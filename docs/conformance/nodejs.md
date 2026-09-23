@@ -3797,6 +3797,59 @@ things: a global to store the value in, and an *unbound* value to store, because
 `held.add` is not `held.add.bind(held)`. The fixture now carries an arm that
 separates them: a method reading no `this` still gets no global.
 
+### Correction, 2026-09-24: the head is four constructs, and I named it by reading
+
+The paragraph above says *a head named by reading is a guess with a number
+attached*, and then names one. **The 27 are not the method-value binding.** They
+wear one sentence because `storable` declines every module-scope name whose
+value is a function it cannot lay out, and that is a property of the *binding*
+rather than of what is bound. Opening all 27 declarations:
+
+    15  a CALL that returns a function
+        fs 13  `promisifyVoid(callbacks.access)` and its two relatives
+        util 2 `deprecate(...)`
+     6  a METHOD read off an instance          <- the construct named above
+        assert 5  `looseAssertions.ok`
+        events 1  `EventEmitter.setMaxListeners` (a static, not an instance)
+     4  a plain `export function`, with no initializer at all
+        events 3  `getEventListeners`, `getMaxListeners`, `listenerCount`
+        stream 1  `compose`
+     2  an ALIAS to a name declared elsewhere
+        util 1  `isDeepStrictEqual = compareDeepStrict` (an import)
+        timers 1 `now = nts_timers_now` (a `declare function`)
+
+So `blockers/a-method-exported-as-a-value` covers **6**, not 27, and the largest
+sub-shape by more than double is a *call returning a closure* — a different
+feature, with no receiver question in it at all.
+
+**And for 6 of the 27 the sentence is not merely imprecise, it is false.** The
+four `export function` rows have no initializer to fix any layout, and the two
+aliases fail for a root the compiler had already printed:
+
+    util  isDeepStrictEqual
+      says  a module-scope name holding a function, whose closure layout its
+            initializer does not fix
+      is    NTS1003 `isDeepStrictEqual` cannot be compiled because it calls
+            `objectPairs`, and a `new` of unrepresentable type (`Map<any, any>`)
+
+Bracketed rather than inferred: `export const g = f` for a local `f` publishes,
+and so does the same binding to an **imported** `f` — both verified in a probe
+— so neither the binding form nor the module edge is the cause. What is left is
+that the target did not compile, which is the reason to print. `timers.now`
+names a `declare function`, where *no function of that name was compiled* is the
+accurate sentence and already exists.
+
+`fs`'s 15 are the honest ones: no diagnostic names `promisifyVoid` at all, so
+for them the layout sentence is exactly right.
+
+**This is `record_unstorable_exports` preferring its own generic reason over a
+root recorded elsewhere — the same defect the cascade repair fixed one level
+in, in code I wrote in the same sitting.** Whoever takes it: the repair is to
+consult the initializer's own `uncompiled` entry before falling back to the
+storage sentence, and it re-attributes 6 declined exports without publishing
+any name. The axis measure is unchanged at **140 published names**, and no item
+in this section moves it.
+
 ## Eleven modules started compiling and not one gained a passing test
 
 Measured on `target/release/nts` at 15:39, pinned to scratch, from a worktree at

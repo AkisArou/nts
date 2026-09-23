@@ -90,6 +90,23 @@
 // the receiver, which is why a method whose body reads `this` is refused
 // outright at a read (`RECEIVER_IS_NOT_BOUND`). Both halves are independent:
 // `ignores` below reads no `this` and still gets no global.
+//
+// # What closing it is worth, measured 2026-09-24
+//
+// **Six declined exports**, not the 27 that `docs/conformance/nodejs.md` once
+// attributed here. The 27 share a *sentence*, because `storable` declines every
+// module-scope name whose value is a function it cannot lay out, and that is a
+// property of the binding rather than of what is bound. Opened one at a time
+// they are four constructs: 15 a call returning a function (`fs`'s
+// `promisifyVoid(callbacks.access)` family, and `util`'s two `deprecate(...)`),
+// **6 this one** (`assert` 5, plus `events`' `EventEmitter.setMaxListeners`,
+// which is a *static* read rather than an instance one), 4 a plain `export
+// function` with no initializer at all, and 2 an alias whose target was itself
+// refused.
+//
+// So the yield here is 6, the receiver question is real for 5 of them, and the
+// largest neighbour -- a call returning a closure, at 15 -- has no receiver
+// question in it at all and wants a different fixture.
 
 class Holder {
   base: number;
