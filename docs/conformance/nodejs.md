@@ -3516,9 +3516,24 @@ The 23 that really are an ordering question are almost all option bags --
 in, and tsgo lists a type's **own** members before its inherited ones, so
 `interface Wide extends Narrow` puts `Narrow`'s fields last and is not laid out
 with `Narrow` as a prefix. Classes do not have this problem, because
-`put_bases_first` already reorders a subclass against its base and remaps every
-access; interfaces do not go through it. That is the shape of a fix for this
-column, and it is a layout change, so it needs its own before-and-after.
+`put_bases_first` reorders a subclass against its base and remaps every access;
+interfaces do not go through it.
+
+**And laying interfaces out inherited-first is not the fix.** Record 0258 built
+exactly that, measured it, and reverted it: it bought four sites and cost
+**29 of 29 cases** in the fixture written for it, because `Object.keys` walks
+the layout's field order and JavaScript orders own string keys by insertion.
+`as_the_program_writes_them` is what stands there now -- the layout takes the
+order the program's *literals* write, which makes the extension case a prefix
+for free wherever a literal of that exact field set exists. These 23 sites are
+the types where none does, option bags being written partially by everyone who
+writes one.
+
+So this column is not waiting on a layout rule. It is waiting on what 0258
+names: **key order recorded per allocation site rather than read off the
+layout**, after which one order no longer has to serve two questions.
+`agreements/key-order-of-an-extended-interface` is the divergence that stays
+open until then.
 
 ### And the copy machinery covers one of five routes to an interface type
 

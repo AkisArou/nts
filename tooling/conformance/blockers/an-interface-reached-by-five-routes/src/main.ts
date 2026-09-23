@@ -60,6 +60,16 @@
 // lists its own members before its inherited ones and the supertype is
 // therefore not a prefix of the subtype.
 //
+// **Laying interfaces out inherited-first is not the fix for those either.**
+// Record 0258 built it, measured four sites bought and 29 of 29 key-order cases
+// lost, and reverted: `Object.keys` walks the layout's field order and
+// JavaScript orders own string keys by insertion. What stands there instead is
+// `as_the_program_writes_them`, which takes the order the program's literals
+// write -- and that makes the extension case a prefix for free wherever a
+// literal of exactly that field set exists. Option bags are written partially,
+// so for them none does. That column is waiting on key order recorded per
+// allocation site, which is the change 0258 names.
+//
 // Related: `blockers/a-method-through-a-structural-interface` is the same
 // question asked about *methods* and carries the reverted experiment that
 // inferred `implements` edges; `blockers/an-options-bag-widened-by-assignment`
