@@ -737,6 +737,103 @@ int main(void) { return run() == 111.0 ? 0 : 1; }
     }
 }
 
+/// A checked downcast answers the object when it is a `T` and null when it is
+/// not, on both backends; and the directions no check could make right are
+/// refused before any check runs.
+///
+/// The class system is a fake one in C -- a `kind` in each object's first
+/// field -- so the test does not need GTK. What it checks is the compiler's
+/// half: that `is` true yields the same address as the requested type, `is`
+/// false and a null value yield null, and a sideways cast or an upcast is
+/// refused however `is` was computed.
+#[test]
+fn an_unsafe_downcast_follows_its_check_and_refuses_what_no_check_can_fix() {
+    let source = r#"
+import type { Class, c_int } from "c:types";
+import { unsafeDowncast } from "c:memory";
+type Obj = Class<"_Obj">;
+type Widget = Class<"_Widget", Obj>;
+type Box = Class<"_Box", Widget>;
+declare function make(kind: c_int): Widget | null;
+declare function kind_of(o: Obj): c_int;
+declare function box_items(b: Box): c_int;
+function asBox(w: Widget | null): Box | null {
+    return unsafeDowncast<Box>(w, w !== null && kind_of(w) === 1);
+}
+export function run(kind: number): number {
+    const b = asBox(make(kind as c_int));
+    return b === null ? -1 : box_items(b);
+}
+"#;
+    let Some((dir, prepared)) = prepare("downcast", source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("native.c"), r"
+#include <stddef.h>
+struct _Obj { int kind; };
+struct _Widget { struct _Obj parent; };
+struct _Box { struct _Widget parent; int items; };
+static struct _Box a_box = { { { 1 } }, 42 };
+static struct _Widget a_label = { { 2 } };
+struct _Widget *make(int kind) {
+    return kind == 1 ? &a_box.parent : kind == 2 ? &a_label : NULL;
+}
+int kind_of(struct _Obj *o) { return o->kind; }
+int box_items(struct _Box *b) { return b->items; }
+").unwrap();
+    std::fs::write(dir.join("caller.c"), r#"
+#include "program.h"
+int main(void) {
+    if (run(1) != 42.0) return 1;  /* a box, read through as one */
+    if (run(2) != -1.0) return 2;  /* a label is not a box */
+    if (run(3) != -1.0) return 3;  /* null is not a box */
+    return 0;
+}
+"#).unwrap();
+    for file in ["native.c", "caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+    }
+    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+        let status = Command::new(dir.join(executable)).status().unwrap();
+        assert!(status.success(), "{executable}: arm {:?}", status.code());
+    }
+
+    for (label, cast) in [
+        ("sideways", "unsafeDowncast<Label>(b, true)"),
+        ("upward", "unsafeDowncast<Obj>(b, true)"),
+    ] {
+        let refused = format!(
+            r#"
+import type {{ Class }} from "c:types";
+import {{ unsafeDowncast }} from "c:memory";
+type Obj = Class<"_Obj">;
+type Widget = Class<"_Widget", Obj>;
+type Box = Class<"_Box", Widget>;
+type Label = Class<"_Label", Widget>;
+declare function a_box(): Box;
+export function run(): boolean {{
+    const b = a_box();
+    return {cast} === null;
+}}
+"#
+        );
+        let Some((_, prepared)) = prepare(&format!("downcast-{label}"), &refused) else { return; };
+        assert!(
+            prepared.diagnostics.iter().any(|d| d.message.contains("not below it on its declared chain")),
+            "{label}: {:?}",
+            prepared.diagnostics
+        );
+    }
+}
+
 /// A downcast written as an assertion is refused by lowering.
 ///
 /// TypeScript accepts `widget as GtkButton`: the two types overlap, which is

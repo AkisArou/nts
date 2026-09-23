@@ -9,4 +9,6 @@ declare module "c:text" {
   export function text_length(s: string): c_int;
   export function text_byte(s: string, at: c_int): c_int;
   export function text_total(s: string): c_uint;
+  /** `string | null`: a null string is a NULL `const char *`. */
+  export function text_is_null(s: string | null): c_int;
 }

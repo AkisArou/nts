@@ -1,4 +1,4 @@
-import { text_byte, text_length, text_total } from "c:text";
+import { text_byte, text_is_null, text_length, text_total } from "c:text";
 import type { c_int } from "c:types";
 
 // Built at run time rather than written as one literal, so the string C sees
@@ -46,4 +46,11 @@ export function many(count: number): number {
     total = text_total("n" + String(i % 10));
   }
   return total;
+}
+
+// `string | null`: C receives NULL for null, and a string for a string --
+// including an empty one, which is not NULL.
+export function nullIsNull(which: number): number {
+  const s = which === 0 ? null : which === 1 ? "" : "text";
+  return text_is_null(s);
 }

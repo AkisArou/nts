@@ -14,4 +14,7 @@ int text_byte(const char *s, int at);
 // something observable that the optimiser cannot drop.
 unsigned text_total(const char *s);
 
+// 1 when C received NULL, 0 when it received a string.
+int text_is_null(const char *s);
+
 #endif

@@ -1,6 +1,6 @@
 //! Native places are addresses. Member access and addrOf share this path so
 //! evaluating a receiver never performs an accidental aggregate copy/load.
-use super::{Diagnostic, FuncBuilder, HirType, NodeId, OpKind, Place, ValueId};
+use super::{Branch, Diagnostic, FuncBuilder, HirType, NodeId, OpKind, Place, ValueId};
 use crate::hir::native::Pointee;
 use nts_semantic_schema::{LiteralValue, TypeKind, syntax};
 
@@ -242,6 +242,57 @@ impl FuncBuilder<'_> {
 }
 
 impl FuncBuilder<'_> {
+    /// `unsafeDowncast<T>(value, is)`: `is ? (T *)value : NULL`.
+    ///
+    /// The conversion is a `Convert` producing a new value, not a relabel of
+    /// `value`: the result is a second reference to the same object, and a
+    /// handle family that counts references (Objective-C's) has to see two.
+    /// The check the compiler can make is made here -- `T` strictly below
+    /// `value`'s type on its declared chain -- and the one it cannot, whether
+    /// the object is a `T`, is the caller's `is`.
+    ///
+    /// **Handles only, and that refusal is what makes trusting `is` sound.** An
+    /// opaque handle has no layout this program reads, so a wrong `is` yields a
+    /// wrongly typed pointer that the library's own checks reject -- not a read
+    /// at an offset the compiler fabricated. Extend this to a laid-out record
+    /// and a false `is` becomes a field read from the wrong place, the failure
+    /// `blockers/an-intersection-from-an-in-narrowing` exists to stop.
+    pub(super) fn native_downcast(&mut self, id: NodeId, args: &[NodeId]) -> Result<ValueId, Diagnostic> {
+        let [value, is] = args else {
+            return Err(self.unsupported(id, "unsafeDowncast takes a handle and the check that it is a `T`"));
+        };
+        let value = self.lower_expression(*value)?;
+        let is = self.lower_expression(*is)?;
+        let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "a downcast"))?;
+        let handle = |pointee: &Pointee| match pointee {
+            Pointee::Opaque(handle) => Some(handle.clone()),
+            Pointee::Const(inner) => match &**inner {
+                Pointee::Opaque(handle) => Some(handle.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        let (HirType::NativePointer(from), HirType::NativePointer(to)) = (&self.values[value.0 as usize].ty, &ty) else {
+            return Err(self.unsupported(id, "unsafeDowncast between types that are not both handles"));
+        };
+        let (Some(from), Some(to)) = (handle(from), handle(to)) else {
+            return Err(self.unsupported(id, "unsafeDowncast between types that are not both handles"));
+        };
+        if !to.upcasts_to(&from) {
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "unsafeDowncast from `{}` to `{}`, which is not below it on its declared chain",
+                    from.tag, to.tag
+                ),
+            ));
+        }
+        let origin = self.origin(id);
+        let converted = self.push(OpKind::Convert(value), ty.clone(), origin.clone());
+        let absent = self.push(OpKind::ConstNull, ty.clone(), origin);
+        self.lower_branching_value_at(id, ty, is, Branch::Value(converted), Branch::Value(absent))
+    }
+
     pub(super) fn native_storage(&mut self, id: NodeId, operation: &str, args: &[NodeId]) -> Result<ValueId, Diagnostic> {
         if operation == "sizeof" {
             if self.type_of(id) != Some(HirType::NUMBER) { return Err(self.unsupported(id, "sizeof must return a number")); }

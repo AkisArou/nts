@@ -46,6 +46,9 @@ int main(int argc, char **argv) {
   expect("lone surrogate 1", loneByte(1), 0xBF);
   expect("lone surrogate 2", loneByte(2), 0xBD);
   expect("latin-1 as utf-8", latinLength(), 3);
+  expect("null is NULL", nullIsNull(0), 1);
+  expect("empty is not NULL", nullIsNull(1), 0);
+  expect("text is not NULL", nullIsNull(2), 0);
   if (failures)
     return 1;
   printf("strings cross to C as UTF-8: OK\n");

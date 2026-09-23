@@ -1043,12 +1043,6 @@ impl Function {
     }
 }
 
-/// Whether a declared parameter is a plain TypeScript `string`.
-///
-/// Plain only. `string | null` would be a NULL-able `const char *`, and it is
-/// refused until the representation of a nullable string at a call is
-/// checked rather than assumed -- a union may reach here as an erased value,
-/// which is not the `NtsString *` the conversion reads.
 /// What the callee keeps of each parameter, as far as the declaration says.
 ///
 /// A scoped closure is called only during the call and its context is released
@@ -1148,8 +1142,27 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, bool)> {
     Some((function?, scoped?))
 }
 
+/// Whether a declared parameter is a TypeScript `string`, or `string | null`.
+///
+/// Both lower to a string reference, `null` as the null one -- checked with
+/// `nts hir`, not assumed: `string | null` is `managed<str>` and its `null`
+/// is `const null : managed<str>`. The conversion maps a null string to a null
+/// `const char *`, which is what C's "nullable" means. `string | undefined` is
+/// not the same: two absences make it an erased value, which is not the
+/// `NtsString *` the conversion reads, so it is left refused.
 fn is_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::String))
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    match kind(ty) {
+        Some(TypeKind::String) => true,
+        Some(TypeKind::Union(parts)) => {
+            let [a, b] = parts.as_slice() else { return false };
+            matches!(
+                (kind(*a), kind(*b)),
+                (Some(TypeKind::String), Some(TypeKind::Null)) | (Some(TypeKind::Null), Some(TypeKind::String))
+            )
+        }
+        _ => false,
+    }
 }
 
 /// The element type of a rest parameter, which is the type of each argument

@@ -47,6 +47,10 @@ declare module "c:types" {
   // has the context and no destroy function -- and it is released after.
   export type Closure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "retained" };
   export type ScopedClosure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "scoped" };
+  // A handle read-only through this view: C's `const GtkBitset *`. A plain
+  // handle is assignable to it, and the C prototype says `const`, which is
+  // what the header declares and so what the witness compares against.
+  export type Const<H extends ClassChain | Opaque<string>> = H & { readonly __c_const?: true };
   // What a `Class` is, for the constraint above; not a type to write.
   export type ClassChain = { readonly __c_chain: readonly string[] };
   // A parent's tags, without the rest element that keeps the chain open.
@@ -317,6 +321,23 @@ declare module "c:memory" {
   // cannot see that.
   /** @ntsAbi intrinsic */
   export function copy<T>(destination: Ptr<T>, source: ConstPtr<T>): void;
+  // `value` as the handle type `T` when `is` holds, and `null` otherwise:
+  // a downcast along a declared `Class` hierarchy, `GTK_BOX(w)` with its
+  // check made explicit.
+  //
+  // **`is` is the caller's claim, and nothing ties it to `value`**, which is
+  // what the name says. The object system answers it --
+  // `g_type_check_instance_is_a` for GObject, `isKindOfClass:` for
+  // Objective-C -- and a binding generator writes one checked helper per class
+  // (`asGtkBox(v)`) so that application code never calls this. The compiler
+  // checks what it can: `T` must be a strict descendant of `value`'s type, so
+  // a sideways or unrelated cast is refused however `is` was computed. A null
+  // `value` answers null, as both runtimes' checks do for one.
+  /** @ntsAbi intrinsic */
+  export function unsafeDowncast<T extends import("c:types").ClassChain>(
+    value: import("c:types").ClassChain | null,
+    is: boolean,
+  ): T | null;
 }
 
 // Type aliases only: every export here renames a brand `c:types` already

@@ -31,6 +31,25 @@ pub fn pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     pointer_within(snapshot, ty, &mut Vec::new())
 }
 
+/// An opaque pointee: `Opaque<Tag>`, or `Class<Tag, Parent>` with its chain.
+fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
+    if let Some(tag) = marker(snapshot, ty, "___c_opaque") {
+        return Some(Pointee::Opaque(text(snapshot, tag)?.into()));
+    }
+    // `Class<Tag, Parent>` -- an opaque pointee with a hierarchy. The chain is
+    // a tuple of string literals, root first, ending in a `...string[]` rest,
+    // which the snapshot flattens to one trailing `string` element: the tags
+    // are the literal prefix and the last of them is this handle's own.
+    let chain = marker(snapshot, ty, "___c_chain")?;
+    let TypeKind::Tuple(elements) = &snapshot.types.get(chain.0 as usize)?.kind else {
+        return None;
+    };
+    let mut tags: Vec<String> =
+        elements.iter().map_while(|element| text(snapshot, *element).map(str::to_owned)).collect();
+    let tag = tags.pop()?;
+    Some(Pointee::Opaque(super::Handle { tag, ancestors: tags }))
+}
+
 /// A `Struct<...>` describes native storage; constructing its phantom marker as a
 /// managed JS object is not constructing that storage.
 #[must_use]
@@ -53,23 +72,12 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         let payload = if is_null(*a) { *b } else if is_null(*b) { *a } else { return None; };
         return pointer_within(snapshot, payload, visiting);
     }
-    if let Some(tag) = marker(snapshot, ty, "___c_opaque") {
-        return Some(Pointee::Opaque(text(snapshot, tag)?.into()));
-    }
-    // `Class<Tag, Parent>` -- an opaque pointee with a hierarchy. The chain is
-    // a tuple of string literals, root first, ending in a `...string[]` rest,
-    // which the snapshot flattens to one trailing `string` element: the tags
-    // are the literal prefix and the last of them is this handle's own.
-    if let Some(chain) = marker(snapshot, ty, "___c_chain") {
-        let TypeKind::Tuple(elements) = &snapshot.types.get(chain.0 as usize)?.kind else {
-            return None;
-        };
-        let mut tags: Vec<String> = elements
-            .iter()
-            .map_while(|element| text(snapshot, *element).map(str::to_owned))
-            .collect();
-        let tag = tags.pop()?;
-        return Some(Pointee::Opaque(super::Handle { tag, ancestors: tags }));
+    if let Some(handle) = handle(snapshot, ty) {
+        // `Const<H>` -- the same handle, read-only through this view: C's
+        // `const GtkBitset *`. The marker is optional, so a plain handle is
+        // assignable to it, which is C's own qualification conversion.
+        let constant = property(snapshot, ty, "___c_const").is_some_and(|p| p.optional && p.readonly);
+        return Some(if constant { Pointee::Const(Box::new(handle)) } else { handle });
     }
     // `Flexible<T>` -- `T name[]`, storage with no extent. Read before the
     // pointer cases for the reason the others are: it is the thing a pointer to

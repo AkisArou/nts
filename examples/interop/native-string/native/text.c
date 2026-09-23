@@ -18,3 +18,5 @@ unsigned text_total(const char *s) {
     total += *p;
   return total;
 }
+
+int text_is_null(const char *s) { return s == NULL; }
