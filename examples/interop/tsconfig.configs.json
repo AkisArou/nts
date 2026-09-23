@@ -16,6 +16,7 @@
   },
   "files": [
     "c-from-ts/nts.config.ts",
+    "library-module-state/nts.config.ts",
     "native-buffer/nts.config.ts",
     "native-callback/nts.config.ts",
     "native-copy/nts.config.ts",
