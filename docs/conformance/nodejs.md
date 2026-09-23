@@ -3724,8 +3724,8 @@ different axis from every refusal this document ranks, and it was invisible
 because those wrapper lines do not say "it calls X" and the old ranking only
 followed sentences that did.
 
-**`assert`'s 19 are one shape, and `assert` publishes nothing today.** Its whole
-API is
+**`assert` publishes nothing today, and its exports are not one shape — that
+claim was wrong and is corrected two sections below.** Its API is written as
 
 ```ts
 export class Assert { deepStrictEqual(this: Assert | void, …): void { … } }
@@ -3746,6 +3746,56 @@ inside `asRequest`, whose `uncompiled` entry was recorded under a name no caller
 used, so all 67 of its references printed `which was refused above`. The root is
 `blockers/a-capture-narrowed-by-an-assertion`, and the previous plan set it
 aside as "3+ links deep" on evidence that could not have shown otherwise.
+
+### Correction: `assert`'s exports are fourteen causes, not one
+
+The section above read `assert`'s twenty uniform-looking lines of
+`export const x = looseAssertions.x` and called them one shape. **They are
+fourteen distinct causes**, and the compiler could not say so until
+`c90e8acc` published a reason it had already worked out.
+
+`storable` declines a module-scope binding whose closure layout its initializer
+does not fix, and records that sentence in `ModuleScope::unsupported`. That map
+has six readers and every one lowers a *read* of the name; an export is not a
+read, so the wrapper fell through to *is exported and is not a function this
+backend can name* — a sentence about a function, saying it is not one. Publishing
+the reason under the name an importer writes:
+
+    wrapper lines reading "is not a function this backend can name"   38 -> 17
+
+and `assert`'s 24 declined exports resolve as
+
+     5  a module-scope name holding a function, whose closure layout its
+        initializer does not fix
+     4  a property `stackStartFn` of unrepresentable type (a union of
+        `CallableFunction` | undefined)
+     2  a rest parameter position of unrepresentable type (a tuple)
+     2  a parameter of unrepresentable type (`PromiseLike` | a function type)
+     2  an erased value where a concrete representation is wanted
+     9  one each, including `arguments`, `RegExp`, `ArrayLike` and an
+        `instanceof` with no class
+
+**The lesson is the one this document keeps relearning at a different scale.**
+Reading the source told me the shape; only the compiler could tell me the cause,
+and it could not until somebody published what it knew. A head named by reading
+is a guess with a number attached.
+
+The queue re-ranked on the same run:
+
+    27  a module-scope name holding a function, whose closure layout …
+        fs 13, assert 5, events 4, util 3
+    23  an erased value where a concrete representation is wanted
+    17  is exported and is not a function this backend can name
+    17  takes an object
+    16  it calls `uvException`, and a `UVExceptionError` where a `UVError` …
+    13  is a namespace member whose function was not compiled
+    13  a call inside a `try`, whose `throw` would not reach this handler
+
+The new head is the method-value binding itself, at 27 across four modules —
+which is `blockers/a-method-exported-as-a-value`, and it is **two** independent
+things: a global to store the value in, and an *unbound* value to store, because
+`held.add` is not `held.add.bind(held)`. The fixture now carries an arm that
+separates them: a method reading no `this` still gets no global.
 
 ## Eleven modules started compiling and not one gained a passing test
 
