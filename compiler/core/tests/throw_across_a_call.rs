@@ -14,8 +14,10 @@
 //!   - a plain function callee compiles, and its copy is emitted;
 //!   - a **method** callee still refuses — `function_copies` is consulted for
 //!     function declarations and a method has no copy to name;
-//!   - a callee that merely *passes a throw on* still refuses, because its copy
-//!     would call the plain callee and end the program anyway.
+//!   - a callee that merely *passes a throw on* compiles too, through a copy of
+//!     it and of what it calls — the copy set is closed over what a copy
+//!     reaches, and `Throwing::copyable` is the greatest fixpoint that makes
+//!     closing it safe.
 //!
 //! What the refusal must *not* reach is still the greater part of this test.
 //! Three shapes that work were broken by two successive versions of it: a
@@ -72,12 +74,30 @@ fn a_call_that_can_throw_compiles_through_a_raising_copy() {
     );
 }
 
-/// What still refuses, and for the two stated reasons rather than for any
-/// reason at all.
+/// A callee that only *passes a throw on*: compiled, through a copy of it and a
+/// copy of what it calls.
 ///
-/// By count *and* by message: the old version of this test asserted the whole
-/// diagnostic list was one string, which is the assertion that catches a
-/// refusal arriving from somewhere else entirely.
+/// Three frames as well as two, because two is satisfied by a closure that runs
+/// one round and stops.
+#[test]
+fn a_chain_of_callees_compiles_through_copies_of_each() {
+    let Some(lowered) = lowered() else {
+        return;
+    };
+    for name in ["crossingTwoFrames", "crossingThreeFrames"] {
+        assert!(compiled(&lowered, name), "{name} is emitted");
+    }
+    for name in ["passesItOn@raises", "passesItOnAgain@raises"] {
+        assert!(compiled(&lowered, name), "{name} is emitted");
+    }
+}
+
+/// What still refuses, and for the stated reason rather than for any reason at
+/// all.
+///
+/// By message *and* by count: asserting the whole diagnostic list is one string
+/// is what catches a refusal arriving from somewhere else entirely, and what
+/// catches a second one appearing when a copy stops being made.
 #[test]
 fn a_callee_with_no_copy_is_still_refused() {
     let Some(lowered) = lowered() else {
@@ -90,19 +110,12 @@ fn a_callee_with_no_copy_is_still_refused() {
         .collect();
     assert_eq!(
         reasons,
-        vec![
-            "a call inside a `try`, whose `throw` would not reach this handler is not supported by this lowering yet",
-            "a call inside a `try`, whose `throw` would not reach this handler is not supported by this lowering yet",
-        ],
-        "two refusals, naming the calls"
+        vec!["a call inside a `try`, whose `throw` would not reach this handler is not supported by this lowering yet"],
+        "one refusal, naming the call"
     );
     assert!(
         !compiled(&lowered, "crossingAMethod"),
         "a method callee has no raising copy"
-    );
-    assert!(
-        !compiled(&lowered, "crossingTwoFrames"),
-        "a callee that passes a throw on has none either"
     );
 }
 

@@ -678,7 +678,18 @@ profile() {
   #                            1305 -> 1298 -- and one more *published* name,
   #                            139 -> 140, which is the first time that
   #                            number has moved in this lane's memory.
-  ceiling=14700
+  #     2026-09-23   14695   <- a `catch` catches what its callee threw, through
+  #                            a raising copy of the callee (record 0343).
+  #                            **Sites 1298 -> 1284 while occurrences rose**,
+  #                            and the two disagree for a structural reason
+  #                            rather than an interesting one: a copy is a body,
+  #                            so every refusal inside a copied function is
+  #                            reported once more. Definitions are identical
+  #                            module for module, which is what says the rise is
+  #                            a second reading rather than a second defect.
+  #                            Read the site count for this feature; this number
+  #                            will drift up as more callees become copyable.
+  ceiling=14750
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the

@@ -2864,19 +2864,29 @@ fn presence_keys(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> rustc_hash
 /// happen somewhere else entirely.
 /// Which symbols can raise, and which of them raise **only by themselves**.
 ///
-/// `any` is the transitive closure a `try` consults. `self_contained` is the
-/// subset whose every `throw` is written in its own body and which calls
-/// nothing that can raise -- the ones a [raising copy](FuncBuilder::raises) can
-/// be made of today, because such a copy's own calls all reach originals and an
-/// original ends the program.
+/// `any` is the transitive closure a `try` consults. `copyable` is the subset a
+/// [raising copy](FuncBuilder::raises) can be made of, and it is a **greatest**
+/// fixpoint rather than a least one:
 ///
-/// Splitting them is the whole of the bound on this feature: a function that
-/// raises *through* a callee needs that callee copied too, and the copy of a
-/// copy is a fixpoint this does not yet run. What is outside the subset keeps
-/// the refusal, which is the same answer it has had all along.
+/// > `f` is copyable when `f` is a plain function this compiler can copy, and
+/// > every callee of `f` that can raise is itself copyable.
+///
+/// Optimistic, then shrunk. A least fixpoint would have to start from functions
+/// that call nothing and grow, which admits a caller before it has established
+/// its callees; this starts by assuming every plain thrower qualifies and
+/// removes any that reaches one that does not. **The direction is the whole of
+/// the soundness argument**: a copy whose own call reached a *plain* callee
+/// would end the program from inside a `try` that compiled, which is a wrong
+/// answer where the refusal was merely a refusal.
+///
+/// An unresolved callee disqualifies: what it reaches is exactly what cannot be
+/// established here, and it is already the reason its caller is in `any`.
+///
+/// Recursion stays in. `f` calling `f` is satisfied by `f` being copyable,
+/// which is what the greatest fixpoint gives and a least one would not.
 struct Throwing {
     any: rustc_hash::FxHashSet<u32>,
-    self_contained: rustc_hash::FxHashSet<u32>,
+    copyable: rustc_hash::FxHashSet<u32>,
 }
 
 /// The function a declaration *is*, following a `const` to its initialiser.
@@ -2983,7 +2993,6 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
             calls.insert(symbol, reached);
         }
     }
-    let direct = throws.clone();
     let mut set = throws;
     // An unresolved callee is unbounded, so its caller joins the set at once.
     for (symbol, reached) in &calls {
@@ -3018,24 +3027,70 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
             set.insert(u32::try_from(index).unwrap_or(u32::MAX));
         }
     }
-    // Every `throw` in its own body, and no call that could bring another.
-    // `direct` rather than `set`, because `set` has already absorbed everything
-    // reachable and would answer yes to a function that only passes one on.
-    let self_contained = direct
+    let copyable = copyable_symbols(snapshot, probe, &set, &calls);
+    Throwing { any: set, copyable }
+}
+
+/// The greatest fixpoint [`Throwing::copyable`] describes.
+///
+/// Optimistic -- every raiser this compiler could copy at all -- and then
+/// shrunk by removing any that reaches a raiser which is not itself in the set.
+/// A function that only *passes a throw on* belongs here, provided what it
+/// passes on from does, which is why the start is `raises` rather than
+/// `throws`.
+fn copyable_symbols(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    raises: &rustc_hash::FxHashSet<u32>,
+    calls: &rustc_hash::FxHashMap<u32, Vec<Option<u32>>>,
+) -> rustc_hash::FxHashSet<u32> {
+    let mut copyable: rustc_hash::FxHashSet<u32> = raises
         .iter()
-        .filter(|symbol| {
-            calls.get(*symbol).is_none_or(|reached| {
-                reached
-                    .iter()
-                    .all(|called| called.is_some_and(|called| !set.contains(&called)))
-            })
-        })
+        .filter(|symbol| can_be_copied(snapshot, probe, **symbol))
         .copied()
         .collect();
-    Throwing {
-        any: set,
-        self_contained,
+    loop {
+        let losing: Vec<u32> = copyable
+            .iter()
+            .filter(|symbol| {
+                calls.get(*symbol).is_some_and(|reached| {
+                    reached.iter().any(|called| match called {
+                        None => true,
+                        Some(called) => raises.contains(called) && !copyable.contains(called),
+                    })
+                })
+            })
+            .copied()
+            .collect();
+        if losing.is_empty() {
+            return copyable;
+        }
+        for symbol in losing {
+            copyable.remove(&symbol);
+        }
     }
+}
+
+/// Whether a symbol's declaration is one `function_copies` can make a copy of.
+///
+/// A plain `function`, not generic and not `async`. A method, a constructor and
+/// an accessor are copied by nothing -- `function_copies` is consulted for
+/// `FUNCTION_DECLARATION`s -- and a generic's suffix is already spoken for. An
+/// `async` function never raises synchronously, so it is not this question at
+/// all.
+fn can_be_copied(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol: u32) -> bool {
+    let Some(record) = snapshot.symbols.get(symbol as usize) else {
+        return false;
+    };
+    let mut declarations = record.declarations.iter().map(|at| the_function_of(probe, *at));
+    declarations.any(|declaration| {
+        probe.kind_of(declaration) == Some(syntax::FUNCTION_DECLARATION)
+            && !is_generic_function(snapshot, declaration)
+            && !probe
+                .node(declaration)
+                .modifiers
+                .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+    })
 }
 
 /// What a raising copy's name ends in.
@@ -3075,28 +3130,93 @@ fn raising_copies(
     probe: &FuncBuilder,
     throwing: &Throwing,
 ) -> rustc_hash::FxHashSet<NodeId> {
-    let called_from_a_try = calls_guarded_by_a_try(snapshot, probe);
-    let mut copies = rustc_hash::FxHashSet::default();
-    for symbol in &throwing.self_contained {
+    // Which declarations a copy could be made of at all. By node rather than by
+    // symbol, and that is not a detail: `function_copies` is keyed on the node a
+    // call resolves to, and a symbol with two declarations -- an overload
+    // signature and its implementation -- answers `copyable` for one of them.
+    // A copy whose callee resolved to the other would be left calling the plain
+    // function, which ends the program from inside a `try` that compiled.
+    let mut eligible: rustc_hash::FxHashSet<NodeId> = rustc_hash::FxHashSet::default();
+    for symbol in &throwing.copyable {
         let Some(record) = snapshot.symbols.get(*symbol as usize) else {
             continue;
         };
         for declaration in &record.declarations {
-            if probe.kind_of(*declaration) != Some(syntax::FUNCTION_DECLARATION)
-                || is_generic_function(snapshot, *declaration)
-                || probe
-                    .node(*declaration)
-                    .modifiers
-                    .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
-            {
-                continue;
+            let declaration = the_function_of(probe, *declaration);
+            if probe.kind_of(declaration) == Some(syntax::FUNCTION_DECLARATION) {
+                eligible.insert(declaration);
             }
-            if called_from_a_try.contains(declaration) {
-                copies.insert(*declaration);
+        }
+    }
+    // And shrunk over the *bodies*, which is the same greatest fixpoint
+    // `Throwing::copyable` runs one level up and the only one that can see what
+    // a declaration actually calls. Asked with the predicate
+    // `calls_compiled_code` uses, so that what a copy may contain and what a
+    // `try` may contain are one rule: an indirect callee counts as able to
+    // raise, because what it reaches is exactly what cannot be established.
+    loop {
+        let losing: Vec<NodeId> = eligible
+            .iter()
+            .filter(|declaration| {
+                calls_in_the_body_of(probe, **declaration)
+                    .into_iter()
+                    .any(|call| !a_copy_can_contain(snapshot, probe, throwing, &eligible, call))
+            })
+            .copied()
+            .collect();
+        if losing.is_empty() {
+            break;
+        }
+        for declaration in losing {
+            eligible.remove(&declaration);
+        }
+    }
+    // Seeded by what a `try` reaches, then closed over what those reach: a copy
+    // names its callees' copies, so a callee of a copy needs one too.
+    let mut copies: rustc_hash::FxHashSet<NodeId> = calls_guarded_by_a_try(snapshot, probe)
+        .into_iter()
+        .filter(|declaration| eligible.contains(declaration))
+        .collect();
+    let mut pending: Vec<NodeId> = copies.iter().copied().collect();
+    while let Some(declaration) = pending.pop() {
+        for call in calls_in_the_body_of(probe, declaration) {
+            let Some(callee) = snapshot.call_targets.get(&call).and_then(|it| it.callee) else {
+                continue;
+            };
+            if eligible.contains(&callee) && copies.insert(callee) {
+                pending.push(callee);
             }
         }
     }
     copies
+}
+
+/// Whether a raising copy may contain this call: it cannot raise, or the copy
+/// it would name exists.
+fn a_copy_can_contain(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    throwing: &Throwing,
+    eligible: &rustc_hash::FxHashSet<NodeId>,
+    call: NodeId,
+) -> bool {
+    let Some(callee) = probe.children(call).first().copied() else {
+        return true;
+    };
+    // No symbol is an indirect callee -- `fns[0]()`, `this.handler()` -- and
+    // what it reaches cannot be known. `calls_compiled_code` calls that able to
+    // raise and so does this.
+    let Some(symbol) = probe.node(callee).symbol else {
+        return false;
+    };
+    if !throwing.any.contains(&symbol.0) {
+        return true;
+    }
+    snapshot
+        .call_targets
+        .get(&call)
+        .and_then(|target| target.callee)
+        .is_some_and(|declaration| eligible.contains(&declaration))
 }
 
 /// Every declaration a `try` body calls, anywhere in the program.
@@ -24414,7 +24534,6 @@ impl<'a> FuncBuilder<'a> {
         // and is followed by a test. Recorded before the body is lowered,
         // because `push_call` reads both while it walks it.
         for call in handled {
-            self.generic_calls.insert(call, RAISING_SUFFIX.to_owned());
             self.raising_calls.insert(call);
         }
         // The children are the block, an optional catch clause, and an optional
@@ -35225,6 +35344,29 @@ impl<'a> FuncBuilder<'a> {
             .find_map(|child| self.call_within(child, handled))
     }
 
+    /// Whether this call names a raising copy, as a suffix to append.
+    ///
+    /// Two sources, and they are the two halves of the invariant on
+    /// [`Self::raises`]. A `try` registers the calls in its own body, which is
+    /// what lets an ordinary function reach a copy at all. **And a raising copy
+    /// names copies throughout its body**, guarded or not: a call it leaves
+    /// plain would end the program from inside a `try` that compiled, which is
+    /// the one outcome worse than the refusal this replaced.
+    ///
+    /// `Throwing::copyable` is what makes the second safe -- a copy exists for
+    /// every raiser a copy can reach, by construction -- and
+    /// `has_a_raising_copy` is still asked, because a callee that cannot raise
+    /// has no copy and wants none.
+    ///
+    /// One function rather than a set the naming reads and the test reads
+    /// again: the two answering differently is a call that names a copy and
+    /// does not test, or tests and does not name one.
+    fn raising_suffix_of(&self, call: NodeId) -> &'static str {
+        let names_one = self.raising_calls.contains(&call)
+            || (self.raises && self.has_a_raising_copy(call));
+        if names_one { RAISING_SUFFIX } else { "" }
+    }
+
     /// Whether this call's callee is a plain function with a raising copy.
     ///
     /// The call's *resolved* declaration, not the name at the site: an
@@ -38488,7 +38630,9 @@ impl<'a> FuncBuilder<'a> {
         // suffix is what tells them apart.
         let name = format!(
             "{name}{}",
-            self.generic_calls.get(&id).map_or("", String::as_str)
+            self.generic_calls
+                .get(&id)
+                .map_or_else(|| self.raising_suffix_of(id), String::as_str)
         );
 
         // A callee inside the compiled program becomes a static call; one outside
@@ -38808,7 +38952,7 @@ impl<'a> FuncBuilder<'a> {
     /// flag set for this function's own caller to find. That is reachable only
     /// inside a raising copy, whose callers all test -- see [`Self::raises`].
     fn test_for_a_raise(&mut self, id: NodeId) {
-        if !self.raising_calls.contains(&id) {
+        if self.raising_suffix_of(id).is_empty() {
             return;
         }
         let origin = self.origin(id);

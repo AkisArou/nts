@@ -59,11 +59,6 @@ path that does not use a `try` is zero.
 
 ## What it does not reach, and why the bound is where it is
 
-- **A callee that merely passes a throw on.** Its copy would call the plain
-  callee, which ends the program -- a `try` that compiles and still does not
-  catch, which is worse than a refusal. `Throwing::self_contained` is the line:
-  every `throw` in its own body, and no call that could bring another. Closing
-  it is a copy of a copy and a second fixpoint.
 - **A method, a constructor, an accessor.** `function_copies` is consulted for
   `FUNCTION_DECLARATION`s, so there is no copy to name. The same boundary
   `blockers/an-interface-reached-by-six-routes` records for the structural
@@ -71,19 +66,65 @@ path that does not use a `try` is zero.
 - **A bound foreign member**, which can raise on the JVM lane and has no body
   here to copy.
 
-Both refusing arms are in `examples/a-throw-that-stays-in-its-function` beside
-the four that must keep compiling, and asserted by name -- record 0300 is why.
+The refusing arm is in `examples/a-throw-that-stays-in-its-function` beside the
+ones that must keep compiling, and asserted by name -- record 0300 is why.
+
+## A chain of callees, and the fixpoint has to be the greatest one
+
+The first version stopped at a callee whose every `throw` was its own, because a
+copy of a callee that only *passes a throw on* would call the plain one and end
+the program -- a `try` that compiles and still does not catch, which is worse
+than a refusal.
+
+Closing it is a copy of a copy, and the set has to be computed the other way
+round:
+
+> `f` is copyable when `f` is a plain function this compiler can copy, and every
+> callee of `f` that can raise is itself copyable.
+
+**Optimistic, then shrunk.** A least fixpoint grows from functions that call
+nothing, which admits a caller before its callees are established; this assumes
+every plain raiser qualifies and removes any that reaches one that does not.
+Recursion stays in, which is right -- `f` calling `f` is satisfied by `f`, and a
+least fixpoint would drop it.
+
+Run twice, at two levels, and the second is not redundant. `Throwing::copyable`
+is over **symbols**, and copies are keyed by **declaration**: a symbol with an
+overload signature beside its implementation answers for one of them, and a call
+resolving to the other would be left calling the plain function. So
+`raising_copies` shrinks again over the declarations' own bodies, with the same
+predicate `calls_compiled_code` uses -- an indirect callee counts as able to
+raise -- and what a copy may contain and what a `try` may contain stay one rule.
+
+And a third arm in the example, because two frames is satisfied by a closure
+that runs one round and stops.
+
+**Unbounded recursion is deliberately not an arm.** A `countdown` that throws at
+the bottom compiles now, and a large `n` overflows the C stack and takes the
+process where node raises a catchable `RangeError`. That divergence is older
+than this feature and reachable with no `try` at all -- the same shape with no
+throw already disagrees with node -- and it is recorded nowhere, which is worth
+someone's attention and is not this.
 
 ## Measured
 
-    runtime/node, 25 modules        before      after
-    NTS1001 sites                    1,298      1,293
-    NTS1001 occurrences             14,651     14,629
-    definitions                     29,968     29,968   identical per module
-    NTS2006 / NTS2009 / NTS1005    unchanged
+    runtime/node, 25 modules     before   self-contained   +transitive
+    NTS1001 sites                 1,298          1,293         1,284
+    NTS1001 occurrences          14,651         14,629        14,695
+    definitions                  29,968         29,968        29,968
+    NTS2006 / NTS2009 / NTS1005            unchanged throughout
 
-Twelve sites cleared and seven appeared: a `try` whose first call is now handled
-reports its *second* one, which is the compiler naming one blocker at a time.
+Sites fell by 14 while occurrences rose, and the two disagree for a structural
+reason rather than an interesting one: **a copy is a body**, so every refusal
+inside a copied function is reported once more. Definitions identical module for
+module is what says the rise is a second reading rather than a second defect.
+The gate's ceiling carries that sentence now, because this number will drift up
+as more callees become copyable and the site count is the one to read.
+
+Sites cleared in `stream` (6), `fs` (5), `url` (3), `zlib` (2), `events` (2),
+`web-platform`, `util` and `timers`. Some `try` blocks moved one call along
+rather than clearing: a `try` whose first call is now handled reports its
+*second*, which is the compiler naming one blocker at a time.
 
     agreements                    4 disagreeing -> 1
     a-throw-across-a-call         DISAGREES -> agrees

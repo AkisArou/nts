@@ -18,12 +18,19 @@
 //
 // # The arms, and why they are in one file
 //
-// Two still refuse, and they are here rather than in `blockers/` because what
-// makes them refuse is the *absence* of a copy, and the arms that do get one
-// are the only thing that shows the difference is the copy rather than the
-// `try`. The four that compile are the ones two successive versions of the old
+// One still refuses, and it is here rather than in `blockers/` because what
+// makes it refuse is the *absence* of a copy, and the arms that do get one are
+// the only thing that shows the difference is the copy rather than the `try`.
+// Three of the compiling arms are the ones two successive versions of the old
 // refusal broke; record 0300 is about that, and they are asserted by name in
 // `compiler/core/tests/throw_across_a_call.rs`.
+//
+// **Unbounded recursion is deliberately not an arm.** `countdown(n)` that
+// throws at the bottom compiles now, and a large `n` overflows the C stack and
+// takes the process with it where node raises a catchable `RangeError`. That
+// divergence is older than this feature and reachable without any `try` -- the
+// same shape with no throw at all already disagrees with node -- so an arm for
+// it here would be a stack-depth fixture wearing an exceptions name.
 
 function raises(n: number): number {
   if (n > 3) {
@@ -113,11 +120,12 @@ export function crossingAMethod(n: number): number {
   }
 }
 
-// Still refused: `passesItOn` does not throw, it *calls* something that does.
-// A raising copy of it would call the plain `raises`, which ends the program --
-// so the copy would be a `try` that still does not catch, which is worse than a
-// refusal. What that needs is a copy of a copy, and the fixpoint for it is not
-// written; `Throwing::self_contained` is the line that draws the bound.
+// Compiles: `passesItOn` does not throw, it *calls* something that does, and
+// its copy calls `raises`' copy and tests after it. The copy set is closed over
+// what a copy reaches, and `Throwing::copyable` is a **greatest** fixpoint --
+// every plain raiser is assumed copyable and any that reaches one that is not
+// is removed. The direction is the soundness argument: a copy left calling a
+// plain callee would end the program from inside a `try` that compiled.
 function passesItOn(n: number): number {
   return raises(n) + 1;
 }
@@ -125,6 +133,20 @@ function passesItOn(n: number): number {
 export function crossingTwoFrames(n: number): number {
   try {
     return passesItOn(n);
+  } catch {
+    return -1;
+  }
+}
+
+// And three, so that "it closed once" and "it closed to a fixpoint" are not the
+// same arm. Two frames is satisfied by one round of the closure.
+function passesItOnAgain(n: number): number {
+  return passesItOn(n) + 1;
+}
+
+export function crossingThreeFrames(n: number): number {
+  try {
+    return passesItOnAgain(n);
   } catch {
     return -1;
   }
