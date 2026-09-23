@@ -11090,9 +11090,15 @@ static NO_FOREIGN: std::sync::OnceLock<
     super::runtime::ForeignTable,
 > = std::sync::OnceLock::new();
 
-/// A C string lent to a native call, beside the string it was made from:
-/// `(string, pointer)`, released together once the call returns.
-type LentString = (ValueId, ValueId);
+/// Something lent to a native call for its duration, given back once the call
+/// returns.
+#[derive(Debug, Clone, Copy)]
+enum Lent {
+    /// A C string, beside the string it was made from.
+    String { string: ValueId, pointer: ValueId },
+    /// A closure's context, for a `ScopedClosure`.
+    Closure { context: ValueId },
+}
 
 impl<'a> FuncBuilder<'a> {
     /// A builder for asking the snapshot a question -- a name, a location, a
@@ -38757,67 +38763,136 @@ impl<'a> FuncBuilder<'a> {
         let (args, lent) = self.lower_call_arguments(id, &callee, &arguments)?;
 
         let call = self.push_call(id, callee, args, declaration)?;
-        self.release_lent_strings(id, lent);
+        self.give_back(id, lent);
         Ok(call)
     }
 
-    /// Give back every C string a native call was lent, now that it returned.
+    /// Give back everything a native call was lent -- C strings and scoped
+    /// closures' contexts -- now that it returned.
     ///
     /// Immediately after the call and in the same block, so nothing on the
-    /// straight-line path can skip it. **One path does:** a raise from a call
-    /// sequenced *before* this one in the same `try` branches to the handler
-    /// before the native call is reached -- and then this call and its
-    /// conversion were never reached either, so nothing was lent. What a raise
-    /// can never do is land between the conversion and this release, because
-    /// a native call names no raising copy and gets no test after it.
-    fn release_lent_strings(&mut self, id: NodeId, lent: Vec<LentString>) {
+    /// straight-line path can skip it. **One path does, and it is shared by
+    /// both kinds:** a raise from a call sequenced *after* the lend and before
+    /// this, inside one `try`, branches to the handler and skips the give-back.
+    /// Today nothing sits between them -- the conversions are built as the
+    /// arguments, and a native call names no raising copy so gets no test --
+    /// but an argument expression that raises after an earlier one was lent
+    /// would leak it. A leak, not a crash; whoever fixes it for one kind fixes
+    /// it for the other.
+    fn give_back(&mut self, id: NodeId, lent: Vec<Lent>) {
         let origin = self.origin(id);
-        for (string, pointer) in lent {
-            self.runtime_call("nts_cstring_release", vec![string, pointer], HirType::Void, origin.clone());
+        for lent in lent {
+            match lent {
+                Lent::String { string, pointer } => {
+                    self.runtime_call("nts_cstring_release", vec![string, pointer], HirType::Void, origin.clone());
+                }
+                Lent::Closure { context } => {
+                    self.runtime_call("nts_closure_unlend", vec![context], HirType::Void, origin.clone());
+                }
+            }
         }
     }
 
-    /// A call's arguments, lowered the way its callee wants them, and the C
-    /// strings lent for the call -- each beside the string it was made from --
-    /// which the caller releases once the call returns.
+    /// A call's arguments, lowered the way its callee wants them, and what was
+    /// lent for the call, which the caller gives back once it returns.
     ///
-    /// Three things separate a native callee from every other. Its variadic
-    /// tail is arguments rather than a gathered rest array, a function-typed
-    /// argument becomes a bridge rather than a closure address, and a `string`
-    /// parameter receives a C string converted for the call.
+    /// Four things separate a native callee from every other. Its variadic
+    /// tail is arguments rather than a gathered rest array; a function-typed
+    /// argument becomes a bridge rather than a closure address; a `string`
+    /// parameter receives a C string converted for the call; and a closure
+    /// parameter becomes *three* C arguments -- the bridge, the closure's
+    /// context, and for a retained one the function that releases it -- of
+    /// which the program wrote one.
     fn lower_call_arguments(
         &mut self,
         id: NodeId,
         callee: &Callee,
         arguments: &[NodeId],
-    ) -> Result<(Vec<ValueId>, Vec<LentString>), Diagnostic> {
+    ) -> Result<(Vec<ValueId>, Vec<Lent>), Diagnostic> {
         let tail = match callee {
             Callee::Native(target) => {
                 target.variadic.as_ref().map(super::native::Type::representation)
             }
             _ => None,
         };
-        let mut args = match &tail {
+        let args = match &tail {
             Some(element) => self.lower_native_arguments(id, arguments, element)?,
             None => self.lower_arguments(id, arguments)?,
         };
+        let Callee::Native(target) = callee else { return Ok((args, Vec::new())) };
+        let target = target.clone();
+        let origin = self.origin(id);
         let mut lent = Vec::new();
-        if let Callee::Native(target) = callee {
-            self.bridge_callback_arguments(id, &target.clone(), &mut args)?;
-            let origin = self.origin(id);
-            for (at, _) in target.strings.iter().enumerate().filter(|(_, is)| **is) {
-                let Some(argument) = args.get_mut(at) else { continue };
-                let string = *argument;
-                *argument = self.runtime_call(
-                    "nts_string_to_cstring",
-                    vec![string],
-                    target.parameters[at].representation(),
-                    origin.clone(),
-                );
-                lent.push((string, *argument));
+        let mut c_args = Vec::with_capacity(target.parameters.len());
+        // The closure the context slots that follow a closure slot belong to.
+        let mut lending: Option<(ValueId, bool)> = None;
+        for (at, role, fed) in target.slots() {
+            use super::native::Role;
+            let argument = fed.and_then(|ts| args.get(ts).copied());
+            match role {
+                Role::Plain => c_args.extend(argument),
+                Role::String => {
+                    let Some(string) = argument else { continue };
+                    let pointer = self.runtime_call(
+                        "nts_string_to_cstring",
+                        vec![string],
+                        target.parameters[at].representation(),
+                        origin.clone(),
+                    );
+                    lent.push(Lent::String { string, pointer });
+                    c_args.push(pointer);
+                }
+                Role::Closure { scoped } => {
+                    let Some(closure) = argument else { continue };
+                    let super::native::Type::FnPointer(signature) = &target.parameters[at] else {
+                        return Err(self.unsupported(id, "a closure parameter whose C type is not a function pointer"));
+                    };
+                    // Dispatched statically, through the closure's own layout,
+                    // which an arrow or function expression has and a value of
+                    // a bare function type does not.
+                    if !matches!(self.values[closure.0 as usize].ty, HirType::Managed(ManagedType::Object(_))) {
+                        return Err(self.unsupported(
+                            id,
+                            "a closure passed to C whose body is not known here: write the function or arrow at the call, or bind it with `const` in the same function",
+                        ));
+                    }
+                    let bridge = self.push(
+                        OpKind::NativeBridge { closure, signature: signature.clone(), context: true },
+                        HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
+                        origin.clone(),
+                    );
+                    c_args.push(bridge);
+                    lending = Some((closure, scoped));
+                }
+                Role::ClosureData => {
+                    let Some((closure, scoped)) = lending else { continue };
+                    let context = self.runtime_call(
+                        "nts_closure_lend",
+                        vec![closure],
+                        target.parameters[at].representation(),
+                        origin.clone(),
+                    );
+                    if scoped {
+                        lent.push(Lent::Closure { context });
+                    }
+                    c_args.push(context);
+                }
+                Role::ClosureNotify => {
+                    let notify = self.runtime_call(
+                        "nts_closure_notify",
+                        Vec::new(),
+                        target.parameters[at].representation(),
+                        origin.clone(),
+                    );
+                    c_args.push(notify);
+                }
             }
         }
-        Ok((args, lent))
+        // The variadic tail, past every declared parameter.
+        let declared = target.slots().filter(|(_, _, fed)| fed.is_some()).count();
+        c_args.extend(args.iter().skip(declared).copied());
+        self.bridge_callback_arguments(id, &target, &mut c_args)?;
+        Ok((c_args, lent))
     }
 
     /// Turn each argument for a C function pointer parameter into a bridge.
@@ -38859,7 +38934,7 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(at);
         Ok(self.push(
-            OpKind::NativeBridge { closure: value, signature: signature.clone() },
+            OpKind::NativeBridge { closure: value, signature: signature.clone(), context: false },
             HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
             origin,
         ))
@@ -38875,6 +38950,10 @@ impl<'a> FuncBuilder<'a> {
             let super::native::Type::FnPointer(signature) = parameter else {
                 continue;
             };
+            // Bridged above with a context, or supplied by the runtime.
+            if !matches!(target.roles.get(at), Some(super::native::Role::Plain)) {
+                continue;
+            }
             let Some(argument) = args.get_mut(at) else { continue };
             if !matches!(self.values[argument.0 as usize].kind, OpKind::ClosureStatic) {
                 return Err(self.unsupported(
@@ -38894,7 +38973,7 @@ impl<'a> FuncBuilder<'a> {
             // bridges existed -- a `void *` says nothing a wrong value would
             // contradict.
             *argument = self.push(
-                OpKind::NativeBridge { closure: *argument, signature: signature.clone() },
+                OpKind::NativeBridge { closure: *argument, signature: signature.clone(), context: false },
                 HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
                 origin,
             );
@@ -38929,6 +39008,7 @@ impl<'a> FuncBuilder<'a> {
             if names.is_empty() { return Err(self.unsupported(call, "@ntsNoEscape needs at least one native-pointer parameter")); }
             for name in names {
                 let slot = signature.parameters.iter().position(|p| p.name == *name)
+                    .and_then(|ts| native.c_index(ts))
                     .ok_or_else(|| self.unsupported(call, &format!("@ntsNoEscape names no parameter `{name}`")))?;
                 // A *callback* takes the same contract, and means the same
                 // thing by it: nothing of this argument outlives the call. For

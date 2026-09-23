@@ -38,21 +38,74 @@ pub struct Function {
     /// C changes, and what it decides is which headers a translation unit needs
     /// rather than anything about the call.
     pub declared_at: Option<NodeId>,
-    /// Which parameters the declaration spelled as a TypeScript `string`, one
-    /// entry per parameter.
+    /// What each C parameter is *for*, one entry per parameter.
     ///
-    /// Their ABI type is `const char *` -- C's, exactly, so the prototype and
-    /// the witness need nothing new -- and this says that the *argument* is a
-    /// managed string the call site converts: NUL-terminated UTF-8, borrowed by
-    /// the callee for the call and released after it
+    /// The ABI in `parameters` is C's exactly, so prototypes and the witness
+    /// need nothing beyond it; this is what the call site does to produce the
+    /// argument. Read by lowering, which inserts the conversions. No backend
+    /// reads it: by the time a backend sees the call every argument already
+    /// is what C takes.
+    ///
+    /// **Not one-to-one with the TypeScript parameters.** A closure slot is
+    /// followed by the C parameters that carry its context -- `ClosureData`,
+    /// and for a retained one `ClosureNotify` -- which the declaration never
+    /// spells and the caller never passes. [`Function::c_index`] maps between
+    /// the two.
+    pub roles: Vec<Role>,
+}
+
+/// What one C parameter of a foreign function receives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    /// The argument as TypeScript passed it, converted to the ABI type.
+    Plain,
+    /// A TypeScript `string` as `const char *`: NUL-terminated UTF-8, borrowed
+    /// by the callee for the call and released after it
     /// (`nts_string_to_cstring` / `nts_cstring_release`). C that keeps the
     /// pointer past the call must be declared `ConstPtr<c_char>` instead;
     /// that is the contract of the spelling.
+    String,
+    /// A TypeScript closure -- capturing or not -- as a C function pointer
+    /// whose last parameter is the closure's context. `Closure<F>` in
+    /// `c:types` when C keeps it (`scoped: false`, released by the notify
+    /// that follows), `ScopedClosure<F>` when it is called only during the
+    /// call (released after it).
+    Closure { scoped: bool },
+    /// The closure's context, the `void *` C hands back to the callback:
+    /// `nts_closure_lend(closure)`. Hidden from TypeScript.
+    ClosureData,
+    /// `void (*)(void *)` that releases the context, called when C lets go:
+    /// `nts_closure_notify()`. Hidden from TypeScript.
+    ClosureNotify,
+}
+
+impl Function {
+    /// Every C parameter in order: its role, and the TypeScript argument that
+    /// feeds it -- `None` for the context slots no declaration spells.
     ///
-    /// Read by lowering, which inserts the conversion. No backend reads it:
-    /// by the time a backend sees the call the argument already is the
-    /// pointer.
-    pub strings: Vec<bool>,
+    /// **The one derivation of that mapping.** Lowering walks this to build the
+    /// arguments, and [`Function::c_index`] reads it to place an
+    /// `@ntsNoEscape`; two walks deciding separately which slots are hidden
+    /// would disagree the first time a role is added.
+    pub fn slots(&self) -> impl Iterator<Item = (usize, Role, Option<usize>)> + '_ {
+        let mut ts = 0;
+        self.roles.iter().enumerate().map(move |(at, role)| {
+            let fed = match role {
+                Role::ClosureData | Role::ClosureNotify => None,
+                Role::Plain | Role::String | Role::Closure { .. } => {
+                    ts += 1;
+                    Some(ts - 1)
+                }
+            };
+            (at, *role, fed)
+        })
+    }
+
+    /// The C parameter the `ts`th TypeScript parameter lands in.
+    #[must_use]
+    pub fn c_index(&self, ts: usize) -> Option<usize> {
+        self.slots().find(|(_, _, fed)| *fed == Some(ts)).map(|(at, _, _)| at)
+    }
 }
 
 /// What a foreign call keeps of one argument after it returns.
@@ -925,7 +978,7 @@ impl Function {
             ));
         }
         let mut parameters = Vec::with_capacity(signature.parameters.len());
-        let mut strings = Vec::with_capacity(signature.parameters.len());
+        let mut roles = Vec::with_capacity(signature.parameters.len());
         let mut variadic = None;
         for (at, parameter) in signature.parameters.iter().enumerate() {
             if parameter.optional {
@@ -948,14 +1001,26 @@ impl Function {
             // the string itself, which is what `@ntsAbi managed` means.
             if abi.is_none() && is_string(snapshot, parameter.ty) {
                 parameters.push(Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char)))));
-                strings.push(true);
+                roles.push(Role::String);
+                continue;
+            }
+            // `Closure<F>` / `ScopedClosure<F>`: the callback C calls with the
+            // closure's context last, then the context, then -- when C keeps
+            // it -- the function that releases it.
+            if abi.is_none()
+                && let Some((function, scoped)) = closure(snapshot, parameter.ty)
+            {
+                for (ty, role) in closure_slots(snapshot, &name, &parameter.name, function, scoped)? {
+                    parameters.push(ty);
+                    roles.push(role);
+                }
                 continue;
             }
             let ty = abi_type(parameter.ty)
                 .filter(|ty| *ty != Type::Void)
                 .ok_or_else(|| format!("foreign function `{name}` parameter `{}` without a native ABI type; use a c_int/c_double brand, boolean, or string", parameter.name))?;
             parameters.push(ty);
-            strings.push(false);
+            roles.push(Role::Plain);
         }
         let result = abi_type(signature.return_type)
             .ok_or_else(|| format!("foreign function `{name}` return without a native ABI type; use a c_int/c_double brand, boolean, or void"))?;
@@ -966,14 +1031,14 @@ impl Function {
             } else {
                 Convention::C
             },
-            retention: vec![Retention::Unknown; parameters.len()],
+            retention: retention_of(&roles),
             parameters,
             variadic,
             result,
             // Filled in by whoever resolved the callee, which is the only place
             // that has the declaration node.
             declared_at: None,
-            strings,
+            roles,
         })
     }
 }
@@ -984,6 +1049,105 @@ impl Function {
 /// refused until the representation of a nullable string at a call is
 /// checked rather than assumed -- a union may reach here as an erased value,
 /// which is not the `NtsString *` the conversion reads.
+/// What the callee keeps of each parameter, as far as the declaration says.
+///
+/// A scoped closure is called only during the call and its context is released
+/// after it: nothing of either outlives the call, which is `NotRetained` stated
+/// by the type rather than by a tag. Everything else starts `Unknown`, and an
+/// `@ntsNoEscape` may narrow it where the callee is resolved.
+fn retention_of(roles: &[Role]) -> Vec<Retention> {
+    roles
+        .iter()
+        .scan(false, |scoped, role| {
+            Some(match role {
+                Role::Closure { scoped: true } => {
+                    *scoped = true;
+                    Retention::NotRetained
+                }
+                Role::ClosureData if *scoped => Retention::NotRetained,
+                _ => {
+                    *scoped = false;
+                    Retention::Unknown
+                }
+            })
+        })
+        .collect()
+}
+
+/// The C parameters one `Closure<F>` or `ScopedClosure<F>` becomes: the
+/// callback with the context as its last parameter, the context, and for a
+/// retained closure the function that releases it.
+fn closure_slots(
+    snapshot: &SemanticSnapshot,
+    name: &str,
+    parameter: &str,
+    function: TypeId,
+    scoped: bool,
+) -> Result<Vec<(Type, Role)>, String> {
+    let Some(Type::FnPointer(declared)) = abi_type(snapshot, function) else {
+        return Err(format!(
+            "foreign function `{name}` closure parameter `{parameter}` whose signature has no native ABI type"
+        ));
+    };
+    let context = Type::Pointer(Pointee::Void);
+    let mut callback = declared.parameters.clone();
+    callback.push(context.clone());
+    let mut slots = vec![
+        (
+            Type::FnPointer(std::sync::Arc::new(FnPointer::spell(callback, (*declared.result).clone()))),
+            Role::Closure { scoped },
+        ),
+        (context.clone(), Role::ClosureData),
+    ];
+    if !scoped {
+        slots.push((
+            Type::FnPointer(std::sync::Arc::new(FnPointer::spell(vec![context], Type::Void))),
+            Role::ClosureNotify,
+        ));
+    }
+    Ok(slots)
+}
+
+/// The function type inside a `Closure<F>` or `ScopedClosure<F>`, and whether
+/// it is the scoped one.
+///
+/// Both are `F & { readonly __c_closure?: "retained" | "scoped" }`. The marker
+/// is optional so that an arrow, which has no such property, is assignable --
+/// which is also why this reads it directly rather than through the schema's
+/// `marker`, which accepts required properties only.
+fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, bool)> {
+    let TypeKind::Intersection(parts) = &snapshot.types.get(ty.0 as usize)?.kind else {
+        return None;
+    };
+    let mut function = None;
+    let mut scoped = None;
+    for part in parts {
+        match &snapshot.types.get(part.0 as usize)?.kind {
+            TypeKind::Function(_) => function = Some(*part),
+            TypeKind::Object { properties } => {
+                let marker = properties.iter().find(|p| p.name == "___c_closure")?;
+                scoped = match &snapshot.types.get(marker.ty.0 as usize)?.kind {
+                    TypeKind::Literal(nts_semantic_schema::LiteralValue::String(kind)) => {
+                        Some(kind == "scoped")
+                    }
+                    // An optional property reads as `T | undefined`.
+                    TypeKind::Union(members) => members.iter().find_map(|member| {
+                        match &snapshot.types.get(member.0 as usize)?.kind {
+                            TypeKind::Literal(nts_semantic_schema::LiteralValue::String(kind)) => {
+                                Some(kind == "scoped")
+                            }
+                            _ => None,
+                        }
+                    }),
+                    _ => None,
+                };
+            }
+            _ => return None,
+        }
+    }
+    Some((function?, scoped?))
+}
+
 fn is_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::String))
 }

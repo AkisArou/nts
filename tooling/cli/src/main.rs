@@ -1949,8 +1949,9 @@ fn render_constant(index: usize, ty: &str, kind: &OpKind) -> String {
         // Named by the function it bridges rather than by the closure value, so
         // reading the dump answers "which function does C get" without first
         // resolving a layout by hand.
-        OpKind::NativeBridge { closure, signature } => {
-            format!("bridge %{} as {}", closure.0, signature.name)
+        OpKind::NativeBridge { closure, signature, context } => {
+            let with = if *context { " with context" } else { "" };
+            format!("bridge %{} as {}{with}", closure.0, signature.name)
         }
         _ => unreachable!("only the constants reach here"),
     };
@@ -2079,8 +2080,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::NativeCopy { destination, source } => {
             format!("native.copy %{} <- %{}", destination.0, source.0)
         }
-        OpKind::NativeBridge { closure, signature } => {
-            format!("%{index} = native.bridge %{} as {} : {ty}", closure.0, signature.name)
+        OpKind::NativeBridge { closure, signature, context } => {
+            let with = if *context { " with context" } else { "" };
+            format!("%{index} = native.bridge %{} as {}{with} : {ty}", closure.0, signature.name)
         }
         OpKind::NativeIndexAddress { pointer, index: offset } => format!("%{index} = native.index.addr %{}[%{}] : {ty}", pointer.0, offset.0),
         OpKind::NativeFieldAddress { pointer, field } => format!("%{index} = native.field.addr %{}.{field} : {ty}", pointer.0),

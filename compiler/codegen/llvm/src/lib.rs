@@ -983,7 +983,7 @@ fn bridges(program: &Program) -> Result<String, Diagnostic> {
     let mut declared = false;
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| func.value(*value)) {
-            let OpKind::NativeBridge { closure, signature } = &op.kind else { continue };
+            let OpKind::NativeBridge { closure, signature, context } = &op.kind else { continue };
             let layout = closure_layout(program, func, *closure)?;
             let target = layout
                 .methods
@@ -1004,14 +1004,28 @@ fn bridges(program: &Program) -> Result<String, Diagnostic> {
                 .iter()
                 .find(|candidate| candidate.name == target)
                 .ok_or_else(|| refuse(func, "a callback bridge naming a function this program does not define"))?;
-            if compiled.params.len() != signature.parameters.len() + 1 {
+            // With a context, the foreign signature's last parameter is the
+            // receiver -- the closure C was lent and hands back -- so the two
+            // counts agree instead of differing by one. Both are `ptr`, so it
+            // is passed on as it arrives.
+            let receiver_slots = usize::from(!*context);
+            if compiled.params.len() != signature.parameters.len() + receiver_slots {
                 return Err(refuse(func, "a callback bridge whose foreign signature and compiled function disagree about arity"));
             }
+            let last = signature.parameters.len().saturating_sub(1);
             let mut parameters = Vec::new();
-            let mut arguments = vec![format!("ptr @{}", static_closure_name(layout))];
+            let mut arguments = if *context {
+                vec![format!("ptr %a{last}")]
+            } else {
+                vec![format!("ptr @{}", static_closure_name(layout))]
+            };
             let mut body = String::new();
             for (at, foreign) in signature.parameters.iter().enumerate() {
                 let from = foreign.representation();
+                if *context && at == last {
+                    parameters.push(format!("{} %a{at}", ty_of(&from, compiled)?));
+                    continue;
+                }
                 let to = compiled.params[at + 1].ty.clone();
                 let (from_ty, to_ty) = (ty_of(&from, compiled)?, ty_of(&to, compiled)?);
                 parameters.push(format!("{from_ty} %a{at}"));
@@ -2093,7 +2107,7 @@ fn allocation(
         // A bridge's address is its symbol. `getelementptr i8, ptr @f, i64 0` for
         // the same reason the static closure below uses one: a value needs a
         // name, and there is no no-op cast between two `ptr`s.
-        OpKind::NativeBridge { closure, signature } => {
+        OpKind::NativeBridge { closure, signature, .. } => {
             let layout = closure_layout(program, func, *closure)?;
             let target = layout
                 .methods

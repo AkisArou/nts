@@ -32,6 +32,7 @@
     "gtk-hello/nts.config.ts",
     "macos-hello/nts.config.ts",
     "native-string/nts.config.ts",
+    "native-closure/nts.config.ts",
     "android-shape/nts.config.ts",
     "java-from-ts/nts.config.ts",
     "ts-from-java/nts.config.ts"

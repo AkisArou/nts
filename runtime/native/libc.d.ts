@@ -30,6 +30,23 @@ declare module "c:types" {
   export type Class<Tag extends string, Parent extends ClassChain | null = null> = {
     readonly __c_chain: readonly [...ChainOf<Parent>, Tag, ...string[]];
   };
+  // A TypeScript function handed to C as a callback that carries a context --
+  // the `(callback, void *user_data, destroy)` triple C libraries use in place
+  // of closures. Write the callback's TypeScript signature; the C one is that
+  // with a trailing `void *`, and the context and the destroy function that
+  // follow it in the C prototype are not written here and not passed by the
+  // caller:
+  //
+  //     // guint g_idle_add_full(gint, GSourceFunc, gpointer, GDestroyNotify)
+  //     export function g_idle_add_full(priority: c_int, f: Closure<() => c_int>): c_uint;
+  //     g_idle_add_full(0 as c_int, () => { count++; return 0 as c_int; });
+  //
+  // The closure may capture. `Closure` is for a callback C keeps: the closure
+  // is released when C calls the destroy function, not when the call returns.
+  // `ScopedClosure` is for one C calls only during the call -- its C prototype
+  // has the context and no destroy function -- and it is released after.
+  export type Closure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "retained" };
+  export type ScopedClosure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "scoped" };
   // What a `Class` is, for the constraint above; not a type to write.
   export type ClassChain = { readonly __c_chain: readonly string[] };
   // A parent's tags, without the rest element that keeps the chain open.

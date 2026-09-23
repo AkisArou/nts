@@ -4278,7 +4278,7 @@ fn memory_op(
         // Read only by a bridge, which names a symbol instead.
         OpKind::ClosureStatic if !context.read.contains(&value) => return Ok(()),
         OpKind::ClosureStatic => static_closure_text(op, &name, context)?,
-        OpKind::NativeBridge { closure, signature } => bridge_text(func, op, *closure, signature, &name, context)?,
+        OpKind::NativeBridge { closure, signature, .. } => bridge_text(func, op, *closure, signature, &name, context)?,
         OpKind::ObjectNew { frame } => {
             allocate_object(writer, op, &name, *frame, context)?
         }

@@ -791,7 +791,12 @@ pub enum OpKind {
     /// Which compiled function it is comes from the closure's own type: its
     /// layout's first method, the same route a virtual call takes. Naming the
     /// function here as well would be a second derivation of that.
-    NativeBridge { closure: ValueId, signature: std::sync::Arc<native::FnPointer> },
+    ///
+    /// **Unless `context` is set.** Then the closure may capture, and the
+    /// signature's last parameter is its context: the bridge takes its receiver
+    /// from there instead of from the static closure, and whoever passed the
+    /// closure to C lent it (`nts_closure_lend`) for as long as C may call.
+    NativeBridge { closure: ValueId, signature: std::sync::Arc<native::FnPointer>, context: bool },
     /// The nth parameter of the function, materialized as a value.
     Param(u32),
     /// The nth parameter of the block that defines it.

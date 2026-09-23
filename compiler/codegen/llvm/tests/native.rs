@@ -765,6 +765,156 @@ export function run(): void {
     );
 }
 
+/// A capturing closure crosses to C and back, on both backends and both
+/// providers, and a retained one is released when C lets go.
+///
+/// The fixture is `examples/interop/native-closure`'s own library and caller:
+/// captures read back after C calls them, two closures through one C function
+/// each reaching their own variable, and a closure registered by a function
+/// that has returned by the time C calls it.
+///
+/// Under reference counting, the release is counted. The baseline is taken
+/// before anything subscribes, and fifty subscribe/deliver/unsubscribe cycles
+/// must leave `nts_live_count` exactly where it was -- a single cycle would
+/// pass an off-by-one that fifty expose. The control is the same run with the
+/// library told to forget without calling the destroy function, which must
+/// leave every cycle's closure and the box it captured alive.
+#[test]
+fn a_capturing_closure_crosses_to_c_on_both_backends() {
+    let source = include_str!("../../../../examples/interop/native-closure/src/main.ts");
+    let declarations = [("closures.d.ts", include_str!("../../../../examples/interop/native-closure/types/closures.d.ts"))];
+    for (label, provider) in [("nogc", hir::Provider::NoGc), ("rc", hir::Provider::ReferenceCounting)] {
+        let Some((dir, prepared)) = prepare_with_files(&format!("closure-{label}"), source, provider, &declarations) else { return; };
+        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let c = nts_codegen_c::emit(&prepared.program);
+        assert!(c.is_complete(), "{:?}", c.diagnostics);
+        let llvm = nts_codegen_llvm::emit(&prepared.program);
+        assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+        std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+        std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+        std::fs::write(dir.join("closures.h"), include_str!("../../../../examples/interop/native-closure/native/closures.h")).unwrap();
+        std::fs::write(dir.join("closures.c"), include_str!("../../../../examples/interop/native-closure/native/closures.c")).unwrap();
+        std::fs::write(dir.join("caller.c"), include_str!("../../../../examples/interop/native-closure/consumer/caller.c")).unwrap();
+        std::fs::write(dir.join("cycles.c"), r#"
+#include <stdio.h>
+#include <stdlib.h>
+#include "closures.h"
+#include "program.h"
+int main(int argc, char **argv) {
+    module__init();
+    (void)argv;
+    closures_skip_notify = argc > 1;
+    size_t before = nts_live_count();
+    for (int cycle = 0; cycle < 50; cycle++) {
+        start();
+        send_(1);
+        stop();
+    }
+    size_t after = nts_live_count();
+    printf("%zu %zu\n", before, after);
+    return 0;
+}
+"#).unwrap();
+        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting { &["-DNTS_PROVIDER_RC"] } else { &[] };
+        for file in ["closures.c", "caller.c", "cycles.c"] {
+            clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+        }
+        clang(&dir, &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat());
+        for (source, object, executable) in [("program.c", "c.o", "c"), ("program.ll", "llvm.o", "llvm")] {
+            clang(&dir, &[&["-O2", "-Wno-override-module", "-c", source, "-o", object][..], counted].concat());
+            clang(&dir, &[object, "closures.o", "caller.o", "nts_runtime.o", "-lm", "-o", &format!("{executable}-run")]);
+            let run = Command::new(dir.join(format!("{executable}-run"))).output().unwrap();
+            assert!(run.status.success(), "{label}/{executable}: {}", String::from_utf8_lossy(&run.stdout));
+            if provider != hir::Provider::ReferenceCounting {
+                continue;
+            }
+            clang(&dir, &[object, "closures.o", "cycles.o", "nts_runtime.o", "-lm", "-o", &format!("{executable}-cycles")]);
+            let counts = |args: &[&str]| -> (u64, u64) {
+                let run = Command::new(dir.join(format!("{executable}-cycles"))).args(args).output().unwrap();
+                assert!(run.status.success(), "{label}/{executable} cycles");
+                let text = String::from_utf8_lossy(&run.stdout).into_owned();
+                let mut numbers = text.split_whitespace().map(|n| n.parse::<u64>().unwrap());
+                (numbers.next().unwrap(), numbers.next().unwrap())
+            };
+            let (before, after) = counts(&[]);
+            assert_eq!(before, after, "{executable}: fifty released cycles left objects alive");
+            let (before, after) = counts(&["skip-notify"]);
+            assert!(
+                after >= before + 50,
+                "{executable}: the control released what was never given back ({before} -> {after}), so the count proves nothing"
+            );
+        }
+    }
+}
+
+/// What a closure crossing to C still may not do.
+///
+/// A capturing arrow where the declaration says a *plain* function pointer is
+/// refused as before: that parameter has no context, so there is nowhere to
+/// put what it captured. And a throw inside a lent closure stops at the
+/// boundary, the same way a static one's does -- the trampoline dispatches to
+/// the plain compiled function, never to a raising copy.
+#[test]
+fn a_closure_to_c_keeps_its_refusals_and_its_boundary() {
+    let plain = r#"
+import type { c_int } from "c:types";
+declare function apply_twice(f: (n: c_int) => c_int, x: c_int): c_int;
+export function run(k: number): number {
+    return apply_twice((n) => (n + k) as c_int, 1 as c_int);
+}
+"#;
+    let Some((_, prepared)) = prepare("closure-plain", plain) else { return; };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("a C function pointer needs a function declared with `function`")),
+        "a capturing arrow reached a plain function pointer: {:?}",
+        prepared.diagnostics
+    );
+
+    let throwing = r#"
+import type { ScopedClosure, c_int } from "c:types";
+declare function each_upto(f: ScopedClosure<(n: c_int) => void>, upto: c_int): void;
+export function run(limit: number): number {
+    let seen = 0;
+    each_upto((n) => {
+        if (n > limit) throw new Error("past the limit");
+        seen += n;
+    }, 3 as c_int);
+    return seen;
+}
+"#;
+    let Some((dir, prepared)) = prepare("closure-throw", throwing) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("native.c"), "void each_upto(void (*f)(int, void *), void *data, int upto) { for (int n = 1; n <= upto; n++) f(n, data); }\n").unwrap();
+    std::fs::write(dir.join("caller.c"), r#"
+#include <stdlib.h>
+#include "program.h"
+int main(int argc, char **argv) { (void)argv; return run(argc > 1 ? 1 : 10) == 6.0 ? 0 : 1; }
+"#).unwrap();
+    for file in ["native.c", "caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+    }
+    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+        assert!(Command::new(dir.join(executable)).status().unwrap().success(), "{executable}: no throw");
+        let thrown = Command::new(dir.join(executable)).arg("throw").output().unwrap();
+        assert!(!thrown.status.success(), "{executable}: a throw inside a lent closure returned normally");
+        assert!(
+            String::from_utf8_lossy(&thrown.stderr).contains("a callback threw across a C boundary"),
+            "{executable}: {}",
+            String::from_utf8_lossy(&thrown.stderr)
+        );
+    }
+}
+
 /// A `string` parameter reaches C as NUL-terminated UTF-8, on both backends
 /// and both providers.
 ///

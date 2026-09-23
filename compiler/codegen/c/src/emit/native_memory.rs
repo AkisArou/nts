@@ -645,11 +645,13 @@ pub(super) fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPoi
 /// about arity.
 pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<bool, Diagnostic> {
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
-    let mut wanted: std::collections::BTreeMap<String, (std::sync::Arc<nts_core::hir::native::FnPointer>, &Func, String)> =
+    // The receiver: the static closure's name, or `None` when it arrives as
+    // the context parameter.
+    let mut wanted: std::collections::BTreeMap<String, (std::sync::Arc<nts_core::hir::native::FnPointer>, &Func, Option<String>)> =
         std::collections::BTreeMap::new();
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
-            let OpKind::NativeBridge { closure, signature } = &op.kind else { continue };
+            let OpKind::NativeBridge { closure, signature, context } = &op.kind else { continue };
             let layout = layout_of(program, &func.values[closure.0 as usize].ty, origin)?;
             let target = layout
                 .methods
@@ -668,12 +670,15 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             // The closure's call method takes the closure as its first
             // parameter -- that is how every call through one works -- so the
             // bridge supplies it and the foreign signature describes the rest.
-            if compiled.params.len() != signature.parameters.len() + 1 {
+            // With a context, the foreign signature's last parameter *is* that
+            // receiver, so the two counts agree instead of differing by one.
+            let receiver_slots = usize::from(!*context);
+            if compiled.params.len() != signature.parameters.len() + receiver_slots {
                 return Err(refuse("a callback bridge whose foreign signature and compiled function disagree about arity"));
             }
             wanted.insert(
                 bridge_name(target, signature),
-                (signature.clone(), compiled, static_closure_name(layout)),
+                (signature.clone(), compiled, (!*context).then(|| static_closure_name(layout))),
             );
         }
     }
@@ -682,13 +687,23 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     }
     for (name, (signature, compiled, receiver)) in &wanted {
         let mut parameters = Vec::new();
-        // The receiver is the static closure itself: one immortal object per
-        // closure with no captured state, which is exactly why only a
-        // non-capturing function may be bridged.
-        let mut arguments = vec![format!("&{receiver}")];
+        // The receiver is the static closure itself -- one immortal object per
+        // closure with no captured state -- or, for a bridge with a context,
+        // the last parameter, which is the closure C was lent and hands back.
+        let last = signature.parameters.len().saturating_sub(1);
+        let mut arguments = match receiver {
+            Some(receiver) => vec![format!("&{receiver}")],
+            None => vec![format!(
+                "({})a{last}",
+                c_type_of(program, &compiled.params[0].ty, &compiled.params[0].origin)?
+            )],
+        };
         for (at, ty) in signature.parameters.iter().enumerate() {
             let slot = format!("a{at}");
             parameters.push(format!("{} {slot}", ty.c_type()));
+            if receiver.is_none() && at == last {
+                continue;
+            }
             // The compiled function takes the managed representation -- a
             // `number` is a `double` there and an `int` here -- so each argument
             // is converted on the way in and the result on the way out. C's own
