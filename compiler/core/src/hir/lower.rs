@@ -5317,6 +5317,7 @@ fn note_uncompiled(
     snapshot: &SemanticSnapshot,
     program: &mut super::Program,
     id: NodeId,
+    emitted: Option<&str>,
     diagnostic: &Diagnostic,
 ) {
     // **The qualified name first, and independently of the simple one.**
@@ -5354,6 +5355,24 @@ fn note_uncompiled(
             program.uncompiled.push((at, diagnostic.message.clone()));
         }
     };
+    // **The emitted name first, because that is the one every asker uses.** A
+    // call names `asRequest<[erased]x2>` and `declared_name` answers
+    // `asRequest`, so the entry was recorded and never found: the cascade fell
+    // to its fallback and the napi wrapper printed `which was refused above`
+    // about a refusal that had been recorded with its cause. 19 of `fs`'s 23
+    // remaining rootless wrappers were this one function.
+    //
+    // Per copy rather than per declaration, and that is not incidental: a copy
+    // is a body, `asRequest` refuses in eight of them, and the reasons can
+    // differ. Collapsing them onto one key is what lost them.
+    //
+    // `None` from a class member, whose emitted name is built by
+    // `lower_method_of` from `class_name_for` and carries the *class's*
+    // instantiation suffix instead. `qualified_name` covers the `Owner#member`
+    // half of that and the instantiation half is a smaller, separate gap.
+    if let Some(emitted) = emitted {
+        record(emitted.to_owned());
+    }
     if let Some(qualified) = qualified_name(snapshot, id, declared.as_deref()) {
         record(qualified);
     }
@@ -5628,12 +5647,12 @@ fn lower_object_literal_members(
                         func.name,
                     ),
                 );
-                note_uncompiled(snapshot, &mut lowered.program, member, &diagnostic);
+                note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
                 lowered.diagnostics.push(diagnostic);
             }
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => {
-                note_uncompiled(snapshot, &mut lowered.program, member, &diagnostic);
+                note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
                 lowered.diagnostics.push(diagnostic);
             },
         }
@@ -5703,7 +5722,7 @@ fn lower_class(
                 // declare a constructor, and `Readable` is the single
                 // most-named export in that module's failing tests.
                 Err(diagnostic) => {
-                    note_uncompiled(snapshot, &mut lowered.program, member, &diagnostic);
+                    note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
                     lowered.diagnostics.push(diagnostic);
                 }
             }
@@ -7542,7 +7561,7 @@ pub fn lower_with(
             && let Some(diagnostic) = uninstantiated(snapshot, &shared.generics, id)
         {
             refused_functions.insert(id);
-            note_uncompiled(snapshot, &mut lowered.program, id, &diagnostic);
+            note_uncompiled(snapshot, &mut lowered.program, id, None, &diagnostic);
             lowered.diagnostics.push(diagnostic);
             continue;
         }
@@ -7571,7 +7590,14 @@ pub fn lower_with(
                     // text rather than a cause: 38 sites carry it over at least
                     // three unlike shapes.
                     refused_functions.insert(id);
-                    note_uncompiled(snapshot, &mut lowered.program, id, &diagnostic);
+                    let emitted = builder.emitted_function_name(id);
+                    note_uncompiled(
+                        snapshot,
+                        &mut lowered.program,
+                        id,
+                        emitted.as_deref(),
+                        &diagnostic,
+                    );
                     lowered.diagnostics.push(diagnostic);
                 }
             }
@@ -14682,19 +14708,35 @@ impl<'a> FuncBuilder<'a> {
         ))
     }
 
+    /// The name a plain function is **emitted** under, for this copy.
+    ///
+    /// Qualified where another module declares the same name, and suffixed
+    /// where this is one copy -- generic, structural or raising. Neither `@`
+    /// nor `<>` can appear in a TypeScript identifier, so neither can collide
+    /// with a plain name.
+    ///
+    /// Factored out because [`note_uncompiled`] has to record a refusal under
+    /// the name the rest of the compiler will *ask* for. It recorded the
+    /// declared name only, so `asRequest` was recorded once while every caller
+    /// and every napi wrapper named `asRequest<[erased]x2>` -- the entry was
+    /// there and unreachable. Two derivations of the emitted name would drift;
+    /// this is the one.
+    fn emitted_function_name(&self, id: NodeId) -> Option<String> {
+        let name = self
+            .children(id)
+            .iter()
+            .find(|child| self.kind_of(**child) == Some(syntax::IDENTIFIER))
+            .and_then(|child| self.node(*child).text.clone())?;
+        let name = self.qualified.get(&id).cloned().unwrap_or(name);
+        Some(format!("{name}{}", self.suffix))
+    }
+
     fn lower_function(&mut self, id: NodeId) -> Result<Func, Diagnostic> {
         let children = self.children(id);
 
-        let name = children
-            .iter()
-            .find(|child| self.kind_of(**child) == Some(syntax::IDENTIFIER))
-            .and_then(|child| self.node(*child).text.clone())
+        let name = self
+            .emitted_function_name(id)
             .ok_or_else(|| self.unsupported(id, "an anonymous function"))?;
-        // Qualified where another module declares the same name, and suffixed
-        // where this is one copy of a generic. Neither `@` nor `<>` can appear
-        // in a TypeScript identifier, so neither can collide with a plain name.
-        let name = self.qualified.get(&id).cloned().unwrap_or(name);
-        let name = format!("{name}{}", self.suffix);
 
         let mut params = Vec::new();
         for child in &children {

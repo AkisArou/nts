@@ -3911,16 +3911,32 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
             // the same day and for the same reason: a pass that removes
             // something is the only thing that knows why, and a diagnostic is
             // read by a person while a list is read by the next pass.
+            //
+            // **The same sentence the line above carries.** This recorded a
+            // hardcoded `which was refused above` while `why` -- the root, just
+            // resolved, twenty lines up -- sat in scope unused. So the NTS1003
+            // a reader sees named the cause and the entry the *napi wrapper*
+            // reads did not, and the wrapper prints its entry verbatim
+            // (`codegen/napi/src/lib.rs:3382`).
+            //
+            // Measured before the change: **8,139 of 12,110** cascade lines
+            // across 25 `runtime/node` modules ended in the bare fallback, and
+            // **184 of 184** wrapper lines that name a callee did. Every export
+            // ranking this repository has produced was built by chasing the
+            // third that carried a root.
+            //
+            // A cascade of a cascade composes, which is the point: `a` calls
+            // `b` calls `c`, and `a`'s entry now carries what stopped `c`.
             if !lowered
                 .program
                 .uncompiled
                 .iter()
                 .any(|(at, _)| *at == caller)
             {
-                lowered.program.uncompiled.push((
-                    caller.clone(),
-                    format!("it calls `{callee}`, which was refused above"),
-                ));
+                lowered
+                    .program
+                    .uncompiled
+                    .push((caller.clone(), format!("it calls `{callee}`, {why}")));
             }
             lowered.program.funcs.retain(|func| func.name != caller);
         }
