@@ -1796,7 +1796,11 @@ interop() {
   # project prints SKIP, and the comparison is `ran + skipped`.
   #
   # 18 the same day: `native-string` (`85cfd136`), the `const char *` boundary.
-  interop_floor=18
+  #
+  # 19: `library-module-state`, whose module scope builds a heap array. It is
+  # the only interop example whose `module__init` has work to do, which is why
+  # a static archive dropping the initialiser went a month unseen.
+  interop_floor=19
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"
