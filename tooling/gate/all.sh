@@ -1810,7 +1810,8 @@ interop() {
   # builds. `ls examples/interop/*/build.sh` said 21 while the answer was 20.
   #
   # 21: `native-closure` (`580e25bb`), a capturing closure handed to C.
-  interop_floor=21
+  # 22: `gtk-loop` (`9055d56b`), libuv driven from a GLib main loop.
+  interop_floor=22
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"
