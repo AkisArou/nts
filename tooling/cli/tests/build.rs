@@ -3539,3 +3539,66 @@ fn the_config_is_evaluated_once_however_often_it_is_asked() {
         "the config was evaluated {calls} time(s) for a project that has one of them"
     );
 }
+
+/// The witness compiles with the include path the program compiles with.
+///
+/// **A binding over a header that includes a pkg-config package's header** --
+/// `gtk/gtk.h` under `native/`, which is the first thing any GTK program writes.
+/// The program and the package's own C got `--cflags`; the witness did not, so
+/// the check that a binding matches its headers failed to find the headers,
+/// and reported that as a mismatch.
+///
+/// `fakedep.h` is reachable *only* through the `.pc` file's `Cflags`, so a pass
+/// cannot come from a system include directory. Against the compiler before
+/// this test, the build stops with "does not match the headers" and
+/// "'fakedep.h' file not found".
+#[test]
+fn the_witness_sees_a_header_that_only_a_dependency_claim_names() {
+    let pkg_config = Command::new("pkg-config").arg("--version").output();
+    if !available() || !pkg_config.is_ok_and(|o| o.status.success()) {
+        skip("node, the tsgo frontend, clang, nm and pkg-config");
+        return;
+    }
+    let project = native_fixture("build-witness-cflags");
+    let include = project.join("fakedep/include");
+    std::fs::create_dir_all(&include).expect("the include directory");
+    std::fs::write(
+        include.join("fakedep.h"),
+        "#ifndef FAKEDEP_H\n#define FAKEDEP_H\ntypedef unsigned int fakedep_word;\n#endif\n",
+    )
+    .expect("the dependency's header");
+    std::fs::write(
+        project.join("native/digest.h"),
+        "#ifndef PROBE_DIGEST_H\n#define PROBE_DIGEST_H\n#include <stdint.h>\n#include <fakedep.h>\n#define DIGEST_PRIME 16777619u\nuint32_t digest_step(uint32_t seed, uint32_t value);\n#endif\n",
+    )
+    .expect("the header");
+    let pc = project.join("pc");
+    std::fs::create_dir_all(&pc).expect("the pkg-config directory");
+    std::fs::write(
+        pc.join("fakedep.pc"),
+        format!(
+            "prefix={}\nName: fakedep\nDescription: a header reachable only through a claim\n\
+             Version: 1.0.0\nCflags: -I${{prefix}}/include\nLibs:\n",
+            project.join("fakedep").display()
+        ),
+    )
+    .expect("the pkg-config file");
+    std::fs::write(
+        project.join("nts.config.ts"),
+        "import { defineConfig, library, sources, target } from \"@nts/config\";\nexport default defineConfig({\n  products: { probe: library.native({ targets: [target.linux({ backend: \"c\" })], entry: \"./src/main.ts\" }) },\n  native: [sources({ dir: \"native\", header: \"native/digest.h\" })],\n  dependencies: { \"linux-gnu\": { from: \"pkg-config\", packages: [\"fakedep\"] } },\n});\n",
+    )
+    .expect("config");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("build")
+        .arg(project.join("tsconfig.json"))
+        .env("PKG_CONFIG_PATH", &pc)
+        .output()
+        .expect("running nts build");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("does not match the headers"),
+        "the witness did not get the dependency's include path:\n{stderr}"
+    );
+    assert!(output.status.success(), "{stderr}");
+}

@@ -2893,6 +2893,18 @@ fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) 
         for name in &types {
             command.arg("--record").arg(name);
         }
+        // **The package's own dependency claims reach the header too.** A
+        // header that includes `<gtk/gtk.h>` is only readable with gtk4's
+        // `--cflags`, which the program's compile gets from the same claim --
+        // so without them this read a header the build could compile and
+        // reported that clang could not.
+        for id in targets {
+            let claimed = nts_build::dependencies::resolve(package, &resolved.dependencies, id, None)
+                .with_context(|| format!("resolving the dependencies `{config_path}` declares"))?;
+            for flag in claimed.cflags {
+                command.arg("--clang").arg(flag);
+            }
+        }
         command.arg("--out").arg(out.as_str());
         let output = command.output().context("running `nts bind-c`")?;
         if !output.status.success() {
@@ -4437,6 +4449,7 @@ fn check_witness(
     out: &Utf8Path,
     native: &[(Utf8PathBuf, Utf8PathBuf)],
     tools: &Toolchain,
+    cflags: &[String],
 ) -> Result<()> {
     let witness = out.join(nts_codegen_c::NATIVE_WITNESS_NAME);
     if !witness.exists() {
@@ -4459,6 +4472,10 @@ fn check_witness(
             seen.push(directory.as_path());
         }
     }
+    // **And a dependency's `--cflags`**, which the program and the package's C
+    // are compiled with. Without them a header including `<gtk/gtk.h>` failed
+    // here as a mismatch, in a build whose every other compile found it.
+    command.args(cflags);
     command.arg(witness.as_str());
     let output = command
         .output()
@@ -4495,7 +4512,7 @@ fn link_c(
     // root is checked against the headers of the platform it will run on, and
     // doing that with the host compiler asks the wrong question.
     let tools = toolchain_for(name, target)?;
-    check_witness(name, out, native, &tools)?;
+    check_witness(name, out, native, &tools, &needs.cflags)?;
     let addon = product.kind == "node-addon";
     let shared = product.kind == "shared-library" || addon;
     let library = product.kind == "shared-library" || product.kind == "static-library";

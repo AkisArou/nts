@@ -28,6 +28,7 @@
     "native-stat/nts.config.ts",
     "native-uname/nts.config.ts",
     "ts-from-c/nts.config.ts",
+    "gtk-hello/nts.config.ts",
     "android-shape/nts.config.ts",
     "java-from-ts/nts.config.ts",
     "ts-from-java/nts.config.ts"
