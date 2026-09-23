@@ -3637,6 +3637,44 @@ backend, `own` and `rc` then emit that edge's releases like any other, which is
 the objection 0246 raised answered by construction rather than by a cleanup
 list.
 
+### Re-ranked at `f4956d7f`, after the `try` row was worked
+
+Cross-call exception handling landed (record 0343). What it moved, and what it
+did not:
+
+    NTS1001 sites, all causes          1,298 -> 1,284
+    ... of them "a call inside a `try`"   85 ->    67
+    exports blocked by that row           16 ->    13
+    names published                      140 ->   140
+
+**Eighteen sites cleared on that cause and four of them reappeared elsewhere** --
+a function whose `try` now compiles stops at its next blocker instead. The
+export surface did not move, which is the third time this document has recorded
+that and the reason the depth ranking is kept beside the site ranking.
+
+The queue now, by exports blocked, following each wrapper through its cascade to
+the NTS1001 that refused:
+
+    27  an erased value where a concrete representation is wanted
+    16  a `UVExceptionError` where a `UVError` is wanted -- a widening
+    13  a call inside a `try` (a method callee, or one reaching a method)
+    11  a `EngineOptions` where a `ZlibOptions` is wanted -- an ordering
+    10  an exported generic function this program never instantiates
+     7  an `instanceof` against something this compiler has no class for
+     6  a property `#map` of unrepresentable type (`Map<string | symbol, WeakRef>`)
+     5  a method used as a value whose body reads `this`
+
+Three things to read from it. The head changed: **an erased value where a
+concrete representation is wanted** went 19 -> 27 as exports moved out from
+behind the `try` row, and it is now the largest by a clear margin -- and it is
+diffuse, spread over twelve files, so it needs its own census before it is work.
+The `EngineOptions -> ZlibOptions` row is new at 11 and is one of the 23
+ordering sites above, which is to say it is record 0258's column and blocked on
+the same thing. And what is left of the `try` row is exactly the bound record
+0343 draws: a **method** callee, or a plain one that reaches a method, because
+`function_copies` is consulted for function declarations and a method's copy
+would have to be a dispatch-table entry rather than a name.
+
 ## Eleven modules started compiling and not one gained a passing test
 
 Measured on `target/release/nts` at 15:39, pinned to scratch, from a worktree at
