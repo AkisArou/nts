@@ -46,11 +46,30 @@ declare module "c:types" {
   // `ScopedClosure` is for one C calls only during the call -- its C prototype
   // has the context and no destroy function -- and it is released after.
   export type Closure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "retained" };
+  // A retained closure handed to C as GLib's type-erased `GCallback`,
+  // `void (*)(void)`, the shape of `g_signal_connect_data`. C calls it with
+  // the signature `F` plus a trailing context -- which is how a GObject
+  // signal's marshaller calls a handler -- so the bridge is typed `F` and only
+  // the pointer C receives is erased. Whether `F` is the signal's real
+  // signature is the binding's claim; `bind-gir` writes it from GIR.
+  //
+  // `N` is the destroy function's C type, which C libraries do not agree on:
+  // GLib's `GClosureNotify` is `(gpointer, GClosure *)`, and the witness
+  // compares it exactly. The context is released through it; any arguments
+  // past the first are ignored, which is GLib's own `(GClosureNotify) g_free`.
+  export type ErasedClosure<
+    F extends (...args: never[]) => unknown,
+    N extends (context: Ptr<unknown>, ...rest: never[]) => void,
+  > = F & { readonly __c_closure?: "erased"; readonly __c_notify?: N };
   export type ScopedClosure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "scoped" };
   // A handle read-only through this view: C's `const GtkBitset *`. A plain
   // handle is assignable to it, and the C prototype says `const`, which is
   // what the header declares and so what the witness compares against.
   export type Const<H extends ClassChain | Opaque<string>> = H & { readonly __c_const?: true };
+  // A handle C takes as `void *` -- `gpointer` -- where the binding still
+  // knows which handle it is: the instance of `g_signal_connect_data`, typed
+  // by the signal it connects. Any `H` converts to it, and C sees `void *`.
+  export type Erased<H extends ClassChain | Opaque<string>> = H & { readonly __c_erased?: true };
   // What a `Class` is, for the constraint above; not a type to write.
   export type ClassChain = { readonly __c_chain: readonly string[] };
   // A parent's tags, without the rest element that keeps the chain open.

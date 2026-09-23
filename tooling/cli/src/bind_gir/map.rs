@@ -60,6 +60,9 @@ pub(crate) enum TypeDecl {
 
 #[derive(Debug)]
 pub(crate) struct Function {
+    /// The name the binding exports: the C symbol, or for a typed view of
+    /// another function -- a signal's connect -- a name of its own.
+    pub(crate) name: String,
     pub(crate) symbol: String,
     pub(crate) parameters: Vec<(String, Mapped)>,
     pub(crate) result: Mapped,
@@ -251,10 +254,20 @@ pub(crate) fn bind<'a>(
             Err(reason) => mapper.binding.refused.push((name, reason)),
         }
     }
-    mapper.binding.functions.sort_by(|a, b| a.symbol.cmp(&b.symbol));
+    for class in &namespace.classes {
+        for signal in &class.signals {
+            let label = format!("{}::{}", class.c_type.as_deref().unwrap_or(&class.name), signal.name);
+            match mapper.signal(class, signal) {
+                Ok(function) => mapper.binding.functions.push(function),
+                Err(reason) => mapper.binding.refused.push((label, reason)),
+            }
+        }
+    }
+    mapper.binding.functions.sort_by(|a, b| a.name.cmp(&b.name));
     // Two GIR entries can name one C symbol (a function and a method moved to
-    // it); the first is the binding.
-    mapper.binding.functions.dedup_by(|a, b| a.symbol == b.symbol);
+    // it); the first is the binding. Signal connects share a symbol and have
+    // names of their own, which is what this compares.
+    mapper.binding.functions.dedup_by(|a, b| a.name == b.name);
     mapper.binding
 }
 
@@ -334,6 +347,7 @@ impl<'a> Mapper<'a> {
                 && self.reaches_type_instance(class)
             {
                 self.binding.functions.push(Function {
+                    name: get_type.clone(),
                     symbol: get_type.clone(),
                     parameters: Vec::new(),
                     result: Mapped { ts: "c_size_t".to_owned(), c: Type::Scalar(Scalar::Size) },
@@ -461,7 +475,7 @@ impl<'a> Mapper<'a> {
                 _ => None,
             })
             .flatten();
-        Ok(Function { symbol, parameters, result, c_parameters, deprecated: callable.deprecated, free, returns })
+        Ok(Function { name: symbol.clone(), symbol, parameters, result, c_parameters, deprecated: callable.deprecated, free, returns })
     }
 
     /// The result, and for a string the caller owns, what frees it.
@@ -527,6 +541,17 @@ impl<'a> Mapper<'a> {
             TypeRef::Varargs => return Err(Reason::Varargs),
             TypeRef::Missing => return Err(Reason::Unknown("(no type)".to_owned())),
         };
+        // `gpointer` is C's `void *`: any native pointer, which a binding
+        // spells `object` and the compiler checks is not a managed one.
+        // `gconstpointer` would need a const `void *` TypeScript has no
+        // spelling for yet, and a returned `gpointer` says nothing about what
+        // it points at; both stay refused.
+        if name == "gpointer" && param.direction == Direction::In && c_type != "gconstpointer" && !c_type.starts_with("const") {
+            return Ok(Mapped {
+                ts: if param.nullable { "object | null" } else { "object" }.to_owned(),
+                c: Type::Pointer(Pointee::Void),
+            });
+        }
         if name == "gpointer" || name == "gconstpointer" {
             return Err(Reason::Gpointer);
         }
@@ -554,6 +579,20 @@ impl<'a> Mapper<'a> {
             None => (false, c_type),
         };
         let base = base.trim_end_matches(['*', ' ']);
+        // A handle C takes as `gpointer` -- `g_object_unref`'s parameter is
+        // `GObject.Object` to GIR and `gpointer` to C. `Erased<GObject>`: any
+        // object for TypeScript, `void *` for the header.
+        if c_type == "gpointer"
+            && param.direction == Direction::In
+            && let Some(Resolved::Class(namespace, class)) = self.resolve(&qualified)
+            && let Some(class_type) = class.c_type.clone()
+        {
+            let local = self.name_in(namespace, &class_type);
+            self.binding.brands.insert("Erased");
+            let ts = format!("Erased<{local}>");
+            let ts = if param.nullable { format!("{ts} | null") } else { ts };
+            return Ok(Mapped { ts, c: Type::Pointer(Pointee::Void) });
+        }
         if depth == 1
             && let Some(namespace) = self.c_types.get(base).copied()
         {
@@ -574,6 +613,121 @@ impl<'a> Mapper<'a> {
             Some(_) => Err(Reason::PointerDepth(c_type.to_owned())),
             None => Err(Reason::Unknown(qualified)),
         }
+    }
+
+    /// A typed view of `g_signal_connect_data` for one signal of one class:
+    ///
+    /// ```text
+    /// gtk_button_connect_clicked(instance: Erased<GtkButton>, detailed_signal: "clicked",
+    ///     handler: ErasedClosure<(self: GtkButton) => void>, connect_flags: c_uint): c_ulong
+    /// ```
+    ///
+    /// Signals have no C prototype -- `GObject` registers them at run time -- so
+    /// this is the one place a signal's signature can be typed. The C side is
+    /// `g_signal_connect_data` exactly, which the self-check compiles against
+    /// `GObject`'s header for every view: the instance is `void *`, the handler
+    /// a `GCallback`, its destroy function a `GClosureNotify`. The handler's
+    /// own signature is GIR's: the instance first, the signal's parameters,
+    /// and the `user_data` last, where the bridge takes the closure from.
+    fn signal(&mut self, class: &'a Class, signal: &super::model::Signal) -> Result<Function, Reason> {
+        let c_type = class.c_type.clone().ok_or_else(|| Reason::Unknown(class.name.clone()))?;
+        let tag = self.facts.tags.get(&c_type).cloned().ok_or_else(|| Reason::NoTag(c_type.clone()))?;
+        let prefix = class.symbol_prefix.as_deref().ok_or(Reason::NoSymbol)?;
+        let local = c_type.clone();
+        self.binding.brands.extend(["Erased", "ErasedClosure", "c_uint", "c_ulong"]);
+        let instance = Type::Pointer(Pointee::Opaque(Handle { tag, ancestors: Vec::new() }));
+        let mut ts_parameters = vec![format!("self: {local}")];
+        let mut callback = vec![instance];
+        for param in &signal.signature.parameters {
+            if matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8" || name == "filename") {
+                return Err(Reason::StringInCallback);
+            }
+            let mapped = self.typed(&self.with_c_type(param))?;
+            callback.push(mapped.c.clone());
+            ts_parameters.push(format!("{}: {}", identifier(&param.name), mapped.ts));
+        }
+        let result = match &signal.signature.result.ty {
+            TypeRef::Named { name, .. } if name == "none" => Mapped { ts: "void".to_owned(), c: Type::Void },
+            TypeRef::Named { name, .. } if name == "utf8" || name == "filename" => return Err(Reason::StringInCallback),
+            _ => self.typed(&self.with_c_type(&signal.signature.result))?,
+        };
+        let context = Type::Pointer(Pointee::Void);
+        // The handler's C signature is the compiler's to derive from the
+        // TypeScript one; mapping the parameters above is what refuses a
+        // signal whose parameters have no C type here.
+        drop(callback);
+        let erased = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(Vec::new(), Type::Void)));
+        // `GClosureNotify`: `void (*)(gpointer, GClosure *)`, which the header
+        // declares exactly and the self-check compares.
+        let closure_tag = self.facts.tags.get("GClosure").cloned().ok_or_else(|| Reason::NoTag("GClosure".to_owned()))?;
+        let closure = Type::Pointer(Pointee::Opaque(Handle { tag: closure_tag, ancestors: Vec::new() }));
+        let notify = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(vec![context.clone(), closure], Type::Void)));
+        let objects = self
+            .repository
+            .namespaces
+            .get("GObject")
+            .ok_or_else(|| Reason::Unknown("GObject".to_owned()))?;
+        let (_, gclosure) = self.reference(objects, "GClosure");
+        self.binding.brands.insert("Ptr");
+        let string = Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char))));
+        let name = format!(
+            "{}_{prefix}_connect_{}",
+            self.namespace.symbol_prefix,
+            signal.name.replace('-', "_")
+        );
+        Ok(Function {
+            name,
+            symbol: "g_signal_connect_data".to_owned(),
+            parameters: vec![
+                ("instance".to_owned(), Mapped { ts: format!("Erased<{local}>"), c: context.clone() }),
+                ("detailed_signal".to_owned(), Mapped { ts: format!("\"{}\"", signal.name), c: string.clone() }),
+                (
+                    "handler".to_owned(),
+                    Mapped {
+                        ts: format!(
+                            "ErasedClosure<({}) => {}, (data: Ptr<unknown>, closure: {gclosure}) => void>",
+                            ts_parameters.join(", "),
+                            result.ts
+                        ),
+                        c: erased.clone(),
+                    },
+                ),
+                ("connect_flags".to_owned(), Mapped { ts: "c_uint".to_owned(), c: Type::Scalar(Scalar::UInt) }),
+            ],
+            result: Mapped { ts: "c_ulong".to_owned(), c: Type::Scalar(Scalar::ULong) },
+            c_parameters: vec![context.clone(), string, erased, context, notify, Type::Scalar(Scalar::UInt)],
+            deprecated: false,
+            free: None,
+            returns: None,
+        })
+    }
+
+    /// A signal parameter with its C type filled in where GIR left it out:
+    /// a class or record there is passed as a pointer, which is how `GObject`'s
+    /// marshallers pass one.
+    fn with_c_type(&self, param: &Param) -> Param {
+        let mut param = param.clone();
+        if let TypeRef::Named { name, c_type } = &mut param.ty
+            && c_type.is_none()
+        {
+            let qualified = self.qualify(name);
+            let (ns, local) = qualified.split_once('.').unwrap_or_default();
+            if let Some(namespace) = self.repository.namespaces.get(ns) {
+                let pointer = namespace
+                    .classes
+                    .iter()
+                    .find(|c| c.name == local)
+                    .and_then(|c| c.c_type.clone())
+                    .or_else(|| namespace.records.iter().find(|r| r.name == local).and_then(|r| r.c_type.clone()));
+                *c_type = pointer.map(|c| format!("{c}*")).or_else(|| {
+                    namespace.enums.iter().find(|e| e.name == local).and_then(|e| e.c_type.clone())
+                });
+            }
+            if c_type.is_none() {
+                *c_type = Some(name.clone());
+            }
+        }
+        param
     }
 
     /// A pointer to a class or record, `const` where C says so.

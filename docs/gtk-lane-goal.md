@@ -106,11 +106,69 @@ The first and the `gpointer` half of the fourth are what M2's generator has to a
 - `runtime::READS_ONLY`;
 - the JVM `REFUSED_FLOOR`.
 
-## After M1
+## M2, bindings from GIR: where it stands
 
-- **M2: `nts bind-gir`.** Reads GIR XML, which carries what headers cannot: transfer, nullability, closure and destroy pairing, the class hierarchy, and signals.
-- **M3: the idiomatic layer.** Managed GObject wrappers, `new Gtk.Button({ … })`, typed `connect`, and Promises for `GAsyncReadyCallback`.
-- **M4: a real application,** benchmarked against GJS: startup to first frame, RSS, signal dispatch.
+`nts bind-gir Gtk-4.0` binds GTK's closure of 13 namespaces, and `nts build`
+does it on its own for any `c:Name-Version` import (into `types/gir`,
+cached by a stamp over the GIR files read and the `nts` that read them).
+`examples/interop/gtk-gir` is a GTK program with no hand-written GTK
+declarations. Landed:
+
+| Commit | What |
+|---|---|
+| `2fdd62ee` | The binder: parse, facts, map, check, emit, with struct tags and enum signedness read from the headers, and every declaration compiled against them before it is kept. |
+| `a113bc39` | `unsafeDowncast` (one generated `asGtkBox` per class), `Const<H>`, `string \| null` parameters. |
+| `35f374f7` | The runtime's UTF-8 decoder is WHATWG's (it read an overlong `/` as `/`), and ASCII is copied: 80 ns to 36 ns for a 62-byte path. |
+| `892eba61` | Strings C returns, copied, and freed by `@ntsFree` (`g_free` for transfer-full). |
+
+Measured on this machine's GTK 4.22:
+**7788 functions bound**, 418 of them typed signal connects.
+
+**Typed signals.** A signal has no C prototype, so the binder emits one typed
+view of `g_signal_connect_data` per class and signal:
+
+```ts
+/** @ntsSymbol g_signal_connect_data */
+export function gtk_button_connect_clicked(instance: Erased<GtkButton>, detailed_signal: "clicked",
+  handler: ErasedClosure<(self: GtkButton) => void, (data: Ptr<unknown>, closure: GClosure) => void>,
+  connect_flags: c_uint): c_ulong;
+```
+
+All 418 views compile against GObject's header in the binder's self-check.
+The compiler reads the view with:
+
+- `@ntsSymbol`: a TypeScript name bound to another C symbol.
+- `Erased<H>`: a typed handle spelled `void *`.
+- `ErasedClosure<F, N>`: a bridge typed `F`, handed over as `GCallback`, with
+  the destroy function's C type `N` stated by the binding.
+- A string literal parameter type (`"clicked"`), crossing as any `string`.
+
+Checked by `a_typed_signal_view_calls_through_an_erased_callback_on_both_backends`
+(C and LLVM, no-GC and reference counting). Two views of one symbol call
+through a fake registry, and fifty connect/emit/release cycles leave the live
+count unchanged. The control skips the notify and must leave at least 100 alive. `gtk-gir`
+connects `activate` and `clicked` through the generated views and reads its
+flags from the generated `const enum`s. What remains in its shim is
+`g_signal_emit_by_name` (varargs), `g_application_run` (an array), and output.
+
+**Still refused, ranked by count:**
+
+- 648: report errors through `GError **`, which should become a thrown `Error`.
+- 585: out parameters.
+- 291: arrays.
+- 166: async-scope callbacks, which should become Promises.
+- 145: `gpointer` results and `gconstpointer` parameters.
+
+The binder's `*.refused.txt` is the queue.
+
+## After M2
+
+- **M3: the idiomatic layer.** Zero-cost methods on handles
+  (`button.set_label("x")` lowering to `gtk_button_set_label(button, "x")`,
+  with no wrapper object), typed `connect`, and GObject lifetime tied to the
+  TypeScript value.
+- **M4: a real application,** benchmarked against GJS: startup to first frame,
+  RSS, signal dispatch.
 
 ## Rules this lane keeps
 

@@ -1,7 +1,7 @@
 //! Declaration-authored C ABI types. Brands describe a foreign boundary;
 //! inside TypeScript their values retain JavaScript's primitive semantics.
 
-use nts_semantic_schema::{MemberKind, NodeId, SemanticSnapshot, TypeId, TypeKind};
+use nts_semantic_schema::{LiteralValue, MemberKind, NodeId, SemanticSnapshot, TypeId, TypeKind};
 
 use super::{HirType, ManagedType};
 
@@ -78,7 +78,7 @@ pub struct ReturnedString {
 }
 
 /// What one C parameter of a foreign function receives.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Role {
     /// The argument as TypeScript passed it, converted to the ABI type.
     Plain,
@@ -93,7 +93,12 @@ pub enum Role {
     /// `c:types` when C keeps it (`scoped: false`, released by the notify
     /// that follows), `ScopedClosure<F>` when it is called only during the
     /// call (released after it).
-    Closure { scoped: bool },
+    ///
+    /// `bridge` is the signature the closure is called with, context last.
+    /// It is the parameter's own C type except for an `ErasedClosure`, whose
+    /// parameter is `GLib`'s type-erased `GCallback`, `void (*)(void)`, and
+    /// the bridge is converted to it at the call.
+    Closure { scoped: bool, bridge: std::sync::Arc<FnPointer> },
     /// The closure's context, the `void *` C hands back to the callback:
     /// `nts_closure_lend(closure)`. Hidden from TypeScript.
     ClosureData,
@@ -120,7 +125,7 @@ impl Function {
                     Some(ts - 1)
                 }
             };
-            (at, *role, fed)
+            (at, role.clone(), fed)
         })
     }
 
@@ -1019,21 +1024,10 @@ impl Function {
                 variadic = Some(ty);
                 continue;
             }
-            // A TypeScript `string` in the C convention is `const char *`,
-            // converted at the call. Only there: the managed convention passes
-            // the string itself, which is what `@ntsAbi managed` means.
-            if abi.is_none() && is_string(snapshot, parameter.ty) {
-                parameters.push(Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char)))));
-                roles.push(Role::String);
-                continue;
-            }
-            // `Closure<F>` / `ScopedClosure<F>`: the callback C calls with the
-            // closure's context last, then the context, then -- when C keeps
-            // it -- the function that releases it.
             if abi.is_none()
-                && let Some((function, scoped)) = closure(snapshot, parameter.ty)
+                && let Some(slots) = c_parameter(snapshot, &name, parameter)?
             {
-                for (ty, role) in closure_slots(snapshot, &name, &parameter.name, function, scoped)? {
+                for (ty, role) in slots {
                     parameters.push(ty);
                     roles.push(role);
                 }
@@ -1083,7 +1077,7 @@ fn retention_of(roles: &[Role]) -> Vec<Retention> {
         .iter()
         .scan(false, |scoped, role| {
             Some(match role {
-                Role::Closure { scoped: true } => {
+                Role::Closure { scoped: true, .. } => {
                     *scoped = true;
                     Retention::NotRetained
                 }
@@ -1105,7 +1099,7 @@ fn closure_slots(
     name: &str,
     parameter: &str,
     function: TypeId,
-    scoped: bool,
+    kind: ClosureKind,
 ) -> Result<Vec<(Type, Role)>, String> {
     let Some(Type::FnPointer(declared)) = abi_type(snapshot, function) else {
         return Err(format!(
@@ -1115,20 +1109,50 @@ fn closure_slots(
     let context = Type::Pointer(Pointee::Void);
     let mut callback = declared.parameters.clone();
     callback.push(context.clone());
-    let mut slots = vec![
-        (
-            Type::FnPointer(std::sync::Arc::new(FnPointer::spell(callback, (*declared.result).clone()))),
-            Role::Closure { scoped },
-        ),
-        (context.clone(), Role::ClosureData),
-    ];
-    if !scoped {
-        slots.push((
+    let bridge = std::sync::Arc::new(FnPointer::spell(callback, (*declared.result).clone()));
+    let scoped = matches!(kind, ClosureKind::Scoped);
+    // What C's parameter is: the bridge's own type, or for an erased closure
+    // `GCallback`, which the bridge is converted to.
+    let slot = match kind {
+        ClosureKind::Erased(_) => Type::FnPointer(std::sync::Arc::new(FnPointer::spell(Vec::new(), Type::Void))),
+        ClosureKind::Scoped | ClosureKind::Retained => Type::FnPointer(bridge.clone()),
+    };
+    let mut slots = vec![(slot, Role::Closure { scoped, bridge }), (context.clone(), Role::ClosureData)];
+    match kind {
+        ClosureKind::Scoped => {}
+        ClosureKind::Retained => slots.push((
             Type::FnPointer(std::sync::Arc::new(FnPointer::spell(vec![context], Type::Void))),
             Role::ClosureNotify,
-        ));
+        )),
+        // The destroy function's C type is the binding's to state: C libraries
+        // do not agree on one, and GLib's takes the `GClosure` second.
+        ClosureKind::Erased(notify) => {
+            let Some(Type::FnPointer(notify)) = abi_type(snapshot, notify) else {
+                return Err(format!(
+                    "foreign function `{name}` closure parameter `{parameter}` whose destroy function has no native ABI type"
+                ));
+            };
+            if notify.parameters.first() != Some(&context) || *notify.result != Type::Void {
+                return Err(format!(
+                    "foreign function `{name}` closure parameter `{parameter}` whose destroy function does not take the context first and return nothing"
+                ));
+            }
+            slots.push((Type::FnPointer(notify), Role::ClosureNotify));
+        }
     }
     Ok(slots)
+}
+
+/// Which closure a `c:` parameter asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClosureKind {
+    /// `ScopedClosure<F>`: called only during the call.
+    Scoped,
+    /// `Closure<F>`: kept, and released by a `void (*)(void *)`.
+    Retained,
+    /// `ErasedClosure<F, N>`: kept, handed over as `GCallback`, and released
+    /// by a destroy function of type `N`.
+    Erased(TypeId),
 }
 
 /// The function type inside a `Closure<F>` or `ScopedClosure<F>`, and whether
@@ -1138,38 +1162,76 @@ fn closure_slots(
 /// is optional so that an arrow, which has no such property, is assignable --
 /// which is also why this reads it directly rather than through the schema's
 /// `marker`, which accepts required properties only.
-fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, bool)> {
-    let TypeKind::Intersection(parts) = &snapshot.types.get(ty.0 as usize)?.kind else {
+fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKind)> {
+    let kind_of = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    // An optional property reads as `T | undefined`: the `T`.
+    let defined = |id: TypeId| -> Option<TypeId> {
+        match kind_of(id)? {
+            TypeKind::Union(members) => {
+                members.iter().copied().find(|member| !matches!(kind_of(*member), Some(TypeKind::Undefined)))
+            }
+            _ => Some(id),
+        }
+    };
+    let TypeKind::Intersection(parts) = kind_of(ty)? else {
         return None;
     };
     let mut function = None;
-    let mut scoped = None;
+    let mut marker = None;
+    let mut notify = None;
     for part in parts {
-        match &snapshot.types.get(part.0 as usize)?.kind {
+        match kind_of(*part)? {
             TypeKind::Function(_) => function = Some(*part),
             TypeKind::Object { properties } => {
-                let marker = properties.iter().find(|p| p.name == "___c_closure")?;
-                scoped = match &snapshot.types.get(marker.ty.0 as usize)?.kind {
-                    TypeKind::Literal(nts_semantic_schema::LiteralValue::String(kind)) => {
-                        Some(kind == "scoped")
-                    }
-                    // An optional property reads as `T | undefined`.
-                    TypeKind::Union(members) => members.iter().find_map(|member| {
-                        match &snapshot.types.get(member.0 as usize)?.kind {
-                            TypeKind::Literal(nts_semantic_schema::LiteralValue::String(kind)) => {
-                                Some(kind == "scoped")
-                            }
-                            _ => None,
-                        }
-                    }),
-                    _ => None,
+                let closure = properties.iter().find(|p| p.name == "___c_closure")?;
+                let TypeKind::Literal(LiteralValue::String(kind)) = kind_of(defined(closure.ty)?)? else {
+                    return None;
                 };
+                marker = Some(kind.clone());
+                notify = properties.iter().find(|p| p.name == "___c_notify").and_then(|p| defined(p.ty));
             }
             _ => return None,
         }
     }
-    Some((function?, scoped?))
+    let kind = match marker?.as_str() {
+        "scoped" => ClosureKind::Scoped,
+        "retained" => ClosureKind::Retained,
+        "erased" => ClosureKind::Erased(notify?),
+        _ => return None,
+    };
+    Some((function?, kind))
 }
+
+/// The parameters only the C convention has, each a type TypeScript spells
+/// its own way: `None` for any other, which is read as a plain ABI type.
+///
+/// - **`object`**: C's `void *`, any native pointer at all -- what `gpointer`
+///   means. TypeScript also lets a managed object through, and lowering
+///   refuses one at the call.
+/// - **`string`**, or a string literal type: `const char *`, converted at the
+///   call. Only in the C convention: the managed one passes the string itself,
+///   which is what `@ntsAbi managed` means.
+/// - **`Closure<F>` / `ScopedClosure<F>` / `ErasedClosure<F, N>`**: the
+///   callback C calls with the closure's context last, then the context, then
+///   -- when C keeps it -- the function that releases it.
+fn c_parameter(
+    snapshot: &SemanticSnapshot,
+    name: &str,
+    parameter: &nts_semantic_schema::ParameterRecord,
+) -> Result<Option<Vec<(Type, Role)>>, String> {
+    if is_object_pointer(snapshot, parameter.ty) {
+        return Ok(Some(vec![(Type::Pointer(Pointee::Void), Role::Plain)]));
+    }
+    if is_string(snapshot, parameter.ty) || is_string_literal(snapshot, parameter.ty) {
+        let text = Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char))));
+        return Ok(Some(vec![(text, Role::String)]));
+    }
+    match closure(snapshot, parameter.ty) {
+        Some((function, kind)) => closure_slots(snapshot, name, &parameter.name, function, kind).map(Some),
+        None => Ok(None),
+    }
+}
+
 
 /// Whether a declared parameter is a TypeScript `string`, or `string | null`.
 ///
@@ -1192,6 +1254,16 @@ fn is_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
         }
         _ => false,
     }
+}
+
+/// A string literal type, `"clicked"`: a parameter whose only value is that
+/// text, which a binding uses to pin an argument C reads as a name. It crosses
+/// as any `string` does; a return is never one, since C cannot promise it.
+fn is_string_literal(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    matches!(
+        snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+        Some(TypeKind::Literal(LiteralValue::String(_)))
+    )
 }
 
 /// The element type of a rest parameter, which is the type of each argument
@@ -1471,6 +1543,25 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
 
 pub(crate) mod schema;
 pub use schema::{is_layout, pointer, storage};
+
+/// Whether a declared parameter is TypeScript's `object`, or `object | null`.
+///
+/// `TypeFlags.NonPrimitive`, which the schema carries as a structured type.
+/// The same test `FuncBuilder::is_the_object_type` makes in lowering; kept here
+/// rather than shared because the two crates' copies should become one, and
+/// that is a change to lowering for another day.
+pub(crate) fn is_object_pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    const NON_PRIMITIVE: u32 = 0x0002_0000;
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let object = |id: TypeId| matches!(kind(id), Some(TypeKind::Structured { flags }) if *flags == NON_PRIMITIVE);
+    match kind(ty) {
+        Some(TypeKind::Union(parts)) => {
+            let [a, b] = parts.as_slice() else { return false };
+            (object(*a) && matches!(kind(*b), Some(TypeKind::Null))) || (object(*b) && matches!(kind(*a), Some(TypeKind::Null)))
+        }
+        _ => object(ty),
+    }
+}
 
 /// A `string` result is C's `const char *`, copied into a string at the call;
 /// `string | null` makes NULL a `null`. The free function, if any, comes from

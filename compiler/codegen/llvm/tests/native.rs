@@ -834,6 +834,65 @@ export function run(): boolean {{
     }
 }
 
+/// `object` is C's `void *`: any native pointer, the same address, and never a
+/// managed value, on both backends.
+///
+/// `GObject`'s `gpointer` parameters -- `g_object_unref`, every signal function
+/// -- take whatever handle is at hand, and TypeScript's `object` accepts one.
+/// It also accepts `{}`, whose heap address C must never be handed; lowering
+/// refuses that at the call, which is the arm that makes this a check.
+#[test]
+fn an_object_parameter_takes_any_handle_as_void_and_refuses_a_managed_value() {
+    let source = r#"
+import type { Class, c_int } from "c:types";
+type Obj = Class<"_Obj">;
+type Widget = Class<"_Widget", Obj>;
+declare function a_widget(): Widget;
+declare function same(p: object, q: object | null): c_int;
+export function run(): number {
+    const w = a_widget();
+    return same(w, w) * 10 + same(w, null);
+}
+"#;
+    let Some((dir, prepared)) = prepare("object-void", source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    assert!(c.writer.text().contains("int same(void *, void *)"), "`object` did not become `void *`");
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("native.c"), r"
+#include <stddef.h>
+struct _Widget { int kind; };
+static struct _Widget the_widget;
+struct _Widget *a_widget(void) { return &the_widget; }
+int same(void *p, void *q) { return p == (void *)&the_widget ? (q == NULL ? 2 : q == p ? 1 : 3) : 9; }
+").unwrap();
+    std::fs::write(dir.join("caller.c"), "#include \"program.h\"\nint main(void) { return run() == 12.0 ? 0 : 1; }\n").unwrap();
+    for file in ["native.c", "caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+    }
+    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+        assert!(Command::new(dir.join(executable)).status().unwrap().success(), "{executable}");
+    }
+
+    let managed = r"
+declare function takes(p: object): void;
+export function run(): void { takes({ x: 1 }); }
+";
+    let Some((_, prepared)) = prepare("object-managed", managed) else { return; };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("a managed value where C takes a pointer")),
+        "a managed object reached a `void *`: {:?}",
+        prepared.diagnostics
+    );
+}
+
 /// A downcast written as an assertion is refused by lowering.
 ///
 /// TypeScript accepts `widget as GtkButton`: the two types overlap, which is
@@ -893,26 +952,7 @@ fn a_capturing_closure_crosses_to_c_on_both_backends() {
         std::fs::write(dir.join("closures.h"), include_str!("../../../../examples/interop/native-closure/native/closures.h")).unwrap();
         std::fs::write(dir.join("closures.c"), include_str!("../../../../examples/interop/native-closure/native/closures.c")).unwrap();
         std::fs::write(dir.join("caller.c"), include_str!("../../../../examples/interop/native-closure/consumer/caller.c")).unwrap();
-        std::fs::write(dir.join("cycles.c"), r#"
-#include <stdio.h>
-#include <stdlib.h>
-#include "closures.h"
-#include "program.h"
-int main(int argc, char **argv) {
-    module__init();
-    (void)argv;
-    closures_skip_notify = argc > 1;
-    size_t before = nts_live_count();
-    for (int cycle = 0; cycle < 50; cycle++) {
-        start();
-        send_(1);
-        stop();
-    }
-    size_t after = nts_live_count();
-    printf("%zu %zu\n", before, after);
-    return 0;
-}
-"#).unwrap();
+        std::fs::write(dir.join("cycles.c"), SIGNAL_CYCLES).unwrap();
         let counted: &[&str] = if provider == hir::Provider::ReferenceCounting { &["-DNTS_PROVIDER_RC"] } else { &[] };
         for file in ["closures.c", "caller.c", "cycles.c"] {
             clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
@@ -1673,5 +1713,161 @@ fn authored_allocator_symbols_cannot_redefine_storage_operations() {
     let llvm = nts_codegen_llvm::emit(&prepared.program);
     for diagnostics in [&c.diagnostics, &llvm.diagnostics] {
         assert!(diagnostics.iter().any(|d| d.message.contains("collides with the compiler's memory operations")), "{diagnostics:?}");
+    }
+}
+
+/// `g_signal_connect_data`'s contract and nothing more, for the test below.
+const SIGNAL_REGISTRY: &str = r#"
+#include <string.h>
+typedef void (*GCallback)(void);
+struct _GClosure { int unused; };
+typedef void (*GClosureNotify)(void *, struct _GClosure *);
+struct _Obj { int id; };
+static struct _Obj the = { 7 };
+static struct _GClosure a_closure;
+struct _Obj *the_obj(void) { return &the; }
+int obj_id(struct _Obj *o) { return o->id; }
+static struct { const char *name; GCallback fn; void *data; GClosureNotify notify; } slots[2];
+static int used;
+int skip_notify;
+unsigned long sig_connect_data(void *instance, const char *signal, GCallback fn, void *data, GClosureNotify notify, unsigned flags) {
+    if (instance != &the || flags != 0 || used == 2) return 0;
+    slots[used].name = strcmp(signal, "poke") == 0 ? "poke" : strcmp(signal, "ping") == 0 ? "ping" : "?";
+    slots[used].fn = fn;
+    slots[used].data = data;
+    slots[used].notify = notify;
+    return (unsigned long)++used;
+}
+void emit_all(int n) {
+    for (int i = 0; i < used; i++) {
+        if (slots[i].name[1] == 'o') ((void (*)(struct _Obj *, int, void *))slots[i].fn)(&the, n, slots[i].data);
+        else ((void (*)(struct _Obj *, void *))slots[i].fn)(&the, slots[i].data);
+    }
+}
+void drop_all(void) {
+    for (int i = 0; i < used; i++) if (!skip_notify) slots[i].notify(slots[i].data, &a_closure);
+    used = 0;
+}
+"#;
+
+/// Fifty connect/emit/release cycles, then the live count before and after
+/// and what the handlers added up; any argument skips the release.
+const SIGNAL_CYCLES: &str = r#"
+#include <stdio.h>
+#include <stdlib.h>
+#include "closures.h"
+#include "program.h"
+int main(int argc, char **argv) {
+    module__init();
+    (void)argv;
+    closures_skip_notify = argc > 1;
+    size_t before = nts_live_count();
+    for (int cycle = 0; cycle < 50; cycle++) {
+        start();
+        send_(1);
+        stop();
+    }
+    size_t after = nts_live_count();
+    printf("%zu %zu\n", before, after);
+    return 0;
+}
+"#;
+
+/// A `GObject` signal, as `nts bind-gir` declares one: a typed view of
+/// `g_signal_connect_data` per signal, each naming the one C symbol with
+/// `@ntsSymbol`, whose handler C holds as an erased `GCallback` and calls with
+/// the signature the signal has.
+///
+/// The fake registry here is that contract and nothing more: a handler stored
+/// as `void (*)(void)` with its data and a two-argument notify, called through
+/// a cast to the signal's own signature, released by calling the notify. Two
+/// views of one symbol with different handler types check that the erased
+/// prototype really is one prototype -- two spellings would not compile. The
+/// `ping` handler takes fewer arguments than C passes, which is how a signal
+/// handler that ignores its instance is written.
+///
+/// Fifty connect/emit/release cycles under reference counting must leave the
+/// live count where it was; the control skips the notify and must not.
+#[test]
+fn a_typed_signal_view_calls_through_an_erased_callback_on_both_backends() {
+    let source = r#"
+import type { Class, Erased, ErasedClosure, Ptr, c_int, c_uint, c_ulong } from "c:types";
+type Obj = Class<"_Obj">;
+type GClosure = Class<"_GClosure">;
+type Notify = (data: Ptr<unknown>, closure: GClosure) => void;
+/** @ntsSymbol sig_connect_data */
+declare function obj_connect_poke(instance: Erased<Obj>, signal: "poke", handler: ErasedClosure<(self: Obj, n: c_int) => void, Notify>, flags: c_uint): c_ulong;
+/** @ntsSymbol sig_connect_data */
+declare function obj_connect_ping(instance: Erased<Obj>, signal: "ping", handler: ErasedClosure<(self: Obj) => void, Notify>, flags: c_uint): c_ulong;
+declare function the_obj(): Obj;
+declare function obj_id(o: Obj): c_int;
+let total = 0;
+export function wire(k: number): void {
+    const o = the_obj();
+    obj_connect_poke(o, "poke", (self, n) => { total += obj_id(self) * n * k; }, 0 as c_uint);
+    obj_connect_ping(o, "ping", () => { total += 1000 * k; }, 0 as c_uint);
+}
+export function tally(): number { return total; }
+"#;
+    for (label, provider) in [("nogc", hir::Provider::NoGc), ("rc", hir::Provider::ReferenceCounting)] {
+        let Some((dir, prepared)) = prepare_with_provider(&format!("signal-{label}"), source, provider) else { return; };
+        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let c = nts_codegen_c::emit(&prepared.program);
+        assert!(c.is_complete(), "{:?}", c.diagnostics);
+        let llvm = nts_codegen_llvm::emit(&prepared.program);
+        assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+        std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+        std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+        std::fs::write(dir.join("signals.c"), SIGNAL_REGISTRY).unwrap();
+        std::fs::write(dir.join("cycles.c"), r#"
+#include <stdio.h>
+#include "program.h"
+extern int skip_notify;
+void emit_all(int n);
+void drop_all(void);
+int main(int argc, char **argv) {
+    module__init();
+    (void)argv;
+    skip_notify = argc > 1;
+    size_t before = nts_live_count();
+    for (int cycle = 0; cycle < 50; cycle++) {
+        wire(2);
+        emit_all(3);
+        drop_all();
+    }
+    printf("%zu %zu %.0f\n", before, nts_live_count(), tally());
+    return 0;
+}
+"#).unwrap();
+        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting { &["-DNTS_PROVIDER_RC"] } else { &[] };
+        for file in ["signals.c", "cycles.c"] {
+            clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+        }
+        clang(&dir, &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat());
+        for (source, object, executable) in [("program.c", "c.o", "c"), ("program.ll", "llvm.o", "llvm")] {
+            clang(&dir, &[&["-O2", "-Wno-override-module", "-c", source, "-o", object][..], counted].concat());
+            clang(&dir, &[object, "signals.o", "cycles.o", "nts_runtime.o", "-lm", "-o", &format!("{executable}-run")]);
+            let counts = |args: &[&str]| -> (u64, u64, u64) {
+                let run = Command::new(dir.join(format!("{executable}-run"))).args(args).output().unwrap();
+                assert!(run.status.success(), "{label}/{executable}");
+                let text = String::from_utf8_lossy(&run.stdout).into_owned();
+                let numbers: Vec<u64> = text.split_whitespace().map(|n| n.parse().unwrap()).collect();
+                (numbers[0], numbers[1], numbers[2])
+            };
+            // Per cycle: `poke` adds 7 * 3 * 2 through the instance C passed,
+            // `ping` adds 1000 * 2 through the captured `k` alone.
+            let (before, after, total) = counts(&[]);
+            assert_eq!(total, 50 * (7 * 3 * 2 + 1000 * 2), "{label}/{executable}: the handlers did not run as connected");
+            if provider != hir::Provider::ReferenceCounting {
+                continue;
+            }
+            assert_eq!(before, after, "{executable}: fifty released signal handlers left objects alive");
+            let (before, after, _) = counts(&["skip-notify"]);
+            assert!(
+                after >= before + 100,
+                "{executable}: the control released what was never given back ({before} -> {after}), so the count proves nothing"
+            );
+        }
     }
 }

@@ -20,6 +20,8 @@ pub(crate) struct Repository {
 pub(crate) struct Namespace {
     pub(crate) name: String,
     pub(crate) version: String,
+    /// `c:symbol-prefixes`: `gtk`, the first word of every C symbol.
+    pub(crate) symbol_prefix: String,
     /// `<c:include>`: the headers a C program includes to use this namespace.
     pub(crate) headers: Vec<String>,
     /// `<package>`: the pkg-config names whose `--cflags` reach those headers.
@@ -41,6 +43,11 @@ pub(crate) struct Class {
     /// Qualified (`Gtk.Widget`, `GObject.Object`); `None` for a root.
     pub(crate) parent: Option<String>,
     pub(crate) interface: bool,
+    /// `c:symbol-prefix`: `button` in `gtk_button_new`, joined to the
+    /// namespace's own prefix to name what a binding adds for the class.
+    pub(crate) symbol_prefix: Option<String>,
+    /// `<glib:signal>`: the signals instances of this class emit.
+    pub(crate) signals: Vec<Signal>,
     /// `glib:get-type`: the function answering this class's `GType`.
     pub(crate) get_type: Option<String>,
     /// The type of the first field, when GIR lists fields. C makes a pointer
@@ -48,6 +55,14 @@ pub(crate) struct Class {
     /// is how `GObject` sits on `GTypeInstance` with no GIR parent to say so.
     pub(crate) first_field: Option<TypeRef>,
     pub(crate) callables: Vec<Callable>,
+}
+
+/// A signal: its name, and the handler's signature less the instance first
+/// and the `user_data` last, which every handler has and GIR does not list.
+#[derive(Debug)]
+pub(crate) struct Signal {
+    pub(crate) name: String,
+    pub(crate) signature: Signature,
 }
 
 /// A C struct GIR describes: boxed types and plain records alike.

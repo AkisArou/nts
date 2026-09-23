@@ -5,14 +5,10 @@
 
 #include <gtk/gtk.h>
 
-// `g_signal_connect_data`: GIR marks it not introspectable.
-gulong gir_connect(GObject *instance, const char *signal,
-                   void (*handler)(GObject *, void *), void *data,
-                   void (*notify)(void *));
+// `g_signal_emit_by_name`: varargs, so GIR marks it not introspectable.
+void gir_emit(GObject *instance, const char *signal);
 // `g_application_run`: `argv` is an array.
 int gir_run(GApplication *app);
-// `g_object_unref`: a `gpointer`.
-void gir_unref(GObject *object);
 // Output.
 void gir_log(const char *line);
 

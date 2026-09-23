@@ -753,15 +753,28 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
 /// Walked from the signatures rather than from a list built alongside them, so
 /// a signature that reaches a prototype cannot fail to reach this.
 pub(super) fn function_pointer_types(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
-    let mut seen: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    // Every signature a line of program.c can name: a native call's
+    // parameters and result, and any *value* of function-pointer type. The
+    // values matter on their own: an erased callback's bridge has the signature
+    // C will call it with, and the call it is passed to takes a different one
+    // (`GCallback`), so a walk over call types alone declared the value with a
+    // name no line defined.
+    let mut seen: std::collections::BTreeMap<String, std::sync::Arc<nts_core::hir::native::FnPointer>> =
+        std::collections::BTreeMap::new();
+    let mut note = |signature: &std::sync::Arc<nts_core::hir::native::FnPointer>| {
+        seen.entry(signature.name.clone()).or_insert_with(|| signature.clone());
+    };
     for func in &program.funcs {
-        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
-            let nts_core::hir::OpKind::Call { callee: nts_core::hir::Callee::Native(target), .. } = &op.kind else {
+        for value in &func.values {
+            if let nts_core::hir::HirType::NativePointer(Pointee::FnPointer(signature)) = &value.ty {
+                note(signature);
+            }
+            let nts_core::hir::OpKind::Call { callee: nts_core::hir::Callee::Native(target), .. } = &value.kind else {
                 continue;
             };
             for ty in target.parameters.iter().chain(std::iter::once(&target.result)) {
-                if let nts_core::hir::native::Type::FnPointer(signature) = ty {
-                    seen.insert(signature.name.clone(), signature.typedef());
+                if let Type::FnPointer(signature) = ty {
+                    note(signature);
                 }
             }
         }
@@ -778,7 +791,7 @@ pub(super) fn function_pointer_types(writer: &mut CodeWriter, origin: &Origin, p
                 if let Pointee::Pointer(pointee) = &field.ty
                     && let Pointee::FnPointer(signature) = &**pointee
                 {
-                    seen.insert(signature.name.clone(), signature.typedef());
+                    note(signature);
                 }
             }
         }
@@ -790,25 +803,16 @@ pub(super) fn function_pointer_types(writer: &mut CodeWriter, origin: &Origin, p
     // callback taking a handle was a type mismatch at each use. Repeating a
     // tag declaration is legal, so this does not ask what else declares it.
     let mut tags = std::collections::BTreeSet::new();
-    let mut typedefs = Vec::new();
-    for func in &program.funcs {
-        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
-            let nts_core::hir::OpKind::Call { callee: nts_core::hir::Callee::Native(target), .. } = &op.kind else {
-                continue;
-            };
-            for ty in target.parameters.iter().chain(std::iter::once(&target.result)) {
-                if matches!(ty, Type::FnPointer(_)) {
-                    collect_opaque_tags(ty, &mut tags);
-                }
-            }
+    for signature in seen.values() {
+        for ty in signature.parameters.iter().chain(std::iter::once(&*signature.result)) {
+            collect_opaque_tags(ty, &mut tags);
         }
     }
     for tag in tags {
-        typedefs.push(format!("struct {tag};"));
+        writer.line(origin, format!("struct {tag};"));
     }
-    typedefs.extend(seen.into_values());
-    for line in typedefs {
-        writer.line(origin, line);
+    for signature in seen.values() {
+        writer.line(origin, signature.typedef());
     }
 }
 

@@ -31,7 +31,7 @@ mkdir -p "$out"
 log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
   timeout 30 xvfb-run -a "$out/gir/linux-gnu-x86_64/gir" 2>/dev/null | tr '\n' ' ' || true)
 echo "log: $log"
-expected="cast-ok cast-null idle label=tick 3 ticks=3 "
+expected="cast-ok cast-null clicked 1 idle label=tick 3 ticks=3 "
 if [ "$log" != "$expected" ]; then
   echo "FAILED gtk-gir: expected $expected" >&2
   exit 1

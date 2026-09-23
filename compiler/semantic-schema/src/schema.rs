@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 16;
+pub const SCHEMA_VERSION: u32 = 17;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -702,6 +702,10 @@ pub struct NativeAttributes {
     /// function returns, once it has been copied. Absent, the string is
     /// borrowed and C keeps it.
     pub free: Option<String>,
+    /// `@ntsSymbol g_signal_connect_data`: the C symbol a declaration binds,
+    /// when its TypeScript name is another. Several typed views of one C
+    /// function -- one per signal of a `GObject` -- each need a name of their own.
+    pub symbol: Option<String>,
 }
 
 /// Why a snapshot was rejected.

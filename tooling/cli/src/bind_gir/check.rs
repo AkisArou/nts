@@ -71,7 +71,7 @@ pub(crate) fn against_headers(binding: &mut Binding, cflags: &[String]) -> Resul
                 binding.module
             );
         }
-        binding.functions.retain(|f| !rejected.contains_key(&f.symbol));
+        binding.functions.retain(|f| !rejected.contains_key(&f.name));
         binding
             .refused
             .extend(rejected.into_iter().map(|(symbol, why)| (symbol, Reason::Header(why))));
@@ -110,7 +110,7 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, String>) {
             function.result.c.c_type_expanded(),
             function.symbol
         );
-        lines.insert(out.lines().count(), function.symbol.clone());
+        lines.insert(out.lines().count(), function.name.clone());
     }
     (out, lines)
 }

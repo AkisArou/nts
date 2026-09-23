@@ -6,7 +6,7 @@ use roxmltree::Node;
 
 use super::model::{
     Callable, CallableKind, Callback, Class, Direction, Enum, Member, Namespace, Param, Record,
-    Repository, Scope, Signature, Transfer, TypeRef,
+    Repository, Scope, Signal, Signature, Transfer, TypeRef,
 };
 
 const CORE: &str = "http://www.gtk.org/introspection/core/1.0";
@@ -62,6 +62,10 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
     let mut namespace = Namespace {
         name: attribute(element, "name").unwrap_or_default().to_owned(),
         version: attribute(element, "version").unwrap_or_default().to_owned(),
+        symbol_prefix: c_attribute(element, "symbol-prefixes")
+            .and_then(|prefixes| prefixes.split(',').next())
+            .unwrap_or_default()
+            .to_owned(),
         ..Namespace::default()
     };
     for node in repository.children().filter(Node::is_element) {
@@ -89,6 +93,15 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
                 c_type: c_attribute(node, "type").map(str::to_owned),
                 parent: attribute(node, "parent").map(str::to_owned),
                 interface: kind == "interface",
+                symbol_prefix: c_attribute(node, "symbol-prefix").map(str::to_owned),
+                signals: node
+                    .children()
+                    .filter(|n| n.tag_name().namespace() == Some(GLIB) && n.tag_name().name() == "signal")
+                    .map(|signal| Signal {
+                        name: attribute(signal, "name").unwrap_or_default().to_owned(),
+                        signature: signature(signal),
+                    })
+                    .collect(),
                 get_type: node.attribute((GLIB, "get-type")).map(str::to_owned),
                 first_field: node.children().find(|n| is(*n, "field")).and_then(|field| {
                     let ty = child(field, "type")?;

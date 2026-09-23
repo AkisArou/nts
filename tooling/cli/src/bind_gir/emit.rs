@@ -62,6 +62,9 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
         if let Some(free) = &function.free {
             notes.push(format!("@ntsFree {free}"));
         }
+        if function.name != function.symbol {
+            notes.push(format!("@ntsSymbol {}", function.symbol));
+        }
         if !notes.is_empty() {
             // One tag per line, since a tag's value runs to the end of its line.
             let _ = writeln!(out, "  /**");
@@ -79,7 +82,7 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
         let _ = writeln!(
             out,
             "  export function {}({parameters}): {};",
-            function.symbol, function.result.ts
+            function.name, function.result.ts
         );
     }
     out.push_str("}\n");

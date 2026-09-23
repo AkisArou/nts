@@ -13952,6 +13952,9 @@ impl<'a> FuncBuilder<'a> {
             let origin = self.origin(id);
             return Ok(self.push(OpKind::Convert(value), want.clone(), origin));
         }
+        if matches!(want, HirType::NativePointer(_)) && !matches!(have, HirType::NativePointer(_)) {
+            return Err(self.unsupported(id, "a managed value where C takes a pointer: pass a handle, a `Ptr`, or `null`"));
+        }
         if matches!(have, HirType::NativePointer(_)) || matches!(want, HirType::NativePointer(_)) {
             return Err(self.unsupported(id, "an opaque C pointer converted to a different representation"));
         }
@@ -14258,7 +14261,20 @@ impl<'a> FuncBuilder<'a> {
         {
             return Some(bound.clone());
         }
-        self.represent(self.parameter_type_id(call, at)?)
+        let ty = self.parameter_type_id(call, at)?;
+        // `object` at a call to a native declaration is C's `void *`: any
+        // handle converts to it, and a managed value is refused by `coerce`,
+        // which is what keeps a TypeScript object's heap address from C.
+        let native = self
+            .snapshot
+            .call_targets
+            .get(&call)
+            .and_then(|target| target.callee)
+            .is_some_and(|declaration| !self.has_a_body(declaration));
+        if native && super::native::is_object_pointer(self.snapshot, ty) {
+            return Some(HirType::NativePointer(super::native::Pointee::Void));
+        }
+        self.represent(ty)
     }
 
     /// `delete o.x`, which TypeScript permits only where `x` is optional.
@@ -39002,11 +39018,9 @@ impl<'a> FuncBuilder<'a> {
                     lent.push(Lent::String { string, pointer });
                     c_args.push(pointer);
                 }
-                Role::Closure { scoped } => {
+                Role::Closure { scoped, bridge } => {
                     let Some(closure) = argument else { continue };
-                    let super::native::Type::FnPointer(signature) = &target.parameters[at] else {
-                        return Err(self.unsupported(id, "a closure parameter whose C type is not a function pointer"));
-                    };
+                    let signature = &bridge;
                     // Dispatched statically, through the closure's own layout,
                     // which an arrow or function expression has and a value of
                     // a bare function type does not.
@@ -39016,12 +39030,21 @@ impl<'a> FuncBuilder<'a> {
                             "a closure passed to C whose body is not known here: write the function or arrow at the call, or bind it with `const` in the same function",
                         ));
                     }
-                    let bridge = self.push(
+                    let bridged = self.push(
                         OpKind::NativeBridge { closure, signature: signature.clone(), context: true },
                         HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
                         origin.clone(),
                     );
-                    c_args.push(bridge);
+                    // An `ErasedClosure`'s parameter is `GCallback`: the same
+                    // code address, which C casts back to the signature it
+                    // calls it with.
+                    let want = target.parameters[at].representation();
+                    let bridged = if self.values[bridged.0 as usize].ty == want {
+                        bridged
+                    } else {
+                        self.push(OpKind::Convert(bridged), want, origin.clone())
+                    };
+                    c_args.push(bridged);
                     lending = Some((closure, scoped));
                 }
                 Role::ClosureData => {
@@ -39038,12 +39061,18 @@ impl<'a> FuncBuilder<'a> {
                     c_args.push(context);
                 }
                 Role::ClosureNotify => {
-                    let notify = self.runtime_call(
-                        "nts_closure_notify",
-                        Vec::new(),
-                        target.parameters[at].representation(),
-                        origin.clone(),
-                    );
+                    // `nts_closure_unlend`, as the destroy function's type the
+                    // binding states. GLib's `GClosureNotify` takes the
+                    // `GClosure` second, and the release ignores it -- which is
+                    // GLib's own `(GClosureNotify) g_free`.
+                    let released = super::native::Type::FnPointer(std::sync::Arc::new(super::native::FnPointer::spell(
+                        vec![super::native::Type::Pointer(super::native::Pointee::Void)],
+                        super::native::Type::Void,
+                    )))
+                    .representation();
+                    let notify = self.runtime_call("nts_closure_notify", Vec::new(), released.clone(), origin.clone());
+                    let want = target.parameters[at].representation();
+                    let notify = if released == want { notify } else { self.push(OpKind::Convert(notify), want, origin.clone()) };
                     c_args.push(notify);
                 }
             }
@@ -39148,7 +39177,18 @@ impl<'a> FuncBuilder<'a> {
         name: String,
         signature: &nts_semantic_schema::SignatureRecord,
     ) -> Result<Callee, Diagnostic> {
-        let name = declaration.and_then(|decl| self.declared_name(decl)).unwrap_or(name);
+        // `@ntsSymbol`: the C function a declaration binds, when its own name
+        // is another -- one typed view per GObject signal of the one
+        // `g_signal_connect_data`.
+        let symbol = declaration
+            .and_then(|decl| self.node(decl).native.as_ref())
+            .and_then(|n| n.symbol.clone());
+        if let Some(symbol) = &symbol
+            && !super::native::is_c_identifier(symbol)
+        {
+            return Err(self.unsupported(call, "@ntsSymbol names one C function, as in `@ntsSymbol g_signal_connect_data`"));
+        }
+        let name = symbol.or_else(|| declaration.and_then(|decl| self.declared_name(decl))).unwrap_or(name);
         let abi = declaration
             .and_then(|decl| self.snapshot.nodes[decl.0 as usize].native.as_ref().and_then(|n| n.abi.as_deref()));
         // An explicit request for a backend-owned intrinsic. Backends resolve

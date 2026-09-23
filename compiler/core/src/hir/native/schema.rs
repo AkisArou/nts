@@ -77,6 +77,11 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         // `const GtkBitset *`. The marker is optional, so a plain handle is
         // assignable to it, which is C's own qualification conversion.
         let constant = property(snapshot, ty, "___c_const").is_some_and(|p| p.optional && p.readonly);
+        // `Erased<H>` -- the same handle, spelled `void *` where C erases it.
+        let erased = property(snapshot, ty, "___c_erased").is_some_and(|p| p.optional && p.readonly);
+        if erased {
+            return Some(Pointee::Void);
+        }
         return Some(if constant { Pointee::Const(Box::new(handle)) } else { handle });
     }
     // `Flexible<T>` -- `T name[]`, storage with no extent. Read before the
