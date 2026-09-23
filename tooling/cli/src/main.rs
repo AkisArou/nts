@@ -6,6 +6,7 @@
 //! diagnosed precisely, and that promise starts here.
 
 mod bind;
+mod bind_gir;
 
 use std::fmt::Write as _;
 
@@ -317,6 +318,30 @@ fn check(rest: &[String]) -> Result<()> {
     )
 }
 
+/// `nts bind-gir Gtk-4.0 --out types [--gir-dir <dir>]...`
+///
+/// Binds the named namespace and every one it includes, one `.d.ts`, one
+/// `.values.ts` and one `.refused.txt` each. Any `--gir-dir` is searched
+/// first, then `GI_GIR_PATH`, `XDG_DATA_DIRS` and the system directories.
+fn bind_gir(rest: &[String]) -> Result<()> {
+    let root = rest
+        .iter()
+        .find(|arg| !arg.starts_with("--"))
+        .filter(|arg| !rest.windows(2).any(|pair| pair[0].starts_with("--") && pair[1] == **arg))
+        .ok_or_else(|| anyhow::anyhow!("`nts bind-gir` needs a namespace, as in `nts bind-gir Gtk-4.0`"))?;
+    let mut search: Vec<Utf8PathBuf> = rest
+        .windows(2)
+        .filter(|pair| pair[0] == "--gir-dir")
+        .map(|pair| Utf8PathBuf::from(&pair[1]))
+        .collect();
+    search.extend(bind_gir::search_path());
+    let out = rest
+        .windows(2)
+        .find(|pair| pair[0] == "--out")
+        .map_or_else(|| Utf8PathBuf::from("."), |pair| Utf8PathBuf::from(&pair[1]));
+    bind_gir::run(&bind_gir::Request { root: root.clone(), search, out })
+}
+
 /// `nts bind-c --header sys/epoll.h --record epoll_event --fn epoll_ctl ...`
 ///
 /// Repeatable flags rather than a request file: the command *is* the record of
@@ -423,6 +448,7 @@ EMITTING ONE BACKEND
 
 BINDINGS
   bind-c       generate a TypeScript declaration from a C header
+  bind-gir     generate TypeScript declarations from GObject introspection
   bind         generate declarations and a binding table from class files
   deps         acquire the TypeScript behind this project's dependencies
 
@@ -523,6 +549,7 @@ fn main() -> Result<()> {
         // an arm added above it silently shadowed that command. Named for what
         // it emits, the way `emit-c` is.
         Some("bind-c") => bind_c(&args.collect::<Vec<String>>()),
+        Some("bind-gir") => bind_gir(&args.collect::<Vec<String>>()),
         Some("emit-c") => {
             let rest: Vec<String> = args.collect();
             // Through `project`, like every other command that builds a
@@ -2845,8 +2872,23 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
             roots.push(config);
         }
     }
+    // A `c:Name-Version` module this machine has GIR for is bound from the
+    // GIR, into `types/gir` beside the project's other generated bindings.
+    // Checked every build, not only when an import fails to resolve: once the
+    // bindings exist nothing fails to resolve, and a stale binding would be
+    // read silently.
+    let search = bind_gir::search_path();
+    let gir = project.join("types").join("gir");
+    let mut roots_wanted = std::collections::BTreeSet::new();
     for (module, file) in wanted {
+        if let Some(namespace) = bind_gir::namespace_of(&module, &search) {
+            roots_wanted.insert(namespace);
+            continue;
+        }
         bind_one(&module, &file, targets, project)?;
+    }
+    if !roots_wanted.is_empty() || gir.join(".nts-stamp").exists() {
+        bind_gir::ensure(&roots_wanted, &search, &gir)?;
     }
     Ok(roots)
 }

@@ -3764,3 +3764,230 @@ fn a_program_that_links_glib_is_driven_by_glib() {
     assert!(!main.contains("glib"), "a program that does not link GLib mentions it:\n{main}");
     assert!(!main.contains("nts_checkpoint_after_callbacks"), "{main}");
 }
+
+/// A small library with the shapes `bind-gir` decides on, laid out the way a
+/// real one is: a header, the C behind it, a `.pc` whose `Cflags` reach the
+/// header, and a GIR describing it. Written to `root`; the GIR goes in
+/// `root/gir`, the `.pc` in `root/pc`.
+///
+/// Two things are wrong on purpose. `DemoThing`'s struct tag is not the
+/// `_DemoThing` convention, so a binder that assumed it would declare a
+/// different struct; and the GIR claims `demo_wrong` returns a `gint` where
+/// the header says `long`, which only a check against the header can catch.
+fn gir_library(root: &Path, flag_signed: bool) {
+    let include = root.join("include");
+    for dir in [&include, &root.join("gir"), &root.join("pc"), &root.join("native")] {
+        std::fs::create_dir_all(dir).expect("the fixture's directories");
+    }
+    std::fs::write(
+        include.join("demo.h"),
+        "#ifndef DEMO_H\n#define DEMO_H\n\
+         typedef struct demo_thing_impl DemoThing;\n\
+         typedef void (*DemoTick)(DemoThing *thing, void *user_data);\n\
+         typedef enum { DEMO_FLAG_A = 1, DEMO_FLAG_HIGH = (int)(1u << 31) } DemoFlags;\n\
+         DemoThing *demo_thing_new(const char *name);\n\
+         int demo_thing_count(const DemoThing *thing);\n\
+         int demo_label_is_null(const char *label);\n\
+         unsigned int demo_on_tick(DemoThing *thing, DemoTick tick, void *user_data, void (*notify)(void *));\n\
+         void demo_flags(DemoFlags flags);\n\
+         long demo_wrong(int x);\n\
+         #endif\n",
+    )
+    .expect("the header");
+    std::fs::write(
+        root.join("native/demo.c"),
+        "#include <demo.h>\n#include <stdlib.h>\n#include <string.h>\n\
+         struct demo_thing_impl { int count; };\n\
+         DemoThing *demo_thing_new(const char *name) { DemoThing *t = malloc(sizeof *t); t->count = (int)strlen(name); return t; }\n\
+         int demo_thing_count(const DemoThing *thing) { return thing->count; }\n\
+         int demo_label_is_null(const char *label) { return label == NULL; }\n\
+         unsigned int demo_on_tick(DemoThing *thing, DemoTick tick, void *user_data, void (*notify)(void *)) { tick(thing, user_data); notify(user_data); return 1; }\n\
+         void demo_flags(DemoFlags flags) { (void)flags; }\n\
+         long demo_wrong(int x) { return x; }\n",
+    )
+    .expect("the library");
+    std::fs::write(
+        root.join("pc/demo.pc"),
+        format!("Name: demo\nDescription: a fixture\nVersion: 1.0\nCflags: -I{}\nLibs:\n", include.display()),
+    )
+    .expect("the pkg-config file");
+    // The flags' high member as GIR writes it: unsigned, although the header
+    // made it an `int`. Which spelling is right is the compiler's answer.
+    let high = if flag_signed { "2147483648" } else { "1073741824" };
+    std::fs::write(
+        root.join("gir/Demo-1.0.gir"),
+        format!(
+            r#"<?xml version="1.0"?>
+<repository version="1.2" xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0"
+            xmlns:glib="http://www.gtk.org/introspection/glib/1.0">
+  <package name="demo"/>
+  <c:include name="demo.h"/>
+  <namespace name="Demo" version="1.0">
+    <record name="Thing" c:type="DemoThing">
+      <constructor name="new" c:identifier="demo_thing_new">
+        <return-value transfer-ownership="full"><type name="Thing" c:type="DemoThing*"/></return-value>
+        <parameters><parameter name="name"><type name="utf8" c:type="const char*"/></parameter></parameters>
+      </constructor>
+      <method name="count" c:identifier="demo_thing_count">
+        <return-value><type name="gint" c:type="int"/></return-value>
+        <parameters><instance-parameter name="thing"><type name="Thing" c:type="const DemoThing*"/></instance-parameter></parameters>
+      </method>
+      <method name="on_tick" c:identifier="demo_on_tick">
+        <return-value><type name="guint" c:type="unsigned int"/></return-value>
+        <parameters>
+          <instance-parameter name="thing"><type name="Thing" c:type="DemoThing*"/></instance-parameter>
+          <parameter name="tick" scope="notified" closure="1" destroy="2"><type name="Tick" c:type="DemoTick"/></parameter>
+          <parameter name="user_data" nullable="1"><type name="gpointer" c:type="void*"/></parameter>
+          <parameter name="notify" scope="async"><type name="GLib.DestroyNotify" c:type="GDestroyNotify"/></parameter>
+        </parameters>
+      </method>
+    </record>
+    <callback name="Tick" c:type="DemoTick">
+      <return-value><type name="none" c:type="void"/></return-value>
+      <parameters>
+        <parameter name="thing"><type name="Thing" c:type="DemoThing*"/></parameter>
+        <parameter name="user_data" closure="1"><type name="gpointer" c:type="void*"/></parameter>
+      </parameters>
+    </callback>
+    <bitfield name="Flags" c:type="DemoFlags">
+      <member name="a" value="1" c:identifier="DEMO_FLAG_A"/>
+      <member name="high" value="{high}" c:identifier="DEMO_FLAG_HIGH"/>
+    </bitfield>
+    <function name="label_is_null" c:identifier="demo_label_is_null">
+      <return-value><type name="gint" c:type="int"/></return-value>
+      <parameters><parameter name="label" nullable="1"><type name="utf8" c:type="const char*"/></parameter></parameters>
+    </function>
+    <function name="flags" c:identifier="demo_flags">
+      <return-value><type name="none" c:type="void"/></return-value>
+      <parameters><parameter name="flags"><type name="Flags" c:type="DemoFlags"/></parameter></parameters>
+    </function>
+    <function name="wrong" c:identifier="demo_wrong">
+      <return-value><type name="gint" c:type="gint"/></return-value>
+      <parameters><parameter name="x"><type name="gint" c:type="int"/></parameter></parameters>
+    </function>
+  </namespace>
+</repository>
+"#
+        ),
+    )
+    .expect("the GIR");
+}
+
+/// `nts bind-gir` writes what the headers confirm and drops, with the header's
+/// words, what they contradict.
+///
+/// Each assertion is a decision the binder could get wrong in a way that still
+/// produces a plausible file: the struct tag read from the header rather than
+/// guessed, `const` kept, a callback's context and destroy function hidden,
+/// a nullable string, an enum signed because the compiler says so although
+/// GIR's value looks unsigned -- and `demo_wrong`, whose GIR is false about
+/// the header, absent from the binding and named in the report.
+#[test]
+fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
+    let pkg_config = Command::new("pkg-config").arg("--version").output();
+    if !available() || !pkg_config.is_ok_and(|o| o.status.success()) {
+        skip("node, the tsgo frontend, clang, nm and pkg-config");
+        return;
+    }
+    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join("bind-gir-demo");
+    drop(std::fs::remove_dir_all(&root));
+    gir_library(&root, true);
+    let out = root.join("out");
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-gir", "Demo-1.0", "--gir-dir"])
+        .arg(root.join("gir"))
+        .arg("--out")
+        .arg(&out)
+        .env("PKG_CONFIG_PATH", root.join("pc"))
+        .output()
+        .expect("running nts bind-gir");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(run.status.success(), "{stdout}{}", String::from_utf8_lossy(&run.stderr));
+    let binding = std::fs::read_to_string(out.join("Demo-1.0.d.ts")).expect("the binding");
+    for expected in [
+        "export type DemoThing = Class<\"demo_thing_impl\">;",
+        "export function demo_thing_new(name: string): DemoThing;",
+        "export function demo_thing_count(thing: Const<DemoThing>): c_int;",
+        "export function demo_on_tick(thing: DemoThing, tick: Closure<(thing: DemoThing) => void>): c_uint;",
+        "export function demo_label_is_null(label: string | null): c_int;",
+        "export function demo_flags(flags: c_int): void;",
+    ] {
+        assert!(binding.contains(expected), "missing `{expected}` from:\n{binding}");
+    }
+    assert!(!binding.contains("demo_wrong"), "a declaration the header contradicts was kept:\n{binding}");
+    let refused = std::fs::read_to_string(out.join("Demo-1.0.refused.txt")).expect("the report");
+    assert!(
+        refused.lines().any(|line| line.starts_with("demo_wrong\t") && line.contains("the header disagrees")),
+        "demo_wrong was not reported as contradicted:\n{refused}"
+    );
+}
+
+/// `nts build` binds a `c:Name-Version` import from GIR, reuses the binding
+/// while nothing it was made from changed, and rebinds when the GIR does.
+#[test]
+fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
+    let pkg_config = Command::new("pkg-config").arg("--version").output();
+    if !available() || !pkg_config.is_ok_and(|o| o.status.success()) {
+        skip("node, the tsgo frontend, clang, nm and pkg-config");
+        return;
+    }
+    let project = fixture(
+        "build-gir-import",
+        "import { defineConfig, app, sources } from \"@nts/config\";\n\
+         export default defineConfig({\n\
+         \x20 products: { tool: app.cli({ entry: \"./src/main.ts\", backend: \"c\" }) },\n\
+         \x20 native: [sources({ dir: \"native\" })],\n\
+         \x20 dependencies: { \"linux-gnu\": { from: \"pkg-config\", packages: [\"demo\"] } },\n\
+         });\n",
+    );
+    gir_library(&project, true);
+    std::fs::write(
+        project.join("src/main.ts"),
+        "import { demo_label_is_null, demo_thing_count, demo_thing_new } from \"c:Demo-1.0\";\n\
+         function main(): number {\n\
+         \x20 return demo_thing_count(demo_thing_new(\"four\")) * 10 + demo_label_is_null(null);\n\
+         }\n\
+         export const answer = main();\n",
+    )
+    .expect("the program");
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().expect("the repository");
+    std::fs::write(
+        project.join("tsconfig.json"),
+        format!(
+            r#"{{"extends":{:?},"compilerOptions":{{"noEmit":false}},"include":["src","types",{:?}]}}"#,
+            repo.join("tsconfig.fixtures.json").to_string_lossy(),
+            repo.join("runtime/native/libc.d.ts").to_string_lossy(),
+        ),
+    )
+    .expect("tsconfig");
+    let build = || {
+        let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+            .arg("build")
+            .arg(project.join("tsconfig.json"))
+            .env("PKG_CONFIG_PATH", project.join("pc"))
+            .env("GI_GIR_PATH", project.join("gir"))
+            .output()
+            .expect("running nts build");
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        assert!(output.status.success(), "{stdout}{}", String::from_utf8_lossy(&output.stderr));
+        stdout
+    };
+    let first = build();
+    assert!(first.contains("bound Demo-1.0"), "the first build did not bind from GIR:\n{first}");
+    let run = Command::new(project.join(".nts/build/tool/linux-gnu-x86_64/tool")).output().expect("running the program");
+    assert!(run.status.success(), "the program failed");
+    let second = build();
+    assert!(!second.contains("bound Demo-1.0"), "an unchanged GIR was bound again:\n{second}");
+    // A different GIR -- not merely a newer one -- so that a stamp comparing
+    // only modification times at a coarse resolution cannot miss it.
+    gir_library(&project, false);
+    let third = build();
+    assert!(third.contains("bound Demo-1.0"), "a changed GIR was not bound again:\n{third}");
+    assert!(
+        std::fs::read_to_string(project.join("types/gir/Demo-1.0.d.ts"))
+            .expect("the rebound binding")
+            .contains("export function demo_flags(flags: c_int): void;"),
+        "the rebound binding is not the new GIR's"
+    );
+}
