@@ -15906,7 +15906,16 @@ impl<'a> FuncBuilder<'a> {
     /// bargain the rest of this compiler makes with exceptions.
     fn open_cell_early(&mut self, symbol: u32, at: NodeId) -> Option<ValueId> {
         let index = self.cell_of(symbol)?;
-        let ty = self.type_of(at)?;
+        // **`closure_bound_to` first, exactly as `captured_as` asks it.** The
+        // checker's type for a closure is its *signature* -- `__function` --
+        // which no layout hangs on; a closure's layout is on the synthetic
+        // closure class. Typing the cell from the signature built a cell whose
+        // element type nothing had a layout for, and the backend said `an
+        // object type with no layout` about a program the lowering had called
+        // clean. Two derivations of one fact, and this was the narrow one.
+        let ty = self
+            .closure_bound_to(symbol)
+            .or_else(|| self.type_of(at))?;
         let origin = self.origin(at);
         self.layouts.push(self.cell_layout(index, ty));
         let id = ValueId(u32::try_from(self.values.len()).unwrap_or(u32::MAX));

@@ -1716,6 +1716,54 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
         params.join(", ")
     );
 
+    // **Render every block's operations before writing any `phi`.**
+    //
+    // A `phi`'s incoming label has to be the block the edge actually leaves
+    // from, and that is not always the block's own label: a guarded cell read
+    // opens `<v>.no` and `<v>.ok` inline, so the terminator after one sits in
+    // `<v>.ok` while `label(id)` still names the block. LLVM rejects the
+    // module outright -- `PHI node entries do not match predecessors` -- so it
+    // is a hard failure rather than a wrong answer, but it is reachable today
+    // by a closure that reads a forward-captured `const` inside a `?:`, and
+    // `examples/a-guarded-cell-read-in-a-branch` is that program.
+    //
+    // Rendering first is what makes the answer available: a successor may be
+    // emitted before its predecessor (any back edge), so the exit label cannot
+    // be discovered while writing in order.
+    let mut rendered: Vec<Vec<String>> = Vec::with_capacity(func.blocks.len());
+    for block in &func.blocks {
+        let mut lines = Vec::new();
+        for value in &block.ops {
+            let line = operation(program, func, *value)?;
+            if !line.is_empty() {
+                lines.push(line);
+            }
+        }
+        rendered.push(lines);
+    }
+    let exits: Vec<String> = func
+        .blocks
+        .iter()
+        .enumerate()
+        .map(|(index, _)| {
+            let id = BlockId(u32::try_from(index).unwrap_or(0));
+            rendered[index]
+                .iter()
+                .flat_map(|line| line.split('\n'))
+                .filter_map(|line| {
+                    let line = line.trim();
+                    line.strip_suffix(':').filter(|name| {
+                        !name.is_empty()
+                            && name
+                                .chars()
+                                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_')
+                    })
+                })
+                .next_back()
+                .map_or_else(|| label(id), str::to_owned)
+        })
+        .collect();
+
     for (index, block) in func.blocks.iter().enumerate() {
         let id = BlockId(u32::try_from(index).unwrap_or(0));
         let _ = writeln!(out, "{}:", label(id));
@@ -1727,7 +1775,7 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
         // Block parameters become `phi`, one incoming per predecessor edge.
         for (slot, param) in block.params.iter().enumerate() {
             let ty = ty_of(&func.values[param.0 as usize].ty, func)?;
-            let incoming = incoming_for(func, id, slot);
+            let incoming = incoming_for(func, id, slot, &exits);
             if incoming.is_empty() {
                 return Err(refuse(
                     func,
@@ -1736,11 +1784,8 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
             }
             let _ = writeln!(out, "  {} = phi {ty} {}", name(*param), incoming.join(", "));
         }
-        for value in &block.ops {
-            let line = operation(program, func, *value)?;
-            if !line.is_empty() {
-                let _ = writeln!(out, "  {line}");
-            }
+        for line in &rendered[index] {
+            let _ = writeln!(out, "  {line}");
         }
         // Anything an outgoing edge has to convert, before the terminator that
         // carries it: a phi's incoming value must be available in the
@@ -1783,15 +1828,20 @@ fn edge_value(value: ValueId) -> String {
 /// A block parameter is a phi read from the other side: the parameter says what
 /// it holds and each predecessor says what it sends, and this collects the
 /// second into the first.
-fn incoming_for(func: &Func, target: BlockId, slot: usize) -> Vec<String> {
+fn incoming_for(func: &Func, target: BlockId, slot: usize, exits: &[String]) -> Vec<String> {
     let mut pairs = Vec::new();
     for (index, block) in func.blocks.iter().enumerate() {
-        let from = BlockId(u32::try_from(index).unwrap_or(0));
+        // `exits[index]`, not `label(from)`: the label the edge actually
+        // leaves from, which a guarded cell read moves off the block's own.
+        let from = exits
+            .get(index)
+            .cloned()
+            .unwrap_or_else(|| label(BlockId(u32::try_from(index).unwrap_or(0))));
         let mut add = |to: BlockId, args: &[ValueId]| {
             if to == target
                 && let Some(value) = args.get(slot)
             {
-                pairs.push(format!("[ {}, %{} ]", edge_value(*value), label(from)));
+                pairs.push(format!("[ {}, %{} ]", edge_value(*value), from));
             }
         };
         match &block.terminator {
