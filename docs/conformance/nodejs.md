@@ -3574,6 +3574,69 @@ That also settles what a field-order convention could do for this fixture:
 nothing. `WithBase extends Base` owes slot 0 to `Base`, `Slice` wants `b` there,
 and one object has one linear layout.
 
+### The export queue, ranked by root cause instead of by named callee
+
+The depth ranking above counts the callee each wrapper *names*, which is a lower
+bound (see the correction two sections up). Re-ranked on `ec46dc07` by following
+each wrapper's callee through the NTS1003 chain to the NTS1001 that actually
+refused, over all 25 modules:
+
+    exports blocked   root cause
+             19       an erased value where a concrete representation is wanted
+             16       a call inside a `try`, whose `throw` would not reach this
+                      handler
+             16       a `UVExceptionError` where a `UVError` is wanted -- a
+                      widening, `blockers/optional-field-via-interface`
+              6       a property `#map` of unrepresentable type
+                      (`Map<string | symbol, WeakRef>`)
+              5       a method used as a value whose body reads `this`
+              4       `then` on a promise, which has no method table here
+
+and 61 wrappers name a callee whose own refusal the corpus does not print --
+`asRequest<[erased]x2>` is 16 of them, which is the generic-copy case
+`blockers/a-generic-rest-forwarded-to-its-callback` holds.
+
+Beside it, the same corpus ranked by **distinct compiled sites**:
+
+     85  a call inside a `try`, whose `throw` would not reach this handler
+     69  a method `X` with no declaration in the hierarchy
+     57  `X`, a global member with no definition here
+     54  a property `X` of unrepresentable type (an array of `X`)
+     53  `X` on an intersection, which is erased here
+     53  `X`, which `X` does not declare
+
+**One row is at the top of both**, and it is the only one that is: a call inside
+a `try`. Everything else on either list is high on one axis and absent from the
+other -- which is the reason for keeping two lists, and the reason a single
+"biggest cause" number has been the wrong instrument all along.
+
+### What that row is waiting on, which is less than its record says
+
+Record 0246 left it with "the plumbing is an afternoon, the leak is the design":
+a `longjmp` out of compiled code skips the releases reference counting inserted,
+so a thrown-through call leaks, and the memory gate would be right to fail.
+
+Two things have moved since:
+
+- **the sharper predicate is already built.** 0246's refusal was "any call";
+  `throwing_symbols` computes a transitive `can throw` over the call graph and
+  `call_within` consults it, so `try { r = pure(4) } catch {}` already lowers.
+  The 85 sites are calls that genuinely can raise;
+- **the leak is not the design any more**, because the design stopped being a
+  `longjmp`. `lower_try`'s own header states it: *"An unwinder's tables exist to
+  recover, at run time, which values a frame owns; this compiler computes that
+  at compile time already, in `super::own`, and `super::rc` emits the releases
+  an edge implies for every other edge in the program. A handler edge is not a
+  special kind of edge, so it needs no special machinery -- it needs to be an
+  edge."*
+
+A throw that stays inside its function is already exactly that, and works. What
+is missing is the same edge across a call: a callee that raised has to say so,
+and its caller has to branch on it. Modelled in the HIR rather than in a
+backend, `own` and `rc` then emit that edge's releases like any other, which is
+the objection 0246 raised answered by construction rather than by a cleanup
+list.
+
 ## Eleven modules started compiling and not one gained a passing test
 
 Measured on `target/release/nts` at 15:39, pinned to scratch, from a worktree at
