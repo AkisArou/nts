@@ -11090,6 +11090,10 @@ static NO_FOREIGN: std::sync::OnceLock<
     super::runtime::ForeignTable,
 > = std::sync::OnceLock::new();
 
+/// A C string lent to a native call, beside the string it was made from:
+/// `(string, pointer)`, released together once the call returns.
+type LentString = (ValueId, ValueId);
+
 impl<'a> FuncBuilder<'a> {
     /// A builder for asking the snapshot a question -- a name, a location, a
     /// refusal -- rather than for lowering a body.
@@ -38750,22 +38754,43 @@ impl<'a> FuncBuilder<'a> {
             self.native_callee(id, declaration, name, signature)?
         };
 
-        let args = self.lower_call_arguments(id, &callee, &arguments)?;
+        let (args, lent) = self.lower_call_arguments(id, &callee, &arguments)?;
 
-        self.push_call(id, callee, args, declaration)
+        let call = self.push_call(id, callee, args, declaration)?;
+        self.release_lent_strings(id, lent);
+        Ok(call)
     }
 
-    /// A call's arguments, lowered the way its callee wants them.
+    /// Give back every C string a native call was lent, now that it returned.
     ///
-    /// Two things separate a native callee from every other. Its variadic tail
-    /// is arguments rather than a gathered rest array, and a function-typed
-    /// argument becomes a bridge rather than a closure address.
+    /// Immediately after the call and in the same block, so nothing on the
+    /// straight-line path can skip it. **One path does:** a raise from a call
+    /// sequenced *before* this one in the same `try` branches to the handler
+    /// before the native call is reached -- and then this call and its
+    /// conversion were never reached either, so nothing was lent. What a raise
+    /// can never do is land between the conversion and this release, because
+    /// a native call names no raising copy and gets no test after it.
+    fn release_lent_strings(&mut self, id: NodeId, lent: Vec<LentString>) {
+        let origin = self.origin(id);
+        for (string, pointer) in lent {
+            self.runtime_call("nts_cstring_release", vec![string, pointer], HirType::Void, origin.clone());
+        }
+    }
+
+    /// A call's arguments, lowered the way its callee wants them, and the C
+    /// strings lent for the call -- each beside the string it was made from --
+    /// which the caller releases once the call returns.
+    ///
+    /// Three things separate a native callee from every other. Its variadic
+    /// tail is arguments rather than a gathered rest array, a function-typed
+    /// argument becomes a bridge rather than a closure address, and a `string`
+    /// parameter receives a C string converted for the call.
     fn lower_call_arguments(
         &mut self,
         id: NodeId,
         callee: &Callee,
         arguments: &[NodeId],
-    ) -> Result<Vec<ValueId>, Diagnostic> {
+    ) -> Result<(Vec<ValueId>, Vec<LentString>), Diagnostic> {
         let tail = match callee {
             Callee::Native(target) => {
                 target.variadic.as_ref().map(super::native::Type::representation)
@@ -38776,10 +38801,23 @@ impl<'a> FuncBuilder<'a> {
             Some(element) => self.lower_native_arguments(id, arguments, element)?,
             None => self.lower_arguments(id, arguments)?,
         };
+        let mut lent = Vec::new();
         if let Callee::Native(target) = callee {
             self.bridge_callback_arguments(id, &target.clone(), &mut args)?;
+            let origin = self.origin(id);
+            for (at, _) in target.strings.iter().enumerate().filter(|(_, is)| **is) {
+                let Some(argument) = args.get_mut(at) else { continue };
+                let string = *argument;
+                *argument = self.runtime_call(
+                    "nts_string_to_cstring",
+                    vec![string],
+                    target.parameters[at].representation(),
+                    origin.clone(),
+                );
+                lent.push((string, *argument));
+            }
         }
-        Ok(args)
+        Ok((args, lent))
     }
 
     /// Turn each argument for a C function pointer parameter into a bridge.

@@ -1489,6 +1489,7 @@ mod foreign_contracts {
             variadic: None,
             // This asks about retention, which no module decides.
             declared_at: None,
+            strings: vec![false, false],
         }))
     }
 

@@ -680,6 +680,57 @@ fn compatible_c_aliases_share_one_symbol_in_both_backends() {
     }
 }
 
+/// A `string` parameter reaches C as NUL-terminated UTF-8, on both backends
+/// and both providers.
+///
+/// The fixture is `examples/interop/native-string`'s own library and caller,
+/// so what is checked here is what that example checks: C reads the bytes
+/// back, "β😀" must answer differently from "α😀", and a string holding U+0000
+/// stops at the boundary instead of reaching C truncated. The conversion is
+/// lowering's, so both backends only call the runtime -- which is the claim a
+/// second backend is here to test rather than to assume.
+#[test]
+fn a_string_parameter_crosses_as_utf8_on_both_backends() {
+    let source = include_str!("../../../../examples/interop/native-string/src/main.ts");
+    let declarations = [("text.d.ts", include_str!("../../../../examples/interop/native-string/types/text.d.ts"))];
+    for (label, provider) in [("nogc", hir::Provider::NoGc), ("rc", hir::Provider::ReferenceCounting)] {
+        let Some((dir, prepared)) = prepare_with_files(&format!("string-{label}"), source, provider, &declarations) else { return; };
+        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let c = nts_codegen_c::emit(&prepared.program);
+        assert!(c.is_complete(), "{:?}", c.diagnostics);
+        let llvm = nts_codegen_llvm::emit(&prepared.program);
+        assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+        assert!(llvm.text.contains("@nts_string_to_cstring("), "the conversion is not in the LLVM program");
+        assert!(llvm.text.contains("@nts_cstring_release("), "the release is not in the LLVM program");
+        std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+        std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+        std::fs::write(dir.join("text.h"), include_str!("../../../../examples/interop/native-string/native/text.h")).unwrap();
+        std::fs::write(dir.join("text.c"), include_str!("../../../../examples/interop/native-string/native/text.c")).unwrap();
+        std::fs::write(dir.join("caller.c"), include_str!("../../../../examples/interop/native-string/consumer/caller.c")).unwrap();
+        // Both halves counted or neither: the provider decides what the
+        // program emits, and the runtime has to agree with it.
+        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting { &["-DNTS_PROVIDER_RC"] } else { &[] };
+        for file in ["text.c", "caller.c"] {
+            clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+        }
+        clang(&dir, &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat());
+        for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+            clang(&dir, &[&["-O2", "-Wno-override-module", "-c", source, "-o", object][..], counted].concat());
+            clang(&dir, &[object, "text.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+            let run = Command::new(dir.join(executable)).output().unwrap();
+            assert!(run.status.success(), "{label}/{executable}: {}", String::from_utf8_lossy(&run.stdout));
+            let nul = Command::new(dir.join(executable)).arg("nul").output().unwrap();
+            assert!(!nul.status.success(), "{label}/{executable}: U+0000 reached C");
+            assert!(
+                String::from_utf8_lossy(&nul.stderr).contains("containing U+0000 at index 1"),
+                "{label}/{executable}: {}",
+                String::from_utf8_lossy(&nul.stderr)
+            );
+        }
+    }
+}
+
 #[test]
 fn opaque_handles_keep_pointer_bits_and_manual_lifetime_on_both_backends() {
     let source = r#"

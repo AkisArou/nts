@@ -38,6 +38,21 @@ pub struct Function {
     /// C changes, and what it decides is which headers a translation unit needs
     /// rather than anything about the call.
     pub declared_at: Option<NodeId>,
+    /// Which parameters the declaration spelled as a TypeScript `string`, one
+    /// entry per parameter.
+    ///
+    /// Their ABI type is `const char *` -- C's, exactly, so the prototype and
+    /// the witness need nothing new -- and this says that the *argument* is a
+    /// managed string the call site converts: NUL-terminated UTF-8, borrowed by
+    /// the callee for the call and released after it
+    /// (`nts_string_to_cstring` / `nts_cstring_release`). C that keeps the
+    /// pointer past the call must be declared `ConstPtr<c_char>` instead;
+    /// that is the contract of the spelling.
+    ///
+    /// Read by lowering, which inserts the conversion. No backend reads it:
+    /// by the time a backend sees the call the argument already is the
+    /// pointer.
+    pub strings: Vec<bool>,
 }
 
 /// What a foreign call keeps of one argument after it returns.
@@ -848,6 +863,7 @@ impl Function {
             ));
         }
         let mut parameters = Vec::with_capacity(signature.parameters.len());
+        let mut strings = Vec::with_capacity(signature.parameters.len());
         let mut variadic = None;
         for (at, parameter) in signature.parameters.iter().enumerate() {
             if parameter.optional {
@@ -865,10 +881,19 @@ impl Function {
                 variadic = Some(ty);
                 continue;
             }
+            // A TypeScript `string` in the C convention is `const char *`,
+            // converted at the call. Only there: the managed convention passes
+            // the string itself, which is what `@ntsAbi managed` means.
+            if abi.is_none() && is_string(snapshot, parameter.ty) {
+                parameters.push(Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char)))));
+                strings.push(true);
+                continue;
+            }
             let ty = abi_type(parameter.ty)
                 .filter(|ty| *ty != Type::Void)
-                .ok_or_else(|| format!("foreign function `{name}` parameter `{}` without a native ABI type; use a c_int/c_double brand or boolean", parameter.name))?;
+                .ok_or_else(|| format!("foreign function `{name}` parameter `{}` without a native ABI type; use a c_int/c_double brand, boolean, or string", parameter.name))?;
             parameters.push(ty);
+            strings.push(false);
         }
         let result = abi_type(signature.return_type)
             .ok_or_else(|| format!("foreign function `{name}` return without a native ABI type; use a c_int/c_double brand, boolean, or void"))?;
@@ -886,8 +911,19 @@ impl Function {
             // Filled in by whoever resolved the callee, which is the only place
             // that has the declaration node.
             declared_at: None,
+            strings,
         })
     }
+}
+
+/// Whether a declared parameter is a plain TypeScript `string`.
+///
+/// Plain only. `string | null` would be a NULL-able `const char *`, and it is
+/// refused until the representation of a nullable string at a call is
+/// checked rather than assumed -- a union may reach here as an erased value,
+/// which is not the `NtsString *` the conversion reads.
+fn is_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::String))
 }
 
 /// The element type of a rest parameter, which is the type of each argument
