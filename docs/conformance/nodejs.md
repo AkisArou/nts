@@ -3529,11 +3529,17 @@ for free wherever a literal of that exact field set exists. These 23 sites are
 the types where none does, option bags being written partially by everyone who
 writes one.
 
-So this column is not waiting on a layout rule. It is waiting on what 0258
-names: **key order recorded per allocation site rather than read off the
-layout**, after which one order no longer has to serve two questions.
-`agreements/key-order-of-an-extended-interface` is the divergence that stays
-open until then.
+So this column is not waiting on a layout rule, and 0258's own answer -- **key
+order recorded per allocation site** -- turned out to be cheap and to buy
+something else. Record 0342 does it: the allocation site is the literal, the
+literal is in hand at the `Object.keys` use, and asking it instead of the layout
+took `agreements` from 5 disagreeing to 4 with no layout changed.
+
+It buys **no cast site**, and the reason is worth keeping: where no literal is
+in hand the layout's order is still the answer, so the layout is no freer to be
+inherited-first than it was. The 23 remain, and what they are waiting on is an
+interface representation that does not have to be a prefix of the object
+reaching it -- the same thing the other 55 are waiting on.
 
 ### And the copy machinery covers one of five routes to an interface type
 

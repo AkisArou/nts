@@ -35,14 +35,26 @@
 // recorded per allocation site rather than read off the layout — which is a
 // design step and not a reordering.
 //
+// **Done on 2026-09-23, and it did not move this file.** The allocation site is
+// the literal, and the literal is in hand at the `Object.keys` use, so
+// `own_names` asks it instead of the layout (record 0342). This file stays at
+// 116 of 116 because its literals and its layout already agreed. What changed
+// is the pair that did not -- `agreements/key-order-of-an-extended-interface`,
+// which now agrees too.
+//
+// It still does not free the layout to be inherited-first, and this file is
+// still what would say so: where no literal is in hand the layout's order is
+// the answer, and 0258's four cast sites are exactly the types with no literal
+// to find.
+//
 // # What this file cannot be, and the case that says why
 //
 // It cannot be a fixture for key order *being right*, because it is not. One
 // layout is one order, and a literal can be written in any of them: with the
 // layout as it stands, `{ c, a, b }` agrees with node and `{ a, b, c }` of the
-// same type does not. That second case is in
-// `tooling/conformance/agreements/key-order-of-an-extended-interface`, where a
-// case that runs and disagrees belongs.
+// same type does not -- which was true of *both* until the order stopped being
+// read off the layout. `tooling/conformance/agreements/key-order-of-an-extended-
+// interface` holds that second case and agrees as of record 0342.
 //
 // So what this file guards is narrower and worth stating plainly: **the layout
 // of an extended interface is derived-first, and changing it costs more than it

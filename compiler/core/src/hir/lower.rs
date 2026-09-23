@@ -1708,6 +1708,50 @@ fn closure_type(index: usize) -> TypeId {
 /// second rule to keep in step.
 ///
 /// Found by probing against node; no corpus file reported it.
+/// The property names an object literal writes, in source order.
+///
+/// `None` where the literal says nothing about order:
+///
+/// - **a spread** contributes its source's fields under no name here, so a
+///   literal containing one would be recorded short and claim an order it does
+///   not have;
+/// - **a computed key** is the same absence with a different spelling;
+/// - **a repeated name** is not a shape. The second write wins in JavaScript
+///   and nothing here can order the pair.
+///
+/// One derivation, two readers: `collect_naming` folds these into
+/// `Naming::written_order` to decide a *layout's* field order, and
+/// `FuncBuilder::as_that_literal_writes_them` asks the same question of one
+/// literal to answer `Object.keys` at a use. The two disagreeing would be a
+/// layout whose order no `Object.keys` agrees with, which is the failure record
+/// 0258 is about.
+fn literal_field_names(probe: &FuncBuilder, literal: NodeId) -> Option<Vec<String>> {
+    let mut names = Vec::new();
+    for property in probe.children(literal) {
+        let name = match probe.kind_of(property) {
+            Some(syntax::PROPERTY_ASSIGNMENT) => probe
+                .children(property)
+                .first()
+                .and_then(|name| probe.literal_name(*name)),
+            Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => probe
+                .children(property)
+                .first()
+                .and_then(|name| probe.node(*name).text.clone()),
+            _ => None,
+        };
+        names.push(name?);
+    }
+    if names.is_empty() {
+        return None;
+    }
+    let mut sorted = names.clone();
+    sorted.sort();
+    if sorted.windows(2).any(|pair| pair[0] == pair[1]) {
+        return None;
+    }
+    Some(names)
+}
+
 fn property_order<'a>(names: impl Iterator<Item = &'a str>) -> Vec<(usize, String)> {
     let mut indices: Vec<(u32, usize, String)> = Vec::new();
     let mut rest: Vec<(usize, String)> = Vec::new();
@@ -2956,37 +3000,12 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
             continue;
         }
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        let mut names = Vec::new();
-        for property in probe.children(id) {
-            // A spread contributes its source's fields and there is no name to
-            // record, so a literal containing one says nothing about order and
-            // is skipped rather than recorded short.
-            let name = match probe.kind_of(property) {
-                Some(syntax::PROPERTY_ASSIGNMENT) => probe
-                    .children(property)
-                    .first()
-                    .and_then(|name| probe.literal_name(*name)),
-                Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => probe
-                    .children(property)
-                    .first()
-                    .and_then(|name| probe.node(*name).text.clone()),
-                _ => None,
-            };
-            let Some(name) = name else {
-                names.clear();
-                break;
-            };
-            names.push(name);
-        }
-        if names.is_empty() {
+        let Some(names) = literal_field_names(&probe, id) else {
             continue;
-        }
+        };
         let mut signature = names.clone();
         signature.sort();
-        // A literal that names one field twice is not a shape, and the second
-        // write wins in JavaScript. Nothing here can order it, so it is dropped.
-        let repeated = signature.windows(2).any(|pair| pair[0] == pair[1]);
-        if repeated || conflicting.contains(&signature) {
+        if conflicting.contains(&signature) {
             continue;
         }
         match written_order.get(&signature) {
@@ -18653,12 +18672,99 @@ impl<'a> FuncBuilder<'a> {
     fn own_names(&mut self, id: NodeId, argument: NodeId) -> Result<Vec<String>, Diagnostic> {
         let (ty, layout) = self.own_layout(id, argument)?;
         let enumerable = self.enumerable_fields(ty, &layout);
+        let enumerable = self.as_that_literal_writes_them(argument, enumerable);
         Ok(
             property_order(enumerable.iter().map(|(_, name)| name.as_str()))
                 .into_iter()
                 .map(|(at, _)| enumerable[at].1.clone())
                 .collect(),
         )
+    }
+
+    /// Order the names by the literal **this value** was written as, where the
+    /// lowering can see one.
+    ///
+    /// `Object.keys` answers own string keys in insertion order. A compiled
+    /// object has no insertion order -- it has a layout, and the layout is one
+    /// order for every object of the type. `as_the_program_writes_them` makes
+    /// that one order the literals' where they all agree, and record 0258 is
+    /// the measurement of what happens when the layout is asked to serve
+    /// anything else: `{ c, a, b }` and `{ a, b, c }` are the same type, and
+    /// whichever order the layout holds, the other one answers wrong.
+    ///
+    /// **So ask the value rather than the type.** The literal is right here in
+    /// most of the cases that matter -- `Object.keys({ a, b })`, or a `const`
+    /// whose initialiser is one -- and where it is, its order is the answer and
+    /// no layout has to change to give it. Where it is not, the layout's order
+    /// stands, which is exactly what this did before.
+    ///
+    /// A name the literal does not mention keeps the position it had, for the
+    /// reason [`Self::as_the_program_writes_them`] gives: a literal that omits
+    /// an optional field says nothing about where that field goes.
+    ///
+    /// Applied **before** `property_order`, so an integer-like key is still
+    /// hoisted and sorted ascending afterwards. JavaScript's rule is that
+    /// integer indices come first whatever order they were written in, and this
+    /// is about the string keys that come after them.
+    fn as_that_literal_writes_them(
+        &self,
+        argument: NodeId,
+        mut fields: Vec<(Enumerated, String)>,
+    ) -> Vec<(Enumerated, String)> {
+        let Some(literal) = self.written_as_a_literal(argument) else {
+            return fields;
+        };
+        let Some(written) = literal_field_names(self, literal) else {
+            return fields;
+        };
+        let mut ordered: Vec<(Enumerated, String)> = Vec::with_capacity(fields.len());
+        for name in written {
+            if let Some(at) = fields.iter().position(|(_, held)| *held == name) {
+                ordered.push(fields.remove(at));
+            }
+        }
+        ordered.append(&mut fields);
+        ordered
+    }
+
+    /// The object literal this expression is, or the one a `const` binds it to.
+    ///
+    /// **`const` only**, and that is the whole of the soundness argument: a
+    /// `let` can be assigned a second object of the same type written the other
+    /// way round, and then there is no single literal to answer for the name.
+    /// A `const` has one initialiser and it is in the same function.
+    ///
+    /// Deliberately one hop. A chain of `const` aliases would work the same way
+    /// and is not written here because nothing measured wants it -- see
+    /// `with_const_aliases` for the walk if it ever does.
+    fn written_as_a_literal(&self, argument: NodeId) -> Option<NodeId> {
+        if self.kind_of(argument) == Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+            return Some(argument);
+        }
+        if self.kind_of(argument) != Some(syntax::IDENTIFIER) {
+            return None;
+        }
+        let symbol = self.node(argument).symbol?;
+        let declaration = *self
+            .snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .declarations
+            .first()?;
+        if self.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION)
+            || self.declaration_kind(declaration) != nts_semantic_schema::VariableKind::Const
+        {
+            return None;
+        }
+        // `[name, initializer]` for `const o = {…}` and `[name, type,
+        // initializer]` for an annotated one. A declaration with no initialiser
+        // ends at its type, which the kind check below rejects.
+        let children = self.children(declaration);
+        let [_name, .., initializer] = children.as_slice() else {
+            return None;
+        };
+        (self.kind_of(*initializer) == Some(syntax::OBJECT_LITERAL_EXPRESSION))
+            .then_some(*initializer)
     }
 
     /// The layout's fields that are **properties**, each with the slot it sits in.

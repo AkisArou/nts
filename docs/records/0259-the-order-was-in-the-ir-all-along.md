@@ -52,6 +52,10 @@ and there is no shape to order.
 
 ## Where the program disagrees with itself, nothing is done
 
+*(Superseded 2026-09-23 by record 0342, which asks the literal at the use
+instead of the layout. The paragraph below is why that case stayed open, and it
+is no longer open.)*
+
 A file writing one type `{ a, b, c }` in one function and `{ c, a, b }` in
 another has no single layout that satisfies both. Those shapes keep the
 checker's order and `agreements/key-order-of-an-extended-interface` runs and
