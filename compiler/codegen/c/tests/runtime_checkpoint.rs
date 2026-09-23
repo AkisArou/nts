@@ -458,3 +458,13 @@ fn the_collector_reclaims_a_chain_and_keeps_what_is_still_held() {
         checks(&report)
     );
 }
+
+/// Bytes decode to the string node's `TextDecoder` makes of them: overlong
+/// forms and encoded surrogates refused, one U+FFFD per ill-formed sequence,
+/// the byte that broke it read again. `runtime/c/tests/utf8_decode.c` carries
+/// 428 rows node generated, and the program that generated them.
+#[test]
+fn utf8_decoding_agrees_with_textdecoder() {
+    let out = run_suite("utf8_decode", &[]);
+    assert!(out.contains("428 of 428 rows agree"), "{out}");
+}
