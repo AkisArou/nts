@@ -3428,6 +3428,23 @@ fn report_unrepresentable_exports(
                 .find(|(at, _)| *at == format!("{name}#constructor"))
             {
                 format!("is a class whose constructor was not compiled: {why}")
+            // **And the export's own entry**, which was recorded and never
+            // read here. The `uncompiled` lookup above this chain is reached
+            // only for a name the backend expected a *function* for; a binding
+            // that produced no function and no global reaches neither, so a
+            // reason the lowering had already worked out went to the sentence
+            // below instead.
+            //
+            // `export const deepStrictEqual = looseAssertions.deepStrictEqual`
+            // is the case: `ModuleScope::unsupported` holds *"a module-scope
+            // name holding a function, whose closure layout its initializer
+            // does not fix"*, and this printed "is not a function this backend
+            // can name" about a function. Wrong twice over, and the Node lane
+            // said so twice before the cause was found.
+            } else if let Some((_, why)) =
+                program.uncompiled.iter().find(|(at, _)| at == name)
+            {
+                format!("is exported and was not compiled: {why}")
             } else {
                 "is exported and is not a function this backend can name".to_owned()
             },

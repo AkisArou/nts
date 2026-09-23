@@ -7308,6 +7308,60 @@ type PublicSurface = (
 /// second is easy to lose: the addon is a different translation unit from
 /// `program.c`, so a `static` global is invisible to it however correctly the
 /// surface was computed.
+/// Say why an exported name has no storage, using the reason already worked out.
+///
+/// **`ModuleScope::unsupported` holds it and nothing published it.** A
+/// module-scope binding whose type has no global slot is recorded there with a
+/// sentence -- *"a module-scope name holding a function, whose closure layout
+/// its initializer does not fix"* -- and the six readers of that map are all
+/// places that lower a *read* of the name. An export is not a read, so the
+/// sentence never reached the one person who needed it: the napi wrapper,
+/// which found the name in neither `program.funcs` nor `globals` and fell
+/// through to *"is exported and is not a function this backend can name"*.
+///
+/// That sentence is wrong about `assert`, and the Node lane reported it as
+/// wrong twice before the cause was found. `export const deepStrictEqual =
+/// looseAssertions.deepStrictEqual` is a function; what it has no storage for
+/// is the closure layout, which is a different claim and now the one printed.
+///
+/// `blockers/a-method-exported-as-a-value` opens on the silence rather than on
+/// the construct: *"a construct that lowers to nothing and reports nothing
+/// cannot be ranked by any census"*. This does not make the construct work --
+/// that needs the binding and the receiver question the blocker states -- it
+/// makes it **countable**, which is what has to come first.
+fn record_unstorable_exports(
+    lowered: &mut Lowered,
+    snapshot: &SemanticSnapshot,
+    module: &ModuleScope,
+    api: &[(String, String)],
+) {
+    for (symbol, reason) in &module.unsupported {
+        let Some(declared) = snapshot
+            .symbols
+            .get(*symbol as usize)
+            .map(|record| record.name.as_str())
+        else {
+            continue;
+        };
+        // Published under the name an importer writes, which is what the
+        // wrapper looks the export up by. A binding that is not exported keeps
+        // its silence here and is answered at its reads, as before.
+        for (_, published) in api.iter().filter(|(_, published)| published == declared) {
+            if !lowered
+                .program
+                .uncompiled
+                .iter()
+                .any(|(at, _)| at == published)
+            {
+                lowered
+                    .program
+                    .uncompiled
+                    .push((published.clone(), reason.clone()));
+            }
+        }
+    }
+}
+
 fn publish_surface(
     lowered: &mut Lowered,
     snapshot: &SemanticSnapshot,
@@ -7317,6 +7371,7 @@ fn publish_surface(
 ) {
     let (api, namespaces, functions, unpublished, opaque, optional) =
         public_api(snapshot, naming, module, entry);
+    record_unstorable_exports(lowered, snapshot, module, &api);
     // Only the ones that are not functions: a name in `functions` is published
     // by calling something, and a global that happens to share it is a
     // different thing.
@@ -20060,6 +20115,7 @@ impl<'a> FuncBuilder<'a> {
             match self.declared_name(decl).as_deref() {
                 Some("addrOf") => return Some(self.native_address_of(id, arguments)),
                 Some(name @ ("local" | "sizeof" | "malloc" | "free" | "copy")) => return Some(self.native_storage(id, name, arguments)),
+                Some("unsafeDowncast") => return Some(self.native_downcast(id, arguments)),
                 _ => {},
             }
         }
