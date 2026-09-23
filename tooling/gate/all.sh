@@ -1800,7 +1800,15 @@ interop() {
   # 19: `library-module-state`, whose module scope builds a heap array. It is
   # the only interop example whose `module__init` has work to do, which is why
   # a static archive dropping the initialiser went a month unseen.
-  interop_floor=19
+  #
+  # 20: `macos-hello` (`f2312112`), the Apple lane's first program. It SKIPs
+  # without zig, ld64.lld and llvm-objdump, and `ran + skipped` counts it either
+  # way -- which is the whole reason this compares the sum.
+  #
+  # Counted from `git ls-files`, not from the directory: three lanes share this
+  # working tree and an untracked example is not in the pinned tree the gate
+  # builds. `ls examples/interop/*/build.sh` said 21 while the answer was 20.
+  interop_floor=20
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"
