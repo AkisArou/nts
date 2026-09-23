@@ -1122,6 +1122,7 @@ fn emit_bodies<'a>(
 /// `NtsHeader *` on a value that is already one is a cast to its own type.
 const ERASES_CLASS: &[(&str, usize)] = &[
     ("nts_callback_task", 0),
+    ("nts_closure_lend", 0),
     ("nts_concat_into", 0),
     ("nts_environment_install_platform", 0),
     ("nts_number_to_string_into", 0),
