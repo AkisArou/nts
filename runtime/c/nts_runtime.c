@@ -144,6 +144,10 @@ struct NtsEnvironment {
      whose outer edge is the end of the process. Not on the hot path and first
      only because it is the one field a `throw` reads. See `NtsLanding`. */
   NtsLanding *landing;
+  /* A raise recorded by `nts_raise` and not yet taken. See it for why one slot
+     is enough and why this is not a `jmp_buf`. */
+  int raising;
+  NtsValue raised;
   /* How many callback bridges are on the stack below here.
      A `throw` inside a callback has C frames between it and any landing --
      frames belonging to a library that called us and knows nothing about a
@@ -1246,6 +1250,41 @@ NtsValue nts_landing_thrown(const NtsLanding *landing) {
 
 const NtsString *nts_landing_detail(const NtsLanding *landing) {
   return landing ? landing->detail : NULL;
+}
+
+/* A raise in flight, which is the *other* way a throw leaves a function.
+ *
+ * `nts_uncaught` ends the program and `NtsLanding` jumps past frames. This
+ * does neither: `nts_raise` records the value and returns, the compiled
+ * function returns normally straight afterwards, and its caller tests
+ * `nts_raising` and branches. Every frame between the throw and the handler is
+ * left by an ordinary `return`, so the releases reference counting put on those
+ * edges all run -- which is the whole reason this exists beside a `jmp_buf`
+ * that would be shorter.
+ *
+ * **One slot, not a stack.** A raise is in flight between the `nts_raise` that
+ * records it and the check that takes it, and there is exactly one compiled
+ * frame returning in between. It cannot nest: a second raise would have to come
+ * from code running while the first is in flight, and nothing runs there.
+ *
+ * Per environment for the reason a landing is: a throw is a lane-local event.
+ * In the cold half of the struct beside `landing`, because a program with no
+ * `try` around a call never touches it. */
+void nts_raise(NtsValue value) {
+  nts_env->raised = value;
+  nts_env->raising = 1;
+}
+
+int nts_raising(void) { return nts_env->raising; }
+
+/* Take it, which is what a handler does on entry: the value is the handler's
+ * now and leaving the flag set would make the next check fire on a raise that
+ * has already been handled. */
+NtsValue nts_raise_take(void) {
+  NtsValue value = nts_env->raised;
+  nts_env->raised = nts_value_of_undefined();
+  nts_env->raising = 0;
+  return value;
 }
 
 const char *nts_thrown_class(NtsValue value) {

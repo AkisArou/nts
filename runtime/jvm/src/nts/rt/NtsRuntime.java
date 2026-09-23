@@ -160,6 +160,38 @@ public final class NtsRuntime {
     public static boolean stringEq(String left, String right) { return java.util.Objects.equals(left, right); }
     public static boolean stringTruthy(String text) { return text != null && !text.isEmpty(); }
     public static Error unreachable() { return new NtsRefusal("control reached a block the compiler proved unreachable"); }
+    /**
+     * A raise in flight: the other way a throw leaves a function.
+     *
+     * <p>{@code uncaught} ends the process. This records the value and
+     * returns, the compiled method returns immediately after, and its caller
+     * tests {@link #raising} and returns too -- so the whole path out is
+     * ordinary returns. One slot rather than a stack: a raise is in flight
+     * between the {@code raise} and the check that takes it, and nothing runs
+     * in between that could raise again.
+     *
+     * <p>Not a Java exception, deliberately. The C lane cannot throw one and
+     * the three lanes have to agree about control flow, not merely about
+     * answers -- a lane that unwound where another returned would diverge on
+     * which releases ran.
+     */
+    private static boolean raising = false;
+    private static NtsValue raised = NtsValue.UNDEFINED_VALUE;
+
+    public static void raise(NtsValue value) {
+        raised = value;
+        raising = true;
+    }
+
+    public static int raising() { return raising ? 1 : 0; }
+
+    public static NtsValue raiseTake() {
+        NtsValue value = raised;
+        raised = NtsValue.UNDEFINED_VALUE;
+        raising = false;
+        return value;
+    }
+
     public static void uncaught(NtsValue value, String detail) {
         StringBuilder line = new StringBuilder("nts: uncaught ");
         switch (value.tag) {

@@ -50,7 +50,7 @@ mathops-unsupported 4 the constructs the name promises
 # One of four arms. The other three are the shapes this refusal must *not*
 # take, so a count of 2 here means the refusal has grown a case it should not
 # have -- which it did twice while being written.
-a-throw-that-stays-in-its-function 1 the constructs the name promises
+a-throw-that-stays-in-its-function 2 a method callee and a two-frame throw, both without a raising copy
 
 # Incidental: an example written for something else that happens to contain a
 # construct the compiler refuses. Each is a real gap and each is somebody's next

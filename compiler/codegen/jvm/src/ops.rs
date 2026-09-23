@@ -442,6 +442,9 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
     }
     Some(match name {
         "nts_uncaught" => (RUNTIME, "uncaught", "(Lnts/rt/NtsValue;Ljava/lang/String;)V"),
+        "nts_raise" => (RUNTIME, "raise", "(Lnts/rt/NtsValue;)V"),
+        "nts_raising" => (RUNTIME, "raising", "()I"),
+        "nts_raise_take" => (RUNTIME, "raiseTake", "()Lnts/rt/NtsValue;"),
         // Every parameter a `double`, because `hir::runtime` says so. The
         // `slot` is spent already on this lane -- the callback declares
         // `NtsCallback` and is reached by name -- and is still in the

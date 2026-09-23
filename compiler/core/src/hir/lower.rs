@@ -2537,7 +2537,10 @@ struct Naming {
     /// in the set: `fns[0]()` reaches what cannot be known here, and the
     /// alternative is to assume the very thing this exists because the compiler
     /// cannot establish.
-    throwing: rustc_hash::FxHashSet<u32>,
+raising: rustc_hash::FxHashSet<NodeId>,
+    /// Which plain functions a [raising copy](FuncBuilder::raises) is emitted
+    /// for. See [`raising_copies`].
+        throwing: rustc_hash::FxHashSet<u32>,
     /// The emitted name, for a declaration whose plain name is taken.
     qualified: rustc_hash::FxHashMap<NodeId, String>,
     /// Declarations that cannot be told apart by anything this compiler has.
@@ -2859,10 +2862,63 @@ fn presence_keys(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> rustc_hash
 /// different question from where it was written -- attributing its `throw` to
 /// the enclosing function would put half the program in the set for throws that
 /// happen somewhere else entirely.
-fn throwing_symbols(
-    snapshot: &SemanticSnapshot,
-    probe: &FuncBuilder,
-) -> rustc_hash::FxHashSet<u32> {
+/// Which symbols can raise, and which of them raise **only by themselves**.
+///
+/// `any` is the transitive closure a `try` consults. `self_contained` is the
+/// subset whose every `throw` is written in its own body and which calls
+/// nothing that can raise -- the ones a [raising copy](FuncBuilder::raises) can
+/// be made of today, because such a copy's own calls all reach originals and an
+/// original ends the program.
+///
+/// Splitting them is the whole of the bound on this feature: a function that
+/// raises *through* a callee needs that callee copied too, and the copy of a
+/// copy is a fixpoint this does not yet run. What is outside the subset keeps
+/// the refusal, which is the same answer it has had all along.
+struct Throwing {
+    any: rustc_hash::FxHashSet<u32>,
+    self_contained: rustc_hash::FxHashSet<u32>,
+}
+
+/// The function a declaration *is*, following a `const` to its initialiser.
+///
+/// **A function-valued `const` declares its symbol at the variable, and the
+/// function is its initialiser.** `const f = () => { throw ... }` gives `f` a
+/// `VariableDeclaration` declaration and nothing else, so asking the
+/// declaration's own kind put `f` outside the throwing set -- and a
+/// `try { f() } catch` then saw a callee that cannot raise, compiled, and threw
+/// where node answers 5.
+///
+/// Measured: `agreements/a-throw-across-a-call`'s `throwAcrossAnArrow` was a
+/// **wrong answer** rather than a refusal, on every binary before 2026-09-23,
+/// while its two siblings spelled `function` were correctly refused. Three
+/// spellings of one program and two of them right, which is the shape
+/// `a-probe-arm-must-differ-in-one-thing` exists to catch.
+///
+/// The last matching child, because a declaration is `[name, type?, initialiser]`
+/// and only the initialiser can be a function.
+fn the_function_of(probe: &FuncBuilder, declaration: NodeId) -> NodeId {
+    if probe.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION) {
+        return declaration;
+    }
+    probe
+        .children(declaration)
+        .into_iter()
+        .rev()
+        .find(|child| {
+            matches!(
+                probe.kind_of(*child),
+                Some(
+                    syntax::FUNCTION_DECLARATION
+                        | syntax::FUNCTION_EXPRESSION
+                        | syntax::ARROW_FUNCTION
+                        | syntax::METHOD_DECLARATION
+                )
+            )
+        })
+        .unwrap_or(declaration)
+}
+
+fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwing {
     let nested = |kind: Option<u16>| {
         matches!(
             kind,
@@ -2886,6 +2942,7 @@ fn throwing_symbols(
         // tens of thousands of symbols that can never be in the set.
         let mut reached: Vec<Option<u32>> = Vec::new();
         for declaration in &record.declarations {
+            let declaration = &the_function_of(probe, *declaration);
             if !nested(probe.kind_of(*declaration)) {
                 continue;
             }
@@ -2926,6 +2983,7 @@ fn throwing_symbols(
             calls.insert(symbol, reached);
         }
     }
+    let direct = throws.clone();
     let mut set = throws;
     // An unresolved callee is unbounded, so its caller joins the set at once.
     for (symbol, reached) in &calls {
@@ -2960,7 +3018,121 @@ fn throwing_symbols(
             set.insert(u32::try_from(index).unwrap_or(u32::MAX));
         }
     }
-    set
+    // Every `throw` in its own body, and no call that could bring another.
+    // `direct` rather than `set`, because `set` has already absorbed everything
+    // reachable and would answer yes to a function that only passes one on.
+    let self_contained = direct
+        .iter()
+        .filter(|symbol| {
+            calls.get(*symbol).is_none_or(|reached| {
+                reached
+                    .iter()
+                    .all(|called| called.is_some_and(|called| !set.contains(&called)))
+            })
+        })
+        .copied()
+        .collect();
+    Throwing {
+        any: set,
+        self_contained,
+    }
+}
+
+/// What a raising copy's name ends in.
+///
+/// Spelled once. The naming site composes it the same way a generic or a
+/// structural copy's suffix is composed, through `generic_calls`, so a call
+/// that names one takes the same path every other copy naming takes.
+const RAISING_SUFFIX: &str = "@raises";
+
+/// The declarations a [raising copy](FuncBuilder::raises) is emitted for.
+///
+/// A plain function whose every `throw` is its own and which calls nothing that
+/// can raise -- `Throwing::self_contained` -- and which a copy can be made of
+/// at all. `function_copies` is consulted for `FUNCTION_DECLARATION`s, so a
+/// method, a constructor or an accessor is outside this and keeps the refusal;
+/// `an-interface-reached-by-six-routes` records the same boundary for the other
+/// copy kinds, and it is the same line of code drawing it.
+///
+/// Generic functions are excluded because a copy's suffix is already spoken
+/// for there, and `async` ones because a `throw` in one rejects the promise it
+/// returned -- a real edge the lowering already routes, and not this.
+///
+/// **Only for a callee some `try` in the program actually calls.** "Every
+/// qualifying function, and let `hir::dce` drop the rest" was the first version
+/// and it is wrong twice over: a copy is a *body*, so one that is never named
+/// is lowered, and every refusal in it is reported a second time. Over 25
+/// `runtime/node` modules that was **+273 NTS1001 occurrences and +400
+/// NTS1003** against zero change in definitions -- noise that reads exactly
+/// like a regression, sitting above the gate's ceiling.
+///
+/// Reachability is a syntactic question and it is answerable here: a `try`
+/// statement's body, the calls in it, the declarations those resolve to. The
+/// same question `lower_try` asks per function, asked once for the program, and
+/// the two agree because both start from `call_targets`.
+fn raising_copies(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    throwing: &Throwing,
+) -> rustc_hash::FxHashSet<NodeId> {
+    let called_from_a_try = calls_guarded_by_a_try(snapshot, probe);
+    let mut copies = rustc_hash::FxHashSet::default();
+    for symbol in &throwing.self_contained {
+        let Some(record) = snapshot.symbols.get(*symbol as usize) else {
+            continue;
+        };
+        for declaration in &record.declarations {
+            if probe.kind_of(*declaration) != Some(syntax::FUNCTION_DECLARATION)
+                || is_generic_function(snapshot, *declaration)
+                || probe
+                    .node(*declaration)
+                    .modifiers
+                    .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+            {
+                continue;
+            }
+            if called_from_a_try.contains(declaration) {
+                copies.insert(*declaration);
+            }
+        }
+    }
+    copies
+}
+
+/// Every declaration a `try` body calls, anywhere in the program.
+///
+/// Deliberately coarse: a callee here only becomes a copy if it also passes
+/// `Throwing::self_contained`, and a `try` this lowering goes on to refuse for
+/// some other reason costs one unused copy rather than a wrong answer.
+fn calls_guarded_by_a_try(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+) -> rustc_hash::FxHashSet<NodeId> {
+    let mut called = rustc_hash::FxHashSet::default();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::TRY_STATEMENT) {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        // The first child is the guarded block. A `catch` body is not guarded
+        // by this `try` -- a throw there reaches the handler *above* -- and
+        // including it would make a copy for a callee this `try` cannot catch.
+        let Some(&body) = probe.children(id).first() else {
+            continue;
+        };
+        let mut pending = vec![body];
+        while let Some(at) = pending.pop() {
+            if let Some(callee) = snapshot
+                .call_targets
+                .get(&at)
+                .and_then(|target| target.callee)
+            {
+                called.insert(callee);
+            }
+            pending.extend(probe.children(at));
+        }
+    }
+    called
 }
 
 /// A token index for every class the program declares. See
@@ -3075,7 +3247,9 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
             naming.qualified.insert(*id, format!("{name}@{module}"));
         }
     }
-    naming.throwing = throwing_symbols(snapshot, &probe);
+    let throwing = throwing_symbols(snapshot, &probe);
+    naming.raising = raising_copies(snapshot, &probe, &throwing);
+    naming.throwing = throwing.any;
     naming.presence_keys = presence_keys(snapshot, &probe);
     naming.generators = generators;
     naming.written_order = written_order;
@@ -5079,6 +5253,7 @@ fn function_copies(
     snapshot: &SemanticSnapshot,
     generic: &super::generics::GenericFunctions,
     structural: &Structural,
+    raising: &rustc_hash::FxHashSet<NodeId>,
     id: NodeId,
 ) -> Vec<Copy> {
     if let Some(instances) = generic.copies.get(&id) {
@@ -5092,6 +5267,7 @@ fn function_copies(
                 // A copy of a generic *function*: its own parameters are
                 // bound, and there is no enclosing class copy to answer for.
                 instance: None,
+                raises: false,
             })
             .collect();
     }
@@ -5117,6 +5293,21 @@ fn function_copies(
                 ..Copy::default()
             }),
     );
+    // And the raising copy, for a function a `try` around a call can use. The
+    // same addition-not-replacement the structural copies are: an ordinary call
+    // still names the plain one and still ends the program on an uncaught
+    // throw, which is what node does and what nothing here should change.
+    //
+    // Made for every qualifying function rather than for those a `try` reaches,
+    // because that is not known until every body is lowered. One nothing names
+    // is dead and `hir::dce` removes it.
+    if raising.contains(&id) {
+        copies.push(Copy {
+            suffix: RAISING_SUFFIX.to_owned(),
+            raises: true,
+            ..Copy::default()
+        });
+    }
     copies
 }
 
@@ -5134,6 +5325,9 @@ struct Copy {
     /// in each copy of the class around it, and that is the key those answers
     /// are held under. See `generics::GenericFunctions::at_call_in`.
     instance: Option<TypeId>,
+    /// A copy whose unhandled `throw` records and returns rather than ending
+    /// the program. See [`FuncBuilder::raises`].
+    raises: bool,
 }
 
 /// Whether a function declaration has type parameters of its own.
@@ -5642,6 +5836,7 @@ impl Shared {
             copy.suffix.clone(),
         );
         builder.sources = copy.sources;
+        builder.raises = copy.raises;
         builder.retyped = copy.retyped;
         builder.class_instances = std::rc::Rc::clone(&self.class_instances);
         builder.generic_calls.clone_from(&self.generics.at_call);
@@ -5694,6 +5889,7 @@ fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
     builder.qualified.clone_from(&naming.qualified);
     builder.generators.clone_from(&naming.generators);
     builder.throwing.clone_from(&naming.throwing);
+    builder.raising.clone_from(&naming.raising);
     builder.presence_keys.clone_from(&naming.presence_keys);
     builder.written_order.clone_from(&naming.written_order);
     builder.class_tokens.clone_from(&naming.class_tokens);
@@ -7203,7 +7399,13 @@ pub fn lower_with(
             lowered.diagnostics.push(ambiguous_name(snapshot, id));
             continue;
         }
-        let copies = function_copies(snapshot, &shared.generics, &shared.structural, id);
+        let copies = function_copies(
+            snapshot,
+            &shared.generics,
+            &shared.structural,
+            &shared.naming.raising,
+            id,
+        );
         // **An empty answer is two different things, and only one of them is
         // silence worth keeping.** A generic nothing calls is dead, and
         // reporting it would refuse a program nobody wrote. A generic a call
@@ -10699,6 +10901,27 @@ struct FuncBuilder<'a> {
     generator_calls: rustc_hash::FxHashSet<ValueId>,
     /// Which functions can raise a `throw`. See [`Naming::throwing`].
     throwing: rustc_hash::FxHashSet<u32>,
+    /// The declarations a raising copy exists for. See [`raising_copies`].
+    raising: rustc_hash::FxHashSet<NodeId>,
+    /// The calls in this body that name a raising copy, and so are followed by
+    /// a test. Written by [`Self::lower_try`] and by the raising walk; read by
+    /// [`Self::push_call`], which is the one place a plain call is emitted.
+    raising_calls: rustc_hash::FxHashSet<NodeId>,
+    /// Whether this body is a **raising copy**: one reached only from call
+    /// sites that test for a raise afterwards.
+    ///
+    /// A `throw` with no handler in an ordinary function ends the program,
+    /// which is what node does when nobody catches and what every caller of
+    /// that function is compiled to expect. A `try` around a call needs the
+    /// opposite, and the two cannot be one body -- so the callee is copied,
+    /// exactly as a generic or a structural cast copies one, and the copy
+    /// records the value and returns instead. `@raises` is its suffix.
+    ///
+    /// **The invariant that makes it sound: a raising copy is named only by a
+    /// site that checks.** An ordinary call still names the original and still
+    /// ends the program, so nothing that was correct becomes a wrong answer by
+    /// this existing, and no boundary has to learn anything.
+    raises: bool,
     /// Which property names an `in` asks about. See [`Naming::presence_keys`].
     presence_keys: rustc_hash::FxHashSet<String>,
     /// The order the program writes each field-name set; see
@@ -10739,6 +10962,9 @@ impl<'a> FuncBuilder<'a> {
         Self {
             snapshot,
             foreign,
+            raises: false,
+            raising: rustc_hash::FxHashSet::default(),
+            raising_calls: rustc_hash::FxHashSet::default(),
             boxed: Vec::new(),
             guarded: Vec::new(),
             in_closure: false,
@@ -14413,10 +14639,21 @@ impl<'a> FuncBuilder<'a> {
         }
 
         let origin = self.origin(id);
-        let exported = self
-            .node(id)
-            .modifiers
-            .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
+        // **Never a raising copy**, whatever the declaration says. The export
+        // surface names the plain function, which is the one an importer calls
+        // and the one whose uncaught throw ends the program; the copy is an
+        // internal artifact that only a guarded call site may name.
+        //
+        // And `exported` is what keeps a function alive through `hir::dce`, so
+        // inheriting it made every raising copy a root: 41 of them in
+        // `runtime/node/fs` alone, each emitted twice -- a prototype and a
+        // definition -- and called from nowhere. Copies a `try` does reach are
+        // kept by the call, like any other function.
+        let exported = !self.raises
+            && self
+                .node(id)
+                .modifiers
+                .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
         Ok(self.finish(name, params, return_type, origin, exported))
     }
 
@@ -22235,6 +22472,24 @@ impl<'a> FuncBuilder<'a> {
             return Ok(());
         }
 
+        // **A raising copy records it and returns**, which is the whole of what
+        // the copy is for. See [`Self::raises`].
+        //
+        // The same shape as the `async` arm below -- record the reason on
+        // something the caller will look at, then leave by an ordinary
+        // `Return` -- and for the same reason: an ordinary return is an edge
+        // [`super::rc`] already emits releases for, where a jump out of the
+        // frame is not.
+        //
+        // Checked after the handler search above, so a `throw` this copy
+        // catches itself never reaches the runtime slot.
+        if self.raises {
+            self.runtime_call("nts_raise", vec![erased], HirType::Void, origin.clone());
+            let value = self.raised_return(&origin);
+            self.terminate(Terminator::Return(value));
+            return Ok(());
+        }
+
         // An `async` function's `throw` rejects the promise it already owns and
         // hands it back, which is exactly what its `return` does with `settle`.
         // Without this it ended the program: node rejects, and every caller
@@ -24148,11 +24403,19 @@ impl<'a> FuncBuilder<'a> {
         // 13 on names that do not exist. So this is cheapest to refuse now and
         // grows more expensive as publishing improves, which is the opposite of
         // the usual shape.
-        if let Some(call) = self.call_within(body) {
+        let mut handled = Vec::new();
+        if let Some(call) = self.call_within(body, &mut handled) {
             return Err(self.unsupported(
                 call,
                 "a call inside a `try`, whose `throw` would not reach this handler",
             ));
+        }
+        // Every call this `try` *can* handle names the callee's raising copy
+        // and is followed by a test. Recorded before the body is lowered,
+        // because `push_call` reads both while it walks it.
+        for call in handled {
+            self.generic_calls.insert(call, RAISING_SUFFIX.to_owned());
+            self.raising_calls.insert(call);
         }
         // The children are the block, an optional catch clause, and an optional
         // `finally` block. Which is which is read off the shape rather than off
@@ -34909,12 +35172,21 @@ impl<'a> FuncBuilder<'a> {
     /// cannot either -- it aborts where it refuses, which is not a `throw` and
     /// reaches no handler by design. Refusing those would have cost the working
     /// half to fix the broken one.
-    fn call_within(&self, node: NodeId) -> Option<NodeId> {
+    fn call_within(&self, node: NodeId, handled: &mut Vec<NodeId>) -> Option<NodeId> {
         if matches!(
             self.kind_of(node),
             Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)
         ) && self.calls_compiled_code(node)
         {
+            // **Unless a raising copy of the callee exists**, in which case
+            // this call names it and is followed by a test -- which is the
+            // handler edge the refusal below exists for the absence of. The
+            // same walk decides both so that the set of calls this `try`
+            // handles and the set it refuses cannot drift apart.
+            if self.has_a_raising_copy(node) {
+                handled.push(node);
+                return None;
+            }
             return Some(node);
         }
         // **An accessor is a call**, which is the first sentence of
@@ -34950,7 +35222,21 @@ impl<'a> FuncBuilder<'a> {
         }
         self.children(node)
             .into_iter()
-            .find_map(|child| self.call_within(child))
+            .find_map(|child| self.call_within(child, handled))
+    }
+
+    /// Whether this call's callee is a plain function with a raising copy.
+    ///
+    /// The call's *resolved* declaration, not the name at the site: an
+    /// `import { validate }` puts a local symbol here and the copy is keyed by
+    /// the declaration, which is what `raising_copies` collected and what the
+    /// emitted name comes from.
+    fn has_a_raising_copy(&self, call: NodeId) -> bool {
+        self.snapshot
+            .call_targets
+            .get(&call)
+            .and_then(|target| target.callee)
+            .is_some_and(|declaration| self.raising.contains(&declaration))
     }
 
     /// Whether a member access runs an **accessor**, and is therefore a call.
@@ -38491,7 +38777,99 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin,
         );
-        Ok(self.note_generator_call(call, reserved))
+        let call = self.note_generator_call(call, reserved);
+        self.test_for_a_raise(id);
+        Ok(call)
+    }
+
+    /// The test a call that named a raising copy is followed by.
+    ///
+    /// ```text
+    ///   %r = call.extern nts_raising()
+    ///   br %r != 0, took, carry_on
+    /// took:
+    ///   %v = call.extern nts_raise_take()
+    ///   jump handler(%v, ...)        -- or, with no handler here, a `ret`
+    /// carry_on:
+    ///   ...
+    /// ```
+    ///
+    /// **Immediately after the call and not at the end of the statement.** The
+    /// callee returned a value of the right width and no meaning, so anything
+    /// between the call and the test would read it: `f(g())` with `g` raising
+    /// would call `f` with a zero. One block boundary per call that can raise,
+    /// and none anywhere else in the program.
+    ///
+    /// `took` exists so that `nts_raise_take` runs only on the raising path.
+    /// Clearing the flag is what makes it correct to test again at the next
+    /// call, and doing it unconditionally would clear a raise nobody has seen.
+    ///
+    /// With no handler in this body the branch returns instead, leaving the
+    /// flag set for this function's own caller to find. That is reachable only
+    /// inside a raising copy, whose callers all test -- see [`Self::raises`].
+    fn test_for_a_raise(&mut self, id: NodeId) {
+        if !self.raising_calls.contains(&id) {
+            return;
+        }
+        let origin = self.origin(id);
+        let flag = self.runtime_call("nts_raising", Vec::new(), HirType::Int { bits: 32, signed: true }, origin.clone());
+        let zero = self.push(OpKind::ConstInt(0), HirType::Int { bits: 32, signed: true }, origin.clone());
+        let raised = self.push(
+            OpKind::Binary {
+                op: BinOp::Ne,
+                lhs: flag,
+                rhs: zero,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let took = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: raised,
+            then_target: took,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: Vec::new(),
+        });
+        self.switch_to(took);
+        let caught_at = self
+            .exits
+            .iter()
+            .rposition(|exit| matches!(exit, Exit::Handler(_)));
+        if let Some(at) = caught_at {
+            let thrown = self.runtime_call("nts_raise_take", Vec::new(), HirType::Erased, origin);
+            let mut target = match &self.exits[at] {
+                Exit::Handler(frame) => frame.block,
+                Exit::Finally(_) => unreachable!("rposition found a handler"),
+            };
+            if target.is_none() {
+                let block = self.new_block();
+                if let Exit::Handler(frame) = &mut self.exits[at] {
+                    frame.block = Some(block);
+                }
+                target = Some(block);
+            }
+            let Some(target) = target else {
+                unreachable!("just created above")
+            };
+            let edge = Edge {
+                from: self.current,
+                thrown,
+                bindings: self.bindings.clone(),
+            };
+            if let Exit::Handler(frame) = &mut self.exits[at] {
+                frame.edges.push(edge);
+            }
+            self.terminate(Terminator::Jump {
+                target,
+                args: Vec::new(),
+            });
+        } else {
+            let value = self.raised_return(&origin);
+            self.terminate(Terminator::Return(value));
+        }
+        self.switch_to(carry_on);
     }
 
     /// The declaration a call resolves to, when it is a plain function.
@@ -39506,6 +39884,41 @@ impl<'a> FuncBuilder<'a> {
     /// call site, so an argument that specialization narrowed to an integer
     /// converts at the call the way C converts any argument to a declared
     /// parameter type. Nothing here has to pin its operands to `double`.
+    /// What a raising copy returns on the path where it raised.
+    ///
+    /// **The value is never read.** Its caller tests `nts_raising` first and
+    /// goes to its handler, so this exists because a `Return` needs an operand
+    /// of the declared type and for no other reason. Zero rather than
+    /// `undefined`: a slot of the function's own return type costs one constant
+    /// and keeps the function's signature the one every other caller sees,
+    /// where an erased `undefined` would change it.
+    ///
+    /// `None` for a `void` function, which is a `Return` with no operand.
+    ///
+    /// A `void` return is a `Return` with no operand, and so is a type with no
+    /// constant to make -- a native pointer, a `bigint`. Neither is reachable:
+    /// `raising_copies` only copies a plain function, and the one that returned
+    /// a `bigint` would produce a `Return` with nothing in it, which `verify`
+    /// rejects. Stated here rather than assumed, because the arm is shared.
+    fn raised_return(&mut self, origin: &Origin) -> Option<ValueId> {
+        let returns = self.returns.clone();
+        let kind = match &returns {
+            HirType::Bool => OpKind::ConstBool(false),
+            HirType::Int { .. } => OpKind::ConstInt(0),
+            HirType::Float { .. } => OpKind::ConstFloat(0.0),
+            HirType::Erased => OpKind::ConstUndefined,
+            // A null reference, which is what `nts_uncaught`'s own `detail`
+            // argument uses for "no string here": the slot has the right width
+            // and nothing reads it.
+            HirType::Managed(_) => OpKind::ConstNull,
+            HirType::Void
+            | HirType::Never
+            | HirType::BigInt
+            | HirType::NativePointer(_) => return None,
+        };
+        Some(self.push(kind, returns, origin.clone()))
+    }
+
     fn runtime_call(
         &mut self,
         name: &str,

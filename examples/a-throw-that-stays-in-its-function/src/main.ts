@@ -1,19 +1,29 @@
-// Which `try` this compiler can answer, and which one it refuses.
+// Which `try` this compiler can answer, and which one it still refuses.
 //
-// A `throw` is lowered as an edge to the handler's block. That edge exists
-// inside one function, so a `throw` raised by a *callee* has nowhere to go: the
-// callee ends the process through `nts_uncaught` and the caller's `catch` never
-// runs. The C for it is the clearest statement of the defect --
+// A `throw` is lowered as an edge to the handler's block, and that edge lives
+// inside one function. A callee's `throw` had nowhere to go: the callee ended
+// the process through `nts_uncaught` and the caller's `catch` never ran, so the
+// call was refused -- this file's name is that limitation.
 //
-//     double crossing(double v0) { v1 = deep(v0); return v1; }
+// **It is not the limitation any more.** A callee a `try` reaches is compiled a
+// second time as a *raising copy*, which records the thrown value with
+// `nts_raise` and returns instead of ending the program; the call names that
+// copy and is followed by a test that branches into the handler. Every frame
+// between the throw and the handler is left by an ordinary `return`, so the
+// releases reference counting put on those edges all run -- which is the leak
+// record 0246 priced a `longjmp` at, not taken. Record 0343.
 //
-// -- a `try`/`catch` compiled to neither, with no diagnostic. So the call is
-// refused, and three shapes that are *not* broken have to keep compiling, which
-// is what the rest of this file is.
+// The plain function is untouched and an ordinary call still names it, so a
+// throw nobody catches still ends the program, which is what node does.
 //
-// The four arms differ in the callee and in nothing else. Written apart, each
-// would be a fixture for its own arm; written together, the one that refuses
-// names what the other three have that it does not.
+// # The arms, and why they are in one file
+//
+// Two still refuse, and they are here rather than in `blockers/` because what
+// makes them refuse is the *absence* of a copy, and the arms that do get one
+// are the only thing that shows the difference is the copy rather than the
+// `try`. The four that compile are the ones two successive versions of the old
+// refusal broke; record 0300 is about that, and they are asserted by name in
+// `compiler/core/tests/throw_across_a_call.rs`.
 
 function raises(n: number): number {
   if (n > 3) {
@@ -33,7 +43,8 @@ async function rejecting(n: number): Promise<number> {
   return n * 2;
 }
 
-// Refused: `raises` can throw, and the throw would leave its frame.
+// **Compiles now.** `raises` is a plain function whose every `throw` is its
+// own, so it has a raising copy and this call names it.
 export function crossing(n: number): number {
   try {
     return raises(n);
@@ -74,6 +85,46 @@ export function callingSomethingPure(n: number): number {
 export async function awaitingARejection(n: number): Promise<number> {
   try {
     return await rejecting(n);
+  } catch {
+    return -1;
+  }
+}
+
+// Still refused: a **method** has no raising copy. `function_copies` is
+// consulted for `FUNCTION_DECLARATION`s, so a method, a constructor and an
+// accessor are all outside it -- the same boundary
+// `blockers/an-interface-reached-by-six-routes` records for the structural
+// copies, drawn by the same line of code.
+class Deeper {
+  raise(n: number): number {
+    if (n > 3) {
+      throw new RangeError("too deep");
+    }
+    return n * 2;
+  }
+}
+
+export function crossingAMethod(n: number): number {
+  const deeper = new Deeper();
+  try {
+    return deeper.raise(n);
+  } catch {
+    return -1;
+  }
+}
+
+// Still refused: `passesItOn` does not throw, it *calls* something that does.
+// A raising copy of it would call the plain `raises`, which ends the program --
+// so the copy would be a `try` that still does not catch, which is worse than a
+// refusal. What that needs is a copy of a copy, and the fixpoint for it is not
+// written; `Throwing::self_contained` is the line that draws the bound.
+function passesItOn(n: number): number {
+  return raises(n) + 1;
+}
+
+export function crossingTwoFrames(n: number): number {
+  try {
+    return passesItOn(n);
   } catch {
     return -1;
   }

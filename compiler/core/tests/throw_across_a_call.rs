@@ -1,17 +1,29 @@
 //! A `throw` that leaves the frame it was raised in.
 //!
 //! The handler's block is a branch target inside one function, so a callee's
-//! `throw` has no edge to it: the callee ends the process and the caller's
-//! `catch` never runs. `try { return deep(n) } catch { return -1 }` compiled to
+//! `throw` had no edge to it: the callee ended the process and the caller's
+//! `catch` never ran. `try { return deep(n) } catch { return -1 }` compiled to
 //! `v1 = deep(v0); return v1;` — a `try`/`catch` compiled to neither, with no
-//! diagnostic — so the call is refused instead.
+//! diagnostic — so the call was refused instead.
 //!
-//! What the refusal must *not* reach is the greater part of this test. Three
-//! shapes that work were broken by two successive versions of it: a `throw` and
-//! its handler in one function, a call to a callee that cannot raise, and an
-//! `await` of a rejecting async function, whose rejection is a real edge into
-//! the handler. Each is one arm of `examples/a-throw-that-stays-in-its-function`
-//! and each is asserted here by name.
+//! **A callee a `try` reaches now gets a raising copy** (record 0343), which
+//! records the value and returns rather than ending the program, and the call
+//! names it and tests afterwards. So `crossing` compiles, and what is asserted
+//! here is the shape of the bound rather than the shape of the refusal:
+//!
+//!   - a plain function callee compiles, and its copy is emitted;
+//!   - a **method** callee still refuses — `function_copies` is consulted for
+//!     function declarations and a method has no copy to name;
+//!   - a callee that merely *passes a throw on* still refuses, because its copy
+//!     would call the plain callee and end the program anyway.
+//!
+//! What the refusal must *not* reach is still the greater part of this test.
+//! Three shapes that work were broken by two successive versions of it: a
+//! `throw` and its handler in one function, a call to a callee that cannot
+//! raise, and an `await` of a rejecting async function, whose rejection is a
+//! real edge into the handler. Each is one arm of
+//! `examples/a-throw-that-stays-in-its-function` and each is asserted here by
+//! name.
 //!
 //! Skips only when `tsgo` is not built.
 
@@ -41,10 +53,33 @@ fn compiled(lowered: &hir::lower::Lowered, name: &str) -> bool {
     lowered.program.funcs.iter().any(|func| func.name == name)
 }
 
-/// The one arm that is refused, and it is refused for the stated reason rather
-/// than for any reason at all.
+/// A plain function a `try` calls: compiled, through a copy of the callee.
+///
+/// Both halves are asserted. `crossing` being emitted says the refusal lifted;
+/// `raises@raises` being emitted says it lifted *because the copy exists*,
+/// which is the only reason that makes the `catch` reachable. A version that
+/// emitted `crossing` and no copy would pass the first assertion and be the
+/// defect the refusal existed for.
 #[test]
-fn a_call_that_can_throw_is_refused_inside_a_try() {
+fn a_call_that_can_throw_compiles_through_a_raising_copy() {
+    let Some(lowered) = lowered() else {
+        return;
+    };
+    assert!(compiled(&lowered, "crossing"), "`crossing` is emitted");
+    assert!(
+        compiled(&lowered, "raises@raises"),
+        "and its callee's raising copy with it"
+    );
+}
+
+/// What still refuses, and for the two stated reasons rather than for any
+/// reason at all.
+///
+/// By count *and* by message: the old version of this test asserted the whole
+/// diagnostic list was one string, which is the assertion that catches a
+/// refusal arriving from somewhere else entirely.
+#[test]
+fn a_callee_with_no_copy_is_still_refused() {
     let Some(lowered) = lowered() else {
         return;
     };
@@ -55,12 +90,19 @@ fn a_call_that_can_throw_is_refused_inside_a_try() {
         .collect();
     assert_eq!(
         reasons,
-        vec!["a call inside a `try`, whose `throw` would not reach this handler is not supported by this lowering yet"],
-        "one refusal, naming the call"
+        vec![
+            "a call inside a `try`, whose `throw` would not reach this handler is not supported by this lowering yet",
+            "a call inside a `try`, whose `throw` would not reach this handler is not supported by this lowering yet",
+        ],
+        "two refusals, naming the calls"
     );
     assert!(
-        !compiled(&lowered, "crossing"),
-        "`crossing` must not be emitted -- its `catch` cannot be reached"
+        !compiled(&lowered, "crossingAMethod"),
+        "a method callee has no raising copy"
+    );
+    assert!(
+        !compiled(&lowered, "crossingTwoFrames"),
+        "a callee that passes a throw on has none either"
     );
 }
 

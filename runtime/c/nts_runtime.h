@@ -1937,6 +1937,31 @@ NTS_READS_ONLY const NtsString *nts_landing_detail(const NtsLanding *landing);
  * error object. Null for anything that is not a reference. */
 NTS_READS_ONLY const char *nts_thrown_class(NtsValue value);
 
+/* The other way a throw leaves a function, and the one an ordinary `try`
+ * around a call uses.
+ *
+ * `nts_raise` records the value and **returns**. The compiled function returns
+ * immediately afterwards, and every caller between it and the handler tests
+ * `nts_raising` and returns too, so the whole path out is ordinary returns and
+ * the releases reference counting put on those edges all run. That is the leak
+ * the `NtsLanding` note above describes, not taken -- and the reason this
+ * exists beside a `jmp_buf` that would have been shorter.
+ *
+ * `nts_raise_take` clears the flag and hands the value over; a handler calls it
+ * on entry. A raise cannot nest: see the note on the implementation. */
+void nts_raise(NtsValue value);
+/* Deliberately **not** `NTS_READS_ONLY`. `pure` is a promise that the result
+ * depends only on arguments and memory, and this takes none -- so a compiler
+ * that cannot see a write between two calls may answer the second from the
+ * first. Every write here comes from `nts_raise` inside an opaque call, which
+ * is enough today and is a promise about code motion rather than a fact about
+ * this function. The check exists to catch a raise; one the optimiser folded
+ * away would be invisible in exactly the way that matters, and it costs a load
+ * next to a call that has already happened. Same reasoning as
+ * `NTS_ALLOCATES_OR_NULL`'s missing `returns_nonnull`, one hazard over. */
+int nts_raising(void);
+NtsValue nts_raise_take(void);
+
 _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail);
 
 /* `x instanceof C`, for one candidate class.
