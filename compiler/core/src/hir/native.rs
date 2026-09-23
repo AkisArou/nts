@@ -52,6 +52,29 @@ pub struct Function {
     /// spells and the caller never passes. [`Function::c_index`] maps between
     /// the two.
     pub roles: Vec<Role>,
+    /// Set when the declaration returns a TypeScript `string`: the `result`
+    /// is then C's `const char *`, which the call site copies into a string.
+    pub returns_string: Option<ReturnedString>,
+}
+
+/// A string a foreign function returns, as the declaration describes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReturnedString {
+    /// `string | null`: C's NULL is `null`. Otherwise a NULL ends the
+    /// process, since the declaration promised a string.
+    pub nullable: bool,
+    /// `@ntsFree`: the function that releases C's copy once it is read.
+    /// Absent, the string is borrowed -- C keeps it, and nothing is freed.
+    /// Present, the C result is `char *` rather than `const char *`, which is
+    /// how C spells a string the caller owns.
+    ///
+    /// **A wrong tag is far worse than a missing one.** Missing, C's string
+    /// leaks, which a leak check sees. Present on a borrowed string, the
+    /// program frees memory it does not own: heap corruption, which nothing in
+    /// the tree reliably sees. `bind-gir` writes it from GIR's `transfer-
+    /// ownership="full"`; a hand-written binding should add it only where the
+    /// library's documentation says the caller frees the result.
+    pub free: Option<String>,
 }
 
 /// What one C parameter of a foreign function receives.
@@ -1022,8 +1045,13 @@ impl Function {
             parameters.push(ty);
             roles.push(Role::Plain);
         }
-        let result = abi_type(signature.return_type)
-            .ok_or_else(|| format!("foreign function `{name}` return without a native ABI type; use a c_int/c_double brand, boolean, or void"))?;
+        let returns_string = if abi.is_none() { returned_string(snapshot, signature.return_type) } else { None };
+        let result = if returns_string.is_some() {
+            Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char))))
+        } else {
+            abi_type(signature.return_type)
+                .ok_or_else(|| format!("foreign function `{name}` return without a native ABI type; use a c_int/c_double brand, boolean, string, or void"))?
+        };
         Ok(Self {
             name,
             convention: if abi == Some("managed") {
@@ -1039,6 +1067,7 @@ impl Function {
             // that has the declaration node.
             declared_at: None,
             roles,
+            returns_string,
         })
     }
 }
@@ -1442,6 +1471,23 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
 
 pub(crate) mod schema;
 pub use schema::{is_layout, pointer, storage};
+
+/// A `string` result is C's `const char *`, copied into a string at the call;
+/// `string | null` makes NULL a `null`. The free function, if any, comes from
+/// the declaration's `@ntsFree`, where the callee is resolved.
+fn returned_string(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<ReturnedString> {
+    is_string(snapshot, ty).then(|| ReturnedString {
+        nullable: !matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::String)),
+        free: None,
+    })
+}
+/// Whether `name` could be a C function's name: what `@ntsFree` may say.
+#[must_use]
+pub fn is_c_identifier(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
 
 #[cfg(test)]
 mod handles {

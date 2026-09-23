@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 15;
+pub const SCHEMA_VERSION: u32 = 16;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -698,6 +698,10 @@ pub struct NativeAttributes {
     /// it, so the same header yields two different structs and only one of them
     /// is the one a binding was written against.
     pub defines: Option<Vec<String>>,
+    /// `@ntsFree g_free`: the function that releases the string a native
+    /// function returns, once it has been copied. Absent, the string is
+    /// borrowed and C keeps it.
+    pub free: Option<String>,
 }
 
 /// Why a snapshot was rejected.

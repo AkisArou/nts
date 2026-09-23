@@ -67,6 +67,8 @@ pub(crate) struct Function {
     /// compiler will pass, and so what the self-check declares.
     pub(crate) c_parameters: Vec<Type>,
     pub(crate) deprecated: bool,
+    /// `@ntsFree`: the function releasing a returned string the caller owns.
+    pub(crate) free: Option<String>,
     /// GIR's own name for the result where the C type is less specific --
     /// `gtk_button_new` returns a `GtkWidget *` that GIR says is a Button.
     pub(crate) returns: Option<String>,
@@ -95,8 +97,8 @@ pub(crate) enum Reason {
     NotIntrospectable,
     NoSymbol,
     Throws,
-    StringReturn,
     OwnedString,
+    WritableBuffer,
     OutParameter,
     Array,
     Varargs,
@@ -120,8 +122,8 @@ impl fmt::Display for Reason {
             Self::NotIntrospectable => write!(f, "GIR marks it not introspectable"),
             Self::NoSymbol => write!(f, "no C symbol"),
             Self::Throws => write!(f, "reports errors through a `GError **`"),
-            Self::StringReturn => write!(f, "returns a string"),
             Self::OwnedString => write!(f, "a string parameter the callee takes ownership of"),
+            Self::WritableBuffer => write!(f, "a `char *` buffer the callee may write into, which GIR calls a string"),
             Self::OutParameter => write!(f, "an out parameter"),
             Self::Array => write!(f, "an array"),
             Self::Varargs => write!(f, "variadic"),
@@ -243,6 +245,9 @@ pub(crate) fn bind<'a>(
         let name = callable.c_identifier.clone().unwrap_or_else(|| callable.name.clone());
         match mapper.function(callable) {
             Ok(function) => mapper.binding.functions.push(function),
+            // The entry GIR names instead is bound under the same symbol;
+            // this one is a duplicate, not something missing.
+            Err(Reason::Shadowed) => {}
             Err(reason) => mapper.binding.refused.push((name, reason)),
         }
     }
@@ -334,6 +339,7 @@ impl<'a> Mapper<'a> {
                     result: Mapped { ts: "c_size_t".to_owned(), c: Type::Scalar(Scalar::Size) },
                     c_parameters: Vec::new(),
                     deprecated: false,
+                    free: None,
                     returns: None,
                 });
                 self.binding.brands.insert("c_size_t");
@@ -448,26 +454,38 @@ impl<'a> Mapper<'a> {
             c_parameters.push(mapped.c.clone());
             parameters.push((identifier(&param.name), mapped));
         }
-        let result = self.result(&signature.result)?;
+        let (result, free) = self.result(&signature.result)?;
         let returns = (callable.kind == CallableKind::Constructor)
             .then(|| match &signature.result.ty {
                 TypeRef::Named { name, .. } => Some(self.qualify(name)),
                 _ => None,
             })
             .flatten();
-        Ok(Function { symbol, parameters, result, c_parameters, deprecated: callable.deprecated, returns })
+        Ok(Function { symbol, parameters, result, c_parameters, deprecated: callable.deprecated, free, returns })
     }
 
-    fn result(&mut self, result: &Param) -> Result<Mapped, Reason> {
+    /// The result, and for a string the caller owns, what frees it.
+    fn result(&mut self, result: &Param) -> Result<(Mapped, Option<String>), Reason> {
         match &result.ty {
             TypeRef::Named { name, .. } if name == "none" => {
-                Ok(Mapped { ts: "void".to_owned(), c: Type::Void })
+                Ok((Mapped { ts: "void".to_owned(), c: Type::Void }, None))
             }
+            // A returned string is copied at the call. Transfer-full is
+            // GLib's `g_malloc`, so `g_free` releases it, and it is spelled
+            // `char *` -- which the self-check confirms against the header.
             TypeRef::Named { name, .. } if name == "utf8" || name == "filename" => {
-                Err(Reason::StringReturn)
+                let owned = match result.transfer {
+                    Transfer::None => false,
+                    Transfer::Full => true,
+                    Transfer::Container => return Err(Reason::OwnedString),
+                };
+                let char = Pointee::Scalar(Scalar::Char);
+                let c = if owned { Type::Pointer(char) } else { Type::Pointer(Pointee::Const(Box::new(char))) };
+                let ts = if result.nullable { "string | null" } else { "string" };
+                Ok((Mapped { ts: ts.to_owned(), c }, owned.then(|| "g_free".to_owned())))
             }
-            TypeRef::Missing => Ok(Mapped { ts: "void".to_owned(), c: Type::Void }),
-            _ => self.typed(result),
+            TypeRef::Missing => Ok((Mapped { ts: "void".to_owned(), c: Type::Void }, None)),
+            _ => self.typed(result).map(|mapped| (mapped, None)),
         }
     }
 
@@ -481,6 +499,16 @@ impl<'a> Mapper<'a> {
         {
             if param.transfer != Transfer::None {
                 return Err(Reason::OwnedString);
+            }
+            // `char *` without `const` is a buffer the callee may write into
+            // (`g_strlcat`'s destination), which GIR still calls `utf8`. A
+            // string lent for the call is read-only, and not that.
+            let c_type = match &param.ty {
+                TypeRef::Named { c_type, .. } => c_type.as_deref().unwrap_or_default(),
+                _ => "",
+            };
+            if !c_type.starts_with("const ") {
+                return Err(Reason::WritableBuffer);
             }
             return Ok(Mapped {
                 ts: if param.nullable { "string | null" } else { "string" }.to_owned(),

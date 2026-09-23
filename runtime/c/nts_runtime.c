@@ -4437,6 +4437,22 @@ void nts_cstring_release(const NtsString *s, const char *c) {
   free((void *)c);
 }
 
+NtsString *nts_string_from_cstring(const char *c) {
+  if (c == NULL) {
+    return NULL;
+  }
+  return nts_string_from_utf8(c, strlen(c));
+}
+
+NtsString *nts_string_from_required_cstring(const char *c) {
+  if (c == NULL) {
+    fprintf(stderr, "nts: a native function declared to return a `string` "
+                    "returned NULL; declare it `string | null`\n");
+    abort();
+  }
+  return nts_string_from_utf8(c, strlen(c));
+}
+
 void *nts_closure_lend(NtsHeader *closure) {
   nts_retain(closure);
   return closure;

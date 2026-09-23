@@ -13,8 +13,6 @@ gulong gir_connect(GObject *instance, const char *signal,
 int gir_run(GApplication *app);
 // `g_object_unref`: a `gpointer`.
 void gir_unref(GObject *object);
-// `gtk_label_get_text`: returns a string. Prints it.
-void gir_log_label(GtkLabel *label);
 // Output.
 void gir_log(const char *line);
 

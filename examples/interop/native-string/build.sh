@@ -2,12 +2,13 @@
 # Build the library and the C program that links it, and check what C
 # receives when TypeScript passes a `string`.
 #
-# Three checks, and each has an arm that must come out differently:
+# Four checks, and each has an arm that must come out differently:
 #
 # - bytes: "α😀" arrives as CE B1 F0 9F 98 80, and "β😀" through the same
 #   check does not (in caller.c);
 # - U+0000: a string holding one ends the process with the boundary named,
 #   rather than reaching C truncated;
+# - NULL from a binding declared `string` ends the process, named;
 # - leaks: under valgrind, the loss at 20000 calls is the loss at 1000. A
 #   missing release loses one block per call, which this was run against:
 #   1,000 and 100,003 blocks lost, against 0 and 3 (the bump arena's chunks).
@@ -38,6 +39,17 @@ if ! grep -q "containing U+0000 at index 1" "$out/nul.out"; then
 fi
 echo "a string holding U+0000 stops at the boundary: OK"
 
+if "$out/caller" promise > "$out/promise.out" 2>&1; then
+  echo "FAILED native-string: a NULL from a \`string\` binding completed the call" >&2
+  exit 1
+fi
+if ! grep -q "declared to return a \`string\` returned NULL" "$out/promise.out"; then
+  echo "FAILED native-string: the NULL refusal said something else:" >&2
+  cat "$out/promise.out" >&2
+  exit 1
+fi
+echo "a NULL where a string was promised stops the call: OK"
+
 if ! command -v valgrind > /dev/null 2>&1; then
   echo "no valgrind on PATH: the leak arm did not run"
   exit 0
@@ -57,3 +69,18 @@ if [ "$lots" -gt "$((few + 16))" ]; then
   exit 1
 fi
 echo "strings lent to C are released: $few block(s) lost at 1000 calls, $lots at 20000"
+
+# Returned strings: a copy freed with the binding's `@ntsFree` loses nothing
+# however many are made, and the same function bound without it -- the
+# control -- loses one block a call, so the check can see a missing free.
+copies() {
+  valgrind --leak-check=full "$out/caller" copies "$1" "$2" 2>&1 |
+    awk '/definitely lost:/ { gsub(",", "", $7); print $7 }'
+}
+freed=$(copies 20000 0)
+unfreed=$(copies 20000 1)
+if [ -z "$freed" ] || [ -z "$unfreed" ] || [ "$freed" -gt "$few" ] || [ "$unfreed" -lt 20000 ]; then
+  echo "FAILED native-string: returned copies lost $freed block(s) freed, $unfreed unfreed (want $few, >= 20000)" >&2
+  exit 1
+fi
+echo "strings C returns are released by their @ntsFree: $freed lost at 20000 calls, $unfreed without it"

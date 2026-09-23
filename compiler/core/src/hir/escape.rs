@@ -1490,6 +1490,7 @@ mod foreign_contracts {
             // This asks about retention, which no module decides.
             declared_at: None,
             roles: vec![crate::hir::native::Role::Plain; 2],
+            returns_string: None,
         }))
     }
 

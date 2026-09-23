@@ -15,6 +15,7 @@ import {
   gtk_application_window_new,
   gtk_box_append,
   gtk_box_new,
+  gtk_label_get_text,
   gtk_label_new,
   gtk_label_set_text,
   gtk_window_present,
@@ -23,7 +24,7 @@ import {
 import { g_application_quit } from "c:Gio-2.0";
 import { g_idle_add_full, g_timeout_add_full } from "c:GLib-2.0";
 import type { c_int, c_uint } from "c:types";
-import { gir_connect, gir_log, gir_log_label, gir_run, gir_unref } from "c:gir-shim";
+import { gir_connect, gir_log, gir_run, gir_unref } from "c:gir-shim";
 import { asGtkBox, asGtkLabel, asGtkWindow } from "../types/gir/Gtk-4.0.values.ts";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
@@ -60,7 +61,7 @@ function main(): void {
       ticks++;
       gtk_label_set_text(label, "tick " + String(ticks));
       if (ticks < 3) return 1 as c_int;
-      gir_log_label(label);
+      gir_log("label=" + gtk_label_get_text(label));
       g_application_quit(application);
       return 0 as c_int;
     });

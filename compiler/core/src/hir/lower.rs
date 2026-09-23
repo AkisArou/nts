@@ -38856,9 +38856,60 @@ impl<'a> FuncBuilder<'a> {
 
         let (args, lent) = self.lower_call_arguments(id, &callee, &arguments)?;
 
+        let returned = match &callee {
+            Callee::Native(target) => target.returns_string.clone().map(|string| (target.clone(), string)),
+            _ => None,
+        };
         let call = self.push_call(id, callee, args, declaration)?;
+        let value = match returned {
+            Some((target, string)) => self.read_native_string(id, call, &target, &string)?,
+            None => call,
+        };
         self.give_back(id, lent);
-        Ok(call)
+        Ok(value)
+    }
+
+    /// The string a native function returned: C's `const char *`, copied,
+    /// then released with the declaration's `@ntsFree` if it names one.
+    ///
+    /// Immediately after the call and in the same block, and nothing can
+    /// branch between them: a native call names no raising copy, so it gets no
+    /// raise test, and the copy and the free are runtime calls that cannot
+    /// raise either. The free comes after the copy, which is the one order in
+    /// which C's string is never read after it is released.
+    fn read_native_string(
+        &mut self,
+        id: NodeId,
+        pointer: ValueId,
+        target: &super::native::Function,
+        string: &super::native::ReturnedString,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "a returned string"))?;
+        let copy = if string.nullable { "nts_string_from_cstring" } else { "nts_string_from_required_cstring" };
+        let value = self.runtime_call(copy, vec![pointer], ty, origin.clone());
+        if let Some(free) = &string.free {
+            let release = super::native::Function {
+                name: free.clone(),
+                convention: super::native::Convention::C,
+                parameters: vec![super::native::Type::Pointer(super::native::Pointee::Void)],
+                result: super::native::Type::Void,
+                retention: vec![super::native::Retention::Unknown],
+                variadic: None,
+                // The same header as the function that returned the string:
+                // a library's free function is declared where its allocator's
+                // results are.
+                declared_at: target.declared_at,
+                roles: vec![super::native::Role::Plain],
+                returns_string: None,
+            };
+            self.push(
+                OpKind::Call { callee: Callee::Native(std::sync::Arc::new(release)), args: vec![pointer], frame: None },
+                HirType::Void,
+                origin,
+            );
+        }
+        Ok(value)
     }
 
     /// Give back everything a native call was lent -- C strings and scoped
@@ -39098,6 +39149,22 @@ impl<'a> FuncBuilder<'a> {
         // it, so a program carries the headers it reaches rather than every one
         // in the snapshot.
         native.declared_at = declaration.and_then(|decl| self.declaring_module(decl));
+        if let Some(free) = declaration
+            .and_then(|decl| self.node(decl).native.as_ref())
+            .and_then(|n| n.free.as_deref())
+        {
+            let Some(string) = native.returns_string.as_mut() else {
+                return Err(self.unsupported(call, "@ntsFree names what releases a returned string, and this function does not return one"));
+            };
+            if !super::native::is_c_identifier(free) {
+                return Err(self.unsupported(call, "@ntsFree names one C function, as in `@ntsFree g_free`"));
+            }
+            string.free = Some(free.to_owned());
+            // A string the caller frees is `char *` in C, and a borrowed one
+            // `const char *`: that is how C libraries spell whose it is, GLib's
+            // `gchar *` for transfer-full among them. The witness compares.
+            native.result = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
+        }
         if let Some(names) = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.no_escape.as_ref()) {
             if names.is_empty() { return Err(self.unsupported(call, "@ntsNoEscape needs at least one native-pointer parameter")); }
             for name in names {
@@ -39161,8 +39228,16 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let reserved =
             declaration.and_then(|declaration| self.generators.get(&declaration).copied());
+        // A native function returning a string returns C's `const char *`,
+        // which is what the call's own value is; the caller copies it into the
+        // string the program sees (`read_native_string`).
+        let native_string = match &callee {
+            Callee::Native(target) if target.returns_string.is_some() => Some(target.result.representation()),
+            _ => None,
+        };
         let ty = reserved
             .map(|index| HirType::Managed(ManagedType::Object(super::generator_frame(index))))
+            .or(native_string)
             .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
         let origin = self.origin(id);

@@ -1602,6 +1602,14 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
  * silently receiving different text from what the program wrote. */
 NTS_ALLOCATES_OR_NULL const char *nts_string_to_cstring(const NtsString *s);
 void nts_cstring_release(const NtsString *s, const char *c);
+/* A C string a foreign function returned, as a string: the copy is the
+ * program's, and C's pointer is not kept. NULL is `null` -- for a binding
+ * declared `string | null`. */
+NTS_ALLOCATES_OR_NULL NtsString *nts_string_from_cstring(const char *c);
+/* The same for a binding declared plain `string`, which promised one: a NULL
+ * ends the process rather than becoming a null the program's types say
+ * cannot exist. */
+NTS_ALLOCATES NtsString *nts_string_from_required_cstring(const char *c);
 /* A closure lent to C as the `void *` a callback API carries beside its
  * function pointer -- GLib's `user_data`, and what an Objective-C block's
  * copy helper holds.

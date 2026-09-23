@@ -59,8 +59,16 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
         if let Some(returns) = &function.returns {
             notes.push(format!("GIR: returns a `{returns}`."));
         }
+        if let Some(free) = &function.free {
+            notes.push(format!("@ntsFree {free}"));
+        }
         if !notes.is_empty() {
-            let _ = writeln!(out, "  /** {} */", notes.join(" "));
+            // One tag per line, since a tag's value runs to the end of its line.
+            let _ = writeln!(out, "  /**");
+            for note in notes {
+                let _ = writeln!(out, "   * {note}");
+            }
+            let _ = writeln!(out, "   */");
         }
         let parameters = function
             .parameters

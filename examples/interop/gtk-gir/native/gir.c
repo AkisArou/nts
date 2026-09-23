@@ -13,11 +13,6 @@ int gir_run(GApplication *app) { return g_application_run(app, 0, NULL); }
 
 void gir_unref(GObject *object) { g_object_unref(object); }
 
-void gir_log_label(GtkLabel *label) {
-  printf("label=%s\n", gtk_label_get_text(label));
-  fflush(stdout);
-}
-
 void gir_log(const char *line) {
   printf("%s\n", line);
   fflush(stdout);

@@ -204,4 +204,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// 76 for `nts_checkpoint_after_callbacks`, which a C `main` calls once for a
 /// program whose loop is `GLib`'s or `AppKit`'s. The JVM's loop is its own, so there
 /// is nothing here to embed.
-const REFUSED_FLOOR: usize = 76;
+///
+/// 78 for `nts_string_from_cstring` and `nts_string_from_required_cstring`,
+/// which read a string a C function returned: native calls again.
+const REFUSED_FLOOR: usize = 78;

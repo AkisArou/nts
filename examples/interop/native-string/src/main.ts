@@ -1,4 +1,4 @@
-import { text_byte, text_is_null, text_length, text_total } from "c:text";
+import { text_broken_promise, text_byte, text_dup, text_dup_unfreed, text_greek, text_is_null, text_length, text_maybe, text_overlong, text_total } from "c:text";
 import type { c_int } from "c:types";
 
 // Built at run time rather than written as one literal, so the string C sees
@@ -53,4 +53,45 @@ export function many(count: number): number {
 export function nullIsNull(which: number): number {
   const s = which === 0 ? null : which === 1 ? "" : "text";
   return text_is_null(s);
+}
+
+// Returned by C: "α😀" is three code units, the second a high surrogate.
+export function greekLength(): number {
+  return text_greek().length;
+}
+
+export function greekUnit(at: number): number {
+  return text_greek().charCodeAt(at);
+}
+
+// A copy C allocated and the program released: the text survives the free.
+export function dupLength(): number {
+  return text_dup("hello, " + String(42)).length;
+}
+
+// `string | null`: NULL is null, and a string is a string.
+export function maybe(which: number): number {
+  const s = text_maybe(which as c_int);
+  return s === null ? -1 : s.length;
+}
+
+// An overlong '/', decoded as node decodes it: two replacements, no '/'.
+export function overlongUnit(at: number): number {
+  return text_overlong().charCodeAt(at);
+}
+
+// `count` copies read and released, or with `unfreed`, read and leaked.
+export function manyCopies(count: number, unfreed: number): number {
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    const s = unfreed === 0 ? text_dup("copy") : text_dup_unfreed("copy");
+    total += s.length;
+  }
+  return total;
+}
+
+// A NULL where the declaration promised a string. Reaching the `length`
+// would read through a null the program's types say cannot exist.
+export function brokenPromise(): number {
+  return text_broken_promise().length;
 }
