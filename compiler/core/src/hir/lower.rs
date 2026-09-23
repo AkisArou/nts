@@ -7343,6 +7343,43 @@ fn record_unstorable_exports(
         else {
             continue;
         };
+        // **Not a `static` field**, whose reason belongs to `Owner.field` and
+        // never to a bare export name. `collect_static_fields` puts statics in
+        // this same `ModuleScope` -- deliberately, and the comment on
+        // `no_initializer_for_an_erased_slot` says so -- so `unsupported` holds
+        // both kinds and the match below is by *name*. A class writing
+        // `static readonly f = f` beside a module-scope `function f` therefore
+        // published the static's storage reason against the function, masking
+        // the function's own root.
+        //
+        // `events` is the live instance at three exports: it writes `static
+        // readonly listenerCount = listenerCount` (and the same for
+        // `getMaxListeners` and `getEventListeners`) beside the free functions,
+        // all three of which are refused for `... on an intersection, which is
+        // erased here`. Those roots are printed as NTS1003 on the same run and
+        // the wrapper said `closure layout` instead, which sends a reader to
+        // the wrong family of work.
+        //
+        // `blockers/a-static-that-shadows-a-refused-function` carries the
+        // reduction, whose `alone` arm is the control: the identical body with
+        // no same-named static reports the root, and a first reduction that
+        // dropped the refusal did not reproduce at all.
+        if snapshot
+            .symbols
+            .get(*symbol as usize)
+            .is_some_and(|record| {
+                record.declarations.iter().any(|declaration| {
+                    snapshot
+                        .nodes
+                        .get(declaration.0 as usize)
+                        .is_some_and(|node| {
+                            node.kind == NodeKind::Syntax(syntax::PROPERTY_DECLARATION)
+                        })
+                })
+            })
+        {
+            continue;
+        }
         // Published under the name an importer writes, which is what the
         // wrapper looks the export up by. A binding that is not exported keeps
         // its silence here and is answered at its reads, as before.

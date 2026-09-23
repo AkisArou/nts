@@ -3844,11 +3844,33 @@ for them the layout sentence is exactly right.
 
 **This is `record_unstorable_exports` preferring its own generic reason over a
 root recorded elsewhere — the same defect the cascade repair fixed one level
-in, in code I wrote in the same sitting.** Whoever takes it: the repair is to
-consult the initializer's own `uncompiled` entry before falling back to the
-storage sentence, and it re-attributes 6 declined exports without publishing
-any name. The axis measure is unchanged at **140 published names**, and no item
-in this section moves it.
+in, in code I wrote in the same sitting.** It is two causes, and one of them is
+now fixed.
+
+**Fixed: a class static shadowing a function of the same name (3 exports).**
+`collect_static_fields` puts statics in the *same* `ModuleScope` as module-scope
+variables — deliberately; the comment on `no_initializer_for_an_erased_slot`
+says so — and `record_unstorable_exports` matched `unsupported` to exports by
+**name**. `events` writes `static readonly listenerCount = listenerCount` beside
+the free function, so the static's storage reason was published against the
+function. All three now report their real roots, which are the
+intersection-and-erasure family. `blockers/a-static-that-shadows-a-refused-
+function` is the guard, and its `alone` arm — the identical body with no
+same-named static — is what makes it a diagnosis rather than a guess.
+
+**Still open: an alias whose target was refused (2 exports).** `util`'s
+`isDeepStrictEqual` and `timers`' `now` are genuine module-scope consts, and
+`storable` declines them *accurately* — a closure whose target did not compile
+has no layout to fix. The sentence is true and still unhelpful, because the root
+is the target's own refusal. The repair is to consult the initializer's
+`uncompiled` entry before falling back, and it is a different fix from the one
+above. `stream`'s `compose` is a third, not yet diagnosed.
+
+The axis measure is **unchanged** by any of this, as a diagnostics change must
+be: bracketed against the gated binary at `95bedabd` across all 26 modules,
+definitions are identical module for module, `NTS[0-9]{4}` counts are identical,
+and the declined-export total is 501 before and after — only three *reasons*
+moved.
 
 ## Eleven modules started compiling and not one gained a passing test
 
