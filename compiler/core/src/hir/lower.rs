@@ -32710,6 +32710,13 @@ impl<'a> FuncBuilder<'a> {
         let Some(symbol) = self.node(object).symbol else {
             return Ok(None);
         };
+        // Through the alias, for the reason `enum_member` gives: an import
+        // names one at the use site. `declarations` below is read off this
+        // record and has to be the enum's own, since the member values are
+        // recovered by walking them -- an alias declares one import
+        // specifier, which has no `ENUM_MEMBER` child and would reach the
+        // `no member has` refusal for an index every member has.
+        let symbol = self.denoted_symbol(symbol);
         let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else {
             return Ok(None);
         };
@@ -35115,7 +35122,15 @@ impl<'a> FuncBuilder<'a> {
     /// static a string literal gets rather than an immediate.
     fn enum_member(&self, id: NodeId) -> Option<EnumMember> {
         let object = *self.children(id).first()?;
-        let symbol = self.node(object).symbol?;
+        // Through the alias, because an import names one at the use site and
+        // an alias carries no `ENUM` flag of its own. Without this an enum
+        // read across a module edge folds in the file that declares it and
+        // not in the file that imports it -- and the refusal it then reaches
+        // says the enum is `wanted as an object ... which is the reverse
+        // mapping`, because `describe_name` *does* resolve the alias and so
+        // sees a genuine enum. That sentence named the one thing that was
+        // working: the reverse mapping lowers, in the declaring module.
+        let symbol = self.denoted_symbol(self.node(object).symbol?);
         let record = self.snapshot.symbols.get(symbol.0 as usize)?;
         if !record.flags.contains(SymbolFlags::ENUM) {
             return None;

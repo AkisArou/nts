@@ -1328,3 +1328,59 @@ fn the_enum_shape_that_is_refused_is_named() {
         "a string enum member is supported and should not be refused: {messages:?}",
     );
 }
+
+/// An enum read from the module that imports it, rather than the one that
+/// declares it.
+///
+/// The four enum examples that existed when this was written are each a single
+/// file, so every one of them folded a member whose declaration was in the same
+/// module -- and the feature was broken the moment it crossed an edge. An
+/// import names an **alias** at the use site, an alias carries no `ENUM` flag,
+/// and both enum paths tested the flag on the unresolved symbol. `lower.rs`
+/// states the rule they were missing and follows it elsewhere: *"Imports name
+/// their alias at the use site. Classify the declaration it denotes."*
+///
+/// The three assertions are the three things an alias hid, and each fails on
+/// its own if only part of the resolution is restored.
+#[test]
+fn an_enum_folds_through_the_alias_an_import_names() {
+    let Some(lowered) = lowered("an-enum-across-a-module") else {
+        return;
+    };
+    assert!(
+        lowered.diagnostics.is_empty(),
+        "nothing should be refused: {:?}",
+        lowered
+            .diagnostics
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>(),
+    );
+
+    let holds_float = |name: &str, want: f64| {
+        func(&lowered, name).values.iter().any(
+            |op| matches!(op.kind, OpKind::ConstFloat(v) if (v - want).abs() < f64::EPSILON),
+        )
+    };
+    let holds_string = |name: &str, want: &str| {
+        func(&lowered, name)
+            .values
+            .iter()
+            .any(|op| matches!(&op.kind, OpKind::ConstString(text) if text == want))
+    };
+
+    // TypeScript's numbering is a running total, not a position: `Center`
+    // follows `End = 5`, so it is 6. Crossing the edge must not change that.
+    assert!(holds_float("forwardMember", 6.0), "`Align.Center` is 6");
+    // The reverse mapping recovers the name by walking the enum's
+    // `declarations`, which an unresolved alias answers with one import
+    // specifier -- no `ENUM_MEMBER` child, and a refusal saying no member has
+    // a value that four members have.
+    assert!(
+        holds_string("reverseAtConstant", "Center"),
+        "`Align[6]` is \"Center\"",
+    );
+    // Two hops: `hop.ts` re-exports what `kinds.ts` declares, so the chain is
+    // longer than the single hop every alias in the corpus happened to be.
+    assert!(holds_float("throughTwoHops", 5.0), "`Hopped.End` is 5");
+}
