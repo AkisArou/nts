@@ -3675,6 +3675,78 @@ the same thing. And what is left of the `try` row is exactly the bound record
 `function_copies` is consulted for function declarations and a method's copy
 would have to be a dispatch-table entry rather than a name.
 
+### The queue re-ranked once the wrappers could name their roots
+
+`69bef509` stopped the cascade recording a literal where it had just worked the
+root out, and started recording refusals under the name callers actually use.
+What that did to the instrument:
+
+    napi wrapper lines naming a callee, with no root   184 of 184  ->    9
+    NTS1003 cascade lines with no root               8,139/12,110  -> 4,365
+    definitions                                            29,968  -> 29,968
+
+**No row below is comparable to the table two sections up.** That one was built
+by chasing the third of the cascade that carried a root and by guessing at the
+rest; this one reads what the compiler says. Where a number moved, the
+instrument moved.
+
+    38  is exported and is not a function this backend can name
+        assert 19, util 3, http 3, events 3
+    21  an erased value where a concrete representation is wanted
+        fs 14, stream 4, readline 1, url 1
+    17  takes an object
+        timers 5, path 4, async_hooks 2, events 2
+    17  `callback`, a `an anonymous type` captured by a closure that reads it
+        as a `an anonymous type`                                      fs 17
+    16  it calls `uvException`, and a `UVExceptionError` where a `UVError` is
+        wanted -- a widening                                          fs 16
+    13  is a namespace member whose function was not compiled    stream 9, fs 2
+    13  a call inside a `try`, whose `throw` would not reach this handler
+        fs 12, stream 1
+    12  is exported as a value of type `an object`, which does not cross
+    11  it calls `engineForMode`, and a `EngineOptions` where a `ZlibOptions`
+        is wanted                                                    zlib 11
+    11  is exported as a value of type `a function`, which does not cross
+        zlib 11
+    10  an exported generic function this program never instantiates
+     9  an `instanceof` against something this compiler has no class for
+     9  is exported and no function of that name was compiled
+
+155 distinct causes; 9 wrappers still name no root.
+
+### Three things the old instrument could not see
+
+**Most of the head is the boundary, not the lowering.** The rows reading *is not
+a function this backend can name*, *takes an object*, *does not cross* and *no
+function of that name was compiled* are **87 exports** whose bodies the compiler
+may well have lowered — the napi wrapper cannot carry them across. That is a
+different axis from every refusal this document ranks, and it was invisible
+because those wrapper lines do not say "it calls X" and the old ranking only
+followed sentences that did.
+
+**`assert`'s 19 are one shape, and `assert` publishes nothing today.** Its whole
+API is
+
+```ts
+export class Assert { deepStrictEqual(this: Assert | void, …): void { … } }
+const looseAssertions = new Assert(…);
+export const deepStrictEqual = looseAssertions.deepStrictEqual;
+```
+
+— a method read off an instance and bound to a `const`. The method declares
+`this: Assert | void` precisely because JavaScript hands an unbound read no
+receiver, so the source is already written for the calling convention the
+boundary needs. `c.m` is not `c.m.bind(c)`, and the row *a method used as a
+value whose body reads `this`, which a read does not bind* is the same shape
+already diagnosed elsewhere. 19 exports in the most-used module in node's own
+tests.
+
+**`fs`'s captured-callback row is now a head in its own right, at 17.** It was
+inside `asRequest`, whose `uncompiled` entry was recorded under a name no caller
+used, so all 67 of its references printed `which was refused above`. The root is
+`blockers/a-capture-narrowed-by-an-assertion`, and the previous plan set it
+aside as "3+ links deep" on evidence that could not have shown otherwise.
+
 ## Eleven modules started compiling and not one gained a passing test
 
 Measured on `target/release/nts` at 15:39, pinned to scratch, from a worktree at
