@@ -3864,7 +3864,19 @@ same-named static — is what makes it a diagnosis rather than a guess.
 has no layout to fix. The sentence is true and still unhelpful, because the root
 is the target's own refusal. The repair is to consult the initializer's
 `uncompiled` entry before falling back, and it is a different fix from the one
-above. `stream`'s `compose` is a third, not yet diagnosed.
+above.
+
+`stream`'s `compose` is a third, and it is the harder one. Its root **is**
+printed — `compose.ts:116: NTS1001 `slice` on an array of erased elements,
+which needs a `_value` helper this runtime does not have`, a position inside
+`compose`'s own body — but an NTS1001 is built from the *offending node* and
+never names the enclosing declaration, so nothing keyed by name can join on it
+and the storage sentence is all the wrapper has. That is the instrument
+question this document has flagged before and is bigger than either repair
+above. Three other hypotheses were probed and refuted first: a same-named
+static (my fix would have caught it), reading the function as a value at
+module scope, and passing it to a module-scope call — all three report the true
+root in isolation.
 
 The axis measure is **unchanged** by any of this, as a diagnostics change must
 be: bracketed against the gated binary at `95bedabd` across all 26 modules,
