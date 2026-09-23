@@ -4375,21 +4375,11 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length) {
   return out;
 }
 
-const char *nts_string_to_cstring(const NtsString *s) {
-  if (s == NULL) {
-    return NULL;
-  }
-  /* Three bytes per unit is the most any unit needs: a BMP code point is at
-   * most three, and a supplementary one is four bytes for two units. */
-  if ((size_t)s->length > (SIZE_MAX - 1u) / 3u) {
-    fprintf(stderr, "nts: out of memory\n");
-    abort();
-  }
-  char *out = (char *)malloc((size_t)s->length * 3u + 1u);
-  if (!out) {
-    fprintf(stderr, "nts: out of memory\n");
-    abort();
-  }
+/* `s` as NUL-terminated UTF-8 into `out`, which has room for `s->length * 3
+ * + 1` bytes, answering the bytes written before the terminator. The one
+ * transcoding a string gets on its way to C, so a lone surrogate and a U+0000
+ * mean the same thing in a `string` parameter and in a `string[]` one. */
+static size_t nts_write_cstring(const NtsString *s, char *out) {
   size_t n = 0;
   for (uint32_t at = 0; at < s->length; at++) {
     uint32_t point = nts_unit(s, at);
@@ -4427,8 +4417,70 @@ const char *nts_string_to_cstring(const NtsString *s) {
     }
   }
   out[n] = '\0';
+  return n;
+}
+
+const char *nts_string_to_cstring(const NtsString *s) {
+  if (s == NULL) {
+    return NULL;
+  }
+  /* Three bytes per unit is the most any unit needs: a BMP code point is at
+   * most three, and a supplementary one is four bytes for two units. */
+  if ((size_t)s->length > (SIZE_MAX - 1u) / 3u) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  char *out = (char *)malloc((size_t)s->length * 3u + 1u);
+  if (!out) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  nts_write_cstring(s, out);
   return out;
 }
+
+char **nts_strings_to_cstrings(const NtsArray *array) {
+  if (array == NULL) {
+    return NULL;
+  }
+  uint32_t count = array->header.length;
+  NtsString *const *items = NTS_ITEMS(array, NtsString *);
+  /* One block: the table, its terminator, then every string's bytes. The
+   * bound per string is the one `nts_string_to_cstring` allocates. */
+  size_t table = ((size_t)count + 1u) * sizeof(char *);
+  size_t bytes = table;
+  for (uint32_t at = 0; at < count; at++) {
+    const NtsString *s = items[at];
+    if (s == NULL) {
+      fprintf(stderr,
+              "nts: a string array with a hole at index %u cannot cross to C "
+              "as a NULL-terminated `char **`, which would end it there\n",
+              (unsigned)at);
+      abort();
+    }
+    size_t most = (size_t)s->length * 3u + 1u;
+    if ((size_t)s->length > (SIZE_MAX - 1u) / 3u || bytes > SIZE_MAX - most) {
+      fprintf(stderr, "nts: out of memory\n");
+      abort();
+    }
+    bytes += most;
+  }
+  char *block = (char *)malloc(bytes);
+  if (!block) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  char **out = (char **)(void *)block;
+  char *cursor = block + table;
+  for (uint32_t at = 0; at < count; at++) {
+    out[at] = cursor;
+    cursor += nts_write_cstring(items[at], cursor) + 1u;
+  }
+  out[count] = NULL;
+  return out;
+}
+
+void nts_cstrings_release(char **c) { free((void *)c); }
 
 /* Every answer is its own allocation today; see the header for why the source
  * string is passed anyway. */

@@ -181,8 +181,24 @@ pub(crate) enum TypeRef {
     /// `<type name="..." c:type="...">`. `name` is as GIR wrote it, qualified
     /// or not; the mapper qualifies it against the namespace it appears in.
     Named { name: String, c_type: Option<String> },
-    Array,
+    /// `<array>`: C's pointer to elements, described by GIR.
+    Array(ArrayRef),
     Varargs,
     /// No type element at all, which GIR writes for a few odd returns.
     Missing,
+}
+
+/// An `<array>` as GIR describes it.
+#[derive(Debug, Clone)]
+pub(crate) struct ArrayRef {
+    /// The element's GIR type name: `utf8`, `guint8`, `Gtk.Widget`.
+    pub(crate) element: Option<String>,
+    /// The whole array's C spelling, `const gchar* const*`.
+    pub(crate) c_type: Option<String>,
+    /// The index, among the non-instance parameters, of the one holding the
+    /// element count.
+    pub(crate) length: Option<usize>,
+    /// Ends with a zero element. GIR's default when neither a length nor a
+    /// fixed size is given.
+    pub(crate) zero_terminated: bool,
 }

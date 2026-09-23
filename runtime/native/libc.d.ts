@@ -62,6 +62,23 @@ declare module "c:types" {
     N extends (context: Ptr<unknown>, ...rest: never[]) => void,
   > = F & { readonly __c_closure?: "erased"; readonly __c_notify?: N };
   export type ScopedClosure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "scoped" };
+  // A `string[]` as C's NULL-terminated array of strings -- `argv`, GLib's
+  // `gchar **` -- converted for the call and released after it, the way a
+  // `string` parameter is. `Q` is the header's spelling, which the witness
+  // compares exactly: `"char"` is `char **`, `"const"` is `const char **`,
+  // and `"const const"` is `const char * const *`. C that keeps the array
+  // past the call cannot be declared this way.
+  export type CStrings<Q extends "char" | "const" | "const const" = "const const"> = readonly string[] & {
+    readonly __c_strings?: Q;
+  };
+  // An array whose length C takes in a parameter of its own -- `argc` beside
+  // `argv`, `gsize len` after `const guint8 *data`. The caller does not pass
+  // it: the compiler does, from the array, into a slot of brand `L` placed
+  // right after the array (`"after"`) or right before it (`"before"`).
+  export type Counted<A, L extends number | bigint, At extends "after" | "before" = "after"> = A & {
+    readonly __c_count?: L;
+    readonly __c_count_at?: At;
+  };
   // A handle read-only through this view: C's `const GtkBitset *`. A plain
   // handle is assignable to it, and the C prototype says `const`, which is
   // what the header declares and so what the witness compares against.

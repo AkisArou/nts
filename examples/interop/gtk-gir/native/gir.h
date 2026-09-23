@@ -7,8 +7,6 @@
 
 // `g_signal_emit_by_name`: varargs, so GIR marks it not introspectable.
 void gir_emit(GObject *instance, const char *signal);
-// `g_application_run`: `argv` is an array.
-int gir_run(GApplication *app);
 // Output.
 void gir_log(const char *line);
 

@@ -207,4 +207,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 78 for `nts_string_from_cstring` and `nts_string_from_required_cstring`,
 /// which read a string a C function returned: native calls again.
-const REFUSED_FLOOR: usize = 78;
+///
+/// 80 for `nts_strings_to_cstrings` and `nts_cstrings_release`, which hand a
+/// `string[]` to a C function as `char **`: native calls again.
+const REFUSED_FLOOR: usize = 80;

@@ -5,7 +5,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use roxmltree::Node;
 
 use super::model::{
-    Callable, CallableKind, Callback, Class, Direction, Enum, Member, Namespace, Param, Record,
+    ArrayRef, Callable, CallableKind, Callback, Class, Direction, Enum, Member, Namespace, Param, Record,
     Repository, Scope, Signal, Signature, Transfer, TypeRef,
 };
 
@@ -207,8 +207,20 @@ fn param(node: Node<'_, '_>, result: bool) -> Param {
             name: attribute(ty, "name").unwrap_or_default().to_owned(),
             c_type: c_attribute(ty, "type").map(str::to_owned),
         }
-    } else if child(node, "array").is_some() {
-        TypeRef::Array
+    } else if let Some(array) = child(node, "array") {
+        let length = attribute(array, "length").and_then(|v| v.parse().ok());
+        let fixed = attribute(array, "fixed-size").is_some();
+        TypeRef::Array(ArrayRef {
+            element: child(array, "type").and_then(|ty| attribute(ty, "name")).map(str::to_owned),
+            c_type: c_attribute(array, "type").map(str::to_owned),
+            length,
+            // GIR's default: terminated unless it says otherwise, or gives the
+            // extent another way.
+            zero_terminated: match attribute(array, "zero-terminated") {
+                Some(value) => value == "1",
+                None => length.is_none() && !fixed,
+            },
+        })
     } else if child(node, "varargs").is_some() {
         TypeRef::Varargs
     } else {

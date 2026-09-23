@@ -6,8 +6,6 @@ void gir_emit(GObject *instance, const char *signal) {
   g_signal_emit_by_name(instance, signal);
 }
 
-int gir_run(GApplication *app) { return g_application_run(app, 0, NULL); }
-
 void gir_log(const char *line) {
   printf("%s\n", line);
   fflush(stdout);

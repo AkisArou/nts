@@ -11188,6 +11188,8 @@ static NO_FOREIGN: std::sync::OnceLock<
 enum Lent {
     /// A C string, beside the string it was made from.
     String { string: ValueId, pointer: ValueId },
+    /// A `char **` made from a `string[]`.
+    Strings { pointer: ValueId },
     /// A closure's context, for a `ScopedClosure`.
     Closure { context: ValueId },
 }
@@ -14358,6 +14360,12 @@ impl<'a> FuncBuilder<'a> {
             });
         if in_c && super::native::is_object_pointer(self.snapshot, ty) {
             return Some(HirType::NativePointer(super::native::Pointee::Void));
+        }
+        // `CStrings`: the argument is the `string[]` the markers are
+        // intersected with, which the call converts; the markers have no
+        // representation of their own.
+        if in_c && super::native::is_strings(self.snapshot, ty) {
+            return Some(HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String)))));
         }
         self.represent(ty)
     }
@@ -39048,8 +39056,69 @@ impl<'a> FuncBuilder<'a> {
                 Lent::Closure { context } => {
                     self.runtime_call("nts_closure_unlend", vec![context], HirType::Void, origin.clone());
                 }
+                Lent::Strings { pointer } => {
+                    self.runtime_call("nts_cstrings_release", vec![pointer], HirType::Void, origin.clone());
+                }
             }
         }
+    }
+
+    /// A closure as the C function pointer C calls it through: a bridge with
+    /// the `bridge` signature, the closure's context last, converted to the
+    /// parameter's own type `want` where they differ -- an `ErasedClosure`'s
+    /// parameter is `GCallback`, the same code address, which C casts back to
+    /// the signature it calls it with.
+    fn bridge_closure(
+        &mut self,
+        id: NodeId,
+        closure: ValueId,
+        bridge: &std::sync::Arc<super::native::FnPointer>,
+        want: HirType,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
+        // Dispatched statically, through the closure's own layout, which an
+        // arrow or function expression has and a value of a bare function
+        // type does not.
+        if !matches!(self.values[closure.0 as usize].ty, HirType::Managed(ManagedType::Object(_))) {
+            return Err(self.unsupported(
+                id,
+                "a closure passed to C whose body is not known here: write the function or arrow at the call, or bind it with `const` in the same function",
+            ));
+        }
+        let bridged = self.push(
+            OpKind::NativeBridge { closure, signature: bridge.clone(), context: true },
+            HirType::NativePointer(super::native::Pointee::FnPointer(bridge.clone())),
+            origin.clone(),
+        );
+        Ok(if self.values[bridged.0 as usize].ty == want {
+            bridged
+        } else {
+            self.push(OpKind::Convert(bridged), want, origin.clone())
+        })
+    }
+
+    /// `array === null ? 0 : array.length`, for the count C takes beside an
+    /// array that may be absent.
+    fn count_or_zero(&mut self, array: ValueId, origin: &Origin) -> ValueId {
+        let ty = self.values[array.0 as usize].ty.clone();
+        let null = self.push(OpKind::ConstNull, ty, origin.clone());
+        let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: array, rhs: null }, HirType::Bool, origin.clone());
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let present = self.new_block();
+        let merge = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: absent,
+            then_target: merge,
+            then_args: vec![zero],
+            else_target: present,
+            else_args: Vec::new(),
+        });
+        let count = self.push_block_param(merge, HirType::NUMBER, origin.clone());
+        self.switch_to(present);
+        let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
+        self.terminate(Terminator::Jump { target: merge, args: vec![length] });
+        self.switch_to(merge);
+        count
     }
 
     /// A call's arguments, lowered the way its callee wants them, and what was
@@ -39090,6 +39159,29 @@ impl<'a> FuncBuilder<'a> {
             let argument = fed.and_then(|ts| args.get(ts).copied());
             match role {
                 Role::Plain => c_args.extend(argument),
+                Role::Strings => {
+                    let Some(array) = argument else { continue };
+                    let pointer = self.runtime_call(
+                        "nts_strings_to_cstrings",
+                        vec![array],
+                        target.parameters[at].representation(),
+                        origin.clone(),
+                    );
+                    lent.push(Lent::Strings { pointer });
+                    c_args.push(pointer);
+                }
+                // The array's element count, into the slot C reads it from --
+                // before the array's own slot as often as after, so it is read
+                // from the arguments rather than from what was pushed.
+                Role::Length { array, nullable } => {
+                    let fed = target.slots().find(|(slot, _, _)| *slot == array).and_then(|(_, _, fed)| fed);
+                    let Some(array) = fed.and_then(|ts| args.get(ts).copied()) else { continue };
+                    let count = if nullable { self.count_or_zero(array, &origin) } else {
+                        self.push(OpKind::Length(array), HirType::NUMBER, origin.clone())
+                    };
+                    let count = self.coerce(count, &target.parameters[at].representation(), id)?;
+                    c_args.push(count);
+                }
                 Role::String => {
                     let Some(string) = argument else { continue };
                     let pointer = self.runtime_call(
@@ -39103,31 +39195,8 @@ impl<'a> FuncBuilder<'a> {
                 }
                 Role::Closure { scoped, bridge } => {
                     let Some(closure) = argument else { continue };
-                    let signature = &bridge;
-                    // Dispatched statically, through the closure's own layout,
-                    // which an arrow or function expression has and a value of
-                    // a bare function type does not.
-                    if !matches!(self.values[closure.0 as usize].ty, HirType::Managed(ManagedType::Object(_))) {
-                        return Err(self.unsupported(
-                            id,
-                            "a closure passed to C whose body is not known here: write the function or arrow at the call, or bind it with `const` in the same function",
-                        ));
-                    }
-                    let bridged = self.push(
-                        OpKind::NativeBridge { closure, signature: signature.clone(), context: true },
-                        HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
-                        origin.clone(),
-                    );
-                    // An `ErasedClosure`'s parameter is `GCallback`: the same
-                    // code address, which C casts back to the signature it
-                    // calls it with.
                     let want = target.parameters[at].representation();
-                    let bridged = if self.values[bridged.0 as usize].ty == want {
-                        bridged
-                    } else {
-                        self.push(OpKind::Convert(bridged), want, origin.clone())
-                    };
-                    c_args.push(bridged);
+                    c_args.push(self.bridge_closure(id, closure, &bridge, want, &origin)?);
                     lending = Some((closure, scoped));
                 }
                 Role::ClosureData => {
@@ -39324,6 +39393,16 @@ impl<'a> FuncBuilder<'a> {
                 }
                 native.retention[slot] = super::native::Retention::NotRetained;
             }
+        }
+        // A `CStrings` array is lent for the call and freed after it, so a
+        // callee that kept it would read freed memory -- which no test in
+        // either profile reaches. The binding says it does not, or the call
+        // is refused: that is the direction this check fails safe in.
+        if native
+            .slots()
+            .any(|(slot, role, _)| role == super::native::Role::Strings && native.retention[slot] != super::native::Retention::NotRetained)
+        {
+            return Err(self.unsupported(call, "a `CStrings` parameter without `@ntsNoEscape`, which is what says C does not keep the array it is lent"));
         }
         Ok(Callee::Native(std::sync::Arc::new(native)))
     }

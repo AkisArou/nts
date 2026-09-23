@@ -1950,3 +1950,102 @@ int might(int ok, int *out, struct _GError **error) {
         assert!(Command::new(dir.join(executable)).status().unwrap().success(), "{executable}");
     }
 }
+
+/// C's array of strings, `char **`, on both backends.
+const STRINGS_LIBRARY: &str = r"
+#include <stddef.h>
+#include <string.h>
+int joined(int argc, char **argv) {
+    int bytes = 0;
+    for (int i = 0; i < argc; i++) bytes += (int)strlen(argv[i]);
+    return argv[argc] == NULL ? argc * 1000 + bytes : -1;
+}
+int maybe(int argc, char **argv) {
+    return argv == NULL ? (argc == 0 ? -2 : -3) : joined(argc, argv);
+}
+int walked(const char *const *values) {
+    if (values == NULL) return -1;
+    int n = 0, bytes = 0;
+    while (values[n] != NULL) bytes += (int)strlen(values[n++]);
+    return n * 1000 + bytes;
+}
+";
+
+/// A `string[]` crosses to C as a NULL-terminated `char **`, lent for the
+/// call: `argv`'s shape, and `GLib`'s `gchar **`.
+///
+/// The empty array is the first case, because it is the one a generated
+/// fixture never supplies and the one C contracts split on: it is a table
+/// holding only the terminator, not NULL, which a callee walking to the
+/// terminator without checking relies on -- and NULL is kept for `null`.
+/// Then `null`, UTF-8 that is not ASCII, a length slot C takes *before* the
+/// array (`argc`), and a hundred strings. Each answer counts both the strings
+/// and their bytes, so a wrong count, a missing terminator or a wrong
+/// transcoding each change it.
+///
+/// And the refusal: without `@ntsNoEscape` the call is refused, because a
+/// callee that kept the table would read freed memory and nothing would say
+/// so.
+#[test]
+fn a_string_array_crosses_as_a_null_terminated_char_pointer_array_on_both_backends() {
+    let source = r#"
+import type { CStrings, Counted, c_int } from "c:types";
+/** @ntsNoEscape argv */
+declare function joined(argv: Counted<CStrings<"char">, c_int, "before">): c_int;
+/** @ntsNoEscape argv */
+declare function maybe(argv: Counted<CStrings<"char">, c_int, "before"> | null): c_int;
+/** @ntsNoEscape values */
+declare function walked(values: CStrings | null): c_int;
+export function empty(): number { return walked([]) * 10 + joined([]); }
+export function absent(): number { return walked(null) * 10 + maybe(null) + maybe(["q"]) * 100; }
+export function text(): number { return walked(["ab", "αβ"]); }
+export function counted(): number { return joined(["x", "yz", "😀"]); }
+export function many(): number {
+    const values: string[] = [];
+    for (let i = 0; i < 100; i++) values.push(String(i));
+    return joined(values);
+}
+"#;
+    let Some((dir, prepared)) = prepare("strings", source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    assert!(c.writer.text().contains("int walked(const char * const *)"), "`CStrings` is not `const char * const *`");
+    assert!(c.writer.text().contains("int joined(int, char * *)"), "the length is not the slot before the array");
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("native.c"), STRINGS_LIBRARY).unwrap();
+    std::fs::write(
+        dir.join("caller.c"),
+        "#include \"program.h\"\n#include <stdio.h>\n\
+         int main(void) { printf(\"%.0f %.0f %.0f %.0f %.0f\\n\", empty(), absent(), text(), counted(), many()); return 0; }\n",
+    )
+    .unwrap();
+    for file in ["native.c", "caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+    }
+    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+        let run = Command::new(dir.join(executable)).output().unwrap();
+        assert!(run.status.success(), "{executable}");
+        // `absent`: NULL for `null` (-1), `(0, NULL)` for a counted `null`
+        // (-2), and a counted array that is present (1001).
+        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "0 100088 2006 3007 100190", "{executable}");
+    }
+
+    let kept = r#"
+import type { CStrings, c_int } from "c:types";
+declare function walked(values: CStrings): c_int;
+export function run(): number { return walked(["a"]); }
+"#;
+    let Some((_, prepared)) = prepare("strings-kept", kept) else { return; };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("a `CStrings` parameter without `@ntsNoEscape`")),
+        "a `CStrings` parameter C may keep was lowered: {:?}",
+        prepared.diagnostics
+    );
+}

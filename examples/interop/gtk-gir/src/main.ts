@@ -33,7 +33,7 @@ import {
   gtk_window_present,
   gtk_window_set_child,
 } from "c:Gtk-4.0";
-import { gio_application_connect_activate, g_application_quit } from "c:Gio-2.0";
+import { gio_application_connect_activate, g_application_quit, g_application_run } from "c:Gio-2.0";
 import {
   g_date_time_get_ymd,
   g_date_time_new_utc,
@@ -50,7 +50,7 @@ import {
 import { g_object_unref } from "c:GObject-2.0";
 import type { c_double, c_int, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
-import { gir_emit, gir_log, gir_run } from "c:gir-shim";
+import { gir_emit, gir_log } from "c:gir-shim";
 import { Orientation, asGtkBox, asGtkButton, asGtkLabel, asGtkWindow } from "../types/gir/Gtk-4.0.values.ts";
 import { ApplicationFlags } from "../types/gir/Gio-2.0.values.ts";
 
@@ -128,7 +128,11 @@ function main(): void {
       return 0 as c_int;
     });
   }, CONNECT_DEFAULT);
-  gir_run(application);
+  // `argv` as a `string[]`, lent to C as `char **` with `argc` beside it.
+  // GApplication parses it, so it holds only the program name: an option it
+  // does not know would end the run.
+  const status = g_application_run(application, ["gir"]);
+  gir_log("status=" + String(status));
   g_object_unref(application);
   gir_log("ticks=" + String(ticks));
 }

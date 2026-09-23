@@ -1602,6 +1602,18 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
  * silently receiving different text from what the program wrote. */
 NTS_ALLOCATES_OR_NULL const char *nts_string_to_cstring(const NtsString *s);
 void nts_cstring_release(const NtsString *s, const char *c);
+/* A `string[]` as C's NULL-terminated array of strings, for a parameter
+ * declared `CStrings`: each element converted as `nts_string_to_cstring`
+ * converts one, in one allocation with the table, and handed back to
+ * `nts_cstrings_release` once the call returns. NULL is NULL, for
+ * `CStrings | null`.
+ *
+ * **An empty array is a table holding only the terminator, never NULL.** The
+ * two are different C contracts -- `argv` is never NULL, and a callee may walk
+ * to the terminator without checking -- and NULL already means `null`. A hole
+ * ends the process, since C would read it as the end of the array. */
+NTS_ALLOCATES_OR_NULL char **nts_strings_to_cstrings(const NtsArray *array);
+void nts_cstrings_release(char **c);
 /* A C string a foreign function returned, as a string: the copy is the
  * program's, and C's pointer is not kept. NULL is `null` -- for a binding
  * declared `string | null`. */

@@ -105,6 +105,16 @@ pub enum Role {
     /// `void (*)(void *)` that releases the context, called when C lets go:
     /// `nts_closure_notify()`. Hidden from TypeScript.
     ClosureNotify,
+    /// A `string[]` as a NULL-terminated `char **` (`CStrings<Q>` in
+    /// `c:types`), lent for the call and released after it
+    /// (`nts_strings_to_cstrings` / `nts_cstrings_release`).
+    Strings,
+    /// The element count of the array in C parameter `array`, which C takes
+    /// as a parameter of its own (`Counted<A, L>`). Hidden from TypeScript:
+    /// the compiler passes it. `nullable` when the array may be `null`, whose
+    /// count is `0` -- `(NULL, 0)` being the one pair that describes no array,
+    /// and `GLib`'s documented `g_application_run(app, 0, NULL)`.
+    Length { array: usize, nullable: bool },
 }
 
 impl Function {
@@ -119,8 +129,8 @@ impl Function {
         let mut ts = 0;
         self.roles.iter().enumerate().map(move |(at, role)| {
             let fed = match role {
-                Role::ClosureData | Role::ClosureNotify => None,
-                Role::Plain | Role::String | Role::Closure { .. } => {
+                Role::ClosureData | Role::ClosureNotify | Role::Length { .. } => None,
+                Role::Plain | Role::String | Role::Closure { .. } | Role::Strings => {
                     ts += 1;
                     Some(ts - 1)
                 }
@@ -646,6 +656,11 @@ impl Pointee {
             Self::Record(layout) => format!("{} {}", layout.kind.keyword(), layout.name),
             Self::Pointer(pointee) => pointee.pointer_type(),
             Self::Void => "void".to_owned(),
+            // A const *pointer* takes the qualifier after its star --
+            // `char * const` -- because `const char *` is a pointer to a const
+            // `char`, a different type. Written before first, a
+            // `const char * const *` came out `const const char * *`.
+            Self::Const(pointee) if matches!(**pointee, Self::Pointer(_)) => format!("{} const", pointee.c_type()),
             Self::Const(pointee) => format!("const {}", pointee.c_type()),
             // The element's spelling. C writes the length in the *declarator*
             // -- `char name[65]`, not `char[65] name` -- so a member emits it
@@ -1025,7 +1040,7 @@ impl Function {
                 continue;
             }
             if abi.is_none()
-                && let Some(slots) = c_parameter(snapshot, &name, parameter)?
+                && let Some(slots) = c_parameter(snapshot, &name, parameter, parameters.len())?
             {
                 for (ty, role) in slots {
                     parameters.push(ty);
@@ -1202,6 +1217,111 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
     Some((function?, kind))
 }
 
+/// `CStrings<Q>`, possibly `Counted<…>`, possibly `| null`, as declared.
+struct NativeArray {
+    /// The whole parameter's C type: `char **`, `const char **` or
+    /// `const char * const *`.
+    c: Type,
+    nullable: bool,
+    /// The length slot's C type, and whether it comes after the array.
+    count: Option<(TypeId, bool)>,
+}
+
+/// Whether a parameter type is `CStrings`, which lowering reads the
+/// argument for as the `string[]` it is.
+pub(crate) fn is_strings(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    native_array(snapshot, ty).is_some()
+}
+
+/// Read a `CStrings` parameter type, or `None` for any other.
+///
+/// The markers sit on object types intersected with `readonly string[]`, the
+/// way `Closure`'s sit on the function type, so this reads the parts of one
+/// intersection and nothing deeper.
+fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> {
+    let kind_of = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    // An optional marker reads as `T | undefined`: the `T`.
+    let defined = |id: TypeId| -> Option<TypeId> {
+        match kind_of(id)? {
+            TypeKind::Union(members) => {
+                members.iter().copied().find(|member| !matches!(kind_of(*member), Some(TypeKind::Undefined)))
+            }
+            _ => Some(id),
+        }
+    };
+    let text = |id: TypeId| match kind_of(defined(id)?)? {
+        TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+        _ => None,
+    };
+    let (ty, nullable) = match kind_of(ty)? {
+        TypeKind::Union(parts) => {
+            let [a, b] = parts.as_slice() else { return None };
+            match (kind_of(*a)?, kind_of(*b)?) {
+                (TypeKind::Null, _) => (*b, true),
+                (_, TypeKind::Null) => (*a, true),
+                _ => return None,
+            }
+        }
+        _ => (ty, false),
+    };
+    let TypeKind::Intersection(parts) = kind_of(ty)? else { return None };
+    let mut strings = None;
+    let mut elements = None;
+    let mut count = None;
+    let mut after = true;
+    for part in parts {
+        match kind_of(*part)? {
+            TypeKind::Array(element) => elements = Some(*element),
+            TypeKind::Object { properties } => {
+                for property in properties {
+                    match property.name.as_str() {
+                        "___c_strings" => strings = Some(text(property.ty)?),
+                        "___c_count" => count = Some(defined(property.ty)?),
+                        "___c_count_at" => after = text(property.ty)? == "after",
+                        _ => return None,
+                    }
+                }
+            }
+            _ => return None,
+        }
+    }
+    if !matches!(kind_of(elements?)?, TypeKind::String) {
+        return None;
+    }
+    let char = Pointee::Scalar(Scalar::Char);
+    let c = match strings?.as_str() {
+        "char" => Type::Pointer(Pointee::Pointer(Box::new(char))),
+        "const" => Type::Pointer(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))),
+        "const const" => Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(
+            Box::new(char),
+        )))))),
+        _ => return None,
+    };
+    Some(NativeArray { c, nullable, count: count.map(|ty| (ty, after)) })
+}
+
+/// The C slots a `CStrings` parameter occupies, `at` being the first one's
+/// index: the array, and its length before or after it.
+fn array_slots(
+    snapshot: &SemanticSnapshot,
+    name: &str,
+    parameter: &str,
+    array: &NativeArray,
+    at: usize,
+) -> Result<Vec<(Type, Role)>, String> {
+    let Some((count, after)) = array.count else {
+        return Ok(vec![(array.c.clone(), Role::Strings)]);
+    };
+    let Some(length @ Type::Scalar(_)) = abi_type(snapshot, count) else {
+        return Err(format!("foreign function `{name}` parameter `{parameter}`: a `Counted` length that is not a C integer brand"));
+    };
+    Ok(if after {
+        vec![(array.c.clone(), Role::Strings), (length, Role::Length { array: at, nullable: array.nullable })]
+    } else {
+        vec![(length, Role::Length { array: at + 1, nullable: array.nullable }), (array.c.clone(), Role::Strings)]
+    })
+}
+
 /// The parameters only the C convention has, each a type TypeScript spells
 /// its own way: `None` for any other, which is read as a plain ABI type.
 ///
@@ -1214,11 +1334,18 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
 /// - **`Closure<F>` / `ScopedClosure<F>` / `ErasedClosure<F, N>`**: the
 ///   callback C calls with the closure's context last, then the context, then
 ///   -- when C keeps it -- the function that releases it.
+/// - **`CStrings<Q>`**, optionally `Counted`: a `char **`, and its length
+///   beside it when C takes one. `at` is the C index the first slot lands
+///   in, which a length slot names its array by.
 fn c_parameter(
     snapshot: &SemanticSnapshot,
     name: &str,
     parameter: &nts_semantic_schema::ParameterRecord,
+    at: usize,
 ) -> Result<Option<Vec<(Type, Role)>>, String> {
+    if let Some(array) = native_array(snapshot, parameter.ty) {
+        return array_slots(snapshot, name, &parameter.name, &array, at).map(Some);
+    }
     if is_object_pointer(snapshot, parameter.ty) {
         return Ok(Some(vec![(Type::Pointer(Pointee::Void), Role::Plain)]));
     }

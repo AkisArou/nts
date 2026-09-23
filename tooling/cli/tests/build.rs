@@ -3778,6 +3778,7 @@ const DEMO_HEADER: &str = "#ifndef DEMO_H\n#define DEMO_H\n\
          long demo_wrong(int x);\n\
          void demo_thing_size(const DemoThing *thing, int *width, int *height);\n\
          void demo_thing_name(const DemoThing *thing, char **name);\n\
+         int demo_count_args(int argc, char **argv);\n\
          #endif\n";
 
 /// The C behind [`DEMO_HEADER`].
@@ -3791,7 +3792,8 @@ const DEMO_SOURCE: &str = "#include <demo.h>\n#include <stdlib.h>\n#include <str
          long demo_wrong(int x) { return x; }\n\
          void demo_thing_size(const DemoThing *thing, int *width, int *height) { *width = thing->count; if (height) *height = 2 * thing->count; }\n\
          static char demo_name[] = \"thing\";\n\
-         void demo_thing_name(const DemoThing *thing, char **name) { (void)thing; *name = demo_name; }\n";
+         void demo_thing_name(const DemoThing *thing, char **name) { (void)thing; *name = demo_name; }\n\
+         int demo_count_args(int argc, char **argv) { return argv == NULL ? -1 : argc; }\n";
 
 /// A small library with the shapes `bind-gir` decides on, laid out the way a
 /// real one is: a header, the C behind it, a `.pc` whose `Cflags` reach the
@@ -3880,6 +3882,15 @@ fn gir_library(root: &Path, flag_signed: bool) {
       <return-value><type name="none" c:type="void"/></return-value>
       <parameters><parameter name="flags"><type name="Flags" c:type="DemoFlags"/></parameter></parameters>
     </function>
+    <function name="count_args" c:identifier="demo_count_args">
+      <return-value><type name="gint" c:type="int"/></return-value>
+      <parameters>
+        <parameter name="argc" transfer-ownership="none"><type name="gint" c:type="int"/></parameter>
+        <parameter name="argv" transfer-ownership="none" nullable="1">
+          <array length="0" zero-terminated="0" c:type="char**"><type name="utf8"/></array>
+        </parameter>
+      </parameters>
+    </function>
     <function name="wrong" c:identifier="demo_wrong">
       <return-value><type name="gint" c:type="gint"/></return-value>
       <parameters><parameter name="x"><type name="gint" c:type="int"/></parameter></parameters>
@@ -3934,6 +3945,9 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         // stack storage the callee may not keep.
         "   * @ntsNoEscape width\n   * @ntsNoEscape height\n   */\n  \
          export function demo_thing_size(thing: Const<DemoThing>, width: Ptr<c_int>, height: Ptr<c_int> | null): void;",
+        // `argc` before `argv`: hidden, and filled from the array.
+        "   * @ntsNoEscape argv\n   */\n  \
+         export function demo_count_args(argv: Counted<CStrings<\"char\">, c_int, \"before\"> | null): c_int;",
     ] {
         assert!(binding.contains(expected), "missing `{expected}` from:\n{binding}");
     }

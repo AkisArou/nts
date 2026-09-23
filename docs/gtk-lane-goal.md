@@ -122,7 +122,7 @@ declarations. Landed:
 | `892eba61` | Strings C returns, copied, and freed by `@ntsFree` (`g_free` for transfer-full). |
 
 Measured on this machine's GTK 4.22:
-**8452 functions bound**, 418 of them typed signal connects.
+**8507 functions bound**, 418 of them typed signal connects.
 
 **Typed signals.** A signal has no C prototype, so the binder emits one typed
 view of `g_signal_connect_data` per class and signal:
@@ -167,12 +167,25 @@ parameters into return values, is the idiomatic layer's job (M3), as
 TypeScript over these declarations. Refusals that `GError` alone stood
 between: 453, now bound.
 
+**String arrays in.** A `string[]` crosses as C's NULL-terminated
+`char **`, converted for the call into one allocation (table and bytes) and
+freed after it: `CStrings<Q>`, `Q` being the header's spelling
+(`char **`, `const char **`, `const char * const *`) and nothing else, so
+there is one path in the compiler and the runtime. `Counted<A, L, side>` adds
+the length C takes beside it -- after the array or, for `argc`/`argv`,
+before -- which the compiler fills; a `null` array is `(NULL, 0)`. An empty
+array is a table holding only the terminator, never NULL. Refused without
+`@ntsNoEscape`, since the table is freed when the call returns. `gtk-gir`
+runs through the generated `g_application_run(app, ["gir"])`; its shim is
+down to the varargs `g_signal_emit_by_name` and output.
+
 **Still refused, ranked by count:**
 
 - 643: GIR marks the function not introspectable.
-- 460: arrays.
+- 395: arrays -- returned string arrays (68 would clear) and byte buffers in
+  (51) are the next two shapes.
 - 300: out parameters the caller allocates (a struct the callee fills in).
-- 182: async-scope callbacks, which should become Promises.
+- 189: async-scope callbacks, which should become Promises.
 - 153: `gpointer` results and `gconstpointer` parameters.
 - 50: string out parameters.
 

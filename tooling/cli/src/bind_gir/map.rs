@@ -22,7 +22,7 @@ use std::fmt;
 use nts_core::hir::native::{FnPointer, Handle, Pointee, Scalar, Type};
 
 use super::model::{
-    Callable, CallableKind, Callback, Class, Direction, Namespace, Param, Repository, Scope,
+    ArrayRef, Callable, CallableKind, Callback, Class, Direction, Namespace, Param, Repository, Scope,
     Transfer, TypeRef,
 };
 
@@ -461,8 +461,33 @@ impl<'a> Mapper<'a> {
         // which the declaration does not spell and the caller does not pass.
         let mut hidden = BTreeSet::new();
         let mut no_escape = Vec::new();
+        // The parameters that hold an array's length, which the compiler fills
+        // from the array: `index -> the array's index`.
+        let lengths: BTreeMap<usize, usize> = signature
+            .parameters
+            .iter()
+            .enumerate()
+            .filter_map(|(at, param)| match &param.ty {
+                TypeRef::Array(array) if param.direction == Direction::In => Some((array.length?, at)),
+                _ => None,
+            })
+            .collect();
         for (at, param) in signature.parameters.iter().enumerate() {
             if hidden.contains(&at) {
+                continue;
+            }
+            // A length: its C slot is here, and the caller does not pass it.
+            if lengths.contains_key(&at) {
+                c_parameters.push(self.value(param)?.c);
+                continue;
+            }
+            if let TypeRef::Array(array) = &param.ty
+                && param.direction == Direction::In
+            {
+                let mapped = self.strings(param, array, at, &signature.parameters)?;
+                c_parameters.push(mapped.c.clone());
+                no_escape.push(identifier(&param.name));
+                parameters.push((identifier(&param.name), mapped));
                 continue;
             }
             if param.direction != Direction::In {
@@ -550,7 +575,7 @@ impl<'a> Mapper<'a> {
             return Err(Reason::CallerAllocates);
         }
         let TypeRef::Named { name, c_type } = &param.ty else {
-            return Err(if matches!(param.ty, TypeRef::Array) { Reason::Array } else { Reason::OutParameter });
+            return Err(if matches!(param.ty, TypeRef::Array(_)) { Reason::Array } else { Reason::OutParameter });
         };
         if name == "utf8" || name == "filename" {
             return Err(Reason::StringOut);
@@ -578,6 +603,59 @@ impl<'a> Mapper<'a> {
         let ts = format!("Ptr<{slot}>");
         let ts = if param.optional { format!("{ts} | null") } else { ts };
         Ok(Mapped { ts, c: Type::Pointer(pointee) })
+    }
+
+    /// An array of strings the callee reads during the call: `CStrings<Q>`,
+    /// its C spelling `Q` read from GIR's `c:type`, and `Counted` when C
+    /// takes its length in a parameter beside it -- the one GIR names, which
+    /// must be right before or right after it (`at`, among `parameters`).
+    ///
+    /// Only transfer-none: the callee borrows the array, which is what lets
+    /// the compiler lend one converted for the call. Every other array stays
+    /// refused as one.
+    fn strings(&mut self, param: &Param, array: &ArrayRef, at: usize, parameters: &[Param]) -> Result<Mapped, Reason> {
+        let length = match array.length {
+            Some(index) => {
+                let side = if index == at + 1 {
+                    "after"
+                } else if index + 1 == at {
+                    "before"
+                } else {
+                    return Err(Reason::Array);
+                };
+                Some((self.value(parameters.get(index).ok_or(Reason::Array)?)?, side))
+            }
+            None => None,
+        };
+        let element = array.element.as_deref().ok_or(Reason::Array)?;
+        if !(element == "utf8" || element == "filename") || param.transfer != Transfer::None {
+            return Err(Reason::Array);
+        }
+        if !array.zero_terminated && length.is_none() {
+            return Err(Reason::Array);
+        }
+        let spelling: String = array.c_type.as_deref().ok_or(Reason::Array)?.replace("gchar", "char").split_whitespace().collect();
+        let char = Pointee::Scalar(Scalar::Char);
+        let (qualifier, c) = match spelling.as_str() {
+            "char**" => ("char", Type::Pointer(Pointee::Pointer(Box::new(char)))),
+            "constchar**" => ("const", Type::Pointer(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char)))))),
+            "constchar*const*" => (
+                "const const",
+                Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))))),
+            ),
+            _ => return Err(Reason::Array),
+        };
+        self.binding.brands.insert("CStrings");
+        let mut ts = format!("CStrings<\"{qualifier}\">");
+        if let Some((count, side)) = length {
+            self.binding.brands.insert("Counted");
+            ts = format!("Counted<{ts}, {}, \"{side}\">", count.ts);
+        }
+        // `null` is NULL, with a count of 0 beside it where there is one.
+        if param.nullable {
+            ts.push_str(" | null");
+        }
+        Ok(Mapped { ts, c })
     }
 
     /// `error: Ptr<GError | null> | null` -- C's `GError **error`, which the
@@ -629,7 +707,7 @@ impl<'a> Mapper<'a> {
     fn typed(&mut self, param: &Param) -> Result<Mapped, Reason> {
         let (name, c_type) = match &param.ty {
             TypeRef::Named { name, c_type } => (name.as_str(), c_type.as_deref().unwrap_or("")),
-            TypeRef::Array => return Err(Reason::Array),
+            TypeRef::Array(_) => return Err(Reason::Array),
             TypeRef::Varargs => return Err(Reason::Varargs),
             TypeRef::Missing => return Err(Reason::Unknown("(no type)".to_owned())),
         };
