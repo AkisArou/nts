@@ -148,9 +148,15 @@ declare module "c:types" {
   // The value half is `number` for anything numeric, not the brand: that is
   // what keeps `p[i] = n` and `p.count += 2` ordinary arithmetic. A pointer
   // field keeps its own type, having no number to project to.
+  //
+  // Distributive on purpose, and `null` kept as itself: a slot of a nullable
+  // handle (`GError **`'s pointee) reads as the handle or `null`, where
+  // `null & { __c_of?: T }` would be `never` and lose the null C writes.
   type Slot<T> = T extends number
     ? number & { readonly __c_of?: T }
-    : T & { readonly __c_of?: T };
+    : T extends null
+      ? T
+      : T & { readonly __c_of?: T };
   // `__c_writable` is what separates `Ptr` from `ConstPtr`, and it sits on the
   // mutable one so that const is the *smaller* type: a `Ptr<T>` then satisfies
   // a `ConstPtr<T>` and a `ConstPtr<T>` does not satisfy a `Ptr<T>`, which is
@@ -198,9 +204,12 @@ declare module "c:types" {
   export type Flexible<T> = {
     readonly __c_flexible: T;
   };
-  export type Ptr<T> = { readonly __c_pointer: T; readonly __c_writable: true } & (T extends
+  export type Ptr<T> = { readonly __c_pointer: T; readonly __c_writable: true } & ([T] extends [
     | Struct<infer Fields, string>
-    | Union<infer Fields, string>
+    | Union<infer Fields, string>]
+    // In brackets, so a union element is one pointer and not a union of
+    // pointers: `Ptr<GError | null>` is `GError **`, which distributing over
+    // the `null` split into two types no C declaration spells.
     // A struct-typed member is stored inline and projects as a *pointer to it*,
     // never as a value: reading one as a value would be an aggregate copy, and
     // `p.inner.field` should reach the bytes that are there rather than a
@@ -223,9 +232,10 @@ declare module "c:types" {
   // is not a claim that the storage is immutable or unaliased, and nothing here
   // promises otherwise. Writing through one is `TS2542`, "only permits
   // reading", before the compiler is reached.
-  export type ConstPtr<T> = { readonly __c_pointer: T } & (T extends
+  export type ConstPtr<T> = { readonly __c_pointer: T } & ([T] extends [
     | Struct<infer Fields, string>
-    | Union<infer Fields, string>
+    | Union<infer Fields, string>]
+    // In brackets for the reason `Ptr`'s are.
     // The same projection `Ptr` makes, restricted. A record member is storage,
     // so it is a *pointer* to that storage here too -- a const one, because a
     // view that could hand out a writable interior would not be a view.

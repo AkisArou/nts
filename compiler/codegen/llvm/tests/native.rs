@@ -1871,3 +1871,61 @@ int main(int argc, char **argv) {
         }
     }
 }
+
+/// An out parameter: stack storage C writes through, which is how GLib
+/// returns a second value and how it reports an error (`GError **error`).
+///
+/// `local<GError | null>()` is one slot of a nullable handle, and its address
+/// is C's `GError **`. `Ptr` used to distribute over the `| null`, which made
+/// it a union of two pointer types no declaration spells, and `local` refused
+/// it; and a slot of `GError | null` read as `never` for the null half. The arms
+/// are C writing the error and C leaving it null, each read back through the
+/// slot, plus an integer out parameter beside it.
+#[test]
+fn an_out_parameter_of_a_nullable_handle_is_one_slot_on_both_backends() {
+    let source = r"
+import type { Class, Ptr, c_int } from 'c:types';
+import { local } from 'c:memory';
+type GError = Class<'_GError'>;
+/**
+ * @ntsNoEscape out
+ * @ntsNoEscape error
+ */
+declare function might(ok: c_int, out: Ptr<c_int>, error: Ptr<GError | null>): c_int;
+export function attempt(ok: number): number {
+    const n = local<c_int>();
+    const error = local<GError | null>();
+    const r = might(ok as c_int, n, error);
+    if (error[0] !== null) return -1;
+    return (r as number) * 100 + (n[0] as number);
+}
+";
+    let Some((dir, prepared)) = prepare("out-parameter", source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    assert!(c.writer.text().contains("struct _GError * *"), "the error slot's address is not a `GError **`");
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("native.c"), r#"
+struct _GError { int code; };
+static struct _GError failure = { 42 };
+int might(int ok, int *out, struct _GError **error) {
+    if (ok) { *out = 7; return 1; }
+    *error = &failure;
+    return 0;
+}
+"#).unwrap();
+    std::fs::write(dir.join("caller.c"), "#include \"program.h\"\nint main(void) { return attempt(1) == 107.0 && attempt(0) == -1.0 ? 0 : 1; }\n").unwrap();
+    for file in ["native.c", "caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+    }
+    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+        assert!(Command::new(dir.join(executable)).status().unwrap().success(), "{executable}");
+    }
+}
