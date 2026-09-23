@@ -1811,7 +1811,9 @@ interop() {
   #
   # 21: `native-closure` (`580e25bb`), a capturing closure handed to C.
   # 22: `gtk-loop` (`9055d56b`), libuv driven from a GLib main loop.
-  interop_floor=22
+  # 23: `gtk-gir` (`2fdd62ee`), a GTK program on bindings `nts build` generates
+  #     from GIR. It SKIPs without gtk4, xvfb-run or Gtk-4.0.gir.
+  interop_floor=23
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"
