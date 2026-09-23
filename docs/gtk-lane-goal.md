@@ -78,11 +78,16 @@ falsifier first, C then LLVM.
    - **Surface:** `Closure<F>` is retained and released by C's destroy notify. `ScopedClosure<F>` is lent for one call.
    - **Tests:** `examples/interop/native-closure` covers captures read back, two contexts that must not cross, a closure outliving its registering frame, an arrow taking fewer parameters than C passes, and a handle in the callback. Under reference counting, 50 subscribe/unsubscribe cycles leave `nts_live_count` exactly equal; the control without the notify grows by 50 or more. A throw inside still stops at the boundary.
    - **gtk-hello:** connects both signals with capturing arrows.
-4. **A GLib event-loop host: next.** `NtsHost` on the default `GMainContext`, with libuv embedded as a `GSource` over `uv_backend_fd` and `uv_backend_timeout`, selected by `app.linux`.
-   - **Shared with Apple:** the core (embed libuv in a foreign loop) is written here, and Apple adds a CFRunLoop adapter against the same interface.
-   - **Open decision:** `docs/native-operations.md:643`, whether a bridge drains microtasks on return. It is decided with MainClaude and Apple before it lands.
-   - **Falsifier:** a `Promise.then` and a `setTimeout` started inside a click handler both run before quit. On the libuv host they do not.
+4. **The GLib loop: landed.** (`9055d56b`.)
+   - **Design:** libuv stays the host, and a `GSource` on the default context drives it (`nts_uv_host_backend_fd` / `_timeout` / `_pump`, and `nts_glib_host.{c,h}`). The Apple lane writes a CFRunLoop adapter over the same three calls.
+   - **Microtasks:** a callback returning to the loop at `depth` 0 is a checkpoint (`nts_checkpoint_after_callbacks`, set once in main.c before module evaluation). A handler entered synchronously from a task is not, so the task still runs to completion.
+   - **Selection:** by link, for any program whose libs include `-lglib-2.0`.
+   - **Tests:** `examples/interop/gtk-loop` has four arms: the exact order, a control with no drain, a control with the source detached, and idle CPU.
+   - **Defect found:** `uv_backend_timeout` answers 0 for a loop with nothing alive. The source spun at 100% and starved GLib's idle sources until that was mapped to -1.
+   - **The unembedded row** is an assertion in `native-callback`: no foreign loop means no checkpoint at a callback's return.
 5. **Blocker 1** is still standing: a module-scope native pointer.
+
+**M1 against its definition of done.** The program uses strings, upcasts, capturing arrows and a working loop, all on the C backend. The LLVM half of each compiler feature is checked by the C-and-LLVM tests in `compiler/codegen/llvm/tests/native.rs`, because `nts build` cannot produce an LLVM program yet. The shim is *not* down to true macros: `g_signal_connect_data`, `g_object_unref` and variadic emit remain. Each of those needs `gpointer` parameters or an erased `GCallback`, and that is the first question of M2 rather than a gap in M1's features.
 
 **What the shim still stands in for** (`gtk-hello/native/hello.h`):
 
