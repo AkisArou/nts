@@ -1788,7 +1788,13 @@ interop() {
   # Exact rather than padded, which is this repository's rule for a floor: a
   # project that goes away owes an explanation and then a new number. Measured
   # 2026-09-15 -- 16 built and ran, 0 skipped.
-  interop_floor=16
+  #
+  # 17 as of 2026-09-23: `gtk-hello`, the GTK lane's first program (`cd4af93a`).
+  # The test is `-lt`, so the seventeenth passed under a floor of 16 and nothing
+  # went red -- which is the padding this comment argues against, arriving by
+  # addition rather than by choice. It counts on a box with no gtk4 too: that
+  # project prints SKIP, and the comparison is `ran + skipped`.
+  interop_floor=17
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"
