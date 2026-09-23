@@ -22,7 +22,7 @@
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
-/* Darwin: see `nts_runtime.c`, which needs the same line for the same header. */
+/* Darwin: see `nts_runtime.c`, which needs this for the same header. */
 #if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
 #define _DARWIN_C_SOURCE
 #endif
