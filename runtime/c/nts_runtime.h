@@ -1546,6 +1546,26 @@ NtsString *nts_str_raw(uint32_t length, int wide);
 NtsString *nts_str_alloc(const uint16_t *units, uint32_t length);
 
 NtsString *nts_string_from_utf8(const char *bytes, size_t length);
+/* The other direction: a string as a C string, for a foreign parameter the
+ * binding declares as `string`, which means `const char *`.
+ *
+ * NUL-terminated UTF-8, borrowed by the callee for the call and no longer --
+ * the contract that spelling carries -- and handed back to
+ * `nts_cstring_release` with the string it came from once the call returns. A
+ * lone surrogate becomes U+FFFD, as `TextEncoder` and V8's own conversion do.
+ * NULL is NULL, for `string | null`, which is why this is `OR_NULL`.
+ *
+ * **The pair, and not `malloc` and `free`, is the contract.** Today every
+ * answer is a fresh allocation. A one-byte ASCII string whose storage is
+ * NUL-terminated in place could be lent directly, and the release is given the
+ * source so that it can tell the two apart -- which is the whole of what that
+ * later change would need, with no change to what the compiler emits.
+ *
+ * **U+0000 inside the string ends the process**, naming the boundary. A C
+ * string cannot hold one, and passing the prefix before it would be a callee
+ * silently receiving different text from what the program wrote. */
+NTS_ALLOCATES_OR_NULL const char *nts_string_to_cstring(const NtsString *s);
+void nts_cstring_release(const NtsString *s, const char *c);
 /* ECMAScript `Number::toString`, base 10. The shortest decimal that reads back
  * as the same double, laid out the way the specification lays it out -- which
  * is not what any `printf` conversion produces. */

@@ -4281,6 +4281,68 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length) {
   return out;
 }
 
+const char *nts_string_to_cstring(const NtsString *s) {
+  if (s == NULL) {
+    return NULL;
+  }
+  /* Three bytes per unit is the most any unit needs: a BMP code point is at
+   * most three, and a supplementary one is four bytes for two units. */
+  if ((size_t)s->length > (SIZE_MAX - 1u) / 3u) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  char *out = (char *)malloc((size_t)s->length * 3u + 1u);
+  if (!out) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  size_t n = 0;
+  for (uint32_t at = 0; at < s->length; at++) {
+    uint32_t point = nts_unit(s, at);
+    if (point == 0u) {
+      fprintf(stderr,
+              "nts: a string containing U+0000 at index %u cannot cross to C "
+              "as a NUL-terminated `const char *`\n",
+              (unsigned)at);
+      abort();
+    }
+    if (point >= 0xD800u && point <= 0xDBFFu && at + 1u < s->length) {
+      uint32_t low = nts_unit(s, at + 1u);
+      if (low >= 0xDC00u && low <= 0xDFFFu) {
+        point = 0x10000u + ((point - 0xD800u) << 10) + (low - 0xDC00u);
+        at++;
+      }
+    }
+    if (point >= 0xD800u && point <= 0xDFFFu) {
+      point = 0xFFFDu;
+    }
+    if (point < 0x80u) {
+      out[n++] = (char)point;
+    } else if (point < 0x800u) {
+      out[n++] = (char)(0xC0u | (point >> 6));
+      out[n++] = (char)(0x80u | (point & 0x3Fu));
+    } else if (point < 0x10000u) {
+      out[n++] = (char)(0xE0u | (point >> 12));
+      out[n++] = (char)(0x80u | ((point >> 6) & 0x3Fu));
+      out[n++] = (char)(0x80u | (point & 0x3Fu));
+    } else {
+      out[n++] = (char)(0xF0u | (point >> 18));
+      out[n++] = (char)(0x80u | ((point >> 12) & 0x3Fu));
+      out[n++] = (char)(0x80u | ((point >> 6) & 0x3Fu));
+      out[n++] = (char)(0x80u | (point & 0x3Fu));
+    }
+  }
+  out[n] = '\0';
+  return out;
+}
+
+/* Every answer is its own allocation today; see the header for why the source
+ * string is passed anyway. */
+void nts_cstring_release(const NtsString *s, const char *c) {
+  (void)s;
+  free((void *)c);
+}
+
 /* The code units `trim` removes.
  *
  * The specification's `WhiteSpace` and `LineTerminator` together, which is not
