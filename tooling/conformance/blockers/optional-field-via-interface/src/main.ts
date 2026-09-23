@@ -1,5 +1,5 @@
-// expect: which is a pointer cast between two structs that do not agree
-//         about where their shared fields are
+// expect: so `dest` has no storage at any offset and a pointer cast cannot
+//         widen a struct
 //
 // **The diagnosis moved to the assignment on 2026-09-10, and this is the same
 // defect named at its cause.** It used to refuse at the *write*, saying `dest`
@@ -14,6 +14,15 @@
 // free, which is a fact about a *base* and not about a structural target. The
 // unchecked version segfaults where node answers -- measured, on
 // `class Thing { id; name }` reaching `interface Named { name }`.
+//
+// **And on 2026-09-23 it stopped saying "the offsets disagree", which this was
+// never an instance of.** One sentence carried two facts with different
+// repairs: a target *wider* than the source, where no ordering makes storage
+// appear, and two layouts of the same fields in a different order, where laying
+// them out alike is the whole fix. This fixture is the first kind, and it says
+// so -- above, in prose, since 2026-09-10. The message now says it too.
+// See `blockers/an-options-bag-widened-by-assignment` for what reading the one
+// as the other cost.
 //
 // So this fixture reproduces at a different line and for a better stated reason,
 // and the observation below -- that the class omits the field on purpose and the

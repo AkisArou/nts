@@ -13640,21 +13640,13 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Managed(ManagedType::Object(from)),
                 HirType::Managed(ManagedType::Object(to)),
             ) = (&have, want)
-                && !self.laid_out_as_a_prefix(id, *from, *to)
+                && let Some(why) = self.not_a_prefix(id, *from, *to)
             {
                 let (from, to) = (
                     self.name_of_type(*from).unwrap_or("an anonymous type").to_owned(),
                     self.name_of_type(*to).unwrap_or("an anonymous type").to_owned(),
                 );
-                return Err(self.unsupported(
-                    id,
-                    &format!(
-                        "a `{from}` where a `{to}` is wanted, which is a pointer cast between \
-                         two structs that do not agree about where their shared fields are -- \
-                         a base's fields keep their offsets in a subclass and a structural \
-                         type's do not"
-                    ),
-                ));
+                return Err(self.unsupported(id, &why.spell(&from, &to)));
             }
             return Ok(value);
         }
@@ -13689,6 +13681,13 @@ impl<'a> FuncBuilder<'a> {
     /// A target with no fields is trivially a prefix, which is right: nothing
     /// can be read through it.
     fn laid_out_as_a_prefix(&mut self, id: NodeId, from: TypeId, to: TypeId) -> bool {
+        self.not_a_prefix(id, from, to).is_none()
+    }
+
+    /// The same question, answered with *which* of the two facts said no.
+    ///
+    /// See [`NotAPrefix`] for why one sentence for both was worth splitting.
+    fn not_a_prefix(&mut self, id: NodeId, from: TypeId, to: TypeId) -> Option<NotAPrefix> {
         // **A closure or a signature is not a field-layout question, and asking
         // is not free.** `apply(double, n)` passes a function value to a
         // signature-typed parameter: two object types, no fields on either, and
@@ -13712,7 +13711,7 @@ impl<'a> FuncBuilder<'a> {
             || self.is_a_signature(from)
             || self.is_a_signature(to)
         {
-            return true;
+            return None;
         }
         // A generator frame is laid out as a prefix of its abstract generator
         // **by construction**, and cannot be checked by comparing layouts here:
@@ -13723,32 +13722,44 @@ impl<'a> FuncBuilder<'a> {
         // So this is not an exception to the rule below, it is the same rule
         // answered from the one place that knows the answer early.
         if self.generator_declared(from) == Some(to) {
-            return true;
+            return None;
         }
         // The **target** first, and its failure is an allow rather than an
         // error: nothing can be read through a type with no layout, so there is
         // nothing to be at the wrong offset.
         let Ok(to) = self.layout_of(id, to) else {
-            return true;
+            return None;
         };
         // And a target with no fields, for the same reason stated the other way.
         if to.fields.is_empty() {
-            return true;
+            return None;
         }
         // Only now is the source's layout needed, and here a failure is a
         // refusal: the target has fields, so something will be read, and a
         // source whose shape cannot be established cannot be shown to hold them
         // where the target expects.
         let Ok(from) = self.layout_of(id, from) else {
-            return false;
+            return Some(NotAPrefix::Unknown);
         };
+        // **Widening first, so that "they disagree about the order" is a claim a
+        // reader can act on.** Where the target is wider *and* the overlap
+        // disagrees, both are true and only one of them binds: no ordering makes
+        // storage appear. Reporting that one leaves the other sentence meaning
+        // exactly "same fields, wrong order", which is the cheap half.
         if to.fields.len() > from.fields.len() {
-            return false;
+            return Some(NotAPrefix::Widens {
+                wanted: to.fields.len(),
+                held: from.fields.len(),
+                first: to.fields[from.fields.len()].name.clone(),
+            });
         }
-        to.fields
-            .iter()
-            .zip(from.fields.iter())
-            .all(|(want, have)| same_slot(want, have))
+        to.fields.iter().zip(from.fields.iter()).enumerate().find_map(|(at, (want, have))| {
+            (!same_slot(want, have)).then(|| NotAPrefix::Disagrees {
+                at,
+                wanted: want.name.clone(),
+                held: have.name.clone(),
+            })
+        })
     }
 
     fn coerce_to_parameter(
@@ -44515,6 +44526,74 @@ struct CaseChain<'a> {
 /// narrow one.
 pub(super) fn same_slot(want: &Field, have: &Field) -> bool {
     want.names_the_same_member(have) && want.ty == have.ty
+}
+
+/// Why a pointer cast from one object layout to another is not a no-op.
+///
+/// **Two facts wore one sentence, and they have different repairs.** The
+/// refusal used to read "a pointer cast between two structs that do not agree
+/// about where their shared fields are" for both of these, and it is a
+/// description of one of them:
+///
+/// - the target declares *more* fields than the source holds, so the extra ones
+///   have no storage at any offset. Nothing about ordering reaches it -- it is a
+///   **widening**, and what it needs is a representation an interface can have
+///   independently of the object that arrives at it;
+/// - the two hold the same fields in a different order, which really is an
+///   offset question, and laying the fields out the same way answers it.
+///
+/// Reading the first as the second costs a day. `runtime/node/zlib` passes an
+/// `IteratorZlibOptions` where an `IteratorEngineOptions` is wanted, and the
+/// sentence sent the diagnosis into `record_structural_call` looking for a
+/// missing copy -- when the target simply declares eight fields where the
+/// source holds six, and every copy the machinery could make relocates the cast
+/// rather than removing it. The census could not tell them apart either, so the
+/// split is what makes "how much of this is cheap" a question with an answer.
+/// See `tooling/conformance/blockers/an-options-bag-widened-by-assignment`.
+///
+/// The two sentences are deliberately *not* prefixes of one another: a fixture
+/// or a census matching on text has to pick one.
+enum NotAPrefix {
+    /// The target declares fields the source has no storage for.
+    Widens {
+        wanted: usize,
+        held: usize,
+        /// The first target field past the end of the source.
+        first: String,
+    },
+    /// Both layouts have a field at this slot and it is not the same field.
+    Disagrees {
+        at: usize,
+        wanted: String,
+        held: String,
+    },
+    /// The source has no layout to compare. The target has fields, so something
+    /// will be read; a shape that cannot be established cannot be shown to hold
+    /// them where the target expects.
+    Unknown,
+}
+
+impl NotAPrefix {
+    /// The refusal, given the two type names as the program spells them.
+    fn spell(&self, from: &str, to: &str) -> String {
+        match self {
+            Self::Widens { wanted, held, first } => format!(
+                "a `{from}` where a `{to}` is wanted -- a `{to}` declares {wanted} fields and a \
+                 `{from}` holds {held}, so `{first}` has no storage at any offset and a pointer \
+                 cast cannot widen a struct"
+            ),
+            Self::Disagrees { at, wanted, held } => format!(
+                "a `{from}` where a `{to}` is wanted, which is a pointer cast between two \
+                 structs that do not agree about where their shared fields are -- a `{to}` \
+                 holds `{wanted}` in slot {at} where a `{from}` holds `{held}`, and a base's \
+                 fields keep their offsets in a subclass where a structural type's do not"
+            ),
+            Self::Unknown => format!(
+                "a `{from}` where a `{to}` is wanted, and a `{from}` has no layout here, so \
+                 nothing can show it holds a `{to}`'s fields where a `{to}` expects them"
+            ),
+        }
+    }
 }
 
 /// A natively represented thing an erased value can be, for the one question
