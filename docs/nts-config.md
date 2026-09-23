@@ -81,10 +81,21 @@ through `CC=clang` and `CC="zig cc"`. Cross-compiling `program.c` and
 | `aarch64-linux-gnu` | ELF 64-bit LSB shared object, ARM aarch64 |
 | `aarch64-macos-none` | **FAILED** -- `unknown type name 'malloc_zone_t'` |
 
-So Apple is the one it cannot reach: the runtime includes headers that come from
-Apple's SDK rather than from zig's bundled libc, and no flag fixes that. It is
-refused by name with that reason rather than attempted, because the alternative
-is a page of `unknown type name` from a tool the reader did not invoke.
+~~So Apple is the one it cannot reach: the runtime includes headers that come from
+Apple's SDK rather than from zig's bundled libc, and no flag fixes that.~~
+
+**Corrected 2026-09-23 by the Apple lane: that reading was wrong.** zig bundles
+the Darwin headers. The runtime's own `_POSIX_C_SOURCE` made Darwin's
+`malloc/malloc.h` hide the typedef it then uses, and a real SDK fails the same
+way. `_DARWIN_C_SOURCE` fixes it: one cross build, two binaries, one stops at
+`malloc.h:108` and the other links.
+
+macOS now builds from Linux with `clang -target <arch>-apple-macos<min>
+-isysroot <sdk> -fuse-ld=lld`, not zig, because zig does not honour the
+witness's `-fsyntax-only`. The sysroot is either a real SDK (`NTS_APPLE_SDK`) or
+zig's Darwin libc arranged as one (`tooling/apple/zig-sdk.sh`).
+`examples/interop/macos-hello` is the arm that proves it. iOS is still refused
+by name, for its own reason: it has no bundle, signing or simulator path.
 
 **What this was hiding.** `link_c` never read `target.os` and `artifact_name`
 hardcoded `.so`, so a `windows` product built on Linux produced `libsdk.so` -- an

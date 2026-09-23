@@ -4332,10 +4332,13 @@ fn zig_triple(target: &nts_build::config::Target) -> Option<String> {
 ///     aarch64-linux-gnu     ELF 64-bit LSB shared object, ARM aarch64
 ///     aarch64-macos-none    FAILED: unknown type name `malloc_zone_t`
 ///
-/// So Apple is the one it cannot reach: the runtime includes headers that come
-/// from Apple's SDK rather than from zig's bundled libc, and no flag fixes
-/// that. Named rather than attempted, because the alternative is a page of
-/// `unknown type name` from a tool the reader did not invoke.
+/// **That last line was read as "Apple needs its SDK", and it did not.** zig
+/// bundles the Darwin headers; the runtime's own `_POSIX_C_SOURCE` made
+/// Darwin's `malloc/malloc.h` hide the typedef it then uses, and a real SDK
+/// fails identically. `_DARWIN_C_SOURCE` in the runtime fixed it (measured
+/// 2026-09-23: the same cross build, one binary before the define and one
+/// after, stops at `malloc.h:108` and reaches the linker respectively). macOS
+/// now has its own branch, `apple_toolchain`, and iOS stays refused by name.
 ///
 /// **An explicit `CC` wins, including for a cross target.** Somebody who sets
 /// `CC=x86_64-w64-mingw32-gcc` has chosen; second-guessing them would be this
@@ -4349,12 +4352,23 @@ fn zig_triple(target: &nts_build::config::Target) -> Option<String> {
 struct Toolchain {
     program: String,
     leading: Vec<String>,
+    /// Flags only a link takes. Kept out of `leading` because every compile
+    /// here that is not a link -- the witness above all, at `-Werror` -- turns
+    /// an unused `-fuse-ld=` or `-L` into an error.
+    link: Vec<String>,
 }
 
 impl Toolchain {
     fn command(&self) -> std::process::Command {
         let mut command = std::process::Command::new(&self.program);
         command.args(&self.leading);
+        command
+    }
+
+    /// `command`, for a link.
+    fn link_command(&self) -> std::process::Command {
+        let mut command = self.command();
+        command.args(&self.link);
         command
     }
 
@@ -4374,14 +4388,21 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
         return Ok(Toolchain {
             program: words.next().unwrap_or("clang").to_owned(),
             leading: words.map(str::to_owned).collect(),
+            link: Vec::new(),
         });
     }
-    if matches!(target.os.as_str(), "macos" | "ios") {
+    if target.os == "macos" {
+        return apple_toolchain(name, target);
+    }
+    if target.os == "ios" {
+        // **Not the macOS reason.** Compiling for iOS is the same command line
+        // with another triple; what is missing is everything after it -- an
+        // app bundle, signing, and a simulator or device to run it on.
         bail!(
-            "product `{name}` targets {} and this is a {} machine. Cross-compiling to \
-             Apple needs its SDK -- the runtime uses headers `zig cc` does not bundle, \
-             and it stops at `unknown type name 'malloc_zone_t'`. Build it on a Mac, or \
-             set CC to a cross compiler that has the SDK",
+            "product `{name}` targets {} and this is a {} machine. iOS is not built \
+             from here yet: an iOS artifact needs a bundle, signing and a simulator or \
+             device, and none of those exist in this build. Build it on a Mac, or set \
+             CC to a cross compiler for iOS",
             target.id,
             host_os()
         )
@@ -4406,7 +4427,68 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
     Ok(Toolchain {
         program: "zig".to_owned(),
         leading: vec!["cc".to_owned(), "-target".to_owned(), triple],
+        link: Vec::new(),
     })
+}
+
+/// Where the Apple lane keeps what a macOS build needs and this box does not
+/// ship: a sysroot and a libuv per arch. `tooling/apple/*.sh` fills it.
+fn apple_root() -> Utf8PathBuf {
+    if let Ok(root) = std::env::var("NTS_APPLE_ROOT") {
+        return Utf8PathBuf::from(root);
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_owned());
+    Utf8PathBuf::from(home).join(".cache/nts/apple")
+}
+
+/// macOS from a machine that is not a Mac: clang, the triple, a sysroot, and
+/// `ld64.lld`.
+///
+/// **clang rather than `zig cc`**, though zig links a Mach-O: every build
+/// compiles a witness with `-fsyntax-only`, and `zig cc` does not honour it.
+///
+/// **One command line for both sysroots.** `NTS_APPLE_SDK` is a real SDK --
+/// frameworks, libobjc -- copied off a Mac (`tooling/apple/sync-sdk.sh`).
+/// Without one, `<root>/zig-sdk` is zig's bundled Darwin libc arranged as a
+/// sysroot (`tooling/apple/zig-sdk.sh`), which reaches every program that
+/// needs nothing beyond libSystem. The SDK only changes `-isysroot`.
+///
+/// libuv, which every executable links, comes from `<root>/<arch>` when
+/// `tooling/apple/build-libuv.sh` has put one there; otherwise the usual
+/// refusal about `uv.h` says what is missing.
+fn apple_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolchain> {
+    let arch = target.arch.as_deref().unwrap_or(host_arch());
+    // Apple and LLVM spell it `arm64`; the config spells it as Linux does.
+    let apple_arch = if arch == "aarch64" { "arm64" } else { arch };
+    let minimum = target.minimum_version.as_deref().unwrap_or("11.0");
+    let root = apple_root();
+    let (sdk, from) = match std::env::var("NTS_APPLE_SDK") {
+        Ok(sdk) => (Utf8PathBuf::from(sdk), "NTS_APPLE_SDK"),
+        Err(_) => (root.join("zig-sdk"), "the zig-derived sysroot"),
+    };
+    if !sdk.join("usr/include").is_dir() {
+        bail!(
+            "product `{name}` targets {} and this is a {} machine, so it is \
+             cross-compiled against a macOS sysroot -- and {from} at {sdk} has no \
+             `usr/include`. Run `tooling/apple/zig-sdk.sh` for one that covers \
+             libSystem-only programs, or set NTS_APPLE_SDK to a MacOSX.sdk",
+            target.id,
+            host_os()
+        )
+    }
+    let mut leading = vec![
+        "-target".to_owned(),
+        format!("{apple_arch}-apple-macos{minimum}"),
+        "-isysroot".to_owned(),
+        sdk.to_string(),
+    ];
+    let mut link = vec!["-fuse-ld=lld".to_owned()];
+    let uv = root.join(arch);
+    if uv.join("include/uv.h").is_file() {
+        leading.push(format!("-I{}", uv.join("include")));
+        link.push(format!("-L{}", uv.join("lib")));
+    }
+    Ok(Toolchain { program: "clang".to_owned(), leading, link })
 }
 
 fn run(mut command: std::process::Command, what: &str) -> Result<()> {
@@ -4517,6 +4599,13 @@ fn link_c(
     let shared = product.kind == "shared-library" || addon;
     let library = product.kind == "shared-library" || product.kind == "static-library";
     let pic = library || addon;
+    // **Mach-O links with ld64's vocabulary, not GNU ld's.** Every `-Wl,--`
+    // flag below is a GNU spelling that `ld64.lld` and Apple's `ld` reject as
+    // an unknown argument, so the branches say which linker they are talking to.
+    let macho = matches!(target.os.as_str(), "macos" | "ios");
+    if addon && macho {
+        refuse_an_apple_addon(name, target)?;
+    }
     // An addon needs one header and no library. Asked before anything is
     // compiled, so a missing toolchain is a message rather than forty
     // `node_api.h: No such file` lines.
@@ -4613,7 +4702,7 @@ fn link_c(
     let artifact = out.join(artifact_name(name, product, target));
     if product.kind == "static-library" {
         {
-            let mut command = std::process::Command::new("ar");
+            let mut command = archiver(macho);
             command.arg("rcs").arg(artifact.as_str());
             for object in &objects {
                 command.arg(object.as_str());
@@ -4622,9 +4711,9 @@ fn link_c(
         }
     } else {
         {
-            let mut command = tools.command();
+            let mut command = tools.link_command();
             if shared {
-                command.arg("-shared");
+                command.arg(if macho { "-dynamiclib" } else { "-shared" });
                 // **A Windows DLL is half an artifact without its import
                 // library.** The linker emits one either way; unnamed, it takes
                 // the first object's name -- this produced `program.c.lib`
@@ -4639,16 +4728,20 @@ fn link_c(
                     ));
                 }
                 if !addon {
-                    hide_all_but_the_exports(&mut command, out, wrote)?;
+                    hide_all_but_the_exports(&mut command, out, wrote, macho)?;
                 }
-                if let Some(soname) = &product.soname {
-                    command.arg(format!("-Wl,-soname,{soname}"));
-                }
+                name_the_library(&mut command, name, product, target, macho);
             }
             for object in &objects {
                 command.arg(object.as_str());
             }
-            command.args(["-Wl,--gc-sections", "-lm"]);
+            if macho {
+                // libm is part of libSystem there, and the zig-derived sysroot
+                // carries no separate `libm.tbd` for `-lm` to find.
+                command.arg("-Wl,-dead_strip");
+            } else {
+                command.args(["-Wl,--gc-sections", "-lm"]);
+            }
             // **After our own objects and before `-o`.** A static archive is
             // consumed left to right by the linker, so a `-l` that precedes the
             // objects needing it resolves nothing -- which is the failure mode
@@ -4668,7 +4761,8 @@ fn link_c(
             // so. Not for an addon: a `.node` resolves `napi_*` out of the host
             // process at load, so those are legitimately unresolved at link time
             // and there is no library to satisfy them from.
-            if shared && !addon {
+            // ld64 already refuses an undefined symbol in a dylib by default.
+            if shared && !addon && !macho {
                 command.arg("-Wl,--no-undefined");
             }
             command.arg("-o").arg(artifact.as_str());
@@ -4692,6 +4786,54 @@ fn link_c(
 ///
 /// A build that writes a file nothing can load has half-emitted, which is the
 /// one thing this command must not do.
+/// Refused before anything compiles. A `.node` for a Mac resolves `napi_*`
+/// from the process (`-undefined dynamic_lookup`), and the unresolved-symbol
+/// check after the link reads ELF (`nm -D`). Neither is written; an addon that
+/// linked without both would be unchecked.
+fn refuse_an_apple_addon(name: &str, target: &nts_build::config::Target) -> Result<()> {
+    bail!(
+        "product `{name}` is a Node addon for {}, and addons are not built for \
+         Apple yet: the link needs `-undefined dynamic_lookup` and the \
+         unresolved-symbol check reads ELF only",
+        target.id
+    )
+}
+
+/// **An archive's index is per format.** GNU `ar` writes a `/` symbol table
+/// Apple's linkers do not read as one; `llvm-ar --format=darwin` writes
+/// `__.SYMDEF`, which they do. On a Mac, `ar` is Apple's and already right.
+fn archiver(macho: bool) -> std::process::Command {
+    if macho && host_os() != "macos" {
+        let mut command = std::process::Command::new("llvm-ar");
+        command.arg("--format=darwin");
+        command
+    } else {
+        std::process::Command::new("ar")
+    }
+}
+
+/// The name a shared library records for whoever loads it.
+///
+/// A dylib always records one: the path a consumer will load it from. Left
+/// alone that is the build directory, which exists on no machine the library
+/// ships to; `@rpath` defers it to the consumer, which is what `soname` means
+/// on ELF -- where it is written only when the product names one.
+fn name_the_library(
+    command: &mut std::process::Command,
+    name: &str,
+    product: &nts_build::config::Product,
+    target: &nts_build::config::Target,
+    macho: bool,
+) {
+    if macho {
+        let file =
+            product.soname.clone().unwrap_or_else(|| artifact_name(name, product, target));
+        command.arg(format!("-Wl,-install_name,@rpath/{file}"));
+    } else if let Some(soname) = &product.soname {
+        command.arg(format!("-Wl,-soname,{soname}"));
+    }
+}
+
 fn refuse_unresolved(name: &str, artifact: &Utf8Path) -> Result<()> {
     let Ok(listed) = std::process::Command::new("nm").args(["-D", "-u"]).arg(artifact.as_str()).output()
     else {
@@ -5021,23 +5163,40 @@ fn hide_all_but_the_exports(
     command: &mut std::process::Command,
     out: &Utf8Path,
     wrote: &Wrote,
+    macho: bool,
 ) -> Result<()> {
-    let script = out.join("exports.map");
-    std::fs::write(&script, version_script(&wrote.published))
-        .with_context(|| format!("writing {script}"))?;
-    command.arg(format!("-Wl,--version-script={script}"));
-    // **A name in the script that no symbol answers to is an error, not a
-    // no-op.** By default `ld` accepts an unmatched pattern silently, which is
-    // how `global: Counter;` and a doubled `global: stdin_;` both went
-    // unnoticed: the script looked like it published two things, `local: *` hid
-    // the real symbol, and the `.so` came out short with no message. This turns
-    // the next such disagreement into a link failure naming the symbol.
-    //
-    // It catches a name nothing answers to. It cannot catch a name answering to
-    // the *wrong* symbol -- `stdin_` for a global whose symbol is `stdin__` --
-    // because both exist; that one is closed by `published` coming from the
-    // emitter, which is the same place the header's "C symbol:" comment does.
-    command.arg("-Wl,--no-undefined-version");
+    if macho {
+        // ld64 has no version scripts. An exported-symbols list is the same
+        // set, in Mach-O's spelling of a C name (a leading underscore), and a
+        // name in it that no symbol answers to is already an error there --
+        // the check `--no-undefined-version` adds below for GNU ld.
+        let list = out.join("exports.list");
+        let mut text = String::new();
+        for symbol in &wrote.published {
+            text.push('_');
+            text.push_str(symbol);
+            text.push('\n');
+        }
+        std::fs::write(&list, text).with_context(|| format!("writing {list}"))?;
+        command.arg(format!("-Wl,-exported_symbols_list,{list}"));
+    } else {
+        let script = out.join("exports.map");
+        std::fs::write(&script, version_script(&wrote.published))
+            .with_context(|| format!("writing {script}"))?;
+        command.arg(format!("-Wl,--version-script={script}"));
+        // **A name in the script that no symbol answers to is an error, not a
+        // no-op.** By default `ld` accepts an unmatched pattern silently, which is
+        // how `global: Counter;` and a doubled `global: stdin_;` both went
+        // unnoticed: the script looked like it published two things, `local: *` hid
+        // the real symbol, and the `.so` came out short with no message. This turns
+        // the next such disagreement into a link failure naming the symbol.
+        //
+        // It catches a name nothing answers to. It cannot catch a name answering to
+        // the *wrong* symbol -- `stdin_` for a global whose symbol is `stdin__` --
+        // because both exist; that one is closed by `published` coming from the
+        // emitter, which is the same place the header's "C symbol:" comment does.
+        command.arg("-Wl,--no-undefined-version");
+    }
     // **Said out loud, because from the outside it looks like an export.** The
     // product's manifest promises "publishes what `./src/main.ts` exports" and
     // the header carries the name; only the symbol table disagrees, and nobody

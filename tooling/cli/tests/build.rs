@@ -1738,9 +1738,15 @@ fn a_windows_target_produces_a_windows_dll() {
     );
 }
 
-/// Apple is refused by name, with the reason that was measured rather than guessed.
+/// iOS is refused by name, and not with the macOS reason.
+///
+/// **This test used to be about macOS**, refused because "Apple needs its SDK".
+/// That reason was wrong -- the runtime's own `_POSIX_C_SOURCE` hid a Darwin
+/// typedef -- and macOS builds now (`a_macos_target_produces_a_mach_o_dylib`).
+/// The refusal it guarded still exists for iOS, so the guarantee is kept on the
+/// target that still needs it rather than deleted with the one that stopped.
 #[test]
-fn cross_compiling_to_apple_is_refused_by_name() {
+fn cross_compiling_to_ios_is_refused_by_name() {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     if !frontend || cfg!(target_os = "macos") {
@@ -1748,13 +1754,13 @@ fn cross_compiling_to_apple_is_refused_by_name() {
         return;
     }
     let project = fixture(
-        "build-apple-cross",
+        "build-ios-cross",
         r#"
 import { defineConfig, library, target } from "@nts/config";
 export default defineConfig({
   products: {
-    mac: library.native({
-      targets: [target.macos({ minimumVersion: "14.0" })],
+    phone: library.native({
+      targets: [target.ios({ minimumVersion: "17.0" })],
       entry: "./src/main.ts",
     }),
   },
@@ -1762,10 +1768,115 @@ export default defineConfig({
 "#,
     );
     let run = build(&project, &[]);
-    assert!(!run.ok, "it produced something for macOS:\n{}", run.stdout);
+    assert!(!run.ok, "it produced something for iOS:\n{}", run.stdout);
     assert!(
-        run.stderr.contains("SDK") && run.stderr.contains("macos-14"),
+        run.stderr.contains("iOS is not built from here") && run.stderr.contains("ios-17"),
         "the refusal names neither the target nor what is missing:\n{}",
+        run.stderr
+    );
+}
+
+const MACOS_DYLIB: &str = r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    mac: library.native({
+      targets: [target.macos({ minimumVersion: "13.0", arch: "aarch64" })],
+      entry: "./src/main.ts",
+    }),
+  },
+});
+"#;
+
+/// `nts build` for macOS, run with `NTS_APPLE_ROOT` pointing at `root`.
+fn build_for_apple(project: &Path, root: &Path) -> Run {
+    let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("build")
+        .arg(project.join("tsconfig.json"))
+        .env("NTS_APPLE_ROOT", root)
+        .env_remove("NTS_APPLE_SDK")
+        .env_remove("CC")
+        .output()
+        .expect("running nts build");
+    Run {
+        ok: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    }
+}
+
+/// macOS from Linux: a Mach-O dylib whose symbol table is the export surface.
+///
+/// **Every assertion is on the artifact**, because each step before it can
+/// succeed on the wrong platform: `file` for the format, the exported symbols
+/// for the `-exported_symbols_list` branch (GNU ld's version script is not read
+/// by ld64, so `notPublished` leaking out is the failure it would show), and
+/// the install name for `@rpath` rather than the build directory.
+///
+/// The sysroot is `tooling/apple/zig-sdk.sh`'s, found through
+/// `NTS_APPLE_ROOT`; the arm below it runs the same build with an empty root.
+#[test]
+fn a_macos_target_produces_a_mach_o_dylib() {
+    let tool = |name: &str, arg: &str| {
+        Command::new(name).arg(arg).output().is_ok_and(|o| o.status.success())
+    };
+    let root = std::env::var_os("NTS_APPLE_ROOT")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/nts/apple")))
+        .unwrap_or_default();
+    if !available()
+        || cfg!(target_os = "macos")
+        || !root.join("zig-sdk/usr/include").is_dir()
+        || !tool("ld64.lld", "--version")
+        || !tool("llvm-nm", "--version")
+    {
+        skip("a non-Apple host with ld64.lld, llvm-nm and tooling/apple/zig-sdk.sh run");
+        return;
+    }
+    let project = fixture("build-macos-dylib", MACOS_DYLIB);
+    let run = build_for_apple(&project, &root);
+    assert!(run.ok, "the macOS build failed:\n{}{}", run.stdout, run.stderr);
+
+    let dylib = project.join(".nts/build/mac/macos-13-aarch64/libmac.dylib");
+    assert!(dylib.is_file(), "no dylib at {}:\n{}", dylib.display(), run.stdout);
+    let kind = Command::new("file").arg("-b").arg(&dylib).output().expect("running file");
+    let kind = String::from_utf8_lossy(&kind.stdout);
+    assert!(
+        kind.contains("Mach-O") && kind.contains("arm64") && kind.contains("dynamically linked shared library"),
+        "not an arm64 Mach-O dylib -- `file` says: {kind}"
+    );
+
+    let symbols = Command::new("llvm-nm").args(["-gU"]).arg(&dylib).output().expect("llvm-nm");
+    let symbols = String::from_utf8_lossy(&symbols.stdout);
+    assert!(symbols.contains(" _published"), "the export is missing:\n{symbols}");
+    assert!(
+        !symbols.contains("notPublished") && !symbols.contains("nts_string_from_utf8"),
+        "symbols outside the export surface leaked:\n{symbols}"
+    );
+
+    let install = Command::new("llvm-otool").arg("-D").arg(&dylib).output().expect("llvm-otool");
+    let install = String::from_utf8_lossy(&install.stdout);
+    assert!(
+        install.contains("@rpath/libmac.dylib"),
+        "the install name is not relocatable:\n{install}"
+    );
+}
+
+/// Without a sysroot, the macOS build says which script makes one.
+#[test]
+fn a_macos_target_without_a_sysroot_names_the_script() {
+    if !available() || cfg!(target_os = "macos") {
+        skip("a non-Apple host with the tsgo frontend and clang");
+        return;
+    }
+    let project = fixture("build-macos-no-sysroot", MACOS_DYLIB);
+    let empty = Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-apple-root");
+    std::fs::create_dir_all(&empty).expect("creating an empty root");
+    let run = build_for_apple(&project, &empty);
+    assert!(!run.ok, "it built for macOS with no sysroot:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("tooling/apple/zig-sdk.sh") && run.stderr.contains("macos-13"),
+        "the refusal names neither the target nor the fix:\n{}",
         run.stderr
     );
 }
@@ -2848,14 +2959,16 @@ fn two_projects_built_from_their_own_directories_do_not_share_a_snapshot() {
     );
 }
 
+// iOS, since macOS builds here now: the rule below needs a target whose
+// toolchain is still missing.
 const APPLE_WITH_UNREADABLE_DEPENDENCY: &str = r#"
 import { defineConfig, library, target } from "@nts/config";
 export default defineConfig({
   products: {
-    sdk: library.native({ targets: [target.macos({ minimumVersion: "14.0" })], entry: "./src/main.ts" }),
+    sdk: library.native({ targets: [target.ios({ minimumVersion: "17.0" })], entry: "./src/main.ts" }),
   },
   dependencies: {
-    "macos-14": { from: "cocoapods", lockfile: "./deps/Podfile.lock" },
+    "ios-17": { from: "cocoapods", lockfile: "./deps/Podfile.lock" },
   },
 });
 "#;
@@ -2878,7 +2991,7 @@ fn a_missing_toolchain_is_reported_before_a_dependency_it_would_never_reach() {
     let run = build(&project, &[]);
     assert!(!run.ok, "an Apple target built on this machine:\n{}", run.stdout);
     assert!(
-        run.stderr.contains("Cross-compiling to Apple needs its SDK"),
+        run.stderr.contains("iOS is not built from here"),
         "the toolchain is not what it reported:\n{}",
         run.stderr
     );

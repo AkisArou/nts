@@ -1,0 +1,8 @@
+upper STRASSE Ǆ ΑΒΓ
+numbers 0.30000000000000004 1e+21 0.66667
+bigint 976371285
+map pear=2 apple=3 fig=1
+array 1,4,9,16,25
+sync
+await 7
+timer
