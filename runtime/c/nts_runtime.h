@@ -1566,6 +1566,22 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
  * silently receiving different text from what the program wrote. */
 NTS_ALLOCATES_OR_NULL const char *nts_string_to_cstring(const NtsString *s);
 void nts_cstring_release(const NtsString *s, const char *c);
+/* A closure lent to C as the `void *` a callback API carries beside its
+ * function pointer -- GLib's `user_data`, and what an Objective-C block's
+ * copy helper holds.
+ *
+ * `nts_closure_lend` takes a reference and hands back the closure as the
+ * context; `nts_closure_unlend` gives that reference back. The compiled
+ * trampoline C calls receives the context as its receiver, so the closure's
+ * captures stay reachable for exactly as long as C holds the pair open.
+ *
+ * `nts_closure_notify` is `nts_closure_unlend` as a value: the
+ * `GDestroyNotify` passed beside a retained callback, so the release happens
+ * when the library lets go -- `g_signal_handler_disconnect`, a source removed,
+ * an object finalised -- and not when the call that registered it returns. */
+void *nts_closure_lend(NtsHeader *closure);
+void nts_closure_unlend(void *context);
+void (*nts_closure_notify(void))(void *);
 /* ECMAScript `Number::toString`, base 10. The shortest decimal that reads back
  * as the same double, laid out the way the specification lays it out -- which
  * is not what any `printf` conversion produces. */

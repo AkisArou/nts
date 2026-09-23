@@ -4343,6 +4343,15 @@ void nts_cstring_release(const NtsString *s, const char *c) {
   free((void *)c);
 }
 
+void *nts_closure_lend(NtsHeader *closure) {
+  nts_retain(closure);
+  return closure;
+}
+
+void nts_closure_unlend(void *context) { nts_release((NtsHeader *)context); }
+
+void (*nts_closure_notify(void))(void *) { return nts_closure_unlend; }
+
 /* The code units `trim` removes.
  *
  * The specification's `WhiteSpace` and `LineTerminator` together, which is not
