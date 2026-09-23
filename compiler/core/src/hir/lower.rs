@@ -17041,6 +17041,39 @@ impl<'a> FuncBuilder<'a> {
         Ok(params)
     }
 
+    /// Whether this parameter name is the **`this` annotation**, which is a type
+    /// and not a parameter.
+    ///
+    /// `deepStrictEqual(this: Assert | void, ...args)` says what `this` is when
+    /// the method is called, and TypeScript erases it: the emitted JavaScript
+    /// has one parameter, not two. Lowering it as an ordinary one gave every
+    /// such method a *second* receiver slot --
+    ///
+    /// ```text
+    /// func Holder#withThis(this: managed<obj#1>, this: managed<obj#1>, n: f64)
+    /// ```
+    ///
+    /// -- while the call site passed the receiver and the real arguments, so
+    /// `n` landed in the annotation's slot and the declared `n` was never
+    /// written. Where a call existed `verify` stopped the build with
+    /// `CallArgumentCount { expected: 3, found: 2 }` -- a whole program refused,
+    /// naming neither the method nor the annotation; where none existed the
+    /// function was emitted with the extra slot and nothing looked at it.
+    ///
+    /// `this` is reserved in parameter position, so a parameter *named* `this`
+    /// is this and nothing else: the test is exact rather than a guess about a
+    /// name. The receiver comes from the declaration rather than from the
+    /// parameter list, which is why dropping this loses nothing the body needs
+    /// -- `this instanceof Holder ? this.base : 100` still answers both ways.
+    ///
+    /// Asked here rather than at each caller: every one of them `extend`s the
+    /// result and passes an index taken before the call, so an empty answer
+    /// leaves the next real parameter numbered correctly.
+    fn annotates_this(&self, name: NodeId) -> bool {
+        self.kind_of(name) == Some(syntax::IDENTIFIER)
+            && self.node(name).text.as_deref() == Some("this")
+    }
+
     fn lower_param(&mut self, id: NodeId, index: u32) -> Result<Vec<Param>, Diagnostic> {
         let children = self.children(id);
         // A name, or a pattern standing where one would be. `function f({ x }:
@@ -17060,6 +17093,11 @@ impl<'a> FuncBuilder<'a> {
             })
             .copied()
             .ok_or_else(|| self.unsupported(id, "a parameter with no name"))?;
+
+        // A `this` annotation is not a parameter. See [`Self::annotates_this`].
+        if self.annotates_this(name_node) {
+            return Ok(Vec::new());
+        }
 
         // A parameter list that does not line up with the argument list, one
         // way or the other. Both were *silently* lowered as ordinary
