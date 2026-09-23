@@ -5,7 +5,7 @@
  * @ntsHeader "hello.h"
  */
 declare module "c:gtk-hello" {
-  import type { Class, Ptr, Struct, c_char, c_int, c_uint } from "c:types";
+  import type { Class, Closure, Ptr, c_char, c_int, c_uint, c_ulong } from "c:types";
 
   // The instance hierarchy, root first, as GObject lays it out. GTK spells
   // these `typedef struct _GtkWidget GtkWidget`, so each tag is the
@@ -17,7 +17,6 @@ declare module "c:gtk-hello" {
   export type GtkApplication = Class<"_GtkApplication", GApplication>;
   export type GtkWidget = Class<"_GtkWidget", GObject>;
   export type GtkWindow = Class<"_GtkWindow", GtkWidget>;
-  export type State = Struct<{ clicks: c_int }, "hello_state">;
 
   // GTK itself. `flags` is `GApplicationFlags`, an enum whose values are all
   // non-negative, so C makes it compatible with `unsigned int` -- and the
@@ -31,17 +30,12 @@ declare module "c:gtk-hello" {
   export function g_application_quit(app: GApplication): void;
 
   // The shim.
+  export function hello_connect(
+    instance: GObject,
+    signal: string,
+    handler: Closure<(instance: GObject) => void>,
+  ): c_ulong;
   export function hello_as_window(widget: GtkWidget): GtkWindow;
-  export function hello_on_activate(
-    app: GtkApplication,
-    handler: (app: GtkApplication, state: Ptr<State>) => void,
-    state: Ptr<State>,
-  ): void;
-  export function hello_on_clicked(
-    button: GtkWidget,
-    handler: (button: GtkWidget, state: Ptr<State>) => void,
-    state: Ptr<State>,
-  ): void;
   export function hello_click(button: GtkWidget): void;
   export function hello_unref(app: GtkApplication): void;
   export function hello_report(clicks: c_int, status: c_int): void;

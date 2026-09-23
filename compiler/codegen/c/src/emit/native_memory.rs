@@ -671,9 +671,12 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             // parameter -- that is how every call through one works -- so the
             // bridge supplies it and the foreign signature describes the rest.
             // With a context, the foreign signature's last parameter *is* that
-            // receiver, so the two counts agree instead of differing by one.
-            let receiver_slots = usize::from(!*context);
-            if compiled.params.len() != signature.parameters.len() + receiver_slots {
+            // receiver. And the compiled function may take *fewer* than C
+            // passes -- `() => count++` is a perfectly good handler for a signal
+            // that passes the instance -- so C's extra leading arguments are
+            // accepted and dropped. More than C passes is the mismatch.
+            let foreign = signature.parameters.len() - usize::from(*context);
+            if compiled.params.is_empty() || compiled.params.len() - 1 > foreign {
                 return Err(refuse("a callback bridge whose foreign signature and compiled function disagree about arity"));
             }
             wanted.insert(
@@ -702,6 +705,10 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             let slot = format!("a{at}");
             parameters.push(format!("{} {slot}", ty.c_type()));
             if receiver.is_none() && at == last {
+                continue;
+            }
+            // Passed by C and not taken by the compiled function.
+            if at + 1 >= compiled.params.len() {
                 continue;
             }
             // The compiled function takes the managed representation -- a
@@ -776,8 +783,32 @@ pub(super) fn function_pointer_types(writer: &mut CodeWriter, origin: &Origin, p
             }
         }
     }
-    for typedef in seen.values() {
-        writer.line(origin, typedef.clone());
+    // **Every opaque tag a typedef mentions, declared first.** A struct tag
+    // first seen inside a parameter list is scoped to that list -- clang says
+    // "will not be visible outside of this function" -- so the typedef named a
+    // different `struct _GObject` from every prototype that followed, and a
+    // callback taking a handle was a type mismatch at each use. Repeating a
+    // tag declaration is legal, so this does not ask what else declares it.
+    let mut tags = std::collections::BTreeSet::new();
+    let mut typedefs = Vec::new();
+    for func in &program.funcs {
+        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
+            let nts_core::hir::OpKind::Call { callee: nts_core::hir::Callee::Native(target), .. } = &op.kind else {
+                continue;
+            };
+            for ty in target.parameters.iter().chain(std::iter::once(&target.result)) {
+                if matches!(ty, Type::FnPointer(_)) {
+                    collect_opaque_tags(ty, &mut tags);
+                }
+            }
+        }
+    }
+    for tag in tags {
+        typedefs.push(format!("struct {tag};"));
+    }
+    typedefs.extend(seen.into_values());
+    for line in typedefs {
+        writer.line(origin, line);
     }
 }
 

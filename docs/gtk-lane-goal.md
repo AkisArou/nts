@@ -59,24 +59,47 @@ gtk4 through pkg-config.
 
 **Not yet exercised: the event loop.** `g_application_run` blocks inside module evaluation, so a timer, a promise continuation, or anything posted to libuv during it would not run until it returns. The program uses none of these, which is why it works.
 
-## Next: M1, the minimum surface
+## M1, the minimum surface: where it stands
 
-Each item is its own commit and fixture. Each is announced to MainClaude with
-its falsifier first. C first, then LLVM.
+Each item is its own commit and fixture, announced to MainClaude with its
+falsifier first, C then LLVM.
 
-1. **Strings across the boundary.** A borrowed C string that a TS `string` converts to for the duration of a call; a returned one is copied. Branded **nominally, not as an intersection**: MainClaude notes that an intersection has no representation (`lower.rs:10347`), which is also blocker 3's shape.
-   - Falsifier: `α😀` round-trips, and a corrupted length arm fails.
-2. **GObject handle hierarchy.** `Opaque` with a parent chain and implicit upcasts (`hir/native.rs:532`). Downcasts only through a check backed by `g_type_check_instance_is_a`.
-   - Falsifier: a `GtkWidget` where a `GtkWindow` goes is refused by the checker, not by GTK at run time.
-3. **Capturing closures into C.** A function-typed parameter paired with its `user_data` and `GDestroyNotify` parameters. The closure is retained when registered and released when notified.
-   - Falsifiers: a captured `let` changes and TS reads the change back, and the reference-count floor is unchanged after `g_signal_handler_disconnect`.
-   - Must go through `push_call`, per MainClaude, so the raise test from record 0343 covers any new call path.
-4. **A GLib event-loop host.** `NtsHost` on the default `GMainContext`, with libuv embedded as a `GSource` over `uv_backend_fd` and `uv_backend_timeout`. Selected by `app.linux`.
-   - Needs a decision on `docs/native-operations.md:643`: does a bridge drain microtasks on return?
-   - Falsifier: a `Promise.then` and a `setTimeout` started inside a click handler both run before quit, and on the libuv host they do not.
-5. **Blocker 1**, if nothing in MainClaude's lane gets there first. A native pointer is a word, and a module-scope word has somewhere to live.
+1. **Strings across the boundary: landed.** (`1be75f5e` runtime, `85cfd136` lowering, `961a2e84` gtk-hello.)
+   - **Surface:** a `c:` parameter typed plain `string` is `const char *`, borrowed UTF-8 for the call. No brand, so the intersection wall never comes up.
+   - **Example:** `examples/interop/native-string` checks the bytes C receives against node's TextEncoder. U+0000 stops at the boundary.
+   - **Leak arm:** under valgrind, loss is flat from 1k to 20k calls, and a compiler without the release loses one block per call.
+   - **Cost:** 15-16 ns per string call against 1.5 ns for an int; this is what a borrowed fast path has to beat.
+   - Returned strings and `string | null` are still to do.
+2. **Handle hierarchy: landed, upcasts only.** (`6b02cd21`.)
+   - **Surface:** `Class<Tag, Parent>` in `c:types`. It is a tuple chain, so TypeScript's own assignability allows upcasts and refuses downcasts and sibling casts. The compiler holds the same chain on `Pointee::Opaque(Handle)`.
+   - **Tests:** `widget as GtkButton` is refused in lowering (`a_class_downcast_by_assertion_is_refused`). The upcast runs on C and LLVM.
+   - **Downcast:** a checked downcast is not built; `GTK_WINDOW(w)` stays in the shim. It will be designed with the Apple lane, which needs `isKindOfClass:`.
+3. **Capturing closures into C: landed.** (`09ae016f` runtime, `580e25bb` lowering and backends.)
+   - **Surface:** `Closure<F>` is retained and released by C's destroy notify. `ScopedClosure<F>` is lent for one call.
+   - **Tests:** `examples/interop/native-closure` covers captures read back, two contexts that must not cross, a closure outliving its registering frame, an arrow taking fewer parameters than C passes, and a handle in the callback. Under reference counting, 50 subscribe/unsubscribe cycles leave `nts_live_count` exactly equal; the control without the notify grows by 50 or more. A throw inside still stops at the boundary.
+   - **gtk-hello:** connects both signals with capturing arrows.
+4. **A GLib event-loop host: next.** `NtsHost` on the default `GMainContext`, with libuv embedded as a `GSource` over `uv_backend_fd` and `uv_backend_timeout`, selected by `app.linux`.
+   - **Shared with Apple:** the core (embed libuv in a foreign loop) is written here, and Apple adds a CFRunLoop adapter against the same interface.
+   - **Open decision:** `docs/native-operations.md:643`, whether a bridge drains microtasks on return. It is decided with MainClaude and Apple before it lands.
+   - **Falsifier:** a `Promise.then` and a `setTimeout` started inside a click handler both run before quit. On the libuv host they do not.
+5. **Blocker 1** is still standing: a module-scope native pointer.
 
-**M1 is done when** `gtk-hello`'s shim holds only true macros, and the program uses a string, an upcast and a capturing arrow handler, on C and LLVM.
+**What the shim still stands in for** (`gtk-hello/native/hello.h`):
+
+- **`g_signal_connect_data` itself:** its instance is a `gpointer`, its handler is the erased `GCallback`, and its notify takes two arguments. The shim is one generic `hello_connect`.
+- **The downcast** `GTK_WINDOW`.
+- **Variadic `g_signal_emit_by_name`.**
+- **`g_object_unref`**, which is both `gpointer` and ownership.
+- **Stdio.**
+
+The first and the `gpointer` half of the fourth are what M2's generator has to answer, with generated glue or with erased-callback support. That choice is made there.
+
+**Four tables a new runtime helper owes a row to.** Main went red twice by missing them. The list is in `nts_runtime.h`'s helper block:
+
+- the LLVM signatures;
+- `ERASES_CLASS` in the C emitter;
+- `runtime::READS_ONLY`;
+- the JVM `REFUSED_FLOOR`.
 
 ## After M1
 

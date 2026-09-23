@@ -1,4 +1,4 @@
-import { deliver, each_upto, subscribe, unsubscribe } from "c:closures";
+import { deliver, each_upto, item_weight, subscribe, unsubscribe, visit_items } from "c:closures";
 import type { c_int } from "c:types";
 
 // Scoped: the arrow captures `total`, C calls it `upto` times during the
@@ -25,6 +25,26 @@ export function twoContexts(): number {
     second += n * 100;
   }, 3 as c_int);
   return first + second;
+}
+
+// An arrow taking fewer parameters than C passes, which TypeScript allows and
+// every event API relies on: the bridge accepts C's argument and drops it.
+export function countCalls(upto: number): number {
+  let calls = 0;
+  each_upto(() => {
+    calls++;
+  }, upto as c_int);
+  return calls;
+}
+
+// A callback whose parameter is a handle, so the C function-pointer type
+// names a struct tag. 2 + 3 + 5.
+export function visitItems(): number {
+  let weight = 0;
+  visit_items((item) => {
+    weight += item_weight(item);
+  });
+  return weight;
 }
 
 // Retained: `start` registers a closure over a box and returns, so the

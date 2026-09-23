@@ -17,6 +17,8 @@ static void expect(const char *what, double got, double want) {
 int main(void) {
   expect("scoped sum", sumTo(10), 55);
   expect("two contexts", twoContexts(), 610);
+  expect("fewer parameters than C passes", countCalls(4), 4);
+  expect("a handle in the callback", visitItems(), 10);
   // Retained: registered in one call, delivered in later ones.
   start();
   deliver(3);

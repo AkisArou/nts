@@ -52,3 +52,16 @@ int subscribers(void) {
     count += slots[at].f != NULL;
   return count;
 }
+
+struct item {
+  int weight;
+};
+
+static struct item items[3] = {{2}, {3}, {5}};
+
+int item_weight(struct item *item) { return item->weight; }
+
+void visit_items(void (*f)(struct item *, void *), void *data) {
+  for (int at = 0; at < 3; at++)
+    f(&items[at], data);
+}

@@ -15,6 +15,13 @@ void unsubscribe(int handle);
 // Subscribers still held.
 int subscribers(void);
 
+// An opaque item, and a walk over three of them that hands each to `f`. The
+// callback takes a handle, which is what puts a struct tag inside a function
+// pointer's parameter list.
+struct item;
+int item_weight(struct item *item);
+void visit_items(void (*f)(struct item *, void *), void *data);
+
 // The control arm: while set, `unsubscribe` forgets without calling
 // `notify`, so whatever the context held is never released.
 extern int closures_skip_notify;

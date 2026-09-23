@@ -1008,8 +1008,12 @@ fn bridges(program: &Program) -> Result<String, Diagnostic> {
             // receiver -- the closure C was lent and hands back -- so the two
             // counts agree instead of differing by one. Both are `ptr`, so it
             // is passed on as it arrives.
-            let receiver_slots = usize::from(!*context);
-            if compiled.params.len() != signature.parameters.len() + receiver_slots {
+            // And the compiled function may take fewer than C passes -- `() =>
+            // count++` handles a signal that passes the instance -- so C's
+            // extra leading arguments are accepted and dropped. More is the
+            // mismatch.
+            let foreign = signature.parameters.len() - usize::from(*context);
+            if compiled.params.is_empty() || compiled.params.len() - 1 > foreign {
                 return Err(refuse(func, "a callback bridge whose foreign signature and compiled function disagree about arity"));
             }
             let last = signature.parameters.len().saturating_sub(1);
@@ -1022,7 +1026,9 @@ fn bridges(program: &Program) -> Result<String, Diagnostic> {
             let mut body = String::new();
             for (at, foreign) in signature.parameters.iter().enumerate() {
                 let from = foreign.representation();
-                if *context && at == last {
+                // The context, which became the receiver, and any argument C
+                // passes that the compiled function does not take.
+                if (*context && at == last) || at + 1 >= compiled.params.len() {
                     parameters.push(format!("{} %a{at}", ty_of(&from, compiled)?));
                     continue;
                 }

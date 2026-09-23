@@ -1,33 +1,28 @@
 // The part of GTK a TypeScript program cannot reach yet, and nothing else.
 //
 // Each function here stands in for one missing compiler capability, named
-// beside it. M0 of docs/gtk-lane-goal.md measures that list; each later step
-// deletes the functions it makes unnecessary. A shim function that outlives its
-// reason is the thing to look for when reading this file.
+// beside it. Each step of docs/gtk-lane-goal.md deletes the functions it makes
+// unnecessary; a shim function that outlives its reason is the thing to look
+// for when reading this file.
 #ifndef NTS_GTK_HELLO_H
 #define NTS_GTK_HELLO_H
 
 #include <gtk/gtk.h>
 
-// The program's state, which C hands back to every callback. A capturing
-// closure would replace it.
-struct hello_state {
-  int clicks;
-};
-
+// `g_signal_connect_data`, at the types a `Closure<F>` produces. Three things
+// keep TypeScript from declaring the real one: its instance is a `gpointer`,
+// which a `Class` handle cannot be passed as yet; its handler is a `GCallback`,
+// `void (*)(void)`, which erases the signature the bridge needs; and its
+// destroy notify is a `GClosureNotify`, which takes the closure as a second
+// argument.
+gulong hello_connect(GObject *instance, const char *signal,
+                     void (*handler)(GObject *, void *), void *data,
+                     void (*notify)(void *));
 // A downcast: `gtk_application_window_new` returns a `GtkWidget *`, and
 // `GTK_WINDOW(w)` is a checked cast, which is a runtime question and not a
 // conversion the compiler can prove. Upcasts need nothing here.
 GtkWindow *hello_as_window(GtkWidget *widget);
-// `g_signal_connect` is a macro over a `GCallback`-typed function, and the
-// signal name is a string.
-void hello_on_activate(GtkApplication *app,
-                       void (*handler)(GtkApplication *, struct hello_state *),
-                       struct hello_state *state);
-void hello_on_clicked(GtkWidget *button,
-                      void (*handler)(GtkWidget *, struct hello_state *),
-                      struct hello_state *state);
-// `g_signal_emit_by_name` is variadic and takes a string.
+// `g_signal_emit_by_name` is variadic over the signal's own arguments.
 void hello_click(GtkWidget *button);
 // `g_object_unref` takes a `gpointer`, which a `Class` handle cannot be
 // passed as yet; and whose reference it gives up is the ownership question.
