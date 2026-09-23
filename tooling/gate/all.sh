@@ -1794,7 +1794,9 @@ interop() {
   # went red -- which is the padding this comment argues against, arriving by
   # addition rather than by choice. It counts on a box with no gtk4 too: that
   # project prints SKIP, and the comparison is `ran + skipped`.
-  interop_floor=17
+  #
+  # 18 the same day: `native-string` (`85cfd136`), the `const char *` boundary.
+  interop_floor=18
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"
