@@ -2,8 +2,8 @@
 //         between two structs that do not agree about where their shared
 //         fields are
 //
-// **Specialisation covers one of the five ways a value reaches an interface
-// type, and the other four are the same refusal.**
+// **Specialisation covers one of the six ways a value reaches an interface
+// type, and the other five are the same refusal.**
 //
 // `record_structural_call` makes a copy of a callee per concrete argument type,
 // which is why `asArgument` below lowers: `read@0obj<WithBase>` reads `b`
@@ -13,16 +13,38 @@
 //
 // ```text
 // read(new WithBase())                     a call argument      LOWERS
+// new Holder(new WithBase())               a constructor's      refuses
 // const s: Slice = new WithBase()          an annotated local   refuses
 // function make(): Slice { return … }      a declared return    refuses
-// this.slice = new WithBase()              a field at the type  refuses
+// h.slice = new WithBase()                 a field at the type  refuses
 // let s: Slice = …; s = new WithBase()     a later assignment   refuses
 // ```
 //
+// **The second row is the interesting one**, because it is a call. `new` is in
+// `snapshot.call_targets` like any other call and `record_structural_call` sees
+// it; what it does not do is queue the callee, because it queues only where a
+// copy will be lowered:
+//
+// ```rust
+// if probe.kind_of(callee) == Some(syntax::FUNCTION_DECLARATION) {
+//     pending.push(PendingCopy { … });
+// }
+// ```
+//
+// and `function_copies` is consulted for function declarations, so a
+// constructor has no copy to name. The guard still holds -- measured, the `new`
+// refuses rather than quietly coercing to a copy that was never emitted -- but
+// the specialisation a plain call gets is simply not available here.
+//
+// `calls_in_the_body_of` has the same shape one level along: it collects
+// `CALL_EXPRESSION` and not `NEW_EXPRESSION`, so a `new` inside a copy's body
+// is outside the transitive walk too.
+//
 // Measured 2026-09-23 on `6943bcff`. The point of the table is that the four
-// are not four defects: a copy re-types a **parameter**, so the one route that
-// passes through a parameter is the one that works, and the machinery has
-// nothing to say about a slot, a return, or a variable.
+// are not five defects: a copy re-types a **parameter** of a function
+// declaration, so the one route through such a parameter is the one that works,
+// and the machinery has nothing to say about a constructor, a slot, a return,
+// or a variable.
 //
 // A join of two *different* classes is a sixth thing and not in the table: it
 // erases before it reaches here, and refuses as `an erased value where a
@@ -118,16 +140,38 @@ export function asReturn(): number {
 }
 
 class Holder {
-  slice: Slice;
+  /** The literal's shape *is* `Slice`, so this initialiser needs no cast. */
+  slice: Slice = { b: 0 };
+}
+
+/**
+ * Refuses -- a store into a slot declared at the interface type.
+ *
+ * Written as an assignment rather than `new Holder(new WithBase())`, which
+ * would be the constructor-argument arm again and differ in nothing. The
+ * first version of this file made exactly that mistake.
+ */
+export function asFieldStore(): number {
+  const h = new Holder();
+  h.slice = new WithBase();
+  return h.slice.b;
+}
+
+class Seen {
+  readonly slice: Slice;
 
   constructor(slice: Slice) {
     this.slice = slice;
   }
 }
 
-/** Refuses. */
-export function asFieldStore(): number {
-  return new Holder(new WithBase()).slice.b;
+/**
+ * Refuses, where `asArgument` above lowers. The only difference is that the
+ * parameter belongs to a constructor, which `record_structural_call` does not
+ * queue a copy for.
+ */
+export function asConstructorArgument(): number {
+  return new Seen(new WithBase()).slice.b;
 }
 
 /** Refuses -- and only on the second assignment, `NoBase` being a prefix. */

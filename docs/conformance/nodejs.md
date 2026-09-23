@@ -3541,21 +3541,34 @@ inherited-first than it was. The 23 remain, and what they are waiting on is an
 interface representation that does not have to be a prefix of the object
 reaching it -- the same thing the other 55 are waiting on.
 
-### And the copy machinery covers one of five routes to an interface type
+### And the copy machinery covers one of six routes to an interface type
 
-Measured on `6943bcff`, one class, one interface, five bindings:
+One class, one interface, six bindings:
 
-    read(new WithBase())                 a call argument      LOWERS
-    const s: Slice = new WithBase()      an annotated local   refuses
-    function make(): Slice { return … }  a declared return    refuses
-    this.slice = new WithBase()          a field at the type  refuses
-    let s: Slice = …; s = new WithBase() a later assignment   refuses
+    read(new WithBase())                 a call argument       LOWERS
+    new Seen(new WithBase())             a constructor's       refuses
+    const s: Slice = new WithBase()      an annotated local    refuses
+    function make(): Slice { return … }  a declared return     refuses
+    h.slice = new WithBase()             a field at the type   refuses
+    let s: Slice = …; s = new WithBase() a later assignment    refuses
 
-`record_structural_call` re-types a **parameter**, so the one route that passes
-through a parameter is the one that works and the machinery has nothing to say
-about a slot, a return, or a variable. `blockers/an-interface-reached-by-five-
-routes` holds the arms and the control -- the same class without `extends Base`
-lowers on every one of them, because then the interface really is its prefix.
+`record_structural_call` re-types a **parameter of a function declaration**, so
+the one route through such a parameter is the one that works.
+
+The second row is the one worth reading, because it *is* a call: a `new` is in
+`snapshot.call_targets` like any other and `record_structural_call` sees it. It
+queues no copy, because it queues only where one will be lowered --
+`probe.kind_of(callee) == Some(syntax::FUNCTION_DECLARATION)` -- and
+`function_copies` is consulted for function declarations. `calls_in_the_body_of`
+has the same shape one level along: it collects `CALL_EXPRESSION` and not
+`NEW_EXPRESSION`, so a `new` inside a copy's body is outside the transitive walk
+too. The guard still holds -- the `new` refuses rather than quietly coercing to
+a copy nothing emitted, which was probed -- but the specialisation a plain call
+gets is not available there.
+
+`blockers/an-interface-reached-by-six-routes` holds the arms and the control --
+the same class without `extends Base` lowers on every one of them, because then
+the interface really is its prefix.
 
 That also settles what a field-order convention could do for this fixture:
 nothing. `WithBase extends Base` owes slot 0 to `Base`, `Slice` wants `b` there,
