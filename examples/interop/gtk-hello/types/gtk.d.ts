@@ -5,7 +5,7 @@
  * @ntsHeader "hello.h"
  */
 declare module "c:gtk-hello" {
-  import type { Opaque, Ptr, Struct, c_int } from "c:types";
+  import type { Opaque, Ptr, Struct, c_int, c_uint } from "c:types";
 
   // GTK spells these `typedef struct _GtkWidget GtkWidget`, so the tag is the
   // underscored one.
@@ -14,14 +14,16 @@ declare module "c:gtk-hello" {
   export type GtkWindow = Opaque<"_GtkWindow">;
   export type State = Struct<{ clicks: c_int }, "hello_state">;
 
-  // GTK itself.
+  // GTK itself. `flags` is `GApplicationFlags`, an enum whose values are all
+  // non-negative, so C makes it compatible with `unsigned int` -- and the
+  // witness is what checks that this machine's compiler agrees.
+  export function gtk_application_new(id: string, flags: c_uint): GtkApplication;
   export function gtk_application_window_new(app: GtkApplication): GtkWidget;
   export function gtk_button_new(): GtkWidget;
   export function gtk_window_set_child(window: GtkWindow, child: GtkWidget | null): void;
   export function gtk_window_present(window: GtkWindow): void;
 
   // The shim.
-  export function hello_app_new(): GtkApplication;
   export function hello_as_window(widget: GtkWidget): GtkWindow;
   export function hello_on_activate(
     app: GtkApplication,

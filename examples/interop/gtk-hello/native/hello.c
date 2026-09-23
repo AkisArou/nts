@@ -3,10 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-GtkApplication *hello_app_new(void) {
-  return gtk_application_new("dev.nts.GtkHello", G_APPLICATION_NON_UNIQUE);
-}
-
 GtkWindow *hello_as_window(GtkWidget *widget) { return GTK_WINDOW(widget); }
 
 void hello_on_activate(GtkApplication *app,

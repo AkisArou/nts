@@ -15,9 +15,6 @@ struct hello_state {
   int clicks;
 };
 
-// Strings: TS `string` cannot become `const char *`, so the application id
-// is fixed here.
-GtkApplication *hello_app_new(void);
 // Handle casts: `GTK_WINDOW(w)` is a macro and one `Opaque` tag cannot become
 // another.
 GtkWindow *hello_as_window(GtkWidget *widget);

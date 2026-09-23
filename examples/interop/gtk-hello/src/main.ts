@@ -2,11 +2,11 @@
 // button, clicks the button twice through the signal system, and quits. The
 // printed count is what build.sh checks.
 import {
+  gtk_application_new,
   gtk_application_window_new,
   gtk_button_new,
   gtk_window_present,
   gtk_window_set_child,
-  hello_app_new,
   hello_as_window,
   hello_click,
   hello_on_activate,
@@ -19,7 +19,7 @@ import {
   type GtkWidget,
   type State,
 } from "c:gtk-hello";
-import type { Ptr, c_int } from "c:types";
+import type { Ptr, c_int, c_uint } from "c:types";
 import { sizeof } from "c:memory";
 import { free, malloc } from "c:stdlib";
 
@@ -45,7 +45,9 @@ function main(): void {
   const state = malloc<State>(sizeof<State>());
   if (state === null) return;
   state.clicks = 0 as c_int;
-  const app = hello_app_new();
+  // G_APPLICATION_NON_UNIQUE: two runs of this program, the check and its
+  // control, must not find each other on the session bus.
+  const app = gtk_application_new("dev.nts.GtkHello", 0x20 as c_uint);
   hello_on_activate(app, onActivate, state);
   const status = hello_run(app);
   hello_unref(app);
