@@ -104,3 +104,28 @@ export function reentrant(x: number): number { return apply_twice(reenter, x as 
 // double loses the low bit, and every value below it would agree either way.
 function bump(n: c_int64): c_int64 { return (n + 1n) as c_int64; }
 export function wideRoundTrip(x: bigint): bigint { return apply_wide(bump, x as c_int64); }
+
+// **A promise job queued inside a callback waits for the program's own
+// checkpoint.** This library runs no foreign loop, so a callback returning to
+// C is not a turn of anything: it is the middle of `aJobStaysQueued`, which
+// has not returned to its C caller yet. Run-to-completion says the job cannot
+// run here. A program whose loop is GLib's turns this on deliberately
+// (`nts_checkpoint_after_callbacks`), and `gtk-loop` checks that side; this is
+// the guard that the default did not move with it.
+let jobRan = 0;
+
+async function markLater(): Promise<void> {
+  await 0;
+  jobRan = 1;
+}
+
+function queuesAJob(n: c_int): c_int {
+  void markLater();
+  return n;
+}
+
+export function aJobStaysQueued(): number {
+  jobRan = 0;
+  apply_twice(queuesAJob, 1 as c_int);
+  return jobRan;
+}

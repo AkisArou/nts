@@ -33,7 +33,9 @@ pub use emit::{
     RUNTIME_HEADER, RUNTIME_HEADER_NAME, RUNTIME_SOURCE,
     RUNTIME_SOURCE_NAME, UNICODE_HEADER, UNICODE_HEADER_NAME, UNICODE_SOURCE, UNICODE_SOURCE_NAME,
     UV_HOST_HEADER, UV_HOST_HEADER_NAME, UV_HOST_SOURCE, UV_HOST_SOURCE_NAME, Support, c_global, c_identifier, c_member, emit,
+    GLIB_HOST_HEADER, GLIB_HOST_HEADER_NAME, GLIB_HOST_SOURCE, GLIB_HOST_SOURCE_NAME,
     support_files,
     standalone_main,
+    standalone_main_in_glib,
     leaves_the_program_inconsistent,
 };

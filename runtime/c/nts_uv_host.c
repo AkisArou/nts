@@ -409,6 +409,40 @@ int nts_uv_host_run(void) {
   return alive;
 }
 
+int nts_uv_host_backend_fd(void) {
+  nts_uv_require_owner("backend_fd");
+  return uv_backend_fd(nts_uv_loop);
+}
+
+int nts_uv_host_backend_timeout(void) {
+  nts_uv_require_owner("backend_timeout");
+  /* The loop's cached "now" is from its last iteration, and the timeout is
+   * measured from it; without the update a foreign loop that ran for a while
+   * would be told to sleep for time that has already passed. */
+  uv_update_time(nts_uv_loop);
+  /* libuv answers 0 for a loop with nothing alive -- "run me now", which is
+   * what `uv_run` wants to hear, since it would return at once. A foreign loop
+   * hears it as "always ready" and spins, and at GLib's default priority that
+   * starved every idle source: a click posted with `g_idle_add` never ran.
+   * Nothing alive means nothing due; a post from another thread still arrives,
+   * because the async handle wakes the backend descriptor. */
+  if (!uv_loop_alive(nts_uv_loop)) {
+    return -1;
+  }
+  return uv_backend_timeout(nts_uv_loop);
+}
+
+void nts_uv_host_pump(void) {
+  nts_uv_require_owner("pump");
+  if (nts_uv_running) {
+    return;
+  }
+  nts_uv_running = true;
+  (void)nts_uv_run_foreign();
+  (void)uv_run(nts_uv_loop, UV_RUN_NOWAIT);
+  nts_uv_running = false;
+}
+
 /* Every timer this host started and the program never cancelled.
  *
  * Over the slot table rather than `uv_walk`, which was the first version and

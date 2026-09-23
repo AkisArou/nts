@@ -55,6 +55,32 @@ void nts_uv_host_install(uv_loop_t *loop);
  * including calls to nts_promise_join, so recursive entry is refused. */
 int nts_uv_host_run(void);
 
+/* Driving this host's loop from someone else's.
+ *
+ * A GUI toolkit owns the thread's loop -- GLib's `GMainContext`, a
+ * `CFRunLoop` -- and runs it from inside the program: `g_application_run`
+ * blocks inside module evaluation until the application quits. libuv then
+ * never runs, and neither does any timer, promise job posted as a task, or
+ * I/O completion the program started.
+ *
+ * So the foreign loop drives this one rather than replacing it: it watches the
+ * backend descriptor for readiness, sleeps no longer than the backend timeout,
+ * and pumps when either comes due. Nothing about posting changes; the host is
+ * the same host, run from a different place. The adapters are thin, one per
+ * foreign loop (`nts_glib_host.c`, and a CFRunLoop one), and all three calls
+ * are for them.
+ *
+ * `backend_fd` is libuv's own polling descriptor: epoll on Linux, kqueue on
+ * Darwin. Readable means the loop has something to do. */
+int nts_uv_host_backend_fd(void);
+/* Milliseconds until the loop next has something to do: -1 for nothing
+ * scheduled, 0 while a task is queued (the idle handle is started). */
+int nts_uv_host_backend_timeout(void);
+/* Run whatever is due, without blocking. Does nothing when called from
+ * inside the loop -- a task that iterated the foreign loop, as a modal dialog
+ * does -- since libuv's loop is not re-entrant. */
+void nts_uv_host_pump(void);
+
 /* Close every handle this host owns and drop whatever is still queued.
  *
  * Dropping matters: a task owns a reference to its state, and the contract is

@@ -1995,6 +1995,30 @@ typedef struct NtsLanding {
    The throw ends the process instead, naming the boundary. */
 void nts_callback_enter(void);
 void nts_callback_leave(void);
+/* Make a callback that returns to a foreign loop a checkpoint.
+ *
+ * For a program whose loop is someone else's -- GTK's `g_application_run`,
+ * AppKit's `[NSApp run]` -- called from inside module evaluation. Every event
+ * handler then runs from that loop's dispatch, and the program's microtasks
+ * and ticks would wait for the next libuv task, which may never come. With
+ * this on, `nts_callback_leave` checkpoints when the outermost callback
+ * returns and no compiled task is running.
+ *
+ * **`depth` is what decides it, and it is not the TypeScript stack.** It counts
+ * compiled tasks and synchronous re-entries -- `nts_enter`/`nts_leave` -- and
+ * module evaluation runs at 0. So a handler dispatched by the loop that
+ * `g_application_run` turns checkpoints on return, with module evaluation's
+ * frames still below it; that is deliberate, and it is what GJS does with
+ * `app.run()`. A handler entered synchronously from a task -- a
+ * `g_signal_emit` inside a timer -- runs at `depth` 1 and does not, so the
+ * task still runs to completion. `in_callback`, beside it, counts bridges on
+ * the stack and is a different question.
+ *
+ * **Set once, before `module__init`, and never again.** The ordering of every
+ * microtask in the program depends on it; a flag that changed mid-run would
+ * make that ordering depend on when. A program with no foreign loop leaves it
+ * off, and its callbacks behave exactly as they did. */
+void nts_checkpoint_after_callbacks(bool on);
 
 void nts_landing_push(NtsLanding *landing);
 /* Remove `landing` if it is the innermost. Idempotent, and it names the frame

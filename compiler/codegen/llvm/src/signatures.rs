@@ -120,6 +120,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_check_fn", returns: "i32", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_check_or_grow_fn", returns: "i32", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_checkpoint", returns: "void", params: &[], attributes: &[] },
+    Signature { name: "nts_checkpoint_after_callbacks", returns: "void", params: &["i1 zeroext"], attributes: &[] },
     Signature { name: "nts_clear_timeout", returns: "void", params: &["double"], attributes: &[] },
     Signature { name: "nts_closure_lend", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_closure_notify", returns: "ptr", params: &[], attributes: &[] },

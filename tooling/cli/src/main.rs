@@ -2345,6 +2345,7 @@ fn write_standalone(
     linking: bool,
     witness: bool,
     declined: &[String],
+    glib: bool,
 ) -> Result<()> {
     // A program that is only declarations has nothing to evaluate, and calling
     // a function that was never emitted is a link error.
@@ -2376,9 +2377,23 @@ fn write_standalone(
         out.join(nts_codegen_c::UV_HOST_SOURCE_NAME),
         nts_codegen_c::UV_HOST_SOURCE,
     )?;
+    if glib {
+        std::fs::write(
+            out.join(nts_codegen_c::GLIB_HOST_HEADER_NAME),
+            nts_codegen_c::GLIB_HOST_HEADER,
+        )?;
+        std::fs::write(
+            out.join(nts_codegen_c::GLIB_HOST_SOURCE_NAME),
+            nts_codegen_c::GLIB_HOST_SOURCE,
+        )?;
+    }
     let main_path = out.join("main.c");
-    std::fs::write(&main_path, nts_codegen_c::standalone_main(initializes))
-        .with_context(|| format!("writing {main_path}"))?;
+    let main = if glib {
+        nts_codegen_c::standalone_main_in_glib(initializes)
+    } else {
+        nts_codegen_c::standalone_main(initializes)
+    };
+    std::fs::write(&main_path, main).with_context(|| format!("writing {main_path}"))?;
     // Named here for the reason the library path names it: it is the only
     // output whose value depends on a consumer choosing to include it, and an
     // artifact nobody is told about reads, later, as one that was never
@@ -2390,10 +2405,19 @@ fn write_standalone(
     // binding and needs no witness. That difference looked like `--main`
     // suppressing it until a program that calls one at top level said otherwise.
     println!(
-        "wrote program.c, main.c, {}, {}, {}{} to {out}",
+        "wrote program.c, main.c, {}, {}, {}{}{} to {out}",
         sources.join(", "),
         nts_codegen_c::UV_HOST_HEADER_NAME,
         nts_codegen_c::UV_HOST_SOURCE_NAME,
+        if glib {
+            format!(
+                ", {}, {}",
+                nts_codegen_c::GLIB_HOST_HEADER_NAME,
+                nts_codegen_c::GLIB_HOST_SOURCE_NAME
+            )
+        } else {
+            String::new()
+        },
         if witness { format!(", {}", nts_codegen_c::NATIVE_WITNESS_NAME) } else { String::new() },
     );
     // Every translation unit the program needs, which is not a fixed list: a
@@ -2408,8 +2432,13 @@ fn write_standalone(
     // 81 KB to 16 KB, because most of the runtime is unreachable from any one
     // program too.
     if !linking {
+        let (glib_source, glib_flags) = if glib {
+            (format!(" {}", nts_codegen_c::GLIB_HOST_SOURCE_NAME), " $(pkg-config --cflags --libs glib-2.0)")
+        } else {
+            (String::new(), "")
+        };
         println!(
-        "  cc -std=c11 -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c program.c {} {} -luv -lm -o program",
+        "  cc -std=c11 -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c program.c {} {}{glib_source} -luv -lm{glib_flags} -o program",
         sources.join(" "),
         nts_codegen_c::UV_HOST_SOURCE_NAME
         );
@@ -2530,7 +2559,7 @@ fn build(rest: &[String]) -> Result<()> {
             bail!("product `{name}` names no targets, so there is nothing to build it for")
         }
         let emission =
-            Emission { shape: Shape::of(&product.kind), product: Some((name, product)), linking: true };
+            Emission { shape: Shape::of(&product.kind), product: Some((name, product)), linking: true, glib: false };
         for target in targets_for(name, product, only_os.as_deref())? {
             // **Before anything is written.** A kind whose packaging does not
             // exist would otherwise emit, compile, and produce a file of the
@@ -3074,7 +3103,8 @@ fn build_c(
     cache_dir: Option<&Utf8Path>,
     needs: &nts_build::dependencies::Resolution,
 ) -> Result<usize> {
-    let wrote = emit_c(tsconfig, Some(out), emission)?;
+    let glib = needs.libs.iter().any(|flag| flag == "-lglib-2.0");
+    let wrote = emit_c(tsconfig, Some(out), Emission { glib, ..emission })?;
     let artifact = link_c(name, product, out, &wrote, native, cache_dir, target, needs)?;
     println!("  {artifact}");
     // Named here as well as on stderr, because a build whose last line is
@@ -5599,12 +5629,25 @@ struct Emission<'a> {
     /// prints a command it has already run, and a reader who pastes it gets a
     /// second, differently-flagged copy of the artifact they already have.
     linking: bool,
+    /// Whether an executable's loop is `GLib`'s rather than its own.
+    ///
+    /// A GTK program runs `g_application_run` from inside module evaluation,
+    /// and that loop -- not libuv's -- is what turns until it quits. Decided
+    /// from the link rather than declared: a program that links `glib-2.0`
+    /// has `GLib`'s loop available to it, and every GTK program does. Linking it
+    /// and never running it costs one idle `GSource`.
+    glib: bool,
 }
 
 impl Emission<'_> {
     /// A bare `emit-*`: the flags are all it has to go on.
     fn from_flags() -> Self {
-        Self { shape: Shape::from_flags(), product: None, linking: false }
+        Self {
+            shape: Shape::from_flags(),
+            product: None,
+            linking: false,
+            glib: std::env::args().any(|arg| arg == "--glib"),
+        }
     }
 }
 
@@ -6211,11 +6254,13 @@ fn write_c_output(
             emission.linking,
             !emitted.witness.is_empty(),
             &emitted.refused,
+            emission.glib,
         )?;
         return Ok(Wrote {
             sources: std::iter::once("program.c".to_owned())
                 .chain(extra.iter().map(|name| (*name).to_owned()))
                 .chain(["main.c".to_owned(), nts_codegen_c::UV_HOST_SOURCE_NAME.to_owned()])
+                .chain(emission.glib.then(|| nts_codegen_c::GLIB_HOST_SOURCE_NAME.to_owned()))
                 .collect(),
             published,
             published_without_a_symbol,

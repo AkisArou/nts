@@ -163,6 +163,9 @@ struct NtsEnvironment {
      allocation, an iterator half-advanced. So while this is non-zero the throw
      is not delivered outward at all. See `nts_uncaught`. */
   size_t in_callback;
+  /* Whether a callback returning to a foreign loop is a checkpoint. Set once,
+     before module evaluation; see `nts_checkpoint_after_callbacks`. */
+  bool checkpoint_after_callbacks;
   /* -- one cache line: the reference-counting and allocation hot path -- */
   size_t retains;
   size_t releases;
@@ -1330,7 +1333,23 @@ void nts_callback_enter(void) {
   }
   nts_environment_current()->in_callback++;
 }
-void nts_callback_leave(void) { nts_environment_current()->in_callback--; }
+void nts_callback_leave(void) {
+  NtsEnvironment *environment = nts_environment_current();
+  environment->in_callback--;
+  /* A foreign loop handing control back: the outermost callback has returned
+   * and no compiled task is running (`depth` 0), so this is the loop's turn
+   * ending, and node checkpoints at every one of those. Entered from a task
+   * instead -- a `g_signal_emit` inside a timer -- `depth` is not 0, and the
+   * task's own `nts_leave` is the checkpoint, after it runs to completion. */
+  if (environment->checkpoint_after_callbacks &&
+      environment->in_callback == 0 && environment->depth == 0) {
+    nts_checkpoint();
+  }
+}
+
+void nts_checkpoint_after_callbacks(bool on) {
+  nts_environment_current()->checkpoint_after_callbacks = on;
+}
 
 _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail) {
   /* An embedder with somewhere to put it gets it, and the process survives.

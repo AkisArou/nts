@@ -3715,3 +3715,52 @@ fn the_witness_sees_a_header_that_only_a_dependency_claim_names() {
     );
     assert!(output.status.success(), "{stderr}");
 }
+
+/// A program that links `GLib` gets `GLib`'s loop turning libuv's, and one that
+/// does not is left exactly as it was.
+///
+/// Decided from the link: a GTK program runs `g_application_run` from its own
+/// module code, and without the source libuv never gets a turn while it does.
+/// The arm that makes this a check is the second: the same program without
+/// the dependency claim must not attach anything, and must not turn on the
+/// checkpoint after callbacks, which would move when promise jobs run for a
+/// program that has no foreign loop at all.
+#[test]
+fn a_program_that_links_glib_is_driven_by_glib() {
+    let glib = Command::new("pkg-config").args(["--exists", "glib-2.0"]).status();
+    if !available() || !glib.is_ok_and(|status| status.success()) {
+        skip("node, the tsgo frontend, clang, nm and glib-2.0's pkg-config entry");
+        return;
+    }
+    let with = |name: &str, dependencies: &str| {
+        let project = fixture(
+            name,
+            &format!(
+                "import {{ defineConfig, app }} from \"@nts/config\";\nexport default defineConfig({{\n  products: {{ tool: app.cli({{ entry: \"./src/main.ts\", backend: \"c\" }}) }},\n{dependencies}}});\n"
+            ),
+        );
+        let run = build(&project, &[]);
+        assert!(run.ok, "{}{}", run.stdout, run.stderr);
+        let out = project.join(".nts/build/tool/linux-gnu-x86_64");
+        let main = std::fs::read_to_string(out.join("main.c")).expect("main.c");
+        (main, out.join("nts_glib_host.c").exists())
+    };
+    let (main, source) = with(
+        "build-glib-driven",
+        "  dependencies: { \"linux-gnu\": { from: \"pkg-config\", packages: [\"glib-2.0\"] } },\n",
+    );
+    assert!(source, "the GLib adapter was not written beside the program");
+    assert!(main.contains("nts_glib_host_attach();"), "main.c does not attach to GLib:\n{main}");
+    assert!(
+        main.contains("nts_checkpoint_after_callbacks(true);"),
+        "main.c does not make a callback's return a checkpoint:\n{main}"
+    );
+    let attach = main.find("nts_glib_host_attach").unwrap_or(usize::MAX);
+    let evaluate = main.find("module__init();").unwrap_or(0);
+    assert!(attach < evaluate, "attached after module evaluation began:\n{main}");
+
+    let (main, source) = with("build-glib-absent", "");
+    assert!(!source, "a program that does not link GLib got its adapter");
+    assert!(!main.contains("glib"), "a program that does not link GLib mentions it:\n{main}");
+    assert!(!main.contains("nts_checkpoint_after_callbacks"), "{main}");
+}

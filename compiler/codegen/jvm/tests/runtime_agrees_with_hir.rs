@@ -200,4 +200,8 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// `nts_cstring_release` and the `nts_closure_*` three exist to hand a string
 /// or a closure to a C function, and this lane refuses native calls outright,
 /// so it has no call that could reach them. Deliberate, and not the queue.
-const REFUSED_FLOOR: usize = 75;
+///
+/// 76 for `nts_checkpoint_after_callbacks`, which a C `main` calls once for a
+/// program whose loop is `GLib`'s or `AppKit`'s. The JVM's loop is its own, so there
+/// is nothing here to embed.
+const REFUSED_FLOOR: usize = 76;

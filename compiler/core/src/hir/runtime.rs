@@ -88,6 +88,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_callback_task", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Bool)], None),
     ("nts_check", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Int { bits: 32, signed: false })),
     ("nts_check_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Int { bits: 32, signed: false })),
+    ("nts_checkpoint_after_callbacks", &[Some(HirType::Bool)], None),
     ("nts_clear_timeout", &[Some(HirType::Float { bits: 64 })], None),
     ("nts_closure_lend", &[None], None),
     ("nts_closure_notify", &[], None),

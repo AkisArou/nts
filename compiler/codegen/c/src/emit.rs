@@ -59,6 +59,10 @@ pub const UV_HOST_HEADER_NAME: &str = "nts_uv_host.h";
 pub const UV_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_uv_host.h");
 pub const UV_HOST_SOURCE_NAME: &str = "nts_uv_host.c";
 pub const UV_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_uv_host.c");
+pub const GLIB_HOST_HEADER_NAME: &str = "nts_glib_host.h";
+pub const GLIB_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_glib_host.h");
+pub const GLIB_HOST_SOURCE_NAME: &str = "nts_glib_host.c";
+pub const GLIB_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_glib_host.c");
 
 /// The vendored half of the runtime, shipped as a `quickjs/` subdirectory.
 ///
@@ -176,6 +180,34 @@ pub fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
 /// was never emitted is a link error.
 #[must_use]
 pub fn standalone_main(initializes: bool) -> String {
+    main_with(initializes, false)
+}
+
+/// [`standalone_main`] for a program that runs `GLib`'s main loop itself --
+/// every GTK application, whose `g_application_run` blocks inside module
+/// evaluation until it quits.
+///
+/// Two lines differ. The libuv host is attached to `GLib`'s default context, so
+/// that loop turns this one while it runs (`nts_glib_host.h`); and a callback
+/// returning to it is made a checkpoint, so a promise settled in a signal
+/// handler runs its reactions before the next event rather than after the
+/// window closes (`nts_checkpoint_after_callbacks`). Both before module
+/// evaluation, because the flag must never change after it starts.
+#[must_use]
+pub fn standalone_main_in_glib(initializes: bool) -> String {
+    main_with(initializes, true)
+}
+
+fn main_with(initializes: bool, glib: bool) -> String {
+    let (include, attach, detach) = if glib {
+        (
+            "#include \"nts_glib_host.h\"\n",
+            "    nts_glib_host_attach();\n    nts_checkpoint_after_callbacks(true);\n",
+            "    nts_glib_host_detach();\n",
+        )
+    } else {
+        ("", "", "")
+    };
     let declare = if initializes {
         "/* Emitted only when the program has top-level code to evaluate. */\nvoid module__init(void);\n\n"
     } else {
@@ -196,14 +228,17 @@ pub fn standalone_main(initializes: bool) -> String {
          \n\
          #include \"nts_runtime.h\"\n\
          #include \"nts_uv_host.h\"\n\
+         {include}\
          \n\
          {declare}\
          int main(void) {{\n\
          \x20   nts_uv_host_install(uv_default_loop());\n\
+         {attach}\
          {evaluate}\
          \x20   /* Until nothing is runnable, no timer is pending, and no\n\
          \x20    * foreign completion is in flight. */\n\
          \x20   nts_uv_host_run();\n\
+         {detach}\
          \x20   /* Closes every handle and drops whatever is still queued: a\n\
          \x20    * task owns a reference, and the contract is that whoever\n\
          \x20    * holds it either runs it or gives it back. */\n\

@@ -30,6 +30,7 @@
     "native-uname/nts.config.ts",
     "ts-from-c/nts.config.ts",
     "gtk-hello/nts.config.ts",
+    "gtk-loop/nts.config.ts",
     "macos-hello/nts.config.ts",
     "native-string/nts.config.ts",
     "native-closure/nts.config.ts",
