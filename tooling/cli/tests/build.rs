@@ -3765,6 +3765,34 @@ fn a_program_that_links_glib_is_driven_by_glib() {
     assert!(!main.contains("nts_checkpoint_after_callbacks"), "{main}");
 }
 
+/// The Demo library's header, for [`gir_library`].
+const DEMO_HEADER: &str = "#ifndef DEMO_H\n#define DEMO_H\n\
+         typedef struct demo_thing_impl DemoThing;\n\
+         typedef void (*DemoTick)(DemoThing *thing, void *user_data);\n\
+         typedef enum { DEMO_FLAG_A = 1, DEMO_FLAG_HIGH = (int)(1u << 31) } DemoFlags;\n\
+         DemoThing *demo_thing_new(const char *name);\n\
+         int demo_thing_count(const DemoThing *thing);\n\
+         int demo_label_is_null(const char *label);\n\
+         unsigned int demo_on_tick(DemoThing *thing, DemoTick tick, void *user_data, void (*notify)(void *));\n\
+         void demo_flags(DemoFlags flags);\n\
+         long demo_wrong(int x);\n\
+         void demo_thing_size(const DemoThing *thing, int *width, int *height);\n\
+         void demo_thing_name(const DemoThing *thing, char **name);\n\
+         #endif\n";
+
+/// The C behind [`DEMO_HEADER`].
+const DEMO_SOURCE: &str = "#include <demo.h>\n#include <stdlib.h>\n#include <string.h>\n\
+         struct demo_thing_impl { int count; };\n\
+         DemoThing *demo_thing_new(const char *name) { DemoThing *t = malloc(sizeof *t); t->count = (int)strlen(name); return t; }\n\
+         int demo_thing_count(const DemoThing *thing) { return thing->count; }\n\
+         int demo_label_is_null(const char *label) { return label == NULL; }\n\
+         unsigned int demo_on_tick(DemoThing *thing, DemoTick tick, void *user_data, void (*notify)(void *)) { tick(thing, user_data); notify(user_data); return 1; }\n\
+         void demo_flags(DemoFlags flags) { (void)flags; }\n\
+         long demo_wrong(int x) { return x; }\n\
+         void demo_thing_size(const DemoThing *thing, int *width, int *height) { *width = thing->count; if (height) *height = 2 * thing->count; }\n\
+         static char demo_name[] = \"thing\";\n\
+         void demo_thing_name(const DemoThing *thing, char **name) { (void)thing; *name = demo_name; }\n";
+
 /// A small library with the shapes `bind-gir` decides on, laid out the way a
 /// real one is: a header, the C behind it, a `.pc` whose `Cflags` reach the
 /// header, and a GIR describing it. Written to `root`; the GIR goes in
@@ -3779,33 +3807,8 @@ fn gir_library(root: &Path, flag_signed: bool) {
     for dir in [&include, &root.join("gir"), &root.join("pc"), &root.join("native")] {
         std::fs::create_dir_all(dir).expect("the fixture's directories");
     }
-    std::fs::write(
-        include.join("demo.h"),
-        "#ifndef DEMO_H\n#define DEMO_H\n\
-         typedef struct demo_thing_impl DemoThing;\n\
-         typedef void (*DemoTick)(DemoThing *thing, void *user_data);\n\
-         typedef enum { DEMO_FLAG_A = 1, DEMO_FLAG_HIGH = (int)(1u << 31) } DemoFlags;\n\
-         DemoThing *demo_thing_new(const char *name);\n\
-         int demo_thing_count(const DemoThing *thing);\n\
-         int demo_label_is_null(const char *label);\n\
-         unsigned int demo_on_tick(DemoThing *thing, DemoTick tick, void *user_data, void (*notify)(void *));\n\
-         void demo_flags(DemoFlags flags);\n\
-         long demo_wrong(int x);\n\
-         #endif\n",
-    )
-    .expect("the header");
-    std::fs::write(
-        root.join("native/demo.c"),
-        "#include <demo.h>\n#include <stdlib.h>\n#include <string.h>\n\
-         struct demo_thing_impl { int count; };\n\
-         DemoThing *demo_thing_new(const char *name) { DemoThing *t = malloc(sizeof *t); t->count = (int)strlen(name); return t; }\n\
-         int demo_thing_count(const DemoThing *thing) { return thing->count; }\n\
-         int demo_label_is_null(const char *label) { return label == NULL; }\n\
-         unsigned int demo_on_tick(DemoThing *thing, DemoTick tick, void *user_data, void (*notify)(void *)) { tick(thing, user_data); notify(user_data); return 1; }\n\
-         void demo_flags(DemoFlags flags) { (void)flags; }\n\
-         long demo_wrong(int x) { return x; }\n",
-    )
-    .expect("the library");
+    std::fs::write(include.join("demo.h"), DEMO_HEADER).expect("the header");
+    std::fs::write(root.join("native/demo.c"), DEMO_SOURCE).expect("the library");
     std::fs::write(
         root.join("pc/demo.pc"),
         format!("Name: demo\nDescription: a fixture\nVersion: 1.0\nCflags: -I{}\nLibs:\n", include.display()),
@@ -3840,6 +3843,21 @@ fn gir_library(root: &Path, flag_signed: bool) {
           <parameter name="tick" scope="notified" closure="1" destroy="2"><type name="Tick" c:type="DemoTick"/></parameter>
           <parameter name="user_data" nullable="1"><type name="gpointer" c:type="void*"/></parameter>
           <parameter name="notify" scope="async"><type name="GLib.DestroyNotify" c:type="GDestroyNotify"/></parameter>
+        </parameters>
+      </method>
+      <method name="size" c:identifier="demo_thing_size">
+        <return-value><type name="none" c:type="void"/></return-value>
+        <parameters>
+          <instance-parameter name="thing"><type name="Thing" c:type="const DemoThing*"/></instance-parameter>
+          <parameter name="width" direction="out" caller-allocates="0" transfer-ownership="full"><type name="gint" c:type="int*"/></parameter>
+          <parameter name="height" direction="out" caller-allocates="0" transfer-ownership="full" optional="1"><type name="gint" c:type="int*"/></parameter>
+        </parameters>
+      </method>
+      <method name="name" c:identifier="demo_thing_name">
+        <return-value><type name="none" c:type="void"/></return-value>
+        <parameters>
+          <instance-parameter name="thing"><type name="Thing" c:type="const DemoThing*"/></instance-parameter>
+          <parameter name="name" direction="out" caller-allocates="0" transfer-ownership="full"><type name="utf8" c:type="char**"/></parameter>
         </parameters>
       </method>
     </record>
@@ -3912,6 +3930,10 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         "export function demo_on_tick(thing: DemoThing, tick: Closure<(thing: DemoThing) => void>): c_uint;",
         "export function demo_label_is_null(label: string | null): c_int;",
         "export function demo_flags(flags: c_int): void;",
+        // Out parameters: a slot each, the optional one nullable, and both
+        // stack storage the callee may not keep.
+        "   * @ntsNoEscape width\n   * @ntsNoEscape height\n   */\n  \
+         export function demo_thing_size(thing: Const<DemoThing>, width: Ptr<c_int>, height: Ptr<c_int> | null): void;",
     ] {
         assert!(binding.contains(expected), "missing `{expected}` from:\n{binding}");
     }
@@ -3920,6 +3942,10 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
     assert!(
         refused.lines().any(|line| line.starts_with("demo_wrong\t") && line.contains("the header disagrees")),
         "demo_wrong was not reported as contradicted:\n{refused}"
+    );
+    assert!(
+        refused.lines().any(|line| line == "demo_thing_name\ta string out parameter"),
+        "a string out parameter was not refused as one:\n{refused}"
     );
 }
 

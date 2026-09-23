@@ -122,7 +122,7 @@ declarations. Landed:
 | `892eba61` | Strings C returns, copied, and freed by `@ntsFree` (`g_free` for transfer-full). |
 
 Measured on this machine's GTK 4.22:
-**7788 functions bound**, 418 of them typed signal connects.
+**8452 functions bound**, 418 of them typed signal connects.
 
 **Typed signals.** A signal has no C prototype, so the binder emits one typed
 view of `g_signal_connect_data` per class and signal:
@@ -151,13 +151,30 @@ connects `activate` and `clicked` through the generated views and reads its
 flags from the generated `const enum`s. What remains in its shim is
 `g_signal_emit_by_name` (varargs), `g_application_run` (an array), and output.
 
+**Out parameters, and `GError **`.** An out parameter is a slot on the
+caller's stack that C writes during the call: `Ptr<c_int>` for `gint *`,
+`Ptr<GtkWidget | null>` for `GtkWidget **`, `| null` where GIR lets the
+caller skip it, and `@ntsNoEscape` on each, which is what lets the storage be
+a `local`. A function that `throws` takes a trailing
+`error: Ptr<GError | null> | null`, the same shape. This needed no compiler
+change beyond `Ptr` not distributing over `| null` (`eeb3a33c`), and it
+emits exactly the C a person writes: `GError *error[1]` on the stack, passed as
+`GError **`. `gtk-gir` reads two dates and a key file through them, with the
+error slot null on success and set on a missing key.
+
+This is the C layer. Turning the slot into a thrown `Error`, and out
+parameters into return values, is the idiomatic layer's job (M3), as
+TypeScript over these declarations. Refusals that `GError` alone stood
+between: 453, now bound.
+
 **Still refused, ranked by count:**
 
-- 648: report errors through `GError **`, which should become a thrown `Error`.
-- 585: out parameters.
-- 291: arrays.
-- 166: async-scope callbacks, which should become Promises.
-- 145: `gpointer` results and `gconstpointer` parameters.
+- 643: GIR marks the function not introspectable.
+- 460: arrays.
+- 300: out parameters the caller allocates (a struct the callee fills in).
+- 182: async-scope callbacks, which should become Promises.
+- 153: `gpointer` results and `gconstpointer` parameters.
+- 50: string out parameters.
 
 The binder's `*.refused.txt` is the queue.
 

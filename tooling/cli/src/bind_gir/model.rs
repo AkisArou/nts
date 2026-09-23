@@ -161,6 +161,12 @@ pub(crate) struct Param {
     pub(crate) direction: Direction,
     pub(crate) transfer: Transfer,
     pub(crate) nullable: bool,
+    /// An out parameter the caller may pass `NULL` for, to say it does not
+    /// want the value.
+    pub(crate) optional: bool,
+    /// An out parameter whose storage the caller provides whole -- a struct
+    /// the callee fills in -- rather than a slot the callee writes a value to.
+    pub(crate) caller_allocates: bool,
     pub(crate) scope: Option<Scope>,
     /// Index of the `user_data` parameter this callback is handed back, among
     /// the non-instance parameters -- or, on a callback type's own parameter,

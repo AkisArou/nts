@@ -1872,7 +1872,7 @@ int main(int argc, char **argv) {
     }
 }
 
-/// An out parameter: stack storage C writes through, which is how GLib
+/// An out parameter: stack storage C writes through, which is how `GLib`
 /// returns a second value and how it reports an error (`GError **error`).
 ///
 /// `local<GError | null>()` is one slot of a nullable handle, and its address
@@ -1910,7 +1910,7 @@ export function attempt(ok: number): number {
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-    std::fs::write(dir.join("native.c"), r#"
+    std::fs::write(dir.join("native.c"), r"
 struct _GError { int code; };
 static struct _GError failure = { 42 };
 int might(int ok, int *out, struct _GError **error) {
@@ -1918,7 +1918,7 @@ int might(int ok, int *out, struct _GError **error) {
     *error = &failure;
     return 0;
 }
-"#).unwrap();
+").unwrap();
     std::fs::write(dir.join("caller.c"), "#include \"program.h\"\nint main(void) { return attempt(1) == 107.0 && attempt(0) == -1.0 ? 0 : 1; }\n").unwrap();
     for file in ["native.c", "caller.c", "nts_runtime.c"] {
         clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);

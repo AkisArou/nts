@@ -62,6 +62,9 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
         if let Some(free) = &function.free {
             notes.push(format!("@ntsFree {free}"));
         }
+        for name in &function.no_escape {
+            notes.push(format!("@ntsNoEscape {name}"));
+        }
         if function.name != function.symbol {
             notes.push(format!("@ntsSymbol {}", function.symbol));
         }

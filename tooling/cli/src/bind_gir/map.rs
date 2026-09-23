@@ -72,6 +72,10 @@ pub(crate) struct Function {
     pub(crate) deprecated: bool,
     /// `@ntsFree`: the function releasing a returned string the caller owns.
     pub(crate) free: Option<String>,
+    /// `@ntsNoEscape`: the parameters the callee writes through during the
+    /// call and keeps nothing of -- out parameters, which is what lets their
+    /// storage be a `local` on the caller's stack.
+    pub(crate) no_escape: Vec<String>,
     /// GIR's own name for the result where the C type is less specific --
     /// `gtk_button_new` returns a `GtkWidget *` that GIR says is a Button.
     pub(crate) returns: Option<String>,
@@ -103,6 +107,8 @@ pub(crate) enum Reason {
     OwnedString,
     WritableBuffer,
     OutParameter,
+    StringOut,
+    CallerAllocates,
     Array,
     Varargs,
     Gpointer,
@@ -127,7 +133,9 @@ impl fmt::Display for Reason {
             Self::Throws => write!(f, "reports errors through a `GError **`"),
             Self::OwnedString => write!(f, "a string parameter the callee takes ownership of"),
             Self::WritableBuffer => write!(f, "a `char *` buffer the callee may write into, which GIR calls a string"),
-            Self::OutParameter => write!(f, "an out parameter"),
+            Self::OutParameter => write!(f, "an out parameter of a type written through no slot here"),
+            Self::StringOut => write!(f, "a string out parameter"),
+            Self::CallerAllocates => write!(f, "an out parameter whose storage the caller allocates"),
             Self::Array => write!(f, "an array"),
             Self::Varargs => write!(f, "variadic"),
             Self::Gpointer => write!(f, "a `gpointer`"),
@@ -354,6 +362,7 @@ impl<'a> Mapper<'a> {
                     c_parameters: Vec::new(),
                     deprecated: false,
                     free: None,
+                    no_escape: Vec::new(),
                     returns: None,
                 });
                 self.binding.brands.insert("c_size_t");
@@ -441,9 +450,6 @@ impl<'a> Mapper<'a> {
         }
         let symbol = callable.c_identifier.clone().ok_or(Reason::NoSymbol)?;
         let signature = &callable.signature;
-        if signature.throws {
-            return Err(Reason::Throws);
-        }
         let mut parameters = Vec::new();
         let mut c_parameters = Vec::new();
         if let Some(instance) = &signature.instance {
@@ -454,8 +460,16 @@ impl<'a> Mapper<'a> {
         // The parameters a callback's context and destroy function occupy,
         // which the declaration does not spell and the caller does not pass.
         let mut hidden = BTreeSet::new();
+        let mut no_escape = Vec::new();
         for (at, param) in signature.parameters.iter().enumerate() {
             if hidden.contains(&at) {
+                continue;
+            }
+            if param.direction != Direction::In {
+                let mapped = self.out(param)?;
+                c_parameters.push(mapped.c.clone());
+                no_escape.push(identifier(&param.name));
+                parameters.push((identifier(&param.name), mapped));
                 continue;
             }
             if let Some((mapped, slots)) = self.callback_parameter(param, at, &signature.parameters)? {
@@ -469,13 +483,34 @@ impl<'a> Mapper<'a> {
             parameters.push((identifier(&param.name), mapped));
         }
         let (result, free) = self.result(&signature.result)?;
+        // `GError **error`, which GIR leaves out of the parameter list: the
+        // same out parameter as any other, a slot for a nullable handle.
+        if signature.throws {
+            if parameters.iter().any(|(name, _)| name == "error") {
+                return Err(Reason::Throws);
+            }
+            let error = self.error_parameter().ok_or(Reason::Throws)?;
+            c_parameters.push(error.c.clone());
+            no_escape.push("error".to_owned());
+            parameters.push(("error".to_owned(), error));
+        }
         let returns = (callable.kind == CallableKind::Constructor)
             .then(|| match &signature.result.ty {
                 TypeRef::Named { name, .. } => Some(self.qualify(name)),
                 _ => None,
             })
             .flatten();
-        Ok(Function { name: symbol.clone(), symbol, parameters, result, c_parameters, deprecated: callable.deprecated, free, returns })
+        Ok(Function {
+            name: symbol.clone(),
+            symbol,
+            parameters,
+            result,
+            c_parameters,
+            deprecated: callable.deprecated,
+            free,
+            no_escape,
+            returns,
+        })
     }
 
     /// The result, and for a string the caller owns, what frees it.
@@ -501,6 +536,63 @@ impl<'a> Mapper<'a> {
             TypeRef::Missing => Ok((Mapped { ts: "void".to_owned(), c: Type::Void }, None)),
             _ => self.typed(result).map(|mapped| (mapped, None)),
         }
+    }
+
+    /// An out or inout parameter: a pointer to the slot the callee writes,
+    /// which the caller makes with `local<T>()` and reads after the call --
+    /// `Ptr<c_int>` for `gint *`, `Ptr<GtkWidget | null>` for `GtkWidget **`.
+    ///
+    /// A handle's slot is nullable whatever GIR says of the value: it holds
+    /// what the caller put there until the callee writes it, and `local`
+    /// zeroes it. `optional` is whether the caller may pass no slot at all.
+    fn out(&mut self, param: &Param) -> Result<Mapped, Reason> {
+        if param.caller_allocates {
+            return Err(Reason::CallerAllocates);
+        }
+        let TypeRef::Named { name, c_type } = &param.ty else {
+            return Err(if matches!(param.ty, TypeRef::Array) { Reason::Array } else { Reason::OutParameter });
+        };
+        if name == "utf8" || name == "filename" {
+            return Err(Reason::StringOut);
+        }
+        if name == "gpointer" || name == "gconstpointer" {
+            return Err(Reason::Gpointer);
+        }
+        // The value's own C type, one `*` fewer than the parameter's.
+        let Some(value_type) = c_type.as_deref().and_then(|c| c.strip_suffix('*')) else {
+            return Err(Reason::OutParameter);
+        };
+        let value = Param {
+            ty: TypeRef::Named { name: name.clone(), c_type: Some(value_type.trim_end().to_owned()) },
+            direction: Direction::In,
+            nullable: false,
+            ..param.clone()
+        };
+        let mapped = self.typed(&value)?;
+        let (slot, pointee) = match mapped.c {
+            Type::Scalar(scalar) => (mapped.ts, Pointee::Scalar(scalar)),
+            Type::Pointer(pointee) => (format!("{} | null", mapped.ts), Pointee::Pointer(Box::new(pointee))),
+            _ => return Err(Reason::OutParameter),
+        };
+        self.binding.brands.insert("Ptr");
+        let ts = format!("Ptr<{slot}>");
+        let ts = if param.optional { format!("{ts} | null") } else { ts };
+        Ok(Mapped { ts, c: Type::Pointer(pointee) })
+    }
+
+    /// `error: Ptr<GError | null> | null` -- C's `GError **error`, which the
+    /// caller may pass as `NULL` to ignore the error. `None` where `GError`
+    /// is not a type these headers tag.
+    fn error_parameter(&mut self) -> Option<Mapped> {
+        let namespace = self.c_types.get("GError").copied()?;
+        let tag = self.facts.tags.get("GError").cloned()?;
+        let local = self.name_in(namespace, "GError");
+        self.binding.brands.insert("Ptr");
+        let handle = Pointee::Opaque(Handle { tag, ancestors: Vec::new() });
+        Some(Mapped {
+            ts: format!("Ptr<{local} | null> | null"),
+            c: Type::Pointer(Pointee::Pointer(Box::new(handle))),
+        })
     }
 
     /// An in parameter or an instance.
@@ -698,6 +790,7 @@ impl<'a> Mapper<'a> {
             c_parameters: vec![context.clone(), string, erased, context, notify, Type::Scalar(Scalar::UInt)],
             deprecated: false,
             free: None,
+            no_escape: Vec::new(),
             returns: None,
         })
     }

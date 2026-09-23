@@ -179,6 +179,8 @@ fn signature(node: Node<'_, '_>) -> Signature {
             direction: Direction::Out,
             transfer: Transfer::None,
             nullable: false,
+            optional: false,
+            caller_allocates: false,
             scope: None,
             closure: None,
             destroy: None,
@@ -229,6 +231,9 @@ fn param(node: Node<'_, '_>, result: bool) -> Param {
         },
         nullable: attribute(node, "nullable") == Some("1")
             || attribute(node, "allow-none") == Some("1"),
+        // `allow-none` is the older spelling, and meant both.
+        optional: attribute(node, "optional") == Some("1") || attribute(node, "allow-none") == Some("1"),
+        caller_allocates: attribute(node, "caller-allocates") == Some("1"),
         scope: match attribute(node, "scope") {
             Some("call") => Some(Scope::Call),
             Some("async") => Some(Scope::Async),
