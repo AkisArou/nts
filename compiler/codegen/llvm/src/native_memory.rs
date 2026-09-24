@@ -1,19 +1,19 @@
 //! Address native storage using the shared C layout. Never attach managed
 //! TBAA, noalias, or inbounds promises to a caller-owned address.
-use super::{Func, OpKind, HirType, Diagnostic, name, refuse, ty_of, widening};
-use nts_core::hir::native::{NativeAbi, Pointee};
+use super::{Func, OpKind, HirType, Diagnostic, Platform, name, refuse, ty_of, widening};
+use nts_core::hir::native::Pointee;
 
-pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str, abi: NativeAbi) -> Result<String, Diagnostic> {
+pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str, platform: Platform) -> Result<String, Diagnostic> {
     match *kind {
         OpKind::NativeLocal { count } => {
             let HirType::NativePointer(element) = result else { return Err(refuse(func, "local needs native layout")); };
-            let shape = nts_core::hir::layout::native_shape(element, abi).ok_or_else(|| refuse(func, "local needs native layout"))?;
+            let shape = nts_core::hir::layout::native_shape(element, platform.abi).ok_or_else(|| refuse(func, "local needs native layout"))?;
             let bytes = shape.size * count;
             return Ok(format!("store [{bytes} x i8] zeroinitializer, ptr {out}, align {}", shape.align));
         }
         OpKind::NativeMalloc { bytes } => {
             let HirType::NativePointer(element) = result else { return Err(refuse(func, "malloc needs native layout")); };
-            let size = nts_core::hir::layout::native_shape(element, abi).ok_or_else(|| refuse(func, "malloc needs native layout"))?.size;
+            let size = nts_core::hir::layout::native_shape(element, platform.abi).ok_or_else(|| refuse(func, "malloc needs native layout"))?.size;
             return Ok(format!("{out} = call ptr @nts_native_malloc(double {}, i64 {size})", name(bytes)));
         }
         OpKind::NativeFree { pointer } => return Ok(format!("call void @free(ptr {})", name(pointer))),
@@ -28,7 +28,7 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str,
             let HirType::NativePointer(element) = &func.value(destination).ty else {
                 return Err(refuse(func, "a copy without a native pointer"));
             };
-            let shape = nts_core::hir::layout::native_shape(element, abi)
+            let shape = nts_core::hir::layout::native_shape(element, platform.abi)
                 .ok_or_else(|| refuse(func, "a copy of a native type with no size"))?;
             return Ok(format!(
                 "call void @llvm.memcpy.p0.p0.i64(ptr align {} {}, ptr align {} {}, i64 {}, i1 false)",
@@ -51,23 +51,23 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str,
     let base = name(pointer);
     Ok(match *kind {
         OpKind::NativeBitLoad { field, .. } | OpKind::NativeBitStore { field, .. } => {
-            bit_field(func, kind, storage, field, &base, out, abi)?
+            bit_field(func, kind, storage, field, &base, out, platform)?
         }
         OpKind::NativeFieldAddress { field, .. } => {
             let Pointee::Record(layout) = storage else { return Err(refuse(func, "field address without a native struct")); };
-            let placed = nts_core::hir::layout::native_place(layout, abi).ok_or_else(|| refuse(func, "native struct without a layout"))?;
+            let placed = nts_core::hir::layout::native_place(layout, platform.abi).ok_or_else(|| refuse(func, "native struct without a layout"))?;
             let offset = placed.offsets.get(field as usize).ok_or_else(|| refuse(func, "invalid native field index"))?;
             format!("{out} = getelementptr i8, ptr {base}, i64 {offset}")
         }
         OpKind::NativeIndexAddress { index, .. } => {
-            let shape = nts_core::hir::layout::native_shape(storage, abi).ok_or_else(|| refuse(func, "native pointer without an element size"))?;
+            let shape = nts_core::hir::layout::native_shape(storage, platform.abi).ok_or_else(|| refuse(func, "native pointer without an element size"))?;
             format!("{out}.offset = mul i64 {}, {}\n  {out} = getelementptr i8, ptr {base}, i64 {out}.offset", name(index), shape.size)
         }
         OpKind::NativeLoad { index, .. } | OpKind::NativeStore { index, .. } => {
             // The slot C laid out, which a `c_long` under Win64 makes
             // narrower than the value: stored truncated and loaded widened,
             // with the address arithmetic on the slot's own width.
-            let slot = storage.abi_element_type(abi).ok_or_else(|| refuse(func, "native memory without a loadable element"))?;
+            let slot = storage.abi_element_type(platform.abi).ok_or_else(|| refuse(func, "native memory without a loadable element"))?;
             let value = storage.element_type().ok_or_else(|| refuse(func, "native memory without a loadable element"))?;
             let widen = widening(&slot, &value);
             let element = ty_of(&slot, func)?;
@@ -102,12 +102,12 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str,
 }
 
 
-pub(super) fn stack_storage(func: &Func, abi: NativeAbi) -> Vec<String> {
+pub(super) fn stack_storage(func: &Func, platform: Platform) -> Vec<String> {
     func.blocks.iter().flat_map(|b| &b.ops).filter_map(|at| {
         let op = func.value(*at);
         let OpKind::NativeLocal { count } = op.kind else { return None; };
         let HirType::NativePointer(element) = &op.ty else { return None; };
-        let shape = nts_core::hir::layout::native_shape(element, abi)?;
+        let shape = nts_core::hir::layout::native_shape(element, platform.abi)?;
         Some(format!("{} = alloca [{} x i8], align {}", name(*at), shape.size * count, shape.align))
     }).collect()
 }
@@ -164,12 +164,12 @@ invalid:
     field: u32,
     base: &str,
     out: &str,
-    abi: NativeAbi,
+    platform: Platform,
 ) -> Result<String, Diagnostic> {
     let Pointee::Record(layout) = storage else {
         return Err(refuse(func, "a bit-field through a pointer to something else"));
     };
-    let placed = nts_core::hir::layout::native_place(layout, abi)
+    let placed = nts_core::hir::layout::native_place(layout, platform.abi)
         .ok_or_else(|| refuse(func, "a bit-field in a record with no layout"))?;
     let Some(Pointee::Bits { unit, width }) =
         layout.fields.get(field as usize).map(|member| &member.ty)
@@ -185,7 +185,7 @@ invalid:
             .get(field as usize)
             .ok_or_else(|| refuse(func, "a bit-field with no offset"))?,
     );
-    let unit_ty = unit.abi(abi);
+    let unit_ty = unit.abi(platform.abi);
     let signed = matches!(unit_ty, HirType::Int { signed: true, .. });
     let unit_bits = u64::from(
         nts_core::hir::layout::shape_of(&unit_ty)

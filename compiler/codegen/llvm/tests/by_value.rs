@@ -3,12 +3,12 @@
 //!
 //! The C backend passes a record as `*p` and assigns a record result through
 //! the storage the lowering made for it, and clang does the ABI. The LLVM
-//! backend classifies each record as `x86_64` System V does
+//! backend classifies each record as `x86_64` System V or Win64 does
 //! (`src/aggregate.rs`), and the declarations it writes are compared with
-//! clang's here. What it cannot classify, Win64 and unions, it refuses by
-//! name: a record is carried in HIR as a pointer to it, so without the
-//! refusal it would pass every check a pointer passes and hand C an address
-//! where C reads bytes.
+//! clang's for each target here. What it cannot classify, anything on arm64
+//! and a union under System V, it refuses by name: a record is carried in HIR
+//! as a pointer to it, so without the refusal it would pass every check a
+//! pointer passes and hand C an address where C reads bytes.
 //!
 //! Running one is `examples/interop/native-byvalue`'s job, against the same
 //! program in C, and `examples/interop/macos-geometry`'s on the lane's Mac.
@@ -160,7 +160,9 @@ export function run(): bigint {
 }
 
 /// Shapes for the LLVM declarations to be compared with clang's: one per
-/// eightbyte rule, and two that run out of registers. `(C declarations, the
+/// System V eightbyte rule, two that run out of registers, and one of each
+/// size Win64 passes in a register (1, 2, 4 and 8 bytes, `struct { double }`
+/// among them). `(C declarations, the
 /// same in a binding, the functions to compare)`.
 const SHAPES_C: &str = r"
 struct pd { double a; double b; };
@@ -174,6 +176,9 @@ struct iii { int a; int b; int c; };
 struct ic { int a; char b; };
 struct pi { void *p; int n; };
 struct big { long a; long b; long c; };
+struct c1 { char a; };
+struct f1 { float a; };
+struct d1 { double a; };
 struct pd f_pd(struct pd v);
 struct pf f_pf(struct pf v);
 struct tf f_tf(struct tf v);
@@ -185,6 +190,9 @@ struct iii f_iii(struct iii v);
 struct ic f_ic(struct ic v);
 struct pi f_pi(struct pi v);
 struct big f_big(struct big v, int n);
+struct c1 f_c1(struct c1 v);
+struct f1 f_f1(struct f1 v);
+struct d1 f_d1(struct d1 v);
 double sse_out(struct pd a, struct pd b, struct pd c, struct pd d, struct pd e);
 long int_out(struct big x, struct ci a, struct ci b, struct ci c, struct ci d, struct ci e, struct ci f);
 ";
@@ -203,6 +211,9 @@ declare module "c:shapes" {
   export type Ic = Struct<{ a: c_int; b: c_char }, "ic">;
   export type Pi = Struct<{ p: Ptr<unknown>; n: c_int }, "pi">;
   export type Big = Struct<{ a: c_long; b: c_long; c: c_long }, "big">;
+  export type C1 = Struct<{ a: c_char }, "c1">;
+  export type F1 = Struct<{ a: c_float }, "f1">;
+  export type D1 = Struct<{ a: c_double }, "d1">;
   export function f_pd(v: ByValue<Pd>): ByValue<Pd>;
   export function f_pf(v: ByValue<Pf>): ByValue<Pf>;
   export function f_tf(v: ByValue<Tf>): ByValue<Tf>;
@@ -214,6 +225,9 @@ declare module "c:shapes" {
   export function f_ic(v: ByValue<Ic>): ByValue<Ic>;
   export function f_pi(v: ByValue<Pi>): ByValue<Pi>;
   export function f_big(v: ByValue<Big>, n: c_int): ByValue<Big>;
+  export function f_c1(v: ByValue<C1>): ByValue<C1>;
+  export function f_f1(v: ByValue<F1>): ByValue<F1>;
+  export function f_d1(v: ByValue<D1>): ByValue<D1>;
   export function sse_out(a: ByValue<Pd>, b: ByValue<Pd>, c: ByValue<Pd>, d: ByValue<Pd>, e: ByValue<Pd>): c_double;
   export function int_out(
     x: ByValue<Big>, a: ByValue<Ci>, b: ByValue<Ci>, c: ByValue<Ci>, d: ByValue<Ci>, e: ByValue<Ci>, f: ByValue<Ci>,
@@ -236,6 +250,9 @@ export function run(): number {
   shapes.f_ic(local<shapes.Ic>());
   shapes.f_pi(local<shapes.Pi>());
   shapes.f_big(local<shapes.Big>(), 1 as c_int);
+  shapes.f_c1(local<shapes.C1>());
+  shapes.f_f1(local<shapes.F1>());
+  shapes.f_d1(local<shapes.D1>());
   const pd = local<shapes.Pd>();
   const ci = local<shapes.Ci>();
   return shapes.sse_out(pd, pd, pd, pd, pd) + Number(shapes.int_out(local<shapes.Big>(), ci, ci, ci, ci, ci, ci));
@@ -247,8 +264,15 @@ export function run(): number {
 /// size (clang names `%struct.pd`, this backend `[16 x i8]`), and `ptr` for
 /// an INTEGER eightbyte that is a pointer (clang keeps the pointer type, this
 /// backend the integer; the register is the same).
+///
+/// Under Win64 a record passed in memory is `ptr dead_on_return` in clang's
+/// declaration and `ptr byval(...)` in this backend's: a pointer to a copy the
+/// caller makes, which is what LLVM makes of `byval` on that target, and
+/// [`byval_is_a_pointer_to_a_copy_on_win64`] checks. Both become `ptr`.
 fn normalized(line: &str, sizes: &std::collections::BTreeMap<String, u32>) -> String {
     let mut text = line
+        .replace(" dso_local", "")
+        .replace(" dead_on_return", "")
         .replace(" noundef", "")
         .replace(" dead_on_unwind", "")
         .replace(" writable", "")
@@ -258,6 +282,23 @@ fn normalized(line: &str, sizes: &std::collections::BTreeMap<String, u32>) -> St
         text = text.replace(&format!("%struct.{name}"), &format!("[{size} x i8]"));
     }
     let text = text.split(" #").next().unwrap_or_default().to_owned();
+    let text = if text.contains("byval(") {
+        let mut out = String::new();
+        let mut rest = text.as_str();
+        while let Some(at) = rest.find(" byval(") {
+            out.push_str(&rest[..at]);
+            let after = &rest[at..];
+            let end = after.find(')').unwrap() + 1;
+            let after = &after[end..];
+            // ` align N`
+            let after = after.strip_prefix(" align ").map_or(after, |a| a.trim_start_matches(char::is_numeric));
+            rest = after;
+        }
+        out.push_str(rest);
+        out
+    } else {
+        text
+    };
     text.replace("(ptr, i32)", "(i64, i32)").replace("{ ptr, i32 }", "{ i64, i32 }")
 }
 
@@ -266,20 +307,32 @@ fn normalized(line: &str, sizes: &std::collections::BTreeMap<String, u32>) -> St
 /// C prototype, on `x86_64` System V.
 #[test]
 fn the_llvm_declarations_are_clangs() {
-    let Some((dir, prepared)) = prepare("shapes", SHAPES_TS, SHAPES_PROGRAM) else {
+    compare_with_clang(nts_codegen_llvm::Platform::SYSV_X86_64, "x86_64-unknown-linux-gnu", 24);
+}
+
+/// The same on Win64, where the rule is the record's size alone. `big` is
+/// three `long`s, which LLP64 makes twelve bytes.
+#[test]
+fn the_llvm_declarations_are_clangs_on_win64() {
+    compare_with_clang(nts_codegen_llvm::Platform::WIN64_X86_64, "x86_64-w64-windows-gnu", 12);
+}
+
+fn compare_with_clang(platform: nts_codegen_llvm::Platform, triple: &str, big: u32) {
+    let Some((dir, prepared)) = prepare(&format!("shapes-{triple}"), SHAPES_TS, SHAPES_PROGRAM) else {
         eprintln!("skipped: no tsgo");
         return;
     };
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, platform);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
 
     std::fs::write(dir.join("shapes.c"), format!(
         "{SHAPES_C}\nvoid *used[] = {{ (void *)f_pd, (void *)f_pf, (void *)f_tf, (void *)f_fd, (void *)f_ci, (void *)f_dc, \
-         (void *)f_cc, (void *)f_iii, (void *)f_ic, (void *)f_pi, (void *)f_big, (void *)sse_out, (void *)int_out }};\n"
+         (void *)f_cc, (void *)f_iii, (void *)f_ic, (void *)f_pi, (void *)f_big, (void *)f_c1, (void *)f_f1, (void *)f_d1, \
+         (void *)sse_out, (void *)int_out }};\n"
     )).unwrap();
     let Ok(clang) = Command::new("clang")
-        .args(["--target=x86_64-unknown-linux-gnu", "-S", "-emit-llvm", "-O0", "-o", "-"])
+        .args([&format!("--target={triple}"), "-S", "-emit-llvm", "-O0", "-o", "-"])
         .arg(dir.join("shapes.c"))
         .output()
     else {
@@ -289,7 +342,7 @@ fn the_llvm_declarations_are_clangs() {
     assert!(clang.status.success(), "{}", String::from_utf8_lossy(&clang.stderr));
     let sizes: std::collections::BTreeMap<String, u32> = [
         ("pd", 16), ("pf", 8), ("tf", 12), ("fd", 16), ("ci", 16), ("dc", 16), ("cc", 2), ("iii", 12), ("ic", 8),
-        ("pi", 16), ("big", 24),
+        ("pi", 16), ("big", big), ("c1", 1), ("f1", 4), ("d1", 8),
     ]
     .into_iter()
     .map(|(name, size)| (name.to_owned(), size))
@@ -302,7 +355,7 @@ fn the_llvm_declarations_are_clangs() {
             (name, normalized(line, &sizes))
         })
         .collect();
-    assert_eq!(theirs.len(), 13, "clang declared {theirs:?}");
+    assert_eq!(theirs.len(), 16, "clang declared {theirs:?}");
     for (function, expected) in &theirs {
         let ours = llvm
             .text
@@ -313,19 +366,21 @@ fn the_llvm_declarations_are_clangs() {
     }
 }
 
-/// Under Win64 this backend knows no aggregate convention, and a union's
-/// eightbytes are not ones it classifies: both refused by name, rather than
-/// passed the way System V would pass a struct.
+/// On arm64 this backend knows no aggregate convention, and under System V a
+/// union's eightbytes are not ones it classifies: both refused by name, rather
+/// than passed the way `x86_64` System V would pass a struct. Under Win64 the
+/// same union crosses, because there the rule is its size alone.
 #[test]
 fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
-    let Some((_, prepared)) = prepare("llvm-win64", GEOMETRY, PROGRAM) else {
+    let Some((_, prepared)) = prepare("llvm-arm64", GEOMETRY, PROGRAM) else {
         eprintln!("skipped: no tsgo");
         return;
     };
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
+    let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
     assert!(
-        llvm.diagnostics.iter().any(|d| d.message.contains("under Win64, whose aggregate calling convention")),
+        llvm.diagnostics.iter().any(|d| d.message.contains("crossing a call on arm64, whose calling convention (AAPCS64)")),
         "{:?}",
         llvm.diagnostics
     );
@@ -339,12 +394,88 @@ fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
     let source = "import { take, type Either } from \"c:u\";\nimport { local } from \"c:memory\";\nexport function run(): void {\n  take(local<Either>());\n}\n";
     let Some((_, prepared)) = prepare("llvm-union", binding, source) else { return };
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(
         llvm.diagnostics.iter().any(|d| d.message.contains("cannot classify (a union")),
         "{:?}",
         llvm.diagnostics
     );
+    let win64 = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(win64.diagnostics.is_empty(), "{:?}", win64.diagnostics);
+    assert!(win64.text.contains("declare void @take(i64)"), "an 8-byte union is not one integer:\n{}", win64.text);
+}
+
+/// On arm64 only what the convention places is refused: a scalar C call and
+/// an Objective-C send with no record in it emit, as they do on `x86_64`.
+#[test]
+fn arm64_refuses_only_what_its_convention_places() {
+    let binding = r#"declare module "c:scalars" {
+  import type { c_double, c_int } from "c:types";
+  export function scaled(n: c_int, by: c_double): c_double;
+}
+/**
+ * @ntsFramework Foundation
+ */
+declare module "objc:Foundation" {
+  import type { c_ulong } from "c:types";
+  import type { ObjcClass } from "objc:types";
+  export interface NSObjectOwnMethods {
+    /**
+     * @ntsSelector hash
+     */
+    hash(this: NSObject): c_ulong;
+  }
+  export type NSObject = ObjcClass<"NSObject"> & NSObjectOwnMethods;
+  /**
+   * @ntsSelector new
+   * @ntsClass NSObject
+   */
+  export function make(): NSObject;
+}
+"#;
+    let source = "import { scaled } from \"c:scalars\";\nimport { make } from \"objc:Foundation\";\nimport type { c_double, c_int } from \"c:types\";\nexport function run(): number {\n  return scaled(2 as c_int, 1.5 as c_double) + Number(make().hash());\n}\n";
+    let Some((_, prepared)) = prepare("arm64-scalars", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
+    let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
+    assert!(llvm.diagnostics.is_empty(), "a scalar call or send was refused on arm64: {:?}", llvm.diagnostics);
+    assert!(llvm.text.contains("@scaled("), "{}", llvm.text);
+    assert!(llvm.text.contains("objc_msgSend"), "{}", llvm.text);
+}
+
+/// What the Win64 comparison above assumes: that LLVM makes of `byval`, on
+/// that target, the pointer to a caller's copy clang passes for a record that
+/// is not 1, 2, 4 or 8 bytes. Assembled, the caller copies the record to its
+/// own frame and passes that copy's address in the first argument register.
+#[test]
+fn byval_is_a_pointer_to_a_copy_on_win64() {
+    let module = "%T = type { ptr, ptr, double }\n\
+                  declare void @take(ptr byval(%T) align 8)\n\
+                  define void @f(ptr %p) {\n  call void @take(ptr byval(%T) align 8 %p)\n  ret void\n}\n";
+    let dir = std::env::temp_dir().join(format!("nts-byval-win64-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("m.ll"), module).unwrap();
+    let Ok(out) = Command::new("clang")
+        .args(["--target=x86_64-w64-windows-gnu", "-O1", "-S", "-o", "-"])
+        .arg(dir.join("m.ll"))
+        .output()
+    else {
+        eprintln!("skipped: no clang");
+        return;
+    };
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let asm = String::from_utf8_lossy(&out.stdout);
+    let body: Vec<&str> = asm.lines().skip_while(|line| !line.starts_with("f:")).take_while(|line| !line.contains("retq")).collect();
+    let body = body.join("\n");
+    // The copy: the record read through the incoming pointer (`%rcx`) into the
+    // caller's frame, then that frame address passed in `%rcx`.
+    assert!(body.contains("(%rcx)"), "the record is not copied from the incoming pointer:\n{body}");
+    assert!(body.contains("leaq") && body.contains("(%rsp), %rcx"), "no address of a copy in %rcx:\n{body}");
+    assert!(body.contains("callq\ttake"), "{body}");
 }
 
 /// Each record that cannot cross by value is refused where the binding is

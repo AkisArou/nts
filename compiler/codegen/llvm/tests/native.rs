@@ -88,7 +88,7 @@ fn managed_declarations_execute_with_the_nts_abi_on_c_and_llvm() {
     );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -195,7 +195,7 @@ fn a_bit_field_reads_and_writes_the_same_bits_on_c_and_llvm() {
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -252,7 +252,7 @@ fn a_flexible_array_member_reaches_the_bytes_after_the_record() {
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -308,7 +308,7 @@ fn a_record_named_only_by_a_typedef_is_spelled_without_the_keyword() {
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -369,7 +369,7 @@ fn aggregate_arguments_respect_register_exhaustion() {
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let c_program = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c_program.is_complete(), "{:?}", c_program.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert!(llvm.text.contains("ptr byval({ i32, i64 }) align 8"));
     for file in c_program.support_files() { file.write(dir.as_std_path()).unwrap(); }
@@ -396,7 +396,7 @@ fn intrinsic_annotations_do_not_authorize_arbitrary_foreign_symbols() {
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(!c.is_complete());
     assert!(c.diagnostics.iter().any(|d| d.message.contains("abs") && d.message.contains("no declared C ABI")));
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.iter().any(|d| d.message.contains("abs")));
 }
 
@@ -423,7 +423,7 @@ fn managed_runtime_declarations_must_agree_with_the_header() {
             "{:?}",
             prepared.diagnostics
         );
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         if valid {
             assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
             assert_eq!(
@@ -522,7 +522,7 @@ fn every_scalar_and_libm_cross_the_real_c_abi() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     assert!(emitted.text.contains("declare double @sqrt(double)"));
     assert!(
@@ -640,7 +640,7 @@ fn conflicting_abis_and_runtime_collisions_are_refused() {
         let source = format!("import type {{ c_int, c_uint }} from \"c:types\";\n{source}");
         let Some((_, prepared)) = prepare(name, &source) else { return; };
         assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-        let emitted = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let emitted = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(emitted.diagnostics.iter().any(|d| d.message.contains(expected)), "{:?}", emitted.diagnostics);
         assert!(emitted.text.is_empty());
     }
@@ -662,7 +662,7 @@ fn compatible_c_aliases_share_one_symbol_in_both_backends() {
         "{:?}",
         prepared.diagnostics
     );
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert_eq!(
         llvm.text
@@ -723,7 +723,7 @@ export function run(): number {
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     assert!(c.writer.text().contains("(struct _GtkWidget *)"), "no conversion to the ancestor was emitted");
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -784,7 +784,7 @@ export function run(kind: number): number {
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -874,7 +874,7 @@ export function run(): number {
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     assert!(c.writer.text().contains("int same(void *, void *)"), "`object` did not become `void *`");
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -980,7 +980,7 @@ fn a_capturing_closure_crosses_to_c_on_both_backends() {
         assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -1060,7 +1060,7 @@ export function run(limit: number): number {
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -1106,7 +1106,7 @@ fn a_string_parameter_crosses_as_utf8_on_both_backends() {
         assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         assert!(llvm.text.contains("@nts_string_to_cstring("), "the conversion is not in the LLVM program");
         assert!(llvm.text.contains("@nts_cstring_release("), "the release is not in the LLVM program");
@@ -1176,7 +1176,7 @@ export function identity(c: Counter | null): Counter | null { return c; }
         }
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         assert!(c.writer.text().contains("struct Counter *"));
         assert!(c.writer.text().contains("struct _Wide *"));
@@ -1271,7 +1271,7 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert!(!llvm.text.contains("ptrtoint"));
     assert!(!c.writer.text().contains("nts_array_"));
@@ -1298,7 +1298,7 @@ fn native_struct_fields_addresses_and_aliases_agree_with_c() {
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -1333,7 +1333,7 @@ fn native_poll_calls_libc_and_matches_the_platform_header() {
         assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -1375,7 +1375,7 @@ fn native_fd_reads_through_a_void_pointer_and_agrees_with_unistd() {
         assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -1545,7 +1545,7 @@ fn c_calls_a_typescript_function_through_a_bridge() {
         assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -1632,7 +1632,7 @@ fn conflicting_native_struct_tags_refuse_in_both_backends() {
     let Some((_, prepared)) = prepare("struct-collision", source) else { return; };
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     for diagnostics in [&c.diagnostics, &llvm.diagnostics] {
         assert!(diagnostics.iter().any(|d| d.message.contains("conflicting native layouts")), "{diagnostics:?}");
     }
@@ -1701,7 +1701,7 @@ fn native_owned_storage_executes_on_c_and_llvm() {
         let Some((dir, prepared)) = prepare_with_provider("native-storage", source, provider) else { return; };
         assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
@@ -1746,7 +1746,7 @@ fn authored_allocator_symbols_cannot_redefine_storage_operations() {
     let Some((_, prepared)) = prepare("allocator-collision", source) else { return; };
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     for diagnostics in [&c.diagnostics, &llvm.diagnostics] {
         assert!(diagnostics.iter().any(|d| d.message.contains("collides with the compiler's memory operations")), "{diagnostics:?}");
     }
@@ -1850,7 +1850,7 @@ export function tally(): number { return total; }
         assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -1941,7 +1941,7 @@ export function attempt(ok: number): number {
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     assert!(c.writer.text().contains("struct _GError * *"), "the error slot's address is not a `GError **`");
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -1985,7 +1985,7 @@ fn run_on_both_backends(
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -3398,7 +3398,7 @@ export function probe(seed: number): number {
     let sysv = nts_core::hir::native::NativeAbi::SysV;
 
     let run = |abi, helpers: &str, name: &str| -> String {
-        let llvm = nts_codegen_llvm::emit(&prepared.program, abi);
+        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi, arch: nts_codegen_llvm::Arch::X86_64 });
         assert!(llvm.diagnostics.is_empty(), "{name}: {:?}", llvm.diagnostics);
         let c = nts_codegen_c::emit(&prepared.program, abi);
         assert!(c.is_complete(), "{name}: {:?}", c.diagnostics);
@@ -3462,12 +3462,12 @@ export function negative(): void { take_ulong(-1n as c_ulong); }
         diagnostics.iter().filter(|d| d.message.contains("does not fit")).map(|d| d.message.clone()).collect()
     };
     let c = refused(&nts_codegen_c::emit(&prepared.program, win64).diagnostics);
-    let llvm = refused(&nts_codegen_llvm::emit(&prepared.program, win64).diagnostics);
+    let llvm = refused(&nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi: win64, arch: nts_codegen_llvm::Arch::X86_64 }).diagnostics);
     assert_eq!(c.len(), 2, "C refused {c:?}");
     assert_eq!(c, llvm, "the two backends refused different constants");
     assert!(c.iter().any(|m| m.contains("2147483648")) && c.iter().any(|m| m.contains("-1")), "{c:?}");
     assert!(refused(&nts_codegen_c::emit(&prepared.program, sysv).diagnostics).is_empty(), "SysV refused a constant that fits");
-    assert!(refused(&nts_codegen_llvm::emit(&prepared.program, sysv).diagnostics).is_empty(), "SysV refused a constant that fits");
+    assert!(refused(&nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi: sysv, arch: nts_codegen_llvm::Arch::X86_64 }).diagnostics).is_empty(), "SysV refused a constant that fits");
 }
 
 /// `F | null` passes NULL for `null` and a bridge for a function, and
@@ -3610,7 +3610,7 @@ export function negative(): number { return echo_long(-5 as c_long32); }
     let win64 = nts_core::hir::native::NativeAbi::Win64;
     let sysv = nts_core::hir::native::NativeAbi::SysV;
 
-    let llvm = nts_codegen_llvm::emit(&prepared.program, win64);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi: win64, arch: nts_codegen_llvm::Arch::X86_64 });
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     let c = nts_codegen_c::emit(&prepared.program, win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
@@ -3633,7 +3633,7 @@ export function negative(): number { return echo_long(-5 as c_long32); }
         diagnostics.iter().filter(|d| d.message.contains("32-bit C `long`")).map(|d| d.message.clone()).collect()
     };
     let c_refused = refused(&nts_codegen_c::emit(&prepared.program, sysv).diagnostics);
-    let llvm_refused = refused(&nts_codegen_llvm::emit(&prepared.program, sysv).diagnostics);
+    let llvm_refused = refused(&nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi: sysv, arch: nts_codegen_llvm::Arch::X86_64 }).diagnostics);
     assert_eq!(c_refused.len(), 2, "C on SysV refused {c_refused:?}");
     assert_eq!(c_refused, llvm_refused, "the two backends refused different functions");
 }

@@ -1,12 +1,21 @@
-//! Records passed and returned by value, as AMD64 System V passes them.
+//! Records passed and returned by value, and erased values past the integer
+//! registers: how each crosses a call, by the platform's convention.
 //!
-//! This backend's native calls follow that ABI and no other: `native.rs`'s
-//! rule for an erased value in registers is the same assumption. Under Win64
-//! a record by value is refused by name, and so is a union, whose eightbytes
-//! clang classifies by rules this does not reproduce.
+//! Two conventions are implemented, both clang's, and `tests/by_value.rs`
+//! compares each against `clang -emit-llvm` for its target directly. arm64
+//! (AAPCS64, Apple's and Windows') is neither, and a record by value there is
+//! refused by name rather than lowered by `x86_64`'s rules.
 //!
-//! The rules are clang's (`X86_64ABIInfo`), which the tests in
-//! `tests/by_value.rs` compare against `clang -emit-llvm` directly:
+//! **Win64** (`WinX86_64ABIInfo`) decides by size alone, unions included: a
+//! record of 1, 2, 4 or 8 bytes is one integer of that width, as an argument
+//! and as a result (`struct { double }` is an `i64`); any other size is a
+//! pointer to a copy the caller makes, which is what LLVM makes of `byval`
+//! on this target, and an `sret` pointer as a result. The four argument
+//! registers are positional, so nothing spills whole: a record or an erased
+//! value past the fourth goes on the stack as it would have gone in a register.
+//!
+//! **System V `x86_64`** (`X86_64ABIInfo`). A union is refused, since clang
+//! classifies its eightbytes by rules this does not reproduce:
 //!
 //! - over 16 bytes, or holding a misaligned member: **memory**, a `byval`
 //!   copy as an argument and an `sret` pointer as a result;
@@ -21,6 +30,7 @@
 use nts_core::hir::layout::{native_place, native_shape};
 use nts_core::hir::native::{NativeAbi, Pointee, Record, RecordKind, Scalar, Type};
 use nts_core::hir::HirType;
+use crate::{Arch, Platform};
 
 /// How one record crosses a call.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,11 +73,33 @@ const SSE_REGISTERS: usize = 8;
 /// an Objective-C send's receiver and selector -- and whose declared
 /// parameters and result are these. `None` when a record in it cannot be
 /// classified here.
-pub(crate) fn plan(leading: usize, parameters: &[Type], result: &Type, abi: NativeAbi) -> Option<Plan> {
-    let result = match result {
-        Type::Record(record) => Some(classify(record, abi)?),
+pub(crate) fn plan(leading: usize, parameters: &[Type], result_type: &Type, platform: Platform) -> Option<Plan> {
+    let result = match result_type {
+        Type::Record(record) => Some(classify(record, platform)?),
         _ => None,
     };
+    let Some(convention) = convention(platform) else {
+        // arm64: a scalar or a pointer crosses as itself, whatever the
+        // convention. A record or an erased value is placed by rules this
+        // backend implements only for x86_64, so the call is refused.
+        let placed_by_convention = |ty: &Type| matches!(ty, Type::Record(_)) || ty.representation() == HirType::Erased;
+        if parameters.iter().chain(std::iter::once(result_type)).any(placed_by_convention) {
+            return None;
+        }
+        return Some(Plan { arguments: vec![Crossing::Scalar; parameters.len()], result: None });
+    };
+    if convention == Convention::Win64 {
+        let arguments = parameters
+            .iter()
+            .map(|parameter| match parameter {
+                Type::Record(record) => classify(record, platform).map(Crossing::Record),
+                // Sixteen bytes: a pointer to a copy, which `byval` is here.
+                other if other.representation() == HirType::Erased => Some(Crossing::ErasedInMemory),
+                _ => Some(Crossing::Scalar),
+            })
+            .collect::<Option<Vec<_>>>()?;
+        return Some(Plan { arguments, result });
+    }
     // A result in memory is written through a pointer the caller passes
     // first, in an integer register.
     let hidden = usize::from(matches!(result, Some(Passing::Memory { .. })));
@@ -76,7 +108,7 @@ pub(crate) fn plan(leading: usize, parameters: &[Type], result: &Type, abi: Nati
     let mut arguments = Vec::with_capacity(parameters.len());
     for parameter in parameters {
         let crossing = match parameter {
-            Type::Record(record) => match classify(record, abi)? {
+            Type::Record(record) => match classify(record, platform)? {
                 Passing::Registers(eightbytes) => {
                     let wants_sse = eightbytes.iter().filter(|e| e.sse).count();
                     let wants_integer = eightbytes.len() - wants_sse;
@@ -85,7 +117,7 @@ pub(crate) fn plan(leading: usize, parameters: &[Type], result: &Type, abi: Nati
                         sse -= wants_sse;
                         Crossing::Record(Passing::Registers(eightbytes))
                     } else {
-                        let (size, align) = extent(record, abi)?;
+                        let (size, align) = extent(record, platform)?;
                         Crossing::Record(Passing::Memory { size, align })
                     }
                 }
@@ -113,19 +145,58 @@ pub(crate) fn plan(leading: usize, parameters: &[Type], result: &Type, abi: Nati
     Some(Plan { arguments, result })
 }
 
+/// The calling convention a platform's records cross by, which its data
+/// model and its arch decide together.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Convention {
+    SysV,
+    Win64,
+}
+
+/// `None` on arm64, whose convention this backend does not implement.
+fn convention(platform: Platform) -> Option<Convention> {
+    match (platform.abi, platform.arch) {
+        (NativeAbi::SysV, Arch::X86_64) => Some(Convention::SysV),
+        (NativeAbi::Win64, Arch::X86_64) => Some(Convention::Win64),
+        (_, Arch::Aarch64) => None,
+    }
+}
+
+/// Whether this backend knows how a record or an erased value crosses a call
+/// on `platform`.
+pub(crate) fn classifies_on(platform: Platform) -> bool {
+    convention(platform).is_some()
+}
+
 /// How `record` crosses when registers are available. `None` for a record
-/// this cannot classify: a union, a record with no layout on `abi`, or one
-/// whose eightbytes are not ones clang's rules name.
-pub(crate) fn classify(record: &Record, abi: NativeAbi) -> Option<Passing> {
-    if abi != NativeAbi::SysV || record.kind == RecordKind::Union {
+/// this cannot classify: one on a platform whose convention is not
+/// implemented here, a record with no layout, or, under System V, a union or
+/// a record whose eightbytes are not ones clang's rules name.
+pub(crate) fn classify(record: &Record, platform: Platform) -> Option<Passing> {
+    match convention(platform)? {
+        Convention::SysV => sysv(record, platform),
+        Convention::Win64 => win64(record, platform),
+    }
+}
+
+fn win64(record: &Record, platform: Platform) -> Option<Passing> {
+    let (size, align) = extent(record, platform)?;
+    Some(match size {
+        1 | 2 | 4 | 8 => Passing::Registers(vec![Eightbyte { ty: format!("i{}", size * 8), sse: false }]),
+        _ => Passing::Memory { size, align },
+    })
+}
+
+fn sysv(record: &Record, platform: Platform) -> Option<Passing> {
+    if record.kind == RecordKind::Union {
         return None;
     }
-    let (size, align) = extent(record, abi)?;
+    let (size, align) = extent(record, platform)?;
     if size > 16 {
         return Some(Passing::Memory { size, align });
     }
     let mut leaves = Vec::new();
-    if !walk(&Pointee::Record(std::sync::Arc::new(record.clone())), 0, abi, &mut leaves)? {
+    if !walk(&Pointee::Record(std::sync::Arc::new(record.clone())), 0, platform, &mut leaves)? {
         return Some(Passing::Memory { size, align });
     }
     let eightbytes = (0..size.div_ceil(8))
@@ -134,8 +205,8 @@ pub(crate) fn classify(record: &Record, abi: NativeAbi) -> Option<Passing> {
     Some(Passing::Registers(eightbytes))
 }
 
-fn extent(record: &Record, abi: NativeAbi) -> Option<(u32, u32)> {
-    let placed = native_place(record, abi)?;
+fn extent(record: &Record, platform: Platform) -> Option<(u32, u32)> {
+    let placed = native_place(record, platform.abi)?;
     Some((placed.size, placed.align))
 }
 
@@ -150,31 +221,31 @@ struct Leaf {
 
 /// Every scalar in `pointee`, at its offset from `base`. `Some(false)` when a
 /// member is misaligned, which puts the whole record in memory.
-fn walk(pointee: &Pointee, base: u32, abi: NativeAbi, leaves: &mut Vec<Leaf>) -> Option<bool> {
+fn walk(pointee: &Pointee, base: u32, platform: Platform, leaves: &mut Vec<Leaf>) -> Option<bool> {
     match pointee {
         Pointee::Record(record) => {
-            let placed = native_place(record, abi)?;
+            let placed = native_place(record, platform.abi)?;
             for (field, offset) in record.fields.iter().zip(&placed.offsets) {
-                if !walk(&field.ty, base + offset, abi, leaves)? {
+                if !walk(&field.ty, base + offset, platform, leaves)? {
                     return Some(false);
                 }
             }
             Some(true)
         }
         Pointee::Array { element, length } => {
-            let step = native_shape(element, abi)?.size;
+            let step = native_shape(element, platform.abi)?.size;
             for at in 0..*length {
-                if !walk(element, base + at * step, abi, leaves)? {
+                if !walk(element, base + at * step, platform, leaves)? {
                     return Some(false);
                 }
             }
             Some(true)
         }
-        Pointee::Const(inner) => walk(inner, base, abi, leaves),
-        Pointee::Bits { unit, .. } => walk(&Pointee::Scalar(*unit), base, abi, leaves),
+        Pointee::Const(inner) => walk(inner, base, platform, leaves),
+        Pointee::Bits { unit, .. } => walk(&Pointee::Scalar(*unit), base, platform, leaves),
         Pointee::Unaligned(_) | Pointee::Flexible(_) | Pointee::Opaque(_) | Pointee::Void => None,
         scalar_or_pointer => {
-            let shape = native_shape(scalar_or_pointer, abi)?;
+            let shape = native_shape(scalar_or_pointer, platform.abi)?;
             if shape.align == 0 || !base.is_multiple_of(shape.align) {
                 return Some(false);
             }
@@ -293,6 +364,6 @@ pub(crate) fn store_result(passing: &Passing, align: u32, returned: &str, destin
 
 /// The alignment of a record's storage, which the loads and stores above may
 /// assume of the pointer they are handed.
-pub(crate) fn alignment(record: &Record, abi: NativeAbi) -> Option<u32> {
-    extent(record, abi).map(|(_, align)| align)
+pub(crate) fn alignment(record: &Record, platform: Platform) -> Option<u32> {
+    extent(record, platform).map(|(_, align)| align)
 }

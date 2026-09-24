@@ -1363,7 +1363,7 @@ fn render(
         bail!("the JVM backend produces class files, which this driver cannot link");
     }
     Ok(if backend == Backend::Llvm {
-        let rendered = nts_codegen_llvm::emit(program, nts_core::hir::native::NativeAbi::SysV);
+        let rendered = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::SYSV_X86_64);
         if !rendered.diagnostics.is_empty() {
             for diagnostic in rendered.diagnostics.iter().take(3) {
                 eprintln!("  not rendered: {} {}", diagnostic.code, diagnostic.message);

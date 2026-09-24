@@ -2177,7 +2177,7 @@ fn emit(
 ) -> Result<String> {
     let program = prepared_program(tsconfig, entry, specialize, provider)?;
     if llvm {
-        let emitted = nts_codegen_llvm::emit(&program, nts_core::hir::native::NativeAbi::SysV);
+        let emitted = nts_codegen_llvm::emit(&program, nts_codegen_llvm::Platform::SYSV_X86_64);
         // Silent by default: the second backend refuses whole categories of
         // program and says so once per function, and twenty cases' worth of
         // that would bury the table printed above it. `NTS_DECLINES=1` asks,

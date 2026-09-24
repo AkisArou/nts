@@ -5352,6 +5352,13 @@ fn native_abi(os: &str) -> nts_core::hir::native::NativeAbi {
     }
 }
 
+/// The LLVM backend's target: the data model `native_abi` gives, and the arch,
+/// which with it decides how a record crosses a call.
+fn llvm_platform(os: &str, arch: &str) -> nts_codegen_llvm::Platform {
+    let arch = if arch == "aarch64" { nts_codegen_llvm::Arch::Aarch64 } else { nts_codegen_llvm::Arch::X86_64 };
+    nts_codegen_llvm::Platform { abi: native_abi(os), arch }
+}
+
 /// The system libraries a static libuv needs on Windows: its `CMakeLists.txt`
 /// list for `WIN32`, which `tooling/windows/build-libuv.sh` builds from.
 const WINDOWS_UV_LIBS: [&str; 9] =
@@ -6550,7 +6557,7 @@ fn emit_llvm(tsconfig: &Utf8Path, emission: Emission) -> Result<()> {
         );
     }
     // `emit-llvm` names no target, so the program is for this machine.
-    let emitted = nts_codegen_llvm::emit(&prepared.program, native_abi(host_os()));
+    let emitted = nts_codegen_llvm::emit(&prepared.program, llvm_platform(host_os(), host_arch()));
     for diagnostic in &emitted.diagnostics {
         eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
     }

@@ -3,32 +3,41 @@
 
 use std::collections::BTreeMap;
 
-use nts_core::hir::{Callee, Func, HirType, OpKind, Program, ValueId, native::{Function, NativeAbi}};
+use nts_core::hir::{Callee, Func, HirType, OpKind, Program, ValueId, native::Function};
 use nts_diagnostics::Diagnostic;
 
 use super::aggregate::{self, Crossing, Plan};
-use super::{extension, name, refuse, signatures, ty_of};
+use super::{Platform, extension, name, refuse, signatures, ty_of};
 
 /// How this call's arguments and result cross, or the refusal that names why
-/// a record in it cannot: under Win64, whose aggregate convention this backend
-/// does not implement, or a record `aggregate::classify` does not describe.
-pub(super) fn plan(func: &Func, target: &Function, leading: usize, abi: NativeAbi) -> Result<Plan, Diagnostic> {
-    aggregate::plan(leading, &target.parameters, &target.result, abi).ok_or_else(|| {
-        refuse(func, if abi == NativeAbi::Win64 {
-            "a C record passed or returned by value under Win64, whose aggregate calling convention this backend does not implement; the C backend builds it"
-        } else {
+/// one cannot: a record or an erased value on arm64, whose convention this
+/// backend does not implement, or a record `aggregate::classify` does not
+/// describe.
+pub(super) fn plan(func: &Func, target: &Function, leading: usize, platform: Platform) -> Result<Plan, Diagnostic> {
+    // Win64 returns sixteen bytes through a hidden pointer, where System V
+    // uses two registers; this backend spells only the second.
+    if platform.abi == nts_core::hir::native::NativeAbi::Win64 && target.result.representation() == HirType::Erased {
+        return Err(refuse(
+            func,
+            "a C function returning an erased value under Win64, which returns it through a hidden pointer this backend does not pass; the C backend builds it",
+        ));
+    }
+    aggregate::plan(leading, &target.parameters, &target.result, platform).ok_or_else(|| {
+        refuse(func, if aggregate::classifies_on(platform) {
             "a C record passed or returned by value that this backend cannot classify (a union, or a member it cannot place); the C backend builds it"
+        } else {
+            "a C record passed or returned by value, or an erased value, crossing a call on arm64, whose calling convention (AAPCS64) this backend does not implement; the C backend builds it"
         })
     })
 }
 
 /// The declared spelling of one fixed parameter.
-fn parameter_spelling(func: &Func, ty: &nts_core::hir::native::Type, crossing: &Crossing, abi: NativeAbi) -> Result<Vec<String>, Diagnostic> {
+fn parameter_spelling(func: &Func, ty: &nts_core::hir::native::Type, crossing: &Crossing, platform: Platform) -> Result<Vec<String>, Diagnostic> {
     Ok(match crossing {
         Crossing::ErasedInMemory => vec!["ptr byval({ i32, i64 }) align 8".to_owned()],
         Crossing::Record(passing) => aggregate::parameter_types(passing),
         Crossing::Scalar => {
-            let ty = ty.abi(abi);
+            let ty = ty.abi(platform.abi);
             if ty == HirType::Erased {
                 vec!["i32, i64".to_owned()]
             } else {
@@ -40,11 +49,11 @@ fn parameter_spelling(func: &Func, ty: &nts_core::hir::native::Type, crossing: &
 
 /// The return type a call is declared and made with: a record's eightbytes or
 /// `void` for one in memory, and otherwise the slot C returns in.
-fn returned_type(func: &Func, target: &Function, plan: &Plan, abi: NativeAbi) -> Result<String, Diagnostic> {
+fn returned_type(func: &Func, target: &Function, plan: &Plan, platform: Platform) -> Result<String, Diagnostic> {
     if let Some(passing) = &plan.result {
         return Ok(aggregate::result_type(passing));
     }
-    let result = target.result.abi(abi);
+    let result = target.result.abi(platform.abi);
     Ok(format!("{}{}", extension(&result), ty_of(&result, func)?))
 }
 
@@ -58,7 +67,7 @@ pub(super) fn split_destination<'a>(target: &Function, args: &'a [ValueId]) -> (
     }
 }
 
-pub(super) fn declarations(program: &Program, abi: NativeAbi) -> Result<Vec<String>, Vec<Diagnostic>> {
+pub(super) fn declarations(program: &Program, platform: Platform) -> Result<Vec<String>, Vec<Diagnostic>> {
     let mut seen: BTreeMap<&str, (&Function, String)> = BTreeMap::new();
     let mut errors = Vec::new();
     for func in &program.funcs {
@@ -110,7 +119,7 @@ pub(super) fn declarations(program: &Program, abi: NativeAbi) -> Result<Vec<Stri
                 errors.push(refuse(func, &problem));
                 continue;
             }
-            match declaration(func, target, abi) {
+            match declaration(func, target, platform) {
                 Ok(line) => {
                     if let Some(known) = signatures::signature(symbol) {
                         let expected = format!(
@@ -141,11 +150,11 @@ pub(super) fn declarations(program: &Program, abi: NativeAbi) -> Result<Vec<Stri
     }
 }
 
-fn declaration(func: &Func, target: &Function, abi: NativeAbi) -> Result<String, Diagnostic> {
-    let plan = plan(func, target, 0, abi)?;
+fn declaration(func: &Func, target: &Function, platform: Platform) -> Result<String, Diagnostic> {
+    let plan = plan(func, target, 0, platform)?;
     let mut parameters: Vec<String> = plan.result.as_ref().and_then(|passing| aggregate::sret(passing, "")).map(|hidden| hidden.trim_end().to_owned()).into_iter().collect();
     for (ty, crossing) in target.parameters.iter().zip(&plan.arguments) {
-        parameters.extend(parameter_spelling(func, ty, crossing, abi)?);
+        parameters.extend(parameter_spelling(func, ty, crossing, platform)?);
     }
     // `...` and nothing after it, as in C. LLVM needs the declaration to say
     // so, because a call to a variadic function has to spell the function type
@@ -155,7 +164,7 @@ fn declaration(func: &Func, target: &Function, abi: NativeAbi) -> Result<String,
     }
     Ok(format!(
         "declare {} @{}({})",
-        returned_type(func, target, &plan, abi)?,
+        returned_type(func, target, &plan, platform)?,
         target.name,
         parameters.join(", ")
     ))
@@ -166,14 +175,14 @@ fn declaration(func: &Func, target: &Function, abi: NativeAbi) -> Result<String,
 /// A call to a non-variadic function may leave it out, and does; LLVM takes it
 /// from the callee. For a variadic one it is required, because the call is what
 /// says how many arguments are actually being passed.
-fn variadic_type(func: &Func, target: &Function, plan: &Plan, abi: NativeAbi) -> Result<String, Diagnostic> {
+fn variadic_type(func: &Func, target: &Function, plan: &Plan, platform: Platform) -> Result<String, Diagnostic> {
     let mut parameters = Vec::new();
     for (ty, crossing) in target.parameters.iter().zip(&plan.arguments) {
         match crossing {
             Crossing::ErasedInMemory | Crossing::Record(aggregate::Passing::Memory { .. }) => parameters.push("ptr".to_owned()),
             Crossing::Record(passing) => parameters.extend(aggregate::parameter_types(passing)),
             Crossing::Scalar => {
-                let ty = ty.abi(abi);
+                let ty = ty.abi(platform.abi);
                 parameters.push(if ty == HirType::Erased { "i32, i64".to_owned() } else { ty_of(&ty, func)?.to_owned() });
             }
         }
@@ -182,7 +191,7 @@ fn variadic_type(func: &Func, target: &Function, plan: &Plan, abi: NativeAbi) ->
     // A variadic function never returns a record: `from_signature` refuses it.
     Ok(format!(
         "{} ({})",
-        ty_of(&target.result.abi(abi), func)?,
+        ty_of(&target.result.abi(platform.abi), func)?,
         parameters.join(", ")
     ))
 }
@@ -193,9 +202,9 @@ pub(super) fn call(
     args: &[ValueId],
     result: &HirType,
     out: &str,
-    abi: NativeAbi,
+    platform: Platform,
 ) -> Result<String, Diagnostic> {
-    let plan = plan(func, target, 0, abi)?;
+    let plan = plan(func, target, 0, platform)?;
     let carried = target.argument_types().count();
     let miscounted = match target.variadic {
         Some(_) => args.len() < carried,
@@ -237,11 +246,11 @@ pub(super) fn call(
                 parameters.push(format!("ptr byval({{ i32, i64 }}) align 8 {temp}.storage"));
             }
             Crossing::Record(passing) => {
-                let align = record_alignment(func, declared, abi)?;
+                let align = record_alignment(func, declared, platform)?;
                 parameters.extend(aggregate::load_argument(&passing, align, &name(*arg), &temp, &mut before));
             }
             Crossing::Scalar => {
-                if let Some(slot) = declared.map(|ty| ty.abi(abi)).filter(|slot| super::widening(slot, value).is_some()) {
+                if let Some(slot) = declared.map(|ty| ty.abi(platform.abi)).filter(|slot| super::widening(slot, value).is_some()) {
                     // A value wider than the slot C reads -- a `c_long` under Win64 --
                     // is truncated here, as C truncates. A constant that would lose
                     // bits was refused before emission (`abi::unrepresentable_constants`).
@@ -255,7 +264,7 @@ pub(super) fn call(
         }
     }
     if let (Some(passing), Some(destination)) = (&plan.result, destination) {
-        let align = record_alignment(func, Some(&target.result), abi)?;
+        let align = record_alignment(func, Some(&target.result), platform)?;
         let returned = format!("{out}.returned");
         let prefix = if matches!(passing, aggregate::Passing::Memory { .. }) { String::new() } else { format!("{returned} = ") };
         before.push(format!(
@@ -277,11 +286,11 @@ pub(super) fn call(
     // return type and lets LLVM take the rest from the callee.
     // The slot C returns in, which is narrower than the value for a `c_long`
     // under Win64: called into a temporary and widened by its signedness.
-    let returned = target.result.abi(abi);
+    let returned = target.result.abi(platform.abi);
     let widened = super::widening(&returned, result);
     let prefix = if widened.is_some() { format!("{out}.narrow = ") } else { prefix };
     let spelled = match target.variadic {
-        Some(_) => variadic_type(func, target, &plan, abi)?,
+        Some(_) => variadic_type(func, target, &plan, platform)?,
         None => ty_of(&returned, func)?.to_owned(),
     };
     before.push(format!(
@@ -299,9 +308,9 @@ pub(super) fn call(
 
 /// The alignment of a record crossing by value, for the loads and stores that
 /// move its eightbytes.
-pub(super) fn record_alignment(func: &Func, ty: Option<&nts_core::hir::native::Type>, abi: NativeAbi) -> Result<u32, Diagnostic> {
+pub(super) fn record_alignment(func: &Func, ty: Option<&nts_core::hir::native::Type>, platform: Platform) -> Result<u32, Diagnostic> {
     match ty {
-        Some(nts_core::hir::native::Type::Record(record)) => aggregate::alignment(record, abi),
+        Some(nts_core::hir::native::Type::Record(record)) => aggregate::alignment(record, platform),
         _ => None,
     }
     .ok_or_else(|| refuse(func, "a C record by value whose layout this backend cannot place"))
@@ -309,13 +318,13 @@ pub(super) fn record_alignment(func: &Func, ty: Option<&nts_core::hir::native::T
 
 /// One temporary per call site, in the entry block, so a call in a loop does
 /// not accumulate stack allocations. The callee receives a by-value copy.
-pub(super) fn stack_arguments(func: &Func, abi: NativeAbi) -> Vec<String> {
+pub(super) fn stack_arguments(func: &Func, platform: Platform) -> Vec<String> {
     let mut storage = Vec::new();
     for value in func.blocks.iter().flat_map(|block| &block.ops) {
         let OpKind::Call { callee: Callee::Native(target), .. } = &func.values[value.0 as usize].kind else { continue; };
         // A call whose records cannot be planned is refused where it is
         // emitted, so it needs no storage here.
-        let Some(plan) = aggregate::plan(0, &target.parameters, &target.result, abi) else { continue };
+        let Some(plan) = aggregate::plan(0, &target.parameters, &target.result, platform) else { continue };
         for (at, crossing) in plan.arguments.iter().enumerate() {
             if *crossing == Crossing::ErasedInMemory {
                 storage.push(format!("{}.arg{at}.storage = alloca {{ i32, i64 }}, align 8", name(*value)));

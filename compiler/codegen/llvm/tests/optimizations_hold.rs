@@ -55,7 +55,7 @@ fn rendered(case: &str, source: &str) -> Option<(String, hir::Program)> {
     let snapshot = api.snapshot(&tsconfig).expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "the fixture should typecheck");
     let prepared = hir::prepare(&snapshot).expect("prepared HIR should verify");
-    let emitted = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(
         emitted.diagnostics.is_empty(),
         "{case}: the backend declined: {:?}",

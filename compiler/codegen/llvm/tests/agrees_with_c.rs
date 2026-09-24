@@ -61,7 +61,7 @@ fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, Stri
     let prepared = hir::prepare(&snapshot).expect("prepared HIR should verify");
 
     // LLVM.
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(
         llvm.diagnostics.is_empty(),
         "the LLVM backend declined: {:?}",

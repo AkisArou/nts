@@ -60,6 +60,31 @@ pub struct Emitted {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+/// The target a module is emitted for, as far as its text depends on it.
+///
+/// **Two facts, because neither decides the other.** `abi` is the C data
+/// model, which decides every native size and offset. `arch` decides with it
+/// the calling convention: how a record or an erased value crosses a call.
+/// `x86_64` Linux and arm64 macOS share a data model and not a convention.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Platform {
+    pub abi: NativeAbi,
+    pub arch: Arch,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Arch {
+    X86_64,
+    Aarch64,
+}
+
+impl Platform {
+    /// `x86_64` System V: Linux and the other ELF targets.
+    pub const SYSV_X86_64: Self = Self { abi: NativeAbi::SysV, arch: Arch::X86_64 };
+    /// `x86_64` Windows, mingw and MSVC alike.
+    pub const WIN64_X86_64: Self = Self { abi: NativeAbi::Win64, arch: Arch::X86_64 };
+}
+
 /// Render a whole program as textual LLVM IR.
 ///
 /// A function this cannot render is *absent* and reported, exactly as the C
@@ -71,7 +96,7 @@ pub struct Emitted {
 /// the first place the answer exists, and it is required so that no caller
 /// gets the host's by omission.
 #[must_use]
-pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
+pub fn emit(program: &Program, platform: Platform) -> Emitted {
     let mut text = String::new();
     let mut diagnostics = Vec::new();
     if let Err(why) = nts_codegen_common::native::layouts(program)
@@ -79,12 +104,12 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     {
         return Emitted { text, diagnostics: vec![refuse(func, &why)] };
     }
-    let mut refusals = nts_codegen_common::abi::unrepresentable_constants(program, abi);
-    refusals.extend(nts_codegen_common::abi::unavailable_scalars(program, abi));
+    let mut refusals = nts_codegen_common::abi::unrepresentable_constants(program, platform.abi);
+    refusals.extend(nts_codegen_common::abi::unavailable_scalars(program, platform.abi));
     if !refusals.is_empty() {
         return Emitted { text, diagnostics: refusals };
     }
-    let native = match native::declarations(program, abi) {
+    let native = match native::declarations(program, platform) {
         Ok(lines) => lines,
         Err(diagnostics) => return Emitted { text, diagnostics },
     };
@@ -180,7 +205,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     }
     let mut bodies = String::new();
     for func in &program.funcs {
-        match function(program, func, abi) {
+        match function(program, func, platform) {
             Ok(rendered) => {
                 let _ = writeln!(bodies, "\n{rendered}");
             }
@@ -203,7 +228,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
             }
         }
     }
-    match bridges(program, abi) {
+    match bridges(program, platform) {
         Ok(text_for_bridges) => text.push_str(&text_for_bridges),
         Err(diagnostic) => diagnostics.push(diagnostic),
     }
@@ -1030,7 +1055,7 @@ fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) ->
 ///
 /// The receiver is the static closure's global. Only a closure with no captures
 /// is bridged, so one immortal instance is the whole of its state.
-fn bridges(program: &Program, abi: NativeAbi) -> Result<String, Diagnostic> {
+fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut declared = false;
@@ -1078,7 +1103,7 @@ fn bridges(program: &Program, abi: NativeAbi) -> Result<String, Diagnostic> {
             };
             let mut body = String::new();
             for (at, foreign) in signature.parameters.iter().enumerate() {
-                let from = foreign.abi(abi);
+                let from = foreign.abi(platform.abi);
                 // The context, which became the receiver, and any argument C
                 // passes that the compiled function does not take.
                 if (*context && at == last) || at + 1 >= compiled.params.len() {
@@ -1102,7 +1127,7 @@ fn bridges(program: &Program, abi: NativeAbi) -> Result<String, Diagnostic> {
                     arguments.push(format!("{to_ty} %p{at}"));
                 }
             }
-            let want = signature.result.abi(abi);
+            let want = signature.result.abi(platform.abi);
             let have = compiled.return_type.clone();
             // `symbol` already carries the sigil; a second one is `@@f`, which
             // the assembler reports as "expected value token" pointing at the
@@ -1767,7 +1792,7 @@ fn symbol(raw: &str) -> String {
     format!("@{}", nts_codegen_common::symbols::c_identifier(raw))
 }
 
-fn function(program: &Program, func: &Func, abi: NativeAbi) -> Result<String, Diagnostic> {
+fn function(program: &Program, func: &Func, platform: Platform) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let returns = ty_of(&func.return_type, func)?;
     let mut params = Vec::new();
@@ -1800,8 +1825,8 @@ fn function(program: &Program, func: &Func, abi: NativeAbi) -> Result<String, Di
         }
     }
     prologue.extend(frame_storage(program, func));
-    prologue.extend(native::stack_arguments(func, abi));
-    prologue.extend(native_memory::stack_storage(func, abi));
+    prologue.extend(native::stack_arguments(func, platform));
+    prologue.extend(native_memory::stack_storage(func, platform));
     let linkage = if func.exported { "" } else { "internal " };
     // `nounwind` on everything this compiler defines, for the reason above: the
     // language has no exceptions, so no frame here can be unwound through.
@@ -1836,7 +1861,7 @@ fn function(program: &Program, func: &Func, abi: NativeAbi) -> Result<String, Di
     for block in &func.blocks {
         let mut lines = Vec::new();
         for value in &block.ops {
-            let line = operation(program, func, *value, abi)?;
+            let line = operation(program, func, *value, platform)?;
             if !line.is_empty() {
                 lines.push(line);
             }
@@ -2027,7 +2052,7 @@ fn field_at(
     Ok((offset, ty_of(ty, func)?))
 }
 
-fn operation(program: &Program, func: &Func, value: ValueId, abi: NativeAbi) -> Result<String, Diagnostic> {
+fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = name(value);
     Ok(match &op.kind {
@@ -2061,7 +2086,7 @@ fn operation(program: &Program, func: &Func, value: ValueId, abi: NativeAbi) -> 
         // The size is this target's, so it is resolved here and not in HIR,
         // and spelled as the constant it is.
         OpKind::NativeSizeOf(storage) => {
-            let shape = nts_core::hir::layout::native_shape(storage, abi)
+            let shape = nts_core::hir::layout::native_shape(storage, platform.abi)
                 .ok_or_else(|| refuse(func, "sizeof needs a complete native layout"))?;
             format!("{out} = fsub double {}, 0.0", float_literal(f64::from(shape.size)))
         }
@@ -2165,7 +2190,7 @@ fn operation(program: &Program, func: &Func, value: ValueId, abi: NativeAbi) -> 
                 )
             }
         }
-        OpKind::Call { .. } => return call(func, value, &out, abi),
+        OpKind::Call { .. } => return call(func, value, &out, platform),
         // A null pointer, which is what an absent reference is: the one spare
         // value a pointer has, and the whole reason `T | null` costs nothing.
         OpKind::ConstNull | OpKind::ConstUndefined if matches!(op.ty, HirType::Managed(_) | HirType::NativePointer(_)) => {
@@ -2215,7 +2240,7 @@ fn operation(program: &Program, func: &Func, value: ValueId, abi: NativeAbi) -> 
                 }
             )
         }
-        _ => return memory_operation(program, func, value, &out, abi),
+        _ => return memory_operation(program, func, value, &out, platform),
     })
 }
 
@@ -2901,7 +2926,7 @@ fn arguments(
 /// struct. And an argument whose type is not the one the runtime declares is
 /// converted -- C does that at the call and says nothing, which is how
 /// `nts_tag_name(uint32_t)` came to be handed a double.
-fn call(func: &Func, value: ValueId, out: &str, abi: NativeAbi) -> Result<String, Diagnostic> {
+fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     if let OpKind::Call {
         callee: Callee::Native(target),
@@ -2913,9 +2938,9 @@ fn call(func: &Func, value: ValueId, out: &str, abi: NativeAbi) -> Result<String
             return Err(refuse(func, "a frame-placed native call"));
         }
         if let Some(send) = &target.send {
-            return objc::send(func, target, send, args, &op.ty, out, abi);
+            return objc::send(func, target, send, args, &op.ty, out, platform);
         }
-        return native::call(func, target, args, &op.ty, out, abi);
+        return native::call(func, target, args, &op.ty, out, platform);
     }
     let out = out.to_owned();
     Ok(match &op.kind {
@@ -3086,7 +3111,7 @@ fn memory_operation(
     func: &Func,
     value: ValueId,
     out: &str,
-    abi: NativeAbi,
+    platform: Platform,
 ) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
@@ -3121,7 +3146,7 @@ fn memory_operation(
         | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. }
         | OpKind::NativeBitLoad { .. } | OpKind::NativeBitStore { .. }
         | OpKind::NativeCopy { .. } => {
-            return native_memory::operation(func, &op.kind, &op.ty, &out, abi);
+            return native_memory::operation(func, &op.kind, &op.ty, &out, platform);
         }
         OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
             return text_operation(func, value, &out);

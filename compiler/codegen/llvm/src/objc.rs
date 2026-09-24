@@ -10,12 +10,12 @@ use nts_codegen_common::objc::{
     block_descriptor_symbol, block_encoding, block_invoke_symbol, block_signatures, class_symbol, lookups,
     selector_symbol,
 };
-use nts_core::hir::native::{FnPointer, Function, NativeAbi, Send, Type};
+use nts_core::hir::native::{FnPointer, Function, Send, Type};
 use nts_core::hir::{Callee, Func, HirType, OpKind, Program, ValueId};
 use nts_diagnostics::Diagnostic;
 
 use super::aggregate::{self, Crossing, Passing};
-use super::{extension, name, refuse, ty_of};
+use super::{Platform, extension, name, refuse, ty_of};
 
 /// A C string as an LLVM constant. Selectors and class names are identifier
 /// characters and colons only (checked where they are read), so no byte here
@@ -97,12 +97,12 @@ pub(super) fn send(
     args: &[ValueId],
     result: &HirType,
     out: &str,
-    abi: NativeAbi,
+    platform: Platform,
 ) -> Result<String, Diagnostic> {
     let instance = send.class.is_none();
     // The selector always; the receiver too when it is a class, which is not
     // among the declared parameters.
-    let plan = super::native::plan(func, target, 1 + usize::from(!instance), abi)?;
+    let plan = super::native::plan(func, target, 1 + usize::from(!instance), platform)?;
     if args.len() != target.argument_types().count() || *result != target.call_result() {
         return Err(refuse(func, "an Objective-C message whose HIR disagrees with its declared ABI"));
     }
@@ -136,7 +136,7 @@ pub(super) fn send(
         }
         let temp = format!("{out}.arg{at}");
         if let Crossing::Record(passing) = &plan.arguments[at] {
-            let align = super::native::record_alignment(func, target.parameters.get(at), abi)?;
+            let align = super::native::record_alignment(func, target.parameters.get(at), platform)?;
             if let Passing::Memory { .. } = passing {
                 types.push("ptr".to_owned());
             } else {
@@ -149,7 +149,7 @@ pub(super) fn send(
         }
     }
     if let (Some(passing), Some(destination)) = (&plan.result, destination) {
-        let align = super::native::record_alignment(func, Some(&target.result), abi)?;
+        let align = super::native::record_alignment(func, Some(&target.result), platform)?;
         let returned = format!("{out}.returned");
         let (entry, prefix) = match passing {
             Passing::Memory { .. } => ("objc_msgSend_stret", String::new()),
