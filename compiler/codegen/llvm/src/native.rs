@@ -86,7 +86,7 @@ pub(super) fn declarations(program: &Program, platform: Platform) -> Result<Vec<
             };
             // A message has no symbol: `objc::module` declares `objc_msgSend`,
             // and each call spells its own function type.
-            if target.send.is_some() {
+            if target.send.is_some() || target.vtable.is_some() {
                 continue;
             }
             let symbol = target.name.as_str();
@@ -229,6 +229,7 @@ pub(super) fn call(
     }
     let (args, destination) = split_destination(target, args);
     let mut before = Vec::new();
+    let callee = callee(target, args, out, &mut before);
     let mut parameters = Vec::new();
     if let (Some(passing), Some(destination)) = (&plan.result, destination) {
         parameters.extend(aggregate::sret(passing, &name(destination)));
@@ -268,9 +269,8 @@ pub(super) fn call(
         let returned = format!("{out}.returned");
         let prefix = if matches!(passing, aggregate::Passing::Memory { .. }) { String::new() } else { format!("{returned} = ") };
         before.push(format!(
-            "{prefix}call {} @{}({})",
+            "{prefix}call {} {callee}({})",
             aggregate::result_type(passing),
-            target.name,
             parameters.join(", ")
         ));
         aggregate::store_result(passing, align, &returned, &name(destination), &mut before);
@@ -294,16 +294,28 @@ pub(super) fn call(
         None => ty_of(&returned, func)?.to_owned(),
     };
     before.push(format!(
-        "{prefix}call {}{} @{}({})",
+        "{prefix}call {}{} {callee}({})",
         extension(&returned),
         spelled,
-        target.name,
         parameters.join(", ")
     ));
     if let Some(widen) = widened {
         before.push(format!("{out} = {widen} {} {out}.narrow to {}", ty_of(&returned, func)?, ty_of(result, func)?));
     }
     Ok(before.join("\n"))
+}
+
+/// What a native call calls: the symbol, or for a COM method the function in
+/// its slot of the receiver's table -- the table the receiver's first word
+/// points at, as C's `(*(void ***)r)[slot]` reads it.
+fn callee(target: &Function, args: &[ValueId], out: &str, before: &mut Vec<String>) -> String {
+    let (Some(vtable), Some(receiver)) = (&target.vtable, args.first()) else {
+        return format!("@{}", target.name);
+    };
+    before.push(format!("{out}.table = load ptr, ptr {}, align 8", name(*receiver)));
+    before.push(format!("{out}.at = getelementptr inbounds ptr, ptr {out}.table, i64 {}", vtable.slot));
+    before.push(format!("{out}.method = load ptr, ptr {out}.at, align 8"));
+    format!("{out}.method")
 }
 
 /// The alignment of a record crossing by value, for the loads and stores that

@@ -3226,7 +3226,7 @@ fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<St
             } else {
                 linkable(target)
             };
-            if framed.is_some() && signatures::signature(&called).is_none() {
+            if framed.is_some() && signatures::signature_on(&called, platform).is_none() {
                 return Err(refuse(
                     func,
                     &format!("a frame-placed {target}, which has no linkable `_into` form"),
@@ -3253,7 +3253,7 @@ fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<St
             // The same distinction the `_fn` companions exist for: a `static
             // inline` is not a contract another code generator can read.
             match callee {
-                Callee::External(_) if signatures::signature(&called).is_none() => {
+                Callee::External(_) if signatures::signature_on(&called, platform).is_none() => {
                     let target = &called;
                     return Err(refuse(
                         func,
