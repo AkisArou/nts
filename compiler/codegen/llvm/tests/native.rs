@@ -2439,6 +2439,93 @@ int orient_last(int spacing, unsigned orientation) { return (int)orientation * 1
     );
 }
 
+/// A fake `GObject` for the counting tests: the real pair's signatures, a
+/// count, and a `freed` flag instead of `free`, so a use after the last
+/// release reads -1 rather than whatever the allocator left.
+const GOBJECT_LIBRARY: &str = r"
+#include <stdbool.h>
+#include <stdlib.h>
+typedef struct _GTypeInstance { int type; } GTypeInstance;
+typedef struct _GObject { GTypeInstance instance; int refs; bool floating; bool freed; } GObject;
+typedef struct _Thing { GObject parent; int value; } Thing;
+static int live;
+static Thing *thing(int value, bool floating) {
+    Thing *t = calloc(1, sizeof *t);
+    t->parent.refs = 1;
+    t->parent.floating = floating;
+    t->value = value;
+    live++;
+    return t;
+}
+struct _Thing *thing_new_owned(int value) { return thing(value, false); }
+struct _Thing *thing_new_floating(int value) { return thing(value, true); }
+void *g_object_ref_sink(void *object) {
+    GObject *o = object;
+    if (o->floating) o->floating = false; else o->refs++;
+    return object;
+}
+void g_object_unref(void *object) {
+    GObject *o = object;
+    if (--o->refs == 0) { o->freed = true; live--; }
+}
+int instance_value(struct _GTypeInstance *instance) {
+    Thing *t = (Thing *)instance;
+    return t->parent.freed ? -1 : t->value;
+}
+int live_objects(void) { return live; }
+";
+
+/// `GObjectClass`, counted with `g_object_ref_sink`/`g_object_unref` under
+/// reference counting, and seen by C as the `GTypeInstance` it starts with.
+///
+/// Each arm is a way the count could be wrong. A `GTypeInstance` view held
+/// past a branch: the view holds no reference, and the object's own last use
+/// is the conversion, so without the ownership pass keeping the object alive
+/// across the view it is released on the edge into the branch and the view
+/// reads -1 there. (A view used within its own block does not show it:
+/// releases there fall after the block's last use either way.) A fresh +1
+/// temporary passed straight to such a parameter; a transfer-none result born
+/// floating, which `ref_sink` takes and the last use drops; and one object
+/// held twice. After fifty runs of each, nothing is alive.
+#[test]
+fn a_gobject_is_counted_and_seen_by_c_as_its_instance_on_both_backends() {
+    let source = r#"
+import type { Class, GObjectClass, Owned, c_int } from "c:types";
+type GTypeInstance = Class<"_GTypeInstance">;
+type GObject = GObjectClass<"_GObject", GTypeInstance>;
+type Thing = GObjectClass<"_Thing", GObject>;
+declare function thing_new_owned(value: c_int): Owned<Thing>;
+declare function thing_new_floating(value: c_int): Thing;
+declare function instance_value(instance: GTypeInstance): c_int;
+declare function live_objects(): c_int;
+export function temporary(): number { return instance_value(thing_new_owned(7 as c_int)); }
+export function floating(): number { const t = thing_new_floating(5 as c_int); return instance_value(t); }
+export function twice(): number { const a = thing_new_owned(3 as c_int); const b = a; return instance_value(b) + instance_value(a); }
+export function branched(flag: boolean): number {
+    const instance: GTypeInstance = thing_new_owned(9 as c_int);
+    if (flag) {
+        return instance_value(instance);
+    }
+    return 0;
+}
+export function live(): number { return live_objects(); }
+"#;
+    let caller = counted_caller(
+        r#"printf("%.0f %.0f %.0f %.0f", branched(true), temporary(), floating(), twice());
+  for (int i = 0; i < 50; i++) { branched(true); branched(false); temporary(); floating(); twice(); }
+  printf(" live=%.0f", live());"#,
+        "",
+    );
+    let Some((_, outputs)) =
+        run_on_both_backends("gobject", source, hir::Provider::ReferenceCounting, GOBJECT_LIBRARY, &caller)
+    else {
+        return;
+    };
+    for output in outputs {
+        assert_eq!(output, "9 7 5 6 live=0 leak=0");
+    }
+}
+
 /// C behind the `@ntsDefault` test: each answer spells what arrived.
 const DEFAULTS_LIBRARY: &str = r"
 #include <stdbool.h>

@@ -48,9 +48,11 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
         elements.iter().map_while(|element| text(snapshot, *element).map(str::to_owned)).collect();
     let tag = tags.pop()?;
     // `ObjcClass<Tag, Parent>` is `Class<Tag, Parent>` with this brand beside
-    // it: the same chain, an object the program counts.
+    // it: the same chain, an object the program counts. `GObjectClass` the same.
     let family = if marker(snapshot, ty, "___objc").is_some() {
         super::Family::Objc
+    } else if marker(snapshot, ty, "___gobject").is_some() {
+        super::Family::GObject
     } else {
         super::Family::C
     };

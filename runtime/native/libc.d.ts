@@ -122,6 +122,18 @@ declare module "c:types" {
   // Plain bytes only: a record holding a counted handle is refused, because a
   // copy of it would be a second owner.
   export type ByValue<T> = Ptr<T> & { readonly __c_by_value?: true };
+  // A `GObject`: `Class<Tag, Parent>` for an object GLib counts. Under the
+  // reference-counting provider the compiler takes a reference where a
+  // second one is kept -- `g_object_ref_sink`, which also takes the floating
+  // reference a new widget is born with -- and drops it where the last one
+  // dies, `g_object_unref`; so a program never calls either. Under the
+  // no-GC provider nothing is ever freed, a GObject included.
+  export type GObjectClass<Tag extends string, Parent extends ClassChain | null = null> = Class<Tag, Parent> & {
+    readonly __gobject: true;
+  };
+  // A result the caller owns -- GIR's `transfer-ownership="full"`: the
+  // reference comes with it, and is not taken again.
+  export type Owned<T extends ClassChain> = T & { readonly __c_owned?: true };
   // What a `Class` is, for the constraint above; not a type to write.
   export type ClassChain = { readonly __c_chain: readonly string[] };
   // A parent's tags, without the rest element that keeps the chain open.

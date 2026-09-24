@@ -667,8 +667,7 @@ pub struct Handle {
 ///
 /// A plain enum on purpose, where a flag would do for two members. Each object
 /// system with its own reference count is one more arm, whose answer is a pair
-/// of functions in [`Family::counting`]. `GObject`'s `g_object_ref`/`unref` is
-/// the next.
+/// of functions in [`Family::counting`].
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Family {
     /// A C pointer the program never counts: its library's own functions
@@ -678,6 +677,9 @@ pub enum Family {
     /// An Objective-C object: `ObjcClass<Tag, Parent>`, retained and released
     /// with the ARC entry points under the reference-counting provider.
     Objc,
+    /// A `GObject`: `GObjectClass<Tag, Parent>`, counted with `GLib`'s own
+    /// pair under the reference-counting provider.
+    GObject,
 }
 
 /// The two functions a counted handle is retained and released with. Both
@@ -699,6 +701,11 @@ impl Family {
         match self {
             Self::C => None,
             Self::Objc => Some(Counting { retain: "objc_retain", release: "objc_release" }),
+            // `ref_sink`, as glib-rs takes a borrowed object: a plain ref on
+            // an ordinary one, and on a new widget -- born floating, handed
+            // back transfer-none -- the floating reference itself, which
+            // otherwise nothing would ever drop.
+            Self::GObject => Some(Counting { retain: "g_object_ref_sink", release: "g_object_unref" }),
         }
     }
 }
@@ -718,10 +725,14 @@ impl Pointee {
 
 impl Handle {
     /// Whether a pointer to this may be passed where one to `to` is wanted:
-    /// `to`'s whole chain is a strict prefix of this one's, in one family.
+    /// `to`'s whole chain is a strict prefix of this one's, in one family --
+    /// or `to` is a C handle nobody counts, which a counted object may be
+    /// viewed as: a `GObject` is a `GTypeInstance` to C. That view holds no
+    /// reference, and the ownership pass keeps the object alive across it
+    /// (`own::anchors`).
     #[must_use]
     pub fn upcasts_to(&self, to: &Self) -> bool {
-        self.family == to.family
+        (self.family == to.family || to.family == Family::C)
             && self.ancestors.len() > to.ancestors.len()
             && self.ancestors.starts_with(&to.ancestors)
             && self.ancestors[to.ancestors.len()] == to.tag
@@ -1434,7 +1445,7 @@ impl Function {
         }
         let returns_string = if abi.is_none() { returned_string(snapshot, signature.return_type) } else { None };
         let returned_array = if abi.is_none() { returned_strings(snapshot, signature.return_type) } else { None };
-        let declared = declared_result(snapshot, &name, signature.return_type)?;
+        let (declared, returns_owned) = handed_back(snapshot, &name, signature.return_type)?;
         let result = records_checked(&name, &parameters, variadic.is_some(), match (returned_text(returned_array.is_some(), returns_string.is_some()), &declared) {
             (Some(text), _) => text,
             (None, Some((c, _))) => c.clone(),
@@ -1460,7 +1471,7 @@ impl Function {
                 .map(|nullable| ReturnedString { nullable, free: None, array: true })
                 .or(returns_string),
             send: None,
-            returns_owned: false,
+            returns_owned,
             consumes: Vec::new(),
             frameworks: Vec::new(),
             defaults: given,
@@ -1917,6 +1928,43 @@ fn tags_name_parameters(
         }
     }
     Ok(())
+}
+
+/// What a returned handle's type says of it: the handle the program has where
+/// C declares an ancestor (`Declared`), and whether the reference comes with
+/// it (`Owned`).
+fn handed_back(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Result<(Option<(Type, Type)>, bool), String> {
+    Ok((declared_result(snapshot, name, ty)?, owned_result(snapshot, name, ty)?))
+}
+
+/// Whether a result is typed `Owned<T>` -- GIR's `transfer-ownership="full"`:
+/// the caller has the reference, and takes no other.
+///
+/// # Errors
+///
+/// `Owned` on a handle the program does not count: a reference handed over
+/// that nothing would ever drop.
+fn owned_result(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Result<bool, String> {
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let ty = match kind(ty) {
+        Some(TypeKind::Union(members)) => match members.as_slice() {
+            [a, b] if matches!(kind(*a), Some(TypeKind::Null)) => *b,
+            [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
+            _ => return Ok(false),
+        },
+        _ => ty,
+    };
+    let Some(TypeKind::Intersection(parts)) = kind(ty) else { return Ok(false) };
+    let owned = parts.iter().any(|part| {
+        matches!(kind(*part), Some(TypeKind::Object { properties })
+            if matches!(properties.as_slice(), [p] if p.name == "___c_owned" && p.optional && p.readonly))
+    });
+    if owned && pointer(snapshot, ty).is_none_or(|pointee| pointee.counting().is_none()) {
+        return Err(format!(
+            "foreign function `{name}` hands back a reference the caller owns, as a handle the program does not count; declare its class with `GObjectClass`, not `Class`"
+        ));
+    }
+    Ok(owned)
 }
 
 /// A result typed `Declared<T, D>`: C's type, a pointer to `D`, and the
