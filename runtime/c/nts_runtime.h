@@ -300,13 +300,18 @@ typedef struct NtsHeader {
  * none is garbage with everything only it held.
  *
  * - `node`: the node standing for `object` in a trace, or NULL where it holds
- *   nothing -- then it is no node, and a slot pointing at it is no edge.
+ *   nothing -- then it is no node, and a slot pointing at it is no edge. Its
+ *   count is its object's references, read the first time a collection
+ *   reaches it (`nts_collection_epoch`), so a trace pays for the nodes it
+ *   touches and not for every one there is.
  * - `each_held`: each closure a node holds, once per lend.
- * - `count`: before a trace, every node's count to its object's references.
- * - `fallen`: at a checkpoint, `root` for each node whose object's count fell
- *   since `count` last read it. A reference given up on the foreign side --
- *   a window destroyed, dropping its child -- releases nothing of ours, so
- *   nothing else would ever look at the cycle it leaves behind.
+ * - `fallen`: at a checkpoint, `root` for nodes whose object's count fell
+ *   since a collection last read it, with the count read for the collection
+ *   that follows. A reference given up on the foreign side -- a window
+ *   destroyed, dropping its child -- releases nothing of ours, so nothing
+ *   else would ever look at the cycle it leaves behind. A bounded share of
+ *   the nodes each time: a checkpoint runs after every task, and one that
+ *   read all ten thousand of a large program's took 146 us.
  * - `sever`: a node found garbage. The object lets go of the closures it holds
  *   (a disconnect), and the release each lend's notify then makes reaches an
  *   object the collector has already marked dying, which ignores it. The
@@ -314,7 +319,6 @@ typedef struct NtsHeader {
 typedef struct NtsHolders {
   NtsHeader *(*node)(void *object);
   void (*each_held)(NtsHeader *node, void (*visit)(NtsHeader *));
-  void (*count)(void);
   void (*fallen)(void (*root)(NtsHeader *));
   void (*sever)(NtsHeader *node);
 } NtsHolders;
@@ -1015,6 +1019,10 @@ void nts_collect_cycles(void);
 /* How many candidates have ever been buffered. For tests: an acyclic program
  * must never buffer one, and the only way to state that is to count. */
 size_t nts_cycle_candidates(void);
+
+/* The collection a node's count is for (see `NtsHolders`): the next one, or
+ * the one running. A node whose count was read for another reads it again. */
+uint64_t nts_collection_epoch(void);
 
 /* An object the program did not allocate -- a string literal in static data --
  * carries this count and is never freed. A sentinel rather than a flag bit so

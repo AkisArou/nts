@@ -173,6 +173,10 @@ struct NtsEnvironment {
   size_t roots_cap;
   NtsHeader **roots;
   size_t candidates;
+  /* Which collection is next: advanced as each one ends, so a node rooted at
+   * a checkpoint and the trace that follows read the same number (see
+   * `nts_collection_epoch`). */
+  uint64_t epoch;
   size_t bytes_held;
   bool draining;
   bool collecting;
@@ -1252,15 +1256,6 @@ void nts_collect_cycles(void) {
   }
   nts_env->collecting = true;
 
-  /* Every node's count to its foreign object's references, read now: a
-   * trace subtracts from it what the candidates hold, and whatever is left
-   * is held by the foreign system. */
-  for (uint32_t family = 0; family < NTS_FAMILIES; family++) {
-    if (nts_holders[family] != NULL) {
-      nts_holders[family]->count();
-    }
-  }
-
   /* Mark. A candidate that is no longer purple was retained since it was
    * buffered, so it is reachable and not a root; one whose count reached zero
    * while buffered was left for exactly this moment. */
@@ -1364,10 +1359,13 @@ void nts_collect_cycles(void) {
     nts_destroy(nts_env->zeroed[index]);
   }
   nts_env->zeroed_len = 0;
+  nts_env->epoch++;
   nts_env->collecting = false;
 }
 
 size_t nts_cycle_candidates(void) { return nts_env->candidates; }
+
+uint64_t nts_collection_epoch(void) { return nts_env->epoch; }
 
 /* Rendered the way a person reading a crash needs it, which is not the way
  * `String(e)` would: this is the end of the program, so a thrown object prints

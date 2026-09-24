@@ -13,8 +13,12 @@ typedef struct NtsGObjectHeld NtsGObjectHeld;
 typedef struct {
   NtsHeader header;
   GObject *object;
-  /* `ref_count` when the collector last read it, which `fallen` compares. */
+  /* `ref_count` when a collection last read it, which `fallen` compares; and
+   * which collection that was (`nts_collection_epoch`). */
   guint last;
+  uint64_t epoch;
+  /* Where it is in `nts_gobject_order`. */
+  guint index;
   GPtrArray *held;
 } NtsGObjectNode;
 
@@ -26,12 +30,31 @@ struct NtsGObjectHeld {
   gboolean severed;
 };
 
-/* Instance to node. Owner thread only, as signal connection is in GTK. */
+/* Instance to node, and every node in an order `fallen` walks a share of at
+ * a time. Owner thread only, as signal connection is in GTK. */
 static GHashTable *nts_gobject_nodes;
+static GPtrArray *nts_gobject_order;
+static guint nts_gobject_cursor;
+
+static guint nts_gobject_references(NtsGObjectNode *node);
+
+/* The count, for the collection `nts_collection_epoch` names, read once. */
+static void nts_gobject_read(NtsGObjectNode *node) {
+  uint64_t epoch = nts_collection_epoch();
+  if (node->epoch != epoch) {
+    node->epoch = epoch;
+    node->last = nts_gobject_references(node);
+    node->header.reserved = node->last;
+  }
+}
 
 static NtsHeader *nts_gobject_node(void *object) {
   NtsGObjectNode *node = g_hash_table_lookup(nts_gobject_nodes, object);
-  return node != NULL ? &node->header : NULL;
+  if (node == NULL) {
+    return NULL;
+  }
+  nts_gobject_read(node);
+  return &node->header;
 }
 
 static void nts_gobject_each_held(NtsHeader *header,
@@ -52,24 +75,25 @@ static guint nts_gobject_references(NtsGObjectNode *node) {
   return (guint)g_atomic_int_get((gint *)&node->object->ref_count);
 }
 
-static void nts_gobject_count(void) {
-  GHashTableIter iter;
-  gpointer value;
-  g_hash_table_iter_init(&iter, nts_gobject_nodes);
-  while (g_hash_table_iter_next(&iter, NULL, &value)) {
-    NtsGObjectNode *node = value;
-    node->last = nts_gobject_references(node);
-    node->header.reserved = node->last;
-  }
-}
+/* How many nodes a checkpoint looks at: a GObject let go of on GTK's side is
+ * found within (nodes / this) checkpoints, and a checkpoint costs this many
+ * reads rather than one per node -- 146 us at ten thousand. */
+#define NTS_GOBJECT_FALLEN_SHARE 64u
 
 static void nts_gobject_fallen(void (*root)(NtsHeader *)) {
-  GHashTableIter iter;
-  gpointer value;
-  g_hash_table_iter_init(&iter, nts_gobject_nodes);
-  while (g_hash_table_iter_next(&iter, NULL, &value)) {
-    NtsGObjectNode *node = value;
+  guint count = nts_gobject_order->len;
+  guint share =
+      count < NTS_GOBJECT_FALLEN_SHARE ? count : NTS_GOBJECT_FALLEN_SHARE;
+  for (guint at = 0; at < share; at++) {
+    if (nts_gobject_cursor >= nts_gobject_order->len) {
+      nts_gobject_cursor = 0;
+    }
+    NtsGObjectNode *node =
+        g_ptr_array_index(nts_gobject_order, nts_gobject_cursor++);
     if (nts_gobject_references(node) < node->last) {
+      /* Read for the collection this root starts, which is the next. */
+      node->epoch = nts_collection_epoch() - 1u;
+      nts_gobject_read(node);
       root(&node->header);
     }
   }
@@ -87,6 +111,12 @@ static void nts_gobject_unheld(gpointer data, GClosure *closure) {
   g_free(held);
   if (node->held->len == 0) {
     g_hash_table_remove(nts_gobject_nodes, node->object);
+    /* Out of the order by moving the last node into its place. */
+    g_ptr_array_remove_index_fast(nts_gobject_order, node->index);
+    if (node->index < nts_gobject_order->len) {
+      NtsGObjectNode *moved = g_ptr_array_index(nts_gobject_order, node->index);
+      moved->index = node->index;
+    }
     g_ptr_array_free(node->held, TRUE);
     g_free(node);
   }
@@ -116,8 +146,8 @@ static void nts_gobject_sever(NtsHeader *header) {
 }
 
 static const NtsHolders nts_gobject_holders = {
-    nts_gobject_node, nts_gobject_each_held, nts_gobject_count,
-    nts_gobject_fallen, nts_gobject_sever};
+    nts_gobject_node, nts_gobject_each_held, nts_gobject_fallen,
+    nts_gobject_sever};
 
 gulong nts_gobject_connect(gpointer instance, const gchar *detailed_signal,
                            GCallback handler, gpointer data,
@@ -133,6 +163,7 @@ gulong nts_gobject_connect(gpointer instance, const gchar *detailed_signal,
   }
   if (nts_gobject_nodes == NULL) {
     nts_gobject_nodes = g_hash_table_new(g_direct_hash, g_direct_equal);
+    nts_gobject_order = g_ptr_array_new();
     nts_register_holders(NTS_FAMILY_GOBJECT, &nts_gobject_holders);
   }
   /* No destroy notify of GLib's: the program's runs from the connection's
@@ -148,7 +179,11 @@ gulong nts_gobject_connect(gpointer instance, const gchar *detailed_signal,
     node->object = instance;
     node->held = g_ptr_array_new();
     g_hash_table_insert(nts_gobject_nodes, instance, node);
+    node->index = nts_gobject_order->len;
+    g_ptr_array_add(nts_gobject_order, node);
     node->last = nts_gobject_references(node);
+    /* A collection other than the next, so the next one reads it. */
+    node->epoch = nts_collection_epoch() - 1u;
   }
   NtsGObjectHeld *held = g_new0(NtsGObjectHeld, 1);
   held->node = node;

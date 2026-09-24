@@ -485,9 +485,10 @@ representation for foreign objects beside Objective-C's.
 2. *Edges.* During a collection only, an object's foreign slot pointing at a
    registered X is an edge to X's record, and X's record has an edge to each
    closure it holds. An X with no record holds nothing and is no node.
-3. *Count.* A record's count is X's own `ref_count`, read at the start of the
-   collection through a family hook (`nts_glib_host.c`, so the runtime stays
-   GLib-free). Trial deletion subtracts the edges from the candidate graph;
+3. *Count.* A record's count is X's own `ref_count`, read the first time a
+   collection reaches it (`nts_collection_epoch`), so a trace pays for the
+   nodes it touches and not for every node there is; the family reads it
+   (`nts_gobject.c`, so the runtime stays GLib-free). Trial deletion subtracts the edges from the candidate graph;
    what remains is held from elsewhere. A transient GTK reference (emission,
    layout) is a real reference, so it can only keep X black -- latency, never
    a collection of something alive. Measured: inside the label's own
@@ -504,8 +505,12 @@ representation for foreign objects beside Objective-C's.
    pointing at it is no edge.
 5. *Revisit.* `window.destroy()` drops GTK's reference to the label on the
    GObject side, where no release of ours happens, so nothing becomes a root.
-   At a checkpoint, a record whose `ref_count` fell since the collector last
-   read it is a root: one read per record per checkpoint.
+   At a checkpoint, a record whose `ref_count` fell since a collection last
+   read it is a root. Reading every record at every checkpoint cost 146 us
+   with ten thousand connected labels (1-2 us with none), and a checkpoint
+   runs after every task; so a checkpoint reads a share of them, 64,
+   round-robin -- 2 us at ten thousand -- and such a cycle is found within
+   (records / 64) checkpoints rather than at the next.
 6. *Collect, in an order that survives re-entrancy.* White records first
    mark their closures severed, so an unlend reaching one is a no-op; then
    their handlers are disconnected (`g_signal_handlers_disconnect_matched` on
