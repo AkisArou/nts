@@ -13,6 +13,8 @@
 //   error-set 0   a missing key wrote a `GError` into that slot, which is freed
 //   split=a|b|c   `g_strsplit` returned a `char **`, copied into a `string[]`
 //                 and released by the binding's `g_strfreev`
+//   sha256=ba7816bf  the bytes "abc", from offset 1 of a larger `Uint8Array`,
+//                 borrowed in place as `const guint8 *` with their length
 //   cast-ok       `asGtkBox` answers the box `gtk_box_new` returned as a widget
 //   cast-null     `asGtkLabel` answers null for that same box
 //   clicked 1     a typed signal handler, connected through the generated
@@ -37,6 +39,7 @@ import {
 } from "c:Gtk-4.0";
 import { gio_application_connect_activate, g_application_quit, g_application_run } from "c:Gio-2.0";
 import {
+  g_compute_checksum_for_data,
   g_date_time_get_ymd,
   g_date_time_new_utc,
   g_date_time_unref,
@@ -55,6 +58,7 @@ import type { c_double, c_int, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
 import { gir_emit, gir_log } from "c:gir-shim";
 import { Orientation, asGtkBox, asGtkButton, asGtkLabel, asGtkWindow } from "../types/gir/Gtk-4.0.values.ts";
+import { ChecksumType } from "../types/gir/GLib-2.0.values.ts";
 import { ApplicationFlags } from "../types/gir/Gio-2.0.values.ts";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
@@ -92,6 +96,12 @@ function outParameters(): void {
   g_key_file_unref(keys);
 
   gir_log("split=" + g_strsplit("a,b,c", ",", -1 as c_int).join("|"));
+
+  // `subarray` starts one byte in, so a pointer to the buffer rather than the
+  // view would hash "_ab" instead.
+  const abc = new Uint8Array([0x5f, 0x61, 0x62, 0x63, 0x5f]).subarray(1, 4);
+  const digest = g_compute_checksum_for_data(ChecksumType.SHA256 as c_uint, abc);
+  gir_log("sha256=" + (digest === null ? "none" : digest.slice(0, 8)));
 }
 
 function main(): void {

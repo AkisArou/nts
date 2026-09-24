@@ -71,6 +71,13 @@ declare module "c:types" {
   export type CStrings<Q extends "char" | "const" | "const const" = "const const"> = readonly string[] & {
     readonly __c_strings?: Q;
   };
+  // A `Uint8Array` as C's pointer to its bytes -- `const guint8 *data` --
+  // borrowed in place for the call: no copy in or out, so bytes C writes are
+  // the ones the array holds when the call returns. `Q` is the header's
+  // pointee spelling, which the witness compares exactly. Like `CStrings`,
+  // only for C that does not keep the pointer past the call.
+  export type CBytes<Q extends "const uint8_t" | "uint8_t" | "const char" | "const void" | "void" = "const uint8_t"> =
+    Uint8Array & { readonly __c_bytes?: Q };
   // An array whose length C takes in a parameter of its own -- `argc` beside
   // `argv`, `gsize len` after `const guint8 *data`. The caller does not pass
   // it: the compiler does, from the array, into a slot of brand `L` placed

@@ -14374,11 +14374,11 @@ impl<'a> FuncBuilder<'a> {
         if in_c && super::native::is_object_pointer(self.snapshot, ty) {
             return Some(HirType::NativePointer(super::native::Pointee::Void));
         }
-        // `CStrings`: the argument is the `string[]` the markers are
-        // intersected with, which the call converts; the markers have no
-        // representation of their own.
-        if in_c && super::native::is_strings(self.snapshot, ty) {
-            return Some(HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String)))));
+        // `CStrings` / `CBytes`: the argument is the `string[]` or the
+        // `Uint8Array` the markers are intersected with, which the call
+        // converts or borrows; the markers have no representation of their own.
+        if in_c && let Some(argument) = super::native::native_array_argument(self.snapshot, ty) {
+            return Some(argument);
         }
         self.represent(ty)
     }
@@ -39140,28 +39140,64 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
-    /// `array === null ? 0 : array.length`, for the count C takes beside an
-    /// array that may be absent.
-    fn count_or_zero(&mut self, array: ValueId, origin: &Origin) -> ValueId {
-        let ty = self.values[array.0 as usize].ty.clone();
+    /// A `Uint8Array`'s bytes where C takes a pointer to them, NULL for
+    /// `null`: `nts_view_bytes`, in place.
+    fn borrow_bytes(&mut self, view: ValueId, want: HirType, origin: &Origin) -> ValueId {
+        let absent = self.push(OpKind::ConstNull, want.clone(), origin.clone());
+        self.unless_null(view, absent, origin, |this| {
+            this.runtime_call("nts_view_bytes", vec![view], want, origin.clone())
+        })
+    }
+
+    /// What C means by a length beside an array: the elements of a
+    /// `string[]`, the bytes of a view -- and 0 for a `null` one.
+    fn array_count(&mut self, array: ValueId, nullable: bool, origin: &Origin) -> ValueId {
+        let view = matches!(self.values[array.0 as usize].ty, HirType::Managed(ManagedType::View(_)));
+        let length = |this: &mut Self| {
+            if view {
+                this.runtime_call("nts_view_byte_length", vec![array], HirType::NUMBER, origin.clone())
+            } else {
+                this.push(OpKind::Length(array), HirType::NUMBER, origin.clone())
+            }
+        };
+        if nullable {
+            let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+            self.unless_null(array, zero, origin, length)
+        } else {
+            length(self)
+        }
+    }
+
+    /// `value === null ? absent : present(value)`, for what C takes beside
+    /// or in place of a managed argument that may be `null` -- a count of 0,
+    /// a NULL pointer -- where reading the absent value would fault.
+    /// `absent` is built by the caller, before the branch.
+    fn unless_null(
+        &mut self,
+        value: ValueId,
+        absent: ValueId,
+        origin: &Origin,
+        present: impl FnOnce(&mut Self) -> ValueId,
+    ) -> ValueId {
+        let ty = self.values[value.0 as usize].ty.clone();
+        let out = self.values[absent.0 as usize].ty.clone();
         let null = self.push(OpKind::ConstNull, ty, origin.clone());
-        let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: array, rhs: null }, HirType::Bool, origin.clone());
-        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        let present = self.new_block();
+        let missing = self.push(OpKind::Binary { op: BinOp::Eq, lhs: value, rhs: null }, HirType::Bool, origin.clone());
+        let taken = self.new_block();
         let merge = self.new_block();
         self.terminate(Terminator::Branch {
-            cond: absent,
+            cond: missing,
             then_target: merge,
-            then_args: vec![zero],
-            else_target: present,
+            then_args: vec![absent],
+            else_target: taken,
             else_args: Vec::new(),
         });
-        let count = self.push_block_param(merge, HirType::NUMBER, origin.clone());
-        self.switch_to(present);
-        let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
-        self.terminate(Terminator::Jump { target: merge, args: vec![length] });
+        let answer = self.push_block_param(merge, out, origin.clone());
+        self.switch_to(taken);
+        let there = present(self);
+        self.terminate(Terminator::Jump { target: merge, args: vec![there] });
         self.switch_to(merge);
-        count
+        answer
     }
 
     /// A call's arguments, lowered the way its callee wants them, and what was
@@ -39216,12 +39252,18 @@ impl<'a> FuncBuilder<'a> {
                 // The array's element count, into the slot C reads it from --
                 // before the array's own slot as often as after, so it is read
                 // from the arguments rather than from what was pushed.
+                // A `Uint8Array` in place: its bytes, for the call. Nothing is
+                // lent, so nothing is given back -- the view is the caller's
+                // argument, alive across the call.
+                Role::Bytes => {
+                    let Some(view) = argument else { continue };
+                    let want = target.parameters[at].representation();
+                    c_args.push(self.borrow_bytes(view, want, &origin));
+                }
                 Role::Length { array, nullable } => {
                     let fed = target.slots().find(|(slot, _, _)| *slot == array).and_then(|(_, _, fed)| fed);
                     let Some(array) = fed.and_then(|ts| args.get(ts).copied()) else { continue };
-                    let count = if nullable { self.count_or_zero(array, &origin) } else {
-                        self.push(OpKind::Length(array), HirType::NUMBER, origin.clone())
-                    };
+                    let count = self.array_count(array, nullable, &origin);
                     let count = self.coerce(count, &target.parameters[at].representation(), id)?;
                     c_args.push(count);
                 }
@@ -39448,11 +39490,11 @@ impl<'a> FuncBuilder<'a> {
         // callee that kept it would read freed memory -- which no test in
         // either profile reaches. The binding says it does not, or the call
         // is refused: that is the direction this check fails safe in.
-        if native
-            .slots()
-            .any(|(slot, role, _)| role == super::native::Role::Strings && native.retention[slot] != super::native::Retention::NotRetained)
-        {
-            return Err(self.unsupported(call, "a `CStrings` parameter without `@ntsNoEscape`, which is what says C does not keep the array it is lent"));
+        if native.slots().any(|(slot, role, _)| {
+            matches!(role, super::native::Role::Strings | super::native::Role::Bytes)
+                && native.retention[slot] != super::native::Retention::NotRetained
+        }) {
+            return Err(self.unsupported(call, "a `CStrings` or `CBytes` parameter without `@ntsNoEscape`, which is what says C does not keep the array it is lent"));
         }
         Ok(Callee::Native(std::sync::Arc::new(native)))
     }

@@ -114,6 +114,10 @@ pub enum Role {
     /// `c:types`), lent for the call and released after it
     /// (`nts_strings_to_cstrings` / `nts_cstrings_release`).
     Strings,
+    /// A `Uint8Array`'s bytes, borrowed in place for the call (`CBytes<Q>`):
+    /// `nts_view_bytes`, no copy. The view is the caller's argument, alive
+    /// across the call, and its storage never moves.
+    Bytes,
     /// The element count of the array in C parameter `array`, which C takes
     /// as a parameter of its own (`Counted<A, L>`). Hidden from TypeScript:
     /// the compiler passes it. `nullable` when the array may be `null`, whose
@@ -135,7 +139,7 @@ impl Function {
         self.roles.iter().enumerate().map(move |(at, role)| {
             let fed = match role {
                 Role::ClosureData | Role::ClosureNotify | Role::Length { .. } => None,
-                Role::Plain | Role::String | Role::Closure { .. } | Role::Strings => {
+                Role::Plain | Role::String | Role::Closure { .. } | Role::Strings | Role::Bytes => {
                     ts += 1;
                     Some(ts - 1)
                 }
@@ -1231,27 +1235,35 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
     Some((function?, kind))
 }
 
-/// `CStrings<Q>`, possibly `Counted<…>`, possibly `| null`, as declared.
+/// `CStrings<Q>` or `CBytes<Q>`, possibly `Counted<…>`, possibly `| null`,
+/// as declared.
 struct NativeArray {
-    /// The whole parameter's C type: `char **`, `const char **` or
-    /// `const char * const *`.
+    /// `Role::Strings` or `Role::Bytes`: what the call makes of it.
+    role: Role,
+    /// The argument as the program holds it: `string[]`, or the
+    /// `Uint8Array`'s view.
+    managed: HirType,
+    /// The whole parameter's C type: `char **`, `const uint8_t *`, ...
     c: Type,
     nullable: bool,
     /// The length slot's C type, and whether it comes after the array.
     count: Option<(TypeId, bool)>,
 }
 
-/// Whether a parameter type is `CStrings`, which lowering reads the
-/// argument for as the `string[]` it is.
-pub(crate) fn is_strings(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    native_array(snapshot, ty).is_some()
+/// The argument's representation where a parameter is `CStrings` or
+/// `CBytes`: the value the markers are intersected with, which has one where
+/// the markers have none.
+pub(crate) fn native_array_argument(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType> {
+    native_array(snapshot, ty).map(|array| array.managed)
 }
 
-/// Read a `CStrings` parameter type, or `None` for any other.
+/// Read a `CStrings` or `CBytes` parameter type, or `None` for any other.
 ///
-/// The markers sit on object types intersected with `readonly string[]`, the
-/// way `Closure`'s sit on the function type, so this reads the parts of one
-/// intersection and nothing deeper.
+/// The markers sit on object types intersected with the value -- a
+/// `readonly string[]`, a `Uint8Array` -- the way `Closure`'s sit on the
+/// function type, so this reads the parts of one intersection and nothing
+/// deeper. A part is a marker when every property it has is one; the value
+/// is the other part, and is an object type with properties of its own.
 fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> {
     let kind_of = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
     // An optional marker reads as `T | undefined`: the `T`.
@@ -1280,42 +1292,78 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
     };
     let TypeKind::Intersection(parts) = kind_of(ty)? else { return None };
     let mut strings = None;
-    let mut elements = None;
+    let mut bytes = None;
+    let mut value = None;
     let mut count = None;
     let mut after = true;
     for part in parts {
-        match kind_of(*part)? {
-            TypeKind::Array(element) => elements = Some(*element),
-            TypeKind::Object { properties } => {
-                for property in properties {
-                    match property.name.as_str() {
-                        "___c_strings" => strings = Some(text(property.ty)?),
-                        "___c_count" => count = Some(defined(property.ty)?),
-                        "___c_count_at" => after = text(property.ty)? == "after",
-                        _ => return None,
-                    }
-                }
+        let markers = match kind_of(*part)? {
+            TypeKind::Object { properties }
+                if !properties.is_empty() && properties.iter().all(|p| p.name.starts_with("___c_")) =>
+            {
+                properties
             }
-            _ => return None,
+            _ => {
+                if value.replace(*part).is_some() {
+                    return None;
+                }
+                continue;
+            }
+        };
+        for property in markers {
+            match property.name.as_str() {
+                "___c_strings" => strings = Some(text(property.ty)?),
+                "___c_bytes" => bytes = Some(text(property.ty)?),
+                "___c_count" => count = Some(defined(property.ty)?),
+                "___c_count_at" => after = text(property.ty)? == "after",
+                _ => return None,
+            }
         }
     }
-    if !matches!(kind_of(elements?)?, TypeKind::String) {
-        return None;
-    }
+    let value = value?;
     let char = Pointee::Scalar(Scalar::Char);
-    let c = match strings?.as_str() {
-        "char" => Type::Pointer(Pointee::Pointer(Box::new(char))),
-        "const" => Type::Pointer(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))),
-        "const const" => Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(
-            Box::new(char),
-        )))))),
+    let (role, managed, c) = match (strings, bytes) {
+        (Some(spelling), None) => {
+            let TypeKind::Array(element) = kind_of(value)? else { return None };
+            if !matches!(kind_of(*element)?, TypeKind::String) {
+                return None;
+            }
+            let c = match spelling.as_str() {
+                "char" => Type::Pointer(Pointee::Pointer(Box::new(char))),
+                "const" => Type::Pointer(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))),
+                "const const" => Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(
+                    Box::new(char),
+                )))))),
+                _ => return None,
+            };
+            let managed = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String))));
+            (Role::Strings, managed, c)
+        }
+        (None, Some(spelling)) => {
+            // A view of bytes, whatever TypeScript calls its class: what the
+            // program passes is its storage.
+            let managed = super::lower::representation(snapshot, value)?;
+            let HirType::Managed(ManagedType::View(element)) = &managed else { return None };
+            if **element != (HirType::Int { bits: 8, signed: false }) {
+                return None;
+            }
+            let pointee = match spelling.as_str() {
+                "const uint8_t" => Pointee::Const(Box::new(Pointee::Scalar(Scalar::UInt8))),
+                "uint8_t" => Pointee::Scalar(Scalar::UInt8),
+                "const char" => Pointee::Const(Box::new(char)),
+                "const void" => Pointee::Const(Box::new(Pointee::Void)),
+                "void" => Pointee::Void,
+                _ => return None,
+            };
+            (Role::Bytes, managed, Type::Pointer(pointee))
+        }
         _ => return None,
     };
-    Some(NativeArray { c, nullable, count: count.map(|ty| (ty, after)) })
+    Some(NativeArray { role, managed, c, nullable, count: count.map(|ty| (ty, after)) })
 }
 
-/// The C slots a `CStrings` parameter occupies, `at` being the first one's
-/// index: the array, and its length before or after it.
+/// The C slots a `CStrings` or `CBytes` parameter occupies, `at` being the
+/// first one's index: the array, and its length before or after it.
 fn array_slots(
     snapshot: &SemanticSnapshot,
     name: &str,
@@ -1324,15 +1372,15 @@ fn array_slots(
     at: usize,
 ) -> Result<Vec<(Type, Role)>, String> {
     let Some((count, after)) = array.count else {
-        return Ok(vec![(array.c.clone(), Role::Strings)]);
+        return Ok(vec![(array.c.clone(), array.role.clone())]);
     };
     let Some(length @ Type::Scalar(_)) = abi_type(snapshot, count) else {
         return Err(format!("foreign function `{name}` parameter `{parameter}`: a `Counted` length that is not a C integer brand"));
     };
     Ok(if after {
-        vec![(array.c.clone(), Role::Strings), (length, Role::Length { array: at, nullable: array.nullable })]
+        vec![(array.c.clone(), array.role.clone()), (length, Role::Length { array: at, nullable: array.nullable })]
     } else {
-        vec![(length, Role::Length { array: at + 1, nullable: array.nullable }), (array.c.clone(), Role::Strings)]
+        vec![(length, Role::Length { array: at + 1, nullable: array.nullable }), (array.c.clone(), array.role.clone())]
     })
 }
 
@@ -1348,7 +1396,8 @@ fn array_slots(
 /// - **`Closure<F>` / `ScopedClosure<F>` / `ErasedClosure<F, N>`**: the
 ///   callback C calls with the closure's context last, then the context, then
 ///   -- when C keeps it -- the function that releases it.
-/// - **`CStrings<Q>`**, optionally `Counted`: a `char **`, and its length
+/// - **`CStrings<Q>`** or **`CBytes<Q>`**, optionally `Counted`: a `char **`
+///   or a byte pointer, and its length
 ///   beside it when C takes one. `at` is the C index the first slot lands
 ///   in, which a length slot names its array by.
 fn c_parameter(

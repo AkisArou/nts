@@ -2044,7 +2044,7 @@ export function run(): number { return walked(["a"]); }
 "#;
     let Some((_, prepared)) = prepare("strings-kept", kept) else { return; };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("a `CStrings` parameter without `@ntsNoEscape`")),
+        prepared.diagnostics.iter().any(|d| d.message.contains("a `CStrings` or `CBytes` parameter without `@ntsNoEscape`")),
         "a `CStrings` parameter C may keep was lowered: {:?}",
         prepared.diagnostics
     );
@@ -2125,5 +2125,74 @@ export function run(): number {
         // Two elements; "βeta" is 4 units; freed twice; one borrowed "one";
         // an empty array; NULL for `null`.
         assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "242110", "{executable}");
+    }
+}
+
+/// C reading and writing bytes through a pointer and a length.
+const BYTES_LIBRARY: &str = r"
+#include <stddef.h>
+#include <stdint.h>
+int bytes_sum(const uint8_t *data, size_t length) {
+    if (data == NULL) return length == 0 ? -1 : -2;
+    int sum = 0;
+    for (size_t i = 0; i < length; i++) sum += data[i];
+    return sum * 100 + (int)length;
+}
+void bytes_fill(uint8_t *out, int count) { for (int i = 0; i < count; i++) out[i] = (uint8_t)(i * 3); }
+";
+
+/// A `Uint8Array` crosses to C as a pointer to its own bytes, borrowed in
+/// place for the call: `const guint8 *data` with its length beside it.
+///
+/// Each arm is a way a copy or a wrong address would show. A `subarray`
+/// starts part-way into its buffer, so a pointer to the buffer rather than
+/// the view reads the wrong bytes. C writing through `uint8_t *` is read back
+/// from the array afterwards, which a copy in would lose. An empty array is a
+/// length of 0 at a real address, and `null` is `(NULL, 0)`. And the length
+/// is the view's byte length, which C is told and the program never passes.
+#[test]
+fn a_uint8_array_is_borrowed_in_place_on_both_backends() {
+    let source = r#"
+import type { CBytes, Counted, c_int, c_size_t } from "c:types";
+/** @ntsNoEscape data */
+declare function bytes_sum(data: Counted<CBytes, c_size_t> | null): c_int;
+/** @ntsNoEscape out */
+declare function bytes_fill(out: CBytes<"uint8_t">, count: c_int): void;
+export function run(): string {
+    const data = new Uint8Array([1, 2, 3, 250]);
+    const out = new Uint8Array(5);
+    bytes_fill(out, 4 as c_int);
+    return [bytes_sum(data), bytes_sum(data.subarray(2)), bytes_sum(new Uint8Array(0)), bytes_sum(null),
+        out[1] * 100 + out[3] * 10 + out[4]].join(" ");
+}
+"#;
+    let Some((dir, prepared)) = prepare("bytes", source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    assert!(text.contains("int bytes_sum(const uint8_t *, size_t)"), "`CBytes` is not `const uint8_t *` with its length after");
+    assert!(text.contains("void bytes_fill(uint8_t *, int)"), "`CBytes<\"uint8_t\">` is not writable");
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("native.c"), BYTES_LIBRARY).unwrap();
+    std::fs::write(
+        dir.join("caller.c"),
+        "#include \"program.h\"\n#include <stdio.h>\n\
+         int main(void) { NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i)); putchar('\\n'); return 0; }\n",
+    )
+    .unwrap();
+    for file in ["native.c", "caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+    }
+    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+        let run = Command::new(dir.join(executable)).output().unwrap();
+        assert!(run.status.success(), "{executable}");
+        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "25604 25302 0 -1 390", "{executable}");
     }
 }

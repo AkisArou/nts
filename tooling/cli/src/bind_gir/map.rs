@@ -484,7 +484,7 @@ impl<'a> Mapper<'a> {
             if let TypeRef::Array(array) = &param.ty
                 && param.direction == Direction::In
             {
-                let mapped = self.strings(param, array, at, &signature.parameters)?;
+                let mapped = self.array_parameter(param, array, at, &signature.parameters)?;
                 c_parameters.push(mapped.c.clone());
                 no_escape.push(identifier(&param.name));
                 parameters.push((identifier(&param.name), mapped));
@@ -606,15 +606,16 @@ impl<'a> Mapper<'a> {
         Ok(Mapped { ts, c: Type::Pointer(pointee) })
     }
 
-    /// An array of strings the callee reads during the call: `CStrings<Q>`,
-    /// its C spelling `Q` read from GIR's `c:type`, and `Counted` when C
-    /// takes its length in a parameter beside it -- the one GIR names, which
-    /// must be right before or right after it (`at`, among `parameters`).
+    /// An array the callee reads (or fills) during the call: strings as
+    /// `CStrings<Q>`, bytes as a borrowed `Uint8Array`, `CBytes<Q>` -- `Q`
+    /// read from GIR's `c:type` -- and `Counted` when C takes its length in a
+    /// parameter beside it: the one GIR names, which must be right before or
+    /// right after it (`at`, among `parameters`).
     ///
     /// Only transfer-none: the callee borrows the array, which is what lets
-    /// the compiler lend one converted for the call. Every other array stays
-    /// refused as one.
-    fn strings(&mut self, param: &Param, array: &ArrayRef, at: usize, parameters: &[Param]) -> Result<Mapped, Reason> {
+    /// the compiler lend one for the call. Every other array stays refused as
+    /// one.
+    fn array_parameter(&mut self, param: &Param, array: &ArrayRef, at: usize, parameters: &[Param]) -> Result<Mapped, Reason> {
         let length = match array.length {
             Some(index) => {
                 let side = if index == at + 1 {
@@ -629,25 +630,43 @@ impl<'a> Mapper<'a> {
             None => None,
         };
         let element = array.element.as_deref().ok_or(Reason::Array)?;
-        if !(element == "utf8" || element == "filename") || param.transfer != Transfer::None {
+        if param.transfer != Transfer::None {
             return Err(Reason::Array);
         }
-        if !array.zero_terminated && length.is_none() {
-            return Err(Reason::Array);
-        }
-        let spelling: String = array.c_type.as_deref().ok_or(Reason::Array)?.replace("gchar", "char").split_whitespace().collect();
+        let spelling: String = array.c_type.as_deref().ok_or(Reason::Array)?.split_whitespace().collect();
         let char = Pointee::Scalar(Scalar::Char);
-        let (qualifier, c) = match spelling.as_str() {
-            "char**" => ("char", Type::Pointer(Pointee::Pointer(Box::new(char)))),
-            "constchar**" => ("const", Type::Pointer(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char)))))),
-            "constchar*const*" => (
-                "const const",
-                Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))))),
-            ),
+        let (ts, c) = match element {
+            "utf8" | "filename" if array.zero_terminated || length.is_some() => {
+                let (qualifier, c) = match spelling.replace("gchar", "char").as_str() {
+                    "char**" => ("char", Type::Pointer(Pointee::Pointer(Box::new(char)))),
+                    "constchar**" => ("const", Type::Pointer(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char)))))),
+                    "constchar*const*" => (
+                        "const const",
+                        Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))))),
+                    ),
+                    _ => return Err(Reason::Array),
+                };
+                self.binding.brands.insert("CStrings");
+                (format!("CStrings<\"{qualifier}\">"), c)
+            }
+            // Bytes have no terminator to find their end by, so only with a
+            // length. `guchar` is `uint8_t` on every target GLib runs on; the
+            // self-check compiles the prototype against the header either way.
+            "guint8" if length.is_some() => {
+                let (qualifier, pointee) = match spelling.as_str() {
+                    "constguint8*" | "constguchar*" => ("const uint8_t", Pointee::Const(Box::new(Pointee::Scalar(Scalar::UInt8)))),
+                    "guint8*" | "guchar*" => ("uint8_t", Pointee::Scalar(Scalar::UInt8)),
+                    "constgchar*" | "constchar*" => ("const char", Pointee::Const(Box::new(char))),
+                    "gconstpointer" | "constvoid*" => ("const void", Pointee::Const(Box::new(Pointee::Void))),
+                    "gpointer" | "void*" => ("void", Pointee::Void),
+                    _ => return Err(Reason::Array),
+                };
+                self.binding.brands.insert("CBytes");
+                (format!("CBytes<\"{qualifier}\">"), Type::Pointer(pointee))
+            }
             _ => return Err(Reason::Array),
         };
-        self.binding.brands.insert("CStrings");
-        let mut ts = format!("CStrings<\"{qualifier}\">");
+        let mut ts = ts;
         if let Some((count, side)) = length {
             self.binding.brands.insert("Counted");
             ts = format!("Counted<{ts}, {}, \"{side}\">", count.ts);

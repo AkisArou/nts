@@ -452,10 +452,16 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             for ty in target.parameters.iter().chain(std::iter::once(&target.result)) {
                 collect_opaque_tags(ty, &mut opaque);
             }
+            // The declarator in parentheses, `void (g_free)(void *);`: the
+            // same declaration, and one a function-like macro of that name
+            // cannot expand. The witness includes the header, and GLib 2.78
+            // defines `g_free` as exactly such a macro, so the plain
+            // `void g_free(void *);` expanded into a syntax error the first
+            // time a binding freed a string with it.
             declared.entry(target.name.as_str()).or_insert_with(|| {
                 (
                     target.declared_at.is_some(),
-                    native_prototype(&target.name, target, Spelling::Expanded),
+                    native_prototype(&format!("({})", target.name), target, Spelling::Expanded),
                 )
             });
         }

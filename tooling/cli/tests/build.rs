@@ -3766,7 +3766,7 @@ fn a_program_that_links_glib_is_driven_by_glib() {
 }
 
 /// The Demo library's header, for [`gir_library`].
-const DEMO_HEADER: &str = "#ifndef DEMO_H\n#define DEMO_H\n\
+const DEMO_HEADER: &str = "#ifndef DEMO_H\n#define DEMO_H\n#include <stddef.h>\n#include <stdint.h>\n\
          typedef struct demo_thing_impl DemoThing;\n\
          typedef void (*DemoTick)(DemoThing *thing, void *user_data);\n\
          typedef enum { DEMO_FLAG_A = 1, DEMO_FLAG_HIGH = (int)(1u << 31) } DemoFlags;\n\
@@ -3780,6 +3780,7 @@ const DEMO_HEADER: &str = "#ifndef DEMO_H\n#define DEMO_H\n\
          void demo_thing_name(const DemoThing *thing, char **name);\n\
          int demo_count_args(int argc, char **argv);\n\
          char **demo_split(const char *text);\n\
+         int demo_checksum(const uint8_t *data, size_t length);\n\
          #endif\n";
 
 /// The C behind [`DEMO_HEADER`].
@@ -3795,36 +3796,14 @@ const DEMO_SOURCE: &str = "#include <demo.h>\n#include <stdlib.h>\n#include <str
          static char demo_name[] = \"thing\";\n\
          void demo_thing_name(const DemoThing *thing, char **name) { (void)thing; *name = demo_name; }\n\
          int demo_count_args(int argc, char **argv) { return argv == NULL ? -1 : argc; }\n\
-         char **demo_split(const char *text) { (void)text; return NULL; }\n";
+         char **demo_split(const char *text) { (void)text; return NULL; }\n\
+         int demo_checksum(const uint8_t *data, size_t length) { int sum = 0; for (size_t i = 0; i < length; i++) sum += data[i]; return sum; }\n";
 
-/// A small library with the shapes `bind-gir` decides on, laid out the way a
-/// real one is: a header, the C behind it, a `.pc` whose `Cflags` reach the
-/// header, and a GIR describing it. Written to `root`; the GIR goes in
-/// `root/gir`, the `.pc` in `root/pc`.
-///
-/// Two things are wrong on purpose. `DemoThing`'s struct tag is not the
-/// `_DemoThing` convention, so a binder that assumed it would declare a
-/// different struct; and the GIR claims `demo_wrong` returns a `gint` where
-/// the header says `long`, which only a check against the header can catch.
-fn gir_library(root: &Path, flag_signed: bool) {
-    let include = root.join("include");
-    for dir in [&include, &root.join("gir"), &root.join("pc"), &root.join("native")] {
-        std::fs::create_dir_all(dir).expect("the fixture's directories");
-    }
-    std::fs::write(include.join("demo.h"), DEMO_HEADER).expect("the header");
-    std::fs::write(root.join("native/demo.c"), DEMO_SOURCE).expect("the library");
-    std::fs::write(
-        root.join("pc/demo.pc"),
-        format!("Name: demo\nDescription: a fixture\nVersion: 1.0\nCflags: -I{}\nLibs:\n", include.display()),
-    )
-    .expect("the pkg-config file");
-    // The flags' high member as GIR writes it: unsigned, although the header
-    // made it an `int`. Which spelling is right is the compiler's answer.
-    let high = if flag_signed { "2147483648" } else { "1073741824" };
-    std::fs::write(
-        root.join("gir/Demo-1.0.gir"),
-        format!(
-            r#"<?xml version="1.0"?>
+/// The Demo library's GIR, for [`gir_library`]: `high` is the flags' high
+/// member as GIR writes it.
+fn demo_gir(high: &str) -> String {
+    format!(
+        r#"<?xml version="1.0"?>
 <repository version="1.2" xmlns="http://www.gtk.org/introspection/core/1.0"
             xmlns:c="http://www.gtk.org/introspection/c/1.0"
             xmlns:glib="http://www.gtk.org/introspection/glib/1.0">
@@ -3899,6 +3878,15 @@ fn gir_library(root: &Path, flag_signed: bool) {
       </return-value>
       <parameters><parameter name="text" transfer-ownership="none"><type name="utf8" c:type="const char*"/></parameter></parameters>
     </function>
+    <function name="checksum" c:identifier="demo_checksum">
+      <return-value><type name="gint" c:type="int"/></return-value>
+      <parameters>
+        <parameter name="data" transfer-ownership="none">
+          <array length="1" zero-terminated="0" c:type="const guint8*"><type name="guint8"/></array>
+        </parameter>
+        <parameter name="length" transfer-ownership="none"><type name="gsize" c:type="gsize"/></parameter>
+      </parameters>
+    </function>
     <function name="wrong" c:identifier="demo_wrong">
       <return-value><type name="gint" c:type="gint"/></return-value>
       <parameters><parameter name="x"><type name="gint" c:type="int"/></parameter></parameters>
@@ -3906,9 +3894,34 @@ fn gir_library(root: &Path, flag_signed: bool) {
   </namespace>
 </repository>
 "#
-        ),
     )
-    .expect("the GIR");
+}
+
+/// A small library with the shapes `bind-gir` decides on, laid out the way a
+/// real one is: a header, the C behind it, a `.pc` whose `Cflags` reach the
+/// header, and a GIR describing it. Written to `root`; the GIR goes in
+/// `root/gir`, the `.pc` in `root/pc`.
+///
+/// Two things are wrong on purpose. `DemoThing`'s struct tag is not the
+/// `_DemoThing` convention, so a binder that assumed it would declare a
+/// different struct; and the GIR claims `demo_wrong` returns a `gint` where
+/// the header says `long`, which only a check against the header can catch.
+fn gir_library(root: &Path, flag_signed: bool) {
+    let include = root.join("include");
+    for dir in [&include, &root.join("gir"), &root.join("pc"), &root.join("native")] {
+        std::fs::create_dir_all(dir).expect("the fixture's directories");
+    }
+    std::fs::write(include.join("demo.h"), DEMO_HEADER).expect("the header");
+    std::fs::write(root.join("native/demo.c"), DEMO_SOURCE).expect("the library");
+    std::fs::write(
+        root.join("pc/demo.pc"),
+        format!("Name: demo\nDescription: a fixture\nVersion: 1.0\nCflags: -I{}\nLibs:\n", include.display()),
+    )
+    .expect("the pkg-config file");
+    // The flags' high member as GIR writes it: unsigned, although the header
+    // made it an `int`. Which spelling is right is the compiler's answer.
+    let high = if flag_signed { "2147483648" } else { "1073741824" };
+    std::fs::write(root.join("gir/Demo-1.0.gir"), demo_gir(high)).expect("the GIR");
 }
 
 /// `nts bind-gir` writes what the headers confirm and drops, with the header's
@@ -3953,6 +3966,9 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         // stack storage the callee may not keep.
         "   * @ntsNoEscape width\n   * @ntsNoEscape height\n   */\n  \
          export function demo_thing_size(thing: Const<DemoThing>, width: Ptr<c_int>, height: Ptr<c_int> | null): void;",
+        // Bytes borrowed in place, their length after them and hidden.
+        "   * @ntsNoEscape data\n   */\n  \
+         export function demo_checksum(data: Counted<CBytes<\"const uint8_t\">, c_size_t, \"after\">): c_int;",
         // A returned `gchar **` the caller frees.
         "   * @ntsFree g_strfreev\n   */\n  export function demo_split(text: string): string[];",
         // `argc` before `argv`: hidden, and filled from the array.

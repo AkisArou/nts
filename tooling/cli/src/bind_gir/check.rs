@@ -104,9 +104,12 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, String>) {
         } else {
             function.c_parameters.iter().map(Type::c_type_expanded).collect::<Vec<_>>().join(", ")
         };
+        // The declarator in parentheses, as the build's witness writes it: a
+        // header may define the function as a function-like macro too --
+        // GLib's `g_free` -- which a bare `g_free(` would expand.
         let _ = writeln!(
             out,
-            "extern {} {}({parameters});",
+            "extern {} ({})({parameters});",
             function.result.c.c_type_expanded(),
             function.symbol
         );

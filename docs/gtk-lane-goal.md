@@ -122,7 +122,7 @@ declarations. Landed:
 | `892eba61` | Strings C returns, copied, and freed by `@ntsFree` (`g_free` for transfer-full). |
 
 Measured on this machine's GTK 4.22:
-**8565 functions bound**, 418 of them typed signal connects.
+**8607 functions bound**, 418 of them typed signal connects.
 
 **Typed signals.** A signal has no C prototype, so the binder emits one typed
 view of `g_signal_connect_data` per class and signal:
@@ -189,10 +189,30 @@ refused rather than declared in a spelling the header contradicts. A result
 is a plain `string[]`, with no markers to follow it into the program's
 variables. `gtk-gir` splits a string with `g_strsplit`.
 
+**Bytes in.** A `Uint8Array` crosses as a pointer to its own bytes,
+borrowed in place for the call -- `CBytes<Q>`, `Q` the header's pointee
+(`const uint8_t`, `uint8_t` for a buffer C fills, `const char`,
+`const void`, `void`) -- with its byte length in a `Counted` slot. No copy in
+or out: what C writes is in the array when the call returns, a `subarray`
+passes its own offset, and `null` is `(NULL, 0)`. It needed no runtime
+helper; `nts_view_bytes` and `nts_view_byte_length` were already on every
+table. `gtk-gir` hashes three bytes from the middle of a larger array with
+`g_compute_checksum_for_data`, and gets SHA-256's `ba7816bf`.
+
+That run also found the witness redeclaring `g_free`, which GLib 2.78
+defines as a function-like macro too: `void g_free(void *);` expanded into a
+syntax error. The witness and the binder's self-check now write the
+declarator in parentheses, `void (g_free)(void *);`, which no macro expands.
+
+Six functions GIR spells `void *` where the header says `const void *`
+(`g_output_stream_write` among them) are refused by the self-check, with
+clang's words: GIR is wrong about them, and the check is what says so.
+
 **Still refused, ranked by count:**
 
 - 643: GIR marks the function not introspectable.
-- 337: arrays -- byte buffers in (51 would clear) are the next shape.
+- 290: arrays -- arrays of handles and records, and buffers C fills and
+  returns, are what is left.
 - 300: out parameters the caller allocates (a struct the callee fills in).
 - 189: async-scope callbacks, which should become Promises.
 - 153: `gpointer` results and `gconstpointer` parameters.
