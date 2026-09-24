@@ -27,8 +27,9 @@
 //   order=ab      `connect_after` passes `G_CONNECT_AFTER`: its handler,
 //                 connected first, still ran after the plain one
 //   idle          a closure given to `g_idle_add_full` ran
-//   label=tick 3  a timeout closure ticked three times, rewriting the label,
-//                 which is read back through `gtk_label_get_text`
+//   label=tick 3  a timeout closure ticked three times, rewriting the label
+//                 through its `label` property, as GJS writes it -- the
+//                 `gtk_label_set_label` and `gtk_label_get_label` GIR names
 //   ticks=3       and the count it captured is what `main` reads afterwards
 //   made=1 again=rejected removed=1
 //                 `make_directory_async` and `delete_async` awaited: the
@@ -45,9 +46,7 @@ import {
   gtk_box_append,
   gtk_box_new,
   gtk_button_new_with_label,
-  gtk_label_get_text,
   gtk_label_new,
-  gtk_label_set_text,
   gtk_window_present,
   gtk_window_set_child,
   Orientation,
@@ -215,11 +214,11 @@ function main(): void {
     });
     g_timeout_add_full(PRIORITY_DEFAULT, 10 as c_uint, () => {
       ticks++;
-      label.set_text("tick " + String(ticks));
+      label.label = "tick " + String(ticks);
       // And the query answered, so the log does not depend on which of the
       // two a loaded machine finishes first.
       if (ticks < 3 || kind === -1 || folders === "") return 1 as c_int;
-      gir_log("label=" + label.get_text());
+      gir_log("label=" + label.label);
       application.quit();
       return 0 as c_int;
     });

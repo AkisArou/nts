@@ -55,6 +55,16 @@ pub(crate) struct Class {
     /// is how `GObject` sits on `GTypeInstance` with no GIR parent to say so.
     pub(crate) first_field: Option<TypeRef>,
     pub(crate) callables: Vec<Callable>,
+    /// `<property>`: each with the methods GIR says read and write it.
+    pub(crate) properties: Vec<Property>,
+}
+
+/// A property and its accessor methods, by their GIR names (`get_label`).
+#[derive(Debug)]
+pub(crate) struct Property {
+    pub(crate) name: String,
+    pub(crate) getter: Option<String>,
+    pub(crate) setter: Option<String>,
 }
 
 /// A signal: its name, and the handler's signature less the instance first

@@ -41,6 +41,11 @@ pub(crate) struct Binding {
     pub(crate) refused: Vec<(String, Reason)>,
     /// Classes with a checked downcast helper.
     pub(crate) casts: Vec<Cast>,
+    /// Each class's properties as GIR names them, by the class's C type:
+    /// `(property, getter, setter)`, method names. Which become a property of
+    /// the class's methods is the emitter's call, since it depends on which
+    /// of those methods the self-check kept.
+    pub(crate) properties: BTreeMap<String, Vec<(String, Option<String>, Option<String>)>>,
 }
 
 /// One `asGtkBox`-style helper: the class, and the function answering its
@@ -459,6 +464,11 @@ impl<'a> Mapper<'a> {
                 self.binding.casts.push(Cast { class: c_type.clone(), get_type: get_type.clone() });
             }
             let counted = self.counted(self.namespace, class);
+            self.binding.properties.insert(
+                c_type.clone(),
+                // `icon-name` as `icon_name`, as GJS spells it too.
+                class.properties.iter().map(|p| (identifier(&p.name.replace('-', "_")), p.getter.clone(), p.setter.clone())).collect(),
+            );
             if counted {
                 self.binding.brands.insert("GObjectClass");
             }

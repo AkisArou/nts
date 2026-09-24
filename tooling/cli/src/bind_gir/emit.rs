@@ -57,11 +57,15 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                 // than extended, so a subclass method that shares a name with
                 // an ancestor's is an overload and not a conflicting redeclaration.
                 let _ = writeln!(out, "  export interface {name}OwnMethods {{");
-                for function in methods.get(name.as_str()).into_iter().flatten() {
+                let own: Vec<&Function> = methods.get(name.as_str()).into_iter().flatten().copied().collect();
+                for function in &own {
                     method(&mut out, function);
                     if let Some(finish) = promises.get(function.symbol.as_str()) {
                         promise_method(&mut out, function, finish);
                     }
+                }
+                for (property, getter, setter) in binding.properties.get(name.as_str()).into_iter().flatten() {
+                    accessor(&mut out, &own, property, getter.as_deref(), setter.as_deref());
                 }
                 out.push_str("  }\n");
                 if let Some((_, parent)) = parent {
@@ -92,6 +96,46 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
     }
     out.push_str("}\n");
     out
+}
+
+/// A property of the class's methods, read and written through the methods
+/// GIR names for it (`@ntsGet`/`@ntsSet`), where the self-check kept them:
+/// `label.label = "Hi"`. Typed by what the getter returns; the setter joins
+/// only where it takes exactly that, since a getter answering `string | null`
+/// beside a setter taking `string` would let `null` be assigned -- such a
+/// property is read-only, and `set_label` is still there. A property whose
+/// name a method of the class already has, or that no kept method serves, is
+/// left out.
+fn accessor(out: &mut String, own: &[&Function], property: &str, getter: Option<&str>, setter: Option<&str>) {
+    let find = |method: Option<&str>| {
+        let method = method?;
+        own.iter().copied().find(|f| f.method.as_ref().is_some_and(|(_, name)| name == method))
+    };
+    if own.iter().any(|f| f.method.as_ref().is_some_and(|(_, name)| name == property)) {
+        return;
+    }
+    let get = find(getter).filter(|f| f.parameters.len() == 1 && f.result.ts != "void" && f.throws.is_none());
+    let set = find(setter).filter(|f| f.parameters.len() == 2 && f.result.ts == "void" && f.throws.is_none());
+    let (ts, set) = match (get, set) {
+        (Some(get), Some(set)) if set.parameters[1].1.ts == get.result.ts => (get.result.ts.clone(), Some(set)),
+        (Some(get), _) => (get.result.ts.clone(), None),
+        (None, Some(set)) => (set.parameters[1].1.ts.clone(), Some(set)),
+        (None, None) => return,
+    };
+    let mut tags = Vec::new();
+    if let Some((_, name)) = get.and_then(|f| f.method.as_ref()) {
+        tags.push(format!("@ntsGet {name}"));
+    }
+    if let Some((_, name)) = set.and_then(|f| f.method.as_ref()) {
+        tags.push(format!("@ntsSet {name}"));
+    }
+    let _ = writeln!(out, "    /**");
+    for tag in tags {
+        let _ = writeln!(out, "     * {tag}");
+    }
+    let _ = writeln!(out, "     */");
+    let readonly = if set.is_none() { "readonly " } else { "" };
+    let _ = writeln!(out, "    {readonly}{property}: {ts};");
 }
 
 /// A function as a method of its class: `this` is its instance.

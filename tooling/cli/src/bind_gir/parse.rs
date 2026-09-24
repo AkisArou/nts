@@ -5,8 +5,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use roxmltree::Node;
 
 use super::model::{
-    ArrayRef, Callable, CallableKind, Callback, Class, Direction, Enum, Member, Namespace, Param, Record,
-    Repository, Scope, Signal, Signature, Transfer, TypeRef,
+    ArrayRef, Callable, CallableKind, Callback, Class, Direction, Enum, Member, Namespace, Param, Property,
+    Record, Repository, Scope, Signal, Signature, Transfer, TypeRef,
 };
 
 const CORE: &str = "http://www.gtk.org/introspection/core/1.0";
@@ -105,6 +105,17 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
                     .map(|signal| Signal {
                         name: attribute(signal, "name").unwrap_or_default().to_owned(),
                         signature: signature(signal),
+                    })
+                    .collect(),
+                properties: node
+                    .children()
+                    .filter(|n| is(*n, "property"))
+                    .filter_map(|property| {
+                        Some(Property {
+                            name: attribute(property, "name")?.to_owned(),
+                            getter: attribute(property, "getter").map(str::to_owned),
+                            setter: attribute(property, "setter").map(str::to_owned),
+                        })
                     })
                     .collect(),
                 get_type: node.attribute((GLIB, "get-type")).map(str::to_owned),
