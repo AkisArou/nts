@@ -25696,55 +25696,28 @@ impl<'a> FuncBuilder<'a> {
 
     /// `new GtkButton({ label: "Hi" })`, where the construct signature the
     /// call resolved to carries `@ntsConstruct gtk_button_new`: that function,
-    /// called with nothing, then the setter each property's `@ntsSet` names,
-    /// in the order the literal writes them -- the literal is known here, so
-    /// no object is built and no property is tested for presence. `None` for
-    /// any other `new`.
+    /// then the setter each property's `@ntsSet` names, in the order the
+    /// literal writes them -- the literal is known here, so no object is built
+    /// and no property is tested for presence. `None` for any other `new`.
+    ///
+    /// Any further names are functions called with nothing, each answering
+    /// the constructor's next argument, the rest left to its defaults:
+    /// `@ntsConstruct GtkLabel_construct gtk_label_get_type` is
+    /// `g_object_new_with_properties(gtk_label_get_type(), 0, NULL, NULL)`.
     fn native_construct(&mut self, id: NodeId) -> Option<Result<ValueId, Diagnostic>> {
         let declaration = self.snapshot.call_targets.get(&id)?.callee?;
         if self.kind_of(declaration) != Some(syntax::CONSTRUCT_SIGNATURE) {
             return None;
         }
-        let function = self.node(declaration).native.as_ref()?.construct.clone()?;
-        Some(self.lower_native_construct(id, &function))
+        let construct = self.node(declaration).native.as_ref()?.construct.clone()?;
+        Some(self.lower_native_construct(id, &construct))
     }
 
-    fn lower_native_construct(&mut self, id: NodeId, function: &str) -> Result<ValueId, Diagnostic> {
-        // The constructor: a foreign function of that name, called with
-        // nothing -- `Declared`, `Owned` and its tags apply as at any call.
-        // Found by its symbol: every binding's declarations are in the
-        // program, and a C name is one function wherever it is declared.
-        let found = self
-            .snapshot
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.name == function)
-            .flat_map(|symbol| symbol.declarations.iter().copied())
-            .find(|node| self.kind_of(*node) == Some(syntax::FUNCTION_DECLARATION) && !self.has_a_body(*node));
-        let declaration = found.ok_or_else(|| {
-            self.unsupported(id, &format!("@ntsConstruct naming `{function}`, which no foreign function declares"))
-        })?;
-        // Its own signature, as any call of it would resolve: a symbol's type
-        // is its declaration's (`node_types`), which the frontend records there
-        // rather than on the symbol.
-        let signature = std::iter::once(declaration)
-            .chain(self.children(declaration))
-            .find_map(|node| self.snapshot.node_types.get(&node).copied())
-            .and_then(|ty| match self.snapshot.types.get(ty.0 as usize).map(|t| &t.kind) {
-                Some(TypeKind::Function(signature)) => Some(*signature),
-                _ => None,
-            })
-            .ok_or_else(|| self.unsupported(id, &format!("@ntsConstruct naming `{function}`, whose signature is unknown")))?;
-        let record = self.snapshot.signatures[signature.0 as usize].clone();
-        if !record.parameters.is_empty() {
-            return Err(self.unsupported(id, &format!("@ntsConstruct naming `{function}`, which takes arguments")));
-        }
-        let callee = self.native_callee(id, Some(declaration), function.to_owned(), &record)?;
-        let Callee::Native(target) = &callee else {
-            return Err(self.unsupported(id, "@ntsConstruct naming a function that is not foreign"));
-        };
-        let (args, lent) = self.native_arguments(id, &target.clone(), Vec::new(), 0, None)?;
-        let handle = self.finish_call(id, callee, args, lent, Some(declaration))?;
+    fn lower_native_construct(&mut self, id: NodeId, construct: &str) -> Result<ValueId, Diagnostic> {
+        let mut names = construct.split_whitespace();
+        let function = names.next().ok_or_else(|| self.unsupported(id, "@ntsConstruct naming no function"))?;
+        let arguments = names.map(|name| self.call_foreign_named(id, name, Vec::new())).collect::<Result<Vec<_>, _>>()?;
+        let handle = self.call_foreign_named(id, function, arguments)?;
         // The properties, as the literal writes them.
         let ty = self
             .snapshot
@@ -25777,6 +25750,52 @@ impl<'a> FuncBuilder<'a> {
             self.lower_accessor_on(id, handle, ty, &setter, Some(value))?;
         }
         Ok(handle)
+    }
+
+    /// A foreign function a tag names, called at `id` with `arguments` and
+    /// its defaults for the rest -- `Declared`, `Owned` and its tags applying
+    /// as at any call of it. Found by its symbol: every binding's declarations
+    /// are in the program, and a C name is one function wherever it is
+    /// declared.
+    fn call_foreign_named(&mut self, id: NodeId, function: &str, arguments: Vec<ValueId>) -> Result<ValueId, Diagnostic> {
+        let declaration = self
+            .snapshot
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.name == function)
+            .flat_map(|symbol| symbol.declarations.iter().copied())
+            .find(|node| self.kind_of(*node) == Some(syntax::FUNCTION_DECLARATION) && !self.has_a_body(*node))
+            .ok_or_else(|| self.unsupported(id, &format!("a tag naming `{function}`, which no foreign function declares")))?;
+        // Its own signature, as a call of it would resolve: a symbol's type is
+        // its declaration's (`node_types`), which the frontend records there
+        // rather than on the symbol.
+        let signature = std::iter::once(declaration)
+            .chain(self.children(declaration))
+            .find_map(|node| self.snapshot.node_types.get(&node).copied())
+            .and_then(|ty| match self.snapshot.types.get(ty.0 as usize).map(|t| &t.kind) {
+                Some(TypeKind::Function(signature)) => Some(*signature),
+                _ => None,
+            })
+            .ok_or_else(|| self.unsupported(id, &format!("a tag naming `{function}`, whose signature is unknown")))?;
+        let record = self.snapshot.signatures[signature.0 as usize].clone();
+        let callee = self.native_callee(id, Some(declaration), function.to_owned(), &record)?;
+        let Callee::Native(target) = &callee else {
+            return Err(self.unsupported(id, &format!("a tag naming `{function}`, which is not foreign")));
+        };
+        // The parameters past `arguments` by their `@ntsDefault`s, as a call
+        // leaving them out gets them.
+        let written = arguments.len();
+        let mut arguments = arguments;
+        let origin = self.origin(id);
+        let outer = self.omitting_for.replace((target.clone(), 0));
+        let defaults = (written..record.parameters.len()).map(|at| self.omitted_by_default(at, &origin)).collect::<Option<Vec<_>>>();
+        self.omitting_for = outer;
+        arguments.extend(defaults.ok_or_else(|| {
+            self.unsupported(id, &format!("a tag naming `{function}`, whose parameters past the {written} it is given are not all `@ntsDefault`ed"))
+        })?);
+        let (args, lent) = self.native_arguments(id, &target.clone(), arguments, written, None)?;
+        let typed = target.call_result();
+        self.finish_call_typed(id, callee, args, lent, Some(declaration), Some(typed))
     }
 
     /// The property signatures a binding declares for the member at `member`
@@ -26930,7 +26949,7 @@ impl<'a> FuncBuilder<'a> {
             .cloned()
             .or_else(|| self.declared_name(declaration))
             .ok_or_else(|| self.unsupported(tag, "a tagged template with an unnamed tag"))?;
-        self.push_call(id, Callee::Direct(name), args, Some(declaration))
+        self.push_call(id, Callee::Direct(name), args, Some(declaration), None)
     }
 
     fn lower_template(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
@@ -39555,6 +39574,22 @@ impl<'a> FuncBuilder<'a> {
         lent: Vec<Lent>,
         declaration: Option<NodeId>,
     ) -> Result<ValueId, Diagnostic> {
+        self.finish_call_typed(id, callee, args, lent, declaration, None)
+    }
+
+    /// [`Self::finish_call`] for a call that is not the node at `id` -- one a
+    /// tag makes, whose value is not what the checker typed the node:
+    /// `gtk_label_get_type()` inside `new GtkLabel(…)` is a `GType`, not a
+    /// `GtkLabel`. `ty` is the call's own type there.
+    fn finish_call_typed(
+        &mut self,
+        id: NodeId,
+        callee: Callee,
+        args: Vec<ValueId>,
+        lent: Vec<Lent>,
+        declaration: Option<NodeId>,
+        ty: Option<HirType>,
+    ) -> Result<ValueId, Diagnostic> {
         let returned = match &callee {
             Callee::Native(target) => target.returns_string.clone().map(|string| (target.clone(), string)),
             _ => None,
@@ -39569,7 +39604,7 @@ impl<'a> FuncBuilder<'a> {
             Callee::Native(target) if target.destination().is_some() => args.last().copied(),
             _ => None,
         };
-        let call = self.push_call(id, callee, args, declaration)?;
+        let call = self.push_call(id, callee, args, declaration, ty)?;
         // A failure is checked *before* the result is read: a function that
         // reports one returns nothing meaningful -- GLib returns NULL where it
         // promised a string -- and reading that would end the process rather
@@ -39828,7 +39863,7 @@ impl<'a> FuncBuilder<'a> {
             let value = self.lower_expecting(default, &ty)?;
             args.push(self.coerce(value, &ty, default)?);
         }
-        self.push_call(id, Callee::Direct(name), args, Some(function))
+        self.push_call(id, Callee::Direct(name), args, Some(function), None)
     }
 
     /// A literal, `null`, or one of those negated, parenthesized or cast --
@@ -41001,6 +41036,7 @@ impl<'a> FuncBuilder<'a> {
         callee: Callee,
         args: Vec<ValueId>,
         declaration: Option<NodeId>,
+        typed: Option<HirType>,
     ) -> Result<ValueId, Diagnostic> {
         let reserved =
             declaration.and_then(|declaration| self.generators.get(&declaration).copied());
@@ -41028,6 +41064,7 @@ impl<'a> FuncBuilder<'a> {
         let ty = reserved
             .map(|index| HirType::Managed(ManagedType::Object(super::generator_frame(index))))
             .or(native_string)
+            .or(typed)
             .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
         let origin = self.origin(id);

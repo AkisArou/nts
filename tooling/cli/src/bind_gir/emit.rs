@@ -170,12 +170,14 @@ fn own_method<'f>(own: &[&'f Function], method: Option<&str>) -> Option<&'f Func
 }
 
 /// GJS's construction: `…Props`, the class's writable properties -- each
-/// optional, typed as its setter takes it -- extending the parent's; and,
-/// where the class has a zero-argument `new` the self-check kept, a value of
-/// the class's name to construct it with, `new GtkButton({ label })`, which
-/// calls that `new` and then the setter of each property the literal writes
-/// (`@ntsConstruct`). A class only extended, or constructed some other way,
-/// has the interface and not the value.
+/// optional, typed as its setter takes it -- extending the parent's; and a
+/// value of the class's name to construct it with, `new GtkButton({ label })`,
+/// which makes one with every property at its default and then calls the
+/// setter of each property the literal writes (`@ntsConstruct`). It is made
+/// by the class's `new` where that takes nothing, and by its `GType` through
+/// `g_object_new_with_properties` otherwise (`GtkLabel_construct`). An
+/// abstract class, or one whose constructor the self-check refused, has the
+/// interface and not the value.
 fn construction(out: &mut String, binding: &Binding, own: &[&Function], name: &str, parent: Option<&str>) {
     let extends = parent.map(|parent| format!(" extends {parent}Props")).unwrap_or_default();
     let _ = writeln!(out, "  export interface {name}Props{extends} {{");
@@ -184,15 +186,16 @@ fn construction(out: &mut String, binding: &Binding, own: &[&Function], name: &s
         let _ = writeln!(out, "    {}?: {};", property.name, set.parameters[1].1.ts);
     }
     out.push_str("  }\n");
-    let Some(constructor) = binding.constructors.get(name).and_then(|symbol| {
-        binding.functions.iter().find(|f| f.symbol == *symbol && f.parameters.is_empty() && f.throws.is_none())
-    }) else {
-        return;
+    let kept = |function: &str| binding.functions.iter().find(|f| f.name == function && f.throws.is_none());
+    let Some(constructor) = binding.constructors.get(name) else { return };
+    let tag = match (kept(&constructor.function), &constructor.get_type) {
+        (Some(new), None) if new.parameters.is_empty() => constructor.function.clone(),
+        (Some(_), Some(get_type)) if kept(get_type).is_some() => format!("{} {get_type}", constructor.function),
+        _ => return,
     };
     let _ = writeln!(
         out,
-        "  export const {name}: {{\n    /**\n     * @ntsConstruct {}\n     */\n    new (props?: {name}Props): {name};\n  }};",
-        constructor.symbol,
+        "  export const {name}: {{\n    /**\n     * @ntsConstruct {tag}\n     */\n    new (props?: {name}Props): {name};\n  }};",
     );
 }
 

@@ -45,9 +45,19 @@ pub(crate) struct Binding {
     /// property of the class's methods is the emitter's call, since it depends
     /// on which of those methods the self-check kept.
     pub(crate) properties: BTreeMap<String, Vec<Accessor>>,
-    /// Each class's zero-argument constructor (`gtk_button_new`), by the
-    /// class's C type: what `new GtkButton({ … })` calls before its setters.
-    pub(crate) constructors: BTreeMap<String, String>,
+    /// What `new GtkButton({ … })` calls before its setters, by the class's
+    /// C type.
+    pub(crate) constructors: BTreeMap<String, Constructor>,
+}
+
+/// How a class is constructed with every property at its default: its own
+/// `new` taking nothing (`gtk_button_new`), or else its view of
+/// `g_object_new_with_properties` given its `GType` (`GtkLabel_construct`,
+/// `gtk_label_get_type`).
+#[derive(Debug)]
+pub(crate) struct Constructor {
+    pub(crate) function: String,
+    pub(crate) get_type: Option<String>,
 }
 
 /// A property as the binding names it (`icon_name`), and the methods GIR
@@ -334,7 +344,7 @@ pub(crate) fn bind<'a>(
                     && callable.signature.parameters.is_empty()
                     && let Some(c_type) = owner.and_then(|class| class.c_type.clone())
                 {
-                    mapper.binding.constructors.insert(c_type, function.symbol.clone());
+                    mapper.binding.constructors.insert(c_type, Constructor { function: function.name.clone(), get_type: None });
                 }
                 mapper.binding.functions.push(function);
             }
@@ -485,6 +495,18 @@ impl<'a> Mapper<'a> {
                 });
                 self.binding.brands.insert("c_size_t");
                 self.binding.casts.push(Cast { class: c_type.clone(), get_type: get_type.clone() });
+                // A class `new GtkLabel({ … })` can make by its `GType`; its
+                // own `new`, where that takes nothing, replaces this below.
+                if !class.is_abstract && self.counted(self.namespace, class) {
+                    match self.construct(class, c_type) {
+                        Ok(view) => {
+                            let constructor = Constructor { function: view.name.clone(), get_type: Some(get_type.clone()) };
+                            self.binding.constructors.insert(c_type.clone(), constructor);
+                            self.binding.functions.push(view);
+                        }
+                        Err(reason) => self.binding.refused.push((format!("{c_type}_construct"), reason)),
+                    }
+                }
             }
             let counted = self.counted(self.namespace, class);
             self.binding.properties.insert(
@@ -1237,6 +1259,74 @@ impl<'a> Mapper<'a> {
     fn counted_c_type(&self, c_type: &str) -> bool {
         let Some(namespace) = self.c_types.get(c_type).copied() else { return false };
         namespace.classes.iter().find(|class| class.c_type.as_deref() == Some(c_type)).is_some_and(|class| self.counted(namespace, class))
+    }
+
+    /// A typed view of `g_object_new_with_properties` for one class:
+    ///
+    /// ```text
+    /// GtkLabel_construct(object_type: c_size_t, n_properties?: c_uint,
+    ///     names?: Ptr<ConstPtr<c_char>> | null, values?: Const<GValue> | null): Declared<GtkLabel, GObject>
+    /// ```
+    ///
+    /// Called with the class's `GType` and nothing else, it makes an instance
+    /// with every property at its default -- GJS's `new Gtk.Label()` -- which
+    /// is what `new GtkLabel({ … })` calls, then the setters, for a class with
+    /// no `new` taking nothing. GIR marks the function not introspectable,
+    /// since it takes `GValue`s, so it is declared here; the self-check
+    /// compiles each view against `GObject`'s header. The result is floating
+    /// for a `GInitiallyUnowned`, as `gtk_label_new`'s is, and the caller's
+    /// own reference, `Owned`, for any other object. `names` is a plain
+    /// pointer rather than a lent `CStrings`, since nothing here passes one:
+    /// the view is for `NULL`, which a lent array cannot be defaulted to.
+    fn construct(&mut self, class: &'a Class, c_type: &str) -> Result<Function, Reason> {
+        let objects = self
+            .repository
+            .namespaces
+            .get("GObject")
+            .ok_or_else(|| Reason::Unknown("GObject".to_owned()))?;
+        let tag = |name: &str| self.facts.tags.get(name).cloned().ok_or_else(|| Reason::NoTag(name.to_owned()));
+        let (object_tag, value_tag) = (tag("GObject")?, tag("GValue")?);
+        let object = self.name_in(objects, "GObject");
+        let value = self.name_in(objects, "GValue");
+        let result = self.handle(object, &object_tag, false, false);
+        let result = self.declared(result, class);
+        let floating = self.descends(self.namespace, class, "GInitiallyUnowned");
+        let result = self.owned(result, !floating);
+        let char = Pointee::Scalar(Scalar::Char);
+        self.binding.brands.extend(["Ptr", "ConstPtr", "c_char", "c_size_t", "c_uint"]);
+        let parameters = vec![
+            ("object_type".to_owned(), Mapped { shape: Shape::Other, ts: "c_size_t".to_owned(), c: Type::Scalar(Scalar::Size) }),
+            ("n_properties".to_owned(), Mapped { shape: Shape::Other, ts: "c_uint".to_owned(), c: Type::Scalar(Scalar::UInt) }),
+            (
+                "names".to_owned(),
+                Mapped {
+                    shape: Shape::Other,
+                    ts: "Ptr<ConstPtr<c_char>> | null".to_owned(),
+                    c: Type::Pointer(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))),
+                },
+            ),
+            ("values".to_owned(), self.handle(value, &value_tag, true, true)),
+        ];
+        Ok(Function {
+            name: format!("{c_type}_construct"),
+            symbol: "g_object_new_with_properties".to_owned(),
+            c_parameters: parameters.iter().map(|(_, mapped)| mapped.c.clone()).collect(),
+            parameters,
+            result,
+            deprecated: false,
+            free: None,
+            no_escape: Vec::new(),
+            returns: None,
+            method: None,
+            throws: None,
+            finish: None,
+            omissible: BTreeMap::from([
+                ("n_properties".to_owned(), "0"),
+                ("names".to_owned(), "null"),
+                ("values".to_owned(), "null"),
+            ]),
+            method_only: false,
+        })
     }
 
     /// A constructor's result as the class GIR says it returns, where C

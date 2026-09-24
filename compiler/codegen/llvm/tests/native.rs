@@ -2775,10 +2775,15 @@ int toggle(int on) { return on; }
 /// twice all change the record. A literal naming one property twice is
 /// TypeScript's own error (TS1117), so it has no arm. A props bag that is not
 /// a literal is refused by name.
+///
+/// `Other` is made by its type, as a class with no `new` taking nothing is:
+/// `@ntsConstruct thing_construct thing_get_type` passes the `GType`-like
+/// value straight to the constructor, whose other parameter is defaulted.
+/// The value needs all 64 bits, so a trip through a double reads as 9.
 #[test]
 fn a_handle_is_constructed_with_properties_on_both_backends() {
     let source = r#"
-import type { Class, c_int } from "c:types";
+import type { Class, c_int, c_size_t } from "c:types";
 interface ThingOwnMethods {
     /** @ntsSymbol thing_set_label */
     set_label(this: Thing, label: string): void;
@@ -2801,6 +2806,13 @@ declare const Thing: {
     new (props?: ThingProps): Thing;
 };
 declare function thing_record(thing: Thing): c_int;
+declare function thing_get_type(): c_size_t;
+/** @ntsDefault spare=0 */
+declare function thing_construct(type: c_size_t, spare?: c_int): Thing;
+declare const Other: {
+    /** @ntsConstruct thing_construct thing_get_type */
+    new (props?: ThingProps): Thing;
+};
 let evaluated = 0;
 function next(): c_int { evaluated = evaluated * 10 + 1; return evaluated as c_int; }
 export function run(): number {
@@ -2808,15 +2820,23 @@ export function run(): number {
     // Written width first, then label: the type declares label first.
     const thing = new Thing({ width: next(), label, });
     const plain = new Thing();
-    return (thing_record(thing) as number) * 10 + (thing_record(plain) as number);
+    const other = new Other({ height: 5 as c_int });
+    return ((thing_record(thing) as number) * 10 + (thing_record(plain) as number)) * 100 + (thing_record(other) as number);
 }
 "#;
     let library = r"
 #include <string.h>
 typedef struct _Thing { int record; } Thing;
-static Thing things[2];
+#include <stddef.h>
+static Thing things[3];
 static int made;
-struct _Thing *thing_new(void) { Thing *t = &things[made++ % 2]; t->record = 0; return t; }
+struct _Thing *thing_new(void) { Thing *t = &things[made++ % 3]; t->record = 0; return t; }
+size_t thing_get_type(void) { return (size_t)0x8000000000000001ULL; }
+struct _Thing *thing_construct(size_t type, int spare) {
+    Thing *t = thing_new();
+    t->record = type == (size_t)0x8000000000000001ULL && spare == 0 ? 7 : 9;
+    return t;
+}
 void thing_set_label(struct _Thing *t, const char *label) { t->record = t->record * 10 + 1 + (int)strlen(label) * 0; }
 void thing_set_width(struct _Thing *t, int width) { t->record = t->record * 10 + 2 + width * 0; t->record = t->record * 10 + width; }
 void thing_set_height(struct _Thing *t, int height) { t->record = t->record * 10 + 3 + height * 0; }
@@ -2824,11 +2844,19 @@ int thing_record(struct _Thing *t) { return t->record; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((_, outputs)) = run_on_both_backends("construct", source, provider, library, &caller) else { return; };
+        let Some((c, outputs)) = run_on_both_backends("construct", source, provider, library, &caller) else { return; };
+        // And not by luck of the constant: the type reaches C with no double
+        // between, which an exact round trip of a smaller value would hide.
+        let typed = c
+            .lines()
+            .find_map(|line| line.trim().strip_suffix(" = thing_get_type();"))
+            .expect("thing_get_type is called");
+        assert!(!c.contains(&format!("(double){typed};")), "the type went through a double:\n{c}");
         // width (2, then its value 1), then label (1), and no height: 211;
-        // the plain one set nothing: 0.
+        // the plain one set nothing: 0; the other was made by its type (7)
+        // and given a height (3): 73.
         for output in outputs {
-            assert_eq!(output, expect("2110", provider), "{provider:?}");
+            assert_eq!(output, expect("211073", provider), "{provider:?}");
         }
     }
     let bag = source.replace("new Thing({ width: next(), label, })", "new Thing(({ width: next(), label } as ThingProps))");

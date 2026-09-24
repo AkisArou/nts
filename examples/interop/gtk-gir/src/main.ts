@@ -48,11 +48,12 @@ import {
   gtk_application_window_new,
   gtk_box_append,
   gtk_box_new,
-  gtk_label_new,
   gtk_window_present,
   gtk_window_set_child,
   Orientation,
   GtkButton,
+  GtkEntryBuffer,
+  GtkLabel,
   type GtkWidget,
 } from "c:Gtk-4.0";
 import {
@@ -186,11 +187,16 @@ function main(): void {
     // from `gtk_box_new`, which C declares `GtkWidget *`.
     const window = gtk_application_window_new(application);
     const box = gtk_box_new(Orientation.VERTICAL, 4 as c_int);
-    const label = gtk_label_new("start");
+    // No `new` of its own taking nothing: made by its `GType`, as GJS does.
+    const label = new GtkLabel({ label: "start", selectable: true });
     // GJS's construction: `gtk_button_new`, then the setter of each
     // property the literal writes, in its order.
     const button = new GtkButton({ label: "press", has_frame: false });
     gir_log("made " + String(button.label) + " " + String(button.has_frame));
+    // Not floating: the program's own reference, which `--rc` releases once.
+    const buffer = new GtkEntryBuffer({ max_length: 2 as c_int });
+    buffer.set_text("abc", -1 as c_int);
+    gir_log("buffer " + buffer.text + " " + String(label.selectable));
     // A checked downcast, for a handle known only as a widget.
     const widget: GtkWidget = box;
     gir_log(asGtkBox(widget) === null ? "cast-failed" : "cast-ok");

@@ -43,6 +43,9 @@ pub(crate) struct Class {
     /// Qualified (`Gtk.Widget`, `GObject.Object`); `None` for a root.
     pub(crate) parent: Option<String>,
     pub(crate) interface: bool,
+    /// `abstract="1"`: no instance is of exactly this class, so nothing
+    /// constructs one by its `GType`.
+    pub(crate) is_abstract: bool,
     /// `c:symbol-prefix`: `button` in `gtk_button_new`, joined to the
     /// namespace's own prefix to name what a binding adds for the class.
     pub(crate) symbol_prefix: Option<String>,
