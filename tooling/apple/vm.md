@@ -5,8 +5,9 @@ This box is Linux. nts compiles and links Apple artifacts here; a Mac only
 
 **Licence.** Apple's macOS licence permits virtualisation only on Apple
 hardware. Running this VM on a PC is the user's decision, taken knowingly on
-2026-09-23; nothing in the build depends on it being a VM, and a real Mac
-replaces it by changing one ssh alias.
+2026-09-23. The VM in use since 2026-09-24 is macOS 26.6 (Tahoe, the last
+release for Intel) with full Xcode and the 26.5 SDK. Nothing in the build
+depends on it being a VM, and a real Mac replaces it by changing one ssh alias.
 
 **What a VM cannot answer.** The VM is x86_64. arm64 Mach-O is built and linked
 here, and its load commands and symbols are checked, but it is never *run* until
@@ -21,8 +22,8 @@ by luck.
 
    ```sh
    mkdir -p ~/vms && cd ~/vms
-   quickget macos sequoia
-   quickemu --vm macos-sequoia.conf
+   quickget macos tahoe
+   quickemu --vm macos-tahoe.conf
    ```
 
    Install macOS from the recovery image the first time; quickemu's own README

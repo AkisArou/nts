@@ -67,9 +67,13 @@ bind-c`, the witness, and `program.h` for C calling TypeScript.
     `minos 13.0`.
   - The x86_64 slice runs on a Mac when one is reachable.
 
-**Not yet measured: a run on macOS.** The VM is not set up yet, so no nts
-program has run on a Mac. `macos-hello` prints `not run -- no Mac reachable`
-until one is.
+**Measured 2026-09-24: an nts program runs on macOS.** On the lane's VM
+(macOS 26.6, x86_64, full Xcode with the 26.5 SDK), `macos-hello`'s x86_64
+slice prints node's output byte for byte. It does so when built against the
+zig-derived sysroot and when built against the real SDK copied back by
+`tooling/apple/sync-sdk.sh`. Control: the arm64 slice sent to the same VM
+fails with `bad CPU type in executable` (exit 127), so the run arm reports a
+failure rather than printing whatever it was given.
 
 **Never measured here: arm64 at run time.** The VM is x86_64. arm64 is built,
 linked and inspected, and the lane never emits a variadic `objc_msgSend`, so
@@ -77,9 +81,8 @@ correctness does not depend on arm64 running by luck.
 
 ## Next
 
-1. **A0, closing:** the VM, and `macos-hello`'s x86_64 slice run on it. Then
-   the existing C interop fixtures with a macOS target; `native-poll` and
-   `native-stat` apply, `native-epoll` does not.
+1. **A0, remainder:** the existing C interop fixtures with a macOS target.
+   `native-poll` and `native-stat` apply; `native-epoll` does not.
 2. **A1, Foundation from TypeScript:**
    - an `objc:` specifier;
    - typed `objc_msgSend` lowering;
