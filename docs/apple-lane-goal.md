@@ -171,10 +171,19 @@ correctness does not depend on arm64 running by luck.
    - **Blocks (`6e177bd0`).** `Block<F>` becomes a clang-shaped stack block
      whose copy and dispose lend and give back the closure, guarded to the
      owning thread. `examples/interop/macos-blocks` matches an ARC oracle.
+   - **Classes (`fb6496c1`).** A class is made at run time through the
+     runtime's C API (`objc:runtime`), and each method is
+     `imp_implementationWithBlock` over a TypeScript closure whose first
+     parameter is `self`. `examples/interop/macos-subclass` matches an ARC
+     oracle. Ownership follows ObjC's: a method closure lives as long as its
+     class, which is forever. An instance is an ordinary counted object, so a
+     target or delegate that Cocoa holds weakly stays alive only while
+     TypeScript holds it. Nothing on our side adds a hidden strong edge.
 
-   Left for A2: `class X extends NSObject` (target/action, delegates), then
+   Left for A2: C structs by value (`NSRect`: C first, then LLVM), then
    `macos-window` with a capturing target/action handler that starts a timer
-   and an await.
+   and an await. Sugar for `class X extends NSObject` belongs to A4, and so
+   does per-instance TypeScript state.
 2. **A3:** `nts bind-objc` from SDK headers, with an ObjC witness.
 3. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
    benchmark against NativeScript and Swift.
