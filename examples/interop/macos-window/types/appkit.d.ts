@@ -37,11 +37,8 @@ declare module "objc:AppKit" {
   export interface NSViewOwnMethods {
     /** @ntsSelector addSubview: */
     addSubview(this: NSView, view: NSView): void;
-    /**
-     * A 32-byte record returned: on x86_64 through `objc_msgSend_stret`.
-     * @ntsSelector frame
-     */
-    frame(this: NSView): ByValue<CGRect>;
+    /** A 32-byte record, read on x86_64 through `objc_msgSend_stret`. */
+    readonly frame: ByValue<CGRect>;
   }
   export type NSView = ObjcClass<"NSView", NSResponder> & NSViewOwnMethods;
   export type NSControl = ObjcClass<"NSControl", NSView> & NSViewOwnMethods;
@@ -49,12 +46,9 @@ declare module "objc:AppKit" {
   export interface NSButtonOwnMethods {
     /** @ntsSelector initWithFrame: */
     initWithFrame(this: NSButton, frame: ByValue<CGRect>): NSButton;
-    /** @ntsSelector setTitle: */
-    setTitle(this: NSButton, title: NSString): void;
-    /** @ntsSelector setTarget: */
-    setTarget(this: NSButton, target: NSObject | null): void;
-    /** @ntsSelector setAction: */
-    setAction(this: NSButton, action: Selector): void;
+    title: NSString;
+    target: NSObject | null;
+    action: Selector;
     /** @ntsSelector performClick: */
     performClick(this: NSButton, sender: NSObject | null): void;
   }
@@ -72,14 +66,11 @@ declare module "objc:AppKit" {
       backing: c_ulong,
       defer: boolean,
     ): NSWindow;
-    /** @ntsSelector setTitle: */
-    setTitle(this: NSWindow, title: NSString): void;
-    /** @ntsSelector contentView */
-    contentView(this: NSWindow): NSView;
+    title: NSString;
+    contentView: NSView;
     /** @ntsSelector makeKeyAndOrderFront: */
     makeKeyAndOrderFront(this: NSWindow, sender: NSObject | null): void;
-    /** @ntsSelector frame */
-    frame(this: NSWindow): ByValue<CGRect>;
+    readonly frame: ByValue<CGRect>;
   }
   export type NSWindow = ObjcClass<"NSWindow", NSResponder> & NSWindowOwnMethods;
 

@@ -54,12 +54,12 @@ function main(): void {
   setRect(frame, 200, 200, 320, 200);
   // Titled and closable, buffered, not deferred.
   const window = NSWindow.alloc().initWithContentRect(frame, 3n as c_ulong, 2n as c_ulong, false);
-  window.setTitle(NSString.stringWithUTF8String("nts"));
+  window.title = NSString.stringWithUTF8String("nts");
   const buttonFrame = local<CGRect>();
   setRect(buttonFrame, 110, 80, 100, 32);
   const button = NSButton.alloc().initWithFrame(buttonFrame);
-  button.setTitle(NSString.stringWithUTF8String("Press"));
-  window.contentView().addSubview(button);
+  button.title = NSString.stringWithUTF8String("Press");
+  window.contentView.addSubview(button);
 
   const cls = objc_allocateClassPair(NSObject, "NtsWindowController", 0n as c_size_t);
   if (cls === null) {
@@ -94,11 +94,14 @@ function main(): void {
   objc_registerClassPair(cls);
 
   const controller = NtsWindowController.new();
-  button.setTarget(controller);
-  button.setAction(sel_registerName("pressed:"));
+  button.target = controller;
+  button.action = sel_registerName("pressed:");
   window.makeKeyAndOrderFront(null);
-  const shown = window.frame();
-  report(`window ${shown.size.width} button ${button.frame().size.width}x${button.frame().size.height}`);
+  const shown = window.frame;
+  const pressable = button.frame;
+  const width = pressable.size.width;
+  const height = button.frame.size.height;
+  report(`window ${shown.size.width} button ${width}x${height}`);
 
   NSTimer.scheduledTimerWithTimeIntervalTargetSelectorUserInfoRepeats(0.05 as c_double, controller, sel_registerName("tick:"), null, true);
   app.run();

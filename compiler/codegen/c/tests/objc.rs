@@ -367,3 +367,39 @@ fn a_class_value_is_declared_by_an_objc_module_with_a_class_name() {
         );
     }
 }
+
+const PROPERTIES: &str = r#"/**
+ * @ntsFramework AppKit
+ */
+declare module "objc:AppKit" {
+  import type { ObjcClass } from "objc:types";
+  export type NSString = ObjcClass<"NSString">;
+  export interface NSWindowOwnMethods {
+    title: NSString;
+    /** @ntsSelector isVisible */
+    visible: boolean;
+    readonly windowNumber: number;
+  }
+  export type NSWindow = ObjcClass<"NSWindow"> & NSWindowOwnMethods;
+}
+"#;
+
+/// A property is two messages: the getter, named for the property or by
+/// `@ntsSelector` (`getter=isVisible`), and the setter Cocoa's `@property`
+/// makes, `set` and the name capitalized.
+#[test]
+fn a_property_reads_and_writes_by_message() {
+    let source = "import type { NSString, NSWindow } from \"objc:AppKit\";\n\
+                  export function run(w: NSWindow, s: NSString): boolean {\n  w.title = s;\n  w.visible = !w.visible;\n  return w.title === s;\n}\n";
+    let Some((_, prepared)) = prepare("properties", PROPERTIES, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let text = emitted.writer.text();
+    for selector in ["\"title\"", "\"setTitle:\"", "\"isVisible\"", "\"setVisible:\""] {
+        assert!(text.contains(&format!("sel_registerName({selector})")), "no {selector}:\n{text}");
+    }
+    assert!(!text.contains("sel_registerName(\"visible\")"), "the getter override was ignored:\n{text}");
+}

@@ -390,11 +390,15 @@ fn decode_nodes(
             // And a method signature, which is how a binding declares a C
             // function as a method of the handle it takes: `set_label` on
             // `GtkButtonMethods`, tagged `@ntsSymbol gtk_button_set_label`.
+            //
+            // And a property signature, an Objective-C property whose getter
+            // is not its name: `@ntsSelector isVisible` on `visible`.
             native: if matches!(
                 kind,
                 NodeKind::Syntax(
                     nts_semantic_schema::syntax::FUNCTION_DECLARATION
                         | nts_semantic_schema::syntax::METHOD_SIGNATURE
+                        | nts_semantic_schema::syntax::PROPERTY_SIGNATURE
                         | nts_semantic_schema::syntax::MODULE_DECLARATION
                         | nts_semantic_schema::syntax::SOURCE_FILE
                 )

@@ -223,7 +223,14 @@ correctness does not depend on arm64 running by luck.
      class methods need no `@ntsClass` function. `macos-window` is written this
      way.
 
-   Next: properties (`window.title = s` as `setTitle:`).
+   - **Properties are messages.** A property signature in an `objc:` interface
+     is read with its getter (its name, or `@ntsSelector isVisible` for a
+     `getter=`) and written with `set` and the name capitalized, so
+     `window.title = s` sends `setTitle:` and `window.frame` sends `frame`,
+     `stret` included. A `readonly` property has no setter. `macos-window`
+     uses both.
+
+   Next: `nts bind-objc`, writing exactly this surface.
 
 3. **A3:** `nts bind-objc` from SDK headers, with an Objective-C witness.
    It replaces the hand-written `.d.ts` in every `macos-*` fixture. Sugar for

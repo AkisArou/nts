@@ -25631,6 +25631,9 @@ impl<'a> FuncBuilder<'a> {
         // at the literal's own element type and then fail to convert the
         // finished thing; asking the place first is the same order the
         // evaluation rule already imposed.
+        if let Some(value) = self.lower_objc_property_set(id, target, source)? {
+            return Ok(value);
+        }
         let place = self.place_of(target)?;
         let value = match self.slot_type(id, &place)? {
             Some(want) => self.lower_expecting(source, &want)?,
@@ -33942,6 +33945,13 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_property_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        // An Objective-C property is a message, and the one named read
+        // through a handle that is not refused below.
+        if let [object, member] = self.children(id)[..]
+            && let Some(value) = self.lower_objc_property_get(id, object, member)?
+        {
+            return Ok(value);
+        }
         self.check_native_brand_read(id)?;
         // `Colour.Red` is a constant, and the checker has already worked out
         // which one: it gives the access a *literal* type carrying the value.
@@ -40127,6 +40137,32 @@ impl<'a> FuncBuilder<'a> {
         name: String,
         signature: &nts_semantic_schema::SignatureRecord,
     ) -> Result<Callee, Diagnostic> {
+        self.native_callee_with(call, declaration, name, signature, None)
+    }
+
+    /// The message one accessor of an Objective-C property sends: the
+    /// property's declaration, with the getter's or the setter's selector
+    /// rather than any the declaration tags.
+    fn native_callee_sending(
+        &self,
+        call: NodeId,
+        declaration: NodeId,
+        selector: &str,
+        signature: &nts_semantic_schema::SignatureRecord,
+    ) -> Result<Callee, Diagnostic> {
+        self.native_callee_with(call, Some(declaration), selector.to_owned(), signature, Some(selector.to_owned()))
+    }
+
+    /// [`Self::native_callee`], with the selector given when `selector` is,
+    /// and otherwise the one the declaration's `@ntsSelector` names.
+    fn native_callee_with(
+        &self,
+        call: NodeId,
+        declaration: Option<NodeId>,
+        name: String,
+        signature: &nts_semantic_schema::SignatureRecord,
+        selector: Option<String>,
+    ) -> Result<Callee, Diagnostic> {
         // `@ntsSymbol`: the C function a declaration binds, when its own name
         // is another -- one typed view per GObject signal of the one
         // `g_signal_connect_data`.
@@ -40165,8 +40201,10 @@ impl<'a> FuncBuilder<'a> {
         if let Some(decl) = declaration {
             native.frameworks = self.declared_frameworks(call, decl)?;
         }
+        let selector =
+            selector.or_else(|| declaration.and_then(|decl| self.node(decl).native.as_ref().and_then(|n| n.selector.clone())));
         if let Some(decl) = declaration
-            && let Some(selector) = self.node(decl).native.as_ref().and_then(|n| n.selector.clone())
+            && let Some(selector) = selector
         {
             let send = self.objc_send(call, decl, &native, selector)?;
             // A family is a claim about the returned *object*, so it applies
@@ -40300,6 +40338,96 @@ impl<'a> FuncBuilder<'a> {
         Ok(Some(self.push(OpKind::ObjcClass { name, frameworks }, ty, self.origin(id))))
     }
 
+    /// The Objective-C property `member` names: one an `objc:` module
+    /// declares as a property signature of an interface, read with its getter
+    /// and written with its setter.
+    ///
+    /// The getter is the property's name, or the selector `@ntsSelector`
+    /// gives it, since a `getter=isVisible` property is read with another.
+    /// The setter is `set` and the name capitalized, with a colon, which is
+    /// the one Cocoa's `@property` makes unless it says `setter=`; a
+    /// `readonly` property has none.
+    fn objc_property(&self, member: NodeId) -> Option<ObjcProperty> {
+        let symbol = self.node(member).symbol?;
+        let record = self.snapshot.symbols.get(symbol.0 as usize)?;
+        let declaration = record.declarations.iter().copied().find(|declaration| {
+            self.kind_of(*declaration) == Some(syntax::PROPERTY_SIGNATURE) && self.in_objc_module(*declaration)
+        })?;
+        let name = record.name.clone();
+        let getter = self.node(declaration).native.as_ref().and_then(|n| n.selector.clone()).unwrap_or_else(|| name.clone());
+        let setter = (!self.node(declaration).modifiers.contains(nts_semantic_schema::DeclarationModifiers::READONLY)).then(|| {
+            let mut letters = name.chars();
+            let first = letters.next().map(|c| c.to_ascii_uppercase()).into_iter();
+            format!("set{}:", first.chain(letters).collect::<String>())
+        });
+        Some(ObjcProperty { declaration, getter, setter })
+    }
+
+    /// `object.property` as a message: the getter, sent to the object.
+    fn lower_objc_property_get(&mut self, id: NodeId, object: NodeId, member: NodeId) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(property) = self.objc_property(member) else { return Ok(None) };
+        // The access's type is the property's: the checker gives the member's
+        // symbol none of its own.
+        let (Some(receiver_ty), Some(ty)) =
+            (self.snapshot.node_types.get(&object).copied(), self.snapshot.node_types.get(&id).copied())
+        else {
+            return Ok(None);
+        };
+        let receiver = self.lower_expression(object)?;
+        let signature = accessor_signature(receiver_ty, None, ty);
+        let callee = self.native_callee_sending(id, property.declaration, &property.getter, &signature)?;
+        let (args, lent) = self.lower_call_arguments(id, &callee, &[], Some(receiver))?;
+        self.finish_call(id, callee, args, lent, Some(property.declaration)).map(Some)
+    }
+
+    /// `object.property = value` as a message: the setter, sent to the
+    /// object, with the value its one argument. The assignment's own value is
+    /// that argument, read back at the expression's type.
+    fn lower_objc_property_set(&mut self, id: NodeId, target: NodeId, source: NodeId) -> Result<Option<ValueId>, Diagnostic> {
+        if self.kind_of(target) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return Ok(None);
+        }
+        let [object, member] = self.children(target)[..] else { return Ok(None) };
+        let Some(property) = self.objc_property(member) else { return Ok(None) };
+        // Defensive: TypeScript refuses the assignment first (TS2540), and a
+        // cast to write it anyway names a different property, which is not
+        // this one. Kept because a binding could still be wrong about which
+        // properties are `readonly`, and sending a setter that does not exist
+        // would answer `unrecognized selector` at run time.
+        let Some(setter) = property.setter.clone() else {
+            return Err(self.unsupported(id, "an assignment to a readonly Objective-C property"));
+        };
+        let (Some(receiver_ty), Some(ty)) =
+            (self.snapshot.node_types.get(&object).copied(), self.snapshot.node_types.get(&target).copied())
+        else {
+            return Ok(None);
+        };
+        let receiver = self.lower_expression(object)?;
+        let signature = accessor_signature(receiver_ty, Some(ty), self.void_type()?);
+        let callee = self.native_callee_sending(id, property.declaration, &setter, &signature)?;
+        let (args, lent) = self.lower_call_arguments(id, &callee, &[source], Some(receiver))?;
+        let written = *args.get(1).ok_or_else(|| self.unsupported(id, "a property setter with no value"))?;
+        self.finish_call(id, callee, args, lent, Some(property.declaration))?;
+        let want = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "an assignment"))?;
+        if self.values[written.0 as usize].ty == want {
+            return Ok(Some(written));
+        }
+        let origin = self.origin(id);
+        Ok(Some(self.push(OpKind::Convert(written), want, origin)))
+    }
+
+    /// The checker's `void`, which a setter's signature returns. Any program
+    /// that binds a setter has one, since the binding module declares it.
+    fn void_type(&self) -> Result<TypeId, Diagnostic> {
+        self.snapshot
+            .types
+            .iter()
+            .position(|record| matches!(record.kind, TypeKind::Void))
+            .and_then(|at| u32::try_from(at).ok())
+            .map(TypeId)
+            .ok_or_else(|| Diagnostic::error("NTS1001", "a property setter in a program the checker gave no `void`", self.origin(NodeId(0)).location))
+    }
+
     /// Whether `declaration` sits inside `declare module "objc:..."`.
     fn in_objc_module(&self, declaration: NodeId) -> bool {
         let mut at = self.node(declaration).parent;
@@ -40347,7 +40475,8 @@ impl<'a> FuncBuilder<'a> {
         if !super::native::Send::is_selector(&selector) {
             return Err(self.unsupported(call, "@ntsSelector names one selector, as in `@ntsSelector initWithUTF8String:`"));
         }
-        let method = self.kind_of(declaration) == Some(syntax::METHOD_SIGNATURE);
+        // A property's accessors send to `this` as a method does.
+        let method = matches!(self.kind_of(declaration), Some(syntax::METHOD_SIGNATURE | syntax::PROPERTY_SIGNATURE));
         let class = attributes.and_then(|n| n.class.clone());
         match (method, &class) {
             (true, Some(_)) => {
@@ -40447,6 +40576,10 @@ impl<'a> FuncBuilder<'a> {
             // A record result is written into the call's destination, and the
             // call itself produces nothing.
             Callee::Native(target) if target.destination().is_some() => Some(target.call_result()),
+            // A native call that returns nothing produces nothing, whatever the
+            // expression around it is typed: a property setter is called for
+            // an assignment, whose type is the value's.
+            Callee::Native(target) if target.call_result() == HirType::Void => Some(HirType::Void),
             _ => None,
         };
         let ty = reserved
@@ -47281,3 +47414,26 @@ mod tests {
 }
 
 mod native_memory;
+
+/// An Objective-C property: its declaration, and the selectors that read and
+/// write it. `setter` is `None` for a `readonly` one.
+struct ObjcProperty {
+    declaration: NodeId,
+    getter: String,
+    setter: Option<String>,
+}
+
+/// The signature one accessor sends with: the receiver first, as
+/// `lower_native_method_call` puts a method's `this`, then the value for a
+/// setter, and what it returns.
+fn accessor_signature(receiver: TypeId, value: Option<TypeId>, result: TypeId) -> nts_semantic_schema::SignatureRecord {
+    let parameter = |name: &str, ty| nts_semantic_schema::ParameterRecord { name: name.to_owned(), ty, optional: false, rest: false };
+    nts_semantic_schema::SignatureRecord {
+        parameters: std::iter::once(parameter("this", receiver)).chain(value.map(|ty| parameter("value", ty))).collect(),
+        return_type: result,
+        type_parameters: Vec::new(),
+        is_construct: false,
+        type_predicate: None,
+        this_type: Some(receiver),
+    }
+}
