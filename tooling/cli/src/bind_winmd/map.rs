@@ -273,11 +273,11 @@ impl Mapper<'_> {
         };
         match &info.kind {
             // A typedef the metadata says points at UTF-16 characters.
-            Kind::Typedef { value: Type::PtrMut(unit, 1) | Type::PtrConst(unit, 1) } if **unit == Type::Char => {
+            Kind::Typedef { value: Type::PtrMut(unit, 1) | Type::PtrConst(unit, 1), .. } if **unit == Type::Char => {
                 self.utf16(&name.1, c, how)
             }
             Kind::Typedef { .. } if matches!(name.1.as_str(), "PSTR" | "PCSTR") => Ok(self.narrow(c, how)),
-            Kind::Typedef { .. } => self.typedef(name, c, how),
+            Kind::Typedef { parent, .. } => self.typedef(name, parent.as_ref(), c, how),
             Kind::Enum { members } => self.enumeration(name, members, c),
             Kind::Struct { nested: true, .. } => Err(format!("`{}`, a struct with a nested anonymous member", name.1)),
             Kind::Struct { fields, union, .. } => self.record(name, fields, *union, c, how),
@@ -325,18 +325,47 @@ impl Mapper<'_> {
 
     /// A handle (`struct HWND__ *`, or `void *` for `HANDLE`) or a scalar
     /// typedef (`BOOL`, `WPARAM`).
-    fn typedef(&mut self, name: &Name, c: &CType, how: Use) -> Result<Spelled, String> {
+    ///
+    /// **A handle is a `Class`**, so that the metadata's `[AlsoUsableFor]` is
+    /// the hierarchy TypeScript's own assignability checks: `HBRUSH` is
+    /// `Class<"HBRUSH__", HGDIOBJ>`, and passes where `DeleteObject` takes an
+    /// `HGDIOBJ`, with no cast. The C side is the header's: a struct pointer,
+    /// or `void *` (`Erased`) where the header erases it.
+    ///
+    /// **Where the header makes the two one type, so does the binding.** The
+    /// metadata says an `HINSTANCE` is usable for an `HMODULE`; mingw spells
+    /// both `struct HINSTANCE__ *`, so C also takes an `HMODULE` for an
+    /// `HINSTANCE`, and `wc.hInstance = GetModuleHandleW(null)` is how every
+    /// Win32 program starts. Such a handle is an alias of its parent.
+    fn typedef(&mut self, name: &Name, parent: Option<&Name>, c: &CType, how: Use) -> Result<Spelled, String> {
         let simple = name.1.as_str();
+        let mut uses = BTreeSet::from([name.clone()]);
+        // The parent is declared first, and only when it maps: a handle
+        // whose parent does not is still a handle, with no parent.
+        let mut same_in_c = false;
+        let parent_ts = parent.and_then(|parent| {
+            let parent_c = self.facts.typedefs.get(&parent.1)?.clone();
+            self.typedef(parent, None, &parent_c, Use::default()).ok()?;
+            same_in_c = parent_c == *c && matches!(c, CType::Pointer { to, .. } if matches!(**to, CType::Record { .. }));
+            Some(parent.1.clone())
+        });
+        let class = |tag: &str| match &parent_ts {
+            Some(parent) => format!("Class<\"{tag}\", {parent}>"),
+            None => format!("Class<\"{tag}\">"),
+        };
         let (ts, nullable_ok, c_spelled) = match c {
             CType::Pointer { to, .. } => match &**to {
+                CType::Record { tag, .. } if same_in_c => {
+                    (parent_ts.clone().unwrap_or_default(), true, format!("struct {tag} *"))
+                }
                 CType::Record { tag, .. } => {
-                    self.brands.insert("Opaque");
-                    (format!("Opaque<\"{tag}\">"), true, format!("struct {tag} *"))
+                    self.brands.insert("Class");
+                    (class(tag), true, format!("struct {tag} *"))
                 }
                 CType::Void => {
-                    self.brands.insert("Opaque");
+                    self.brands.insert("Class");
                     self.brands.insert("Erased");
-                    (format!("Erased<Opaque<\"{simple}\">>"), true, "void *".into())
+                    (format!("Erased<{}>", class(simple)), true, "void *".into())
                 }
                 other => {
                     let pointer = CType::Pointer { to: Box::new(other.clone()), constant: false };
@@ -350,12 +379,10 @@ impl Mapper<'_> {
             }
             other => return Err(format!("`{simple}`, a typedef of `{}`", other.spelled())),
         };
-        self.declared.insert(name.clone(), Some(TypeDecl::Alias { name: simple.into(), ts, uses: BTreeSet::new() }));
-        Ok(Spelled {
-            ts: nullable(simple.into(), nullable_ok && (how.optional || how.stored)),
-            c: c_spelled,
-            uses: BTreeSet::from([name.clone()]),
-        })
+        let own_uses: BTreeSet<Name> = parent.filter(|_| parent_ts.is_some()).cloned().into_iter().collect();
+        uses.extend(own_uses.iter().cloned());
+        self.declared.insert(name.clone(), Some(TypeDecl::Alias { name: simple.into(), ts, uses: own_uses }));
+        Ok(Spelled { ts: nullable(simple.into(), nullable_ok && (how.optional || how.stored)), c: c_spelled, uses })
     }
 
     /// An enum: a `const enum` of its members, crossing as the scalar the

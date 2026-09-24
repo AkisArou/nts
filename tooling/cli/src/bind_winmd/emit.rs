@@ -11,7 +11,7 @@ use super::map::{Binding, TypeDecl};
 
 /// Every name of `c:types` a binding may use.
 const BRANDS: &[&str] = &[
-    "CArray", "CEnum", "ConstPtr", "Erased", "Opaque", "Ptr", "Struct", "Typedef", "Union", "Utf16String",
+    "CArray", "CEnum", "Class", "ConstPtr", "Erased", "Opaque", "Ptr", "Struct", "Typedef", "Union", "Utf16String",
     "c_char", "c_double", "c_float", "c_int", "c_int16", "c_int64", "c_int8", "c_long", "c_long32", "c_uint",
     "c_uint16", "c_uint64", "c_uint8", "c_ulong", "c_ulong32",
 ];
@@ -75,6 +75,10 @@ pub(crate) fn write(binding: &Binding, out: &Utf8Path, command: &str, owners: &B
         }
         let header = header_of(function.documentation.as_deref()).unwrap_or_else(|| "windows.h".into());
         let _ = writeln!(body, "   * Imported from `{}`; declared in `<{header}>`.", function.library);
+        // The import library mingw names after the DLL: `USER32.dll` is
+        // `-luser32`. A program links it only if it calls this.
+        let library = function.library.to_ascii_lowercase();
+        let _ = writeln!(body, "   * @ntsLibrary {}", library.strip_suffix(".dll").unwrap_or(&library));
         for parameter in &function.no_escape {
             let _ = writeln!(body, "   * @ntsNoEscape {parameter}");
         }

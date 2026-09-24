@@ -70,8 +70,22 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
     );
     // A handle is the struct the header's DECLARE_HANDLE makes, and `HANDLE`
     // itself, which is `void *` there, is erased but kept distinct.
-    assert!(foundation.contains("export type HWND = Opaque<\"HWND__\">;"), "{foundation}");
-    assert!(foundation.contains("export type HANDLE = Erased<Opaque<\"HANDLE\">>;"), "{foundation}");
+    // Each handle is a `Class`, and the metadata's `[AlsoUsableFor]` is its
+    // parent: an `HWND` passes where a `HANDLE` is taken, with no cast.
+    assert!(foundation.contains("export type HWND = Class<\"HWND__\", HANDLE>;"), "{foundation}");
+    assert!(foundation.contains("export type HANDLE = Erased<Class<\"HANDLE\">>;"), "{foundation}");
+    // Where the header makes a handle and its parent one C type, the
+    // binding does too: `wc.hInstance = GetModuleHandleW(null)` typechecks.
+    // Which of the two is spelled as the alias follows the order they are
+    // reached in, and either is the same type.
+    assert!(
+        foundation.contains("export type HINSTANCE = HMODULE;") || foundation.contains("export type HMODULE = HINSTANCE;"),
+        "{foundation}"
+    );
+    // The DLL, as the import library a program links when it calls this.
+    let create = messaging.find("export function CreateWindowExW(").unwrap();
+    let doc = &messaging[messaging[..create].rfind("/**").unwrap()..create];
+    assert!(doc.contains("@ntsLibrary user32"), "CreateWindowExW does not name user32: {doc}");
     assert!(values.contains("export const WM_TIMER = 275 as c_uint;"), "no WM_TIMER");
     // `PWSTR` that is not read-only is a buffer the caller owns, not a lent
     // string: `LoadStringW` writes into it.

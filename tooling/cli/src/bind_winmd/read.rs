@@ -49,7 +49,9 @@ pub(crate) struct Constant {
 #[derive(Debug, Clone)]
 pub(crate) enum Kind {
     /// `[NativeTypedef]`: a C typedef over `value` -- a handle, `BOOL`, `PWSTR`.
-    Typedef { value: Type },
+    /// `parent` is `[AlsoUsableFor]`: the handle it is also, as `HBRUSH` is an
+    /// `HGDIOBJ` and `HWND` a `HANDLE`.
+    Typedef { value: Type, parent: Option<Name> },
     Struct { fields: Vec<(String, Type)>, union: bool, nested: bool },
     Enum { members: Vec<(String, Value)> },
     /// A C function pointer type: `WNDPROC`, with its parameters' names.
@@ -152,7 +154,26 @@ fn describe(index: &'static Index, def: TypeDef<'static>, wanted: &mut Vec<Name>
         TypeCategory::Struct if def.has_attribute("NativeTypedefAttribute") => {
             let value = def.fields().next().map_or(Type::Void, |field| field.ty());
             reach(&value, wanted);
-            Kind::Typedef { value }
+            // The metadata names the parent handle and not its namespace:
+            // the one that declares a typedef of that name, found once.
+            let parent = def.find_attribute("AlsoUsableForAttribute").and_then(|attribute| {
+                attribute.value().into_iter().find_map(|(_, value)| match value {
+                    Value::Utf8(name) => Some(name),
+                    _ => None,
+                })
+            });
+            let parent = parent.and_then(|name| {
+                let namespace = index
+                    .types()
+                    .find(|candidate| candidate.name() == name && candidate.has_attribute("NativeTypedefAttribute"))?
+                    .namespace()
+                    .to_owned();
+                Some((namespace, name))
+            });
+            if let Some(parent) = &parent {
+                wanted.push(parent.clone());
+            }
+            Kind::Typedef { value, parent }
         }
         TypeCategory::Struct => {
             let fields: Vec<(String, Type)> = def.fields().map(|field| (field.name().to_owned(), field.ty())).collect();
