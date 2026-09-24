@@ -562,8 +562,10 @@ fn collect_opaque_tags<'a>(ty: &'a Type, into: &mut std::collections::BTreeSet<&
                 collect_opaque_tags(ty, into);
             }
         }
+        // A record by value is a complete type the header defines, not a
+        // forward-declared tag.
         Type::Scalar(_) | Type::Bool | Type::Void | Type::Managed(_) | Type::Erased
-        | Type::BigInt => {}
+        | Type::BigInt | Type::Record(_) => {}
     }
 }
 
@@ -602,6 +604,7 @@ fn names_only_foreign(ty: &Type) -> bool {
             .iter()
             .chain(std::iter::once(&*signature.result))
             .all(names_only_foreign),
+        Type::Record(layout) => layout.foreign(),
         Type::Managed(_) | Type::Erased | Type::BigInt => false,
     }
 }

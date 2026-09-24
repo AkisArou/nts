@@ -112,6 +112,16 @@ declare module "c:types" {
   // believes it (`unsafe_cast`), and a factory that returned a sibling of
   // `T` would be read as a `T`. Only a `D` unrelated to `T` is refused.
   export type Declared<T extends ClassChain, D extends ClassChain> = T & { readonly __c_declared?: D };
+  // A record C takes or returns **by value** -- `NSRect frame`, not
+  // `NSRect *frame`. TypeScript holds a record only as storage, so this is a
+  // pointer to it: an argument is read from the storage it points at, and C
+  // copies it; a result is written into storage the call makes in the
+  // caller's frame, with `local<T>()`'s rules. The brand is optional, so any
+  // `Ptr<T>` passes.
+  //
+  // Plain bytes only: a record holding a counted handle is refused, because a
+  // copy of it would be a second owner.
+  export type ByValue<T> = Ptr<T> & { readonly __c_by_value?: true };
   // What a `Class` is, for the constraint above; not a type to write.
   export type ClassChain = { readonly __c_chain: readonly string[] };
   // A parent's tags, without the rest element that keeps the chain open.

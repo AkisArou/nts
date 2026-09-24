@@ -833,9 +833,7 @@ fn call_arguments(
                     // the arguments C promotes reached the call as whatever
                     // TypeScript had, which is a double for every number.
                     target
-                        .parameters
-                        .get(at)
-                        .or(target.variadic.as_ref())
+                        .argument(at)
                         .map_or(*arg, |ty| {
                             convert(func, rewritten, count, *arg, &ty.representation())
                         })
@@ -960,7 +958,7 @@ fn reconcile_fixed_results<S: std::hash::BuildHasher>(
                 OpKind::Call {
                     callee: super::Callee::Native(target),
                     ..
-                } => target.result.representation(),
+                } => target.call_result(),
                 OpKind::Call {
                     callee: super::Callee::Direct(name),
                     ..

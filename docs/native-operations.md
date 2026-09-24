@@ -734,6 +734,46 @@ defensive, kept because a `Ptr` can still be built by a cast.
 and nothing had asked for one until `copy` needed to pass a `Ptr<Sample>` where
 a `ConstPtr<Sample>` was wanted.
 
+## Records by value
+
+    export function inset(r: ByValue<Rect>, by: c_double): ByValue<Rect>;
+
+C's `struct rect inset(struct rect r, double by)`. A program holds a record only
+as storage, so `ByValue<T>` is `Ptr<T>` with an optional brand: the brand says
+C's parameter is the record in that storage, not its address.
+
+    *v12 = inset(*v3, 1.0);                                          /* C */
+
+- **An argument** is read from the storage it points at, and C copies it. The
+  callee changing its copy leaves ours alone, and nothing retains the storage,
+  so a `local` may be passed (`Retention::NotRetained`).
+- **A result** is written into a `NativeLocal` the lowering makes and passes as
+  the call's **last HIR argument**, which is sret expressed in HIR. The program
+  gets a `Ptr<T>` to that storage, so `local<T>()`'s rules are the result's:
+  it may not escape, and the call may not sit in a loop or a suspending
+  function. The call itself produces nothing (`Function::call_result`).
+- A record crosses as plain bytes. A record holding a counted handle is
+  refused, since copying one would create a second owner. So are a packed record, one
+  with a flexible member, one C cannot name, a record inside a function type,
+  and a record result on a variadic function.
+
+A record's HIR representation is a pointer to it, so a backend that does not
+know records would pass every check a pointer passes and hand C an address
+where C reads bytes. `Function::passes_a_record` is the question the LLVM
+backend asks so that it refuses by name until it classifies aggregates itself.
+
+**An Objective-C send** returning a record goes through `objc_msgSend_stret` on
+x86_64 when the record is over 16 bytes, since every record that crosses is
+unpacked. arm64 has one entry point and no `_stret`, so the choice is
+`NTS_OBJC_SEND_FOR(sizeof(T))`, decided per slice by the C compiler.
+`examples/interop/macos-geometry` runs a control that forces plain `objc_msgSend`,
+and the 32-byte `rectValue` then fails at the send.
+
+The fixtures are `examples/interop/native-byvalue` (one record per ABI class,
+run against the same program in C) and `examples/interop/macos-geometry`
+(against the same program in Objective-C). `nts bind-c` spells a record that
+crosses a call `ByValue<T>`, and a record member stays the alias.
+
 ## Anonymous records
 
 The survey said these block four records where bit-fields block one, so they

@@ -1501,12 +1501,31 @@ impl Shape {
                 parameters
                     .iter()
                     .enumerate()
-                    .map(|(at, ty)| format!("arg{at}: {}", ty.spell(aliases)))
+                    .map(|(at, ty)| format!("arg{at}: {}", ty.spell_crossing(aliases)))
                     .collect::<Vec<_>>()
                     .join(", "),
-                result.as_ref().as_ref().map_or_else(|| "void".to_owned(), |ty| ty.spell(aliases))
+                result.as_ref().as_ref().map_or_else(|| "void".to_owned(), |ty| ty.spell_crossing(aliases))
             ),
         }
+    }
+
+    /// The spelling where the value crosses a call -- a parameter or a result
+    /// -- rather than sits in storage. A record there is passed **by value**,
+    /// which is `ByValue<T>`; as a member it is the alias itself, stored
+    /// inline.
+    fn spell_crossing(&self, aliases: &BTreeMap<String, String>) -> String {
+        match self {
+            Self::Record(_) | Self::AnonymousRecord(_) => format!("ByValue<{}>", self.spell(aliases)),
+            _ => self.spell(aliases),
+        }
+    }
+
+    /// [`Self::imports`] for [`Self::spell_crossing`].
+    fn imports_crossing(&self, into: &mut BTreeSet<&'static str>) {
+        if matches!(self, Self::Record(_) | Self::AnonymousRecord(_)) {
+            into.insert("ByValue");
+        }
+        self.imports(into);
     }
 
     /// The names from `c:types` this spelling needs imported.
@@ -1540,10 +1559,10 @@ impl Shape {
             Self::Record(_) | Self::AnonymousRecord(_) => {}
             Self::FnPointer(parameters, result) => {
                 for parameter in parameters {
-                    parameter.imports(into);
+                    parameter.imports_crossing(into);
                 }
                 if let Some(result) = result.as_ref() {
-                    result.imports(into);
+                    result.imports_crossing(into);
                 }
             }
         }
@@ -1604,10 +1623,10 @@ impl Binding {
         }
         for function in &self.functions {
             for (_, ty) in &function.parameters {
-                ty.imports(&mut needed);
+                ty.imports_crossing(&mut needed);
             }
             if let Some(result) = &function.result {
-                result.imports(&mut needed);
+                result.imports_crossing(&mut needed);
             }
         }
 
@@ -1690,7 +1709,7 @@ impl Binding {
             let mut parameters: Vec<String> = function
                 .parameters
                 .iter()
-                .map(|(name, ty)| format!("{name}: {}", ty.spell(&request.aliases)))
+                .map(|(name, ty)| format!("{name}: {}", ty.spell_crossing(&request.aliases)))
                 .collect();
             if function.variadic {
                 // The tail's element type is a claim C's prototype cannot make,
@@ -1702,7 +1721,7 @@ impl Binding {
             let result = function
                 .result
                 .as_ref()
-                .map_or_else(|| "void".to_owned(), |ty| ty.spell(&request.aliases));
+                .map_or_else(|| "void".to_owned(), |ty| ty.spell_crossing(&request.aliases));
             let _ = writeln!(
                 out,
                 "  export function {}({}): {result};",
@@ -1887,6 +1906,29 @@ mod tests {
             authored.contains("an authored claim"),
             "the generated file has to say whose claim it is:\n{authored}"
         );
+    }
+
+    /// A record a function takes or returns crosses by value, so it is spelled
+    /// `ByValue<T>` there and imported; the same record as a member stays the
+    /// alias, stored inline.
+    #[test]
+    fn a_record_crossing_a_call_is_spelled_by_value() {
+        let mut binding = Binding::default();
+        binding.functions.push(Function {
+            name: "inset".to_owned(),
+            parameters: vec![
+                ("r".to_owned(), Shape::Record("rect".to_owned())),
+                ("by".to_owned(), Shape::Scalar("c_double")),
+            ],
+            result: Some(Shape::Record("rect".to_owned())),
+            variadic: false,
+        });
+        let text = binding.render(&request(Vec::new()));
+        assert!(
+            text.contains("export function inset(r: ByValue<Rect>, by: c_double): ByValue<Rect>;"),
+            "{text}"
+        );
+        assert!(binding.imports_needed().contains("ByValue"), "{text}");
     }
 
     /// A `--no-escape` naming nothing is refused **with the names that exist**.

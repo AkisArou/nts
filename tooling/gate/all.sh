@@ -1830,7 +1830,10 @@ interop() {
   #     blocks against an ARC oracle. It SKIPs without a macOS SDK.
   # 27: `macos-subclass` (A2's classes), an NSObject subclass defined from
   #     TypeScript, whose method is a closure Foundation calls.
-  interop_floor=27
+  # 29: `native-byvalue` (records by value, one per ABI class, against C) and
+  #     `macos-geometry` (the same through Objective-C, `objc_msgSend_stret`
+  #     included). The second SKIPs without a macOS SDK.
+  interop_floor=29
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"

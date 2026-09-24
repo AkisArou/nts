@@ -57,6 +57,23 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     Some(Pointee::Opaque(super::Handle { tag, ancestors: tags, family }))
 }
 
+/// `ByValue<T>`: the record `T` itself, where C takes or returns one by value.
+///
+/// `Ptr<T> & { readonly __c_by_value?: true }`. The pointer is what TypeScript
+/// holds -- storage -- and the optional brand says C's parameter is the record
+/// in that storage. Anything but a record under the brand is not one of these.
+#[must_use]
+pub(crate) fn by_value(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::sync::Arc<Record>> {
+    let brand = property(snapshot, ty, "___c_by_value")?;
+    if !(brand.readonly && brand.optional && brand.kind == MemberKind::Field) {
+        return None;
+    }
+    match pointer(snapshot, ty)? {
+        Pointee::Record(record) => Some(record),
+        _ => None,
+    }
+}
+
 /// A `Struct<...>` describes native storage; constructing its phantom marker as a
 /// managed JS object is not constructing that storage.
 #[must_use]

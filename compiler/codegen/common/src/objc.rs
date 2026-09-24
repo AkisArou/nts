@@ -17,6 +17,9 @@ use nts_core::hir::{Callee, OpKind, Program};
 pub struct Lookups<'p> {
     pub selectors: Vec<&'p str>,
     pub classes: Vec<&'p str>,
+    /// Whether any send returns a record by value, which on `x86_64` may have
+    /// to go through `objc_msgSend_stret` instead.
+    pub returns_records: bool,
 }
 
 #[must_use]
@@ -29,6 +32,7 @@ pub fn lookups(program: &Program) -> Lookups<'_> {
             {
                 found.selectors.push(send.selector.as_str());
                 found.classes.extend(send.class.as_deref());
+                found.returns_records |= target.destination().is_some();
             }
         }
     }
@@ -123,6 +127,7 @@ fn encoding(ty: &Type) -> (&'static str, usize) {
         Type::Pointer(Pointee::Const(inner)) if matches!(**inner, Pointee::Scalar(Scalar::Char)) => ("r*", 8),
         Type::FnPointer(_) => ("^?", 8),
         Type::Pointer(_) | Type::Managed(_) | Type::Erased => ("^v", 8),
+        Type::Record(_) => unreachable!("a function type never holds a record by value: `abi_type` refuses one"),
     }
 }
 

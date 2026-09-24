@@ -1527,18 +1527,44 @@ fn native_call_expression(
     result: &HirType,
     origin: &Origin,
 ) -> Result<String, Diagnostic> {
+    // A record crosses by value: each one read from the storage its argument
+    // points at, and a record result assigned through the destination.
+    let (arguments, destination) = by_value_arguments(target, arguments);
+    let arguments = arguments.as_slice();
     // A send is refused a managed ABI where it is read, so the cast below is
     // the whole of it.
-    if let Some(send) = &target.send {
-        return Ok(objc::send_expression(target, send, arguments));
-    }
-    let call = format!("{}({})", target.name, arguments.join(", "));
-    if matches!(target.result, nts_core::hir::native::Type::Managed(_)) {
+    let call = if let Some(send) = &target.send {
+        objc::send_expression(target, send, arguments)
+    } else if matches!(target.result, nts_core::hir::native::Type::Managed(_)) {
         let wanted = c_type_of(program, result, origin)?;
-        Ok(format!("({wanted}){call}"))
+        format!("({wanted}){}({})", target.name, arguments.join(", "))
     } else {
-        Ok(call)
-    }
+        format!("{}({})", target.name, arguments.join(", "))
+    };
+    Ok(match destination {
+        Some(destination) => format!("*{destination} = {call}"),
+        None => call,
+    })
+}
+
+/// The C arguments of a call through which records cross by value: `*vN` for
+/// each record argument, and the destination -- the last HIR argument of a
+/// call returning one -- taken off to be assigned through.
+fn by_value_arguments(
+    target: &nts_core::hir::native::Function,
+    arguments: &[String],
+) -> (Vec<String>, Option<String>) {
+    use nts_core::hir::native::Type;
+    let mut arguments: Vec<String> = arguments
+        .iter()
+        .enumerate()
+        .map(|(at, argument)| match target.parameters.get(at) {
+            Some(Type::Record(_)) => format!("*{argument}"),
+            _ => argument.clone(),
+        })
+        .collect();
+    let destination = target.destination().and_then(|_| arguments.pop());
+    (arguments, destination)
 }
 
 /// Which layouts some `ObjectNew` in the program actually creates.

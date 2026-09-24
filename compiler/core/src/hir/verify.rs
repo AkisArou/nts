@@ -300,15 +300,18 @@ fn check_native_calls(program: &Program, problems: &mut Vec<Invalid>) {
             else {
                 continue;
             };
-            if target.retention.len() != target.parameters.len()
-                || target.retention.iter().zip(&target.parameters).any(|(kept, ty)| {
+            if target.retention.len() != target.argument_types().count()
+                || target.retention.iter().zip(target.argument_types()).any(|(kept, ty)| {
                     *kept == super::native::Retention::NotRetained
-                        && !matches!(ty, super::native::Type::Pointer(_) | super::native::Type::FnPointer(_))
+                        && !matches!(
+                            ty,
+                            super::native::Type::Pointer(_) | super::native::Type::FnPointer(_) | super::native::Type::Record(_)
+                        )
                 })
             {
                 problems.push(Invalid::NativeStorage { func: func.name.clone(), reason: "invalid native no-escape contract" });
             }
-            let result = target.result.representation();
+            let result = target.call_result();
             if op.ty != result {
                 problems.push(Invalid::CallResultType {
                     func: func.name.clone(),
@@ -319,19 +322,20 @@ fn check_native_calls(program: &Program, problems: &mut Vec<Invalid>) {
             }
             // A variadic prototype takes at least its declared parameters and
             // then anything; a fixed one takes exactly them.
+            let carried = target.argument_types().count();
             let miscounted = match target.variadic {
-                Some(_) => args.len() < target.parameters.len(),
-                None => args.len() != target.parameters.len(),
+                Some(_) => args.len() < carried,
+                None => args.len() != carried,
             };
             if miscounted {
                 problems.push(Invalid::CallArgumentCount {
                     func: func.name.clone(),
                     callee: target.name.clone(),
-                    expected: target.parameters.len(),
+                    expected: carried,
                     found: args.len(),
                 });
             }
-            for (at, (arg, want)) in args.iter().zip(&target.parameters).enumerate() {
+            for (at, (arg, want)) in args.iter().zip(target.argument_types()).enumerate() {
                 let Some(found) = func.values.get(arg.0 as usize) else {
                     continue;
                 };

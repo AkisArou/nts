@@ -180,10 +180,30 @@ correctness does not depend on arm64 running by luck.
      target or delegate that Cocoa holds weakly stays alive only while
      TypeScript holds it. Nothing on our side adds a hidden strong edge.
 
-   Left for A2: C structs by value (`NSRect`: C first, then LLVM), then
-   `macos-window` with a capturing target/action handler that starts a timer
-   and an await. Sugar for `class X extends NSObject` belongs to A4, and so
-   does per-instance TypeScript state.
+   - **Records by value, C backend.** `ByValue<T>` in a binding: an argument
+     is read from the storage it points at, and a result is written into a
+     frame local, with `local<T>()`'s rules. A send returning one uses
+     `objc_msgSend_stret` on x86_64 when it is over 16 bytes.
+     `examples/interop/macos-geometry` matches an Objective-C oracle, and its
+     control shows plain `objc_msgSend` failing at the send.
+     `examples/interop/native-byvalue` covers each ABI class against C. The LLVM
+     backend refuses by name until it classifies aggregates (SysV and AAPCS64,
+     checked against `clang -emit-llvm`).
+
+   Left for A2: records by value on LLVM, then `macos-window` with a capturing
+   target/action handler that starts a timer and an await. Sugar for
+   `class X extends NSObject` belongs to A4, and so does per-instance
+   TypeScript state, and so does `NSMakeRect`-style construction. Today a
+   rectangle is a `local<CGRect>()` filled member by member, and a helper that
+   returns one is refused as an escaping local.
+
+   **A live limit: `performSelector:` on a void method, read.** A +0 result
+   nothing reads is left alone (`fb6496c1`), so the unread case is correct.
+   A program that *reads* the result of a selector whose method returns
+   `void` still retains whatever the return register held. The selector is a
+   run-time value, so this cannot be refused statically. It is ObjC's own
+   hazard, and A3's generated bindings, which know each method's real result,
+   leave `performSelector:` as the one untyped escape hatch.
 2. **A3:** `nts bind-objc` from SDK headers, with an ObjC witness.
 3. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
    benchmark against NativeScript and Swift.

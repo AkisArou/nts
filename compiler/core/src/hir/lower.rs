@@ -39262,6 +39262,12 @@ impl<'a> FuncBuilder<'a> {
             Callee::Native(target) => target.result_as.as_ref().map(super::native::Type::representation),
             _ => None,
         };
+        // What the program sees of a record result: the storage it was written
+        // into, which `lower_call_arguments` made the last argument.
+        let destination = match &callee {
+            Callee::Native(target) if target.destination().is_some() => args.last().copied(),
+            _ => None,
+        };
         let call = self.push_call(id, callee, args, declaration)?;
         // A failure is checked *before* the result is read: a function that
         // reports one returns nothing meaningful -- GLib returns NULL where it
@@ -39285,8 +39291,16 @@ impl<'a> FuncBuilder<'a> {
             (None, Some(ty)) => self.push(OpKind::Convert(call), ty, self.origin(id)),
             (None, None) => call,
         };
+        let value = destination.unwrap_or(value);
         self.give_back(id, lent);
         Ok(value)
+    }
+
+    /// A record result's storage: a local of the caller's, so the local's
+    /// rules are the result's, passed as the call's last argument.
+    fn record_destination(&mut self, target: &super::native::Function, origin: &Origin) -> Option<ValueId> {
+        let destination = target.destination()?.representation();
+        Some(self.push(OpKind::NativeLocal { count: 1 }, destination, origin.clone()))
     }
 
     /// `nts_closure_unlend`, as the destroy function's type the binding
@@ -39931,6 +39945,7 @@ impl<'a> FuncBuilder<'a> {
         // The variadic tail, past every declared parameter.
         let declared = target.slots().filter(|(_, _, fed)| fed.is_some()).count();
         c_args.extend(args.iter().skip(declared).copied());
+        c_args.extend(self.record_destination(&target, &origin));
         self.bridge_callback_arguments(id, &target, &mut c_args)?;
         Ok((c_args, lent))
     }
@@ -40294,6 +40309,9 @@ impl<'a> FuncBuilder<'a> {
             Callee::Native(target) if target.returns_string.is_some() || target.result_as.is_some() => {
                 Some(target.result.representation())
             }
+            // A record result is written into the call's destination, and the
+            // call itself produces nothing.
+            Callee::Native(target) if target.destination().is_some() => Some(target.call_result()),
             _ => None,
         };
         let ty = reserved

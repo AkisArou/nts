@@ -42,6 +42,20 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
     // promised was an object. The required form ends the process, naming it.
     writer.line(origin, "extern struct objc_class *objc_getRequiredClass(const char *name);");
     writer.line(origin, "extern void objc_msgSend(void);");
+    if found.returns_records {
+        // x86_64 returns a record in memory -- larger than 16 bytes, since
+        // nothing packed crosses by value -- through a hidden pointer, and the
+        // runtime needs a second entry point that knows the receiver is not
+        // the first argument. arm64 has one entry point for every result, and
+        // no `objc_msgSend_stret` to link against. `sizeof` is a constant, so
+        // each slice keeps one of the two.
+        writer.line(origin, "#if defined(__x86_64__)");
+        writer.line(origin, "extern void objc_msgSend_stret(void);");
+        writer.line(origin, "#define NTS_OBJC_SEND_FOR(size) ((size) > 16 ? objc_msgSend_stret : objc_msgSend)");
+        writer.line(origin, "#else");
+        writer.line(origin, "#define NTS_OBJC_SEND_FOR(size) objc_msgSend");
+        writer.line(origin, "#endif");
+    }
     for selector in found.selectors {
         let name = selector_symbol(selector);
         writer.line(origin, format!("static struct objc_selector *{name}(void) {{"));
@@ -191,10 +205,10 @@ pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[Strin
     types.extend(target.parameters.iter().skip(skip).map(parameter));
     let mut values = vec![receiver, format!("{}()", selector_symbol(&send.selector))];
     values.extend(rest.iter().cloned());
-    format!(
-        "(({} (*)({}))objc_msgSend)({})",
-        result(&target.result),
-        types.join(", "),
-        values.join(", ")
-    )
+    let result = result(&target.result);
+    let entry = match target.result {
+        Type::Record(_) => format!("(NTS_OBJC_SEND_FOR(sizeof({result})))"),
+        _ => "objc_msgSend".to_owned(),
+    };
+    format!("(({result} (*)({})){entry})({})", types.join(", "), values.join(", "))
 }

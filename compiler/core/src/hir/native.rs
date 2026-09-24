@@ -376,6 +376,20 @@ pub enum Type {
     /// TypeScript function and a C code pointer are not interchangeable and the
     /// bridge between them has to exist somewhere visible.
     FnPointer(std::sync::Arc<FnPointer>),
+    /// A record passed or returned **by value**: `NSRect frame`, not
+    /// `NSRect *frame`. Written `ByValue<T>` in a binding.
+    ///
+    /// TypeScript holds a record only as storage, so this is carried in HIR as
+    /// a pointer to that storage -- its [`Type::representation`] -- and the
+    /// value crosses at the call. An argument is read from the storage the
+    /// caller points at, and C copies it. A result is written into a
+    /// `NativeLocal` the lowering makes, which is the call's **last HIR
+    /// argument**: sret, said in HIR. So the local's lifetime rules --
+    /// no escape, no loop, no suspension -- are the result's, unchanged.
+    ///
+    /// Plain bytes only: [`by_value_record_is_passable`] refuses a record
+    /// holding a counted handle, which would make a copy an ownership edge.
+    Record(std::sync::Arc<Record>),
 }
 
 /// The shape of a C function pointer, and the name its typedef gets.
@@ -864,6 +878,18 @@ pub struct Field {
 }
 
 impl Pointee {
+    /// Whether storage of this type holds a handle the program counts,
+    /// directly or in a nested record or array.
+    #[must_use]
+    pub fn holds_counted(&self) -> bool {
+        match self {
+            Self::Pointer(pointee) => pointee.counting().is_some(),
+            Self::Record(record) => record.fields.iter().any(|field| field.ty.holds_counted()),
+            Self::Array { element, .. } | Self::Flexible(element) | Self::Const(element) => element.holds_counted(),
+            _ => false,
+        }
+    }
+
     #[must_use]
     pub fn c_type(&self) -> String {
         match self {
@@ -1126,6 +1152,7 @@ impl Type {
             Self::FnPointer(signature) => {
                 HirType::NativePointer(Pointee::FnPointer(signature.clone()))
             }
+            Self::Record(record) => HirType::NativePointer(Pointee::Record(record.clone())),
         }
     }
 
@@ -1142,6 +1169,7 @@ impl Type {
             // declarator around the name, so it cannot be written where a type
             // precedes a name; every use goes through the typedef instead.
             Self::FnPointer(signature) => return std::borrow::Cow::Borrowed(&signature.name),
+            Self::Record(record) => return std::borrow::Cow::Owned(Pointee::Record(record.clone()).c_type()),
             Self::Managed(ty) => match ty {
                 ManagedType::String => "NtsString *",
                 ManagedType::Object(_) => "NtsHeader *",
@@ -1164,6 +1192,9 @@ impl Type {
 /// pointer for exactly the reason a function-typed parameter is, and two
 /// answers to that would be two places to keep in agreement.
     fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
+        if let Some(record) = schema::by_value(snapshot, ty) {
+            return Some(Type::Record(record));
+        }
         if let Some(name) = pointer(snapshot, ty) {
             return Some(Type::Pointer(name));
         }
@@ -1192,6 +1223,11 @@ impl Type {
                     .map(|parameter| abi_type(snapshot, parameter.ty))
                     .collect::<Option<Vec<_>>>()?;
                 let result = abi_type(snapshot, signature.return_type)?;
+                // A callback taking or returning a record by value would need
+                // its bridge to do what a call does here; nothing does yet.
+                if parameters.iter().chain([&result]).any(|ty| matches!(ty, Type::Record(_))) {
+                    return None;
+                }
                 Some(Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
                     parameters, result,
                 ))))
@@ -1217,6 +1253,43 @@ pub fn fn_pointer(
 }
 
 impl Function {
+    /// Whether a record crosses this call by value, as an argument or as the
+    /// result. A backend that has no aggregate calling convention asks this
+    /// and refuses by name, because a record's HIR representation is a pointer
+    /// and would otherwise pass every check a pointer passes.
+    #[must_use]
+    pub fn passes_a_record(&self) -> bool {
+        self.parameters.iter().chain([&self.result]).any(|ty| matches!(ty, Type::Record(_)))
+    }
+
+    /// The storage a record result is written into, when there is one: the
+    /// call's argument after every declared parameter (see [`Type::Record`]).
+    /// Never alongside a variadic tail, which `from_signature` refuses.
+    #[must_use]
+    pub fn destination(&self) -> Option<&Type> {
+        matches!(self.result, Type::Record(_)).then_some(&self.result)
+    }
+
+    /// What an HIR call to this carries, in order: the declared parameters,
+    /// then the destination. The variadic tail is not in it.
+    pub fn argument_types(&self) -> impl Iterator<Item = &Type> {
+        self.parameters.iter().chain(self.destination())
+    }
+
+    /// The type of an HIR call's argument `at`: a declared parameter, the
+    /// destination, or past both the variadic tail.
+    #[must_use]
+    pub fn argument(&self, at: usize) -> Option<&Type> {
+        self.argument_types().nth(at).or(self.variadic.as_ref())
+    }
+
+    /// The type of the call's own value: the result, except for a record,
+    /// which the call writes into its destination and does not produce.
+    #[must_use]
+    pub fn call_result(&self) -> HirType {
+        if self.destination().is_some() { HirType::Void } else { self.result.representation() }
+    }
+
     /// Aliases such as `int`/`int32_t` agree on the supported LP64 targets;
     /// signedness remains part of the contract even where LLVM erases it.
     #[must_use]
@@ -1317,12 +1390,12 @@ impl Function {
         let returns_string = if abi.is_none() { returned_string(snapshot, signature.return_type) } else { None };
         let returned_array = if abi.is_none() { returned_strings(snapshot, signature.return_type) } else { None };
         let declared = declared_result(snapshot, &name, signature.return_type)?;
-        let result = match (returned_text(returned_array.is_some(), returns_string.is_some()), &declared) {
+        let result = records_checked(&name, &parameters, variadic.is_some(), match (returned_text(returned_array.is_some(), returns_string.is_some()), &declared) {
             (Some(text), _) => text,
             (None, Some((c, _))) => c.clone(),
             (None, None) => abi_type(signature.return_type)
                 .ok_or_else(|| format!("foreign function `{name}` return without a native ABI type; use a c_int/c_double brand, boolean, string, or void"))?,
-        };
+        })?;
         Ok(Self {
             name,
             convention: if abi == Some("managed") {
@@ -1330,7 +1403,7 @@ impl Function {
             } else {
                 Convention::C
             },
-            retention: retention_of(&roles),
+            retention: by_value_retention(retention_of(&roles), &parameters, &result),
             parameters,
             variadic,
             result,
@@ -1357,6 +1430,71 @@ impl Function {
 /// after it: nothing of either outlives the call, which is `NotRetained` stated
 /// by the type rather than by a tag. Everything else starts `Unknown`, and an
 /// `@ntsNoEscape` may narrow it where the callee is resolved.
+/// A record passed by value is copied by C, so the storage the argument points
+/// at is read and not kept. A record result is written through one more
+/// argument, past the declared ones, into storage the callee never sees as an
+/// address. Both are borrows, which is what lets a `NativeLocal` be either.
+fn by_value_retention(mut retention: Vec<Retention>, parameters: &[Type], result: &Type) -> Vec<Retention> {
+    for (at, ty) in parameters.iter().enumerate() {
+        if matches!(ty, Type::Record(_))
+            && let Some(slot) = retention.get_mut(at)
+        {
+            *slot = Retention::NotRetained;
+        }
+    }
+    if matches!(result, Type::Record(_)) {
+        retention.resize(parameters.len(), Retention::Unknown);
+        retention.push(Retention::NotRetained);
+    }
+    retention
+}
+
+/// `result`, once every record the signature passes or returns by value has
+/// been checked, along with the one shape a record result's destination cannot
+/// share: a variadic tail, which would put it after arguments whose count only
+/// the call knows.
+fn records_checked(name: &str, parameters: &[Type], variadic: bool, result: Type) -> Result<Type, String> {
+    for ty in parameters.iter().chain([&result]) {
+        if let Type::Record(record) = ty {
+            by_value_record_is_passable(name, record)?;
+        }
+    }
+    if variadic && matches!(result, Type::Record(_)) {
+        return Err(format!("foreign function `{name}` is variadic and returns a record by value"));
+    }
+    Ok(result)
+}
+
+/// What a record must be to cross by value.
+///
+/// - **No counted handle inside.** Copying one would duplicate an ownership
+///   edge, which is `classify`'s question and a different feature. ARC agrees:
+///   a struct with a `__strong` member is a non-trivial C struct.
+/// - **A C spelling.** An untagged record has none, so neither the prototype
+///   nor the cast can name it.
+/// - **Not packed and no flexible member.** A packed record's registers are
+///   not what its members suggest, and a flexible member has no extent to
+///   copy.
+fn by_value_record_is_passable(name: &str, record: &Record) -> Result<(), String> {
+    let refuse = |why: &str| Err(format!("foreign function `{name}` passes `{}` by value, which {why}", record.name));
+    if record.untagged() {
+        return refuse("C has no name for");
+    }
+    if record.packed {
+        return refuse("is packed; take it by pointer");
+    }
+    if let Some(field) = record.fields.iter().find(|field| field.ty.holds_counted()) {
+        return Err(format!(
+            "foreign function `{name}` passes `{}` by value, and its member `{}` is a counted handle: a copy would be a second owner",
+            record.name, field.name
+        ));
+    }
+    if record.fields.iter().any(|field| matches!(field.ty, Pointee::Flexible(_))) {
+        return refuse("ends in a flexible array member with no extent to copy");
+    }
+    Ok(())
+}
+
 fn retention_of(roles: &[Role]) -> Vec<Retention> {
     roles
         .iter()
@@ -1993,6 +2131,9 @@ fn variadic_tail_is_passable(name: &str, ty: &Type, no_fixed: bool) -> Result<()
     // backends would have to agree about a conversion neither declaration
     // mentions. Refused with the promoted type named, which is what the binding
     // should say.
+    if matches!(ty, Type::Record(_)) {
+        return Err(format!("foreign function `{name}` passes records by value through `...`, which C cannot say how to"));
+    }
     if let Some(promoted) = ty.promoted_for_variadic() {
         return Err(format!(
             "foreign function `{name}` variadic tail is `{}`, which C promotes to `{}` before the callee sees it; declare `{}`",
@@ -2029,6 +2170,10 @@ impl Type {
     fn same_abi(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Managed(_), Self::Managed(_)) => self.c_type() == other.c_type(),
+            // Its representation is a pointer to it, which a `Ptr<T>` shares:
+            // compared that way, `f(r: NSRect)` and `f(r: NSRect *)` agree.
+            (Self::Record(a), Self::Record(b)) => a == b,
+            (Self::Record(_), _) | (_, Self::Record(_)) => false,
             _ => self.representation() == other.representation(),
         }
     }

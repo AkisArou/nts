@@ -87,6 +87,9 @@ pub(super) fn send(
     result: &HirType,
     out: &str,
 ) -> Result<String, Diagnostic> {
+    if target.passes_a_record() {
+        return Err(refuse(func, "a C record passed or returned by value, which this backend has no aggregate calling convention for yet; the C backend builds it"));
+    }
     let instance = send.class.is_none();
     if args.len() != target.parameters.len() || *result != target.result.representation() {
         return Err(refuse(func, "an Objective-C message whose HIR disagrees with its declared ABI"));
