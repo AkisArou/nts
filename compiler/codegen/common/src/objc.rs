@@ -120,6 +120,10 @@ fn encoding(ty: &Type) -> (&'static str, usize) {
             Scalar::UInt16 => ("S", 4),
             Scalar::Int | Scalar::Int32 => ("i", 4),
             Scalar::UInt | Scalar::UInt32 => ("I", 4),
+            // A 32-bit `long` exists only on Win64 and is refused on Apple
+            // before a message is encoded; `l`/`L` are its letters.
+            Scalar::Long32 => ("l", 4),
+            Scalar::ULong32 => ("L", 4),
             Scalar::Int64 | Scalar::Long | Scalar::Ptrdiff => ("q", 8),
             Scalar::UInt64 | Scalar::ULong | Scalar::Size => ("Q", 8),
             Scalar::Float => ("f", 4),

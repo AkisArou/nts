@@ -387,6 +387,13 @@ declare module "c:types" {
   export type c_uint64 = bigint & { readonly __c_uint64: unique symbol };
   export type c_long = bigint & { readonly __c_long: unique symbol };
   export type c_ulong = bigint & { readonly __c_ulong: unique symbol };
+  // C's `long` and `unsigned long` where they are 32 bits: Windows (LLP64),
+  // whose APIs are built on `LONG` and `DWORD`. A `number`, where `c_long` is
+  // a `bigint` so that portable code is exact on every target. A Windows
+  // binding uses these; a build for a target whose `long` is 64 bits refuses
+  // every function that takes or returns one, by name.
+  export type c_long32 = number & { readonly __c_long32: unique symbol };
+  export type c_ulong32 = number & { readonly __c_ulong32: unique symbol };
   export type c_size_t = bigint & { readonly __c_size_t: unique symbol };
   export type c_ptrdiff_t = bigint & { readonly __c_ptrdiff_t: unique symbol };
   export type c_float = number & { readonly __c_float: unique symbol };

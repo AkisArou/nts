@@ -8,7 +8,7 @@ use std::{fmt::Write, process::Command};
 
 #[path = "../../common/test-support/native_cases.rs"]
 mod native_cases;
-use native_cases::{CASES, WIDE_CASES};
+use native_cases::{CASES, WIDE_CASES, WINDOWS_ONLY};
 
 fn prepare(name: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
     prepare_with_provider(name, source, hir::Provider::NoGc)
@@ -3548,4 +3548,57 @@ export function go(s: string & { real: number }): number { return take(s); }
         )),
         "a UTF-16 conversion was emitted for a string that is not a Utf16String"
     );
+}
+
+/// `c_long32`/`c_ulong32` are Windows' `LONG`/`DWORD`: a `number` in
+/// TypeScript and C's 32-bit `long` on Win64, where every bit round-trips.
+/// On a target whose `long` is 64 bits the same program is refused by both
+/// backends, by name: it is a Windows binding.
+///
+/// All bits set in the unsigned one and a negative value in the signed one,
+/// so a sign or zero extension done wrongly shows. LLVM's Win64 program runs
+/// here against `int32_t`/`uint32_t` helpers, the slot a Win64 `long` is; C's
+/// is checked by an LLP64 clang, as the `c_long` test does.
+#[test]
+fn a_c_long32_is_a_number_on_win64_and_refused_where_long_is_64_bits() {
+    // The brands this test is the case for, read from the shared list.
+    assert_eq!(WINDOWS_ONLY, ["c_long32", "c_ulong32"], "a Windows-only brand without a case here");
+    let source = r#"
+import type { c_long32, c_ulong32 } from "c:types";
+declare function echo_dword(value: c_ulong32): c_ulong32;
+declare function echo_long(value: c_long32): c_long32;
+export function dword(): number { return echo_dword(4294967295 as c_ulong32); }
+export function negative(): number { return echo_long(-5 as c_long32); }
+"#;
+    let Some((dir, prepared)) = prepare("long32", source) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let win64 = nts_core::hir::native::NativeAbi::Win64;
+    let sysv = nts_core::hir::native::NativeAbi::SysV;
+
+    let llvm = nts_codegen_llvm::emit(&prepared.program, win64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("helpers.c"), "#include <stdint.h>\nuint32_t echo_dword(uint32_t v) { return v; }\nint32_t echo_long(int32_t v) { return v; }\n").unwrap();
+    std::fs::write(dir.join("caller.c"), "#include <stdio.h>\ndouble dword(void);\ndouble negative(void);\nint main(void) { printf(\"%.0f %.0f\\n\", dword(), negative()); return 0; }\n").unwrap();
+    for file in ["helpers.c", "caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-c", file]);
+    }
+    clang(&dir, &["-O2", "-Wno-override-module", "-c", "program.ll", "-o", "llvm.o"]);
+    clang(&dir, &["llvm.o", "helpers.o", "caller.o", "nts_runtime.o", "-lm", "-o", "run"]);
+    let out = Command::new(dir.join("run")).output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "4294967295 -5", "the Win64 slot did not round-trip");
+    let text = c.writer.text();
+    assert!(text.contains("unsigned long echo_dword(unsigned long);"), "C does not call through `unsigned long`:\n{text}");
+    assert!(text.contains("long echo_long(long);"), "C does not call through `long`:\n{text}");
+
+    let refused = |diagnostics: &[nts_diagnostics::Diagnostic]| -> Vec<String> {
+        diagnostics.iter().filter(|d| d.message.contains("32-bit C `long`")).map(|d| d.message.clone()).collect()
+    };
+    let c_refused = refused(&nts_codegen_c::emit(&prepared.program, sysv).diagnostics);
+    let llvm_refused = refused(&nts_codegen_llvm::emit(&prepared.program, sysv).diagnostics);
+    assert_eq!(c_refused.len(), 2, "C on SysV refused {c_refused:?}");
+    assert_eq!(c_refused, llvm_refused, "the two backends refused different functions");
 }

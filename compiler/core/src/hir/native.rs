@@ -2527,6 +2527,12 @@ pub enum Scalar {
     UInt64,
     Long,
     ULong,
+    /// C's `long` where it is 32 bits: Win64 (LLP64). A `number` in
+    /// TypeScript, for Windows APIs, which are built on `LONG` and `DWORD`;
+    /// portable code keeps `Long`, which is exact on every target. A backend
+    /// whose `long` is 64 bits refuses it (`abi::unavailable_scalars`).
+    Long32,
+    ULong32,
     Size,
     Ptrdiff,
     Float,
@@ -2550,6 +2556,8 @@ impl Scalar {
             "__c_uint64" => Self::UInt64,
             "__c_long" => Self::Long,
             "__c_ulong" => Self::ULong,
+            "__c_long32" => Self::Long32,
+            "__c_ulong32" => Self::ULong32,
             "__c_size_t" => Self::Size,
             "__c_ptrdiff_t" => Self::Ptrdiff,
             "__c_float" => Self::Float,
@@ -2565,11 +2573,11 @@ impl Scalar {
             // distinct from `signed char` regardless; the representation is
             // what the target says, and LP64 Linux says signed.
 
-            Self::Int | Self::Int32 => HirType::Int {
+            Self::Int | Self::Int32 | Self::Long32 => HirType::Int {
                 bits: 32,
                 signed: true,
             },
-            Self::UInt | Self::UInt32 => HirType::Int {
+            Self::UInt | Self::UInt32 | Self::ULong32 => HirType::Int {
                 bits: 32,
                 signed: false,
             },
@@ -2613,8 +2621,8 @@ impl Scalar {
             Self::UInt32 => "uint32_t",
             Self::Int64 => "int64_t",
             Self::UInt64 => "uint64_t",
-            Self::Long => "long",
-            Self::ULong => "unsigned long",
+            Self::Long | Self::Long32 => "long",
+            Self::ULong | Self::ULong32 => "unsigned long",
             Self::Size => "size_t",
             Self::Ptrdiff => "ptrdiff_t",
             Self::Float => "float",

@@ -94,7 +94,7 @@ fn prepare_with_types(
 
 #[path = "../../common/test-support/native_cases.rs"]
 mod native_cases;
-use native_cases::{CASES, WIDE_CASES};
+use native_cases::{CASES, WIDE_CASES, WINDOWS_ONLY};
 
 #[test]
 #[allow(clippy::too_many_lines)] // Two generated families and their C consumer.
@@ -112,7 +112,7 @@ fn scalar_abi_matches_an_independently_compiled_c_library() {
     // Both families together: a brand belongs to exactly one, and a brand in
     // neither is a shipped scalar nothing checks against C.
     let covered: std::collections::BTreeSet<_> =
-        CASES.iter().chain(WIDE_CASES).map(|case| case.0).collect();
+        CASES.iter().chain(WIDE_CASES).map(|case| case.0).chain(WINDOWS_ONLY.iter().copied()).collect();
     assert_eq!(
         published, covered,
         "each shipped scalar needs an independent C ABI case"
@@ -430,7 +430,15 @@ fn unrelated_declarations_cannot_supply_a_calls_abi() {
                     prepared.diagnostics
                 );
                 assert!(prepared.program.funcs.iter().any(|f| f.name == "run"));
-                let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+                // A Windows-only brand is emitted where it exists: the
+                // question is whether an unrelated declaration can change the
+                // call, which Win64 asks as well as SysV does.
+                let abi = if WINDOWS_ONLY.contains(&brand) {
+                    nts_core::hir::native::NativeAbi::Win64
+                } else {
+                    nts_core::hir::native::NativeAbi::SysV
+                };
+                let emitted = nts_codegen_c::emit(&prepared.program, abi);
                 assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
                 let text = emitted.writer.text().to_owned();
                 assert!(text.contains("native_value("));

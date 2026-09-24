@@ -1204,6 +1204,7 @@ fn external_prototypes(program: &Program, abi: NativeAbi) -> Prototypes {
     }
     // The other ABI refusals: a constant too wide for the slot C reads.
     refusals.extend(nts_codegen_common::abi::unrepresentable_constants(program, abi));
+    refusals.extend(nts_codegen_common::abi::unavailable_scalars(program, abi));
     prototypes.sort();
     if !seen.is_empty() {
         prototypes.insert(0, data_model_assertion(abi).to_owned());

@@ -40,3 +40,12 @@ pub(crate) const WIDE_CASES: &[(&str, &str, &str, &str)] = &[
     ("c_size_t", "size_t", "18446744073709551615n", "SIZE_MAX"),
     ("c_ptrdiff_t", "ptrdiff_t", "9223372036854775807n", "PTRDIFF_MAX"),
 ];
+
+/// The brands that exist only where C's `long` is 32 bits: Windows' `LONG` and
+/// `DWORD`. They cannot be run against a C library on this host, where every
+/// function taking one is refused by name; the Win64 round trip, with all bits
+/// set and a negative value, is
+/// `a_c_long32_is_a_number_on_win64_and_refused_where_long_is_64_bits` in the
+/// LLVM backend's tests, and C's Win64 spelling is checked there by an LLP64
+/// clang. A third family, so a brand is still covered by exactly one.
+pub(crate) const WINDOWS_ONLY: &[&str] = &["c_long32", "c_ulong32"];

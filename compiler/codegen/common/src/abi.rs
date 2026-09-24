@@ -8,7 +8,7 @@
 //! inexcusable, so it is refused.
 //!
 //! One check, called by both backends, so C's and LLVM's answers cannot differ.
-use nts_core::hir::native::{NativeAbi, Pointee, Type};
+use nts_core::hir::native::{NativeAbi, Pointee, Scalar, Type};
 use nts_core::hir::{Callee, Func, HirType, OpKind, Program, UnOp, ValueId};
 use nts_diagnostics::Diagnostic;
 
@@ -91,5 +91,78 @@ fn constant(func: &Func, value: ValueId) -> Option<i128> {
         OpKind::Convert(inner) => constant(func, *inner),
         OpKind::Unary { op: UnOp::Neg, operand } => constant(func, *operand).and_then(i128::checked_neg),
         _ => None,
+    }
+}
+
+/// Every native function whose signature holds a 32-bit `long`
+/// (`c_long32`/`c_ulong32`) on a target whose `long` is 64 bits.
+///
+/// That scalar is Windows' `LONG` and `DWORD`, and a binding written with it
+/// is a Windows binding. Elsewhere C's `long` is another width, so the program
+/// would call through a type C does not have: refused, naming the function.
+#[must_use]
+pub fn unavailable_scalars(program: &Program, abi: NativeAbi) -> Vec<Diagnostic> {
+    if abi == NativeAbi::Win64 {
+        return Vec::new();
+    }
+    let mut refusals = Vec::new();
+    let mut named = std::collections::BTreeSet::new();
+    for func in &program.funcs {
+        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|v| func.value(*v)) {
+            let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
+            let mentions = target
+                .parameters
+                .iter()
+                .chain(std::iter::once(&target.result))
+                .chain(target.variadic.iter())
+                .any(|ty| type_holds_long32(ty, &mut Vec::new()));
+            if mentions && named.insert(target.name.clone()) {
+                refusals.push(Diagnostic::error(
+                    "NTS2007",
+                    format!(
+                        "`{}` takes or returns a 32-bit C `long` (`c_long32`/`c_ulong32`), which exists only \
+                         on Windows (LLP64); this target's `long` is 64 bits. It is a Windows binding",
+                        target.name
+                    ),
+                    op.origin.location,
+                ));
+            }
+        }
+    }
+    refusals
+}
+
+fn type_holds_long32(ty: &Type, seen: &mut Vec<String>) -> bool {
+    match ty {
+        Type::Scalar(scalar) => matches!(scalar, Scalar::Long32 | Scalar::ULong32),
+        Type::Pointer(pointee) => pointee_holds_long32(pointee, seen),
+        Type::Record(record) => pointee_holds_long32(&Pointee::Record(record.clone()), seen),
+        Type::FnPointer(signature) => {
+            signature.parameters.iter().chain(std::iter::once(&*signature.result)).any(|t| type_holds_long32(t, seen))
+        }
+        _ => false,
+    }
+}
+
+fn pointee_holds_long32(pointee: &Pointee, seen: &mut Vec<String>) -> bool {
+    match pointee {
+        Pointee::Scalar(scalar) => matches!(scalar, Scalar::Long32 | Scalar::ULong32),
+        Pointee::Bits { unit, .. } => matches!(unit, Scalar::Long32 | Scalar::ULong32),
+        Pointee::Record(record) => {
+            // A record reached twice (a linked structure) is answered once.
+            if seen.contains(&record.name) {
+                return false;
+            }
+            seen.push(record.name.clone());
+            record.fields.iter().any(|field| pointee_holds_long32(&field.ty, seen))
+        }
+        Pointee::Pointer(inner) | Pointee::Const(inner) | Pointee::Flexible(inner) | Pointee::Unaligned(inner) => {
+            pointee_holds_long32(inner, seen)
+        }
+        Pointee::Array { element, .. } => pointee_holds_long32(element, seen),
+        Pointee::FnPointer(signature) => {
+            signature.parameters.iter().chain(std::iter::once(&*signature.result)).any(|t| type_holds_long32(t, seen))
+        }
+        Pointee::Opaque(_) | Pointee::Void => false,
     }
 }

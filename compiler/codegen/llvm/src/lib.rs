@@ -79,7 +79,8 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     {
         return Emitted { text, diagnostics: vec![refuse(func, &why)] };
     }
-    let refusals = nts_codegen_common::abi::unrepresentable_constants(program, abi);
+    let mut refusals = nts_codegen_common::abi::unrepresentable_constants(program, abi);
+    refusals.extend(nts_codegen_common::abi::unavailable_scalars(program, abi));
     if !refusals.is_empty() {
         return Emitted { text, diagnostics: refusals };
     }
