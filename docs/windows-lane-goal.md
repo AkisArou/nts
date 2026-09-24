@@ -166,12 +166,18 @@ both backends and both providers:
   - `class App extends Application`, meaning COM aggregation with an outer
     object of the program's. Apple's `extends NSObject` has the
     registration shape to share.
-  - XAML controls' default styles. Without them a `Button` has no template
-    and measures `ActualWidth` 0. Measured on the VM: `Application.get_Resources`
-    answers E_UNEXPECTED on a plain `Application`, and activating
-    `XamlControlsResources` answers E_FAIL. Both point at the resource system
-    of an unpackaged program, which WinUI's own build feeds a `resources.pri`
-    (MRT) that this build does not make yet.
+  - XAML controls' default styles, which need the application to be an
+    object of the program's: measured with a C oracle on the VM. A plain
+    `Application` answers `get_Resources` with E_UNEXPECTED, and a `Button`
+    without WinUI's resources has no template (`ActualWidth` 0). An outer
+    object aggregating `Application` changes both. It implements
+    `IApplicationOverrides.OnLaunched` and `IXamlMetadataProvider`, delegating
+    the provider to `XamlControlsXamlMetaDataProvider`. `Resources` works, and
+    merging `XamlControlsResources` in `OnLaunched` templates the button
+    (`ActualWidth` 24). `XamlControlsResources` asks the application for
+    its metadata provider while it activates. No `resources.pri` is involved.
+    So the milestone is `class App extends Application`, with the metadata
+    provider supplied for the program.
   - The idiomatic layer (W4).
 
 ## Next
