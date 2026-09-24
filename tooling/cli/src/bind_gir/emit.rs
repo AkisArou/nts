@@ -93,7 +93,7 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                     let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods;");
                     let _ = writeln!(out, "  export type {name} = {class}<\"{tag}\"> & {name}Methods;");
                 }
-                construction(&mut out, binding, &own, name, parent.as_ref().map(|(_, parent)| parent.as_str()));
+                construction(&mut out, binding, &own, name, parent.as_ref().map(|(_, parent)| parent.as_str()), implements);
             }
         }
     }
@@ -196,8 +196,23 @@ fn own_method<'f>(own: &[&'f Function], method: Option<&str>) -> Option<&'f Func
 /// `g_object_new_with_properties` otherwise (`GtkLabel_construct`). An
 /// abstract class, or one whose constructor the self-check refused, has the
 /// interface and not the value.
-fn construction(out: &mut String, binding: &Binding, own: &[&Function], name: &str, parent: Option<&str>) {
-    let extends = parent.map(|parent| format!(" extends {parent}Props")).unwrap_or_default();
+fn construction(
+    out: &mut String,
+    binding: &Binding,
+    own: &[&Function],
+    name: &str,
+    parent: Option<&str>,
+    implements: &[(String, String)],
+) {
+    // The parent's, and each implemented interface's: `new GtkBox({
+    // orientation })` sets `GtkOrientable`'s.
+    let bases: Vec<String> = parent
+        .into_iter()
+        .map(str::to_owned)
+        .chain(implements.iter().map(|(interface, _)| interface.clone()))
+        .map(|base| format!("{base}Props"))
+        .collect();
+    let extends = if bases.is_empty() { String::new() } else { format!(" extends {}", bases.join(", ")) };
     let _ = writeln!(out, "  export interface {name}Props{extends} {{");
     for property in binding.properties.get(name).into_iter().flatten() {
         let Some(set) = settable(own, &property.name, property.setter.as_deref()) else { continue };

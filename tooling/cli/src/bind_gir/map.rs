@@ -593,7 +593,7 @@ impl<'a> Mapper<'a> {
             if let Some(tag) = self.facts.tags.get(&c_type).cloned() {
                 let (module, local) = self.reference(next_namespace, &c_type);
                 if !module.is_empty() {
-                    self.binding.imports.entry(module).or_default().insert(format!("{local}Methods"));
+                    self.binding.imports.entry(module).or_default().extend([format!("{local}Methods"), format!("{local}Props")]);
                 }
                 implied.push((local, tag));
             }
@@ -619,7 +619,7 @@ impl<'a> Mapper<'a> {
             }
             let (module, local) = self.reference(namespace, c_type);
             if !module.is_empty() {
-                self.binding.imports.entry(module).or_default().insert(format!("{local}Methods"));
+                self.binding.imports.entry(module).or_default().extend([format!("{local}Methods"), format!("{local}Props")]);
             }
             found.push((local, tag));
         }
