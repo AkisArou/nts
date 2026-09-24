@@ -689,6 +689,28 @@ pub enum Family {
 pub struct Counting {
     pub retain: &'static str,
     pub release: &'static str,
+    /// Whether the pair takes `NULL` quietly, as `objc_retain(nil)` does. A
+    /// count on a handle that may be null -- a field's old value, a nullable
+    /// result -- otherwise goes through a guard each backend defines once
+    /// ([`Counting::guarded`]): `g_object_unref(NULL)` is a critical, and an
+    /// abort under `G_DEBUG=fatal-criticals`.
+    pub null_safe: bool,
+}
+
+impl Counting {
+    /// The function a backend calls for `retain` or `release`: the pair's own
+    /// where it is null-safe, and otherwise the guard it defines around it.
+    #[must_use]
+    pub fn called(&self, retain: bool) -> String {
+        let name = if retain { self.retain } else { self.release };
+        if self.null_safe { name.to_owned() } else { Self::guarded(name) }
+    }
+
+    /// The guard around `name`: `nts_guarded_g_object_unref`.
+    #[must_use]
+    pub fn guarded(name: &str) -> String {
+        format!("nts_guarded_{name}")
+    }
 }
 
 impl Family {
@@ -700,17 +722,35 @@ impl Family {
     pub const fn counting(self) -> Option<Counting> {
         match self {
             Self::C => None,
-            Self::Objc => Some(Counting { retain: "objc_retain", release: "objc_release" }),
+            Self::Objc => Some(Counting { retain: "objc_retain", release: "objc_release", null_safe: true }),
             // `ref_sink`, as glib-rs takes a borrowed object: a plain ref on
             // an ordinary one, and on a new widget -- born floating, handed
             // back transfer-none -- the floating reference itself, which
             // otherwise nothing would ever drop.
-            Self::GObject => Some(Counting { retain: "g_object_ref_sink", release: "g_object_unref" }),
+            Self::GObject => Some(Counting { retain: "g_object_ref_sink", release: "g_object_unref", null_safe: false }),
         }
     }
 }
 
+/// The root every counted `GObject` handle upcasts to: what a promise's box
+/// holds one as (`HANDLE_BOX_GOBJECT`), since one box serves the family and
+/// its release is the family's.
+#[must_use]
+pub fn gobject_root() -> Pointee {
+    Pointee::Opaque(Handle { tag: "_GObject".to_owned(), ancestors: vec!["_GTypeInstance".to_owned()], family: Family::GObject })
+}
+
 impl Pointee {
+    /// The family of the handle this is, through a `const` view.
+    #[must_use]
+    pub fn family(&self) -> Option<Family> {
+        match self {
+            Self::Opaque(handle) => Some(handle.family),
+            Self::Const(inner) => inner.family(),
+            _ => None,
+        }
+    }
+
     /// How a handle to this is counted: its family's answer, through a
     /// `const` view as well, since `Const<NSString>` is the same object.
     #[must_use]

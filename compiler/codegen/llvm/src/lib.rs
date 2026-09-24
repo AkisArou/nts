@@ -93,10 +93,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     }
     text.push_str(&native_memory::helpers(program));
     text.push_str(&objc::module(program));
-    for counting in nts_codegen_common::counting::foreign(program) {
-        let _ = writeln!(text, "declare ptr @{}(ptr)", counting.retain);
-        let _ = writeln!(text, "declare void @{}(ptr)", counting.release);
-    }
+    text.push_str(&counting_declarations(program));
     // What the runtime offers this backend, declared up front.
     //
     // `nts_to_int32` is `static inline` in the C header, which is right for C
@@ -2504,8 +2501,8 @@ fn counting_or_global(
             let retain = matches!(op.kind, OpKind::Retain(_));
             let operand = name(*object);
             match counter(&func.values[object.0 as usize].ty).map_err(|why| refuse(func, why))? {
-                Counter::Foreign(counting) if retain => format!("call ptr @{}(ptr {operand})", counting.retain),
-                Counter::Foreign(counting) => format!("call void @{}(ptr {operand})", counting.release),
+                Counter::Foreign(counting) if retain => format!("call ptr @{}(ptr {operand})", counting.called(true)),
+                Counter::Foreign(counting) => format!("call void @{}(ptr {operand})", counting.called(false)),
                 _ if retain => format!("call void @nts_retain(ptr {operand})"),
                 _ => format!("call void @nts_release(ptr {operand})"),
             }
@@ -3929,3 +3926,30 @@ fn unary(
 }
 
 mod native_memory;
+
+/// The foreign counting pairs the program calls, declared -- and for a pair
+/// that does not take NULL quietly, the guard every count goes through
+/// (`Counting::called`).
+fn counting_declarations(program: &Program) -> String {
+    let mut text = String::new();
+    for counting in nts_codegen_common::counting::foreign(program) {
+        let _ = writeln!(text, "declare ptr @{}(ptr)", counting.retain);
+        let _ = writeln!(text, "declare void @{}(ptr)", counting.release);
+        // A pair that does not take NULL quietly, guarded once here.
+        if !counting.null_safe {
+            let retain = nts_core::hir::native::Counting::guarded(counting.retain);
+            let release = nts_core::hir::native::Counting::guarded(counting.release);
+            let _ = writeln!(
+                text,
+                "define internal ptr @{retain}(ptr %object) alwaysinline {{\nentry:\n  %null = icmp eq ptr %object, null\n  br i1 %null, label %done, label %count\ncount:\n  %counted = call ptr @{}(ptr %object)\n  br label %done\ndone:\n  %result = phi ptr [ %object, %entry ], [ %counted, %count ]\n  ret ptr %result\n}}",
+                counting.retain
+            );
+            let _ = writeln!(
+                text,
+                "define internal void @{release}(ptr %object) alwaysinline {{\nentry:\n  %null = icmp eq ptr %object, null\n  br i1 %null, label %done, label %count\ncount:\n  call void @{}(ptr %object)\n  br label %done\ndone:\n  ret void\n}}",
+                counting.release
+            );
+        }
+    }
+    text
+}

@@ -2465,15 +2465,17 @@ static Thing *thing(int value, bool floating) {
 }
 struct _Thing *thing_new_owned(int value) { return thing(value, false); }
 struct _Thing *thing_new_floating(int value) { return thing(value, true); }
+static int errors;
+/* As GLib's: NULL is a critical, counted here rather than aborting. */
 void *g_object_ref_sink(void *object) {
     GObject *o = object;
+    if (!o) { errors++; return object; }
     if (o->floating) o->floating = false; else o->refs++;
     return object;
 }
-static int errors;
 void g_object_unref(void *object) {
     GObject *o = object;
-    if (o->freed || o->refs <= 0) { errors++; return; }
+    if (!o || o->freed || o->refs <= 0) { errors++; return; }
     if (--o->refs == 0) { o->freed = true; live--; }
 }
 static Thing *kept;

@@ -807,10 +807,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     // A foreign object system's retain and release, declared with the shape
     // every such pair has (the object in, and for retain, the object back),
     // for exactly the pairs this program calls.
-    for counting in nts_codegen_common::counting::foreign(program) {
-        writer.line(&origin, format!("extern void *{}(void *object);", counting.retain));
-        writer.line(&origin, format!("extern void {}(void *object);", counting.release));
-    }
+    counting_declarations(&mut writer, &origin, program);
 
     // Forward declarations, so a call does not depend on definition order — and
     // only for functions that actually have a definition. Before the
@@ -4907,8 +4904,7 @@ fn emit_op(
                 Counter::Runtime => format!("nts_release((NtsHeader *){operand});"),
                 Counter::Tagged if retain => format!("nts_value_retain({operand});"),
                 Counter::Tagged => format!("nts_value_release({operand});"),
-                Counter::Foreign(counting) if retain => format!("{}((void *){operand});", counting.retain),
-                Counter::Foreign(counting) => format!("{}((void *){operand});", counting.release),
+                Counter::Foreign(counting) => format!("{}((void *){operand});", counting.called(retain)),
             }
         }
         OpKind::Convert(operand) => {
@@ -5569,3 +5565,32 @@ mod tests {
 
 mod native_memory;
 mod objc;
+
+/// The foreign counting pairs the program calls, declared -- and for a pair
+/// that does not take NULL quietly, the guard every count goes through
+/// (`Counting::called`).
+fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+    for counting in nts_codegen_common::counting::foreign(program) {
+        writer.line(origin, format!("extern void *{}(void *object);", counting.retain));
+        writer.line(origin, format!("extern void {}(void *object);", counting.release));
+        // A pair that does not take NULL quietly, guarded once here.
+        if !counting.null_safe {
+            writer.line(
+                origin,
+                format!(
+                    "static inline void *{}(void *object) {{ return object ? {}(object) : object; }}",
+                    nts_core::hir::native::Counting::guarded(counting.retain),
+                    counting.retain
+                ),
+            );
+            writer.line(
+                origin,
+                format!(
+                    "static inline void {}(void *object) {{ if (object) {}(object); }}",
+                    nts_core::hir::native::Counting::guarded(counting.release),
+                    counting.release
+                ),
+            );
+        }
+    }
+}
