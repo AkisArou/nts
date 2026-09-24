@@ -72,7 +72,8 @@ void nts_glib_host_attach(void) {
 
 char *nts_gerror_take_message(struct _GError *error) {
   GError *reported = error;
-  const char *text = reported->message != NULL ? reported->message : "unknown GLib error";
+  const char *text =
+      reported->message != NULL ? reported->message : "unknown GLib error";
   size_t length = strlen(text);
   char *message = malloc(length + 1);
   if (message == NULL) {
