@@ -4457,9 +4457,31 @@ static size_t nts_write_cstring(const NtsString *s, char *out) {
   return n;
 }
 
+/* Whether a one-byte string's storage is already its C string: every byte
+ * ASCII, and none of them zero. Branch-free over the bytes, so the compiler
+ * vectorises it: `(b - 1) | b` has its top bit set exactly for 0 and for
+ * 0x80 and above. */
+static bool nts_lendable_ascii(const unsigned char *bytes, uint32_t length) {
+  unsigned char bad = 0;
+  for (uint32_t at = 0; at < length; at++) {
+    bad |= (unsigned char)((unsigned char)(bytes[at] - 1u) | bytes[at]);
+  }
+  return (bad & 0x80u) == 0;
+}
+
 const char *nts_string_to_cstring(const NtsString *s) {
   if (s == NULL) {
     return NULL;
+  }
+  /* Lent in place: a one-byte string's storage ends in a zero -- every
+   * string is built through `nts_str_raw`, and both backends' literals carry
+   * one -- so ASCII with no U+0000 is already the C string, and the call
+   * costs a scan instead of an allocation. */
+  if ((s->flags & NTS_TWO_BYTE) == 0) {
+    const unsigned char *bytes = NTS_ELEMENTS(s, unsigned char);
+    if (nts_lendable_ascii(bytes, s->length)) {
+      return (const char *)bytes;
+    }
   }
   /* Three bytes per unit is the most any unit needs: a BMP code point is at
    * most three, and a supplementary one is four bytes for two units. */
@@ -4545,10 +4567,12 @@ NtsArray *nts_strings_from_cstrings(const char *const *c, bool required) {
   return array;
 }
 
-/* Every answer is its own allocation today; see the header for why the source
- * string is passed anyway. */
+/* A lent answer is the string's own storage, and anything else was
+ * allocated: the source is what tells the two apart. */
 void nts_cstring_release(const NtsString *s, const char *c) {
-  (void)s;
+  if (s != NULL && c == (const char *)NTS_ELEMENTS(s, unsigned char)) {
+    return;
+  }
   free((void *)c);
 }
 

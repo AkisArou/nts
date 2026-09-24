@@ -327,7 +327,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_string_from_cstring", returns: "noalias ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_string_from_required_cstring", returns: "noalias nonnull ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_string_from_utf8", returns: "ptr", params: &["ptr", "i64"], attributes: &[] },
-    Signature { name: "nts_string_to_cstring", returns: "noalias ptr", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_string_to_cstring", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_string_truthy", returns: "zeroext i1", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_strings_from_cstrings", returns: "ptr", params: &["ptr", "i1 zeroext"], attributes: &[] },
     Signature { name: "nts_strings_to_cstrings", returns: "noalias ptr", params: &["ptr"], attributes: &[] },

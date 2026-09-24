@@ -1616,16 +1616,16 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
  * lone surrogate becomes U+FFFD, as `TextEncoder` and V8's own conversion do.
  * NULL is NULL, for `string | null`, which is why this is `OR_NULL`.
  *
- * **The pair, and not `malloc` and `free`, is the contract.** Today every
- * answer is a fresh allocation. A one-byte ASCII string whose storage is
- * NUL-terminated in place could be lent directly, and the release is given the
- * source so that it can tell the two apart -- which is the whole of what that
- * later change would need, with no change to what the compiler emits.
+ * **The pair, and not `malloc` and `free`, is the contract.** A one-byte
+ * string that is all ASCII is lent: the answer is its own storage, which is
+ * NUL-terminated in place. Anything else is a fresh allocation. The release
+ * is given the source so that it can tell the two apart -- and so the answer
+ * may alias the string, which is why this is not `NTS_ALLOCATES_OR_NULL`.
  *
  * **U+0000 inside the string ends the process**, naming the boundary. A C
  * string cannot hold one, and passing the prefix before it would be a callee
  * silently receiving different text from what the program wrote. */
-NTS_ALLOCATES_OR_NULL const char *nts_string_to_cstring(const NtsString *s);
+const char *nts_string_to_cstring(const NtsString *s);
 void nts_cstring_release(const NtsString *s, const char *c);
 /* A `string[]` as C's NULL-terminated array of strings, for a parameter
  * declared `CStrings`: each element converted as `nts_string_to_cstring`

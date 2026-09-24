@@ -2009,6 +2009,44 @@ fn expect(values: &str, provider: hir::Provider) -> String {
     if provider == hir::Provider::ReferenceCounting { format!("{values} leak=0") } else { values.to_owned() }
 }
 
+/// An ASCII `string` is lent to C in place, not copied: a narrow string's
+/// storage is already NUL-terminated, so its bytes *are* the C string.
+///
+/// Observed by converting one string twice in one call: lent, both arguments
+/// are one pointer; copied, they are two allocations alive at once, which can
+/// never be equal. Non-ASCII, and a wide string, must still be copies -- the
+/// UTF-8 is not the storage -- and under reference counting nothing leaks and
+/// nothing is freed that was lent (a `free` of the string's own storage would
+/// crash here, or corrupt the heap for the fifty repeats).
+#[test]
+fn an_ascii_string_is_lent_to_c_in_place_on_both_backends() {
+    let source = r#"
+import type { c_int } from "c:types";
+declare function same(a: string, b: string): boolean;
+declare function length(a: string): c_int;
+export function ascii(): number { const s = "gtk_label_set_text"; return same(s, s) ? 1 : 0; }
+export function latin(): number { const s = "caf\u00e9"; return same(s, s) ? 1 : 0; }
+export function wide(): number { const s = "\u03b1\u03b2"; return same(s, s) ? 1 : 0; }
+export function built(): number { let s = ""; for (let i = 0; i < 20; i++) s += String(i); return same(s, s) ? length(s) : -1; }
+"#;
+    let library = r#"
+#include <stdbool.h>
+#include <string.h>
+bool same(const char *a, const char *b) { return a == b && strcmp(a, b) == 0; }
+int length(const char *a) { return (int)strlen(a); }
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(
+            r#"printf("%.0f %.0f %.0f %.0f", ascii(), latin(), wide(), built());"#,
+            "ascii(); latin(); wide(); built();",
+        );
+        let Some((_, outputs)) = run_on_both_backends("lent-string", source, provider, library, &caller) else { return; };
+        for output in outputs {
+            assert_eq!(output, expect("1 0 0 30", provider), "{provider:?}");
+        }
+    }
+}
+
 /// C's array of strings, `char **`, on both backends.
 const STRINGS_LIBRARY: &str = r"
 #include <stddef.h>
