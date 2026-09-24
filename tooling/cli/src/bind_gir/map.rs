@@ -273,16 +273,18 @@ pub(crate) fn bind<'a>(
     };
     mapper.types();
     mapper.enums();
-    let mut callables: Vec<&Callable> = namespace.functions.iter().collect();
+    // Each with the class it is declared in, which is what a constructor
+    // returns whatever its return type says.
+    let mut callables: Vec<(&Callable, Option<&Class>)> = namespace.functions.iter().map(|f| (f, None)).collect();
     for class in &namespace.classes {
-        callables.extend(&class.callables);
+        callables.extend(class.callables.iter().map(|c| (c, Some(class))));
     }
     for record in namespace.records.iter().filter(|r| !r.class_struct) {
-        callables.extend(&record.callables);
+        callables.extend(record.callables.iter().map(|c| (c, None)));
     }
-    for callable in callables {
+    for (callable, owner) in callables {
         let name = callable.c_identifier.clone().unwrap_or_else(|| callable.name.clone());
-        match mapper.function(callable) {
+        match mapper.function(callable, owner) {
             Ok(function) => mapper.binding.functions.push(function),
             // The entry GIR names instead is bound under the same symbol;
             // this one is a duplicate, not something missing.
@@ -515,7 +517,7 @@ impl<'a> Mapper<'a> {
         }
     }
 
-    fn function(&mut self, callable: &Callable) -> Result<Function, Reason> {
+    fn function(&mut self, callable: &Callable, owner: Option<&'a Class>) -> Result<Function, Reason> {
         if callable.shadowed {
             return Err(Reason::Shadowed);
         }
@@ -585,7 +587,7 @@ impl<'a> Mapper<'a> {
             }
             parameters.push((identifier(&param.name), mapped));
         }
-        let (result, free) = self.result(&signature.result)?;
+        let (result, free) = self.function_result(callable, owner)?;
         // `GError **error`, which GIR leaves out of the parameter list: the
         // same out parameter as any other, a slot for a nullable handle.
         if signature.throws {
@@ -1078,6 +1080,52 @@ impl<'a> Mapper<'a> {
     }
 
     /// A pointer to a class or record, `const` where C says so.
+    /// The result, and what frees it. A constructor returns its class: GIR
+    /// says so by where it declares one, and its return type says what C
+    /// does -- `Gtk.Widget` for `gtk_box_new`.
+    fn function_result(&mut self, callable: &Callable, owner: Option<&'a Class>) -> Result<(Mapped, Option<String>), Reason> {
+        let (result, free) = self.result(&callable.signature.result)?;
+        Ok(match owner {
+            Some(class) if callable.kind == CallableKind::Constructor => (self.declared(result, class), free),
+            _ => (result, free),
+        })
+    }
+
+    /// A constructor's result as the class GIR says it returns, where C
+    /// declares one of that class's ancestors: `gtk_box_new`'s `GtkWidget *`
+    /// is `Declared<GtkBox, GtkWidget>`, so `box.append(…)` needs no downcast.
+    /// GIR's word is trusted, as gtk-rs trusts it; anything else -- the same
+    /// class, or one GIR does not say descends from C's -- is left as C has it.
+    fn declared(&mut self, result: Mapped, class: &'a Class) -> Mapped {
+        let nullable = result.ts.ends_with(" | null");
+        let declared = result.ts.trim_end_matches(" | null").to_owned();
+        let namespace = self.namespace;
+        let Some(c_type) = class.c_type.as_deref() else { return result };
+        if c_type == declared || !self.facts.tags.contains_key(c_type) || !self.descends(namespace, class, &declared) {
+            return result;
+        }
+        let local = self.name_in(namespace, c_type);
+        self.binding.brands.insert("Declared");
+        let ts = format!("Declared<{local}, {declared}>{}", if nullable { " | null" } else { "" });
+        Mapped { ts, c: result.c }
+    }
+
+    /// Whether GIR says `class` descends from the class C calls `ancestor`.
+    fn descends(&self, namespace: &'a Namespace, class: &'a Class, ancestor: &str) -> bool {
+        let (mut namespace, mut class) = (namespace, class);
+        // Bounded, so a cycle in malformed GIR ends.
+        for _ in 0..64 {
+            let Some(parent) = &class.parent else { return false };
+            let qualified = if parent.contains('.') { parent.clone() } else { format!("{}.{parent}", namespace.name) };
+            let Some(Resolved::Class(next_namespace, next)) = self.resolve(&qualified) else { return false };
+            if next.c_type.as_deref() == Some(ancestor) {
+                return true;
+            }
+            (namespace, class) = (next_namespace, next);
+        }
+        false
+    }
+
     fn handle(&mut self, local: String, tag: &str, constant: bool, nullable: bool) -> Mapped {
         let pointee = Pointee::Opaque(Handle::from(tag));
         let (pointee, local) = if constant {

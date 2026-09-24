@@ -17,8 +17,9 @@
 //                 and released by the binding's `g_strfreev`
 //   sha256=ba7816bf  the bytes "abc", from offset 1 of a larger `Uint8Array`,
 //                 borrowed in place as `const guint8 *` with their length
-//   cast-ok       `asGtkBox` answers the box `gtk_box_new` returned as a widget
-//   cast-null     `asGtkLabel` answers null for that same box
+//   cast-ok       `asGtkBox` answers the box `gtk_box_new` returned, held as
+//                 a plain `GtkWidget`
+//   cast-null     `asGtkLabel` answers null for that same widget
 //   clicked 1     a typed signal handler, connected as GJS spells it --
 //                 `button.connect("clicked", handler)`, the flags left out --
 //                 ran when the signal was emitted, and was handed the button
@@ -50,6 +51,7 @@ import {
   gtk_window_present,
   gtk_window_set_child,
   Orientation,
+  type GtkWidget,
 } from "c:Gtk-4.0";
 import {
   ApplicationFlags,
@@ -79,7 +81,7 @@ import { g_object_unref } from "c:GObject-2.0";
 import type { c_double, c_int, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
 import { gir_emit, gir_log } from "c:gir-shim";
-import { asGtkBox, asGtkButton, asGtkLabel, asGtkWindow } from "../types/gir/Gtk-4.0.values.ts";
+import { asGtkBox, asGtkButton, asGtkLabel } from "../types/gir/Gtk-4.0.values.ts";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
 const PRIORITY_DEFAULT = 0 as c_int;
@@ -182,17 +184,16 @@ function main(): void {
   let ticks = 0;
   let clicks = 0;
   application.connect("activate", () => {
-    const window = asGtkWindow(gtk_application_window_new(application));
-    const box = asGtkBox(gtk_box_new(Orientation.VERTICAL, 4 as c_int));
-    const label = asGtkLabel(gtk_label_new("start"));
-    const button = asGtkButton(gtk_button_new_with_label("press"));
-    if (window === null || box === null || label === null || button === null) {
-      gir_log("cast-failed");
-      application.quit();
-      return;
-    }
-    gir_log("cast-ok");
-    gir_log(asGtkLabel(box) === null ? "cast-null" : "cast-wrong");
+    // Each constructor returns its class, as GIR declares it -- a `GtkBox`
+    // from `gtk_box_new`, which C declares `GtkWidget *`.
+    const window = gtk_application_window_new(application);
+    const box = gtk_box_new(Orientation.VERTICAL, 4 as c_int);
+    const label = gtk_label_new("start");
+    const button = gtk_button_new_with_label("press");
+    // A checked downcast, for a handle known only as a widget.
+    const widget: GtkWidget = box;
+    gir_log(asGtkBox(widget) === null ? "cast-failed" : "cast-ok");
+    gir_log(asGtkLabel(widget) === null ? "cast-null" : "cast-wrong");
     // Methods on the handles: each is the C function it names, called with
     // the handle as its instance -- `box.append(label)` is
     // `gtk_box_append(box, label)`, and `window.present()` reaches
