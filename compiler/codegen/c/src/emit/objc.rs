@@ -20,8 +20,11 @@
 //! every other call does.
 
 use super::{CodeWriter, Origin, Program};
-use nts_codegen_common::objc::{class_symbol, lookups, selector_symbol};
-use nts_core::hir::native::{Function, Send, Type};
+use nts_codegen_common::objc::{
+    block_descriptor_symbol, block_encoding, block_invoke_symbol, block_signatures, class_symbol, lookups,
+    selector_symbol,
+};
+use nts_core::hir::native::{FnPointer, Function, Send, Type};
 
 /// The runtime declarations and the lookup functions, when the program sends
 /// anything. Written before the function bodies, which call them.
@@ -55,6 +58,103 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
         writer.line(origin, "    return cached;");
         writer.line(origin, "}");
     }
+}
+
+/// What every block in the program shares: the layout, the two helpers the
+/// block runtime calls on a copy and its final release, and the stack block's
+/// class. Then one invoke adapter and one descriptor per signature.
+///
+/// The layout is `Block_layout` (libclosure's `Block_private.h`) and two
+/// captured words: the closure, lent for the call that built the block, and
+/// the bridge into its compiled body. A callee that keeps the block copies it;
+/// `nts_block_copy` lends the closure again for the copy, and
+/// `nts_block_dispose` gives that back when the copy is released. A callee
+/// that keeps the block *without* copying it holds a pointer into a frame that
+/// is gone, which is the same bug in C.
+///
+/// **Copy and dispose check the thread.** They touch the closure's count,
+/// which only its owning thread may, and they run without the block being
+/// invoked (a timer invalidated before it fires still disposes its block).
+/// So the guard is here, not only in the bridge an invoke goes through.
+pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+    let signatures = block_signatures(program);
+    if signatures.is_empty() {
+        return;
+    }
+    writer.line(origin, "/* Objective-C blocks: see `emit/objc.rs`. */");
+    writer.line(
+        origin,
+        "struct nts_block { void *isa; int flags; int reserved; void *invoke; const void *descriptor; void *context; void *bridge; };",
+    );
+    writer.line(
+        origin,
+        "struct nts_block_descriptor { unsigned long reserved; unsigned long size; void (*copy)(void *, const void *); void (*dispose)(const void *); const char *signature; const char *layout; };",
+    );
+    writer.line(origin, "extern void *_NSConcreteStackBlock[32];");
+    writer.line(origin, "extern void abort(void);");
+    writer.line(origin, "extern int dprintf(int descriptor, const char *format, ...);");
+    writer.line(origin, "static void nts_block_on_owner(const char *what) {");
+    writer.line(origin, "    if (nts_is_owner_thread()) return;");
+    writer.line(
+        origin,
+        "    dprintf(2, \"nts: a block was %s off the thread that owns its closure\\n\", what);",
+    );
+    writer.line(origin, "    abort();");
+    writer.line(origin, "}");
+    writer.line(origin, "static void nts_block_copy(void *copy, const void *block) {");
+    writer.line(origin, "    (void)copy;");
+    writer.line(origin, "    nts_block_on_owner(\"copied\");");
+    writer.line(origin, "    (void)nts_closure_lend((NtsHeader *)((const struct nts_block *)block)->context);");
+    writer.line(origin, "}");
+    writer.line(origin, "static void nts_block_dispose(const void *block) {");
+    writer.line(origin, "    nts_block_on_owner(\"released\");");
+    writer.line(origin, "    nts_closure_unlend(((const struct nts_block *)block)->context);");
+    writer.line(origin, "}");
+    for signature in signatures {
+        let result = signature.result.c_type();
+        let mut parameters = vec!["void *block".to_owned()];
+        let mut bridge_types = Vec::new();
+        let mut arguments = Vec::new();
+        for (at, ty) in signature.parameters.iter().enumerate() {
+            parameters.push(format!("{} a{at}", ty.c_type()));
+            bridge_types.push(ty.c_type().into_owned());
+            arguments.push(format!("a{at}"));
+        }
+        bridge_types.push("void *".to_owned());
+        arguments.push("b->context".to_owned());
+        let give = if matches!(*signature.result, Type::Void) { "" } else { "return " };
+        writer.line(
+            origin,
+            format!(
+                "static {result} {}({}) {{ const struct nts_block *b = block; {give}(({result} (*)({}))b->bridge)({}); }}",
+                block_invoke_symbol(signature),
+                parameters.join(", "),
+                bridge_types.join(", "),
+                arguments.join(", ")
+            ),
+        );
+        writer.line(
+            origin,
+            format!(
+                "static const struct nts_block_descriptor {} = {{ 0, sizeof(struct nts_block), nts_block_copy, nts_block_dispose, \"{}\", 0 }};",
+                block_descriptor_symbol(signature),
+                block_encoding(signature)
+            ),
+        );
+    }
+}
+
+/// The statements that fill a `NativeBlock`'s frame slot and take its address.
+pub(super) fn block_expression(name: &str, invoke: &str, context: &str, signature: &FnPointer) -> String {
+    // `BLOCK_HAS_COPY_DISPOSE` and `BLOCK_HAS_SIGNATURE`; a stack block's
+    // reference count bits are zero.
+    format!(
+        "{name}_block.isa = _NSConcreteStackBlock; {name}_block.flags = (1 << 25) | (1 << 30); {name}_block.reserved = 0; \
+         {name}_block.invoke = (void *){}; {name}_block.descriptor = &{}; {name}_block.context = {context}; \
+         {name}_block.bridge = (void *){invoke}; {name} = &{name}_block;",
+        block_invoke_symbol(signature),
+        block_descriptor_symbol(signature)
+    )
 }
 
 /// A parameter's type in the cast. Every pointer is `const void *`, because

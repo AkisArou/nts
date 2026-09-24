@@ -826,6 +826,17 @@ pub enum OpKind {
     /// `GAsyncReadyCallback`, GIR's `scope="async"` -- so the bridge gives
     /// the closure back itself (`nts_closure_unlend`) after that one call.
     NativeBridge { closure: ValueId, signature: std::sync::Arc<native::FnPointer>, context: bool, once: bool },
+    /// An Objective-C block in this function's frame, which is what clang
+    /// passes for `^{ ... }`: the address is the value, and it is valid until
+    /// the function returns. A callee that keeps it copies it (`_Block_copy`),
+    /// and the copy lends `context` again; disposing the copy gives it back.
+    ///
+    /// `invoke` is a `NativeBridge` with a context (the trampoline into the
+    /// closure's compiled body), `context` the closure lent for the call, and
+    /// `signature` the block's own, which names its invoke adapter and its
+    /// type encoding. The block carries both words, so the adapter is one per
+    /// signature, not one per closure.
+    NativeBlock { invoke: ValueId, context: ValueId, signature: std::sync::Arc<native::FnPointer> },
     /// The nth parameter of the function, materialized as a value.
     Param(u32),
     /// The nth parameter of the block that defines it.

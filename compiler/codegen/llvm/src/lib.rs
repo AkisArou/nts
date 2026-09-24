@@ -1461,6 +1461,8 @@ fn frame_storage(program: &Program, func: &Func) -> Vec<String> {
                 OpKind::Call {
                     frame: Some(units), ..
                 } => Some(one_frame(&out, units)),
+                // A block's frame slot: see `OpKind::NativeBlock`.
+                OpKind::NativeBlock { .. } => Some(format!("{out}.block = alloca %nts.block, align 8")),
                 OpKind::ObjectNew { frame: true } => {
                     let placed = object_placement(program, &op.ty)?;
                     Some(format!(
@@ -1608,7 +1610,21 @@ fn externals(program: &Program) -> Vec<String> {
     if once && !seen.contains(&unlend)
         && let Some(line) = declaration(&unlend)
     {
+        seen.push(unlend);
         lines.push(line);
+    }
+    // A block's copy and dispose helpers lend and give back its closure, on
+    // the owning thread only (`objc::module`), and no operation names them.
+    if !nts_codegen_common::objc::block_signatures(program).is_empty() {
+        for helper in ["nts_is_owner_thread", "nts_closure_lend", "nts_closure_unlend"] {
+            let helper = helper.to_owned();
+            if !seen.contains(&helper)
+                && let Some(line) = declaration(&helper)
+            {
+                seen.push(helper);
+                lines.push(line);
+            }
+        }
     }
     lines
 }
@@ -2231,6 +2247,7 @@ fn allocation(
                 nts_codegen_common::symbols::bridge_name(target, signature, *once)
             )
         }
+        OpKind::NativeBlock { invoke, context, signature } => objc::block(&out, *invoke, *context, signature),
         OpKind::ClosureStatic => {
             let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &op.ty else {
                 return Err(refuse(func, "a closure value that is not an object"));
@@ -3044,6 +3061,7 @@ fn memory_operation(
         // rendered beside the static closure it is derived from, which is where
         // the layout lookup already lives.
         | OpKind::NativeBridge { .. }
+        | OpKind::NativeBlock { .. }
         | OpKind::Await { .. }
         // `CellReady` belongs with the other two halves of the suspension
         // machine, and was the one kind missing from this list -- so it fell

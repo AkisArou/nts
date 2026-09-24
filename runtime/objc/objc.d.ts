@@ -16,4 +16,16 @@ declare module "objc:types" {
   export type ObjcClass<Tag extends string, Parent extends ClassChain | null = null> = Class<Tag, Parent> & {
     readonly __objc: true;
   };
+
+  // A TypeScript function where Objective-C takes a block, `void (^)(A...)`.
+  // The block is built in the caller's frame, as clang builds `^{ ... }`, and
+  // the closure is lent to it for the call. A callee that keeps the block
+  // copies it, and the copy keeps the closure alive until the block runtime
+  // releases it. The closure may capture: what it sees of a `let` is the
+  // variable, not a snapshot.
+  //
+  // Runs on the main thread only: a block called, copied or released on
+  // another thread ends the process by name, since the closure's count is
+  // not atomic.
+  export type Block<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "block" };
 }

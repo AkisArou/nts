@@ -39655,6 +39655,38 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
+    /// A closure as an Objective-C block: the trampoline into its body, the
+    /// closure lent for the call (a callee that keeps the block copies it and
+    /// lends it again), and the block in this frame holding both.
+    /// `None` for an argument the call does not pass.
+    fn lend_block(
+        &mut self,
+        id: NodeId,
+        closure: Option<ValueId>,
+        (bridge, signature): (std::sync::Arc<super::native::FnPointer>, std::sync::Arc<super::native::FnPointer>),
+        want: HirType,
+        lent: &mut Vec<Lent>,
+        origin: &Origin,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(closure) = closure else { return Ok(None) };
+        let invoke = self.bridge_closure(
+            id,
+            closure,
+            &bridge,
+            false,
+            HirType::NativePointer(super::native::Pointee::FnPointer(bridge.clone())),
+            origin,
+        )?;
+        let context = self.runtime_call(
+            "nts_closure_lend",
+            vec![closure],
+            HirType::NativePointer(super::native::Pointee::Void),
+            origin.clone(),
+        );
+        lent.push(Lent::Closure { context });
+        Ok(Some(self.push(OpKind::NativeBlock { invoke, context, signature }, want, origin.clone())))
+    }
+
     /// A `Uint8Array`'s bytes where C takes a pointer to them, NULL for
     /// `null`: `nts_view_bytes`, in place.
     fn borrow_bytes(&mut self, view: ValueId, want: HirType, origin: &Origin) -> ValueId {
@@ -39841,6 +39873,9 @@ impl<'a> FuncBuilder<'a> {
                     c_args.push(self.bridge_closure(id, closure, &bridge, once, want, &origin)?);
                     lending = Some((closure, lifetime));
                 }
+                Role::Block { bridge, signature } => c_args.extend(
+                    self.lend_block(id, argument, (bridge, signature), target.parameters[at].representation(), &mut lent, &origin)?,
+                ),
                 Role::ClosureData => {
                     let Some((closure, lifetime)) = lending else { continue };
                     let context = self.runtime_call(
@@ -40146,8 +40181,10 @@ impl<'a> FuncBuilder<'a> {
         if native.variadic.is_some() || native.convention != super::native::Convention::C {
             return Err(self.unsupported(call, "an Objective-C message with a variadic tail or a managed ABI, which a cast to one C function type cannot carry"));
         }
-        if native.roles.iter().any(|role| !matches!(role, super::native::Role::Plain | super::native::Role::String)) {
-            return Err(self.unsupported(call, "an Objective-C message taking a callback, an array or an error slot; a callback crosses as a block, which is not built yet"));
+        if native.roles.iter().any(|role| {
+            !matches!(role, super::native::Role::Plain | super::native::Role::String | super::native::Role::Block { .. })
+        }) {
+            return Err(self.unsupported(call, "an Objective-C message taking a C callback, an array or an error slot; a callback crosses as a `Block<F>`"));
         }
         // The *message's* arguments: the declared parameters less the
         // receiver. Not the C arity, which also counts `self` and `_cmd` --

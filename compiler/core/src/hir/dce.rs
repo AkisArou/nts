@@ -110,6 +110,9 @@ fn has_effects(kind: &OpKind) -> bool {
         // Whether the *bridged function* survives is a different question, and
         // not this one's to answer: `reachable.rs` keeps the bridged body alive.
         OpKind::NativeBridge { .. } => false,
+        // Filling a frame slot no one reads is unobservable: a block is only
+        // anything once its address reaches a call.
+        OpKind::NativeBlock { .. } => false,
         // A fixed local has no allocator call or observable effect without a
         // use of its address. Dropping it also drops its zero initialization.
         OpKind::NativeLocal { .. } => false,

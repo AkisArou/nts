@@ -764,6 +764,7 @@ pub fn emit(program: &Program) -> Emitted {
     writer.append(object_types);
     native_memory::helpers(&mut writer, &origin, program);
     objc::declarations(&mut writer, &origin, program);
+    objc::blocks(&mut writer, &origin, program);
     // A foreign object system's retain and release, declared with the shape
     // every such pair has (the object in, and for retain, the object back),
     // for exactly the pairs this program calls.
@@ -3825,6 +3826,14 @@ fn emit_body(
         // locals, which means one slot per allocation site rather than one per
         // execution of it -- correct precisely because nothing outlives the
         // iteration that made it.
+        // A block's frame slot, beside the frame objects: see
+        // `OpKind::NativeBlock`.
+        if let OpKind::NativeBlock { .. } = op.kind {
+            writer.line(
+                &op.origin,
+                format!("struct nts_block {}_block;", value_name(ValueId(u32::try_from(index).unwrap_or(0)))),
+            );
+        }
         if let OpKind::ObjectNew { frame: true } = op.kind {
             let layout = layout_of(context.program, &op.ty, &op.origin)?;
             writer.line(
@@ -4744,6 +4753,9 @@ fn emit_op(
         | OpKind::Await { .. }
         | OpKind::Yield { .. }
         | OpKind::Suspend { .. } => return memory_op(writer, func, value, context),
+        OpKind::NativeBlock { invoke, context, signature } => {
+            objc::block_expression(&name, &value_name(*invoke), &value_name(*context), signature)
+        }
         // An erased value is not a pointer to cast: it is sixteen bytes that
         // hold one only when the tag says so, and the runtime helper is where
         // that question is asked. The compiler emits the same retain and

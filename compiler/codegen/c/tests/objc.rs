@@ -211,3 +211,91 @@ fn a_malformed_message_is_refused_by_name() {
         );
     }
 }
+
+/// A TypeScript closure passed where Objective-C takes a block: a stack block
+/// in the caller's frame, one invoke adapter and one descriptor for its
+/// signature, and copy and dispose helpers that check the thread before they
+/// touch the closure's count.
+#[test]
+fn a_closure_crosses_as_a_stack_block() {
+    let binding = r#"/**
+ * @ntsFramework Foundation
+ */
+declare module "objc:Foundation" {
+  import type { c_int } from "c:types";
+  import type { Block, ObjcClass } from "objc:types";
+  export interface NSThingOwnMethods {
+    /**
+     * @ntsSelector each:
+     */
+    each(this: NSThing, block: Block<(n: c_int) => void>): void;
+  }
+  export type NSThing = ObjcClass<"NSThing"> & NSThingOwnMethods;
+  /**
+   * @ntsSelector new
+   * @ntsClass NSThing
+   */
+  export function newThing(): NSThing;
+}
+"#;
+    let program = r#"import { newThing } from "objc:Foundation";
+export function run(): number {
+  let seen = 0;
+  newThing().each((n) => { seen += n; });
+  return seen;
+}
+"#;
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize_utf8().unwrap();
+    let dir = root.join(format!("target/objc-c-tests/{}-block", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        format!(
+            r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","binding.d.ts","{root}/runtime/native/libc.d.ts","{root}/runtime/objc/objc.d.ts"]}}"#
+        ),
+    )
+    .unwrap();
+    std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
+    std::fs::write(dir.join("main.ts"), program).unwrap();
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let prepared = hir::prepare(&snapshot).unwrap();
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program);
+    assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    for expected in [
+        "struct nts_block {",
+        "extern void *_NSConcreteStackBlock[32];",
+        // The block's own signature, as clang encodes `void (^)(int)`.
+        "\"v12@?0i8\"",
+        // Copy and dispose check the thread before touching the count.
+        "nts_block_on_owner(\"copied\");",
+        "nts_block_on_owner(\"released\");",
+        // The adapter reads the bridge and the context out of the block.
+        "b->bridge)(a0, b->context);",
+        // `BLOCK_HAS_COPY_DISPOSE | BLOCK_HAS_SIGNATURE` on a stack block.
+        "_block.flags = (1 << 25) | (1 << 30);",
+        "_block.isa = _NSConcreteStackBlock;",
+    ] {
+        assert!(text.contains(expected), "no `{expected}`:\n{text}");
+    }
+    for file in emitted.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    std::fs::write(dir.join("program.c"), text).unwrap();
+    let cc = std::env::var("CC").unwrap_or_else(|_| "clang".to_owned());
+    let Ok(compiled) = Command::new(&cc)
+        .args(["-std=c11", "-Wall", "-Werror", "-fsyntax-only"])
+        .arg(dir.join("program.c"))
+        .output()
+    else {
+        eprintln!("skipped the compile: no {cc}");
+        return;
+    };
+    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+}

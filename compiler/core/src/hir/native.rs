@@ -249,6 +249,12 @@ pub enum Role {
     /// parameter is `GLib`'s type-erased `GCallback`, `void (*)(void)`, and
     /// the bridge is converted to it at the call.
     Closure { lifetime: Lifetime, bridge: std::sync::Arc<FnPointer> },
+    /// A TypeScript function as an Objective-C block (`Block<F>`): one C
+    /// parameter, the block's address. `bridge` is the trampoline's type,
+    /// `signature` with the context after it; `signature` is the block's own.
+    /// The closure is lent for the call; a callee that keeps the block
+    /// copies it, and the copy lends it again.
+    Block { bridge: std::sync::Arc<FnPointer>, signature: std::sync::Arc<FnPointer> },
     /// The closure's context, the `void *` C hands back to the callback:
     /// `nts_closure_lend(closure)`. Hidden from TypeScript.
     ClosureData,
@@ -293,6 +299,7 @@ impl Function {
                 Role::Plain
                 | Role::String
                 | Role::Closure { .. }
+                | Role::Block { .. }
                 | Role::Strings
                 | Role::Bytes
                 | Role::ErrorSlot { .. } => {
@@ -1359,8 +1366,12 @@ fn closure_slots(
     let mut callback = declared.parameters.clone();
     callback.push(context.clone());
     let bridge = std::sync::Arc::new(FnPointer::spell(callback, (*declared.result).clone()));
+    if matches!(kind, ClosureKind::Block) {
+        return Ok(vec![(context, Role::Block { bridge, signature: declared })]);
+    }
     let lifetime = match kind {
-        ClosureKind::Scoped => Lifetime::Call,
+        // A block returned above; its lend is the call's, as a scoped one's.
+        ClosureKind::Scoped | ClosureKind::Block => Lifetime::Call,
         ClosureKind::Once => Lifetime::Once,
         ClosureKind::Retained | ClosureKind::Erased(_) => Lifetime::Notified,
     };
@@ -1368,11 +1379,13 @@ fn closure_slots(
     // `GCallback`, which the bridge is converted to.
     let slot = match kind {
         ClosureKind::Erased(_) => Type::FnPointer(std::sync::Arc::new(FnPointer::spell(Vec::new(), Type::Void))),
-        ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Retained => Type::FnPointer(bridge.clone()),
+        ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Retained | ClosureKind::Block => {
+            Type::FnPointer(bridge.clone())
+        }
     };
     let mut slots = vec![(slot, Role::Closure { lifetime, bridge }), (context.clone(), Role::ClosureData)];
     match kind {
-        ClosureKind::Scoped | ClosureKind::Once => {}
+        ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Block => {}
         ClosureKind::Retained => slots.push((
             Type::FnPointer(std::sync::Arc::new(FnPointer::spell(vec![context], Type::Void))),
             Role::ClosureNotify,
@@ -1422,6 +1435,10 @@ enum ClosureKind {
     /// `ErasedClosure<F, N>`: kept, handed over as `GCallback`, and released
     /// by a destroy function of type `N`.
     Erased(TypeId),
+    /// `Block<F>` (`objc:types`): an Objective-C block, which carries its
+    /// own context and is released by the block runtime, not by a destroy
+    /// function beside it.
+    Block,
 }
 
 /// The function type inside a `Closure<F>` or `ScopedClosure<F>`, and whether
@@ -1467,6 +1484,7 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
         "once" => ClosureKind::Once,
         "retained" => ClosureKind::Retained,
         "erased" => ClosureKind::Erased(notify?),
+        "block" => ClosureKind::Block,
         _ => return None,
     };
     Some((function?, kind))

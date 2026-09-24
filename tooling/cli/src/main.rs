@@ -2221,6 +2221,9 @@ fn render_constant(index: usize, ty: &str, kind: &OpKind) -> String {
             let once = if *once { ", once" } else { "" };
             format!("bridge %{} as {}{with}{once}", closure.0, signature.name)
         }
+        OpKind::NativeBlock { invoke, context, signature } => {
+            format!("block %{} with %{} as {}", invoke.0, context.0, signature.name)
+        }
         _ => unreachable!("only the constants reach here"),
     };
     format!("%{index} = const {value} : {ty}")
@@ -2352,6 +2355,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             let with = if *context { " with context" } else { "" };
             let once = if *once { ", once" } else { "" };
             format!("%{index} = native.bridge %{} as {}{with}{once} : {ty}", closure.0, signature.name)
+        }
+        OpKind::NativeBlock { invoke, context, signature } => {
+            format!("%{index} = native.block %{} with %{} as {} : {ty}", invoke.0, context.0, signature.name)
         }
         OpKind::NativeIndexAddress { pointer, index: offset } => format!("%{index} = native.index.addr %{}[%{}] : {ty}", pointer.0, offset.0),
         OpKind::NativeFieldAddress { pointer, field } => format!("%{index} = native.field.addr %{}.{field} : {ty}", pointer.0),
