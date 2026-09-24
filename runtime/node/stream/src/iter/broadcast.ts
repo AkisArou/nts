@@ -366,6 +366,40 @@ export class BroadcastController {
     }
   }
 
+  /**
+   * Promote the next waiter, extracting its settlers.
+   *
+   * `next.resolve` is a capability member read as a *value*, which is refused --
+   * a settler is a settle with the promise as receiver, not a function object.
+   * `#pendingDrains` above was repaired by holding the capability whole, and
+   * `stream`'s `WakeSlot` and `web-platform`'s `ConnectionPool` were repaired the
+   * same way.
+   *
+   * **That repair was tried here on 2026-09-24 and made things worse, so it is
+   * written down rather than left to be rediscovered.** Giving
+   * `BroadcastConsumerState` one
+   * `capability: PromiseWithResolvers<IteratorResult<ByteBatch>> | null` in place
+   * of the `resolve`/`reject` pair is mechanical -- the two are always set,
+   * cleared and null-checked together -- and it does clear this refusal and
+   * `#promotePending`'s two cascades. But it **introduces two structural-cast
+   * refusals**:
+   *
+   *     a `an anonymous type` where a `an anonymous type` is wanted, which is a
+   *     pointer cast between two structs that do not agree about where their
+   *     shared fields are
+   *
+   * `PromiseWithResolvers<T>` is an *anonymous* object type, and moving one from
+   * the ring buffer into a field crosses two distinct instantiations of it whose
+   * layouts disagree. Net: one refusal fewer in total, two more in the family
+   * that is waiting on the interface-representation design step -- which is a
+   * worse position, not a better one.
+   *
+   * So the bound on the repair is: **holding a capability works where one is
+   * created and stored in one place, and trips where one is moved between
+   * slots.** `WakeSlot` and `ConnectionPool` are the first shape; this is the
+   * second. It becomes repairable when the structural-cast family does; see
+   * `blockers/method-syntax-in-an-interface` for what that costs.
+   */
   #promotePending(consumer: BroadcastConsumerState): boolean {
     const next = consumer.pending.shift();
     if (next === undefined) return false;
