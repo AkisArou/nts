@@ -81,7 +81,7 @@ they are listed in PORTING.md and in the native config's comments.
 | `tsconfig.native.json` | the base of every native program: binds the twins, and maps packages to their sources |
 | `native/probe/` | a native program: the runtime, a typed test host and a deterministic scheduler host |
 | `conformance/` | the harness that runs upstream's tests, and the per-test ledgers |
-| `compiler/AUDIT.md` | the upstream Rust React Compiler, audited as our memoizer |
+| `compiler/` | the upstream Rust React Compiler as our memoizer: the audit (`AUDIT.md`), and how its output stays typed TypeScript (`TYPED-OUTPUT.md`, with its fixtures and study) |
 | `spikes/` | representation experiments the design rests on |
 | `upstream-compile/` | the retired route: the Flow→TS conversion of upstream React compiled through NTS. It is kept as a compiler stress corpus (a census of refusals over 57k lines) and as the exact-source JS behaviour oracle |
 

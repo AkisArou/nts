@@ -8,6 +8,10 @@ Scratch work is in `/home/akisarou/.cache/nts-react/rc-audit/`.
 
 ## Verdict
 
+> **Update:** TYPED-OUTPUT.md measures a simpler design for step 5. It restores
+> types on upstream's own output by span, with no pass-list copy and no codegen
+> of our own. It keeps this document's frontend and runtime steps.
+
 The preferred design is feasible: run the upstream analysis up to the
 `ReactiveFunction`, then do our own typed codegen. It works with today's crates
 and needs no upstream patch. Verified: a 150-line driver
