@@ -56,21 +56,45 @@ export interface OperatorOptions {
 const kEmpty = Symbol("kEmpty");
 const kEof = Symbol("kEof");
 
-/** A one-waiter handoff used for producer and consumer backpressure. */
+/**
+ * A one-waiter handoff used for producer and consumer backpressure.
+ *
+ * The **capability** is stored, not the settler. `this.#callback = resolve`
+ * inside a `new Promise` executor is refused -- *"`resolve` used as a value
+ * rather than called, which needs the executor to be a real closure over the
+ * promise"* -- because the executor's body is lowered where the promise is
+ * built, so a call to `resolve` is the settle it stands for and there is nothing
+ * to hand to a field.
+ *
+ * `Promise.withResolvers()` is the standard spelling that survives it, and
+ * `examples/promise-with-resolvers` says why: the capability *is* the promise in
+ * this representation -- no layout, no allocation, no capture -- so it can be
+ * stored, reassigned and passed on.
+ * `examples/a-capability-settled-through-an-optional-link` already holds one in
+ * a field. What stays refused is extracting `pending.resolve` as a *value*;
+ * calling it as a member is a settle with the promise as receiver, which is what
+ * `wake` does.
+ *
+ * **The field is cleared before the settle, and that order is load-bearing.**
+ * Settling an already-settled promise is a no-op in the runtime, so a version
+ * that called `pending.resolve()` first would behave identically here and fail
+ * the day a waiter re-arms the slot inside its own continuation. `wake` reads,
+ * clears, then settles, which is what the old `callback` version did too.
+ */
 class WakeSlot {
-  #callback: (() => void) | null = null;
+  #pending: PromiseWithResolvers<void> | null = null;
 
   wait(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      this.#callback = resolve;
-    });
+    const pending = Promise.withResolvers<void>();
+    this.#pending = pending;
+    return pending.promise;
   }
 
   wake(): void {
-    if (this.#callback === null) return;
-    const callback = this.#callback;
-    this.#callback = null;
-    callback();
+    if (this.#pending === null) return;
+    const pending = this.#pending;
+    this.#pending = null;
+    pending.resolve();
   }
 }
 
