@@ -3862,9 +3862,25 @@ same-named static — is what makes it a diagnosis rather than a guess.
 `isDeepStrictEqual` and `timers`' `now` are genuine module-scope consts, and
 `storable` declines them *accurately* — a closure whose target did not compile
 has no layout to fix. The sentence is true and still unhelpful, because the root
-is the target's own refusal. The repair is to consult the initializer's
-`uncompiled` entry before falling back, and it is a different fix from the one
-above.
+is the target's own refusal.
+
+**And the repair is not what this paragraph first said.** "Consult the
+initializer's `uncompiled` entry before falling back" cannot work, because the
+entry does not exist yet: `record_unstorable_exports` runs inside `lower()` (via
+`publish_surface` at `lower.rs:7717`) and `drop_callers_of_refused` runs later,
+in the prepare stage (`mod.rs:3112`). The storage reason reaches `uncompiled`
+first, and `record_unstorable_exports`' own *"don't push if something is already
+here"* guard then makes the **cascade** the one that is dropped. Two writers,
+one map, and the order decides which survives.
+
+So the fix is a **priority at the reader, not at the writer**: the storage
+reasons want their own map, consulted by the napi wrapper *after* `uncompiled`
+rather than mixed into it. That is a field on the program every backend reads, so
+it wants `cargo clippy --workspace --all-targets` rather than a `cargo build` —
+a field added to `hir::Program` has broken `#[cfg(test)]` literals here before.
+Matching the storage sentence's *text* in order to overwrite it would be the
+cheap version and is the wrong one; this document has a section on why ranking
+by message text ranks texts rather than causes.
 
 `stream`'s `compose` is a third, and it is the harder one. Its root **is**
 printed — `compose.ts:116: NTS1001 `slice` on an array of erased elements,
