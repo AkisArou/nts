@@ -1,5 +1,6 @@
 {
   "name": "scheduler",
+  "version": "0.28.0",
   "private": true,
   "type": "module",
   "exports": {

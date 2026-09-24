@@ -25,6 +25,7 @@ type ExportTarget = string | { [condition: string]: string };
 interface Package {
   dir: string;
   name: string;
+  version: string;
   internal: boolean;
   exports: Record<string, ExportTarget>;
 }
@@ -38,7 +39,13 @@ function sourceFor(target: ExportTarget, mode: string): string {
 
 const packages: Package[] = readdirSync(packagesDir).map(dir => {
   const manifest = JSON.parse(readFileSync(join(packagesDir, dir, 'package.json'), 'utf8'));
-  return {dir, name: manifest.name, internal: manifest.internal === true, exports: manifest.exports};
+  return {
+    dir,
+    name: manifest.name,
+    version: manifest.version ?? '0.0.0',
+    internal: manifest.internal === true,
+    exports: manifest.exports,
+  };
 });
 // Published packages stay external bare specifiers; internal ones (shared,
 // the reconciler) are bundled into every entry that uses them.
@@ -113,6 +120,15 @@ for (const pkg of published) {
     );
   }
 }
+// Each published package gets a manifest with its version, which React
+// reports (`React.version`) and a test checks.
+for (const pkg of published) {
+  writeFileSync(
+    join(out, pkg.name, 'package.json'),
+    JSON.stringify({name: pkg.name, version: pkg.version, main: 'index.js'}, null, 2) + '\n',
+  );
+}
+
 // The bundles are CommonJS; the lane's own package.json says "module".
 writeFileSync(join(out, 'package.json'), JSON.stringify({type: 'commonjs'}) + '\n');
 console.log(`built ${published.map(p => p.name).join(', ')} into ${out}`);
