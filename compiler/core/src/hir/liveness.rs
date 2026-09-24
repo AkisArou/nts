@@ -134,13 +134,18 @@ pub fn analyze(func: &Func) -> Liveness {
     // wherever that view is, exactly as a frame object is wherever a name for
     // it is. Without this the handle's last read is the conversion, and a
     // temporary is released before the call it was converted for.
+    //
+    // And converted to another counted type -- a `GtkBox *` as the
+    // `GtkWidget *` a method's `this` takes -- which may hold no reference of
+    // its own either (`own::views_borrow`): the same rule, for the same
+    // reason. Where the view does take one, the handle living longer costs a
+    // later release and nothing else.
     let viewed: FxHashMap<ValueId, ValueId> = func
         .values
         .iter()
         .enumerate()
         .filter_map(|(at, op)| match op.kind {
-            OpKind::Convert(operand)
-                if op.ty.counting().is_none() && func.values[operand.0 as usize].ty.counting().is_some() =>
+            OpKind::Convert(operand) if func.values[operand.0 as usize].ty.counting().is_some() =>
             {
                 Some((ValueId(u32::try_from(at).unwrap_or(u32::MAX)), operand))
             }

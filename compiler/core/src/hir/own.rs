@@ -416,6 +416,8 @@ fn classify(
                 } else {
                     Ownership::Borrowed
                 }
+            } else if views_borrow(func, *value) {
+                Ownership::Borrowed
             } else if produces_owned(kind) {
                 Ownership::Produced
             } else if (is_load(kind) || repackages(kind))
@@ -2545,6 +2547,47 @@ fn hands_back_a_parameter(
 /// `unknown` and reads it straight back out, and paid four counting operations
 /// per object for a round trip that moves no memory: a retain for the erased
 /// name, a retain for the unerased one, and both given back.
+/// Whether a counted handle converted to another counted type -- a `GtkBox *`
+/// as the `GtkWidget *` an inherited method takes -- can borrow the reference
+/// the handle holds rather than take one of its own.
+///
+/// It is the same object, and liveness keeps the handle alive wherever the
+/// view is used (`viewed` there), so what the view needs is that the handle's
+/// reference is one nothing else can end early: a parameter, which the caller
+/// holds for the call, or a foreign call's result that this function reads,
+/// which it owns and gives back only where liveness says it dies. A chain of
+/// views goes back to its handle. Anything else -- a load, whose own borrow
+/// was argued over its direct uses only, a block parameter -- takes its own,
+/// as before.
+///
+/// `box.get_visible()` in a loop paid `g_object_ref_sink` and
+/// `g_object_unref` for the upcast receiver on every call: 45-55 ns against
+/// 5-6 ns for the call alone, measured against GTK. A view that escapes -- is
+/// stored, returned, passed on an edge -- is retained there, as any borrowed
+/// value is.
+fn views_borrow(func: &Func, value: ValueId) -> bool {
+    let counted = |v: ValueId| func.values[v.0 as usize].ty.counting().is_some();
+    if !eliding() || !counted(value) {
+        return false;
+    }
+    let mut at = value;
+    // Bounded: a chain of views is as long as a class hierarchy.
+    for _ in 0..64 {
+        let OpKind::Convert(operand) = func.values[at.0 as usize].kind else { break };
+        if !counted(operand) {
+            return false;
+        }
+        at = operand;
+    }
+    if at == value {
+        return false;
+    }
+    matches!(
+        func.values[at.0 as usize].kind,
+        OpKind::Param(_) | OpKind::Call { callee: super::Callee::Native(_), .. }
+    )
+}
+
 pub(super) fn repackages(kind: &OpKind) -> bool {
     matches!(kind, OpKind::Erase { .. } | OpKind::Unerase { .. })
 }

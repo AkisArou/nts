@@ -3795,3 +3795,67 @@ void collect(void) { nts_checkpoint(); }
         assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "1334 leak=0", "{executable}");
     }
 }
+
+/// A counted handle seen as a counted ancestor -- a `Thing` passed where a
+/// `GObject` is taken, which is every inherited method's receiver -- borrows
+/// the handle's reference instead of taking its own, where the handle is a
+/// parameter or a foreign result this function reads. `inherited` calls
+/// through the upcast in a loop, which paid `g_object_ref_sink` and
+/// `g_object_unref` per call; its C has neither now.
+///
+/// The arms are the ways borrowing could be wrong: a view of a fresh +1
+/// result, used twice; one held across a branch, where the handle's own last
+/// use would otherwise be the conversion; one returned, which must be
+/// retained where it leaves; and one stored into a field. The fake counts a
+/// count on a freed or NULL object as an error, and after fifty runs of each
+/// nothing is alive.
+#[test]
+fn an_upcast_borrows_its_handles_reference_on_both_backends() {
+    let source = r#"
+import type { Class, GObjectClass, Owned, c_int } from "c:types";
+type GTypeInstance = Class<"_GTypeInstance">;
+type GObject = GObjectClass<"_GObject", GTypeInstance>;
+type Thing = GObjectClass<"_Thing", GObject>;
+declare function thing_new_owned(value: c_int): Owned<Thing>;
+declare function object_value(object: GObject): c_int;
+declare function errors_seen(): c_int;
+declare function live_objects(): c_int;
+function inherited(t: Thing, n: number): number {
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += object_value(t) as number;
+    return sum;
+}
+export function looped(): number { return inherited(thing_new_owned(2 as c_int), 3); }
+export function fresh(): number { const t = thing_new_owned(4 as c_int); return (object_value(t) as number) + (object_value(t) as number); }
+export function branched(flag: boolean): number {
+    const o: GObject = thing_new_owned(6 as c_int);
+    if (flag) return object_value(o) as number;
+    return 0;
+}
+function up(t: Thing): GObject { return t; }
+export function returned(): number { const o = up(thing_new_owned(8 as c_int)); return object_value(o) as number; }
+class Holder { held: GObject; constructor(t: Thing) { this.held = t; } }
+export function stored(): number { const h = new Holder(thing_new_owned(5 as c_int)); return object_value(h.held) as number; }
+export function errors(): number { return errors_seen() as number; }
+export function live(): number { return live_objects() as number; }
+"#;
+    let library = format!(
+        "{GOBJECT_LIBRARY}\nint object_value(struct _GObject *o) {{ Thing *t = (Thing *)o; return t->parent.freed ? -1 : t->value; }}\n"
+    );
+    let caller = counted_caller(
+        r#"printf("%.0f %.0f %.0f %.0f %.0f", looped(), fresh(), branched(true), returned(), stored());
+  for (int i = 0; i < 50; i++) { looped(); fresh(); branched(true); branched(false); returned(); stored(); }
+  printf(" errors=%.0f live=%.0f", errors(), live());"#,
+        "",
+    );
+    let Some((c, outputs)) =
+        run_on_both_backends("upcast", source, hir::Provider::ReferenceCounting, &library, &caller)
+    else {
+        return;
+    };
+    let body = c.split("inherited(").nth(2).and_then(|rest| rest.split("\n}\n").next()).expect("inherited is emitted");
+    assert!(!body.contains("ref_sink") && !body.contains("unref"), "the loop still counts its receiver:\n{body}");
+    for output in outputs {
+        assert_eq!(output, "6 8 6 8 5 errors=0 live=0 leak=0");
+    }
+}
