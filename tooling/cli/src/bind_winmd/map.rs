@@ -120,6 +120,10 @@ struct Use {
     output: bool,
     /// A struct field or a pointee: never a lent string, and a handle may be null.
     stored: bool,
+    /// An argument or the result of a bound function itself, where a record
+    /// crosses by value. Never a callback's: the compiler refuses a record by
+    /// value there, so the binding does too.
+    direct: bool,
 }
 
 struct Mapper<'a> {
@@ -400,12 +404,13 @@ impl Mapper<'_> {
         Ok(Spelled { ts: format!("CEnum<{simple}, {brand}>"), c: emitted.into(), uses: BTreeSet::from([name.clone()]) })
     }
 
-    /// A struct or union, through a pointer or as a member: Win32's own habit.
-    /// By value is a calling-convention question this binder does not answer yet.
+    /// A struct or union, through a pointer or as a member, or by value as a
+    /// function's own argument or result (`WindowFromPoint(POINT)`):
+    /// `ByValue<POINT>`, whose calling convention is the backend's to follow.
     fn record(&mut self, name: &Name, fields: &[(String, Type)], union: bool, c: &CType, how: Use) -> Result<Spelled, String> {
         let simple = name.1.as_str();
-        if !how.stored {
-            return Err(format!("`{simple}` passed by value"));
+        if !how.stored && !how.direct {
+            return Err(format!("`{simple}` passed by value to or from a callback"));
         }
         // A tag the header wrote (`struct tagMSG`), or the typedef's own name
         // where the struct is anonymous: clang prints `typedef struct { ... }
@@ -457,7 +462,11 @@ impl Mapper<'_> {
             let fields = members.into_iter().map(|(field, _, c)| (field, c)).collect();
             self.declared.insert(name.clone(), Some(TypeDecl::Record { name: simple.into(), ts, c: c_spelled.clone(), fields, uses: member_uses }));
         }
-        Ok(Spelled { ts: simple.into(), c: c_spelled, uses })
+        if how.stored {
+            return Ok(Spelled { ts: simple.into(), c: c_spelled, uses });
+        }
+        self.brands.insert("ByValue");
+        Ok(Spelled { ts: format!("ByValue<{simple}>"), c: c_spelled, uses })
     }
 
     /// A callback type: a function type alias, crossing as the C function
@@ -589,7 +598,7 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
     let mut uses = BTreeSet::new();
     let mut no_escape = Vec::new();
     for (parameter, c) in function.parameters.iter().zip(&parameters) {
-        let how = Use { optional: parameter.optional, constant: parameter.constant, output: parameter.output, stored: false };
+        let how = Use { optional: parameter.optional, constant: parameter.constant, output: parameter.output, stored: false, direct: true };
         let spelled = mapper.spell(&parameter.ty, c, how).map_err(|why| format!("parameter `{}`: {why}", parameter.name))?;
         // A pointer Win32 reads or writes during the call: the metadata's
         // `[In]`/`[Out]` is that contract, and no Win32 API it marks so keeps
@@ -602,7 +611,7 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
         c_list.push(spelled.c);
     }
     let returned = mapper
-        .spell(&function.result, &result, Use { optional: true, ..Use::default() })
+        .spell(&function.result, &result, Use { optional: true, direct: true, ..Use::default() })
         .map_err(|why| format!("the result: {why}"))?;
     uses.extend(returned.uses);
     let c_type = format!("{} (*)({})", returned.c, if c_list.is_empty() { "void".into() } else { c_list.join(", ") });

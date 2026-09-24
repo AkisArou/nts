@@ -1,1 +1,1 @@
-created=1 destroyed=1 by=typescript
+created=1 destroyed=1 by=typescript hit=1 miss=1

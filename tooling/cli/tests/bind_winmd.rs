@@ -82,6 +82,11 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
         foundation.contains("export type HINSTANCE = HMODULE;") || foundation.contains("export type HMODULE = HINSTANCE;"),
         "{foundation}"
     );
+    // A record a function takes by value is `ByValue<T>`, as bind-c writes it.
+    assert!(
+        messaging.contains("export function WindowFromPoint(Point: ByValue<POINT>): HWND | null;"),
+        "WindowFromPoint does not take its POINT by value"
+    );
     // The DLL, as the import library a program links when it calls this.
     let create = messaging.find("export function CreateWindowExW(").unwrap();
     let doc = &messaging[messaging[..create].rfind("/**").unwrap()..create];

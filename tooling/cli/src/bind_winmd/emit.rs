@@ -11,7 +11,7 @@ use super::map::{Binding, TypeDecl};
 
 /// Every name of `c:types` a binding may use.
 const BRANDS: &[&str] = &[
-    "CArray", "CEnum", "Class", "ConstPtr", "Erased", "Opaque", "Ptr", "Struct", "Typedef", "Union", "Utf16String",
+    "ByValue", "CArray", "CEnum", "Class", "ConstPtr", "Erased", "Opaque", "Ptr", "Struct", "Typedef", "Union", "Utf16String",
     "c_char", "c_double", "c_float", "c_int", "c_int16", "c_int64", "c_int8", "c_long", "c_long32", "c_uint",
     "c_uint16", "c_uint64", "c_uint8", "c_ulong", "c_ulong32",
 ];

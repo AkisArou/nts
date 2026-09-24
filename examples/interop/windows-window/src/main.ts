@@ -10,14 +10,19 @@
 // 200th tick (about two seconds) the window is closed by that failsafe
 // instead. A program whose libuv never turns prints `by=failsafe`, not a
 // hang.
+//
+// **A record crosses by value**: `ChildWindowFromPointEx` takes a `POINT`,
+// which Win64 passes as one 8-byte integer. (290, 10) is inside the client
+// area and (10, 290) below it, so a point that reached C with its fields
+// swapped, or as a pointer, answers `hit=0 miss=0` instead.
 import { report } from "c:report";
 import { local } from "c:memory";
 import { malloc } from "c:stdlib";
-import type { ConstPtr, c_int, c_uint, c_uint16, c_uint64 } from "c:types";
-import type { HWND, LPARAM, LRESULT, WPARAM } from "c:Windows.Win32.Foundation";
+import type { ConstPtr, c_int, c_long32, c_uint, c_uint16, c_uint64 } from "c:types";
+import type { HWND, LPARAM, LRESULT, POINT, WPARAM } from "c:Windows.Win32.Foundation";
 import { GetModuleHandleW } from "c:Windows.Win32.System.LibraryLoader";
 import {
-  CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
+  CWP_FLAGS, ChildWindowFromPointEx, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
   KillTimer, PostQuitMessage, RegisterClassExW, SetTimer, TranslateMessage,
   WINDOW_EX_STYLE, WINDOW_STYLE,
 } from "c:Windows.Win32.UI.WindowsAndMessaging";
@@ -28,6 +33,8 @@ let created = 0;
 let destroyed = 0;
 let ticks = 0;
 let closedBy = "nothing";
+let hit = 0;
+let miss = 0;
 
 // A struct member keeps its pointer past any one call, which a lent string
 // cannot promise, so `WNDCLASSEXW.lpszClassName` gets UTF-16 units of its own.
@@ -87,6 +94,14 @@ function main(): void {
     report("CreateWindowExW failed");
     return;
   }
+  const inside = local<POINT>();
+  inside[0].x = 290 as c_long32;
+  inside[0].y = 10 as c_long32;
+  const below = local<POINT>();
+  below[0].x = 10 as c_long32;
+  below[0].y = 290 as c_long32;
+  if (ChildWindowFromPointEx(hwnd, inside, CWP_FLAGS.CWP_ALL) === hwnd) hit = 1;
+  if (ChildWindowFromPointEx(hwnd, below, CWP_FLAGS.CWP_ALL) === null) miss = 1;
   SetTimer(hwnd, 1n as c_uint64, 10 as c_uint, null);
   void closeLater(hwnd);
   const msg = local<MSG>();
@@ -94,7 +109,7 @@ function main(): void {
     TranslateMessage(msg);
     DispatchMessageW(msg);
   }
-  report("created=" + String(created) + " destroyed=" + String(destroyed) + " by=" + closedBy);
+  report("created=" + String(created) + " destroyed=" + String(destroyed) + " by=" + closedBy + " hit=" + String(hit) + " miss=" + String(miss));
 }
 
 main();
