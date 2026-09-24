@@ -732,7 +732,7 @@ fn held_by(func: &super::Func, value: super::ValueId) -> Held {
     for _ in 0..8 {
         let op = &func.values[at.0 as usize];
         match &op.kind {
-            OpKind::Erase { value } => at = *value,
+            OpKind::Erase { value, .. } => at = *value,
             OpKind::ConstUndefined | OpKind::ConstNull => return Held::Absent,
             _ => break,
         }

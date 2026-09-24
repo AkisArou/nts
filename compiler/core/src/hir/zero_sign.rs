@@ -102,7 +102,7 @@ pub fn observed(func: &Func) -> FxHashSet<ValueId> {
                 // not, so the lenient test applied to the one operation that
                 // makes a `-0` out of a `+0`. Three `test/language` files
                 // failed on it and `1 / -0` answered `+Infinity`.
-                OpKind::Erase { value: erased } => {
+                OpKind::Erase { value: erased, .. } => {
                     seen.insert(*erased);
                 }
                 OpKind::FieldSet { value: stored, .. }

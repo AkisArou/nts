@@ -1286,7 +1286,7 @@ mod tests {
             0,
             vec![
                 op(OpKind::ObjectNew { frame: false }, object()),
-                op(OpKind::Erase { value: ValueId(0) }, HirType::Erased),
+                op(OpKind::Erase { value: ValueId(0) , absent: super::super::Absent::Impossible }, HirType::Erased),
                 op(
                     OpKind::GlobalSet {
                         global: 0,

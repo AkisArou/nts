@@ -32,7 +32,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::facts;
 use super::flow::Analysis;
-use super::{BinOp, Block, Callee, Func, HirType, Op, OpKind, UnOp, ValueId};
+use super::{Absent, BinOp, Block, Callee, Func, HirType, Op, OpKind, UnOp, ValueId};
 
 /// Bounds of the representations this pass will choose.
 const I32_MIN: f64 = -2_147_483_648.0;
@@ -677,12 +677,12 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
                 // `nts_value_of_number(double)`, LLVM with an explicit
                 // `sitofp` in `payload_from`. It is one fact about the tag
                 // contract, so it belongs where the contract is.
-                OpKind::Erase { value: erased }
+                OpKind::Erase { value: erased, .. }
                     if matches!(func.values[erased.0 as usize].ty, HirType::Int { .. }) =>
                 {
                     let want = HirType::Float { bits: 64 };
                     let erased = convert(func, &mut rewritten, &mut count, erased, &want);
-                    Some(OpKind::Erase { value: erased })
+                    Some(OpKind::Erase { value: erased, absent: Absent::Impossible })
                 }
                 OpKind::GlobalSet {
                     global,
@@ -1035,7 +1035,7 @@ fn reconcile_fixed_results<S: std::hash::BuildHasher>(
         // representations and only `Convert` is a cast.
         let kind = match (&declared, &produced) {
             (concrete, HirType::Erased) if *concrete != HirType::Erased => {
-                OpKind::Erase { value: call }
+                OpKind::Erase { value: call, absent: Absent::Impossible }
             },
             (HirType::Erased, concrete) if *concrete != HirType::Erased => {
                 OpKind::Unerase { value: call }
@@ -1566,7 +1566,7 @@ fn convert(
         // Reached wherever a width was asked for and the value had none: a
         // block edge whose parameter is erased, a field store, a call argument.
         // Five sites in `events`, five in `stream`, six in `fs`.
-        _ if *wanted == HirType::Erased => OpKind::Erase { value: operand },
+        _ if *wanted == HirType::Erased => OpKind::Erase { value: operand, absent: Absent::Impossible },
         _ if func.values[operand.0 as usize].ty == HirType::Erased => {
             OpKind::Unerase { value: operand }
         }

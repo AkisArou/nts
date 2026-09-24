@@ -121,8 +121,14 @@ pub(crate) fn unboxable(func: &Func) -> FxHashSet<ValueId> {
             continue;
         }
         match &op.kind {
-            // The only definition a bare reference can stand in for.
-            OpKind::Erase { value: source } => {
+            // The only definition a bare reference can stand in for -- and only
+            // where the reference cannot be null. A bare reference carries no
+            // tag, so an erase whose null means `null` or `undefined` has
+            // nothing left to say which, and unboxing it is a wrong answer.
+            OpKind::Erase {
+                value: source,
+                absent: nts_core::hir::Absent::Impossible,
+            } => {
                 if !matches!(
                     func.values.get(source.0 as usize).map(|it| &it.ty),
                     Some(HirType::Managed(ManagedType::Object(_)))
@@ -132,6 +138,11 @@ pub(crate) fn unboxable(func: &Func) -> FxHashSet<ValueId> {
             }
             // Arrives on an edge; its arguments carry the obligation.
             OpKind::BlockParam(_) => {}
+            // A nullable erase, refused above by not matching: it must keep its
+            // box, so the value it defines cannot be unboxed either.
+            OpKind::Erase { .. } => {
+                refused.insert(classes.find(value.0));
+            }
             _ => {
                 refused.insert(classes.find(value.0));
             }

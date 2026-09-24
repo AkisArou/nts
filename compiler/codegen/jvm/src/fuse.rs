@@ -145,7 +145,14 @@ pub(crate) const KEY_AT: usize = 1;
 pub(crate) fn object_keys(func: &Func) -> rustc_hash::FxHashMap<ValueId, ValueId> {
     let mut candidates = rustc_hash::FxHashMap::default();
     for (at, op) in func.values.iter().enumerate() {
-        let OpKind::Erase { value } = op.kind else { continue };
+        // **Only an erase that cannot be null.** This fuses an erasure into
+        // an unboxed reference, which throws the tag away -- and for a nullable
+        // operand the tag is the *only* thing that says whether a null pointer
+        // is `null` or `undefined`. Silently permissive here would be a wrong
+        // answer rather than a missed optimisation.
+        let OpKind::Erase { value, absent: nts_core::hir::Absent::Impossible } = op.kind else {
+            continue;
+        };
         let source = func.values.get(value.0 as usize);
         if matches!(
             source.map(|it| &it.ty),

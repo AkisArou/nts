@@ -880,8 +880,26 @@ pub enum OpKind {
     /// The tag is not stored here: it is a function of the operand's type,
     /// which every pass already has. Storing it would create a second answer
     /// to one question and a way for the two to disagree.
+    ///
+    /// # Except for one thing the operand's type cannot say
+    ///
+    /// A reference that may be **absent** is a null pointer, and `null` and
+    /// `undefined` are the same null pointer: `Managed(Object(id))` is the
+    /// representation of `T`, of `T | null` and of `T | undefined` alike. So for
+    /// a null operand the tag is not a function of the operand's type, and
+    /// tagging it `OBJECT` unconditionally made `t?.mid?.leaf === null` answer
+    /// `false` where node answers `true` -- a *wrong answer*, not a refusal,
+    /// found by the Apple lane's chain sweep against node.
+    ///
+    /// [`Absent`] is that one fact, and it is genuinely not a second answer to
+    /// the question above: it says what a **null** operand means, where the
+    /// paragraph above says what a **reference** operand means. Nothing else in
+    /// the IR holds it -- by the time a pass sees `managed<obj#1>` the union it
+    /// came from is gone, which is why it is recorded where the erase is
+    /// inserted and the TypeScript type is still in hand.
     Erase {
         value: ValueId,
+        absent: Absent,
     },
     /// The tag an erased value currently carries.
     ///
@@ -1682,6 +1700,21 @@ pub struct Layout {
     /// A `TypeId` rather than a layout index, because indices move as layouts
     /// merge and a `TypeId` does not. [`Program::base_layout`] resolves it.
     pub base: Option<TypeId>,
+}
+
+/// What a **null** operand of an [`OpKind::Erase`] means.
+///
+/// A reference and its absence share one representation, so this is the only
+/// place the difference survives. `Impossible` is the ordinary case and costs
+/// nothing: the operand cannot be null, so the tag is `OBJECT` with no test.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Absent {
+    /// The operand is never null here. No test, and the tag is `OBJECT`.
+    Impossible,
+    /// `T | null`: a null operand erases to `null`.
+    Null,
+    /// `T | undefined`: a null operand erases to `undefined`.
+    Undefined,
 }
 
 /// One layout a value at an open slot can have, and *that layout's* index for
@@ -2768,7 +2801,7 @@ pub(super) fn carried_values(func: &Func, value: ValueId) -> impl Iterator<Item 
             values.push(at);
         }
         match op.kind {
-            OpKind::Erase { value } => pending.push(value),
+            OpKind::Erase { value, .. } => pending.push(value),
             OpKind::BlockParam(_) => {
                 let Some((block, slot)) =
                     func.blocks.iter().enumerate().find_map(|(block, body)| {

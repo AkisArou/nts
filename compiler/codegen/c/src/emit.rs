@@ -2820,7 +2820,7 @@ fn escapes_uncalled(
                         if layout.types.contains(ty))
             };
             let carries = |value: ValueId| match &func.values[value.0 as usize].kind {
-                OpKind::Erase { value } => is_one(*value),
+                OpKind::Erase { value, .. } => is_one(*value),
                 _ => is_one(value),
             };
             live.iter().any(|value| match &func.values[value.0 as usize].kind {
@@ -3699,7 +3699,7 @@ fn erased_conversion(
         )
     };
     match kind {
-        OpKind::Erase { value } => {
+        OpKind::Erase { value, absent } => {
             let from = &func.value(*value).ty;
             let (tag, field) = erased_tag(from).ok_or_else(|| refuse(from, "erased"))?;
             // The payload is one `NtsHeader *` for every reference, because
@@ -3712,6 +3712,25 @@ fn erased_conversion(
             // and eight NaN-boxed ones tomorrow, and the emitter should not be
             // the second place that has to know which.
             let built = match field {
+                // **A null reference is not an object**, and which absence it
+                // is cannot be read off the operand's type: `managed<obj>` is
+                // the representation of `T`, `T | null` and `T | undefined`
+                // alike. `Absent` is the one fact that survives the erasure, and
+                // without the test `t?.mid?.leaf === null` answered `false`.
+                //
+                // `Absent::Impossible` emits no test at all, which is every
+                // erase of a reference the program can show is there.
+                "reference" if *absent != nts_core::hir::Absent::Impossible => {
+                    let empty = if *absent == nts_core::hir::Absent::Null {
+                        "nts_value_of_null()"
+                    } else {
+                        "nts_value_of_undefined()"
+                    };
+                    format!(
+                        "({0} == NULL) ? {empty} : nts_value_of_reference((NtsHeader *){0}, {tag})",
+                        value_name(*value)
+                    )
+                }
                 "reference" => format!(
                     "nts_value_of_reference((NtsHeader *){}, {tag})",
                     value_name(*value)

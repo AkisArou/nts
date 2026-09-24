@@ -2849,14 +2849,40 @@ fn tagging(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result
         // converted before it is stored, exactly as the C backend's
         // `nts_value_of_number(x)` converts it, and a bool and a pointer are
         // widened to the same eightbyte.
-        OpKind::Erase { value } => {
+        OpKind::Erase { value, absent } => {
+            use nts_core::hir::{tags, Absent};
             let from = &func.values[value.0 as usize].ty;
             let tag = tag_of(from)
                 .ok_or_else(|| refuse(func, &format!("erasing a value of type {from:?}")))?;
             let bits = format!("{out}.bits");
             let widen = payload_from(func, &out, &bits, from, *value)?;
+            // **A null reference is not an object**, and which absence it is
+            // cannot be read off the operand's type: `ptr` is `T`, `T | null`
+            // and `T | undefined` alike. The op carries that one fact; without
+            // it `t?.mid?.leaf === null` answered `false` where node answers
+            // `true`.
+            //
+            // A `select` and not a branch, because a branch here would put two
+            // basic blocks in the middle of a HIR block and leave control
+            // arriving at a label no successor's `phi` names -- the hazard
+            // `open_chains` is written out for. `Absent::Impossible` emits
+            // neither, which is every erase of a reference the program can show
+            // is there.
+            let (test, chosen) = match absent {
+                Absent::Impossible => (String::new(), tag.to_string()),
+                Absent::Null | Absent::Undefined => {
+                    let empty = if *absent == Absent::Null { tags::NULL } else { tags::UNDEFINED };
+                    (
+                        format!(
+                            "{out}.gone = icmp eq i64 {bits}, 0\n  \
+                             {out}.tag = select i1 {out}.gone, i32 {empty}, i32 {tag}\n  "
+                        ),
+                        format!("{out}.tag"),
+                    )
+                },
+            };
             format!(
-                "{widen}\n  {out}.half = insertvalue {ERASED_TYPE} undef, i32 {tag}, 0\n  \
+                "{widen}\n  {test}{out}.half = insertvalue {ERASED_TYPE} undef, i32 {chosen}, 0\n  \
                  {out} = insertvalue {ERASED_TYPE} {out}.half, i64 {bits}, 1"
             )
         }

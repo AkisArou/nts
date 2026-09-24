@@ -80,7 +80,7 @@ fn single_representation(func: &Func, array: ValueId) -> Option<HirType> {
                 // Only a *fresh* erasure. A value that was already erased
                 // elsewhere has a tag this pass did not choose, and unwrapping
                 // it would be asserting something about the other site.
-                let OpKind::Erase { value: source } = func.value(*value).kind else {
+                let OpKind::Erase { value: source, .. } = func.value(*value).kind else {
                     return None;
                 };
                 let representation = func.value(source).ty.clone();
@@ -203,7 +203,7 @@ fn rewrite(func: &mut Func, array: ValueId, element: &HirType) {
                 value,
                 checked,
             } if target == array => {
-                let OpKind::Erase { value: source } = func.value(value).kind else {
+                let OpKind::Erase { value: source, .. } = func.value(value).kind else {
                     continue;
                 };
                 func.values[index].kind = OpKind::ArraySet {
@@ -466,7 +466,7 @@ fn returned_representation(func: &Func) -> Option<HirType> {
         let super::Terminator::Return(Some(returned)) = block.terminator else {
             continue;
         };
-        let OpKind::Erase { value } = func.value(returned).kind else {
+        let OpKind::Erase { value, .. } = func.value(returned).kind else {
             return None;
         };
         let representation = func.value(value).ty.clone();
@@ -489,7 +489,7 @@ fn retype_return(func: &mut Func, representation: &HirType) {
         let super::Terminator::Return(Some(returned)) = block.terminator else {
             continue;
         };
-        if let OpKind::Erase { value } = func.values[returned.0 as usize].kind {
+        if let OpKind::Erase { value, .. } = func.values[returned.0 as usize].kind {
             block.terminator = super::Terminator::Return(Some(value));
         }
     }
@@ -560,7 +560,7 @@ fn survey_callers(
                 if program.funcs[at].params.get(position).map(|p| &p.ty) != Some(&HirType::Erased) {
                     continue;
                 }
-                let OpKind::Erase { value } = caller.value(*argument).kind else {
+                let OpKind::Erase { value, .. } = caller.value(*argument).kind else {
                     sunk.insert(at);
                     continue;
                 };
@@ -694,7 +694,7 @@ fn unwrap_arguments(caller: &mut Func, targets: &[(String, usize)]) {
             {
                 continue;
             }
-            if let OpKind::Erase { value } = caller.values[argument.0 as usize].kind {
+            if let OpKind::Erase { value, .. } = caller.values[argument.0 as usize].kind {
                 *argument = value;
                 changed = true;
             }

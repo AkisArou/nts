@@ -284,7 +284,7 @@ pub(super) fn object_names(func: &Func) -> FxHashMap<ValueId, Vec<ValueId>> {
         let mut changed = false;
         for block in &func.blocks {
             for value in &block.ops {
-                if let OpKind::Erase { value: inner } | OpKind::Unerase { value: inner } =
+                if let OpKind::Erase { value: inner, .. } | OpKind::Unerase { value: inner } =
                     &func.values[value.0 as usize].kind
                 {
                     changed |= note(&mut named, *value, *inner);
@@ -427,14 +427,14 @@ pub(in crate::hir) mod tests {
         let values = vec![
             op(OpKind::Param(0)),                        // %0
             op(OpKind::ObjectNew { frame: true }),       // %1  thrown from one arm
-            op(OpKind::Erase { value: ValueId(1) }),     // %2
+            op(OpKind::Erase { value: ValueId(1) , absent: super::super::Absent::Impossible }),     // %2
             op(OpKind::Binary {
                 op: crate::hir::BinOp::Lt,
                 lhs: ValueId(0),
                 rhs: ValueId(0),
             }), // %3
             op(OpKind::ObjectNew { frame: true }),       // %4  thrown from the other
-            op(OpKind::Erase { value: ValueId(4) }),     // %5
+            op(OpKind::Erase { value: ValueId(4) , absent: super::super::Absent::Impossible }),     // %5
             op(OpKind::Unerase { value: ValueId(6) }),   // %7  read in the handler
         ];
         let mut values = values;

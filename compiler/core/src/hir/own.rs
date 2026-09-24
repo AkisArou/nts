@@ -1104,7 +1104,7 @@ fn costs_nothing(
         // `deleted-field` has 51 against 17 waiting on it, and this is it hiding
         // *immortality*. Each time the fact was already computed and the
         // erasure was between it and the pass that wanted it.
-        OpKind::Erase { value } => costs_nothing(func, inert, *value),
+        OpKind::Erase { value, .. } => costs_nothing(func, inert, *value),
         _ => false,
     }
 }
@@ -1649,7 +1649,7 @@ fn counted_from(
         // through to -- `throw new Error(m)` caught in the same function erases
         // an object that lives in the frame, and the wrapper was retained on
         // the edge into the handler and released on both ways out of it.
-        OpKind::Erase { value: inner } => {
+        OpKind::Erase { value: inner, .. } => {
             // ...and a frame object is the case that argument was written for
             // and did not reach. It is counted -- see `counted_here` -- only so
             // that its own death emits the walk over its reference fields, and

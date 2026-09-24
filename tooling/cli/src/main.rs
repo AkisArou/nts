@@ -2398,6 +2398,10 @@ fn render_element(index: usize, ty: &str, kind: &OpKind) -> String {
 /// The three erasure operations, which differ only in their verb.
 fn render_erasure(index: usize, ty: &str, kind: &OpKind, value: nts_core::hir::ValueId) -> String {
     let verb = match kind {
+        // The absence is printed with the name, because two erases of one type
+        // differ only in it and a dump that omitted it could not show which.
+        OpKind::Erase { absent: nts_core::hir::Absent::Null, .. } => "erase.or.null",
+        OpKind::Erase { absent: nts_core::hir::Absent::Undefined, .. } => "erase.or.undefined",
         OpKind::Erase { .. } => "erase",
         OpKind::TagOf { .. } => "tag.of",
         _ => "unerase",
@@ -2526,7 +2530,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             value.0,
             classes.len()
         ),
-        OpKind::Erase { value } | OpKind::TagOf { value } | OpKind::Unerase { value } => {
+        OpKind::Erase { value, .. }
+        | OpKind::TagOf { value }
+        | OpKind::Unerase { value } => {
             render_erasure(index, &ty, &op.kind, *value)
         }
         OpKind::Binary { op: bin, lhs, rhs } => {

@@ -2744,7 +2744,12 @@ impl Emitter<'_> {
         if *self.ty(value) == HirType::Erased {
             return self.load(code, pool, value);
         }
-        self.erase(code, pool, None, value, origin)?;
+        // `Impossible`, which is this site's standing behaviour and not a
+        // claim: an on-the-fly erasure for an argument has no op to read
+        // `Absent` from. A nullable reference crossing here is the same hazard
+        // `OpKind::Erase` documents and is **not** fixed by this commit; it
+        // needs the argument's declared type, which this function is not given.
+        self.erase(code, pool, None, value, nts_core::hir::Absent::Impossible, origin)?;
         Ok(())
     }
 
@@ -2815,7 +2820,9 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         match kind {
-            OpKind::Erase { value } => self.erase(code, pool, Some(result), *value, origin),
+            OpKind::Erase { value, absent } => {
+                self.erase(code, pool, Some(result), *value, *absent, origin)
+            }
                 // A `Void` erases to `undefined` and has nothing to load.
             OpKind::TagOf { value } => {
                 self.load(code, pool, *value)?;
@@ -2907,6 +2914,11 @@ impl Emitter<'_> {
         // box because nothing names the result to decide otherwise.
         result: Option<ValueId>,
         value: ValueId,
+        // What a **null** operand means. This lane had `T | null` right by
+        // construction -- `NtsValue.ofObject` answers `null` for a null
+        // reference -- and `T | undefined` wrong for the same reason, which is
+        // the opposite of the C lane's error. See `OpKind::Erase`.
+        absent: nts_core::hir::Absent,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         let from = self.ty(value).clone();
@@ -2974,6 +2986,9 @@ impl Emitter<'_> {
             HirType::Bool => ("ofBoolean", "(Z)Lnts/rt/NtsValue;"),
             HirType::Managed(ManagedType::String) => {
                 ("ofString", "(Ljava/lang/String;)Lnts/rt/NtsValue;")
+            }
+            HirType::Managed(_) if absent == nts_core::hir::Absent::Undefined => {
+                ("ofObjectOrUndefined", "(Ljava/lang/Object;)Lnts/rt/NtsValue;")
             }
             HirType::Managed(_) => ("ofObject", "(Ljava/lang/Object;)Lnts/rt/NtsValue;"),
             HirType::Int { .. } | HirType::Float { .. } => {

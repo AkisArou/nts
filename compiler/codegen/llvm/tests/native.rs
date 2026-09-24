@@ -1169,7 +1169,7 @@ export function identity(c: Counter | null): Counter | null { return c; }
         assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
         for func in &prepared.program.funcs {
             for op in &func.values {
-                if let hir::OpKind::Retain(value) | hir::OpKind::Release(value) | hir::OpKind::Erase { value } = op.kind {
+                if let hir::OpKind::Retain(value) | hir::OpKind::Release(value) | hir::OpKind::Erase { value, .. } = op.kind {
                     assert!(!matches!(func.values[value.0 as usize].ty, hir::HirType::NativePointer(_)));
                 }
             }

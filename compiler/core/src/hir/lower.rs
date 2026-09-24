@@ -20,7 +20,7 @@ use nts_semantic_schema::{
 };
 
 use super::facts::Facts;
-use super::{
+use super::{Absent, 
     BinOp, Block, BlockId, Callee, Field, FieldArm, Func, GeneratorKind, HirType, Layout,
     ManagedType, Op,
     OpKind, Param, ParamShape, Program, Terminator, UnOp, ValueId,
@@ -13594,7 +13594,7 @@ impl<'a> FuncBuilder<'a> {
             && let Some(want @ HirType::Managed(ManagedType::View(_))) = self.type_of(id)
         {
             let origin = self.origin(id);
-            let erased = self.push(OpKind::Erase { value }, HirType::Erased, origin.clone());
+            let erased = self.push(OpKind::Erase { value, absent: Absent::Impossible }, HirType::Erased, origin.clone());
             return Ok(self.push(OpKind::Unerase { value: erased }, want, origin));
         }
         if self.values[value.0 as usize].ty != HirType::Erased {
@@ -14273,6 +14273,39 @@ impl<'a> FuncBuilder<'a> {
         want: &HirType,
         id: NodeId,
     ) -> Result<ValueId, Diagnostic> {
+        self.coerce_from(value, want, id, id)
+    }
+
+    /// The same, told which node the **value** came from.
+    ///
+    /// They differ at a merge, and only there so far, but the difference is a
+    /// wrong answer and not a nicety. A conditional's node carries the type of
+    /// the *whole* expression, and for `a?.b?.c` that is `T | null | undefined`
+    /// -- the `undefined` from the short-circuit and the `null` from the field.
+    /// The value being erased is one **arm**, whose own type is `T | null`, and
+    /// which absence a null pointer means is exactly what [`Self::absence_at`]
+    /// is asking. Asked of the merge it reads "both", which says nothing;
+    /// asked of the arm it reads "null", which is the answer.
+    fn coerce_from(
+        &mut self,
+        value: ValueId,
+        want: &HirType,
+        id: NodeId,
+        source: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        self.coerce_arm(value, want, id, source, false)
+    }
+
+    /// The same again, told whether the merge's **other** arm is the
+    /// short-circuit's `undefined`. See [`Self::absence_at_excluding`].
+    fn coerce_arm(
+        &mut self,
+        value: ValueId,
+        want: &HirType,
+        id: NodeId,
+        source: NodeId,
+        undefined_is_the_other_arm: bool,
+    ) -> Result<ValueId, Diagnostic> {
         let have = self.values[value.0 as usize].ty.clone();
         if have == *want {
             return Ok(value);
@@ -14464,7 +14497,62 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
         let origin = self.origin(id);
-        Ok(self.push(OpKind::Erase { value }, HirType::Erased, origin))
+        let absent = self.absence_at_excluding(source, undefined_is_the_other_arm);
+        Ok(self.push(OpKind::Erase { value, absent }, HirType::Erased, origin))
+    }
+
+    /// What a **null** pointer means for the value this node holds.
+    ///
+    /// A reference and its absence share one representation:
+    /// `Managed(Object(id))` is `T`, `T | null` and `T | undefined` alike. So
+    /// the tag an erasure should give a null operand is not a function of the
+    /// HIR type, and asking the *source* type here is the only place it can be
+    /// answered. See [`OpKind::Erase`] and `Absent`.
+    ///
+    /// **`T | null | undefined` answers `Impossible`**, which is the one case
+    /// this cannot get right and does not pretend to: one null pointer cannot
+    /// say which absence arrived, so the representation is genuinely unable to
+    /// carry the program. It keeps today's behaviour rather than picking an
+    /// arm, and is a gap to close with a representation and not with a guess.
+    fn absence_at(&self, id: NodeId) -> Absent {
+        self.absence_at_excluding(id, false)
+    }
+
+    /// The same, where the **other arm of a merge supplies the `undefined`**.
+    ///
+    /// A chain's node carries the whole expression's type, and for `a?.b?.c`
+    /// that is `T | null | undefined`: the `undefined` is what the
+    /// short-circuit produces, on the *other* path, and the `null` is the
+    /// field's. Asked flatly the answer is "both", which says nothing and is
+    /// how `t?.mid?.leaf === null` stayed wrong after the tag was carried.
+    ///
+    /// Asked with the short-circuit's own absence set aside, what is left is
+    /// what this arm's value can actually be -- which is the whole question.
+    fn absence_at_excluding(&self, id: NodeId, undefined_is_the_other_arm: bool) -> Absent {
+        let Some(ty) = self.snapshot.node_types.get(&id) else {
+            return Absent::Impossible;
+        };
+        let Some(TypeKind::Union(members)) = self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind)
+        else {
+            return Absent::Impossible;
+        };
+        let mut null = false;
+        let mut undefined = false;
+        for member in members {
+            match self.snapshot.types.get(member.0 as usize).map(|r| &r.kind) {
+                Some(TypeKind::Null) => null = true,
+                Some(TypeKind::Undefined | TypeKind::Void) => undefined = true,
+                _ => {},
+            }
+        }
+        if undefined_is_the_other_arm {
+            undefined = false;
+        }
+        match (null, undefined) {
+            (true, false) => Absent::Null,
+            (false, true) => Absent::Undefined,
+            _ => Absent::Impossible,
+        }
     }
 
     /// One argument, at the type the callee's parameter declares.
@@ -20546,7 +20634,7 @@ impl<'a> FuncBuilder<'a> {
                 let erased = match self.values[subject.0 as usize].ty {
                     HirType::Erased => subject,
                     _ => self.push(
-                        OpKind::Erase { value: subject },
+                        OpKind::Erase { value: subject , absent: Absent::Impossible },
                         HirType::Erased,
                         origin.clone(),
                     ),
@@ -23131,7 +23219,7 @@ impl<'a> FuncBuilder<'a> {
         if self.values[value.0 as usize].ty == HirType::Erased {
             return value;
         }
-        self.push(OpKind::Erase { value }, HirType::Erased, origin.clone())
+        self.push(OpKind::Erase { value, absent: Absent::Impossible }, HirType::Erased, origin.clone())
     }
 
     fn lower_throw(&mut self, id: NodeId) -> Result<(), Diagnostic> {
@@ -24148,7 +24236,7 @@ impl<'a> FuncBuilder<'a> {
                 origin.clone(),
             );
             let erased = self.push(
-                OpKind::Erase { value: text },
+                OpKind::Erase { value: text , absent: Absent::Impossible },
                 HirType::Erased,
                 origin.clone(),
             );
@@ -29375,7 +29463,7 @@ impl<'a> FuncBuilder<'a> {
             self.field_set(object, field, value, &origin);
         }
         if erase_afterwards {
-            return Ok(self.push(OpKind::Erase { value: object }, HirType::Erased, origin));
+            return Ok(self.push(OpKind::Erase { value: object , absent: Absent::Impossible }, HirType::Erased, origin));
         }
         Ok(object)
     }
@@ -29978,7 +30066,7 @@ impl<'a> FuncBuilder<'a> {
             };
             self.field_set(error, at, value, &origin);
         }
-        let erased = self.push(OpKind::Erase { value: error }, HirType::Erased, origin);
+        let erased = self.push(OpKind::Erase { value: error , absent: Absent::Impossible }, HirType::Erased, origin);
         self.throw_erased(id, error, erased, &object)
     }
 
@@ -33737,7 +33825,7 @@ impl<'a> FuncBuilder<'a> {
             && self.type_of(id) == Some(HirType::Erased)
         {
             let origin = self.origin(id);
-            let erased = self.push(OpKind::Erase { value: array }, HirType::Erased, origin.clone());
+            let erased = self.push(OpKind::Erase { value: array , absent: Absent::Impossible }, HirType::Erased, origin.clone());
             return Ok(self.runtime_call(
                 "nts_array_element",
                 vec![erased, index],
@@ -35565,6 +35653,19 @@ impl<'a> FuncBuilder<'a> {
         then_branch: Branch,
         else_branch: Branch,
     ) -> Result<ValueId, Diagnostic> {
+        // The node each arm's *value* came from, where there is one. A merge's
+        // own node carries the whole expression's type, which for an optional
+        // chain is `T | null | undefined` -- both absences at once, and so no
+        // answer about which a null pointer means. See `coerce_from`.
+        let arm_node = |branch: &Branch| match branch {
+            Branch::Expression(at) | Branch::Assigned(at, _) => Some(*at),
+            _ => None,
+        };
+        let (then_node, else_node) = (arm_node(&then_branch), arm_node(&else_branch));
+        // Whether each arm *is* the short-circuit's `undefined`, which the other
+        // arm's absence has to set aside.
+        let then_absent = matches!(then_branch, Branch::Absent);
+        let else_absent = matches!(else_branch, Branch::Absent);
         let origin = self.origin(id);
         let then_block = self.new_block();
         let else_block = self.new_block();
@@ -35691,7 +35792,8 @@ impl<'a> FuncBuilder<'a> {
         self.switch_to(then_tail);
         let mut args = Vec::new();
         if carries_a_value {
-            args.push(self.coerce(then_value, &ty, id)?);
+            // From the **arm's** node, not the merge's: see `coerce_from`.
+            args.push(self.coerce_arm(then_value, &ty, id, then_node.unwrap_or(id), else_absent)?);
         }
         args.extend(merged.iter().map(|(_, from_then, _)| *from_then));
         self.terminate(Terminator::Jump {
@@ -35702,7 +35804,7 @@ impl<'a> FuncBuilder<'a> {
         self.switch_to(else_tail);
         let mut args = Vec::new();
         if carries_a_value {
-            args.push(self.coerce(else_value, &ty, id)?);
+            args.push(self.coerce_arm(else_value, &ty, id, else_node.unwrap_or(id), then_absent)?);
         }
         args.extend(merged.iter().map(|(_, _, from_else)| *from_else));
         self.terminate(Terminator::Jump {
@@ -43422,7 +43524,7 @@ impl<'a> FuncBuilder<'a> {
             args: vec![undefined],
         });
         self.switch_to(present);
-        let erased = self.push(OpKind::Erase { value }, HirType::Erased, origin.clone());
+        let erased = self.push(OpKind::Erase { value, absent: Absent::Impossible }, HirType::Erased, origin.clone());
         self.terminate(Terminator::Jump {
             target: merge,
             args: vec![erased],
@@ -44024,7 +44126,7 @@ impl<'a> FuncBuilder<'a> {
         if self.values[value.0 as usize].ty == HirType::Erased {
             return value;
         }
-        self.push(OpKind::Erase { value }, HirType::Erased, origin.clone())
+        self.push(OpKind::Erase { value, absent: Absent::Impossible }, HirType::Erased, origin.clone())
     }
 
     /// A method call on an object, once the receiver is lowered.
@@ -46819,7 +46921,7 @@ impl<'a> FuncBuilder<'a> {
         let erased = match self.values[receiver.0 as usize].ty {
             HirType::Erased => receiver,
             _ => self.push(
-                OpKind::Erase { value: receiver },
+                OpKind::Erase { value: receiver , absent: Absent::Impossible },
                 HirType::Erased,
                 origin.clone(),
             ),

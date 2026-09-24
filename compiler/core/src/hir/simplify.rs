@@ -202,7 +202,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
     match kind {
         OpKind::NativeBridge { closure, .. } => *closure = of(*closure),
 
-        OpKind::Erase { value }
+        OpKind::Erase { value, .. }
         | OpKind::TagOf { value }
         | OpKind::Unerase { value }
         | OpKind::InstanceOf { value, .. }

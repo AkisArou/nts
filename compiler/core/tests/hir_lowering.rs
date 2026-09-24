@@ -592,7 +592,7 @@ fn a_thrown_error_is_the_object_and_not_its_message() {
         .values
         .iter()
         .find_map(|op| match op.kind {
-            OpKind::Erase { value } => Some(value),
+            OpKind::Erase { value, .. } => Some(value),
             _ => None,
         })
         .expect("a `throw` erases what it throws");

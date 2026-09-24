@@ -211,7 +211,7 @@ fn splittable(func: &Func, web: &[ValueId]) -> Option<HirType> {
                 }
                 match &func.values[arg.0 as usize].kind {
                     OpKind::ConstUndefined | OpKind::ConstNull => {}
-                    OpKind::Erase { value } => {
+                    OpKind::Erase { value, .. } => {
                         let ty = func.values[value.0 as usize].ty.clone();
                         // A reference already carries its payload as the
                         // pointer, and moving one into a block parameter is the
@@ -402,7 +402,7 @@ fn fill_edges(
         let (tag, carried) = match func.values[arg.0 as usize].kind.clone() {
             OpKind::ConstUndefined => (tags::UNDEFINED, None),
             OpKind::ConstNull => (tags::NULL, None),
-            OpKind::Erase { value } => (
+            OpKind::Erase { value, .. } => (
                 tags::of_representation(&func.values[value.0 as usize].ty),
                 Some(value),
             ),
@@ -548,7 +548,7 @@ mod tests {
             op(OpKind::Param(0), HirType::NUMBER),
             op(OpKind::ConstBool(true), HirType::Bool),
             op(OpKind::ConstUndefined, HirType::Erased),
-            op(OpKind::Erase { value: ValueId(0) }, HirType::Erased),
+            op(OpKind::Erase { value: ValueId(0) , absent: super::super::Absent::Impossible }, HirType::Erased),
             op(OpKind::BlockParam(0), HirType::Erased),
         ];
         values.extend(use_of_member);
@@ -668,7 +668,7 @@ mod tests {
             op(OpKind::Param(0), HirType::NUMBER),
             op(OpKind::ConstBool(true), HirType::Bool),
             op(OpKind::ConstUndefined, HirType::Erased),
-            op(OpKind::Erase { value: ValueId(0) }, HirType::Erased),
+            op(OpKind::Erase { value: ValueId(0) , absent: super::super::Absent::Impossible }, HirType::Erased),
             op(OpKind::BlockParam(1), HirType::Erased),
             op(OpKind::BlockParam(0), HirType::Erased),
             op(OpKind::TagOf { value: ValueId(4) }, tag_type()),
@@ -726,7 +726,7 @@ mod tests {
             op(OpKind::Param(0), HirType::NUMBER),
             op(OpKind::ConstBool(true), HirType::Bool),
             op(OpKind::ConstUndefined, HirType::Erased),
-            op(OpKind::Erase { value: ValueId(0) }, HirType::Erased),
+            op(OpKind::Erase { value: ValueId(0) , absent: super::super::Absent::Impossible }, HirType::Erased),
             op(OpKind::BlockParam(0), HirType::Erased),
             op(OpKind::ConstNull, HirType::Erased),
             op(OpKind::BlockParam(0), HirType::Erased),

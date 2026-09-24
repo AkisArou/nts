@@ -42,6 +42,22 @@ public final class NtsValue {
     public static NtsValue ofObject(Object value) {
         return value == null ? NULL_VALUE : new NtsValue(OBJECT, 0.0, value);
     }
+    /**
+     * A reference that may be absent, where absent means `undefined`.
+     *
+     * <p>`ofObject` answers `null` for a null reference, which is right for
+     * `T | null` and wrong for `T | undefined` -- and the representation cannot
+     * tell them apart, because a reference and both of its absences are one
+     * null. `OpKind::Erase` carries which, and this is the other answer.
+     *
+     * <p>This lane had the `T | null` half right by construction and the
+     * `T | undefined` half wrong; the C lane had it the other way round, which
+     * is the usual shape -- the two native backends agree by luck because
+     * neither looks, and the JVM is where the difference shows.
+     */
+    public static NtsValue ofObjectOrUndefined(Object value) {
+        return value == null ? UNDEFINED_VALUE : new NtsValue(OBJECT, 0.0, value);
+    }
     public static boolean asBoolean(NtsValue value) { return value.num != 0.0; }
     /**
      * `Array.isArray`, which is a question about the *value* rather than about

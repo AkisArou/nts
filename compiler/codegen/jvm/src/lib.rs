@@ -565,7 +565,7 @@ fn closure_interfaces(program: &Program) -> FxHashMap<nts_semantic_schema::TypeI
                 }
                 let mut value = *argument;
                 if let Some(op) = func.values.get(value.0 as usize)
-                    && let nts_core::hir::OpKind::Erase { value: inner } = op.kind
+                    && let nts_core::hir::OpKind::Erase { value: inner, .. } = op.kind
                 {
                     value = inner;
                 }
