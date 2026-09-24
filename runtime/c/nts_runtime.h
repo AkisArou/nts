@@ -1793,6 +1793,7 @@ void *nts_com_addref(void *object);
 void nts_com_release(void *object);
 uint32_t nts_com_releases(void);
 void *nts_winrt_factory(const NtsString *class_name, const NtsString *iid);
+void *nts_winrt_activate(const NtsString *class_name, const NtsString *iid);
 uint32_t nts_winrt_activations(void);
 char *nts_hresult_message(int32_t hr);
 #endif

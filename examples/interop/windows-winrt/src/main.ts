@@ -18,16 +18,20 @@
 //   Windows Runtime computes for `IVector<IJsonValue>` -- `as_IVector` on a
 //   `JsonArray`, whose own interface is `IJsonArray`. A wrong IID ends the
 //   process naming it rather than printing anything.
+// - `built`: a runtime class made by its default constructor
+//   (`JsonObject.create()`, `ActivateInstance` then its default interface),
+//   filled, and read back through another of its interfaces.
 // - `threw`: an HRESULT failure, thrown as an `Error` naming the code.
 // - `released`, reported after `run` returns: 0 without a counting provider,
-//   and 8 under `--rc`, one for each object handed over: `value`, `list`,
+//   and 11 under `--rc`, one for each object handed over: `value`, `list`,
 //   `made`, the `Parse("false")` read once and dropped, the languages, the
-//   array, its `IVector` and the item read from it. The parse
+//   array, its `IVector` and the item read from it, and `built`, the number
+//   put in it, and `built` as its `IJsonValue`. The parse
 //   inside the `try` fails, so it hands over nothing and has nothing to give
 //   back; a release there would be of an object that does not exist.
 import { activations, releases, report } from "c:report";
 // Bound by `nts build` from the Windows Runtime's metadata into `types/winrt`.
-import { JsonArray, JsonValue } from "winrt:Windows.Data.Json";
+import { JsonArray, JsonObject, JsonValue } from "winrt:Windows.Data.Json";
 import { ApplicationLanguages } from "winrt:Windows.Globalization";
 
 function run(): string {
@@ -42,6 +46,9 @@ function run(): string {
   const tags = (languages.get_Size() >= 1 ? "some" : "none") + "," + (first.includes("-") ? "tagged" : first);
   const vector = JsonArray.Parse("[1, 2.5, true]").as_IVector();
   const items = String(vector.get_Size()) + ":" + String(vector.GetAt(1).GetNumber());
+  const built = JsonObject.create();
+  built.SetNamedValue("x", JsonValue.CreateNumberValue(3));
+  const shown = built.as_IJsonValue().Stringify();
   let threw = "nothing";
   try {
     JsonValue.Parse("{not json");
@@ -49,7 +56,7 @@ function run(): string {
     threw = (error as Error).message.slice(0, 18);
   }
   return "number=" + String(number) + " text=" + text + " list=" + list.Stringify() + " activations=" +
-    String(activations()) + " bools=" + bools + " languages=" + tags + " vector=" + items + " threw=" + threw;
+    String(activations()) + " bools=" + bools + " languages=" + tags + " vector=" + items + " built=" + shown + " threw=" + threw;
 }
 
 const line = run();

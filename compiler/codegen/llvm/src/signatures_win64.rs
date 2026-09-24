@@ -388,6 +388,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_view_slice", returns: "noalias ptr", params: &["ptr", "double", "double"], attributes: &[] },
     Signature { name: "nts_view_subarray", returns: "noalias ptr", params: &["ptr", "double", "double"], attributes: &[] },
     Signature { name: "nts_view_unlend", returns: "void", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_winrt_activate", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_winrt_activations", returns: "i32", params: &[], attributes: &[] },
     Signature { name: "nts_winrt_factory", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
 ];

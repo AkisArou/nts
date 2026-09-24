@@ -209,7 +209,7 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
     if !c_types.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"c:types\";", c_types.join(", "));
     }
-    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| matches!(*brand, "ComClass" | "HString")).collect();
+    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| matches!(*brand, "ComClass" | "HString" | "IInspectable")).collect();
     if !winrt.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"winrt:types\";", winrt.join(", "));
     }
@@ -302,7 +302,25 @@ impl Writer<'_> {
         };
         let class_name = format!("{}.{name}", self.namespace);
         let mut statics = String::new();
-        for attribute in def.attributes().filter(|attribute| attribute.ctor().parent().name() == "StaticAttribute") {
+        // A default constructor, `PropertySet.create()`: activated, then
+        // answered as the default interface.
+        let constructible = def.attributes().any(|attribute| {
+            attribute.ctor().parent().name() == "ActivatableAttribute"
+                && !matches!(attribute.value().into_iter().next(), Some((_, Value::TypeName(_))))
+        });
+        if constructible
+            && let Some(Type::ClassName(interface)) = default.map(|implemented| implemented.interface(&[]))
+            && let Ok(default_iid) = self.interface_iid(&Type::ClassName(interface))
+        {
+            let _ = writeln!(statics, "    /**\n     * @ntsActivate {class_name} {default_iid}\n     */");
+            let _ = writeln!(statics, "    function create(): {name};");
+            self.methods += 1;
+        }
+        // Statics, and constructors that take arguments: both are methods of
+        // an interface the class's factory answers as.
+        for attribute in def.attributes().filter(|attribute| {
+            matches!(attribute.ctor().parent().name(), "StaticAttribute" | "ActivatableAttribute")
+        }) {
             let Some((_, Value::TypeName(interface))) = attribute.value().into_iter().next() else { continue };
             let Some(statics_def) = self.index.get(&interface.namespace, &interface.name).next() else {
                 self.refuse(&format!("{name} statics"), &format!("`{}` is not in the metadata read", interface.name));
@@ -503,7 +521,11 @@ impl Writer<'_> {
                 self.brands.insert(underlying);
                 Ok(format!("CEnum<{enumeration}, {underlying}>"))
             }
-            Type::Object => Err("an `Object`, which is `IInspectable` of any class".to_owned()),
+            // Any object: `IInspectable`, which is what the ABI passes.
+            Type::Object => {
+                self.brands.insert("IInspectable");
+                Ok(if argument { "IInspectable | null".to_owned() } else { "IInspectable".to_owned() })
+            }
             Type::Array(_) => Err("an array".to_owned()),
             Type::RefMut(_) => Err("an `out` parameter".to_owned()),
             other => Err(format!("{other:?}, a type WinRT does not use here")),

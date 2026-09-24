@@ -40391,6 +40391,11 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_static_call(id, &class_name, callee, &arguments);
         }
 
+        // `PropertySet.create()` — a runtime class's default constructor.
+        if let Some(activated) = self.activation_call(id, target, &arguments) {
+            return activated;
+        }
+
         // `JsonValue.Parse(x)` — a function a namespace declares. The thing
         // before the dot is a namespace, which has no value to be a receiver,
         // so this is a call to the function, as `Parse(x)` would be.
@@ -42013,6 +42018,47 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let text = self.push(OpKind::ConstString(iid.trim_matches(['{', '}']).to_owned()), HirType::Managed(ManagedType::String), origin.clone());
         Ok(self.runtime_call("nts_com_query", vec![receiver, text], ty, origin))
+    }
+
+    /// The call at `id`, when its callee is an `@ntsActivate` constructor.
+    fn activation_call(
+        &mut self,
+        id: NodeId,
+        target: &nts_semantic_schema::CallTarget,
+        arguments: &[NodeId],
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        let activate = self.node(target.callee?).native.as_ref().and_then(|n| n.activate.clone())?;
+        let result = self.snapshot.signatures[target.signature.0 as usize].return_type;
+        Some(self.lower_activation(id, &activate, result, arguments))
+    }
+
+    /// `@ntsActivate`: a runtime class made by its default constructor
+    /// (`IActivationFactory::ActivateInstance` on the class's cached factory)
+    /// and answered as its default interface -- a reference of the program's
+    /// own, as a runtime call's result is.
+    fn lower_activation(
+        &mut self,
+        id: NodeId,
+        activate: &str,
+        result: nts_semantic_schema::TypeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let words: Vec<&str> = activate.split_whitespace().collect();
+        let [class, iid] = words.as_slice() else {
+            return Err(self.unsupported(id, "@ntsActivate names the runtime class and its default interface's IID"));
+        };
+        if !arguments.is_empty() {
+            return Err(self.unsupported(id, "@ntsActivate on a function that takes arguments; a constructor that does is a factory method"));
+        }
+        if !is_interface_id(iid) {
+            return Err(self.unsupported(id, "@ntsActivate with an interface ID that is not 8-4-4-4-12 hexadecimal digits"));
+        }
+        let ty = self.represent(result).ok_or_else(|| self.unrepresentable(id, "the object @ntsActivate makes"))?;
+        let origin = self.origin(id);
+        let text = HirType::Managed(ManagedType::String);
+        let class = self.push(OpKind::ConstString((*class).to_owned()), text.clone(), origin.clone());
+        let iid = self.push(OpKind::ConstString(iid.trim_matches(['{', '}']).to_owned()), text, origin.clone());
+        Ok(self.runtime_call("nts_winrt_activate", vec![class, iid], ty, origin))
     }
 
     /// The receiver of a runtime class's static: its activation factory as the

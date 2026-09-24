@@ -75,10 +75,17 @@ void *nts_com_addref(void *object) {
 
 static uint32_t releases;
 
+/* `IUnknown::Release`, uncounted: the runtime's own references. */
+static void nts_unknown_release(void *object) {
+  (*(const NtsUnknownTable **)object)->release(object);
+}
+
+/* The program's releases, which the counting provider emits: counted, so a
+ * test can see the provider give back what it took. */
 void nts_com_release(void *object) {
   if (object != 0) {
     releases++;
-    (*(const NtsUnknownTable **)object)->release(object);
+    nts_unknown_release(object);
   }
 }
 
@@ -102,7 +109,13 @@ static void nts_winrt_initialize(void) {
   }
 }
 
-static int nts_parse_iid(const NtsString *text, IID *out);
+/* A run of UTF-16 units: a string's, lent for a call, or a literal's. */
+typedef struct {
+  const uint16_t *units;
+  uint32_t length;
+} NtsUnits;
+
+static int nts_parse_iid(NtsUnits text, IID *out);
 
 /* `object` as the interface `iid` names, by `QueryInterface`: a reference of
  * its own, which the caller releases. An object without the interface ends
@@ -110,7 +123,10 @@ static int nts_parse_iid(const NtsString *text, IID *out);
  * wrong table is not something to call through. */
 void *nts_com_query(void *object, const NtsString *iid) {
   IID wanted;
-  if (!nts_parse_iid(iid, &wanted)) {
+  const uint16_t *units = nts_string_to_utf16(iid);
+  int parsed = nts_parse_iid((NtsUnits){units, iid->length}, &wanted);
+  nts_utf16_release(iid, units);
+  if (!parsed) {
     fprintf(stderr,
             "nts: @ntsQuery names an interface ID that does not parse\n");
     abort();
@@ -129,11 +145,11 @@ void *nts_com_query(void *object, const NtsString *iid) {
 }
 
 /* `{5F6B544A-2F53-48E1-91A3-F78B50A6345C}` or without the braces. */
-static int nts_parse_iid(const NtsString *text, IID *out) {
+static int nts_parse_iid(NtsUnits text, IID *out) {
   char buffer[40];
   uint32_t n = 0;
-  for (uint32_t at = 0; at < text->length && n + 1 < sizeof buffer; at++) {
-    uint16_t unit = nts_unit(text, at);
+  for (uint32_t at = 0; at < text.length && n + 1 < sizeof buffer; at++) {
+    uint16_t unit = text.units[at];
     if (unit != '{' && unit != '}') {
       buffer[n++] = (char)unit;
     }
@@ -173,19 +189,13 @@ uint32_t nts_winrt_activations(void) { return activations; }
 
 /* `class` and `iid` as one key, `class` then a NUL then `iid`, in `into` when
  * it is large enough; the length either way. */
-static uint32_t nts_factory_key(const NtsString *class_name,
-                                const NtsString *iid, uint16_t *into,
-                                uint32_t room) {
-  uint32_t length = class_name->length + 1 + iid->length;
+static uint32_t nts_factory_key(NtsUnits class_name, NtsUnits iid,
+                                uint16_t *into, uint32_t room) {
+  uint32_t length = class_name.length + 1 + iid.length;
   if (into != 0 && length <= room) {
-    uint32_t at = 0;
-    for (uint32_t i = 0; i < class_name->length; i++) {
-      into[at++] = nts_unit(class_name, i);
-    }
-    into[at++] = 0;
-    for (uint32_t i = 0; i < iid->length; i++) {
-      into[at++] = nts_unit(iid, i);
-    }
+    memcpy(into, class_name.units, class_name.length * sizeof *into);
+    into[class_name.length] = 0;
+    memcpy(into + class_name.length + 1, iid.units, iid.length * sizeof *into);
   }
   return length;
 }
@@ -197,7 +207,7 @@ static uint32_t nts_factory_key(const NtsString *class_name,
  *
  * A class that cannot be activated ends the process naming it: the binding
  * said it exists, and there is no value to go on with. */
-void *nts_winrt_factory(const NtsString *class_name, const NtsString *iid) {
+static void *nts_factory(NtsUnits class_name, NtsUnits iid) {
   static NtsFactory *factories;
   uint16_t probe[256];
   uint32_t length = nts_factory_key(class_name, iid, probe, 256);
@@ -224,10 +234,9 @@ void *nts_winrt_factory(const NtsString *class_name, const NtsString *iid) {
             "nts: a WinRT binding names an interface ID that does not parse\n");
     abort();
   }
-  const uint16_t *units = nts_string_to_utf16(class_name);
   HSTRING name = 0;
-  WindowsCreateString((const wchar_t *)units, class_name->length, &name);
-  nts_utf16_release(class_name, units);
+  WindowsCreateString((const wchar_t *)class_name.units, class_name.length,
+                      &name);
   void *factory = 0;
   HRESULT hr = RoGetActivationFactory(name, &wanted, &factory);
   WindowsDeleteString(name);
@@ -256,6 +265,40 @@ void *nts_winrt_factory(const NtsString *class_name, const NtsString *iid) {
   kept->next = factories;
   factories = kept;
   return factory;
+}
+
+void *nts_winrt_factory(const NtsString *class_name, const NtsString *iid) {
+  const uint16_t *name = nts_string_to_utf16(class_name);
+  const uint16_t *id = nts_string_to_utf16(iid);
+  void *factory = nts_factory((NtsUnits){name, class_name->length},
+                              (NtsUnits){id, iid->length});
+  nts_utf16_release(iid, id);
+  nts_utf16_release(class_name, name);
+  return factory;
+}
+
+/* A runtime class made by its default constructor, as the interface `iid`
+ * names: `IActivationFactory::ActivateInstance` (slot 6) on the class's cached
+ * factory, then `QueryInterface` from the `IInspectable` that answers. A
+ * reference the caller owns. */
+void *nts_winrt_activate(const NtsString *class_name, const NtsString *iid) {
+  static const uint16_t activation[] = u"00000035-0000-0000-C000-000000000046";
+  const uint16_t *name = nts_string_to_utf16(class_name);
+  void *factory = nts_factory((NtsUnits){name, class_name->length},
+                              (NtsUnits){activation, 36});
+  nts_utf16_release(class_name, name);
+  typedef HRESULT(STDMETHODCALLTYPE * Activate)(void *, void **);
+  void *made = 0;
+  HRESULT hr = ((Activate)(*(void ***)factory)[6])(factory, &made);
+  if (FAILED(hr) || made == 0) {
+    fprintf(stderr,
+            "nts: the runtime class could not be constructed (0x%08lx)\n",
+            (unsigned long)hr);
+    abort();
+  }
+  void *answer = nts_com_query(made, iid);
+  nts_unknown_release(made);
+  return answer;
 }
 
 /* The message an `Error` thrown for a failed HRESULT carries: the code, and

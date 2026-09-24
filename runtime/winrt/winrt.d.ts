@@ -37,6 +37,11 @@ declare module "winrt:types" {
     readonly __com: true;
   };
 
+  // Any Windows Runtime object, as the metadata's `Object` is: what a
+  // `PropertySet` holds, or a boxed value. `QueryInterface` is how one
+  // becomes something more particular.
+  export type IInspectable = ComClass<"IInspectable">;
+
   // A `string` as the Windows Runtime's `HSTRING`: made for the call and
   // deleted after it, and a returned one copied into a `string` and deleted.
   // The brand is optional, so any `string` passes.

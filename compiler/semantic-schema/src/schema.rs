@@ -797,6 +797,10 @@ pub struct NativeAttributes {
     /// object as another of its COM interfaces, by `QueryInterface`.
     #[serde(default)]
     pub query: Option<String>,
+    /// `@ntsActivate Windows.Foundation.Collections.PropertySet <IID>`: a
+    /// runtime class's default constructor, answering its default interface.
+    #[serde(default)]
+    pub activate: Option<String>,
 }
 
 /// Why a snapshot was rejected.
