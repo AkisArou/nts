@@ -2358,6 +2358,20 @@ int parse_number(const char *text, Err **error) {
     }
     return value;
 }
+typedef struct _Parser { int base; } Parser;
+static Parser the_parser = { 1000000 };
+Parser *parser_new(void) { return &the_parser; }
+int parser_parse(Parser *self, const char *text, Err **error) {
+    int value = parse_number(text, error);
+    return value < 0 ? value : self->base + value;
+}
+char *describe(const char *text, Err **error) {
+    if (parse_number(text, error) < 0) return NULL;
+    char *out = malloc(strlen(text) + 7);
+    strcpy(out, "value ");
+    strcat(out, text);
+    return out;
+}
 char *err_take_message(Err *error) {
     char *message = copy(error->message);
     free(error->message);
@@ -2371,9 +2385,11 @@ char *err_take_message(Err *error) {
 /// `GLib`'s `GError **`, with `nts_gerror_take_message`, in `bind-gir`'s
 /// output -- when the caller leaves the parameter out.
 ///
-/// Three arms: a call that succeeds and throws nothing; one that fails, caught
-/// with the converter's message; and one whose caller passes its own slot,
-/// which is theirs to read and throws nothing. Under reference counting the
+/// The arms: a call that succeeds and throws nothing; one that fails, caught
+/// with the converter's message; one whose caller passes its own slot, which
+/// is theirs to read and throws nothing -- for a function and for a *method*,
+/// whose receiver shifts the argument count; and a string-returning one that
+/// fails, whose NULL result must not be read before the failure is thrown. Under reference counting the
 /// thrown `Error`s are collected: fifty more runs leave nothing alive.
 #[test]
 fn a_reported_c_error_is_thrown_on_both_backends() {
@@ -2386,28 +2402,87 @@ type Err = Class<"_Err">;
  * @ntsThrows error err_take_message
  */
 declare function parse_number(text: string, error?: Ptr<Err | null> | null): c_int;
+interface ParserOwnMethods {
+    /**
+     * @ntsNoEscape error
+     * @ntsSymbol parser_parse
+     * @ntsThrows error err_take_message
+     */
+    parse(this: Parser, text: string, error?: Ptr<Err | null> | null): c_int;
+}
+type Parser = Class<"_Parser"> & ParserOwnMethods;
+declare function parser_new(): Parser;
+/**
+ * @ntsFree free
+ * @ntsNoEscape error
+ * @ntsThrows error err_take_message
+ */
+declare function describe(text: string, error?: Ptr<Err | null> | null): string;
 export function run(): number {
     let total = parse_number("12") as number;
     try {
         parse_number("x1");
-        total += 100000;
+        total += 100000000;
     } catch (e) {
         total += (e as Error).message.length * 100;
     }
     const slot = local<Err | null>();
     parse_number("zz", slot);
-    return total + (slot[0] !== null ? 5 : 0);
+    total += slot[0] !== null ? 5 : 0;
+    // A method: the caller's own slot is theirs -- written, nothing thrown --
+    // and leaving it out throws.
+    const parser = parser_new();
+    const mine = local<Err | null>();
+    parser.parse("q", mine);
+    total += mine[0] !== null ? 50 : 100000000;
+    try {
+        parser.parse("q");
+        total += 100000000;
+    } catch {
+        total += 500;
+    }
+    // A string result: failing, C returns NULL where it promised a string,
+    // and the failure is thrown before that NULL is read; succeeding, the
+    // string is read as usual.
+    try {
+        describe("x1");
+        total += 100000000;
+    } catch {
+        total += 7000;
+    }
+    return total + describe("12").length * 10000;
 }
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
         let Some((_, outputs)) = run_on_both_backends("throws", source, provider, THROWS_LIBRARY, &caller) else { return; };
-        // 12, then "not a number: x1" (16) caught, then the caller's own slot
-        // written and nothing thrown.
+        // 12; "not a number: x1" (16) caught; the caller's own slot written,
+        // nothing thrown; the same for a method's; a method without one
+        // thrown; a failing string result thrown rather than read; and a
+        // succeeding one, "value 12", read.
         for output in outputs {
-            assert_eq!(output, expect("1617", provider), "{provider:?}");
+            assert_eq!(output, expect("89167", provider), "{provider:?}");
         }
     }
+
+    // A tag naming no parameter would leave the call with no slot, and every
+    // failure unreported: refused.
+    let misnamed = r#"
+import type { Class, Ptr, c_int } from "c:types";
+type Err = Class<"_Err">;
+/**
+ * @ntsNoEscape error
+ * @ntsThrows err err_take_message
+ */
+declare function parse_number(text: string, error?: Ptr<Err | null> | null): c_int;
+export function run(): number { return parse_number("1"); }
+"#;
+    let Some((_, prepared)) = prepare("throws-misnamed", misnamed) else { return; };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("@ntsThrows names no parameter `err`")),
+        "an @ntsThrows naming no parameter was accepted: {:?}",
+        prepared.diagnostics
+    );
 }
 
 /// A method a binding declares on a handle whose body is the program's own:

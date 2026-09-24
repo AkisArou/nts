@@ -1185,6 +1185,15 @@ impl Function {
         let mut parameters = Vec::with_capacity(signature.parameters.len());
         let mut roles = Vec::with_capacity(signature.parameters.len());
         let mut variadic = None;
+        // An `@ntsThrows` naming no parameter would leave the call with no
+        // slot, and nothing it reported would ever be thrown. Asked first, so
+        // the refusal names the tag rather than the optional parameter it
+        // failed to claim.
+        if let Some((slot, _)) = throws
+            && !signature.parameters.iter().any(|parameter| parameter.name == slot)
+        {
+            return Err(format!("foreign function `{name}` @ntsThrows names no parameter `{slot}`"));
+        }
         for (at, parameter) in signature.parameters.iter().enumerate() {
             // The error slot, the one parameter a caller may leave out: C
             // reports through it, and the compiler supplies one when omitted.

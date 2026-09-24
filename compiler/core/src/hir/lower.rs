@@ -39183,10 +39183,12 @@ impl<'a> FuncBuilder<'a> {
             _ => None,
         };
         let call = self.push_call(id, callee, args, declaration)?;
-        let value = match returned {
-            Some((target, string)) => self.read_native_string(id, call, &target, &string)?,
-            None => call,
-        };
+        // A failure is checked *before* the result is read: a function that
+        // reports one returns nothing meaningful -- GLib returns NULL where it
+        // promised a string -- and reading that would end the process rather
+        // than throw. The failing path gives back what was lent and throws;
+        // the other reads the result and then gives back, in that order, since
+        // a result may point into something lent.
         let errors: Vec<(ValueId, String)> = lent
             .iter()
             .filter_map(|lent| match lent {
@@ -39194,11 +39196,14 @@ impl<'a> FuncBuilder<'a> {
                 _ => None,
             })
             .collect();
-        self.give_back(id, lent);
-        // Last, so that a throw leaves nothing lent behind it.
         for (slot, converter) in errors {
-            self.throw_if_reported(id, slot, &converter)?;
+            self.throw_if_reported(id, slot, &converter, &lent)?;
         }
+        let value = match returned {
+            Some((target, string)) => self.read_native_string(id, call, &target, &string)?,
+            None => call,
+        };
+        self.give_back(id, lent);
         Ok(value)
     }
 
@@ -39239,7 +39244,7 @@ impl<'a> FuncBuilder<'a> {
     /// `converter` makes of it. The converter takes the error -- it frees it --
     /// and answers a `malloc`'d message, which is copied and freed here:
     /// `nts_gerror_take_message` for `GLib`'s `GError`.
-    fn throw_if_reported(&mut self, id: NodeId, slot: ValueId, converter: &str) -> Result<(), Diagnostic> {
+    fn throw_if_reported(&mut self, id: NodeId, slot: ValueId, converter: &str, lent: &[Lent]) -> Result<(), Diagnostic> {
         let origin = self.origin(id);
         let HirType::NativePointer(super::native::Pointee::Pointer(error)) = self.values[slot.0 as usize].ty.clone() else {
             return Err(self.unsupported(id, "an @ntsThrows slot that is not a pointer to a pointer"));
@@ -39259,6 +39264,8 @@ impl<'a> FuncBuilder<'a> {
             else_args: Vec::new(),
         });
         self.switch_to(raise);
+        // Everything lent to the call, given back before the throw leaves.
+        self.give_back(id, lent.to_vec());
         let convert = std::sync::Arc::new(super::native::Function {
             name: converter.to_owned(),
             convention: super::native::Convention::C,
@@ -39647,7 +39654,9 @@ impl<'a> FuncBuilder<'a> {
                 // A slot the caller passed is theirs to read; one they left out
                 // is a zeroed local of ours, checked after the call.
                 Role::ErrorSlot { converter } => {
-                    let written = fed.is_some_and(|ts| ts < arguments.len());
+                    // `fed` counts a method's receiver, which `arguments` --
+                    // the ones the program wrote after the dot -- does not.
+                    let written = fed.is_some_and(|ts| ts < arguments.len() + usize::from(receiver.is_some()));
                     let ty = target.parameters[at].representation();
                     c_args.push(self.error_slot(argument.filter(|_| written), ty, converter, &mut lent, &origin));
                 }
