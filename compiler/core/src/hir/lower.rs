@@ -2294,23 +2294,10 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
             //     const cleanup = ...;
             //
             // Legal, because the body runs later.
-            //
-            // **And the closure's own name is the same case**, which is not
-            // below it but *around* it:
-            //
-            //     const once = (k: number) => calls === 1 ? once(k + 1) : k;
-            //
-            // `once` has no value until the arrow has been built, so a
-            // by-value capture reads a binding that does not exist yet. One
-            // condition covers both: **the declaration ends after the arrow
-            // does.** A declaration that follows the arrow ends after it, one
-            // that encloses it ends after it, and an ordinary prior
-            // `const base = n * 2` ends before the arrow starts -- which is the
-            // arm `capturesAnother` guards.
             let arrow = probe.node(id).origin.location;
             let below = record.declarations.iter().all(|declaration| {
                 let declared = probe.node(*declaration).origin.location;
-                declared.file == arrow.file && declared.span.end >= arrow.span.end
+                declared.file == arrow.file && declared.span.start > arrow.span.start
             });
             let mut by_reference = assigned.contains(&symbol.0) || below;
             if by_reference {
@@ -15517,18 +15504,10 @@ impl<'a> FuncBuilder<'a> {
         if self.declaration_kind(declaration) != nts_semantic_schema::VariableKind::Const {
             return None;
         }
-        // A `function` expression as well as an arrow, because
-        // `collect_closures` treats both as closures -- `const step = function
-        // (k) { ... step(k + 1) ... }` is the same construct written the other
-        // way, and matching only the arrow answered `None` for it, which sent
-        // the capture to the checker's signature type and the cell to a layout
-        // nothing had built.
-        let initializer = self.children(declaration).into_iter().find(|child| {
-            matches!(
-                self.kind_of(*child),
-                Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION)
-            )
-        })?;
+        let initializer = self
+            .children(declaration)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::ARROW_FUNCTION))?;
         // A refused closure has no layout to name, so this answers `None` and
         // the capture is refused with that closure's own reason rather than
         // with a missing layout.
