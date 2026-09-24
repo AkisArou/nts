@@ -42,6 +42,8 @@ typedef struct {
 #define NTS_UV_NO_SLOT 0xFFFFFFFFu
 
 static uv_loop_t *nts_uv_loop;
+/* The adapter to tell when work is scheduled (`nts_uv_host_on_schedule`). */
+static void (*nts_uv_scheduled)(void);
 static uv_idle_t nts_uv_idle;
 static uv_async_t nts_uv_async;
 static uv_thread_t nts_uv_owner;
@@ -230,6 +232,9 @@ static void nts_uv_post_task(void *state, NtsTask task) {
    * stays started keeps `uv_run` from ever blocking, which is a busy loop
    * that also never lets the process exit. */
   uv_idle_start(&nts_uv_idle, nts_uv_drain_tasks);
+  if (nts_uv_scheduled) {
+    nts_uv_scheduled();
+  }
 }
 
 static void nts_uv_timer_closed(uv_handle_t *handle) { free(handle->data); }
@@ -276,6 +281,9 @@ static NtsTimerId nts_uv_post_delayed(void *state, NtsTask task,
   if (uv_timer_start(&timer->handle, nts_uv_timer_fired, ms,
                      repeating ? ms : 0) != 0) {
     nts_uv_fail("could not start a timer");
+  }
+  if (nts_uv_scheduled) {
+    nts_uv_scheduled();
   }
   return nts_uv_slot_id(timer->slot);
 }
@@ -430,6 +438,16 @@ int nts_uv_host_backend_timeout(void) {
     return -1;
   }
   return uv_backend_timeout(nts_uv_loop);
+}
+
+uv_loop_t *nts_uv_host_loop(void) {
+  nts_uv_require_owner("loop");
+  return nts_uv_loop;
+}
+
+void nts_uv_host_on_schedule(void (*scheduled)(void)) {
+  nts_uv_require_owner("on_schedule");
+  nts_uv_scheduled = scheduled;
 }
 
 void nts_uv_host_pump(void) {

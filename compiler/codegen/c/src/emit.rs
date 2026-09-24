@@ -68,12 +68,16 @@ pub const CF_HOST_HEADER_NAME: &str = "nts_cf_host.h";
 pub const CF_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_cf_host.h");
 pub const CF_HOST_SOURCE_NAME: &str = "nts_cf_host.c";
 pub const CF_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_cf_host.c");
+pub const WIN_HOST_HEADER_NAME: &str = "nts_win_host.h";
+pub const WIN_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_win_host.h");
+pub const WIN_HOST_SOURCE_NAME: &str = "nts_win_host.c";
+pub const WIN_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_win_host.c");
 
 /// Whose loop turns a standalone program's libuv.
 ///
 /// libuv's own, unless the program runs a platform loop from inside module
 /// evaluation: `g_application_run` for a GTK program, `[NSApp run]` or
-/// `CFRunLoopRun` for a Cocoa one. Then an adapter attaches libuv to that
+/// `CFRunLoopRun` for a Cocoa one, a `GetMessageW` loop for a Win32 one. Then an adapter attaches libuv to that
 /// loop, and a callback returning to it is a checkpoint.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum LoopHost {
@@ -83,6 +87,8 @@ pub enum LoopHost {
     Glib,
     /// The main thread's `CFRunLoop`: `nts_cf_host`.
     CoreFoundation,
+    /// The thread's Win32 message queue: `nts_win_host`.
+    Win32,
 }
 
 impl LoopHost {
@@ -95,6 +101,7 @@ impl LoopHost {
             Self::CoreFoundation => {
                 Some([(CF_HOST_HEADER_NAME, CF_HOST_HEADER), (CF_HOST_SOURCE_NAME, CF_HOST_SOURCE)])
             }
+            Self::Win32 => Some([(WIN_HOST_HEADER_NAME, WIN_HOST_HEADER), (WIN_HOST_SOURCE_NAME, WIN_HOST_SOURCE)]),
         }
     }
 
@@ -109,15 +116,24 @@ impl LoopHost {
 
     /// The host a program gets, given the one its target offers.
     ///
-    /// Only a program that uses Apple's frameworks (it sends messages, or
-    /// calls a framework's C functions such as `CFRunLoopRun`) can start the
-    /// main `CFRunLoop`, so any other keeps libuv's own and links no
-    /// CoreFoundation. `GLib`'s is decided from the link, where a GTK program
-    /// always has it.
+    /// - **CoreFoundation:** only a program that uses Apple's frameworks (it
+    ///   sends messages, or calls a framework's C functions such as
+    ///   `CFRunLoopRun`) can start the main `CFRunLoop`. Any other keeps
+    ///   libuv's own and links no CoreFoundation.
+    /// - **Win32:** every program, and not only one seen to pump the thread's
+    ///   message queue. A rule over function names fails in the worst
+    ///   direction: a program pumping through a wrapper or another spelling
+    ///   would get plain libuv, and a timer started outside a pump would never
+    ///   fire, with nothing said. Attaching costs one message-only window and
+    ///   one parked thread -- 0.36 ms at the median over 100 interleaved runs
+    ///   of `windows-hello` on Windows 11, inside process start's own spread
+    ///   (15.5 ms, p10 to p90 12-20 ms) -- and a program that never pumps
+    ///   parks the watcher after one wake, because only a pump re-arms it.
+    /// - **`GLib`:** decided from the link, where a GTK program always has it.
     #[must_use]
-    pub const fn for_program(self, apple: bool) -> Self {
+    pub fn for_program(self, program: &Program) -> Self {
         match self {
-            Self::CoreFoundation if !apple => Self::Libuv,
+            Self::CoreFoundation if !program.objc && program.native_frameworks.is_empty() => Self::Libuv,
             other => other,
         }
     }
@@ -128,9 +144,11 @@ impl LoopHost {
             Self::Libuv => None,
             Self::Glib => Some("nts_glib_host"),
             Self::CoreFoundation => Some("nts_cf_host"),
+            Self::Win32 => Some("nts_win_host"),
         }
     }
 }
+
 
 /// The vendored half of the runtime, shipped as a `quickjs/` subdirectory.
 ///

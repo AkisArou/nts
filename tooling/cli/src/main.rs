@@ -2719,6 +2719,10 @@ fn write_standalone(
             nts_codegen_c::LoopHost::Libuv => "",
             nts_codegen_c::LoopHost::Glib => " $(pkg-config --cflags --libs glib-2.0)",
             nts_codegen_c::LoopHost::CoreFoundation => " -lobjc -framework CoreFoundation",
+            // user32 for the message window; libuv's own system libraries
+            // are the rest of `WINDOWS_UV_LIBS`, which a Windows `-luv` needs
+            // whichever host runs it.
+            nts_codegen_c::LoopHost::Win32 => " -luser32",
         };
         println!(
         "  cc -std=c11 -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c program.c {} {}{glib_source} -luv -lm{glib_flags} -o program",
@@ -3408,6 +3412,8 @@ fn build_c(
         nts_codegen_c::LoopHost::Glib
     } else if target.os == "macos" {
         nts_codegen_c::LoopHost::CoreFoundation
+    } else if target.os == "windows" {
+        nts_codegen_c::LoopHost::Win32
     } else {
         nts_codegen_c::LoopHost::Libuv
     };
@@ -6809,7 +6815,7 @@ fn write_c_output(
                  build would evaluate none of it; the decline is reported above"
             );
         }
-        let host = emission.host.for_program(program.objc || !program.native_frameworks.is_empty());
+        let host = emission.host.for_program(program);
         write_standalone(
             program,
             out,

@@ -81,6 +81,21 @@ int nts_uv_host_backend_timeout(void);
  * does -- since libuv's loop is not re-entrant. */
 void nts_uv_host_pump(void);
 
+/* The installed loop, for an adapter that watches its backend itself: libuv
+ * on Windows is IOCP and has no descriptor (`backend_fd` is -1 there), so
+ * `nts_win_host` waits on the loop's completion port. */
+uv_loop_t *nts_uv_host_loop(void);
+
+/* Called on the owner thread whenever it schedules work -- a task posted, a
+ * timer started -- so an adapter whose foreign loop has no before-waiting hook
+ * can shorten a wait it already armed. GLib's `prepare` and CoreFoundation's
+ * observer re-read `backend_timeout` each time their loop goes idle; a Win32
+ * `GetMessage` loop offers nothing of the kind, and a timer started from a
+ * window procedure posts no completion for the watcher to see. I/O and
+ * `post_from_any_thread` do post one, so they need no call. At most one
+ * adapter; NULL unregisters. */
+void nts_uv_host_on_schedule(void (*scheduled)(void));
+
 /* Close every handle this host owns and drop whatever is still queued.
  *
  * Dropping matters: a task owns a reference to its state, and the contract is
