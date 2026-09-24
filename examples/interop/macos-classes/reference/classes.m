@@ -16,6 +16,8 @@ int main(void) {
     printf("empty %lu\n", (unsigned long)list.count);
     for (int n = 1; n <= 3; n++) [list addObject:[NSNumber numberWithInt:n]];
     printf("count %lu\n", (unsigned long)list.count);
+    [list insertObject:[NSNumber numberWithInt:0] atIndex:0];
+    printf("inserted %lu first %d\n", (unsigned long)list.count, ((NSNumber *)[list objectAtIndex:0]).intValue);
     NSNumber *answer = [NSNumber numberWithInt:42];
     printf("number %d equal %s\n", answer.intValue, [answer isEqual:[NSNumber numberWithInt:42]] ? "true" : "false");
     printf("kinds %s %s %s\n", [answer isKindOfClass:[NSNumber class]] ? "true" : "false",

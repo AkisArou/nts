@@ -36,6 +36,14 @@ declare module "objc:Foundation" {
   export class NSMutableArray extends NSObject {
     /** @ntsSelector addObject: */
     addObject(object: NSObject): void;
+    /**
+     * Swift's `insert(_:at:)`: the first argument unlabelled, the rest in one
+     * object the compiler never builds.
+     * @ntsSelector insertObject:atIndex:
+     */
+    insert(object: NSObject, labels: { at: c_ulong }): void;
+    /** @ntsSelector objectAtIndex: */
+    object(at: c_ulong): NSObject;
     readonly count: c_ulong;
   }
 

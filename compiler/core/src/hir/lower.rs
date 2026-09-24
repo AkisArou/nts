@@ -11269,6 +11269,13 @@ struct FuncBuilder<'a> {
     /// arguments only, and restored after, so a foreign call inside one of
     /// them does not leave its own behind.
     omitting_for: Option<(std::sync::Arc<super::native::Function>, usize)>,
+    /// Object literals a native call passes as its labels, marked before its
+    /// arguments are lowered: each is lowered a property at a time and never
+    /// built (`Role::Label`).
+    labels_pending: rustc_hash::FxHashSet<NodeId>,
+    /// What each labels literal lowered to, by the placeholder that stood for
+    /// it among the arguments: each property's value, by key.
+    labels_lowered: rustc_hash::FxHashMap<ValueId, Vec<(String, ValueId)>>,
     /// The type a bare `null` should take, where the caller knows it.
     ///
     /// `contextual_type` recovers this from the tree for the shapes the tree
@@ -11461,6 +11468,8 @@ impl<'a> FuncBuilder<'a> {
             substitution: Substitution::default(),
             sources: super::generics::Sources::default(),
             omitting_for: None,
+            labels_pending: rustc_hash::FxHashSet::default(),
+            labels_lowered: rustc_hash::FxHashMap::default(),
         }
     }
 
@@ -13490,6 +13499,19 @@ impl<'a> FuncBuilder<'a> {
         if let Some(want @ HirType::NativePointer(_)) = self.type_of(id)
             && self.values[value.0 as usize].ty != want
         {
+            // One Objective-C object as another class of object: what
+            // `instanceof` narrowed it to after asking `isKindOfClass:`, or
+            // what an `as` asserts -- unchecked, as every TypeScript assertion
+            // is, and the object is the one it was. Objective-C code writes
+            // the same cast of the `id` a collection hands back. Any other
+            // pointer stays refused: its bytes are what its type says they are.
+            let objc = |ty: &HirType| {
+                matches!(ty, HirType::NativePointer(super::native::Pointee::Opaque(handle)) if handle.family == super::native::Family::Objc)
+            };
+            if objc(&want) && objc(&self.values[value.0 as usize].ty) {
+                let origin = self.origin(id);
+                return Ok(self.push(OpKind::Convert(value), want, origin));
+            }
             return Err(self.unsupported(id, "a value asserted to be an opaque C pointer"));
         }
         // A view narrowed to its element type, which is the other direction of
@@ -29082,6 +29104,9 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        if self.labels_pending.remove(&id) {
+            return self.lower_labels(id);
+        }
         if matches!(self.contextual_type(id, 0), Some(HirType::NativePointer(_)))
             || matches!(self.type_of(id), Some(HirType::NativePointer(_)))
         {
@@ -40192,9 +40217,75 @@ impl<'a> FuncBuilder<'a> {
             }
             _ => None,
         };
+        if let Callee::Native(target) = callee {
+            self.mark_labels(target, arguments, receiver.is_some())?;
+        }
         let args = self.lower_written_arguments(id, callee, arguments, receiver.is_some(), tail.as_ref())?;
         let Callee::Native(target) = callee else { return Ok((args, Vec::new())) };
         self.native_arguments(id, &target.clone(), args, arguments.len(), receiver)
+    }
+
+    /// Mark each argument a native call passes as labels, which must be an
+    /// object literal: the call's own spelling of its labels, as Swift's are,
+    /// and the one form whose properties can be passed without building it.
+    fn mark_labels(&mut self, target: &super::native::Function, arguments: &[NodeId], method: bool) -> Result<(), Diagnostic> {
+        for (_, role, fed) in target.slots() {
+            let (super::native::Role::Label { last: true, .. }, Some(ts)) = (role, fed) else { continue };
+            let Some(&argument) = ts.checked_sub(usize::from(method)).and_then(|at| arguments.get(at)) else { continue };
+            if self.kind_of(argument) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+                return Err(self.unsupported(argument, "labels passed as anything but an object literal at the call, as in `{ display: true }`"));
+            }
+            self.labels_pending.insert(argument);
+        }
+        Ok(())
+    }
+
+    /// A labels literal, a property at a time in the order it is written --
+    /// which is when JavaScript evaluates them -- and never an object. What it
+    /// answers is a placeholder at the literal's type, which nothing reads:
+    /// `native_arguments` passes each property's value in the slot its key
+    /// names, and the placeholder is dead.
+    fn lower_labels(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let mut values = Vec::new();
+        for property in self.syntax_children_of(id) {
+            let (key, value) = match self.kind_of(property) {
+                Some(syntax::PROPERTY_ASSIGNMENT) => {
+                    let parts = self.syntax_children_of(property);
+                    let [name, initializer] = parts[..] else {
+                        return Err(self.unsupported(property, "a label that is not a name and a value"));
+                    };
+                    let key = self.node(name).text.clone().ok_or_else(|| self.unsupported(name, "a label whose name is computed"))?;
+                    (key, self.lower_expression(initializer)?)
+                }
+                Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => {
+                    let key = self.node(property).text.clone().or_else(|| {
+                        self.syntax_children_of(property).first().and_then(|name| self.node(*name).text.clone())
+                    });
+                    let key = key.ok_or_else(|| self.unsupported(property, "a label whose name is computed"))?;
+                    (key, self.lower_identifier(property)?)
+                }
+                _ => return Err(self.unsupported(property, "a spread, a method or an accessor among labels")),
+            };
+            values.push((key, value));
+        }
+        let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "labels"))?;
+        let origin = self.origin(id);
+        let placeholder = self.push(OpKind::ConstNull, ty, origin);
+        self.labels_lowered.insert(placeholder, values);
+        Ok(placeholder)
+    }
+
+    /// A node's children, seeing through the list nodes between them.
+    fn syntax_children_of(&self, id: NodeId) -> Vec<NodeId> {
+        let mut out = Vec::new();
+        for child in self.children(id) {
+            if self.kind_of(child).is_some() {
+                out.push(child);
+            } else {
+                out.extend(self.syntax_children_of(child));
+            }
+        }
+        out
     }
 
     /// A foreign call's C arguments from the TypeScript ones already lowered:
@@ -40231,6 +40322,17 @@ impl<'a> FuncBuilder<'a> {
             let argument = fed.and_then(|ts| args.get(ts).copied());
             match role {
                 Role::Plain => c_args.extend(argument),
+                // A labelled argument: the property of the labels literal
+                // its key names, at the slot's type.
+                Role::Label { key, .. } => {
+                    let value = argument
+                        .and_then(|placeholder| self.labels_lowered.get(&placeholder))
+                        .and_then(|values| values.iter().find(|(named, _)| *named == key))
+                        .map(|(_, value)| *value)
+                        .ok_or_else(|| self.unsupported(id, &format!("a call missing its `{key}` label")))?;
+                    let want = target.parameters[at].representation();
+                    c_args.push(self.coerce(value, &want, id)?);
+                }
                 // A slot the caller passed is theirs to read; one they left out
                 // is a zeroed local of ours, checked after the call.
                 Role::ErrorSlot { converter } => {
@@ -40969,7 +41071,13 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(call, "an Objective-C message with a variadic tail or a managed ABI, which a cast to one C function type cannot carry"));
         }
         if native.roles.iter().any(|role| {
-            !matches!(role, super::native::Role::Plain | super::native::Role::String(_) | super::native::Role::Block { .. })
+            !matches!(
+                role,
+                super::native::Role::Plain
+                    | super::native::Role::String(_)
+                    | super::native::Role::Block { .. }
+                    | super::native::Role::Label { .. }
+            )
         }) {
             return Err(self.unsupported(call, "an Objective-C message taking a C callback, an array or an error slot; a callback crosses as a `Block<F>`"));
         }

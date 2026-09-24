@@ -4,7 +4,7 @@
 // against the same program in Objective-C (`reference/classes.m`).
 import { NSMutableArray, NSNumber, NSObject, NSOperation, NSProcessInfo, NSString } from "objc:Foundation";
 import { report, report_string, weak_alive, weak_watch } from "c:support";
-import type { c_int } from "c:types";
+import type { c_int, c_ulong } from "c:types";
 
 let watch = 0 as c_int;
 
@@ -22,6 +22,8 @@ function main(): void {
     list.addObject(new NSNumber(n as c_int));
   }
   report(`count ${list.count}`);
+  list.insert(new NSNumber(0 as c_int), { at: 0n as c_ulong });
+  report(`inserted ${list.count} first ${(list.object(0n as c_ulong) as NSNumber).intValue}`);
 
   const answer = new NSNumber(42 as c_int);
   report(`number ${answer.intValue} equal ${answer.isEqual(new NSNumber(42 as c_int))}`);

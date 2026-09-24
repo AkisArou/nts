@@ -470,3 +470,75 @@ fn a_program_class_extending_an_objective_c_class_is_refused_by_name() {
         prepared.diagnostics
     );
 }
+
+/// Swift's labels, `move(_:x:y:)` in TypeScript as `view.move(v, { x, y })`:
+/// one object literal the compiler never builds. Its properties are evaluated
+/// in the order the program writes them, which is JavaScript's rule, and
+/// passed in the order the selector declares them, whatever order that was.
+#[test]
+fn labels_are_passed_without_building_an_object() {
+    let binding = r#"/**
+ * @ntsFramework Foundation
+ */
+declare module "objc:Foundation" {
+  import type { c_double } from "c:types";
+  /** @ntsClass NSView */
+  export class NSView {
+    /** @ntsSelector init */
+    constructor();
+    /** @ntsSelector moveView:toX:y: */
+    move(other: NSView, labels: { x: c_double; y: c_double }): void;
+  }
+}
+"#;
+    let source = "import { NSView } from \"objc:Foundation\";\n\
+                  import type { c_double } from \"c:types\";\n\
+                  export function first(): c_double { return 1 as c_double; }\n\
+                  export function second(): c_double { return 2 as c_double; }\n\
+                  export function run(view: NSView): void {\n  view.move(view, { y: second(), x: first() });\n}\n";
+    let Some((_, prepared)) = prepare("labels", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    let body = text.split("void run(").nth(2).or_else(|| text.split("void run(").nth(1)).unwrap_or_default();
+    assert!(!body.contains("nts_object") && !body.contains("NtsObj_"), "the labels were built:\n{body}");
+    // `second()` is written first and so evaluated first.
+    let (second, first) = (body.find("second(").unwrap_or(usize::MAX), body.find("first(").unwrap_or(0));
+    assert!(second < first, "the labels were not evaluated as written:\n{body}");
+    // And passed as the selector declares them: x, then y.
+    let send = body.lines().find(|line| line.contains("nts_objc_sel_moveView_ctoX_cy_c()")).unwrap_or_default();
+    let x = body.lines().find(|l| l.contains("= first(")).and_then(|l| l.trim().split(' ').next()).unwrap_or("?");
+    let y = body.lines().find(|l| l.contains("= second(")).and_then(|l| l.trim().split(' ').next()).unwrap_or("?");
+    assert!(send.contains(&format!(", {x}, {y})")), "x and y not in the selector's order:\n{body}");
+}
+
+/// Labels that are not an object literal at the call are refused by name: a
+/// literal is the one form whose properties can be passed without building it.
+#[test]
+fn labels_that_are_not_a_literal_are_refused_by_name() {
+    let binding = r#"declare module "objc:Foundation" {
+  import type { c_double } from "c:types";
+  /** @ntsClass NSView */
+  export class NSView {
+    /** @ntsSelector setX:y: */
+    move(labels: { x: c_double; y: c_double }): void;
+  }
+}
+"#;
+    let source = "import { NSView } from \"objc:Foundation\";\n\
+                  import type { c_double } from \"c:types\";\n\
+                  export function run(view: NSView): void {\n  const at = { x: 1 as c_double, y: 2 as c_double };\n  view.move(at);\n}\n";
+    let Some((_, prepared)) = prepare("labels-variable", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("labels passed as anything but an object literal")),
+        "{:?}",
+        prepared.diagnostics
+    );
+}

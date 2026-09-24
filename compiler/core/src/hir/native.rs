@@ -328,6 +328,42 @@ pub enum Role {
     /// reports there is thrown as an `Error` carrying the message `converter`
     /// makes of it.
     ErrorSlot { converter: String },
+    /// One labelled argument: the property `key` of the object literal the
+    /// program passes where the binding declares an object-type parameter --
+    /// `setFrame(_ frame: CGRect, labels: { display: boolean })`, which is
+    /// Swift's `setFrame(_:display:)`. Every label of one parameter is fed by
+    /// that one TypeScript argument, and `last` closes the group. The object
+    /// is never built: each property is lowered on its own and passed here.
+    Label { key: String, last: bool },
+}
+
+/// The labels of a parameter declared as an object type literal --
+/// `labels: { display: boolean }` -- in the order the literal declares them,
+/// which is the order the arguments are passed in. Only an anonymous object
+/// type, which the checker records with no symbol, and only required fields:
+/// an interface names a type a program builds and passes around, where a label
+/// list is the call's own spelling, as Swift's is. Such a parameter had no
+/// native ABI before, so nothing that compiled reads differently.
+fn labels_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Vec<(String, TypeId)>> {
+    let record = snapshot.types.get(ty.0 as usize)?;
+    let TypeKind::Object { properties } = &record.kind else { return None };
+    if record.symbol.is_some() || properties.is_empty() {
+        return None;
+    }
+    // Not a marker: `Opaque<T>`, `Class<...>`, a closure's or a brand's are
+    // anonymous object types too, made of readonly `__`-named properties (the
+    // checker escapes the name to `___`), and each is already a type of its
+    // own here. A label is an ordinary name.
+    if properties.iter().any(|p| p.readonly || p.name.starts_with("__"))
+        || pointer(snapshot, ty).is_some()
+        || is_layout(snapshot, ty)
+    {
+        return None;
+    }
+    properties
+        .iter()
+        .map(|p| (p.kind == MemberKind::Field && !p.optional).then(|| (p.name.clone(), p.ty)))
+        .collect()
 }
 
 /// "This has no native ABI type", **as a noun phrase**.
@@ -379,6 +415,13 @@ impl Function {
                 | Role::ErrorSlot { .. } => {
                     ts += 1;
                     Some(ts - 1)
+                }
+                Role::Label { last, .. } => {
+                    let fed = ts;
+                    if *last {
+                        ts += 1;
+                    }
+                    Some(fed)
                 }
             };
             (at, role.clone(), fed)
@@ -2258,6 +2301,20 @@ fn c_parameter(
     parameter: &nts_semantic_schema::ParameterRecord,
     at: usize,
 ) -> Result<Option<Vec<(Type, Role)>>, String> {
+    // Labels: one slot per property, in the order the literal declares them.
+    if let Some(labels) = labels_of(snapshot, parameter.ty) {
+        return labels
+            .iter()
+            .enumerate()
+            .map(|(at, (key, ty))| {
+                let ty = abi_type(snapshot, *ty)
+                    .filter(|ty| *ty != Type::Void)
+                    .ok_or_else(|| no_abi_type(name, Some(&format!("{}.{key}", parameter.name))))?;
+                Ok((ty, Role::Label { key: key.clone(), last: at + 1 == labels.len() }))
+            })
+            .collect::<Result<Vec<_>, String>>()
+            .map(Some);
+    }
     if let Some(array) = native_array(snapshot, parameter.ty) {
         return array_slots(snapshot, name, &parameter.name, &array, at).map(Some);
     }

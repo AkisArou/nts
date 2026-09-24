@@ -295,6 +295,17 @@ correctness does not depend on arm64 running by luck.
      - `examples/interop/macos-classes` matches an ARC oracle on both
        backends, and its NoGc control differs only in `new`'s object living
        on.
+   - **S2, labels, landed.** A parameter declared as an object type literal
+     is a label list: `insert(object: NSObject, labels: { at: c_ulong })` is
+     Swift's `insert(_:at:)`, called as `list.insert(n, { at: 0n })`. Each
+     property is its own C slot, in the order the type declares them. At the
+     call the literal is never built: its properties are lowered in the order
+     they are written, as JavaScript evaluates them, and passed in the
+     selector's order. Only a literal is accepted. It works for C functions
+     too.
+   - **Objective-C handles narrow and assert.** `instanceof` narrows an
+     Objective-C object to a subclass, and `as` asserts one, unchecked as every
+     TypeScript assertion is. Any other opaque pointer is still refused.
 
 5. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
    benchmark against NativeScript and Swift.
