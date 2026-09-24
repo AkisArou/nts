@@ -68,9 +68,32 @@ either builds them.
   anyway.
 - **Bit-fields under Win64** need MS placement, and are refused until then.
 
+## W1, Win32 from TypeScript: where it stands
+
+`examples/interop/windows-window` is a Win32 window whose window procedure is
+TypeScript, closed by `await new Promise(r => setTimeout(() => r(), 30))`
+while `GetMessageW` owns the thread. It is built by `nts build` alone and run
+on the VM.
+
+| Commit | What |
+|---|---|
+| `695f8a3d` | The witness compares a function's type with its header's (`__builtin_types_compatible_p(__typeof__(F), …)`), where it used to re-declare the function. The re-declaration made `-Winconsistent-dllimport` refuse every Win32 binding. `program.c` calls through the header when the witness checked the function and the header is included: `call *__imp_DispatchMessageW`, not an import thunk. |
+| `266f3f9d` | `nts_win_host`: a watcher thread on libuv's IOCP wakes a message-only window, which pumps libuv inside the program's own message loop, modal loops included. Every Windows executable attaches it: 0.36 ms at the median, measured. |
+| `a05a3584` | `Ptr<void>` as `void *`, and `F \| null` passing NULL for `null` (`SetTimer`'s `TIMERPROC`). |
+| `bb805fea` | `windows-window`. |
+
+**Measured on the VM:**
+- `by=typescript` as built.
+- `by=failsafe` with the host's attach removed, and again with only its schedule hook removed.
+- A 1.5 s TypeScript timer inside the message loop used 31 ms of CPU over 2.4 s.
+
+**What the example still works around:** the class and window names are
+UTF-16 written by hand, until a `string` crosses as `LPCWSTR` (`WString`,
+proposed).
+
 ## Next
 
-1. **W1:** `nts bind-winmd` for a Win32 subset, `wstring` (UTF-16)
+1. **W1, remaining:** `nts bind-winmd` for a Win32 subset, `wstring` (UTF-16)
    crossing, the IOCP loop host (`runtime/c/nts_win_host.*`, API agreed with
    GTK first), and `examples/interop/windows-window`.
 2. **W2:** COM/WinRT: `@ntsVtable` calls, `Family::Com`, HSTRING,
