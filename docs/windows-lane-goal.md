@@ -81,21 +81,32 @@ on the VM.
 | `266f3f9d` | `nts_win_host`: a watcher thread on libuv's IOCP wakes a message-only window, which pumps libuv inside the program's own message loop, modal loops included. Every Windows executable attaches it: 0.36 ms at the median, measured. |
 | `a05a3584` | `Ptr<void>` as `void *`, and `F \| null` passing NULL for `null` (`SetTimer`'s `TIMERPROC`). |
 | `bb805fea` | `windows-window`. |
+| `e669f6f6` | `Utf16String`: a `string` crosses as `LPCWSTR`, lent in place when it is already two-byte. |
+| `fbf1f439` | `c_long32`/`c_ulong32`: `LONG` and `DWORD` as numbers whose C spelling is `long`; refused on SysV, where `long` is 64 bits. |
+| `f4637a6d` | `nts bind-winmd`: Win32 bindings from `Windows.Win32.winmd`, checked against the mingw headers. The metadata gives the meaning, clang gives the exact C type, and where they disagree on width the item is refused, not guessed. `nts build` binds `c:Windows.Win32.*` imports on demand into `types/winmd`. |
+| `10c75d3b` | `windows-window` runs on generated bindings; the hand-written UTF-16 names are gone. |
+| `908d084f` | `@ntsLibrary <name>`: a program links the import libraries of the functions it calls, and no others. |
+| `4d2ff1ed` | Handles are a `Class` hierarchy from `[AlsoUsableFor]` (`HBRUSH` passes as `HGDIOBJ`); handles the header makes one C type (`HINSTANCE`/`HMODULE`) are one type. |
+
+**bind-winmd, measured:** `UI.WindowsAndMessaging` binds 282 functions, 89
+types and 1,303 constants, and refuses 120 items, each with its reason in
+`.refused.txt`. `Graphics.Gdi` binds 316 functions. `NTS_BIND_WINMD_KEEP=1`
+keeps each probe and clang's answer.
 
 **Measured on the VM:**
 - `by=typescript` as built.
 - `by=failsafe` with the host's attach removed, and again with only its schedule hook removed.
 - A 1.5 s TypeScript timer inside the message loop used 31 ms of CPU over 2.4 s.
 
-**What the example still works around:** the class and window names are
-UTF-16 written by hand, until a `string` crosses as `LPCWSTR` (`WString`,
-proposed).
+**What bind-winmd does not bind yet:** structs passed by value, COM
+interfaces, and anything the header and metadata disagree on. The raw
+Win32 surface is C-shaped (`CreateWindowExW` with twelve arguments); the
+idiomatic layer on top of it is W4.
 
 ## Next
 
-1. **W1, remaining:** `nts bind-winmd` for a Win32 subset, `wstring` (UTF-16)
-   crossing, the IOCP loop host (`runtime/c/nts_win_host.*`, API agreed with
-   GTK first), and `examples/interop/windows-window`.
+1. **W1, remaining:** structs by value (the Win64 rule: `> 8` bytes by
+   reference), and an LLVM-backend run of `windows-window`.
 2. **W2:** COM/WinRT: `@ntsVtable` calls, `Family::Com`, HSTRING,
    activation, delegates, and `IAsyncOperation` as a Promise.
 3. **W3:** WinUI 3. **W4:** the idiomatic layer, packaging, and a benchmark
