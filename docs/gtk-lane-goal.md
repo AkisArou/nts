@@ -290,7 +290,7 @@ with a fake error API and its own converter.
 Promise form:
 
 ```ts
-const made = await directory.make_directory_async(PRIORITY_DEFAULT, null);
+const made = await directory.make_directory_async();
 ```
 
 The binding declares it as an overload of the C method, told apart by arity,
@@ -326,11 +326,60 @@ on C and LLVM under both providers with a handle held across a second
 The 4 returning a 64-bit integer need a `bigint` payload, a different
 question; the 15 with no bound `_finish` are the next to look at.
 
+**Signals, as GJS connects them.** A signal is a method of its class:
+
+```ts
+button.connect("clicked", (self) => { clicks++; });
+button.connect_after("clicked", () => { … });   // G_CONNECT_AFTER
+application.connect("activate", () => { … });   // GApplication's, on a GtkApplication
+```
+
+One overload per signal, typed by it: the handler's parameters are the
+signal's, `self` first. Each is `g_signal_connect_data` with the flags left
+out (`@ntsDefault connect_flags=0`, and `=1` for `connect_after`). They are
+methods only; the 419 free `gtk_button_connect_clicked`-style functions are
+gone. Checked in gtk-gir by `order=ab`: a `connect_after` handler connected
+first still runs after a plain one, where both connected plainly read `ba`.
+
+**What nobody sets, left out.** `@ntsDefault flags=0 cancellable=null` gives
+an optional parameter of a foreign function the value the compiler passes
+when the caller leaves it out: an integer for a C integer or boolean, checked
+against its range, `null` for a pointer that admits it. The binder writes it
+only where GLib itself names the "nothing" -- `0` for a bitfield's flags,
+`G_PRIORITY_DEFAULT` for an `io_priority`, `null` for a `GCancellable *` --
+and only for a run at the end of the parameter list: 1317 declarations. A
+Promise form takes the same as its wrapper's constant default parameters,
+which an `@ntsCall` method now fills itself (a default that is not a constant
+is refused: it would run after every written argument).
+
+```ts
+const info = await file.query_info_async("standard::type");   // was (…, 0 as c_uint, PRIORITY_DEFAULT, null)
+```
+
+**Strings reach C without a copy.** A `string` argument that is ASCII is lent
+as its own storage, which is NUL-terminated in place; anything else is
+transcoded to UTF-8 as before. 10M calls of a 40-byte argument: 69 -> 7 ns
+per call; a Latin-1 one, which still copies, unchanged.
+
+**The self-check asks for a declaration.** Each function the binder keeps is
+a `_Static_assert` that the headers declare it with the type the compiler
+will spell, so a GIR function in no header GIR names -- 71 of them, `g_access`
+in `glib/gstdio.h` -- is refused ("declared by none of the headers GIR
+names") instead of bound and failing in some program's build. One clang run,
+where it was a loop; Gtk's closure binds in 1.1-2.0 s.
+
+**Declined:** replacing `nts_view_unlend`, the empty call that keeps a
+`Uint8Array` alive across a C call under reference counting, with a HIR
+keep-alive op. It would be a new op in four backends to save one call per
+`CBytes` argument, and the call has the shape `nts_cstring_release` already
+has for the same reason.
+
 **Next in M3:**
 
-- Typed `connect`: `button.connect("clicked", handler)`.
+- Enums without `as c_uint`: `gtk_box_new(Orientation.VERTICAL, 4)`.
 - Construction and lifetime: `new Gtk.Button({ label })`, and a GObject
-  unreffed when the TypeScript value is released.
+  unreffed when the TypeScript value is released -- `Family::GObject` on the
+  foreign-slot release Apple landed (bb53d038).
 
 ## After M3
 
