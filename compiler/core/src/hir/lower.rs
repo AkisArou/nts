@@ -40920,6 +40920,8 @@ impl<'a> FuncBuilder<'a> {
                 let hstring = self.push(OpKind::NativeLoad { pointer: slot, index: first }, HirType::NativePointer(super::native::Pointee::Void), origin.clone());
                 self.runtime_call("nts_string_from_hstring", vec![hstring], HirType::Managed(ManagedType::String), origin.clone())
             }
+            // The slot is the record's storage, and so the value.
+            Some((slot, super::native::Written::Record)) => slot,
             Some((slot, super::native::Written::Bool)) => {
                 let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
                 let byte_type = HirType::Int { bits: 8, signed: false };

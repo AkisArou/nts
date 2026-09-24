@@ -411,6 +411,14 @@ pub enum Written {
     HString,
     /// A Windows Runtime `boolean`, one byte, read as `!= 0`.
     Bool,
+    /// A struct (`ByValue<T>`), written into the slot, which is the record's
+    /// storage and the value: the slot's rules are the result's, as a C
+    /// function's record result is in the local it was written into. So
+    /// `native_storage::check` refuses it returned, stored or captured (the
+    /// escape rule; probed: NTS2006 at the `return` and at the field store),
+    /// and inside a loop, since the slot is used past its own block -- which
+    /// every other result avoids by being read there (`confined`).
+    Record,
 }
 
 /// What an array crossing an Objective-C message holds, as Swift bridges
@@ -2311,6 +2319,10 @@ fn hresult_result(
         match declared.result {
             // A Windows Runtime `boolean` is one byte, 0 or 1.
             Type::Bool => (Type::Scalar(Scalar::UInt8), Written::Bool),
+            Type::Record(record) => {
+                by_value_record_is_passable(name, &record)?;
+                (Type::Record(record), Written::Record)
+            }
             result => (result, Written::Value),
         }
     };
@@ -2318,9 +2330,10 @@ fn hresult_result(
         Type::Void => None,
         Type::Pointer(pointee) => Some(Pointee::Pointer(Box::new(pointee))),
         Type::Scalar(scalar) => Some(Pointee::Scalar(scalar)),
+        Type::Record(record) => Some(Pointee::Record(record)),
         _ => {
             return Err(format!(
-                "foreign function `{name}` is `@ntsHresult` with a result written through a pointer as something other than a handle, a string or a C scalar"
+                "foreign function `{name}` is `@ntsHresult` with a result written through a pointer as something other than a handle, a string, a C scalar or a record"
             ));
         }
     };

@@ -226,3 +226,42 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
     assert!(refused.contains("IAsyncOperation.get_Completed\t`AsyncOperationCompletedHandler`, a delegate as a result"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
 }
+
+/// A struct is a `Struct` of its fields, tagged with the C name the compiler
+/// defines it by, and crosses by value: `ByValue<T>` where a method takes or
+/// answers one -- `BitmapBounds` sixteen bytes, `DateTime` eight, the two
+/// sizes Win64 passes differently, both run in `examples/interop/windows-winrt`.
+/// A method naming a class this binder refuses is refused with it, rather than
+/// written naming a type nothing declares.
+#[test]
+fn winrt_structs_cross_by_value() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-structs-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.Graphics.Imaging", "Windows.Globalization", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let imaging = std::fs::read_to_string(out.join("Windows.Graphics.Imaging.d.ts")).unwrap();
+    let foundation = std::fs::read_to_string(out.join("Windows.Foundation.d.ts")).unwrap();
+    let globalization = std::fs::read_to_string(out.join("Windows.Globalization.d.ts")).unwrap();
+    let refused = std::fs::read_to_string(out.join("Windows.Graphics.Imaging.refused.txt")).unwrap();
+    assert!(
+        imaging.contains("export type BitmapBounds = Struct<{ X: c_uint32; Y: c_uint32; Width: c_uint32; Height: c_uint32 }, \"Windows_Graphics_Imaging_BitmapBounds\">;"),
+        "{imaging}"
+    );
+    assert!(imaging.contains("put_Bounds(this: IBitmapTransform, value: ByValue<BitmapBounds>): void;"), "{imaging}");
+    assert!(imaging.contains("get_Bounds(this: IBitmapTransform): ByValue<BitmapBounds>;"), "{imaging}");
+    assert!(foundation.contains("export type DateTime = Struct<{ UniversalTime: c_int64 }, \"Windows_Foundation_DateTime\">;"), "{foundation}");
+    assert!(globalization.contains("SetDateTime(this: ICalendar, value: ByValue<DateTime>): void;"), "{globalization}");
+    assert!(!imaging.contains("IAsyncOperation<BitmapPropertySet>"), "a refused class is named:\n{imaging}");
+    assert!(refused.contains("BitmapPropertySet\ta runtime class whose default interface is generic"), "{refused}");
+    assert!(refused.contains("`BitmapPropertySet`, a runtime class whose default interface is generic"), "{refused}");
+    let _ = std::fs::remove_dir_all(&out);
+}

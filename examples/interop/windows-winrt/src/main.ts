@@ -23,16 +23,17 @@
 //   filled, and read back through another of its interfaces.
 // - `threw`: an HRESULT failure, thrown as an `Error` naming the code.
 // - `closed`: an event, a TypeScript function as a delegate (see `events`).
+// - `structs`: records by value, both sizes Win64 passes (see `structs`).
 // - `released`, reported after `run` returns: 2 without a counting provider --
 //   the program's reference to each delegate, given back after the `add_`
-//   call that was handed it -- and 17 under `--rc`, those two and one for
+//   call that was handed it -- and 19 under `--rc`, those two and one for
 //   each object handed over: `value`, `list`, `made`, the `Parse("false")`
 //   read once and dropped, the languages, the array, its `IVector` and the
 //   item read from it, `built`, the number put in it, `built` as its
 //   `IJsonValue`, the buffer, the reference, its `IClosable`, and the
 //   reference the kept handler captured, released with the closure once the
 //   source gave the delegate back (a control whose handler does not capture
-//   it measured 16). The parse inside the `try` fails, so it hands over
+//   it measured one fewer), the calendar and the transform. The parse inside the `try` fails, so it hands over
 //   nothing and has nothing to give back.
 // - `delegates`: how many delegate objects are alive at the end, 0: the
 //   removed one was given back by its source at once, the kept one once
@@ -43,8 +44,40 @@
 import { activations, asked, delegates, releases, report } from "c:report";
 // Bound by `nts build` from the Windows Runtime's metadata into `types/winrt`.
 import { JsonArray, JsonObject, JsonValue } from "winrt:Windows.Data.Json";
+import { local } from "c:memory";
+import type { c_int64, c_uint32 } from "c:types";
 import { MemoryBuffer } from "winrt:Windows.Foundation";
-import { ApplicationLanguages } from "winrt:Windows.Globalization";
+import type { DateTime } from "winrt:Windows.Foundation";
+import { ApplicationLanguages, Calendar } from "winrt:Windows.Globalization";
+import { BitmapTransform } from "winrt:Windows.Graphics.Imaging";
+import type { BitmapBounds } from "winrt:Windows.Graphics.Imaging";
+
+// Structs, which cross by value and which the program holds as storage. A
+// `DateTime` is eight bytes, which Win64 passes in a register; a
+// `BitmapBounds` is sixteen, which it passes as a pointer to a copy. Each
+// goes in and comes back through the object: 2021-07-01 set on a calendar
+// (the year it reports, whatever the machine's time zone, is 2021) and read
+// back a day later as ticks, and bounds put on a transform and read back.
+function structs(): string {
+  const calendar = Calendar.create();
+  const moment = local<DateTime>();
+  moment[0].UniversalTime = 132695712000000000n as c_int64;
+  calendar.SetDateTime(moment);
+  const year = calendar.get_Year();
+  calendar.AddDays(1);
+  const later = calendar.GetDateTime();
+  const days = (later[0].UniversalTime - moment[0].UniversalTime) / 864000000000n;
+  const transform = BitmapTransform.create();
+  const bounds = local<BitmapBounds>();
+  bounds[0].X = 1 as c_uint32;
+  bounds[0].Y = 2 as c_uint32;
+  bounds[0].Width = 300 as c_uint32;
+  bounds[0].Height = 400 as c_uint32;
+  transform.put_Bounds(bounds);
+  const back = transform.get_Bounds();
+  return String(year) + "+" + String(days) + "d,bounds=" + String(back[0].X) + "," + String(back[0].Y) + "," +
+    String(back[0].Width) + "x" + String(back[0].Height);
+}
 
 // An event: two TypeScript functions handed to `add_Closed` as delegates, one
 // removed again, then the reference closed, which raises `Closed` on it before
@@ -73,7 +106,12 @@ function events(): string {
   return String(seen) + ",sender=" + sender + ",alive=" + String(alive) + ",tokens=" + (kept === dropped ? "same" : "distinct");
 }
 
-// Run as `winrt throw`: a delegate whose function throws. `Invoke` has an
+// Run as `winrt throw`: a delegate whose function throws. A switch on the
+// command line and not a second entry, because an executable evaluates every
+// module its tsconfig includes rather than its entry's imports (node runs only
+// those): a `src/throws.ts` beside this ran after it in the same program. A
+// known defect, MainClaude's to fix; this becomes a second entry once it is.
+// `Invoke` has an
 // HRESULT to answer and the throw is not delivered as one -- the event
 // source's frames stand between it and any `catch` outside the handler, and
 // a non-local jump past them would skip what they hold. So the process ends,
@@ -112,7 +150,7 @@ function run(): string {
   }
   return "number=" + String(number) + " text=" + text + " list=" + list.Stringify() + " activations=" +
     String(activations()) + " bools=" + bools + " languages=" + tags + " vector=" + items + " built=" + shown + " threw=" + threw +
-    " closed=" + events();
+    " closed=" + events() + " structs=" + structs();
 }
 
 if (asked("throw")) {

@@ -192,7 +192,7 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
                 }
             }
             TypeCategory::Enum => Writer::enumeration(*def, &mut body),
-            TypeCategory::Struct => writer.refuse(name, "a struct"),
+            TypeCategory::Struct => writer.structure(*def, &mut body),
             TypeCategory::Delegate => writer.refuse(name, "a delegate"),
             TypeCategory::Attribute => {}
         }
@@ -205,7 +205,7 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
     let _ = writeln!(text, "// as the metadata names that slot; the compiler refuses the two disagreeing.");
     let _ = writeln!(text, "declare module \"winrt:{namespace}\" {{");
     let c_types: Vec<&str> =
-        writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || matches!(*brand, "CEnum" | "CNumber")).collect();
+        writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || matches!(*brand, "CEnum" | "CNumber" | "Struct" | "ByValue")).collect();
     if !c_types.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"c:types\";", c_types.join(", "));
     }
@@ -401,6 +401,69 @@ impl Writer<'_> {
         !spelled.is_empty() || !statics.is_empty()
     }
 
+    /// `Point`: a `Struct` of its fields in the metadata's order, tagged with
+    /// the C name the compiler defines it by -- nothing declares a Windows
+    /// Runtime struct in a C header -- with the namespace kept, as an
+    /// interface's tag keeps it. What a field cannot be yet refuses the struct.
+    fn structure(&mut self, def: TypeDef, body: &mut String) {
+        let name = def.name();
+        // One `int64`, spelled as the integer it is passed as (`winrt:types`).
+        if def.namespace() == "Windows.Foundation" && name == "EventRegistrationToken" {
+            return;
+        }
+        let mut fields = Vec::new();
+        for field in def.fields() {
+            match self.field(&field.ty()) {
+                Ok(spelled) => fields.push(format!("{}: {spelled}", field.name())),
+                Err(why) => {
+                    self.refuse(name, &format!("a struct with a field `{}` that is {why}", field.name()));
+                    return;
+                }
+            }
+        }
+        self.brands.insert("Struct");
+        let tag = format!("{}_{name}", self.namespace.replace('.', "_"));
+        let _ = writeln!(body, "  export type {name} = Struct<{{ {} }}, \"{tag}\">;", fields.join("; "));
+    }
+
+    /// A struct field's type: a C scalar, an enum, or another struct, held
+    /// inside the record rather than pointed at.
+    fn field(&mut self, ty: &Type) -> Result<String, String> {
+        let brand = |brand: &'static str, writer: &mut Self| {
+            writer.brands.insert(brand);
+            Ok(brand.to_owned())
+        };
+        match ty {
+            Type::I8 => brand("c_int8", self),
+            Type::U8 => brand("c_uint8", self),
+            Type::I16 => brand("c_int16", self),
+            Type::U16 | Type::Char => brand("c_uint16", self),
+            Type::I32 => brand("c_int32", self),
+            Type::U32 => brand("c_uint32", self),
+            Type::I64 => brand("c_int64", self),
+            Type::U64 => brand("c_uint64", self),
+            Type::F32 => brand("c_float", self),
+            Type::F64 => brand("c_double", self),
+            Type::ValueName(named) => {
+                let def = self.find(&named.namespace, &named.name).map_err(|_| format!("`{}`, not in the metadata read", named.name))?;
+                match def.category() {
+                    TypeCategory::Enum => {
+                        let underlying = if matches!(def.underlying_type(), Some(Type::U32)) { "c_uint32" } else { "c_int32" };
+                        let enumeration = self.named(&named.namespace, &named.name);
+                        self.brands.insert("CEnum");
+                        self.brands.insert(underlying);
+                        Ok(format!("CEnum<{enumeration}, {underlying}>"))
+                    }
+                    TypeCategory::Struct => Ok(self.named(&named.namespace, &named.name)),
+                    other => Err(format!("a {other:?}")),
+                }
+            }
+            Type::Bool => Err("a `boolean`".to_owned()),
+            Type::String => Err("a string".to_owned()),
+            other => Err(format!("{other:?}")),
+        }
+    }
+
     /// `JsonValueType`: a `const enum` of its members.
     fn enumeration(def: TypeDef, body: &mut String) {
         let _ = writeln!(body, "  export const enum {} {{", def.name());
@@ -504,6 +567,10 @@ impl Writer<'_> {
                 if def.category() == TypeCategory::Delegate {
                     return self.delegate(ty, def, argument);
                 }
+                // A class `class` refuses is not declared, so nothing may name it.
+                if def.category() == TypeCategory::Class && generic_default(def) {
+                    return Err(format!("`{}`, a runtime class whose default interface is generic", name.name));
+                }
                 let base = self.named(&name.namespace, generic_base(&name.name));
                 // An instantiation, `IVectorView<HString>`: each argument as
                 // it is inside the type, which is never `null`.
@@ -526,8 +593,15 @@ impl Writer<'_> {
                     self.brands.insert("EventRegistrationToken");
                     return Ok("EventRegistrationToken".to_owned());
                 }
+                // A struct crosses by value: the program holds its storage, a
+                // `Ptr` to it, and C copies it in or writes it out.
+                if def.category() == TypeCategory::Struct {
+                    let record = self.named(&name.namespace, &name.name);
+                    self.brands.insert("ByValue");
+                    return Ok(format!("ByValue<{record}>"));
+                }
                 if def.category() != TypeCategory::Enum {
-                    return Err(format!("`{}`, a struct", name.name));
+                    return Err(format!("`{}`, a {:?}", name.name, def.category()));
                 }
                 let enumeration = self.named(&name.namespace, &name.name);
                 let underlying = match def.underlying_type() {
@@ -661,6 +735,14 @@ impl Writer<'_> {
         self.references.entry(namespace.to_owned()).or_default().insert(name.to_owned());
         name.to_owned()
     }
+}
+
+/// Whether a runtime class's default interface is an instantiation, which
+/// `Writer::class` refuses -- and so every reference to the class with it.
+fn generic_default(def: TypeDef) -> bool {
+    def.interface_impls()
+        .find(|implemented| implemented.has_attribute("DefaultAttribute"))
+        .is_some_and(|implemented| matches!(implemented.interface(&[]), Type::ClassName(interface) if !interface.generics.is_empty()))
 }
 
 /// ``IVectorView`1`` as TypeScript names it: `IVectorView`.
