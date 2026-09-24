@@ -115,6 +115,26 @@
 //      correctness and coverage, and it is also the only one that costs
 //      something on every field read rather than at a boundary.
 //
+//      **And it cannot be narrowed, which was checked on 2026-09-24.** The
+//      tempting cheap variant is to make only those slots indirect that a class
+//      instance can actually inhabit -- leaving every object-literal-only
+//      interface reading at a fixed offset, so nothing that compiles today pays
+//      anything. That needs the complete set of classes structurally satisfying
+//      each interface, and record 0294 already ruled on it: *"**And it needs a
+//      set nobody has.** Reordering is only safe with the complete list of
+//      classes satisfying each interface."* Same set, same answer.
+//
+//      So the implementable rule is the broad one -- every interface-typed slot
+//      -- and its cost is **every field read through an interface**, including
+//      the ones that compile and are correct today. That is the number to
+//      produce before the design step, and it is not in any existing dump:
+//      `nts hir --prepared` keys field ops by slot index (`field.set %2.0`), so
+//      interface-ness is erased by the time it is printed. It wants a temporary
+//      counter in the lowering, keyed on the receiver's checker type being an
+//      interface, run over `runtime/node` and over the benchmark cases -- the
+//      second because a cost on every field read is a benchmark question and
+//      this project's first value is that it beats node on every row.
+//
 // **Base-first ordering, landed 04:47, is not one of these.** It fixes the
 // *other* layout problem — interface extending interface, where the shared
 // fields have identical representations and only position differed. That is
