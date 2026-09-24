@@ -78,6 +78,21 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     Some(Pointee::Opaque(super::Handle { tag, ancestors: tags, family, interface: interface.is_some() }))
 }
 
+/// The handle behind `Erased<H>` (or `Erased<H> | null`): what the program
+/// holds where C says `void *`. `None` for anything not erased.
+pub(crate) fn erased_handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
+    let ty = match &snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Union(parts) => match parts.as_slice() {
+            [a, b] if matches!(snapshot.types[a.0 as usize].kind, TypeKind::Null) => *b,
+            [a, b] if matches!(snapshot.types[b.0 as usize].kind, TypeKind::Null) => *a,
+            _ => return None,
+        },
+        _ => ty,
+    };
+    property(snapshot, ty, "___c_erased").filter(|p| p.optional && p.readonly)?;
+    handle(snapshot, ty)
+}
+
 /// `ByValue<T>`: the record `T` itself, where C takes or returns one by value.
 ///
 /// `Ptr<T> & { readonly __c_by_value?: true }`. The pointer is what TypeScript

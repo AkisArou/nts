@@ -69,6 +69,10 @@ pub(crate) struct Binding {
 pub(crate) struct Constructor {
     pub(crate) function: String,
     pub(crate) get_type: Option<String>,
+    /// For a class with construct-only properties, the properties the
+    /// constructor takes, in its order: `g_list_store_new(item_type)`, which
+    /// `new GListStore({ item_type })` calls with the literal's.
+    pub(crate) from: Vec<String>,
 }
 
 /// A property as the binding names it (`icon_name`), and the methods GIR
@@ -268,6 +272,21 @@ fn is_type_name(name: &str) -> bool {
     name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
+/// The properties a constructor takes, where the class has construct-only
+/// ones this constructor covers and every parameter is a property of the
+/// class by name -- `g_list_store_new(item_type)` for `item-type`. `None`
+/// otherwise.
+fn constructs_from(class: &Class, callable: &Callable) -> Option<Vec<String>> {
+    let name = |property: &str| identifier(&property.replace('-', "_"));
+    let construct_only: Vec<String> = class.properties.iter().filter(|p| p.construct_only).map(|p| name(&p.name)).collect();
+    if construct_only.is_empty() || callable.signature.parameters.is_empty() {
+        return None;
+    }
+    let taken: Vec<String> = callable.signature.parameters.iter().map(|p| identifier(&p.name)).collect();
+    let known = |taken: &String| class.properties.iter().any(|p| name(&p.name) == *taken);
+    (taken.iter().all(known) && construct_only.iter().all(|c| taken.contains(c))).then_some(taken)
+}
+
 /// The module name a namespace binds as: `c:Gtk-4.0`.
 #[must_use]
 pub(crate) fn module_of(namespace: &Namespace) -> String {
@@ -362,13 +381,20 @@ pub(crate) fn bind<'a>(
         match mapper.function(callable, owner) {
             Ok(function) => {
                 // `new GtkButton({ … })` calls the class's `new`, when it
-                // takes nothing.
+                // takes nothing; and a class with construct-only properties,
+                // the constructor that takes them.
                 if callable.kind == CallableKind::Constructor
-                    && callable.name == "new"
-                    && callable.signature.parameters.is_empty()
-                    && let Some(c_type) = owner.and_then(|class| class.c_type.clone())
+                    && let Some(class) = owner
+                    && let Some(c_type) = class.c_type.clone()
                 {
-                    mapper.binding.constructors.insert(c_type, Constructor { function: function.name.clone(), get_type: None });
+                    if let Some(from) = constructs_from(class, callable) {
+                        mapper.binding.constructors.insert(c_type, Constructor { function: function.name.clone(), get_type: None, from });
+                    } else if callable.name == "new"
+                        && callable.signature.parameters.is_empty()
+                        && !class.properties.iter().any(|p| p.construct_only)
+                    {
+                        mapper.binding.constructors.insert(c_type, Constructor { function: function.name.clone(), get_type: None, from: Vec::new() });
+                    }
                 }
                 mapper.binding.functions.push(function);
             }
@@ -526,7 +552,7 @@ impl<'a> Mapper<'a> {
                 if !class.is_abstract && self.counted(self.namespace, class) {
                     match self.construct(class, c_type) {
                         Ok(view) => {
-                            let constructor = Constructor { function: view.name.clone(), get_type: Some(get_type.clone()) };
+                            let constructor = Constructor { function: view.name.clone(), get_type: Some(get_type.clone()), from: Vec::new() };
                             self.binding.constructors.insert(c_type.clone(), constructor);
                             self.binding.functions.push(view);
                         }
@@ -1111,9 +1137,12 @@ impl<'a> Mapper<'a> {
         let base = base.trim_end_matches(['*', ' ']);
         // A handle C takes as `gpointer` -- `g_object_unref`'s parameter is
         // `GObject.Object` to GIR and `gpointer` to C. `Erased<GObject>`: any
-        // object for TypeScript, `void *` for the header.
+        // object for TypeScript, `void *` for the header. And one C returns
+        // as `gpointer` -- `gtk_list_item_get_item`, `g_list_model_get_item`
+        // -- which the program holds as the handle GIR names, counted, and
+        // owned where GIR says so. (A result is the one `Out` reaching here:
+        // `out` rewrites an out parameter's slot to `In`.)
         if c_type == "gpointer"
-            && param.direction == Direction::In
             && let Some(Resolved::Class(namespace, class)) = self.resolve(&qualified)
             && let Some(class_type) = class.c_type.clone()
         {
@@ -1121,7 +1150,12 @@ impl<'a> Mapper<'a> {
             self.binding.brands.insert("Erased");
             let ts = format!("Erased<{local}>");
             let ts = if param.nullable { format!("{ts} | null") } else { ts };
-            return Ok(Mapped { shape: Shape::Other, ts, c: Type::Pointer(Pointee::Void) });
+            let shape = if param.direction == Direction::In {
+                Shape::Other
+            } else {
+                Shape::Handle { class: local, nullable: param.nullable }
+            };
+            return Ok(Mapped { shape, ts, c: Type::Pointer(Pointee::Void) });
         }
         if depth == 1
             && let Some(namespace) = self.c_types.get(base).copied()

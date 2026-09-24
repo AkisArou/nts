@@ -214,7 +214,30 @@ fn construction(
         .collect();
     let extends = if bases.is_empty() { String::new() } else { format!(" extends {}", bases.join(", ")) };
     let _ = writeln!(out, "  export interface {name}Props{extends} {{");
+    // A root's one member, which nothing sets: an interface with none accepts
+    // any object literal, so `new GListStore({ item_type })` -- a property no
+    // setter writes -- typechecked and was refused only by lowering. With it
+    // every `…Props` in the chain has a member, and an unknown key is the
+    // checker's error.
+    if bases.is_empty() {
+        out.push_str("    readonly __c_props?: never;\n");
+    }
+    // What the constructor takes, required, at its parameter's type; and
+    // every other property a setter writes, optional.
+    let constructor = binding.constructors.get(name);
+    let from = constructor.map(|c| c.from.as_slice()).unwrap_or_default();
+    let taking = constructor.and_then(|c| binding.functions.iter().find(|f| f.name == c.function));
+    if let Some(taking) = taking {
+        for property in from {
+            if let Some((_, mapped)) = taking.parameters.iter().find(|(given, _)| given == property) {
+                let _ = writeln!(out, "    {property}: {};", mapped.ts);
+            }
+        }
+    }
     for property in binding.properties.get(name).into_iter().flatten() {
+        if from.contains(&property.name) {
+            continue;
+        }
         let Some(set) = settable(own, &property.name, property.setter.as_deref()) else { continue };
         let _ = writeln!(out, "    {}?: {};", property.name, set.parameters[1].1.ts);
     }
@@ -222,13 +245,15 @@ fn construction(
     let kept = |function: &str| binding.functions.iter().find(|f| f.name == function && f.throws.is_none());
     let Some(constructor) = binding.constructors.get(name) else { return };
     let tag = match (kept(&constructor.function), &constructor.get_type) {
+        (Some(_), None) if !constructor.from.is_empty() => format!("{}({})", constructor.function, constructor.from.join(", ")),
         (Some(new), None) if new.parameters.is_empty() => constructor.function.clone(),
         (Some(_), Some(get_type)) if kept(get_type).is_some() => format!("{} {get_type}", constructor.function),
         _ => return,
     };
     let _ = writeln!(
         out,
-        "  export const {name}: {{\n    /**\n     * @ntsConstruct {tag}\n     */\n    new (props?: {name}Props): {name};\n  }};",
+        "  export const {name}: {{\n    /**\n     * @ntsConstruct {tag}\n     */\n    new (props{optional}: {name}Props): {name};\n  }};",
+        optional = if constructor.from.is_empty() { "?" } else { "" },
     );
 }
 

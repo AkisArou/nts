@@ -2164,7 +2164,14 @@ struct Returned {
 fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&str>) -> Result<Returned, String> {
     let string = if abi.is_none() { returned_string(snapshot, ty) } else { None };
     let array = if abi.is_none() { returned_strings(snapshot, ty) } else { None };
-    let declared = declared_result(snapshot, name, ty)?;
+    // `Erased<H>`, as C's `void *` -- `gtk_list_item_get_item` returns the
+    // item GIR says is an object and C declares `gpointer` -- read back as the
+    // `H` the program holds, which is `Declared`'s conversion with `void *`
+    // for the declared type.
+    let declared = match schema::erased_handle(snapshot, ty) {
+        Some(handle) => Some((Type::Pointer(Pointee::Void), Type::Pointer(handle))),
+        None => declared_result(snapshot, name, ty)?,
+    };
     // Only an array of objects here: a `string[]` result is a C function's
     // NULL-terminated `char **` too, and is an `NSArray` only where the callee
     // turns out to be a message (`bridge_strings`).

@@ -10295,6 +10295,11 @@ fn decided_representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Dec
         }
         return Some(Decided::As(brand_representation(brand)));
     }
+    // `Erased<H>` is `void *` to C and an `H` to the program: what it holds
+    // is the handle, counted, and C's spelling is the boundary's.
+    if let Some(handle) = super::native::schema::erased_handle(snapshot, ty) {
+        return Some(Decided::As(HirType::NativePointer(handle)));
+    }
     if let Some(name) = super::native::pointer(snapshot, ty) {
         return Some(Decided::As(HirType::NativePointer(name)));
     }
@@ -25968,20 +25973,37 @@ impl<'a> FuncBuilder<'a> {
 
     fn lower_native_construct(&mut self, id: NodeId, construct: &str) -> Result<ValueId, Diagnostic> {
         let mut names = construct.split_whitespace();
-        let function = names.next().ok_or_else(|| self.unsupported(id, "@ntsConstruct naming no function"))?;
-        let arguments = names.map(|name| self.call_foreign_named(id, name, Vec::new())).collect::<Result<Vec<_>, _>>()?;
-        let handle = self.call_foreign_named(id, function, arguments)?;
-        // The properties, as the literal writes them.
+        let head = names.next().ok_or_else(|| self.unsupported(id, "@ntsConstruct naming no function"))?;
+        // `g_list_store_new(item_type)`: a class with construct-only
+        // properties is made by the constructor that takes them, each the
+        // literal's own; the rest are set as for any other.
+        let (function, from): (&str, Vec<&str>) = match head.split_once('(') {
+            Some((function, rest)) => {
+                (function, rest.trim_end_matches(')').split(',').map(str::trim).filter(|name| !name.is_empty()).collect())
+            }
+            None => (head, Vec::new()),
+        };
         let ty = self
             .snapshot
             .node_types
             .get(&id)
             .copied()
             .ok_or_else(|| self.unsupported(id, "a constructed handle with no type"))?;
-        let arguments = self.arguments_of(id);
-        let literal = match arguments.as_slice() {
-            [] => return Ok(handle),
-            [literal] if self.kind_of(*literal) == Some(syntax::OBJECT_LITERAL_EXPRESSION) => *literal,
+        // The literal's values first, in the order it writes them -- the
+        // literal is known here, so no object is built -- then the
+        // constructor, then a setter for each value it did not take.
+        let written: Vec<(String, ValueId, NodeId)> = match self.arguments_of(id).as_slice() {
+            [] => Vec::new(),
+            [literal] if self.kind_of(*literal) == Some(syntax::OBJECT_LITERAL_EXPRESSION) => {
+                let mut written = Vec::new();
+                for property in self.children(*literal) {
+                    // Read the literal's way: `{ label }` names the local,
+                    // and a computed name is refused.
+                    let (name, value) = self.property_parts(property, None)?;
+                    written.push((name, value, property));
+                }
+                written
+            }
             _ => {
                 return Err(self.unsupported(
                     id,
@@ -25989,18 +26011,23 @@ impl<'a> FuncBuilder<'a> {
                 ));
             }
         };
-        for property in self.children(literal) {
-            // What an object literal's property is, read the literal's way:
-            // `{ label }` names the local, and a computed name is refused.
-            let (name, value) = self.property_parts(property, None)?;
-            let setter = super::native::schema::property(self.snapshot, ty, &name)
+        let mut arguments = names.map(|name| self.call_foreign_named(id, name, Vec::new())).collect::<Result<Vec<_>, _>>()?;
+        for name in &from {
+            let (_, value, _) = written.iter().find(|(given, ..)| given == name).ok_or_else(|| {
+                self.unsupported(id, &format!("a handle constructed without `{name}`, which its constructor takes"))
+            })?;
+            arguments.push(*value);
+        }
+        let handle = self.call_foreign_named(id, function, arguments)?;
+        for (name, value, property) in written.iter().filter(|(name, ..)| !from.contains(&name.as_str())) {
+            let setter = super::native::schema::property(self.snapshot, ty, name)
                 .and_then(|record| record.declaration)
                 .and_then(|declaration| self.node(declaration).native.as_ref())
                 .and_then(|native| native.set.clone())
                 .ok_or_else(|| {
-                    self.unsupported(property, &format!("a constructed property `{name}` no @ntsSet names a method for"))
+                    self.unsupported(*property, &format!("a constructed property `{name}` no @ntsSet names a method for"))
                 })?;
-            self.lower_accessor_on(id, handle, ty, &setter, Some(value))?;
+            self.lower_accessor_on(id, handle, ty, &setter, Some(*value))?;
         }
         Ok(handle)
     }

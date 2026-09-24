@@ -71,6 +71,9 @@ pub(crate) struct Property {
     pub(crate) name: String,
     pub(crate) getter: Option<String>,
     pub(crate) setter: Option<String>,
+    /// `construct-only="1"` and writable: set when the object is made and
+    /// never after, so no setter writes it -- `GListStore`'s `item-type`.
+    pub(crate) construct_only: bool,
 }
 
 /// A signal: its name, and the handler's signature less the instance first

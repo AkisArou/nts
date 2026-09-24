@@ -169,6 +169,8 @@ fn properties(class: Node<'_, '_>) -> Vec<Property> {
                 name: attribute(property, "name")?.to_owned(),
                 getter: attribute(property, "getter").map(str::to_owned),
                 setter: attribute(property, "setter").map(str::to_owned),
+                construct_only: attribute(property, "construct-only") == Some("1")
+                    && attribute(property, "writable") == Some("1"),
             })
         })
         .collect()

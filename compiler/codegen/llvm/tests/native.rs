@@ -4027,3 +4027,82 @@ export async function suspended(): Promise<number> {
         prepared.diagnostics
     );
 }
+
+/// A handle C returns as `void *` -- `gtk_list_item_get_item`'s `gpointer`,
+/// which GIR says is an object -- declared `Erased<Thing>`: C's prototype
+/// says `void *`, the program holds a `Thing`, counted like any other. The
+/// fake counts a count on a freed or NULL object as an error; after fifty
+/// runs only the object the library keeps is alive.
+#[test]
+fn an_erased_result_is_the_handle_the_program_holds_on_both_backends() {
+    let source = r#"
+import type { Class, Erased, GObjectClass, c_int } from "c:types";
+type GTypeInstance = Class<"_GTypeInstance">;
+type GObject = GObjectClass<"_GObject", GTypeInstance>;
+type Thing = GObjectClass<"_Thing", GObject>;
+declare function thing_any(): Erased<Thing>;
+declare function instance_value(instance: GTypeInstance): c_int;
+declare function errors_seen(): c_int;
+declare function live_objects(): c_int;
+export function run(): number { const t = thing_any(); return (instance_value(t) as number) + (instance_value(thing_any()) as number); }
+export function errors(): number { return errors_seen() as number; }
+export function live(): number { return live_objects() as number; }
+"#;
+    let library = format!("{GOBJECT_LIBRARY}\nstatic Thing *any;\nvoid *thing_any(void) {{ if (any == NULL) any = thing_new_owned(4); return any; }}\n");
+    let caller = counted_caller(
+        r#"printf("%.0f", run());
+  for (int i = 0; i < 50; i++) run();
+  printf(" errors=%.0f live=%.0f", errors(), live());"#,
+        "",
+    );
+    let Some((c, outputs)) = run_on_both_backends("erased-result", source, hir::Provider::ReferenceCounting, &library, &caller) else {
+        return;
+    };
+    assert!(c.contains("void * thing_any(void)") || c.contains("void *thing_any(void)"), "an erased result is not `void *` in C");
+    for output in outputs {
+        assert_eq!(output, "8 errors=0 live=1 leak=0");
+    }
+}
+
+/// A class with a construct-only property is made by the constructor that
+/// takes it: `@ntsConstruct thing_sized(width)` calls `thing_sized` with the
+/// literal's `width`, then the setter of each other property it writes, in
+/// its order -- `new GListStore({ item_type })`.
+#[test]
+fn a_construct_only_property_is_its_constructors_argument_on_both_backends() {
+    let source = r#"
+import type { Class, c_int } from "c:types";
+interface ThingOwnMethods {
+    /** @ntsSymbol thing_set_label */
+    set_label(this: Thing, label: string): void;
+    /** @ntsSet set_label */
+    label: string;
+}
+type Thing = Class<"_Thing"> & ThingOwnMethods;
+declare function thing_sized(width: c_int): Thing;
+declare function thing_record(thing: Thing): c_int;
+declare const Sized: {
+    /** @ntsConstruct thing_sized(width) */
+    new (props: { width: c_int; label?: string }): Thing;
+};
+export function run(): number {
+    return thing_record(new Sized({ label: "ab", width: 7 as c_int })) as number;
+}
+"#;
+    let library = r"
+#include <string.h>
+typedef struct _Thing { int record; } Thing;
+static Thing thing;
+struct _Thing *thing_sized(int width) { thing.record = width; return &thing; }
+void thing_set_label(struct _Thing *t, const char *label) { t->record = t->record * 10 + (int)strlen(label); }
+int thing_record(struct _Thing *t) { return t->record; }
+";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((_, outputs)) = run_on_both_backends("construct-only", source, provider, library, &caller) else { return; };
+        // The constructor's 7, then the label's length: 72.
+        for output in outputs {
+            assert_eq!(output, expect("72", provider), "{provider:?}");
+        }
+    }
+}
