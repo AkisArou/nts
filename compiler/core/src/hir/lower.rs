@@ -27986,6 +27986,97 @@ impl<'a> FuncBuilder<'a> {
     /// already defined before the branch — two arms cannot produce the same
     /// [`ValueId`] otherwise — so it dominates the merge, and a parameter for it
     /// would be a copy carrying no information.
+    /// Whether this condition is decided before the program runs.
+    ///
+    /// Read off the **checker's** type and nothing else: `const x = false` has
+    /// type `false`, `if (false)` has type `false`, and an import of either
+    /// carries it across the module boundary. So the folding is already done and
+    /// this reads the answer.
+    ///
+    /// **`const x: boolean = false` answers `None`, and that is not a gap this
+    /// can close.** The annotation widens the type deliberately, so the checker
+    /// says `boolean` and the initialiser is the only remaining evidence.
+    /// Reading it would mean re-deciding a question the checker answered -- a
+    /// second derivation of "what is this constant", and the one place the two
+    /// could disagree is a program whose author widened the type *because* they
+    /// intend to change the value.
+    fn statically_decided(&self, condition: NodeId) -> Option<bool> {
+        let ty = self.snapshot.node_types.get(&condition)?;
+        match &self.snapshot.types.get(ty.0 as usize)?.kind {
+            TypeKind::Literal(LiteralValue::Boolean(known)) => Some(*known),
+            _ => None,
+        }
+    }
+
+    /// Whether skipping this statement would lose a binding that outlives it.
+    ///
+    /// `var` hoists to the function and a nested `function` declaration is a
+    /// hoisted binding, so either one inside a dead branch is still a name the
+    /// code after the `if` can read. Folding the branch away would leave that
+    /// name undeclared -- a refusal rather than a wrong answer, and a refusal
+    /// pointing at the use rather than at the fold.
+    ///
+    /// A whole-subtree walk, because the declaration may be nested in a block.
+    ///
+    /// **I could not produce a program that reaches this, and that is worth
+    /// writing down rather than leaving it to read as protection.** Under
+    /// `strict` -- which `tsconfig.fixtures.json` sets and every program here
+    /// inherits -- TypeScript rejects both shapes on its own: a `var` assigned
+    /// only in a dead branch is "used before being assigned", and a `function`
+    /// declaration in a block is block-scoped, so calling it outside is an error
+    /// before this compiler sees the file. It stays because what it guards is a
+    /// *language* rule and not a tsconfig setting: a project without `strict`
+    /// can write either, and the cost of the guard is one subtree walk per
+    /// folded branch.
+    fn hoists_out_of(&self, at: NodeId) -> bool {
+        match self.kind_of(at) {
+            Some(syntax::FUNCTION_DECLARATION) => return true,
+            // From the list's own flags, which is where `const`/`let`/`var`
+            // lives -- the same read `lower_variable_statement` makes.
+            Some(syntax::VARIABLE_DECLARATION_LIST)
+                if nts_semantic_schema::VariableKind::from_flags(self.node(at).flags)
+                    == nts_semantic_schema::VariableKind::Var =>
+            {
+                return true;
+            },
+            _ => {},
+        }
+        self.children(at).into_iter().any(|child| self.hoists_out_of(child))
+    }
+
+    /// Lower only the arm a decided condition reaches, and report having done it.
+    ///
+    /// **A branch nothing can enter is not lowered**, which is the difference
+    /// between a program that compiles and one that refuses for a construct it
+    /// never runs. `if (isDevelopment) { console.error(...) }` with
+    /// `isDevelopment` a `const` bound to `false` is React's development-warning
+    /// idiom, and in the React lane's runtime this one cause refused **86
+    /// functions** -- every one for a line a production build cannot reach.
+    /// Folding it is also the only way that code leaves the binary.
+    ///
+    /// `false` when the condition is not decided, or when the dead arm declares
+    /// something that outlives it -- see [`Self::hoists_out_of`]. The caller then
+    /// lowers the `if` as it always has.
+    fn folded_branch(
+        &mut self,
+        condition: NodeId,
+        then_branch: NodeId,
+        else_branch: Option<NodeId>,
+    ) -> Result<bool, Diagnostic> {
+        let Some(taken) = self.statically_decided(condition) else {
+            return Ok(false);
+        };
+        let live = if taken { Some(then_branch) } else { else_branch };
+        let dead = if taken { else_branch } else { Some(then_branch) };
+        if dead.is_some_and(|at| self.hoists_out_of(at)) {
+            return Ok(false);
+        }
+        if let Some(live) = live {
+            self.lower_statement(live)?;
+        }
+        Ok(true)
+    }
+
     fn lower_if(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         let children = self.children(id);
         let (condition, then_branch, else_branch) = match children.as_slice() {
@@ -27993,6 +28084,10 @@ impl<'a> FuncBuilder<'a> {
             [condition, then_branch, else_branch] => (*condition, *then_branch, Some(*else_branch)),
             _ => return Err(self.unsupported(id, "an `if` of unexpected shape")),
         };
+
+        if self.folded_branch(condition, then_branch, else_branch)? {
+            return Ok(());
+        }
 
         let origin = self.origin(id);
         let cond = self.lower_expression(condition)?;
