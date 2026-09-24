@@ -24,7 +24,9 @@ pub fn unrepresentable_constants(program: &Program, abi: NativeAbi) -> Vec<Diagn
                     .iter()
                     .enumerate()
                     .filter_map(|(at, arg)| {
-                        let Type::Scalar(scalar) = target.parameters.get(at).or(target.variadic.as_ref())? else {
+                        // `argument`, the one accessor that knows the layout:
+                        // parameters, a record result's destination, then the tail.
+                        let Type::Scalar(scalar) = target.argument(at)? else {
                             return None;
                         };
                         Some((*arg, scalar.representation(), scalar.abi(abi)))

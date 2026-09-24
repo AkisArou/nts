@@ -212,7 +212,11 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
     // again -- the checker telling us it rendered something we do not model --
     // and reading that as `void *` would turn every unmodelled type into a
     // pointer nobody declared.
-    if matches!(snapshot.types.get(element.0 as usize)?.kind, TypeKind::Unknown) {
+    //
+    // `Ptr<void>` is the same pointer, spelled the way C and every generated
+    // binding spell it (`LPVOID`, `void *`). Like `unknown`, `void` reaches
+    // here only by being written: nothing infers it as a pointee.
+    if matches!(snapshot.types.get(element.0 as usize)?.kind, TypeKind::Unknown | TypeKind::Void) {
         return Some(qualify(Pointee::Void));
     }
     if let Some(scalar) = scalar(snapshot, element) { return Some(qualify(Pointee::Scalar(scalar))); }

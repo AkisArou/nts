@@ -1228,9 +1228,27 @@ impl Type {
         if let Some(scalar) = scalar(snapshot, ty) {
             return Some(Type::Scalar(scalar));
         }
-        match snapshot.types.get(ty.0 as usize)?.kind {
+        match &snapshot.types.get(ty.0 as usize)?.kind {
             TypeKind::Boolean => Some(Type::Bool),
             TypeKind::Void => Some(Type::Void),
+            // `F | null`: the same function pointer, which C passes as NULL
+            // when the program passes `null`. A null pointer and a valid one
+            // share a representation, as they do for `Ptr<T> | null`.
+            //
+            // **`| null` is the API's claim, not a safety net.** It says the
+            // C function documents NULL as meaningful there -- `SetTimer`
+            // posting `WM_TIMER` instead of calling back -- and nothing here
+            // can check that. A function that calls a NULL callback anyway
+            // crashes, and that is its contract, not this binding's.
+            TypeKind::Union(parts) => {
+                let [a, b] = parts.as_slice() else { return None };
+                let is_null = |id: &TypeId| matches!(snapshot.types.get(id.0 as usize).map(|t| &t.kind), Some(TypeKind::Null));
+                let payload = if is_null(a) { b } else if is_null(b) { a } else { return None };
+                match abi_type(snapshot, *payload)? {
+                    function @ Type::FnPointer(_) => Some(function),
+                    _ => None,
+                }
+            }
             // An ordinary TypeScript function type, which at a C ABI
             // boundary can mean one thing: a function pointer. No wrapper
             // type is invented to say so, because there is nothing else it

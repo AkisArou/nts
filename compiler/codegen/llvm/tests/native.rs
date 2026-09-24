@@ -3033,3 +3033,41 @@ export function negative(): void { take_ulong(-1n as c_ulong); }
     assert!(refused(&nts_codegen_c::emit(&prepared.program, sysv).diagnostics).is_empty(), "SysV refused a constant that fits");
     assert!(refused(&nts_codegen_llvm::emit(&prepared.program, sysv).diagnostics).is_empty(), "SysV refused a constant that fits");
 }
+
+/// `F | null` passes NULL for `null` and a bridge for a function, and
+/// `Ptr<void>` is C's `void *`, on both backends.
+///
+/// C decides from what it received, so each answer is observed where it
+/// arrives. `apply_or` calls the callback when it is not NULL and returns its
+/// fallback otherwise; `is_null` reports whether the `void *` it got was
+/// NULL. Win32 has both shapes everywhere (`SetTimer`'s `TIMERPROC`, `LPVOID`),
+/// and both were refused.
+#[test]
+fn a_nullable_callback_and_a_void_pointer_cross_on_both_backends() {
+    let source = r#"
+import type { Ptr, c_int } from "c:types";
+declare function some_address(): Ptr<void>;
+declare function apply_or(f: ((n: c_int) => c_int) | null, x: c_int, fallback: c_int): c_int;
+declare function is_null(p: Ptr<void> | null): c_int;
+function triple(n: c_int): c_int { return (n * 3) as c_int; }
+export function withCallback(): number { return apply_or(triple, 5 as c_int, -1 as c_int); }
+export function withNull(): number { return apply_or(null, 5 as c_int, -1 as c_int); }
+export function nullPointer(): number { return is_null(null); }
+export function realPointer(): number { return is_null(some_address()); }
+"#;
+    let library = "#include <stddef.h>\n\
+        int apply_or(int (*f)(int), int x, int fallback) { return f ? f(x) : fallback; }\n\
+        int is_null(void *p) { return p == NULL; }\n\
+        static int somewhere;\n\
+        void *some_address(void) { return &somewhere; }\n";
+    let caller = counted_caller(
+        r#"printf("%.0f %.0f %.0f %.0f", withCallback(), withNull(), nullPointer(), realPointer());"#,
+        "withCallback(); withNull();",
+    );
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some((_, outputs)) = run_on_both_backends("nullable-callback", source, provider, library, &caller) else { return; };
+        for output in outputs {
+            assert_eq!(output, expect("15 -1 1 0", provider), "{provider:?}");
+        }
+    }
+}

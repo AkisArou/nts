@@ -39981,6 +39981,9 @@ impl<'a> FuncBuilder<'a> {
         value: ValueId,
         signature: &std::sync::Arc<super::native::FnPointer>,
     ) -> Result<ValueId, Diagnostic> {
+        if let Some(null) = self.null_function_pointer(at, value, signature) {
+            return Ok(null);
+        }
         if !matches!(self.values[value.0 as usize].kind, OpKind::ClosureStatic) {
             return Err(self.unsupported(
                 at,
@@ -39990,6 +39993,33 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(at);
         Ok(self.push(
             OpKind::NativeBridge { closure: value, signature: signature.clone(), context: false, once: false },
+            HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
+            origin,
+        ))
+    }
+
+    /// `null` where a C function pointer goes, as the NULL function pointer.
+    ///
+    /// Only the literal: a binding that says `F | null` has told us C accepts
+    /// NULL there. A value that is a function on one path and `null` on another
+    /// would need a bridge chosen at run time, which nothing builds, so it is
+    /// left to the refusal below, which names the function it wanted.
+    fn null_function_pointer(
+        &mut self,
+        at: NodeId,
+        value: ValueId,
+        signature: &std::sync::Arc<super::native::FnPointer>,
+    ) -> Option<ValueId> {
+        let mut source = value;
+        while let OpKind::Convert(inner) = self.values[source.0 as usize].kind {
+            source = inner;
+        }
+        if !matches!(self.values[source.0 as usize].kind, OpKind::ConstNull) {
+            return None;
+        }
+        let origin = self.origin(at);
+        Some(self.push(
+            OpKind::ConstNull,
             HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
             origin,
         ))
@@ -40010,6 +40040,10 @@ impl<'a> FuncBuilder<'a> {
                 continue;
             }
             let Some(argument) = args.get_mut(at) else { continue };
+            if let Some(null) = self.null_function_pointer(call, *argument, signature) {
+                *argument = null;
+                continue;
+            }
             if !matches!(self.values[argument.0 as usize].kind, OpKind::ClosureStatic) {
                 return Err(self.unsupported(
                     call,
