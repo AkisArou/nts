@@ -203,7 +203,7 @@ fn scalar_abi_matches_an_independently_compiled_c_library() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let c = emitted.writer.text();
     assert!(c.contains("double take_0(int);"));
@@ -362,7 +362,7 @@ fn conflicting_authored_abis_and_runtime_symbol_collisions_are_errors() {
             "{:?}",
             prepared.diagnostics
         );
-        let emitted = nts_codegen_c::emit(&prepared.program);
+        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(!emitted.is_complete(), "{name}: {}", emitted.writer.text());
         assert!(
             emitted
@@ -430,7 +430,7 @@ fn unrelated_declarations_cannot_supply_a_calls_abi() {
                     prepared.diagnostics
                 );
                 assert!(prepared.program.funcs.iter().any(|f| f.name == "run"));
-                let emitted = nts_codegen_c::emit(&prepared.program);
+                let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
                 assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
                 let text = emitted.writer.text().to_owned();
                 assert!(text.contains("native_value("));
@@ -474,7 +474,7 @@ fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let declarations = include_str!(concat!(
@@ -551,7 +551,7 @@ fn type_headers_preserve_brands_and_boolean_abi() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     assert!(
         emitted
@@ -646,7 +646,7 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         return;
     };
     assert!(agreeing.diagnostics.is_empty(), "{:?}", agreeing.diagnostics);
-    let emitted = nts_codegen_c::emit(&agreeing.program);
+    let emitted = nts_codegen_c::emit(&agreeing.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(
         emitted.diagnostics.is_empty(),
         "two declarations that agree are one ABI: {:?}",
@@ -657,7 +657,7 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         prepare_with_binding("abi-conflict", &binding("c_size_t"), &program("4n as c_size_t"))
             .unwrap();
     assert!(conflicting.diagnostics.is_empty(), "{:?}", conflicting.diagnostics);
-    let emitted = nts_codegen_c::emit(&conflicting.program);
+    let emitted = nts_codegen_c::emit(&conflicting.program, nts_core::hir::native::NativeAbi::SysV);
     let refusal = emitted
         .diagnostics
         .iter()
@@ -687,7 +687,7 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         "a conflicting ABI leaves a call declared wrongly: {}",
         refusal.message
     );
-    let declines = nts_codegen_c::emit(&agreeing.program);
+    let declines = nts_codegen_c::emit(&agreeing.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(
         declines
             .diagnostics
@@ -752,7 +752,7 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
     // while never executing a line of what it exists to check.
     let witness_of = |name: &str, field: &str| -> Option<(Utf8PathBuf, String)> {
         let (dir, prepared) = prepare_with_binding(name, &binding(field), PROGRAM)?;
-        let emitted = nts_codegen_c::emit(&prepared.program);
+        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(
             emitted.diagnostics.is_empty(),
             "{name}: {:?}",

@@ -1011,7 +1011,7 @@ impl std::fmt::Display for NotC {
 }
 
 pub fn compiles(program: &hir::Program, dir: &Utf8Path) -> Result<(), NotC> {
-    let emitted = nts_codegen_c::emit(program);
+    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::SysV);
     if !emitted.diagnostics.is_empty() {
         return Err(NotC::Refused(
             emitted
@@ -1363,7 +1363,7 @@ fn render(
         bail!("the JVM backend produces class files, which this driver cannot link");
     }
     Ok(if backend == Backend::Llvm {
-        let rendered = nts_codegen_llvm::emit(program);
+        let rendered = nts_codegen_llvm::emit(program, nts_core::hir::native::NativeAbi::SysV);
         if !rendered.diagnostics.is_empty() {
             for diagnostic in rendered.diagnostics.iter().take(3) {
                 eprintln!("  not rendered: {} {}", diagnostic.code, diagnostic.message);
@@ -1430,7 +1430,7 @@ fn run_native(
     // wrong lane -- a quiet trap with two backends and a certainty with three,
     // since `llvm` and `jvm` differ by one character.
     let backend = Backend::from_environment()?;
-    let emitted = nts_codegen_c::emit(program);
+    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::SysV);
     // The backend's own refusals, which used to be dropped on the floor here.
     // A function the emitter cannot write is *absent* from the C, and the
     // driver below still calls it -- so the run died at the linker with an

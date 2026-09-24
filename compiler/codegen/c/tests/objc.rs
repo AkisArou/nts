@@ -87,7 +87,7 @@ fn a_message_is_a_typed_cast_of_objc_msg_send() {
     assert!(program.objc, "a program that sends a message links libobjc");
     assert_eq!(program.native_frameworks, ["Foundation"]);
 
-    let emitted = nts_codegen_c::emit(program);
+    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     // The class method: the class object, the selector, and the C string, in
@@ -265,7 +265,7 @@ export function run(): number {
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let emitted = nts_codegen_c::emit(&prepared.program);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in [

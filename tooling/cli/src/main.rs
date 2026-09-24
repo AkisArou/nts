@@ -2842,7 +2842,7 @@ fn build(rest: &[String]) -> Result<()> {
             bail!("product `{name}` names no targets, so there is nothing to build it for")
         }
         let emission =
-            Emission { shape: Shape::of(&product.kind), product: Some((name, product)), linking: true, host: nts_codegen_c::LoopHost::Libuv };
+            Emission { shape: Shape::of(&product.kind), product: Some((name, product)), linking: true, host: nts_codegen_c::LoopHost::Libuv, abi: native_abi(host_os()) };
         for target in targets_for(name, product, only_os.as_deref())? {
             // **Before anything is written.** A kind whose packaging does not
             // exist would otherwise emit, compile, and produce a file of the
@@ -3411,7 +3411,7 @@ fn build_c(
     } else {
         nts_codegen_c::LoopHost::Libuv
     };
-    let wrote = emit_c(tsconfig, Some(out), Emission { host, ..emission })?;
+    let wrote = emit_c(tsconfig, Some(out), Emission { host, abi: native_abi(&target.os), ..emission })?;
     let artifact = link_c(name, product, out, &wrote, native, cache_dir, target, needs)?;
     println!("  {artifact}");
     // Named here as well as on stderr, because a build whose last line is
@@ -5248,6 +5248,15 @@ impl ObjectFormat {
     }
 }
 
+/// The C ABI a target's native code is laid out and called by. One answer per
+/// OS, beside `ObjectFormat::of`, and the only place the CLI decides it.
+fn native_abi(os: &str) -> nts_core::hir::native::NativeAbi {
+    match os {
+        "windows" => nts_core::hir::native::NativeAbi::Win64,
+        _ => nts_core::hir::native::NativeAbi::SysV,
+    }
+}
+
 /// The system libraries a static libuv needs on Windows: its `CMakeLists.txt`
 /// list for `WIN32`, which `tooling/windows/build-libuv.sh` builds from.
 const WINDOWS_UV_LIBS: [&str; 9] =
@@ -6165,6 +6174,9 @@ struct Emission<'a> {
     /// start that loop, so any other keeps libuv's own and links no
     /// CoreFoundation. See `LoopHost::for_program`.
     host: nts_codegen_c::LoopHost,
+    /// The target's C ABI, which decides a `long`'s width and every native
+    /// size and offset the backend emits. HIR does not know it.
+    abi: nts_core::hir::native::NativeAbi,
 }
 
 impl Emission<'_> {
@@ -6179,6 +6191,8 @@ impl Emission<'_> {
             } else {
                 nts_codegen_c::LoopHost::Libuv
             },
+            // No target was named, so the program is for this machine.
+            abi: native_abi(host_os()),
         }
     }
 }
@@ -6439,7 +6453,8 @@ fn emit_llvm(tsconfig: &Utf8Path, emission: Emission) -> Result<()> {
             diagnostic.message
         );
     }
-    let emitted = nts_codegen_llvm::emit(&prepared.program);
+    // `emit-llvm` names no target, so the program is for this machine.
+    let emitted = nts_codegen_llvm::emit(&prepared.program, native_abi(host_os()));
     for diagnostic in &emitted.diagnostics {
         eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
     }
@@ -6684,7 +6699,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
     }
     let program = prepared.program;
 
-    let emitted = nts_codegen_c::emit(&program);
+    let emitted = nts_codegen_c::emit(&program, emission.abi);
     for diagnostic in &emitted.diagnostics {
         eprintln!(
             "{}: {} {}",

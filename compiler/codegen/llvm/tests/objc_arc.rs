@@ -210,9 +210,9 @@ fn clang(dir: &Utf8Path, args: &[&str]) {
 fn made_and_alive(provider: hir::Provider, label: &str) -> Option<Vec<(String, u32, u32)>> {
     let (dir, prepared) = prepare(label, provider)?;
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let c = nts_codegen_c::emit(&prepared.program);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();

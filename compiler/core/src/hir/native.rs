@@ -995,6 +995,18 @@ impl Pointee {
         }
     }
 
+    /// `element_type`, as the slot C reads on `abi` rather than the value
+    /// HIR holds. They differ only where `Scalar::abi` does.
+    #[must_use]
+    pub fn abi_element_type(&self, abi: NativeAbi) -> Option<HirType> {
+        match self {
+            Self::Scalar(scalar) => Some(scalar.abi(abi)),
+            Self::Bits { unit, .. } => Some(unit.abi(abi)),
+            Self::Const(inner) | Self::Unaligned(inner) => inner.abi_element_type(abi),
+            other => other.element_type(),
+        }
+    }
+
     /// A loadable scalar or pointer slot. Aggregates are addressable, but a
     /// whole-aggregate load/copy is not an implicit pointer assignment.
     #[must_use]
@@ -1076,6 +1088,17 @@ impl Type {
             )
         ) || self.representation() == *actual
     }
+
+    /// The slot C passes this in on `abi`, where `representation` is the
+    /// value HIR holds. They differ only where `Scalar::abi` does.
+    #[must_use]
+    pub fn abi(&self, abi: NativeAbi) -> HirType {
+        match self {
+            Self::Scalar(scalar) => scalar.abi(abi),
+            other => other.representation(),
+        }
+    }
+
     #[must_use]
     pub fn representation(&self) -> HirType {
         match self {
@@ -2011,6 +2034,56 @@ impl Type {
     }
 }
 
+/// The C ABI a native target lays storage out and passes scalars by.
+///
+/// **A backend fact, not a lowering one.** HIR is shared by every target a
+/// program is built for, so lowering never asks which of these it is: a
+/// `c_long` is an exact `i64` value in HIR everywhere, and only the slot C
+/// reads it from is narrower on Windows. Each backend is handed its target's
+/// ABI and resolves sizes, offsets and the boundary conversions from it.
+///
+/// There is no default, and that is the point: every function taking one
+/// takes it as a required argument, so a caller cannot get the wrong ABI by
+/// forgetting to pass it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NativeAbi {
+    /// LP64 System V (Linux, macOS): `long` is 64 bits, and bit-fields use
+    /// the System V placement rules.
+    SysV,
+    /// Windows on `x86_64` and arm64, mingw and MSVC alike.
+    ///
+    /// **What this names is the data model, plus the MS x64 conventions this
+    /// compiler implements, and no more.** The data model is LLP64 on both
+    /// arches: `long` is 32 bits, while `long long`, pointers, `size_t` and
+    /// `ptrdiff_t` stay 64. Bit-fields use the MS placement rules, which this
+    /// compiler does not implement, so a record holding one has no layout.
+    ///
+    /// **Argument classification and aggregate passing are not in it**, and
+    /// they differ between the two arches: AAPCS64 on arm64 Windows, the MS
+    /// x64 convention on `x86_64`. Nothing here passes an aggregate by value
+    /// yet. The first rule that does must split this variant by arch, not take
+    /// `x86_64`'s answer for arm64 by reaching for `Win64`.
+    Win64,
+}
+
+impl NativeAbi {
+    /// **The ABI a target-independent stage bounds sizes with.** Lowering
+    /// refuses stack storage over a limit before it knows the target.
+    ///
+    /// `SysV` is an upper bound on every supported target's layout. Win64
+    /// narrows `long` from 8 bytes to 4 and relaxes its alignment from 8 to 4
+    /// at the same time, and narrowing a member together with its alignment
+    /// cannot enlarge the record holding it: `{char; long}` goes from size 16
+    /// and align 8 to size 8 and align 4. `long` is the only scalar that
+    /// differs between the two, and it only shrinks.
+    ///
+    /// **So the imprecision falls one way.** A limit checked at this ABI can
+    /// refuse a program that would have fit on Windows. It can never accept
+    /// one that does not. A surprising refusal on Windows near a limit is this
+    /// documented cost, not a bug.
+    pub const BOUND: Self = Self::SysV;
+}
+
 /// C scalars whose widths are fixed on the native targets supported by nts.
 /// Keep C spelling separate from the register type: it is the declaration's
 /// contract, not an integer width inferred from a particular argument.
@@ -2135,6 +2208,20 @@ impl Scalar {
 /// alias somebody happened to intern elsewhere. An arbitrary primitive/object
 /// intersection does not acquire a representation through this function.
 impl Scalar {
+    /// The slot C reads this scalar from, on `abi`.
+    ///
+    /// `representation` is the value's type in HIR, which is the same on every
+    /// target. This is the storage and register type, and it differs from the
+    /// representation only for `long` and `unsigned long` under Win64.
+    #[must_use]
+    pub const fn abi(self, abi: NativeAbi) -> HirType {
+        match (self, abi) {
+            (Self::Long, NativeAbi::Win64) => HirType::Int { bits: 32, signed: true },
+            (Self::ULong, NativeAbi::Win64) => HirType::Int { bits: 32, signed: false },
+            _ => self.representation(),
+        }
+    }
+
     /// Whether this C type has values a TypeScript `number` cannot hold.
     ///
     /// A `double` represents every integer up to 2^53 exactly and nothing

@@ -146,7 +146,7 @@ fn build_and_run_hosted(
         },
     )
     .expect("prepared HIR should verify");
-    let emitted = nts_codegen_c::emit(&prepared.program);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
 
     let dir = work_dir(example, harness, provider);
     let generated = dir.join("generated.c");

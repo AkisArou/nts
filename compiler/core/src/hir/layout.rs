@@ -26,6 +26,7 @@
 //! does not have to: such a field is emitted as an opaque pointer, and a
 //! pointer is a pointer whatever it points at.
 
+use crate::hir::native::NativeAbi;
 use crate::hir::{Field, HirType, ManagedType};
 
 /// How wide a value is, and what it must be aligned to.
@@ -189,13 +190,16 @@ pub fn place(fields: &[Field]) -> Option<Placement> {
 /// the whole is as large as the largest, rounded to the strictest alignment. A
 /// packed struct has no padding anywhere and an alignment of one, so its members
 /// are a running sum. Only the ordinary struct is `place_shapes`.
+///
+/// **On `abi`, which is required.** A `long` member is 8 bytes on `SysV` and 4
+/// on Win64, and every offset after it moves with it.
 #[must_use]
-pub fn native_place(layout: &crate::hir::native::Record) -> Option<Placement> {
+pub fn native_place(layout: &crate::hir::native::Record, abi: NativeAbi) -> Option<Placement> {
     use crate::hir::native::{Pointee, RecordKind};
     let shapes = layout
         .fields
         .iter()
-        .map(|field| native_shape(&field.ty))
+        .map(|field| native_shape(&field.ty, abi))
         .collect::<Option<Vec<_>>>()?;
     if layout.kind == RecordKind::Union {
         // A union of nothing has no alignment to round to, and C has no such
@@ -210,6 +214,12 @@ pub fn native_place(layout: &crate::hir::native::Record) -> Option<Placement> {
         });
     }
     if layout.fields.iter().any(|f| matches!(f.ty, Pointee::Bits { .. })) {
+        // MS bit-field placement (a new unit whenever the declared type
+        // changes, among other rules) is not `place_bit_fields`, which is
+        // System V's. No layout, rather than System V's answer on Windows.
+        if abi == NativeAbi::Win64 {
+            return None;
+        }
         return place_bit_fields(layout, &shapes);
     }
     if layout.packed {
@@ -227,11 +237,14 @@ pub fn native_place(layout: &crate::hir::native::Record) -> Option<Placement> {
     place_shapes(shapes.into_iter().map(Some), Shape { size: 0, align: 1 })
 }
 
+/// The size and alignment of native storage on `abi`, which is required: see
+/// `NativeAbi` for why there is no default, and `NativeAbi::BOUND` for the
+/// one a target-independent stage passes.
 #[must_use]
-pub fn native_shape(pointee: &crate::hir::native::Pointee) -> Option<Shape> {
+pub fn native_shape(pointee: &crate::hir::native::Pointee, abi: NativeAbi) -> Option<Shape> {
     use crate::hir::native::Pointee;
     match pointee {
-        Pointee::Record(layout) => native_place(layout).map(|p| Shape { size: p.size, align: p.align }),
+        Pointee::Record(layout) => native_place(layout, abi).map(|p| Shape { size: p.size, align: p.align }),
         Pointee::Opaque(_) => None,
         // `T[N]` is N elements with the element's alignment, and named here
         // rather than left to the catch-all below: `element_type` decays an
@@ -241,7 +254,7 @@ pub fn native_shape(pointee: &crate::hir::native::Pointee) -> Option<Shape> {
         // disagreed, and nothing would have caught at all had the assert not
         // existed.
         Pointee::Array { element, length } => {
-            let inner = native_shape(element)?;
+            let inner = native_shape(element, abi)?;
             Some(Shape {
                 size: inner.size.checked_mul(*length)?,
                 align: inner.align,
@@ -254,13 +267,13 @@ pub fn native_shape(pointee: &crate::hir::native::Pointee) -> Option<Shape> {
         // catch-all below, which would size it as the *pointer* its read decays
         // to and make every record holding one eight bytes too long.
         Pointee::Flexible(element) => {
-            Some(Shape { size: 0, align: native_shape(element)?.align })
+            Some(Shape { size: 0, align: native_shape(element, abi)?.align })
         }
         // The same bytes, with no alignment to promise. Naming it here rather
         // than letting it fall through matters for a packed record inside
         // another: the inner one's alignment must not raise the outer's.
-        Pointee::Unaligned(inner) => native_shape(inner).map(|s| Shape { size: s.size, align: 1 }),
-        _ => shape_of(&pointee.element_type()?),
+        Pointee::Unaligned(inner) => native_shape(inner, abi).map(|s| Shape { size: s.size, align: 1 }),
+        _ => shape_of(&pointee.abi_element_type(abi)?),
     }
 }
 

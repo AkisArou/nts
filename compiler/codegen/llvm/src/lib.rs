@@ -46,6 +46,7 @@ pub mod signatures;
 
 use std::fmt::Write as _;
 
+use nts_core::hir::native::NativeAbi;
 use nts_core::hir::{
     BinOp, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId,
 };
@@ -63,8 +64,13 @@ pub struct Emitted {
 /// A function this cannot render is *absent* and reported, exactly as the C
 /// backend does: a caller that still calls it fails at the linker with a name,
 /// which is a better failure than a body that silently means something else.
+///
+/// **For a target whose C ABI is `abi`**, which decides a `long`'s width and
+/// every native size and offset. HIR is the same for every target, so this is
+/// the first place the answer exists, and it is required so that no caller
+/// gets the host's by omission.
 #[must_use]
-pub fn emit(program: &Program) -> Emitted {
+pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     let mut text = String::new();
     let mut diagnostics = Vec::new();
     if let Err(why) = nts_codegen_common::native::layouts(program)
@@ -72,7 +78,11 @@ pub fn emit(program: &Program) -> Emitted {
     {
         return Emitted { text, diagnostics: vec![refuse(func, &why)] };
     }
-    let native = match native::declarations(program) {
+    let refusals = nts_codegen_common::abi::unrepresentable_constants(program, abi);
+    if !refusals.is_empty() {
+        return Emitted { text, diagnostics: refusals };
+    }
+    let native = match native::declarations(program, abi) {
         Ok(lines) => lines,
         Err(diagnostics) => return Emitted { text, diagnostics },
     };
@@ -171,7 +181,7 @@ pub fn emit(program: &Program) -> Emitted {
     }
     let mut bodies = String::new();
     for func in &program.funcs {
-        match function(program, func) {
+        match function(program, func, abi) {
             Ok(rendered) => {
                 let _ = writeln!(bodies, "\n{rendered}");
             }
@@ -194,7 +204,7 @@ pub fn emit(program: &Program) -> Emitted {
             }
         }
     }
-    match bridges(program) {
+    match bridges(program, abi) {
         Ok(text_for_bridges) => text.push_str(&text_for_bridges),
         Err(diagnostic) => diagnostics.push(diagnostic),
     }
@@ -1021,7 +1031,7 @@ fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) ->
 ///
 /// The receiver is the static closure's global. Only a closure with no captures
 /// is bridged, so one immortal instance is the whole of its state.
-fn bridges(program: &Program) -> Result<String, Diagnostic> {
+fn bridges(program: &Program, abi: NativeAbi) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut declared = false;
@@ -1069,7 +1079,7 @@ fn bridges(program: &Program) -> Result<String, Diagnostic> {
             };
             let mut body = String::new();
             for (at, foreign) in signature.parameters.iter().enumerate() {
-                let from = foreign.representation();
+                let from = foreign.abi(abi);
                 // The context, which became the receiver, and any argument C
                 // passes that the compiled function does not take.
                 if (*context && at == last) || at + 1 >= compiled.params.len() {
@@ -1087,7 +1097,7 @@ fn bridges(program: &Program) -> Result<String, Diagnostic> {
                     arguments.push(format!("{to_ty} %p{at}"));
                 }
             }
-            let want = signature.result.representation();
+            let want = signature.result.abi(abi);
             let have = compiled.return_type.clone();
             // `symbol` already carries the sigil; a second one is `@@f`, which
             // the assembler reports as "expected value token" pointing at the
@@ -1687,6 +1697,21 @@ fn ty_of(ty: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
 /// written on. This is the whole of the ABI story for the scalar slice --
 /// `NtsValue` by value is the part that is not, and it is refused rather than
 /// guessed at.
+/// The instruction that widens a narrower C slot to the value HIR holds, where
+/// the two differ: a `c_long` read under Win64 is an `i32` becoming an `i64`,
+/// by `sext` or `zext` as the slot's signedness says. `None` where they agree.
+///
+/// **One place decides it**, for returns, loads and callback arguments, so the
+/// three cannot disagree about sign extension.
+fn widening(slot: &HirType, value: &HirType) -> Option<&'static str> {
+    match (slot, value) {
+        (HirType::Int { bits: narrow, signed }, HirType::Int { bits: wide, .. }) if narrow < wide => {
+            Some(if *signed { "sext" } else { "zext" })
+        }
+        _ => None,
+    }
+}
+
 fn extension(ty: &HirType) -> &'static str {
     match ty {
         HirType::Int {
@@ -1737,7 +1762,7 @@ fn symbol(raw: &str) -> String {
     format!("@{}", nts_codegen_common::symbols::c_identifier(raw))
 }
 
-fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
+fn function(program: &Program, func: &Func, abi: NativeAbi) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let returns = ty_of(&func.return_type, func)?;
     let mut params = Vec::new();
@@ -1771,7 +1796,7 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     }
     prologue.extend(frame_storage(program, func));
     prologue.extend(native::stack_arguments(func));
-    prologue.extend(native_memory::stack_storage(func));
+    prologue.extend(native_memory::stack_storage(func, abi));
     let linkage = if func.exported { "" } else { "internal " };
     // `nounwind` on everything this compiler defines, for the reason above: the
     // language has no exceptions, so no frame here can be unwound through.
@@ -1806,7 +1831,7 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     for block in &func.blocks {
         let mut lines = Vec::new();
         for value in &block.ops {
-            let line = operation(program, func, *value)?;
+            let line = operation(program, func, *value, abi)?;
             if !line.is_empty() {
                 lines.push(line);
             }
@@ -1997,7 +2022,7 @@ fn field_at(
     Ok((offset, ty_of(ty, func)?))
 }
 
-fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, Diagnostic> {
+fn operation(program: &Program, func: &Func, value: ValueId, abi: NativeAbi) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = name(value);
     Ok(match &op.kind {
@@ -2029,7 +2054,7 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
         // The size is this target's, so it is resolved here and not in HIR,
         // and spelled as the constant it is.
         OpKind::NativeSizeOf(storage) => {
-            let shape = nts_core::hir::layout::native_shape(storage)
+            let shape = nts_core::hir::layout::native_shape(storage, abi)
                 .ok_or_else(|| refuse(func, "sizeof needs a complete native layout"))?;
             format!("{out} = fsub double {}, 0.0", float_literal(f64::from(shape.size)))
         }
@@ -2133,7 +2158,7 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
                 )
             }
         }
-        OpKind::Call { .. } => return call(func, value, &out),
+        OpKind::Call { .. } => return call(func, value, &out, abi),
         // A null pointer, which is what an absent reference is: the one spare
         // value a pointer has, and the whole reason `T | null` costs nothing.
         OpKind::ConstNull | OpKind::ConstUndefined if matches!(op.ty, HirType::Managed(_) | HirType::NativePointer(_)) => {
@@ -2183,7 +2208,7 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
                 }
             )
         }
-        _ => return memory_operation(program, func, value, &out),
+        _ => return memory_operation(program, func, value, &out, abi),
     })
 }
 
@@ -2869,7 +2894,7 @@ fn arguments(
 /// struct. And an argument whose type is not the one the runtime declares is
 /// converted -- C does that at the call and says nothing, which is how
 /// `nts_tag_name(uint32_t)` came to be handed a double.
-fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
+fn call(func: &Func, value: ValueId, out: &str, abi: NativeAbi) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     if let OpKind::Call {
         callee: Callee::Native(target),
@@ -2883,7 +2908,7 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
         if let Some(send) = &target.send {
             return objc::send(func, target, send, args, &op.ty, out);
         }
-        return native::call(func, target, args, &op.ty, out);
+        return native::call(func, target, args, &op.ty, out, abi);
     }
     let out = out.to_owned();
     Ok(match &op.kind {
@@ -3054,6 +3079,7 @@ fn memory_operation(
     func: &Func,
     value: ValueId,
     out: &str,
+    abi: NativeAbi,
 ) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
@@ -3088,7 +3114,7 @@ fn memory_operation(
         | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. }
         | OpKind::NativeBitLoad { .. } | OpKind::NativeBitStore { .. }
         | OpKind::NativeCopy { .. } => {
-            return native_memory::operation(func, &op.kind, &op.ty, &out);
+            return native_memory::operation(func, &op.kind, &op.ty, &out, abi);
         }
         OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
             return text_operation(func, value, &out);

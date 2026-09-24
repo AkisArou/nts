@@ -330,10 +330,20 @@ declare module "c:types" {
   // signed 64-bit storage normalizes like `BigInt.asIntN(64, x)` and unsigned
   // like `asUintN`, and one loaded back is the exact signed or unsigned value.
   //
-  // `long`, `size_t` and `ptrdiff_t` are 64 bits on this target, and giving
-  // `int64_t` exact values while its own underlying spelling rounded would be
-  // the worse of both. A target where `long` is 32 bits would move them back;
-  // LP64 is the model implemented here.
+  // `size_t` and `ptrdiff_t` are 64 bits on every supported target, and so is
+  // `long` except on Windows. Giving `int64_t` exact values while its own
+  // underlying spelling rounded would be the worse of both.
+  //
+  // **`c_long` and `c_ulong` on Windows.** Win64 is LLP64: C's `long` is 32
+  // bits there. The brand stays `bigint` on every target, so one source builds
+  // for all of them, and the value in TypeScript is the same exact integer.
+  // Only the slot C reads is narrower:
+  // - **A constant that does not fit** a 32-bit `long` (or `unsigned long`) is
+  //   refused when building for Windows, naming the value.
+  // - **A runtime value is truncated** modulo 2^32 at the boundary, as C
+  //   truncates: `2n ** 32n + 5n` arrives as `5`. A value C hands back is
+  //   sign-extended for `c_long` and zero-extended for `c_ulong`.
+  // Use `c_int64`/`c_uint64` for a value that needs 64 bits on every target.
   export type c_int64 = bigint & { readonly __c_int64: unique symbol };
   export type c_uint64 = bigint & { readonly __c_uint64: unique symbol };
   export type c_long = bigint & { readonly __c_long: unique symbol };

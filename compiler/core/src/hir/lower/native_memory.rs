@@ -304,7 +304,7 @@ impl FuncBuilder<'_> {
                 .ok_or_else(|| self.unsupported(id, "sizeof needs one explicit native type argument"))?;
             let ty = *self.snapshot.node_types.get(&type_node).ok_or_else(|| self.unsupported(id, "sizeof type has no semantic type"))?;
             let storage = crate::hir::native::storage(self.snapshot, ty).ok_or_else(|| self.unsupported(id, "sizeof needs a complete native storage type"))?;
-            if crate::hir::layout::native_shape(&storage).is_none() {
+            if crate::hir::layout::native_shape(&storage, crate::hir::native::NativeAbi::BOUND).is_none() {
                 return Err(self.unsupported(id, "sizeof needs a complete native layout"));
             }
             return Ok(self.push(OpKind::NativeSizeOf(storage), HirType::NUMBER, self.origin(id)));
@@ -339,7 +339,7 @@ impl FuncBuilder<'_> {
             if into.viewed() != from.viewed() {
                 return Err(self.unsupported(id, "a copy between two different native types"));
             }
-            if crate::hir::layout::native_shape(&into).is_none() {
+            if crate::hir::layout::native_shape(&into, crate::hir::native::NativeAbi::BOUND).is_none() {
                 return Err(self.unsupported(id, "a copy of a native type with no size"));
             }
             return Ok(self.push(
@@ -361,7 +361,10 @@ impl FuncBuilder<'_> {
         }
         let ty = self.type_of(id).ok_or_else(|| self.unsupported(id, "native allocation needs a complete native type argument"))?;
         let HirType::NativePointer(ref element) = ty else { return Err(self.unsupported(id, "native allocation must return a typed pointer")); };
-        let shape = crate::hir::layout::native_shape(element).ok_or_else(|| self.unsupported(id, "native allocation needs a complete element layout"))?;
+        // The stack limit below is checked before the target is known, so on
+        // the ABI that bounds every target's size: see `NativeAbi::BOUND` for
+        // which way that imprecision falls.
+        let shape = crate::hir::layout::native_shape(element, crate::hir::native::NativeAbi::BOUND).ok_or_else(|| self.unsupported(id, "native allocation needs a complete element layout"))?;
         let kind = if operation == "local" {
             let count = match args {
                 [] => 1.0,

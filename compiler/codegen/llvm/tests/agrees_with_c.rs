@@ -61,7 +61,7 @@ fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, Stri
     let prepared = hir::prepare(&snapshot).expect("prepared HIR should verify");
 
     // LLVM.
-    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(
         llvm.diagnostics.is_empty(),
         "the LLVM backend declined: {:?}",
@@ -73,7 +73,7 @@ fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, Stri
     std::fs::write(dir.join("program.ll"), &llvm.text).expect("write the IR");
 
     // C.
-    let c = nts_codegen_c::emit(&prepared.program);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.diagnostics.is_empty(), "the C backend declined");
     std::fs::write(dir.join("program.c"), c.writer.text()).expect("write the C");
     // Through `support_files` rather than by naming the header and the source:

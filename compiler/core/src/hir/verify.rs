@@ -627,12 +627,13 @@ fn compatible(found: &HirType, want: &HirType) -> bool {
 fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
     for op in func.blocks.iter().flat_map(|b| b.ops.iter().map(|v| func.value(*v))) {
         let valid = match &op.kind {
-            OpKind::NativeLocal { count } => *count > 0 && matches!(&op.ty, HirType::NativePointer(p) if super::layout::native_shape(p).is_some()),
+            OpKind::NativeLocal { count } => *count > 0 && matches!(&op.ty, HirType::NativePointer(p) if super::layout::native_shape(p, super::native::NativeAbi::BOUND).is_some()),
             OpKind::NativeMalloc { bytes } => func.value(*bytes).ty == HirType::NUMBER
-                && matches!(&op.ty, HirType::NativePointer(p) if super::layout::native_shape(p).is_some()),
+                && matches!(&op.ty, HirType::NativePointer(p) if super::layout::native_shape(p, super::native::NativeAbi::BOUND).is_some()),
             OpKind::NativeFree { pointer } => op.ty == HirType::Void && matches!(func.value(*pointer).ty, HirType::NativePointer(_)),
-            // Each backend resolves the size, so each may rely on a layout.
-            OpKind::NativeSizeOf(storage) => op.ty == HirType::NUMBER && super::layout::native_shape(storage).is_some(),
+            // A layout on the bounding ABI. A backend whose ABI has none
+            // (a bit-field record under Win64) refuses it by name.
+            OpKind::NativeSizeOf(storage) => op.ty == HirType::NUMBER && super::layout::native_shape(storage, super::native::NativeAbi::BOUND).is_some(),
             _ => true,
         };
         if !valid { problems.push(Invalid::OperandType { func: func.name.clone(), op: "native storage", found: op.ty.clone() }); }

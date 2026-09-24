@@ -22,7 +22,8 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, &'static str)> {
             for &value in &body.ops {
                 let OpKind::NativeLocal { count } = func.value(value).kind else { continue };
                 let size = match &func.value(value).ty {
-                    HirType::NativePointer(p) => super::layout::native_shape(p).and_then(|s| s.size.checked_mul(count)),
+                    // The budget is target-independent, so on `NativeAbi::BOUND`.
+                    HirType::NativePointer(p) => super::layout::native_shape(p, super::native::NativeAbi::BOUND).and_then(|s| s.size.checked_mul(count)),
                     _ => None,
                 };
                 let reason = if count == 0 || size.and_then(|size| bytes.checked_add(size)).is_none_or(|total| total > STACK_LIMIT) {

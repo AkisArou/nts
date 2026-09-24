@@ -39,7 +39,7 @@ fn emit(tsgo: &Utf8Path, name: &str, source: &str) -> (Utf8PathBuf, nts_codegen_
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
     for file in emitted.support_files() {

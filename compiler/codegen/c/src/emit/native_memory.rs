@@ -3,7 +3,7 @@
 use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name, Spelling};
 use nts_core::hir::Callee;
 use nts_codegen_common::symbols::bridge_name;
-use nts_core::hir::native::{Pointee, Type};
+use nts_core::hir::native::{NativeAbi, Pointee, Type};
 
 /// Whether this program needs a type one of its bindings' headers defines.
 ///
@@ -20,7 +20,7 @@ pub(super) fn needs_headers(program: &Program) -> bool {
         .is_ok_and(|layouts| layouts.structs.values().any(|layout| layout.from_header()))
 }
 
-pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<(), Diagnostic> {
+pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program, abi: NativeAbi) -> Result<(), Diagnostic> {
     let layouts = nts_codegen_common::native::layouts(program)
         .map_err(|why| Diagnostic::error("NTS2006", why, origin.location))?;
     for (name, kind) in &layouts.tags {
@@ -102,7 +102,7 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program)
         }
     }
     for layout in ordered {
-        let shape = nts_core::hir::layout::native_place(layout)
+        let shape = nts_core::hir::layout::native_place(layout, abi)
             .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
         // Asserted for every native struct, whether defined here or included.
         // For one of ours both sides come from a single field list and this
@@ -190,12 +190,12 @@ fn layout_asserts(
     }
 }
 
-pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str, origin: &Origin) -> Result<String, Diagnostic> {
+pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str, origin: &Origin, abi: NativeAbi) -> Result<String, Diagnostic> {
     Ok(match *kind {
         OpKind::NativeLocal { .. } => format!("memset({name}_storage, 0, sizeof {name}_storage); {name} = {name}_storage;"),
         OpKind::NativeMalloc { bytes } => {
             let HirType::NativePointer(element) = result else { return Err(Diagnostic::error("NTS2006", "malloc needs a native layout", origin.location)); };
-            let minimum = nts_core::hir::layout::native_shape(element).ok_or_else(|| Diagnostic::error("NTS2006", "malloc needs a native layout", origin.location))?.size;
+            let minimum = nts_core::hir::layout::native_shape(element, abi).ok_or_else(|| Diagnostic::error("NTS2006", "malloc needs a native layout", origin.location))?.size;
             let call = format!("nts_native_malloc({}, {minimum});", value_name(bytes));
             // Like an ordinary effectful call, an ignored allocation result
             // needs no C local. Keep the call even when its value is unused.
@@ -263,7 +263,7 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
                 // taken as its own type) or an anonymous record (which has no
                 // type at all). Same expression, two reasons.
                 _ if layout.packed || through_packing || layout.untagged() => {
-                    let shape = nts_core::hir::layout::native_place(layout).ok_or_else(|| {
+                    let shape = nts_core::hir::layout::native_place(layout, abi).ok_or_else(|| {
                         Diagnostic::error("NTS2006", "native struct has no C layout", origin.location)
                     })?;
                     let offset = shape.offsets.get(field_index as usize).ok_or_else(|| {
@@ -361,7 +361,7 @@ pub(super) fn helpers(writer: &mut CodeWriter, origin: &Origin, program: &Progra
 ///
 /// If a native layout has no C placement. `types` reports that first for the
 /// same layouts; this cannot be the only place it is noticed.
-pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<bool, Diagnostic> {
+pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Program, abi: NativeAbi) -> Result<bool, Diagnostic> {
     let layouts = nts_codegen_common::native::layouts(program)
         .map_err(|why| Diagnostic::error("NTS2006", why, origin.location))?;
     let mut wrote = false;
@@ -381,7 +381,7 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         // header to compare against. `program.c` still asserts their size and
         // offsets against its own definition, which is the only claim available.
         if !layout.from_header() || layout.untagged() { continue; }
-        let placed = nts_core::hir::layout::native_place(layout)
+        let placed = nts_core::hir::layout::native_place(layout, abi)
             .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
         // `__sigset_t`, not `struct __sigset_t`: a typedef-named record has
         // no tag to write, and every assertion below names the type.
