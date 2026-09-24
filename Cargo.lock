@@ -175,6 +175,7 @@ dependencies = [
  "nts-semantic-schema",
  "roxmltree",
  "rustc-hash",
+ "serde",
  "serde_json",
 ]
 
