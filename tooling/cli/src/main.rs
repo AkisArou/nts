@@ -5493,6 +5493,15 @@ fn link_c(
             }
         }
     }
+    // The Windows App SDK's bootstrapper, which the runtime loads from beside
+    // the program to find the SDK installed on the machine (`nts_winrt.c`).
+    if wrote.winappsdk {
+        let bootstrapper = bind_winmd::winrt::bootstrapper();
+        let beside = out.join(bind_winmd::winrt::BOOTSTRAPPER);
+        std::fs::copy(&bootstrapper, &beside).with_context(|| {
+            format!("copying {bootstrapper} beside `{name}`: fetch it with tooling/windows/fetch-winappsdk.sh")
+        })?;
+    }
     Ok(artifact)
 }
 
@@ -6938,6 +6947,9 @@ struct Wrote {
     /// frameworks its bindings name (one `-framework` each), at the link.
     objc: bool,
     frameworks: Vec<String>,
+    /// Whether the program activates a Windows App SDK class (`Microsoft.*`),
+    /// and so ships the SDK's bootstrapper beside itself.
+    winappsdk: bool,
     /// The C libraries its bindings name (`@ntsLibrary`), one `-l` each.
     libraries: Vec<String>,
     /// Whether the program has module-level code to evaluate.
@@ -7074,6 +7086,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
         write_llvm_program(&snapshot, &program, out, platform, &mut wrote)?;
     }
     wrote.objc = program.objc;
+    wrote.winappsdk = bind_winmd::winrt::uses_winappsdk(&program);
     wrote.frameworks.clone_from(&program.native_frameworks);
     wrote.libraries.clone_from(&program.native_libraries);
     Ok(wrote)

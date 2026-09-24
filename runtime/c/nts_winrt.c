@@ -290,6 +290,49 @@ static uint32_t nts_factory_key(NtsUnits class_name, NtsUnits iid,
  *
  * A class that cannot be activated ends the process naming it: the binding
  * said it exists, and there is no value to go on with. */
+/* The Windows App SDK's release a program is bound against: 1.8, as
+ * `MddBootstrapInitialize2` spells a major and minor version. The compiler's
+ * `WINAPPSDK_VERSION` says the same, and a test holds the two together. */
+#define NTS_WINAPPSDK_MAJOR_MINOR 0x00010008u
+
+/* The Windows App SDK's runtime, found for this process once: an unpackaged
+ * program asks the bootstrapper, which ships beside it, to add the installed
+ * framework package to its package graph -- after which `Microsoft.*` classes
+ * activate like any other. Loaded rather than linked, so a program that uses
+ * no `Microsoft.*` class carries no dependency on it, and one that does and
+ * lacks it is told which file is missing. */
+static void nts_winappsdk_bootstrap(void) {
+  static int bootstrapped;
+  if (bootstrapped) {
+    return;
+  }
+  bootstrapped = 1;
+  HMODULE bootstrapper =
+      LoadLibraryW(L"Microsoft.WindowsAppRuntime.Bootstrap.dll");
+  if (bootstrapper == 0) {
+    fprintf(stderr, "nts: Microsoft.WindowsAppRuntime.Bootstrap.dll is not "
+                    "beside the program, which uses the Windows App SDK\n");
+    abort();
+  }
+  typedef HRESULT(WINAPI * Initialize)(UINT32, PCWSTR, UINT64, int);
+  Initialize initialize = (Initialize)(void (*)(void))GetProcAddress(
+      bootstrapper, "MddBootstrapInitialize2");
+  /* Any installed 1.8 runtime (minimum version 0), and no dialog offering to
+   * install one: a program run unattended fails with the HRESULT instead. */
+  HRESULT hr = initialize == 0
+                   ? E_NOINTERFACE
+                   : initialize(NTS_WINAPPSDK_MAJOR_MINOR, L"", 0, 0);
+  if (FAILED(hr)) {
+    fprintf(stderr,
+            "nts: the Windows App SDK 1.8 runtime could not be found "
+            "(0x%08lx); install it from "
+            "https://aka.ms/windowsappsdk/1.8/latest/"
+            "windowsappruntimeinstall-x64.exe\n",
+            (unsigned long)hr);
+    abort();
+  }
+}
+
 static void *nts_factory(NtsUnits class_name, NtsUnits iid) {
   static NtsFactory *factories;
   uint16_t probe[256];
@@ -311,6 +354,12 @@ static void *nts_factory(NtsUnits class_name, NtsUnits iid) {
     }
   }
   nts_winrt_initialize();
+  static const uint16_t microsoft[] = {'M', 'i', 'c', 'r', 'o',
+                                       's', 'o', 'f', 't', '.'};
+  if (class_name.length > 10 &&
+      memcmp(class_name.units, microsoft, sizeof microsoft) == 0) {
+    nts_winappsdk_bootstrap();
+  }
   IID wanted;
   if (!nts_parse_iid(iid, &wanted)) {
     fprintf(stderr,

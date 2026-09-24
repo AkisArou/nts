@@ -41577,6 +41577,41 @@ impl<'a> FuncBuilder<'a> {
         Ok(Some(self.push(OpKind::NativeBlock { invoke, context, signature }, want, origin.clone())))
     }
 
+    /// What a declaration's `@ntsHresult` says, if it has one: plain, or
+    /// `composable`.
+    fn hresult_shape(&self, call: NodeId, declaration: Option<NodeId>) -> Result<Option<super::native::Hresult>, Diagnostic> {
+        let Some(shape) = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.hresult.as_deref()) else {
+            return Ok(None);
+        };
+        match shape.trim() {
+            "" => Ok(Some(super::native::Hresult::Plain)),
+            "composable" => Ok(Some(super::native::Hresult::Composable)),
+            _ => Err(self.unsupported(call, "@ntsHresult with a shape other than `composable`")),
+        }
+    }
+
+    /// The slots an `@ntsHresult` call adds after the declared arguments: the
+    /// result, and a composable factory's outer and inner objects.
+    fn hresult_slot(&mut self, role: &super::native::Role, want: HirType, lent: &mut Vec<Lent>, origin: &Origin) -> ValueId {
+        match role {
+            // Where C writes the result: a zeroed local, read by
+            // `finish_hresult_call` once the HRESULT says it was written.
+            super::native::Role::Result { written } => {
+                let slot = self.push(OpKind::NativeLocal { count: 1 }, want, origin.clone());
+                lent.push(Lent::Result { slot, written: *written });
+                slot
+            }
+            // No outer object: the class is made as itself.
+            super::native::Role::Outer => self.push(OpKind::ConstNull, want, origin.clone()),
+            // The inner object, given back after the call.
+            _ => {
+                let slot = self.push(OpKind::NativeLocal { count: 1 }, want, origin.clone());
+                lent.push(Lent::Inner { slot });
+                slot
+            }
+        }
+    }
+
     /// A closure as a Windows Runtime delegate: a COM object made for the call
     /// (`nts_com_delegate`) whose `Invoke` is the adapter for `signature`, and
     /// which holds the bridge into the closure's body and the closure, lent
@@ -41878,20 +41913,8 @@ impl<'a> FuncBuilder<'a> {
                     let Some(array) = argument else { continue };
                     c_args.push(self.ns_array_of(id, array, &element, &origin)?);
                 }
-                // Where C writes the result (`@ntsHresult`): a zeroed local,
-                // read by `finish_call` once the HRESULT says it was written.
-                Role::Result { written } => {
-                    let slot = self.push(OpKind::NativeLocal { count: 1 }, target.parameters[at].representation(), origin.clone());
-                    lent.push(Lent::Result { slot, written });
-                    c_args.push(slot);
-                }
-                // A composable factory's outer object, none, and its inner
-                // one, given back after the call (`Role::Outer`, `Role::Inner`).
-                Role::Outer => c_args.push(self.push(OpKind::ConstNull, target.parameters[at].representation(), origin.clone())),
-                Role::Inner => {
-                    let slot = self.push(OpKind::NativeLocal { count: 1 }, target.parameters[at].representation(), origin.clone());
-                    lent.push(Lent::Inner { slot });
-                    c_args.push(slot);
+                Role::Result { .. } | Role::Outer | Role::Inner => {
+                    c_args.push(self.hresult_slot(&role, target.parameters[at].representation(), &mut lent, &origin));
                 }
                 Role::String(encoding) => {
                     let Some(string) = argument else { continue };
@@ -42135,14 +42158,7 @@ impl<'a> FuncBuilder<'a> {
         let selector =
             selector.or_else(|| declaration.and_then(|decl| self.node(decl).native.as_ref().and_then(|n| n.selector.clone())));
         let (throws, hidden) = split_hidden_throws(throws, selector.is_some(), signature);
-        let hresult = match declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.hresult.as_deref()) {
-            None => None,
-            Some(shape) => match shape.trim() {
-                "" => Some(super::native::Hresult::Plain),
-                "composable" => Some(super::native::Hresult::Composable),
-                _ => return Err(self.unsupported(call, "@ntsHresult with a shape other than `composable`")),
-            },
-        };
+        let hresult = self.hresult_shape(call, declaration)?;
         let mut native = super::native::Function::from_signature(
             self.snapshot,
             name,

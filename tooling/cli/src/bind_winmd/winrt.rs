@@ -34,13 +34,68 @@ use windows_metadata::{Type, Value};
 /// `Windows.*`). A released version, unlike the Win32 package.
 pub(crate) const WINRT_METADATA_VERSION: &str = "10.0.28000.2705";
 
-/// Where `tooling/windows/fetch-winrt-metadata.sh` puts the metadata: a
-/// directory of contract `.winmd`s.
-pub(crate) fn default_metadata() -> Utf8PathBuf {
-    if let Ok(path) = std::env::var("NTS_WINRT_METADATA") {
-        return Utf8PathBuf::from(path);
+/// The Windows App SDK release whose metadata `Microsoft.*` is bound from,
+/// and whose runtime a program using it bootstraps (`MddBootstrapInitialize2`
+/// for its major and minor version): `WinUI` 3 and what it stands on.
+pub(crate) const WINAPPSDK_VERSION: &str = "1.8.260804001";
+
+/// The packages of that release read, as `id=version`: the metadata of
+/// `Microsoft.Windows.*` and the bootstrap DLL (`Foundation`), `WinUI`'s
+/// (`WinUI`), and `Microsoft.UI`'s windowing and dispatching
+/// (`InteractiveExperiences`). The metapackage names these exact versions.
+/// `tooling/windows/fetch-winappsdk.sh` reads this line.
+pub(crate) const WINAPPSDK_PACKAGES: &str = "foundation=1.8.260803002 winui=1.8.260803003 interactiveexperiences=1.8.260708001";
+
+/// The directories of `.winmd`s bound from: the Windows SDK's contracts, which
+/// `tooling/windows/fetch-winrt-metadata.sh` puts there, and the Windows App
+/// SDK's once `tooling/windows/fetch-winappsdk.sh` has. `NTS_WINRT_METADATA`
+/// names them instead, as a path list.
+pub(crate) fn default_metadata() -> Vec<Utf8PathBuf> {
+    if let Some(paths) = std::env::var_os("NTS_WINRT_METADATA") {
+        return std::env::split_paths(&paths).filter_map(|path| Utf8PathBuf::from_path_buf(path).ok()).collect();
     }
-    crate::windows_root().join("metadata").join(format!("winrt-{WINRT_METADATA_VERSION}"))
+    let mut directories = vec![crate::windows_root().join("metadata").join(format!("winrt-{WINRT_METADATA_VERSION}"))];
+    let sdk = winappsdk();
+    if sdk.is_dir() {
+        directories.push(sdk);
+    }
+    directories
+}
+
+/// Where `tooling/windows/fetch-winappsdk.sh` puts the Windows App SDK: its
+/// `.winmd`s, and `native/` holding the bootstrap DLL a program ships beside
+/// itself.
+pub(crate) fn winappsdk() -> Utf8PathBuf {
+    crate::windows_root().join("metadata").join(format!("winappsdk-{WINAPPSDK_VERSION}"))
+}
+
+/// The Windows App SDK's bootstrapper: what an unpackaged program loads to
+/// find the SDK's runtime, shipped beside it.
+pub(crate) const BOOTSTRAPPER: &str = "Microsoft.WindowsAppRuntime.Bootstrap.dll";
+
+/// Where `tooling/windows/fetch-winappsdk.sh` put the bootstrapper.
+pub(crate) fn bootstrapper() -> Utf8PathBuf {
+    winappsdk().join("native").join(BOOTSTRAPPER)
+}
+
+/// Whether `program` activates a Windows App SDK class -- a `Microsoft.*`
+/// class name reaching the runtime's factory lookup -- and so needs the
+/// bootstrapper beside it. Read from the calls, so a program that only
+/// imports the SDK's types ships nothing.
+pub(crate) fn uses_winappsdk(program: &nts_core::hir::Program) -> bool {
+    use nts_core::hir::{Callee, OpKind};
+    program.funcs.iter().any(|func| {
+        func.values.iter().any(|op| match &op.kind {
+            OpKind::Call { callee: Callee::External(name), args, .. }
+                if matches!(name.as_str(), "nts_winrt_factory" | "nts_winrt_activate") =>
+            {
+                args.first().is_some_and(|class| {
+                    matches!(&func.values[class.0 as usize].kind, OpKind::ConstString(text) if text.starts_with("Microsoft."))
+                })
+            }
+            _ => false,
+        })
+    })
 }
 
 /// Whether a namespace is the Windows Runtime's rather than Win32's.
@@ -50,33 +105,40 @@ pub(crate) fn is_winrt(namespace: &str) -> bool {
     (namespace.starts_with("Windows.") && !namespace.starts_with("Windows.Win32.")) || namespace.starts_with("Microsoft.")
 }
 
-/// Every contract `.winmd` in `directory`, as one index.
-pub(crate) fn index(directory: &Utf8Path) -> Result<&'static Index> {
+/// Every `.winmd` in `directories`, as one index.
+pub(crate) fn index(directories: &[Utf8PathBuf]) -> Result<&'static Index> {
     let mut files = Vec::new();
-    let entries = std::fs::read_dir(directory).with_context(|| {
-        format!("reading {directory}: fetch it with tooling/windows/fetch-winrt-metadata.sh")
-    })?;
-    for entry in entries {
-        let path = entry?.path();
-        if path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("winmd")) {
-            files.push(File::read(&path).with_context(|| format!("reading {}", path.display()))?);
+    for directory in directories {
+        let entries = std::fs::read_dir(directory).with_context(|| {
+            format!("reading {directory}: fetch it with tooling/windows/fetch-winrt-metadata.sh")
+        })?;
+        for entry in entries {
+            let path = entry?.path();
+            if path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("winmd")) {
+                files.push(File::read(&path).with_context(|| format!("reading {}", path.display()))?);
+            }
         }
     }
-    anyhow::ensure!(!files.is_empty(), "no .winmd in {directory}: fetch it with tooling/windows/fetch-winrt-metadata.sh");
+    anyhow::ensure!(!files.is_empty(), "no .winmd in {directories:?}: fetch it with tooling/windows/fetch-winrt-metadata.sh");
     Ok(Index::new(files).leak())
 }
 
 /// Bind `namespaces` into `out`: `<namespace>.d.ts`, and beside it
 /// `<namespace>.refused.txt` naming each item not bound and why. One summary
 /// line each.
-pub(crate) fn write(namespaces: &[String], metadata: &Utf8Path, out: &Utf8Path, command: &str) -> Result<Vec<String>> {
+pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8Path, command: &str) -> Result<Vec<String>> {
     let index = index(metadata)?;
     std::fs::create_dir_all(out).with_context(|| format!("creating {out}"))?;
     let mut lines = Vec::new();
     for namespace in namespaces {
+        let fetch = if namespace.starts_with("Microsoft.") {
+            " -- it is the Windows App SDK's, which tooling/windows/fetch-winappsdk.sh fetches"
+        } else {
+            ""
+        };
         anyhow::ensure!(
             index.contains_namespace(namespace),
-            "the Windows Runtime metadata in {metadata} has no namespace `{namespace}`"
+            "the Windows Runtime metadata in {metadata:?} has no namespace `{namespace}`{fetch}"
         );
     }
     // **What the namespaces asked for reach, and no more.** A namespace asked
@@ -135,9 +197,19 @@ pub(crate) fn namespace_of(module: &str) -> Option<String> {
     module.strip_prefix("winrt:").filter(|namespace| is_winrt(namespace)).map(str::to_owned)
 }
 
-/// The file whose fingerprint stands for the metadata in a stamp.
-pub(crate) fn metadata_marker(directory: &Utf8Path) -> Utf8PathBuf {
-    directory.join("Windows.Foundation.UniversalApiContract.winmd")
+/// The files whose fingerprints stand for the metadata in a stamp: one per
+/// directory, the contract or package that holds most of it.
+pub(crate) fn metadata_markers(directories: &[Utf8PathBuf]) -> Vec<Utf8PathBuf> {
+    directories
+        .iter()
+        .map(|directory| {
+            ["Windows.Foundation.UniversalApiContract.winmd", "Microsoft.UI.Xaml.winmd"]
+                .iter()
+                .map(|marker| directory.join(marker))
+                .find(|marker| marker.is_file())
+                .unwrap_or_else(|| directory.clone())
+        })
+        .collect()
 }
 
 /// One bound namespace: the module text, what was refused and why, and the
@@ -163,6 +235,7 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
         namespace,
         brands: BTreeSet::new(),
         references: std::collections::BTreeMap::new(),
+        spelled: std::collections::BTreeMap::new(),
         generics: Vec::new(),
         refused: Vec::new(),
         methods: 0,
@@ -201,7 +274,11 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
     }
     let mut text = String::new();
     let _ = writeln!(text, "// Generated by `{command}` from the Windows Runtime's metadata");
-    let _ = writeln!(text, "// (Microsoft.Windows.SDK.Contracts {WINRT_METADATA_VERSION}). Edit the command, not this file.");
+    if namespace.starts_with("Microsoft.") {
+        let _ = writeln!(text, "// (Microsoft.WindowsAppSDK {WINAPPSDK_VERSION}: {WINAPPSDK_PACKAGES}). Edit the command, not this file.");
+    } else {
+        let _ = writeln!(text, "// (Microsoft.Windows.SDK.Contracts {WINRT_METADATA_VERSION}). Edit the command, not this file.");
+    }
     let _ = writeln!(text, "//");
     let _ = writeln!(text, "// Each method is the slot of its interface's table the metadata gives it, named");
     let _ = writeln!(text, "// as the metadata names that slot; the compiler refuses the two disagreeing.");
@@ -216,7 +293,13 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
         let _ = writeln!(text, "  import type {{ {} }} from \"winrt:types\";", winrt.join(", "));
     }
     for (other, names) in writer.references.iter().filter(|(other, _)| other.as_str() != namespace) {
-        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        let names: Vec<String> = names
+            .iter()
+            .map(|name| match writer.spelled.get(&(other.clone(), name.clone())) {
+                Some(spelled) if spelled != name => format!("{name} as {spelled}"),
+                _ => name.clone(),
+            })
+            .collect();
         let _ = writeln!(text, "  import type {{ {} }} from \"winrt:{other}\";", names.join(", "));
     }
     text.push('\n');
@@ -238,6 +321,12 @@ struct Writer<'a> {
     namespace: &'a str,
     brands: BTreeSet<&'static str>,
     references: std::collections::BTreeMap<String, BTreeSet<String>>,
+    /// How this module spells each type another namespace declares: its own
+    /// name, or -- where that name is also declared here or imported from a
+    /// third namespace -- the namespace's path in front of it, imported `as`
+    /// that. Decided at the first reference and kept, so every reference to
+    /// one type reads the same.
+    spelled: std::collections::BTreeMap<(String, String), String>,
     /// The type parameters of the generic interface being written, by name.
     generics: Vec<String>,
     refused: Vec<(String, String)>,
@@ -433,6 +522,10 @@ impl Writer<'_> {
         if def.fields().next().is_none() {
             return;
         }
+        if let Some(why) = self.struct_refusal(def, 0) {
+            self.refuse(name, &why);
+            return;
+        }
         let mut fields = Vec::new();
         for field in def.fields() {
             match self.field(&field.ty()) {
@@ -446,6 +539,33 @@ impl Writer<'_> {
         self.brands.insert("Struct");
         let tag = format!("{}_{name}", self.namespace.replace('.', "_"));
         let _ = writeln!(body, "  export type {name} = Struct<{{ {} }}, \"{tag}\">;", fields.join("; "));
+    }
+
+    /// Why `structure` refuses a struct, if it does: a field that is not a C
+    /// scalar, an enum, or a struct it does not refuse. Asked of every
+    /// reference too, so that nothing names a struct that is not declared.
+    fn struct_refusal(&self, def: TypeDef, depth: u32) -> Option<String> {
+        for field in def.fields() {
+            let ty = field.ty();
+            let why = match &ty {
+                Type::I8 | Type::U8 | Type::I16 | Type::U16 | Type::Char | Type::I32 | Type::U32 | Type::I64 | Type::U64 | Type::F32 | Type::F64 => None,
+                Type::ValueName(named) => match self.find(&named.namespace, &named.name) {
+                    Ok(inner) if inner.category() == TypeCategory::Enum => None,
+                    // A struct holds its structs, so the graph has no cycle;
+                    // the bound is against a malformed file.
+                    Ok(inner) if inner.category() == TypeCategory::Struct && depth < 8 => self.struct_refusal(inner, depth + 1),
+                    Ok(_) => Some(format!("`{}`", named.name)),
+                    Err(why) => Some(why),
+                },
+                Type::Bool => Some("a `boolean`".to_owned()),
+                Type::String => Some("a string".to_owned()),
+                other => Some(format!("{other:?}")),
+            };
+            if let Some(why) = why {
+                return Some(format!("a struct with a field `{}` that is {why}", field.name()));
+            }
+        }
+        None
     }
 
     /// A struct field's type: a C scalar, an enum, or another struct, held
@@ -476,7 +596,10 @@ impl Writer<'_> {
                         self.brands.insert(underlying);
                         Ok(format!("CEnum<{enumeration}, {underlying}>"))
                     }
-                    TypeCategory::Struct => Ok(self.named(&named.namespace, &named.name)),
+                    TypeCategory::Struct => match self.struct_refusal(def, 0) {
+                        None => Ok(self.named(&named.namespace, &named.name)),
+                        Some(why) => Err(why),
+                    },
                     other => Err(format!("a {other:?}")),
                 }
             }
@@ -642,6 +765,9 @@ impl Writer<'_> {
                 // A struct crosses by value: the program holds its storage, a
                 // `Ptr` to it, and C copies it in or writes it out.
                 if def.category() == TypeCategory::Struct {
+                    if let Some(why) = self.struct_refusal(def, 0) {
+                        return Err(format!("`{}`, {why}", name.name));
+                    }
                     let record = self.named(&name.namespace, &name.name);
                     self.brands.insert("ByValue");
                     return Ok(format!("ByValue<{record}>"));
@@ -779,7 +905,21 @@ impl Writer<'_> {
     /// module of the namespace declaring it when that is another.
     fn named(&mut self, namespace: &str, name: &str) -> String {
         self.references.entry(namespace.to_owned()).or_default().insert(name.to_owned());
-        name.to_owned()
+        if namespace == self.namespace {
+            return name.to_owned();
+        }
+        let key = (namespace.to_owned(), name.to_owned());
+        if let Some(spelled) = self.spelled.get(&key) {
+            return spelled.clone();
+        }
+        // `Microsoft.UI.Xaml.LaunchActivatedEventArgs` beside
+        // `Windows.ApplicationModel.Activation.LaunchActivatedEventArgs`: one
+        // name, two types.
+        let declared_here = self.index.get(self.namespace, name).next().is_some();
+        let imported_already = self.spelled.iter().any(|((other, taken), spelled)| other != namespace && taken == name && spelled == name);
+        let spelled = if declared_here || imported_already { format!("{}_{name}", namespace.replace('.', "_")) } else { name.to_owned() };
+        self.spelled.insert(key, spelled.clone());
+        spelled
     }
 }
 

@@ -1748,14 +1748,8 @@ impl Function {
             parameters.push(ty);
             roles.push(Role::Plain);
         }
-        if hresult == Some(Hresult::Composable) {
-            parameters.push(Type::Pointer(Pointee::Void));
-            roles.push(Role::Outer);
-            parameters.push(Type::Pointer(Pointee::Pointer(Box::new(Pointee::Void))));
-            roles.push(Role::Inner);
-        }
-        let returned = if hresult.is_some() {
-            hresult_result(snapshot, &name, signature.return_type, abi, &mut parameters, &mut roles)?
+        let returned = if let Some(shape) = hresult {
+            hresult_result(snapshot, &name, signature.return_type, abi, shape, (&mut parameters, &mut roles))?
         } else {
             returned(snapshot, &name, signature.return_type, abi)?
         };
@@ -2326,9 +2320,16 @@ fn hresult_result(
     name: &str,
     ty: TypeId,
     abi: Option<&str>,
-    parameters: &mut Vec<Type>,
-    roles: &mut Vec<Role>,
+    shape: Hresult,
+    (parameters, roles): (&mut Vec<Type>, &mut Vec<Role>),
 ) -> Result<Returned, String> {
+    // A composable factory's outer and inner objects come before the result.
+    if shape == Hresult::Composable {
+        parameters.push(Type::Pointer(Pointee::Void));
+        roles.push(Role::Outer);
+        parameters.push(Type::Pointer(Pointee::Pointer(Box::new(Pointee::Void))));
+        roles.push(Role::Inner);
+    }
     let (written, kind) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
         (Type::Pointer(Pointee::Void), Written::HString)
     } else {

@@ -265,3 +265,95 @@ fn winrt_structs_cross_by_value() {
     assert!(refused.contains("`BitmapPropertySet`, a runtime class whose default interface is generic"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
 }
+
+/// A composable class is constructed as itself: its public factory's methods
+/// without the outer and inner objects, tagged for the compiler to supply
+/// them. A protected factory, which only a subclass calls, is not bound.
+#[test]
+fn composable_classes_are_constructed_as_themselves() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-composable-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.UI.Xaml.Controls", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let module = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.d.ts")).unwrap();
+    let button = &module[module.find("export namespace Button {").expect("no Button namespace")..];
+    let button = &button[..button.find("\n  }").unwrap()];
+    assert!(
+        button.contains("@ntsHresult composable\n     * @ntsFactory Windows.UI.Xaml.Controls.Button ") && button.contains("function CreateInstance(): Button;"),
+        "{button}"
+    );
+    // `Control`'s factory is protected: a control is only ever a subclass.
+    let control = &module[module.find("export namespace Control {").expect("no Control namespace")..];
+    assert!(!control.split("\n  }").next().unwrap_or("").contains("CreateInstance"), "a protected factory was bound");
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// Two namespaces declaring one name: `Microsoft.UI.Xaml` declares
+/// `LaunchActivatedEventArgs` and names `Windows.ApplicationModel.
+/// Activation`'s, which it imports under its namespace's path. Needs the
+/// Windows App SDK (tooling/windows/fetch-winappsdk.sh).
+#[test]
+fn a_name_two_namespaces_declare_is_imported_under_its_path() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    // The release `winrt.rs` pins, read as `fetch-winappsdk.sh` reads it, so a
+    // new pin cannot turn this into a skip.
+    let pinned = include_str!("../src/bind_winmd/winrt.rs")
+        .lines()
+        .find_map(|line| line.split("WINAPPSDK_VERSION: &str = \"").nth(1))
+        .and_then(|rest| rest.split('"').next())
+        .expect("WINAPPSDK_VERSION");
+    let sdk = metadata.parent().map(|root| root.join(format!("winappsdk-{pinned}")));
+    let Some(sdk) = sdk.filter(|sdk| sdk.join("Microsoft.UI.Xaml.winmd").is_file()) else {
+        eprintln!("skipping: needs the Windows App SDK (tooling/windows/fetch-winappsdk.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-alias-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Microsoft.UI.Xaml", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", std::env::join_paths([&metadata, &sdk]).unwrap())
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let module = std::fs::read_to_string(out.join("Microsoft.UI.Xaml.d.ts")).unwrap();
+    assert!(module.contains("export type LaunchActivatedEventArgs = "), "the local one is not declared");
+    assert!(
+        module.contains("LaunchActivatedEventArgs as Windows_ApplicationModel_Activation_LaunchActivatedEventArgs"),
+        "the other is not imported under its path"
+    );
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// The runtime bootstraps the Windows App SDK release the bindings are made
+/// from: `NTS_WINAPPSDK_MAJOR_MINOR` in `nts_winrt.c` is the major and minor
+/// version of `WINAPPSDK_VERSION`, as `MddBootstrapInitialize2` spells them.
+#[test]
+fn the_runtime_bootstraps_the_release_bound() {
+    let pinned = include_str!("../src/bind_winmd/winrt.rs")
+        .lines()
+        .find_map(|line| line.split("WINAPPSDK_VERSION: &str = \"").nth(1))
+        .and_then(|rest| rest.split('"').next())
+        .expect("WINAPPSDK_VERSION");
+    let mut parts = pinned.split('.').map(|part| part.parse::<u32>().unwrap());
+    let (major, minor) = (parts.next().unwrap(), parts.next().unwrap());
+    let runtime = include_str!("../../../runtime/c/nts_winrt.c");
+    let defined = runtime
+        .lines()
+        .find_map(|line| line.strip_prefix("#define NTS_WINAPPSDK_MAJOR_MINOR "))
+        .expect("NTS_WINAPPSDK_MAJOR_MINOR");
+    let value = u32::from_str_radix(defined.trim().trim_start_matches("0x").trim_end_matches('u'), 16).unwrap();
+    assert_eq!(value, (major << 16) | minor, "the runtime bootstraps {value:#010x}, the bindings are {pinned}");
+}

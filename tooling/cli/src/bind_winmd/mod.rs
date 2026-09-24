@@ -93,7 +93,7 @@ pub(crate) fn ensure(namespaces: &std::collections::BTreeSet<String>, out: &Utf8
 /// Win32's, from the Windows Runtime's metadata.
 pub(crate) fn ensure_winrt(namespaces: &std::collections::BTreeSet<String>, out: &Utf8PathBuf) -> Result<()> {
     let metadata = winrt::default_metadata();
-    stamped(namespaces, out, &[winrt::metadata_marker(&metadata)], |wanted| {
+    stamped(namespaces, out, &winrt::metadata_markers(&metadata), |wanted| {
         winrt::write(wanted, &metadata, out, &format!("nts build (bind-winmd {})", wanted.join(" ")))
     })
 }
