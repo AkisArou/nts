@@ -119,7 +119,7 @@ use nts_semantic_schema::schema::{
     LiteralValue, NodeId, SemanticSnapshot, SymbolId, TypeId, TypeKind,
 };
 use nts_semantic_schema::{syntax, walk};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// The checker's `TypeFlagsUniqueESSymbol`, mirrored from `names_one_member`.
 const UNIQUE_SYMBOL: u32 = 1 << 14;
@@ -255,6 +255,18 @@ pub struct Site {
     /// The interface's declared type carried no member list, so neither proxy
     /// could look at it. Counted as *possibly* inhabited, never as not.
     pub unexamined: bool,
+    /// How many distinct layouts a value at this receiver's type can have: the
+    /// length of the type-test chain an indirect read here would need.
+    ///
+    /// **One means no chain.** The type's own layout is always an arm, so a type
+    /// nothing else can inhabit reads at a fixed offset and costs nothing — which
+    /// is 3,334 of the 4,174 interface accesses in `runtime/node`.
+    ///
+    /// An **upper** bound on the real arm count, for the reason
+    /// [`Inhabitable::covering`] gives, and the bound faces the right way: a cap
+    /// chosen against it refuses a site the real chain would have fitted, never
+    /// the reverse.
+    pub arms: u32,
     pub location: nts_diagnostics::Location,
 }
 
@@ -475,6 +487,58 @@ impl Census {
             .len()
     }
 
+    /// Field accesses by how many arms a chain through their receiver would
+    /// need, ascending. The input to the chain-versus-table decision and to the
+    /// arm-count cap.
+    ///
+    /// Over exactly [`Census::through_possibly_inhabited`]'s population, so the
+    /// rows sum to that figure and a reader can check it. The broad rule's other
+    /// 3,334 accesses are through types nothing can inhabit — one arm by
+    /// construction, and a row for them would be the largest in the table while
+    /// saying only what the line above already says.
+    ///
+    /// **Spreads are excluded**, as they are from that figure: one `{ ...v }` is
+    /// *N* field reads, and a histogram mixing a site count with a field count is
+    /// the unit error this census keeps its spread row separate to avoid.
+    ///
+    /// Weighted by accesses rather than by interface, because the cost is paid
+    /// per access: one 9-arm interface read once matters less than a 2-arm one
+    /// read four hundred times, and a per-interface histogram says the opposite.
+    #[must_use]
+    pub fn arm_histogram(&self) -> Vec<(u32, u32)> {
+        let mut counts: FxHashMap<u32, u32> = FxHashMap::default();
+        for site in &self.sites {
+            if site.shape != Shape::Interface
+                || !(site.implemented || site.satisfied || site.unexamined)
+            {
+                continue;
+            }
+            *counts.entry(site.arms).or_default() += site.fields;
+        }
+        let mut rows: Vec<(u32, u32)> = counts.into_iter().collect();
+        rows.sort_unstable();
+        rows
+    }
+
+    /// Accesses in that population whose receiver has **no named second layout**:
+    /// an interface no class covers, reached only because nothing could examine
+    /// it.
+    ///
+    /// Reported apart from the histogram rather than as its `1` row, because the
+    /// two mean opposite things. A one-arm row elsewhere would say *this needs no
+    /// chain*; these say *the arm count is unknown and one is a floor*. Folding
+    /// them together would let a reader take the unknown for a measurement — the
+    /// direction this census refuses to round in.
+    #[must_use]
+    pub fn unexamined_arms(&self) -> u32 {
+        self.fields_where(|site| {
+            site.shape == Shape::Interface
+                && site.unexamined
+                && !site.implemented
+                && !site.satisfied
+        })
+    }
+
     fn fields_where(&self, mut keep: impl FnMut(&Site) -> bool) -> u32 {
         self.sites
             .iter()
@@ -632,7 +696,7 @@ fn spread(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitable, out: &mu
         // is unknown. One is the floor, and the `Unclear` row carries the doubt.
         _ => 1,
     };
-    let (receiver, implemented, satisfied, unexamined) = receiver_of(snapshot, ty, known);
+    let (receiver, implemented, satisfied, unexamined, arms) = receiver_of(snapshot, ty, known);
     out.spread_sites.push(Site {
         shape,
         owner: owner_of(snapshot, id),
@@ -644,6 +708,7 @@ fn spread(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitable, out: &mu
         implemented,
         satisfied,
         unexamined,
+        arms,
         location: snapshot.nodes[id.0 as usize].origin.location,
     });
 }
@@ -710,7 +775,7 @@ fn record(
             Some(_) => {},
         }
     }
-    let (receiver, implemented, satisfied, unexamined) = receiver_of(snapshot, ty, known);
+    let (receiver, implemented, satisfied, unexamined, arms) = receiver_of(snapshot, ty, known);
     out.sites.push(Site {
         shape,
         owner: owner_of(snapshot, access),
@@ -722,6 +787,7 @@ fn record(
         implemented,
         satisfied,
         unexamined,
+        arms,
         location: snapshot.nodes[access.0 as usize].origin.location,
     });
 }
@@ -734,7 +800,7 @@ fn receiver_of(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     known: &Inhabitable,
-) -> (String, bool, bool, bool) {
+) -> (String, bool, bool, bool, u32) {
     let symbol = snapshot
         .types
         .get(ty.0 as usize)
@@ -743,11 +809,17 @@ fn receiver_of(
     let name = symbol
         .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
         .map_or_else(|| "?".to_owned(), |record| record.name.clone());
+    // **Plus one for the type's own layout**, which is always an arm: an object
+    // literal written at an interface is built at the interface's own shape, not
+    // at any class's. So a type nothing can inhabit has one arm and needs no
+    // chain, which is what makes `arms > 1` the predicate the lowering wants.
+    let arms = symbol.map_or(1, |symbol| known.covering(symbol.0).saturating_add(1));
     (
         name,
         symbol.is_some_and(|symbol| known.implemented.contains(&symbol.0)),
-        symbol.is_some_and(|symbol| known.satisfied.contains(&symbol.0)),
+        symbol.is_some_and(|symbol| known.satisfied(symbol.0)),
         symbol.is_some_and(|symbol| known.unexamined.contains(&symbol.0)),
+        arms,
     )
 }
 
@@ -911,22 +983,59 @@ struct Inhabitable {
     /// Named in some class's heritage clause. Misses a structural satisfier, so
     /// it over-states what a narrow rule would spare.
     implemented: FxHashSet<u32>,
-    /// Some class has a same-named member for each required member. Compares
-    /// names and not types, because assignability is the checker's and this does
-    /// not have it — so it both over- and under-counts against the real relation.
-    satisfied: FxHashSet<u32>,
+    /// How many classes have a same-named member for each required member.
+    ///
+    /// A **count**, not a membership test, because the design step needs to know
+    /// how long a type-test chain would be and not merely whether one is needed.
+    /// Absent is zero; [`Inhabitable::satisfied`] is the old predicate, derived
+    /// from it so the two cannot disagree.
+    ///
+    /// Compares names and not types, because assignability is the checker's and
+    /// this does not have it — so it both over- and under-counts against the real
+    /// relation. As an **arm count** it is an upper bound on distinct layouts:
+    /// two classes can merge into one layout ([`crate::hir::Layout::same_shape`])
+    /// and none can split, so counting classes never reports fewer arms than a
+    /// chain would need.
+    covering: FxHashMap<u32, u32>,
+    /// Interfaces some class covers **by member name**: the published lower
+    /// bracket, kept apart from [`Inhabitable::covering`] now that the latter
+    /// also counts an `implements` a name comparison misses.
+    by_name: FxHashSet<u32>,
     /// Interface symbols neither proxy could examine. Counted as *possibly*
     /// inhabited, which is the direction that keeps a narrow rule sound.
     unexamined: FxHashSet<u32>,
 }
 
 impl Inhabitable {
+    /// How many classes could inhabit this interface: the arm count a chain
+    /// through it would need, **not** counting the interface's own layout.
+    fn covering(&self, symbol: u32) -> u32 {
+        self.covering.get(&symbol).copied().unwrap_or(0)
+    }
+
+    /// The published lower-bracket predicate: **the name proxy alone**.
+    ///
+    /// Deliberately not `covering(symbol) > 0`, which now also counts a class
+    /// that merely *says* `implements`. That is the right arm count and the wrong
+    /// bracket: `through_satisfied`'s sentence is about structural satisfaction,
+    /// and widening it silently would move a published number by changing what it
+    /// claims rather than what it found.
+    fn satisfied(&self, symbol: u32) -> bool {
+        self.by_name.contains(&symbol)
+    }
+
     fn of(snapshot: &SemanticSnapshot) -> Self {
         let mut implemented = FxHashSet::default();
         let mut unexamined: FxHashSet<u32> = FxHashSet::default();
         let mut class_members: Vec<FxHashSet<&str>> = Vec::new();
         let mut interfaces_unexamined = 0;
         let mut classes_unexamined = 0;
+
+        // Aligned with `class_members` by position: one entry per class that was
+        // examined, holding the interfaces that class *names*. Two lists rather
+        // than one struct because `class_members` borrows the snapshot and
+        // splitting the borrow is what keeps this a single pass.
+        let mut class_heritage: Vec<FxHashSet<u32>> = Vec::new();
 
         for index in 0..snapshot.nodes.len() {
             let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
@@ -939,6 +1048,7 @@ impl Inhabitable {
             ) {
                 continue;
             }
+            let mut mine: FxHashSet<u32> = FxHashSet::default();
             // Heritage clauses, not `base_types`: `lower.rs` records that
             // `base_types` "in fact carries neither for a class that only
             // implements -- `class Counting implements Sink` has no entry at
@@ -947,19 +1057,23 @@ impl Inhabitable {
                 if walk::kind_of(snapshot, clause) != Some(syntax::HERITAGE_CLAUSE) {
                     continue;
                 }
-                named_symbols(snapshot, clause, &mut implemented);
+                named_symbols(snapshot, clause, &mut mine);
             }
+            implemented.extend(mine.iter().copied());
             match instance_type_of(snapshot, id)
                 .and_then(|ty| snapshot.types.get(ty.0 as usize))
                 .map(|record| &record.kind)
             {
-                Some(TypeKind::Object { properties }) => class_members
-                    .push(properties.iter().map(|p| p.name.as_str()).collect()),
+                Some(TypeKind::Object { properties }) => {
+                    class_members.push(properties.iter().map(|p| p.name.as_str()).collect());
+                    class_heritage.push(mine);
+                },
                 _ => classes_unexamined += 1,
             }
         }
 
-        let mut satisfied = FxHashSet::default();
+        let mut covering: FxHashMap<u32, u32> = FxHashMap::default();
+        let mut by_name: FxHashSet<u32> = FxHashSet::default();
         for (index, record) in snapshot.symbols.iter().enumerate() {
             if !record
                 .declarations
@@ -979,21 +1093,43 @@ impl Inhabitable {
                 unexamined.insert(u32::try_from(index).unwrap_or(u32::MAX));
                 continue;
             };
+            let symbol = u32::try_from(index).unwrap_or(u32::MAX);
             let required: Vec<&str> = properties
                 .iter()
                 .filter(|property| !property.optional)
                 .map(|property| property.name.as_str())
                 .collect();
-            // An interface with no required members is satisfied by every class,
-            // which says nothing; it is not evidence that a class inhabits it.
-            if required.is_empty() {
-                continue;
+            // **A class that says `implements I` inhabits it whether or not the
+            // name proxy agrees**, and leaving it out would be unsound in the one
+            // direction that matters: a chain missing a real arm aborts a correct
+            // program. The empty-`required` skip below is why this is not
+            // redundant -- an interface with only optional members is covered by
+            // nobody under the name rule and can still be implemented by name.
+            //
+            // Found by the `arms` column's own `1` row: three accesses read as
+            // one arm while their interface was in `implemented`, which is a
+            // chain of one arm through a type two layouts reach.
+            let covers = u32::try_from(
+                class_members
+                    .iter()
+                    .zip(&class_heritage)
+                    .filter(|(members, heritage)| {
+                        heritage.contains(&symbol)
+                            || (!required.is_empty()
+                                && required.iter().all(|name| members.contains(name)))
+                    })
+                    .count(),
+            )
+            .unwrap_or(u32::MAX);
+            if covers > 0 {
+                covering.insert(symbol, covers);
             }
-            if class_members
-                .iter()
-                .any(|members| required.iter().all(|name| members.contains(name)))
+            if !required.is_empty()
+                && class_members
+                    .iter()
+                    .any(|members| required.iter().all(|name| members.contains(name)))
             {
-                satisfied.insert(u32::try_from(index).unwrap_or(u32::MAX));
+                by_name.insert(symbol);
             }
         }
 
@@ -1001,7 +1137,8 @@ impl Inhabitable {
             interfaces_unexamined,
             classes_unexamined,
             implemented,
-            satisfied,
+            covering,
+            by_name,
             unexamined,
         }
     }

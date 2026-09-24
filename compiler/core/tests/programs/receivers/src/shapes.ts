@@ -40,3 +40,26 @@ export interface Declared {
 
 /** A value, so the other file can import this module as a namespace. */
 export const LIMIT = 41;
+
+/**
+ * Two classes cover it and neither says so, so a chain through it is three arms:
+ * the interface's own layout, which an object literal written at it gets, plus
+ * one per class.
+ *
+ * The coverers put `coveredTwice` at three different indices between them, which
+ * is the whole reason the arms cannot share one.
+ */
+export interface TwoCoverers {
+  coveredTwice: string;
+}
+
+/**
+ * Every member optional, so a comparison of *required* names has nothing to
+ * compare and finds no coverer -- and `Opting` says `implements` anyway.
+ *
+ * This is the arm a name-coverage rule alone misses, and a chain that misses an
+ * arm aborts a correct program. The `arms` column's own `1` row found the bug.
+ */
+export interface OnlyOptional {
+  perhaps?: number;
+}

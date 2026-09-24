@@ -4,7 +4,15 @@
 // access)` without an owner disambiguating it — and so a rule that fires twice
 // or not at all is visible as a count rather than as a wrong total.
 
-import type { Declared, Keyed, Mixed, Named, Uninhabitable } from "./shapes.js";
+import type {
+  Declared,
+  Keyed,
+  Mixed,
+  Named,
+  OnlyOptional,
+  TwoCoverers,
+  Uninhabitable,
+} from "./shapes.js";
 import * as shapes from "./shapes.js";
 
 /** Covers `Declared` by saying so. */
@@ -122,4 +130,32 @@ export function throughAModule(n: number): number {
  */
 export function throughALibrary(n: number): number {
   return Math.PI * n;
+}
+
+/** Covers `TwoCoverers` at index 0. */
+export class FirstCoverer {
+  coveredTwice = "first";
+  padding = 0;
+}
+
+/** Covers it at index 2, which is why neither arm can read at the other's. */
+export class SecondCoverer {
+  padding = 0;
+  other = 0;
+  coveredTwice = "second";
+}
+
+/** Says `implements` where no required name exists to compare. */
+export class Opting implements OnlyOptional {
+  perhaps = 1;
+}
+
+/** One read through a three-arm receiver. */
+export function throughTwoCoverers(v: TwoCoverers): number {
+  return v.coveredTwice.length;
+}
+
+/** One read through a receiver only an `implements` clause reaches. */
+export function throughOnlyOptional(v: OnlyOptional): number {
+  return v.perhaps ?? 0;
 }

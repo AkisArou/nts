@@ -1748,7 +1748,46 @@ fn receivers_summary(census: &nts_core::receivers::Census) {
         census.distinct_interface_members()
     );
     println!("have to cover, as against what the cost is paid on.");
+    arm_distribution(census, sound);
     }
+
+/// How long the type-test chain would be, where there is one.
+///
+/// The number the *design* step needs, as against the cost figure above: a chain
+/// is code growth proportional to its arms, so "how much does indirection cost"
+/// and "is a chain the right mechanism" are two questions and only the first has
+/// been answered until now.
+///
+/// Accesses through a one-arm type are not shown. They are the 3,334 the sound
+/// rule already spares -- a row for them would be the largest in the table and
+/// would say only that most interfaces are uninhabited, which the line above
+/// says already.
+fn arm_distribution(census: &nts_core::receivers::Census, sound: u32) {
+    let rows = census.arm_histogram();
+    if rows.is_empty() {
+        println!();
+        println!("no interface in this program has a second possible layout: every chain");
+        println!("would be one arm, so indirection here would cost a test and answer nothing.");
+        return;
+    }
+    let counted: u32 = rows.iter().map(|(_, fields)| *fields).sum();
+    let unknown = census.unexamined_arms();
+    println!();
+    println!("arms  accesses   how long a type-test chain through that receiver would be");
+    for (arms, fields) in &rows {
+        let share = f64::from(*fields) * 100.0 / f64::from(counted.max(1));
+        let note = if *arms == 1 { "  no chain: nothing else can inhabit it" } else { "" };
+        println!("{arms:>4}  {fields:>8}   {share:>5.1}%{note}");
+    }
+    if unknown > 0 {
+        println!(
+            "   ?  {unknown:>8}           through an interface nothing could examine: one is a              floor, not a count"
+        );
+    }
+    // The rows sum to the sound figure, and saying so is what lets a reader check
+    // the table against the sentence above instead of trusting it.
+    println!("      {counted:>8}   = the sound rule's {sound}.");
+}
 
 /// One line per field access. The detail a reader needs to see the proxies' own
 /// mistakes rather than trust their totals.

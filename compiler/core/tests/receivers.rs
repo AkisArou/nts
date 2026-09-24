@@ -153,7 +153,9 @@ fn a_read_through_a_string_is_not_a_field_access() {
     let Some(census) = counted() else { return };
     assert_eq!(only(&census, "forStrings").shape, Shape::Interface);
     assert!(of(&census, "length").is_empty());
-    assert_eq!(census.excluded.not_a_struct, 1);
+    // Two: `v.forStrings.length` and `v.coveredTwice.length`, each a `.length`
+    // whose receiver is a `string`.
+    assert_eq!(census.excluded.not_a_struct, 2);
 }
 
 /// A write costs what a read costs, and a compound assignment is one access.
@@ -218,7 +220,9 @@ fn the_two_inhabitability_proxies_disagree() {
 fn the_sound_narrow_figure_is_between_zero_and_the_broad_one() {
     let Some(census) = counted() else { return };
     let sound = census.through_possibly_inhabited();
-    assert_eq!(sound, 8);
+    // 8 before the arm-count cases, plus the reads through `TwoCoverers` and
+    // `OnlyOptional`, both of which a class can inhabit.
+    assert_eq!(sound, 10);
     assert!(sound < census.through_interfaces());
     assert!(sound > census.through_implemented());
     // Nothing unexamined here, so the sound set is exactly the structural one.
@@ -267,10 +271,14 @@ fn a_write_through_this_is_counted() {
 #[test]
 fn the_totals_are_what_the_cases_add_up_to() {
     let Some(census) = counted() else { return };
-    assert_eq!(census.total_fields(), 13);
-    assert_eq!(census.through_interfaces(), 10);
+    // 13 before the arm-count cases; `throughTwoCoverers` and
+    // `throughOnlyOptional` add one interface read each, and nothing else -- the
+    // three classes they need declare fields and access none, which is why the
+    // class row does not move.
+    assert_eq!(census.total_fields(), 15);
+    assert_eq!(census.through_interfaces(), 12);
     assert_eq!(census.through(Shape::ClassInstance), 2);
-    assert_eq!(census.distinct_interface_members(), 10);
+    assert_eq!(census.distinct_interface_members(), 12);
 }
 
 /// The two denominators differ, which is the whole reason there are two.
@@ -285,7 +293,7 @@ fn the_totals_are_what_the_cases_add_up_to() {
 fn the_library_bucket_gives_a_second_denominator() {
     let Some(census) = counted() else { return };
     assert_eq!(census.through(Shape::Library), 1);
-    assert_eq!(census.generated_fields(), 12);
+    assert_eq!(census.generated_fields(), 14);
     assert!(census.generated_fields() < census.total_fields());
 }
 
@@ -305,7 +313,7 @@ fn a_module_member_is_not_a_field_access() {
     let Some(census) = counted() else { return };
     assert_eq!(census.excluded.module_member, 1);
     assert!(of(&census, "LIMIT").is_empty());
-    assert_eq!(census.total_fields(), 13);
+    assert_eq!(census.total_fields(), 15);
 }
 
 /// **The density control**, and the reason this census may key on receiver
@@ -322,4 +330,73 @@ fn every_receiver_carries_a_type() {
     let Some(census) = counted() else { return };
     assert_eq!(census.excluded.untyped_receiver, 0);
     assert_eq!(census.excluded.member_not_declared, 0);
+}
+
+/// An arm count is the layouts a chain would have to test, and it includes the
+/// receiver's own.
+///
+/// This is the number the design step needs and the cost figure does not give:
+/// indirection's *price* is how many accesses become indirect, but whether a
+/// type-test chain is the right mechanism is a question about how long each
+/// chain is. `TwoCoverers` is covered by two classes that put `coveredTwice` at
+/// three different indices between them, so the chain is three arms and one of
+/// them is the interface's own layout -- an object literal written at the
+/// interface is built at that shape and at no class's.
+#[test]
+fn an_arm_count_is_the_layouts_a_chain_would_test() {
+    let Some(census) = counted() else { return };
+    assert_eq!(only(&census, "coveredTwice").arms, 3);
+}
+
+/// **The control**, and without it the case above proves nothing.
+///
+/// A rule that answered "some arms" for every receiver would pass the assertion
+/// above. `Uninhabitable` is covered by no class and named by none, so its arm
+/// count must be exactly one: the type's own layout, read at a fixed offset,
+/// with no chain and no cost. That is 3,334 of the 4,174 in `runtime/node`.
+#[test]
+fn a_receiver_nothing_can_inhabit_is_one_arm() {
+    let Some(census) = counted() else { return };
+    assert_eq!(only(&census, "nobodyHasThis").arms, 1);
+}
+
+/// A class that says `implements` is an arm even where comparing names finds
+/// nothing.
+///
+/// `OnlyOptional` has no *required* member, so a rule comparing required names
+/// has nothing to compare and reports no coverer -- while `Opting` says it
+/// implements the interface and therefore inhabits it. Counting names alone read
+/// this as a one-arm receiver, which is a chain that omits a layout that can
+/// arrive, and a chain missing an arm aborts a correct program.
+///
+/// Found by the `arms` column's own `1` row in `runtime/node`: three accesses
+/// read as one arm through an interface that was in `implemented`. The two
+/// proxies bracket *inhabitability*; an arm count needs their **union**, because
+/// soundness here is a superset and not an estimate.
+#[test]
+fn a_class_that_says_implements_is_an_arm_the_name_rule_misses() {
+    let Some(census) = counted() else { return };
+    let site = only(&census, "perhaps");
+    assert_eq!(site.arms, 2);
+    // The name proxy genuinely does not see it, which is what makes this a test
+    // of the union rather than of one arm that happens to agree.
+    assert!(!site.satisfied);
+    assert!(site.implemented);
+}
+
+/// The histogram's rows sum to the sound figure, so the table can be checked
+/// against the sentence printed above it rather than trusted.
+///
+/// Two derivations of one fact will disagree: `through_possibly_inhabited` walks
+/// a predicate and `arm_histogram` buckets the same sites by a count, and
+/// nothing but this assertion holds them to one population.
+#[test]
+fn the_arm_histogram_covers_exactly_the_sound_population() {
+    let Some(census) = counted() else { return };
+    let rows = census.arm_histogram();
+    let total: u32 = rows.iter().map(|(_, fields)| *fields).sum();
+    assert_eq!(total, census.through_possibly_inhabited());
+    // And it is a distribution rather than one bucket, or it would answer the
+    // same for every program.
+    assert!(rows.len() > 1, "the fixture has receivers of two arm counts");
 }
