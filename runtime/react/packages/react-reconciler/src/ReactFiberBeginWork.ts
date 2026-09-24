@@ -1108,7 +1108,7 @@ function updateCacheComponent(current: Fiber | null, workInProgress: Fiber, rend
       // queue is empty, persist the derived state onto the base state.
       workInProgress.memoizedState = derivedState;
       if (workInProgress.lanes === NoLanes) {
-        const updateQueue = workInProgress.updateQueue as UpdateQueue<CacheComponentState>;
+        const updateQueue = workInProgress.updateQueue as UpdateQueue;
         workInProgress.memoizedState = updateQueue.baseState = derivedState;
       }
 
@@ -1619,7 +1619,7 @@ function updateHostRoot(current: Fiber | null, workInProgress: Fiber, renderLane
       isDehydrated: false,
       cache: nextState.cache,
     };
-    const updateQueue = workInProgress.updateQueue as UpdateQueue<RootState>;
+    const updateQueue = workInProgress.updateQueue as UpdateQueue;
     // `baseState` can always be the last state because the root doesn't
     // have reducer functions so it doesn't need rebasing.
     updateQueue.baseState = overrideState;

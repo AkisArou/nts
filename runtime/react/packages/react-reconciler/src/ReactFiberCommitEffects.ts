@@ -423,7 +423,7 @@ export function commitClassDidMount(finishedWork: Fiber): void {
 export function commitClassCallbacks(finishedWork: Fiber): void {
   // TODO: I think this is now always non-null by the time it reaches the
   // commit phase. Consider removing the type check.
-  const updateQueue = finishedWork.updateQueue as UpdateQueue<unknown> | null;
+  const updateQueue = finishedWork.updateQueue as UpdateQueue | null;
   if (updateQueue !== null) {
     const instance = finishedWork.stateNode as CommitClassInstance;
     if (isDevelopment) {
@@ -447,7 +447,7 @@ export function commitClassCallbacks(finishedWork: Fiber): void {
 export function commitClassHiddenCallbacks(finishedWork: Fiber): void {
   // Commit any callbacks that would have fired while the component was
   // hidden.
-  const updateQueue = finishedWork.updateQueue as UpdateQueue<unknown> | null;
+  const updateQueue = finishedWork.updateQueue as UpdateQueue | null;
   if (updateQueue !== null) {
     const instance = finishedWork.stateNode;
     try {
@@ -465,7 +465,7 @@ export function commitClassHiddenCallbacks(finishedWork: Fiber): void {
 export function commitRootCallbacks(finishedWork: Fiber): void {
   // TODO: I think this is now always non-null by the time it reaches the
   // commit phase. Consider removing the type check.
-  const updateQueue = finishedWork.updateQueue as UpdateQueue<unknown> | null;
+  const updateQueue = finishedWork.updateQueue as UpdateQueue | null;
   if (updateQueue !== null) {
     let instance: unknown = null;
     if (finishedWork.child !== null) {

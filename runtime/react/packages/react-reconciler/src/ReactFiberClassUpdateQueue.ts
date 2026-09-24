@@ -90,6 +90,7 @@ import {
   isTransitionLane,
   intersectLanes,
   markRootEntangled,
+  LanedUpdate,
 } from "./ReactFiberLane.ts";
 import { enterDisallowedContextReadInDEV, exitDisallowedContextReadInDEV } from "./ReactFiberNewContext.ts";
 import { Callback, Visibility, ShouldCapture, DidCapture } from "./ReactFiberFlags.ts";
@@ -108,36 +109,49 @@ import { peekEntangledActionLane, peekEntangledActionThenable } from "./ReactFib
 
 export type UpdateTag = 0 | 1 | 2 | 3;
 
-export interface Update<State> {
-  lane: Lane;
-
-  tag: UpdateTag;
-  // A partial state object, a replacement state, or a function of the
-  // previous state and props (see getStateFromUpdate).
-  payload: unknown;
-  callback: (() => unknown) | null;
-
-  next: Update<State> | null;
-}
-
-export interface SharedQueue<State> {
-  pending: Update<State> | null;
-  lanes: Lanes;
-  hiddenCallbacks: (() => unknown)[] | null;
-}
-
-export interface UpdateQueue<State> {
-  baseState: State;
-  firstBaseUpdate: Update<State> | null;
-  lastBaseUpdate: Update<State> | null;
-  shared: SharedQueue<State>;
-  callbacks: (() => unknown)[] | null;
-}
-
 export const UpdateState = 0;
 export const ReplaceState = 1;
 export const ForceUpdate = 2;
 export const CaptureUpdate = 3;
+
+// A class component's (or the root's) update, in the circular list on its
+// queue. Not generic: the state it produces is erased, and each reader
+// projects it (see runtime/react/spikes/hook-storage/README.md).
+export class Update extends LanedUpdate {
+  tag: UpdateTag = UpdateState;
+  // A partial state object, a replacement state, or a function of the
+  // previous state and props (see getStateFromUpdate).
+  payload: unknown = null;
+  callback: (() => unknown) | null = null;
+
+  next: Update | null = null;
+
+  constructor(lane: Lane) {
+    super(lane);
+  }
+}
+
+export class SharedQueue {
+  pending: Update | null = null;
+  lanes: Lanes = NoLanes;
+  hiddenCallbacks: (() => unknown)[] | null = null;
+}
+
+export class UpdateQueue {
+  baseState: unknown;
+  firstBaseUpdate: Update | null;
+  lastBaseUpdate: Update | null;
+  shared: SharedQueue;
+  callbacks: (() => unknown)[] | null = null;
+
+  constructor(baseState: unknown, firstBaseUpdate: Update | null, lastBaseUpdate: Update | null, shared: SharedQueue) {
+    this.baseState = baseState;
+    this.firstBaseUpdate = firstBaseUpdate;
+    this.lastBaseUpdate = lastBaseUpdate;
+    this.shared = shared;
+  }
+}
+
 
 // An updater function, called with the instance as `this`.
 type UpdaterFunction<State> = (this: unknown, prevState: State, nextProps: unknown) => unknown;
@@ -148,7 +162,7 @@ type UpdaterFunction<State> = (this: unknown, prevState: State, nextProps: unkno
 let hasForceUpdate = false;
 
 let didWarnUpdateInsideUpdate = false;
-let currentlyProcessingQueue: SharedQueue<unknown> | null = null;
+let currentlyProcessingQueue: SharedQueue | null = null;
 export function resetCurrentlyProcessingQueue(): void {
   if (isDevelopment) {
     currentlyProcessingQueue = null;
@@ -158,57 +172,47 @@ export function resetCurrentlyProcessingQueue(): void {
 // The queue holds whatever state the fiber has (a class's state, the root's
 // element): erased here, typed by the code that reads the state.
 export function initializeUpdateQueue(fiber: Fiber): void {
-  const queue: UpdateQueue<unknown> = {
-    baseState: fiber.memoizedState,
-    firstBaseUpdate: null,
-    lastBaseUpdate: null,
-    shared: {
-      pending: null,
-      lanes: NoLanes,
-      hiddenCallbacks: null,
-    },
-    callbacks: null,
-  };
+  const queue = new UpdateQueue(fiber.memoizedState, null, null, new SharedQueue());
   fiber.updateQueue = queue;
 }
 
 export function cloneUpdateQueue(current: Fiber, workInProgress: Fiber): void {
   // Clone the update queue from current. Unless it's already a clone.
-  const queue = workInProgress.updateQueue as UpdateQueue<unknown>;
-  const currentQueue = current.updateQueue as UpdateQueue<unknown>;
+  const queue = workInProgress.updateQueue as UpdateQueue;
+  const currentQueue = current.updateQueue as UpdateQueue;
   if (queue === currentQueue) {
-    const clone: UpdateQueue<unknown> = {
-      baseState: currentQueue.baseState,
-      firstBaseUpdate: currentQueue.firstBaseUpdate,
-      lastBaseUpdate: currentQueue.lastBaseUpdate,
-      shared: currentQueue.shared,
-      callbacks: null,
-    };
+    const clone = new UpdateQueue(
+      currentQueue.baseState,
+      currentQueue.firstBaseUpdate,
+      currentQueue.lastBaseUpdate,
+      currentQueue.shared,
+    );
     workInProgress.updateQueue = clone;
   }
 }
 
-export function createUpdate(lane: Lane): Update<unknown> {
-  const update: Update<unknown> = {
-    lane,
-
-    tag: UpdateState,
-    payload: null,
-    callback: null,
-
-    next: null,
-  };
-  return update;
+// A copy of an update for a rebased or captured list. `callback` is null when
+// the copy must not fire the original's callback again.
+function cloneUpdate(lane: Lane, tag: UpdateTag, payload: unknown, callback: (() => unknown) | null): Update {
+  const clone = new Update(lane);
+  clone.tag = tag;
+  clone.payload = payload;
+  clone.callback = callback;
+  return clone;
 }
 
-export function enqueueUpdate<State>(fiber: Fiber, update: Update<State>, lane: Lane): FiberRoot | null {
-  const updateQueue = fiber.updateQueue as UpdateQueue<State> | null;
+export function createUpdate(lane: Lane): Update {
+  return new Update(lane);
+}
+
+export function enqueueUpdate(fiber: Fiber, update: Update, lane: Lane): FiberRoot | null {
+  const updateQueue = fiber.updateQueue as UpdateQueue | null;
   if (updateQueue === null) {
     // Only occurs if the fiber has been unmounted.
     return null;
   }
 
-  const sharedQueue: SharedQueue<State> = updateQueue.shared;
+  const sharedQueue: SharedQueue = updateQueue.shared;
 
   if (isDevelopment) {
     if (currentlyProcessingQueue === sharedQueue && !didWarnUpdateInsideUpdate) {
@@ -248,13 +252,13 @@ export function enqueueUpdate<State>(fiber: Fiber, update: Update<State>, lane: 
 }
 
 export function entangleTransitions(root: FiberRoot, fiber: Fiber, lane: Lane): void {
-  const updateQueue = fiber.updateQueue as UpdateQueue<unknown> | null;
+  const updateQueue = fiber.updateQueue as UpdateQueue | null;
   if (updateQueue === null) {
     // Only occurs if the fiber has been unmounted.
     return;
   }
 
-  const sharedQueue: SharedQueue<unknown> = updateQueue.shared;
+  const sharedQueue: SharedQueue = updateQueue.shared;
   if (isTransitionLane(lane)) {
     let queueLanes = sharedQueue.lanes;
 
@@ -275,16 +279,16 @@ export function entangleTransitions(root: FiberRoot, fiber: Fiber, lane: Lane): 
   }
 }
 
-export function enqueueCapturedUpdate<State>(workInProgress: Fiber, capturedUpdate: Update<State>): void {
+export function enqueueCapturedUpdate(workInProgress: Fiber, capturedUpdate: Update): void {
   // Captured updates are updates that are thrown by a child during the render
   // phase. They should be discarded if the render is aborted. Therefore,
   // we should only put them on the work-in-progress queue, not the current one.
-  let queue = workInProgress.updateQueue as UpdateQueue<State>;
+  let queue = workInProgress.updateQueue as UpdateQueue;
 
   // Check if the work-in-progress queue is a clone.
   const current = workInProgress.alternate;
   if (current !== null) {
-    const currentQueue = current.updateQueue as UpdateQueue<State>;
+    const currentQueue = current.updateQueue as UpdateQueue;
     if (queue === currentQueue) {
       // The work-in-progress queue is the same as current. This happens when
       // we bail out on a parent fiber that then captures an error thrown by
@@ -292,24 +296,14 @@ export function enqueueCapturedUpdate<State>(workInProgress: Fiber, capturedUpda
       // -progress queue, we need to clone the updates. We usually clone during
       // processUpdateQueue, but that didn't happen in this case because we
       // skipped over the parent when we bailed out.
-      let newFirst: Update<State> | null = null;
-      let newLast: Update<State> | null = null;
+      let newFirst: Update | null = null;
+      let newLast: Update | null = null;
       const firstBaseUpdate = queue.firstBaseUpdate;
       if (firstBaseUpdate !== null) {
         // Loop through the updates and clone them.
-        let update: Update<State> | null = firstBaseUpdate;
+        let update: Update | null = firstBaseUpdate;
         do {
-          const clone: Update<State> = {
-            lane: update.lane,
-
-            tag: update.tag,
-            payload: update.payload,
-            // When this update is rebased, we should not fire its
-            // callback again.
-            callback: null,
-
-            next: null,
-          };
+          const clone = cloneUpdate(update.lane, update.tag, update.payload, null);
           if (newLast === null) {
             newFirst = newLast = clone;
           } else {
@@ -373,8 +367,8 @@ function callUpdater<State>(workInProgress: Fiber, payload: UpdaterFunction<Stat
 
 function getStateFromUpdate<State>(
   workInProgress: Fiber,
-  _queue: UpdateQueue<State>,
-  update: Update<State>,
+  _queue: UpdateQueue,
+  update: Update,
   prevState: State,
   nextProps: unknown,
   instance: unknown,
@@ -446,12 +440,12 @@ export function processUpdateQueue(workInProgress: Fiber, props: unknown, instan
   didReadFromEntangledAsyncAction = false;
 
   // This is always non-null on a ClassComponent or HostRoot
-  const queue = workInProgress.updateQueue as UpdateQueue<unknown>;
+  const queue = workInProgress.updateQueue as UpdateQueue;
 
   hasForceUpdate = false;
 
   if (isDevelopment) {
-    currentlyProcessingQueue = queue.shared as SharedQueue<unknown>;
+    currentlyProcessingQueue = queue.shared as SharedQueue;
   }
 
   let firstBaseUpdate = queue.firstBaseUpdate;
@@ -483,7 +477,7 @@ export function processUpdateQueue(workInProgress: Fiber, props: unknown, instan
     const current = workInProgress.alternate;
     if (current !== null) {
       // This is always non-null on a ClassComponent or HostRoot
-      const currentQueue = current.updateQueue as UpdateQueue<unknown>;
+      const currentQueue = current.updateQueue as UpdateQueue;
       const currentLastBaseUpdate = currentQueue.lastBaseUpdate;
       if (currentLastBaseUpdate !== lastBaseUpdate) {
         if (currentLastBaseUpdate === null) {
@@ -505,10 +499,10 @@ export function processUpdateQueue(workInProgress: Fiber, props: unknown, instan
     let newLanes: Lanes = NoLanes;
 
     let newBaseState: unknown = null;
-    let newFirstBaseUpdate = null as Update<unknown> | null;
-    let newLastBaseUpdate = null as Update<unknown> | null;
+    let newFirstBaseUpdate = null as Update | null;
+    let newLastBaseUpdate = null as Update | null;
 
-    let update: Update<unknown> = firstBaseUpdate;
+    let update: Update = firstBaseUpdate;
     for (;;) {
       // An extra OffscreenLane bit is added to updates that were made to
       // a hidden tree, so that we can distinguish them from updates that were
@@ -527,15 +521,7 @@ export function processUpdateQueue(workInProgress: Fiber, props: unknown, instan
         // Priority is insufficient. Skip this update. If this is the first
         // skipped update, the previous update/state is the new base
         // update/state.
-        const clone: Update<unknown> = {
-          lane: updateLane,
-
-          tag: update.tag,
-          payload: update.payload,
-          callback: update.callback,
-
-          next: null,
-        };
+        const clone = cloneUpdate(updateLane, update.tag, update.payload, update.callback);
         if (newLastBaseUpdate === null) {
           newFirstBaseUpdate = newLastBaseUpdate = clone;
           newBaseState = newState;
@@ -555,21 +541,7 @@ export function processUpdateQueue(workInProgress: Fiber, props: unknown, instan
         }
 
         if (newLastBaseUpdate !== null) {
-          const clone: Update<unknown> = {
-            // This update is going to be committed so we never want uncommit
-            // it. Using NoLane works because 0 is a subset of all bitmasks, so
-            // this will never be skipped by the check above.
-            lane: NoLane,
-
-            tag: update.tag,
-            payload: update.payload,
-
-            // When this update is rebased, we should not fire its
-            // callback again.
-            callback: null,
-
-            next: null,
-          };
+          const clone = cloneUpdate(NoLane, update.tag, update.payload, null);
           newLastBaseUpdate = newLastBaseUpdate.next = clone;
         }
 
@@ -589,7 +561,7 @@ export function processUpdateQueue(workInProgress: Fiber, props: unknown, instan
           }
         }
       }
-      const next: Update<unknown> | null = update.next;
+      const next: Update | null = update.next;
       if (next !== null) {
         update = next;
         continue;
@@ -603,7 +575,7 @@ export function processUpdateQueue(workInProgress: Fiber, props: unknown, instan
       const lastPendingUpdate = pendingQueue;
       // Intentionally unsound. Pending updates form a circular list, but we
       // unravel them when transferring them to the base queue.
-      const firstPendingUpdate = lastPendingUpdate.next as Update<unknown>;
+      const firstPendingUpdate = lastPendingUpdate.next as Update;
       lastPendingUpdate.next = null;
       update = firstPendingUpdate;
       queue.lastBaseUpdate = lastPendingUpdate;
@@ -656,7 +628,7 @@ export function checkHasForceUpdateAfterProcessing(): boolean {
   return hasForceUpdate;
 }
 
-export function deferHiddenCallbacks<State>(updateQueue: UpdateQueue<State>): void {
+export function deferHiddenCallbacks(updateQueue: UpdateQueue): void {
   // When an update finishes on a hidden component, its callback should not
   // be fired until/unless the component is made visible again. Stash the
   // callback on the shared queue object so it can be fired later.
@@ -671,7 +643,7 @@ export function deferHiddenCallbacks<State>(updateQueue: UpdateQueue<State>): vo
   }
 }
 
-export function commitHiddenCallbacks<State>(updateQueue: UpdateQueue<State>, context: unknown): void {
+export function commitHiddenCallbacks(updateQueue: UpdateQueue, context: unknown): void {
   // This component is switching from hidden -> visible. Commit any callbacks
   // that were previously deferred.
   const hiddenCallbacks = updateQueue.shared.hiddenCallbacks;
@@ -684,7 +656,7 @@ export function commitHiddenCallbacks<State>(updateQueue: UpdateQueue<State>, co
   }
 }
 
-export function commitCallbacks<State>(updateQueue: UpdateQueue<State>, context: unknown): void {
+export function commitCallbacks(updateQueue: UpdateQueue, context: unknown): void {
   const callbacks = updateQueue.callbacks;
   if (callbacks !== null) {
     updateQueue.callbacks = null;

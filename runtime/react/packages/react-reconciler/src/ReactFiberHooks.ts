@@ -68,6 +68,7 @@ import {
   markRootEntangled,
   includesSomeLane,
   UpdateLanes,
+  LanedUpdate,
 } from "./ReactFiberLane.ts";
 import { ContinuousEventPriority, higherEventPriority } from "./ReactEventPriorities.ts";
 import { readContext, checkIfContextChanged } from "./ReactFiberNewContext.ts";
@@ -135,46 +136,53 @@ import { callComponentInDEV } from "./ReactFiberCallUserSpace.ts";
 // upstream's shared/ReactSymbols has this symbol; ours does not yet.
 const REACT_RECOVERABLE_TYPE: symbol = Symbol.for("react.recoverable");
 
-// A state or reducer update, in the circular list on its queue.
-export interface Update<S, A> {
-  lane: Lane;
+// A state or reducer update, in the circular list on its queue. Not generic:
+// the action and the state it computed are erased, and each hook projects
+// them to its own types, as it does the hook's state (see
+// runtime/react/spikes/hook-storage/README.md). `next` starts as a loop to
+// itself: every update is linked into a queue before its `next` is read.
+export class Update extends LanedUpdate {
   revertLane: Lane;
-  action: A;
+  action: unknown;
   hasEagerState: boolean;
-  eagerState: S | null;
-  next: Update<S, A>;
+  eagerState: unknown;
+  next: Update;
   // enableGestureTransition is off in the stable channel: always null.
-  gesture: null;
+  gesture: null = null;
+
+  constructor(lane: Lane, revertLane: Lane, action: unknown, hasEagerState: boolean, eagerState: unknown) {
+    super(lane);
+    this.revertLane = revertLane;
+    this.action = action;
+    this.hasEagerState = hasEagerState;
+    this.eagerState = eagerState;
+    this.next = this;
+  }
 }
 
-export interface UpdateQueue<S, A> {
-  pending: Update<S, A> | null;
-  lanes: Lanes;
-  dispatch: ((action: A) => unknown) | null;
-  lastRenderedReducer: ((state: S, action: A) => S) | null;
-  lastRenderedState: S | null;
+// A state or reducer hook's queue. `dispatch` and `lastRenderedReducer` are
+// that hook's typed functions, erased here and projected by the hook.
+export class UpdateQueue {
+  pending: Update | null = null;
+  lanes: Lanes = NoLanes;
+  dispatch: unknown = null;
+  lastRenderedReducer: unknown;
+  lastRenderedState: unknown;
+
+  constructor(lastRenderedReducer: unknown, lastRenderedState: unknown) {
+    this.lastRenderedReducer = lastRenderedReducer;
+    this.lastRenderedState = lastRenderedState;
+  }
 }
 
-// Creates an update. `next` starts as a loop to itself: every update is
-// linked into a queue before its `next` is read.
-function createHookUpdate<S, A>(
+function createHookUpdate(
   lane: Lane,
   revertLane: Lane,
-  action: A,
+  action: unknown,
   hasEagerState: boolean,
-  eagerState: S | null,
-): Update<S, A> {
-  const update = {
-    lane,
-    revertLane,
-    gesture: null,
-    action,
-    hasEagerState,
-    eagerState,
-    next: null,
-  } as unknown as Update<S, A>;
-  update.next = update;
-  return update;
+  eagerState: unknown,
+): Update {
+  return new Update(lane, revertLane, action, hasEagerState, eagerState);
 }
 
 // One hook's state in a function component's list. What `memoizedState`,
@@ -185,7 +193,7 @@ function createHookUpdate<S, A>(
 export class Hook {
   memoizedState: unknown = null;
   baseState: unknown = null;
-  baseQueue: Update<unknown, unknown> | null = null;
+  baseQueue: Update | null = null;
   queue: unknown = null;
   next: Hook | null = null;
 }
@@ -1208,15 +1216,9 @@ export function mountReducer<S, I, A>(
     initialState = initialArg as unknown as S;
   }
   hook.memoizedState = hook.baseState = initialState;
-  const queue: UpdateQueue<S, A> = {
-    pending: null,
-    lanes: NoLanes,
-    dispatch: null,
-    lastRenderedReducer: reducer,
-    lastRenderedState: initialState,
-  };
+  const queue = new UpdateQueue(reducer, initialState);
   hook.queue = queue;
-  const dispatch: Dispatch<A> = (dispatchReducerAction<S, A>).bind(null, currentlyRenderingFiber, queue);
+  const dispatch: Dispatch<A> = (dispatchReducerAction<A>).bind(null, currentlyRenderingFiber, queue);
   queue.dispatch = dispatch;
   return [hook.memoizedState as S, dispatch];
 }
@@ -1231,7 +1233,7 @@ export function updateReducer<S, I, A>(
 }
 
 function updateReducerImpl<S, A>(hook: Hook, current: Hook, reducer: (state: S, action: A) => S): [S, Dispatch<A>] {
-  const queue = hook.queue as UpdateQueue<S, A> | null;
+  const queue = hook.queue as UpdateQueue | null;
 
   if (queue === null) {
     throw new Error(
@@ -1243,7 +1245,7 @@ function updateReducerImpl<S, A>(hook: Hook, current: Hook, reducer: (state: S, 
   queue.lastRenderedReducer = reducer;
 
   // The last rebase update that is NOT part of the base state.
-  let baseQueue = hook.baseQueue as Update<S, A> | null;
+  let baseQueue = hook.baseQueue as Update | null;
 
   // The last pending update that hasn't been processed yet.
   const pendingQueue = queue.pending;
@@ -1283,8 +1285,8 @@ function updateReducerImpl<S, A>(hook: Hook, current: Hook, reducer: (state: S, 
     let newState = baseState;
 
     let newBaseState = null as S | null;
-    let newBaseQueueFirst = null as Update<S, A> | null;
-    let newBaseQueueLast = null as Update<S, A> | null;
+    let newBaseQueueFirst = null as Update | null;
+    let newBaseQueueLast = null as Update | null;
     let update = first;
     let didReadFromEntangledAsyncAction = false;
     do {
@@ -1308,7 +1310,7 @@ function updateReducerImpl<S, A>(hook: Hook, current: Hook, reducer: (state: S, 
         // Priority is insufficient. Skip this update. If this is the first
         // skipped update, the previous update/state is the new base
         // update/state.
-        const clone = createHookUpdate<S, A>(
+        const clone = createHookUpdate(
           updateLane,
           update.revertLane,
           update.action,
@@ -1339,7 +1341,7 @@ function updateReducerImpl<S, A>(hook: Hook, current: Hook, reducer: (state: S, 
             // This update is going to be committed so we never want uncommit
             // it. Using NoLane works because 0 is a subset of all bitmasks, so
             // this will never be skipped by the check above.
-            const clone = createHookUpdate<S, A>(NoLane, NoLane, update.action, update.hasEagerState, update.eagerState);
+            const clone = createHookUpdate(NoLane, NoLane, update.action, update.hasEagerState, update.eagerState);
             newBaseQueueLast = newBaseQueueLast.next = clone;
           }
 
@@ -1374,7 +1376,7 @@ function updateReducerImpl<S, A>(hook: Hook, current: Hook, reducer: (state: S, 
             // is a subset of all bitmasks, so this will never be skipped by
             // the check above. Reuse the same revertLane so we know when the
             // transition has finished.
-            const clone = createHookUpdate<S, A>(
+            const clone = createHookUpdate(
               NoLane,
               update.revertLane,
               update.action,
@@ -1396,7 +1398,7 @@ function updateReducerImpl<S, A>(hook: Hook, current: Hook, reducer: (state: S, 
         }
 
         // Process this update.
-        const action = update.action;
+        const action = update.action as A;
         if (shouldDoubleInvokeUserFnsInHooksDEV) {
           reducer(newState, action);
         }
@@ -1414,7 +1416,7 @@ function updateReducerImpl<S, A>(hook: Hook, current: Hook, reducer: (state: S, 
     if (newBaseQueueLast === null) {
       newBaseState = newState;
     } else {
-      newBaseQueueLast.next = newBaseQueueFirst as Update<S, A>;
+      newBaseQueueLast.next = newBaseQueueFirst as Update;
     }
 
     // Mark that the fiber performed work, but only if the new state is
@@ -1441,7 +1443,7 @@ function updateReducerImpl<S, A>(hook: Hook, current: Hook, reducer: (state: S, 
 
     hook.memoizedState = newState;
     hook.baseState = newBaseState;
-    hook.baseQueue = newBaseQueueLast as Update<unknown, unknown> | null;
+    hook.baseQueue = newBaseQueueLast as Update | null;
 
     queue.lastRenderedState = newState;
   }
@@ -1462,7 +1464,7 @@ export function rerenderReducer<S, I, A>(
   _init?: (initialArg: I) => S,
 ): [S, Dispatch<A>] {
   const hook = updateWorkInProgressHook();
-  const queue = hook.queue as UpdateQueue<S, A> | null;
+  const queue = hook.queue as UpdateQueue | null;
 
   if (queue === null) {
     throw new Error(
@@ -1488,7 +1490,7 @@ export function rerenderReducer<S, I, A>(
       // Process this render phase update. We don't have to check the
       // priority because it will always be the same as the current
       // render's.
-      const action = update.action;
+      const action = update.action as A;
       newState = reducer(newState, action);
       update = update.next;
     } while (update !== firstRenderPhaseUpdate);
@@ -1780,20 +1782,14 @@ function mountStateImpl<S>(initialStateArg: (() => S) | S): Hook {
     initialState = initialStateArg;
   }
   hook.memoizedState = hook.baseState = initialState;
-  const queue: UpdateQueue<S, BasicStateAction<S>> = {
-    pending: null,
-    lanes: NoLanes,
-    dispatch: null,
-    lastRenderedReducer: basicStateReducer,
-    lastRenderedState: initialState,
-  };
+  const queue = new UpdateQueue(basicStateReducer, initialState);
   hook.queue = queue;
   return hook;
 }
 
 export function mountState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>] {
   const hook = mountStateImpl(initialState);
-  const queue = hook.queue as UpdateQueue<S, BasicStateAction<S>>;
+  const queue = hook.queue as UpdateQueue;
   const dispatch: Dispatch<BasicStateAction<S>> = (dispatchSetState<S, BasicStateAction<S>>).bind(
     null,
     currentlyRenderingFiber,
@@ -1814,17 +1810,10 @@ export function rerenderState<S>(initialState: (() => S) | S): [S, Dispatch<Basi
 export function mountOptimistic<S, A>(passthrough: S, _reducer?: ((state: S, action: A) => S) | null): [S, (action: A) => void] {
   const hook = mountWorkInProgressHook();
   hook.memoizedState = hook.baseState = passthrough;
-  const queue: UpdateQueue<S, A> = {
-    pending: null,
-    lanes: NoLanes,
-    dispatch: null,
-    // Optimistic state does not use the eager update optimization.
-    lastRenderedReducer: null,
-    lastRenderedState: null,
-  };
+  const queue = new UpdateQueue(null, null);
   hook.queue = queue;
   // This is different than the normal setState function.
-  const dispatch: (action: A) => void = (dispatchOptimisticSetState<S, A>).bind(null, currentlyRenderingFiber, true, queue);
+  const dispatch: (action: A) => void = (dispatchOptimisticSetState<A>).bind(null, currentlyRenderingFiber, true, queue);
   queue.dispatch = dispatch;
   return [passthrough, dispatch];
 }
@@ -1875,7 +1864,7 @@ export function rerenderOptimistic<S, A>(passthrough: S, reducer?: ((state: S, a
   // Reset the base state to the passthrough. Future updates will be applied
   // on top of this.
   hook.baseState = passthrough;
-  const dispatch = (hook.queue as UpdateQueue<S, A>).dispatch as (action: A) => void;
+  const dispatch = (hook.queue as UpdateQueue).dispatch as (action: A) => void;
   return [passthrough, dispatch];
 }
 
@@ -2217,13 +2206,7 @@ export function mountActionState<S, P>(
   // the `use` algorithm during render.
   const stateHook = mountWorkInProgressHook();
   stateHook.memoizedState = stateHook.baseState = initialState;
-  const stateQueue: UpdateQueue<unknown, unknown> = {
-    pending: null,
-    lanes: NoLanes,
-    dispatch: null,
-    lastRenderedReducer: actionStateReducer,
-    lastRenderedState: initialState,
-  };
+  const stateQueue = new UpdateQueue(actionStateReducer, initialState);
   stateHook.queue = stateQueue;
   const setState: Dispatch<unknown> = dispatchSetState.bind(null, currentlyRenderingFiber, stateQueue);
   stateQueue.dispatch = setState;
@@ -2235,7 +2218,7 @@ export function mountActionState<S, P>(
     null,
     currentlyRenderingFiber,
     false,
-    pendingStateHook.queue as UpdateQueue<unknown, unknown>,
+    pendingStateHook.queue as UpdateQueue,
   );
 
   // Action queue hook. This is used to queue pending actions. The queue is
@@ -2780,7 +2763,7 @@ function releaseAsyncTransition(): void {
 
 function startTransition<S>(
   fiber: Fiber,
-  queue: UpdateQueue<S | Thenable<S>, BasicStateAction<S | Thenable<S>>>,
+  queue: UpdateQueue,
   pendingState: S,
   finishedState: S,
   callback: () => unknown,
@@ -2864,10 +2847,7 @@ export function startHostTransition<F>(
 
   const stateHook = ensureFormComponentIsStateful(formFiber);
 
-  const queue = stateHook.queue as UpdateQueue<
-    Thenable<TransitionStatus> | TransitionStatus,
-    BasicStateAction<Thenable<TransitionStatus> | TransitionStatus>
-  >;
+  const queue = stateHook.queue as UpdateQueue;
 
   startHostActionTimer(formFiber);
 
@@ -2905,7 +2885,7 @@ function ensureFormComponentIsStateful(formFiber: Fiber): Hook {
   //
   // Create the state hook used by TransitionAwareHostComponent. This is
   // essentially an inlined version of mountState.
-  const newQueue: UpdateQueue<unknown, unknown> = {
+  const newQueue: UpdateQueue = {
     pending: null,
     lanes: NoLanes,
     // We're going to cheat and intentionally not create a bound dispatch
@@ -2925,7 +2905,7 @@ function ensureFormComponentIsStateful(formFiber: Fiber): Hook {
   // to a new object. Then during rendering, we detect that the state has
   // changed and schedule a commit effect.
   const initialResetState = {};
-  const newResetStateQueue: UpdateQueue<unknown, unknown> = {
+  const newResetStateQueue: UpdateQueue = {
     pending: null,
     lanes: NoLanes,
     // We're going to cheat and intentionally not create a bound dispatch
@@ -2985,7 +2965,7 @@ export function requestFormReset(formFiber: Fiber): void {
     stateHook = (formFiber.alternate as Fiber).memoizedState as Hook;
   }
   const resetStateHook = stateHook.next as Hook;
-  const resetStateQueue = resetStateHook.queue as UpdateQueue<unknown, unknown>;
+  const resetStateQueue = resetStateHook.queue as UpdateQueue;
   dispatchSetStateInternal(formFiber, resetStateQueue, newResetState, requestUpdateLane(formFiber));
 }
 
@@ -2997,7 +2977,7 @@ export function mountTransition(): [boolean, StartTransitionFunction] {
   const start: StartTransitionFunction = (startTransition<boolean>).bind(
     null,
     currentlyRenderingFiber,
-    stateHook.queue as UpdateQueue<boolean | Thenable<boolean>, BasicStateAction<boolean | Thenable<boolean>>>,
+    stateHook.queue as UpdateQueue,
     true,
     false,
   );
@@ -3155,12 +3135,12 @@ function warnIfDispatchReceivedCallback(extraArgs: readonly unknown[]): void {
   }
 }
 
-function dispatchReducerAction<S, A>(fiber: Fiber, queue: UpdateQueue<S, A>, action: A, ...extraArgs: unknown[]): void {
+function dispatchReducerAction<A>(fiber: Fiber, queue: UpdateQueue, action: A, ...extraArgs: unknown[]): void {
   warnIfDispatchReceivedCallback(extraArgs);
 
   const lane = requestUpdateLane(fiber);
 
-  const update = createHookUpdate<S, A>(lane, NoLane, action, false, null);
+  const update = createHookUpdate(lane, NoLane, action, false, null);
 
   if (isRenderPhaseUpdate(fiber)) {
     enqueueRenderPhaseUpdate(queue, update);
@@ -3176,19 +3156,19 @@ function dispatchReducerAction<S, A>(fiber: Fiber, queue: UpdateQueue<S, A>, act
   markUpdateInDevTools(fiber, lane, action);
 }
 
-function dispatchSetState<S, A>(fiber: Fiber, queue: UpdateQueue<S, A>, action: A, ...extraArgs: unknown[]): void {
+function dispatchSetState<S, A>(fiber: Fiber, queue: UpdateQueue, action: A, ...extraArgs: unknown[]): void {
   warnIfDispatchReceivedCallback(extraArgs);
 
   const lane = requestUpdateLane(fiber);
-  const didScheduleUpdate = dispatchSetStateInternal(fiber, queue, action, lane);
+  const didScheduleUpdate = dispatchSetStateInternal<S, A>(fiber, queue, action, lane);
   if (didScheduleUpdate) {
     startUpdateTimerByLane(lane, "setState()", fiber);
   }
   markUpdateInDevTools(fiber, lane, action);
 }
 
-function dispatchSetStateInternal<S, A>(fiber: Fiber, queue: UpdateQueue<S, A>, action: A, lane: Lane): boolean {
-  const update = createHookUpdate<S, A>(lane, NoLane, action, false, null);
+function dispatchSetStateInternal<S, A>(fiber: Fiber, queue: UpdateQueue, action: A, lane: Lane): boolean {
+  const update = createHookUpdate(lane, NoLane, action, false, null);
 
   if (isRenderPhaseUpdate(fiber)) {
     enqueueRenderPhaseUpdate(queue, update);
@@ -3198,7 +3178,7 @@ function dispatchSetStateInternal<S, A>(fiber: Fiber, queue: UpdateQueue<S, A>, 
       // The queue is currently empty, which means we can eagerly compute the
       // next state before entering the render phase. If the new state is the
       // same as the current state, we may be able to bail out entirely.
-      const lastRenderedReducer = queue.lastRenderedReducer;
+      const lastRenderedReducer = queue.lastRenderedReducer as ((state: S, action: A) => S) | null;
       if (lastRenderedReducer !== null) {
         let prevDispatcher: SavedDispatcher | null = null;
         if (isDevelopment) {
@@ -3243,10 +3223,10 @@ function dispatchSetStateInternal<S, A>(fiber: Fiber, queue: UpdateQueue<S, A>, 
   return false;
 }
 
-function dispatchOptimisticSetState<S, A>(
+function dispatchOptimisticSetState<A>(
   fiber: Fiber,
   throwIfDuringRender: boolean,
-  queue: UpdateQueue<S, A>,
+  queue: UpdateQueue,
   action: A,
 ): void {
   const transition = requestCurrentTransition();
@@ -3294,7 +3274,7 @@ function dispatchOptimisticSetState<S, A>(
   const lane = SyncLane;
   // After committing, the optimistic update is "reverted" using the same
   // lane as the transition it's associated with.
-  const update = createHookUpdate<S, A>(lane, requestTransitionLane(transition), action, false, null);
+  const update = createHookUpdate(lane, requestTransitionLane(transition), action, false, null);
 
   if (isRenderPhaseUpdate(fiber)) {
     // When calling startTransition during render, this warns instead of
@@ -3333,7 +3313,7 @@ function isRenderPhaseUpdate(fiber: Fiber): boolean {
   return fiber === currentlyRenderingFiber || (alternate !== null && alternate === currentlyRenderingFiber);
 }
 
-function enqueueRenderPhaseUpdate<S, A>(queue: UpdateQueue<S, A>, update: Update<S, A>): void {
+function enqueueRenderPhaseUpdate(queue: UpdateQueue, update: Update): void {
   // This is a render phase update. Stash it in a lazily-created map of
   // queue -> linked list of updates. After this render pass, we'll restart
   // and apply the stashed updates on top of the work-in-progress hook.
@@ -3350,7 +3330,7 @@ function enqueueRenderPhaseUpdate<S, A>(queue: UpdateQueue<S, A>, update: Update
 }
 
 // TODO: Move to ReactFiberConcurrentUpdates?
-function entangleTransitionUpdate<S, A>(root: FiberRoot, queue: UpdateQueue<S, A>, lane: Lane): void {
+function entangleTransitionUpdate(root: FiberRoot, queue: UpdateQueue, lane: Lane): void {
   if (isTransitionLane(lane)) {
     let queueLanes = queue.lanes;
 

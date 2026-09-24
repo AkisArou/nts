@@ -1553,7 +1553,7 @@ function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot, lane
       }
 
       if (flags & Callback && offscreenSubtreeIsHidden) {
-        const updateQueue = finishedWork.updateQueue as UpdateQueue<unknown> | null;
+        const updateQueue = finishedWork.updateQueue as UpdateQueue | null;
         if (updateQueue !== null) {
           deferHiddenCallbacks(updateQueue);
         }

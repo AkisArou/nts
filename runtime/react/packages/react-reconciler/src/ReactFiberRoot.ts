@@ -11,9 +11,8 @@ import type { Transition, TransitionTypes, Wakeable } from "shared/ReactTypes.ts
 import type { ErrorInfo, Fiber, FiberRoot, SuspenseHydrationCallbacks, TransitionTracingCallbacks } from "./ReactInternalTypes.ts";
 import type { RootTag } from "./ReactRootTags.ts";
 import type { Cache } from "./ReactFiberCacheComponent.ts";
-import type { ConcurrentUpdate } from "./ReactFiberConcurrentUpdates.ts";
 import type { Container, Instance, NoTimeout, TimeoutHandle } from "react-reconciler/ReactFiberConfig.ts";
-import type { Lane, LaneMap, Lanes } from "./ReactFiberLane.ts";
+import type { Lane, LanedUpdate, LaneMap, Lanes } from "./ReactFiberLane.ts";
 import { noTimeout } from "react-reconciler/ReactFiberConfig.ts";
 import { createHostRootFiber } from "./ReactFiber.ts";
 import { createLaneMap, NoLane, NoLanes, NoTimestamp, TotalLanes } from "./ReactFiberLane.ts";
@@ -62,7 +61,7 @@ export class FiberRootNode {
   entangledLanes: Lanes = NoLanes;
   entanglements: LaneMap<Lanes> = createLaneMap(NoLanes);
 
-  hiddenUpdates: LaneMap<ConcurrentUpdate[] | null> = createLaneMap<ConcurrentUpdate[] | null>(null);
+  hiddenUpdates: LaneMap<LanedUpdate[] | null> = createLaneMap<LanedUpdate[] | null>(null);
 
   identifierPrefix: string;
   onUncaughtError: ErrorCallback;

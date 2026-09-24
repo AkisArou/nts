@@ -7,7 +7,7 @@ import { isDevelopment } from "shared/Build.ts";
 import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";
 import type { UpdateQueue as HookQueue, Update as HookUpdate } from "./ReactFiberHooks.ts";
 import type { SharedQueue as ClassQueue, Update as ClassUpdate } from "./ReactFiberClassUpdateQueue.ts";
-import type { Lane, Lanes } from "./ReactFiberLane.ts";
+import type { Lane, LanedUpdate, Lanes } from "./ReactFiberLane.ts";
 import type { OffscreenInstance } from "./ReactFiberOffscreenComponent.ts";
 import {
   getWorkInProgressRoot,
@@ -19,25 +19,19 @@ import { Hydrating, NoFlags, Placement } from "./ReactFiberFlags.ts";
 import { HostRoot, OffscreenComponent } from "./ReactWorkTags.ts";
 import { OffscreenVisible } from "./ReactFiberOffscreenComponent.ts";
 
-// The part of a hook or class update that this module links into a queue.
-export interface ConcurrentUpdate {
-  next: ConcurrentUpdate;
-  lane: Lane;
-}
-
-interface ConcurrentQueue {
-  pending: ConcurrentUpdate | null;
-}
-
 // If a render is in progress, and we receive an update from a concurrent event,
 // we wait until the current render is over (either finished or interrupted)
 // before adding it to the fiber/hook queue. Push to these arrays so we can
-// access the queue, fiber, update, et al later. Upstream interleaves the four
-// values in one array; four parallel typed arrays keep the same layout
-// without a heterogeneous array.
+// access the queue, fiber, update, et al later. Upstream interleaves fiber,
+// queue, update and lane in one array; here each has its own typed array, and
+// the queue and update have one per kind. Entry `i` fills the pair for its
+// kind and leaves the other null; a render-only entry leaves both null. One
+// index across all of them keeps upstream's order.
 const queuedFibers: (Fiber | null)[] = [];
-const queuedQueues: (ConcurrentQueue | null)[] = [];
-const queuedUpdates: (ConcurrentUpdate | null)[] = [];
+const queuedHookQueues: (HookQueue | null)[] = [];
+const queuedHookUpdates: (HookUpdate | null)[] = [];
+const queuedClassQueues: (ClassQueue | null)[] = [];
+const queuedClassUpdates: (ClassUpdate | null)[] = [];
 const queuedLanes: Lane[] = [];
 let concurrentQueuesIndex = 0;
 
@@ -52,23 +46,40 @@ export function finishQueueingConcurrentUpdates(): void {
   for (let i = 0; i < endIndex; i++) {
     const fiber = queuedFibers[i]!;
     queuedFibers[i] = null;
-    const queue = queuedQueues[i]!;
-    queuedQueues[i] = null;
-    const update = queuedUpdates[i]!;
-    queuedUpdates[i] = null;
+    const hookQueue = queuedHookQueues[i] ?? null;
+    queuedHookQueues[i] = null;
+    const hookUpdate = queuedHookUpdates[i] ?? null;
+    queuedHookUpdates[i] = null;
+    const classQueue = queuedClassQueues[i] ?? null;
+    queuedClassQueues[i] = null;
+    const classUpdate = queuedClassUpdates[i] ?? null;
+    queuedClassUpdates[i] = null;
     const lane = queuedLanes[i]!;
     queuedLanes[i] = NoLane;
 
-    if (queue !== null && update !== null) {
-      const pending = queue.pending;
+    let update: LanedUpdate | null = null;
+    if (hookQueue !== null && hookUpdate !== null) {
+      const pending = hookQueue.pending;
       if (pending === null) {
         // This is the first update. Create a circular list.
-        update.next = update;
+        hookUpdate.next = hookUpdate;
       } else {
-        update.next = pending.next;
-        pending.next = update;
+        hookUpdate.next = pending.next;
+        pending.next = hookUpdate;
       }
-      queue.pending = update;
+      hookQueue.pending = hookUpdate;
+      update = hookUpdate;
+    } else if (classQueue !== null && classUpdate !== null) {
+      const pending = classQueue.pending;
+      if (pending === null) {
+        // This is the first update. Create a circular list.
+        classUpdate.next = classUpdate;
+      } else {
+        classUpdate.next = pending.next;
+        pending.next = classUpdate;
+      }
+      classQueue.pending = classUpdate;
+      update = classUpdate;
     }
 
     if (lane !== NoLane) {
@@ -81,13 +92,15 @@ export function getConcurrentlyUpdatedLanes(): Lanes {
   return concurrentlyUpdatedLanes;
 }
 
-function enqueueUpdate(fiber: Fiber, queue: ConcurrentQueue | null, update: ConcurrentUpdate | null, lane: Lane): void {
+function enqueueUpdate(fiber: Fiber, lane: Lane): void {
   // Don't update the `childLanes` on the return path yet. If we already in
   // the middle of rendering, wait until after it has completed.
   const index = concurrentQueuesIndex++;
   queuedFibers[index] = fiber;
-  queuedQueues[index] = queue;
-  queuedUpdates[index] = update;
+  queuedHookQueues[index] = null;
+  queuedHookUpdates[index] = null;
+  queuedClassQueues[index] = null;
+  queuedClassUpdates[index] = null;
   queuedLanes[index] = lane;
 
   concurrentlyUpdatedLanes = mergeLanes(concurrentlyUpdatedLanes, lane);
@@ -102,36 +115,33 @@ function enqueueUpdate(fiber: Fiber, queue: ConcurrentQueue | null, update: Conc
   }
 }
 
-// A hook or class queue is linked here only through `pending`, `next` and
-// `lane`, which both kinds of update have.
-function asConcurrentQueue(queue: { pending: unknown }): ConcurrentQueue {
-  return queue as ConcurrentQueue;
+function enqueueHookUpdate(fiber: Fiber, queue: HookQueue, update: HookUpdate, lane: Lane): void {
+  const index = concurrentQueuesIndex;
+  enqueueUpdate(fiber, lane);
+  queuedHookQueues[index] = queue;
+  queuedHookUpdates[index] = update;
 }
 
-function asConcurrentUpdate(update: { next: unknown; lane: Lane }): ConcurrentUpdate {
-  return update as ConcurrentUpdate;
-}
-
-export function enqueueConcurrentHookUpdate<S, A>(
+export function enqueueConcurrentHookUpdate(
   fiber: Fiber,
-  queue: HookQueue<S, A>,
-  update: HookUpdate<S, A>,
+  queue: HookQueue,
+  update: HookUpdate,
   lane: Lane,
 ): FiberRoot | null {
-  enqueueUpdate(fiber, asConcurrentQueue(queue), asConcurrentUpdate(update), lane);
+  enqueueHookUpdate(fiber, queue, update, lane);
   return getRootForUpdatedFiber(fiber);
 }
 
-export function enqueueConcurrentHookUpdateAndEagerlyBailout<S, A>(
+export function enqueueConcurrentHookUpdateAndEagerlyBailout(
   fiber: Fiber,
-  queue: HookQueue<S, A>,
-  update: HookUpdate<S, A>,
+  queue: HookQueue,
+  update: HookUpdate,
 ): void {
   // This function is used to queue an update that doesn't need a rerender. The
   // only reason we queue it is in case there's a subsequent higher priority
   // update that causes it to be rebased.
   const lane = NoLane;
-  enqueueUpdate(fiber, asConcurrentQueue(queue), asConcurrentUpdate(update), lane);
+  enqueueHookUpdate(fiber, queue, update, lane);
 
   // Usually we can rely on the upcoming render phase to process the concurrent
   // queue. However, since this is a bail out, we're not scheduling any work
@@ -146,20 +156,21 @@ export function enqueueConcurrentHookUpdateAndEagerlyBailout<S, A>(
   }
 }
 
-// Non-generic over the state it carries: the class queue's state is erased,
-// and a generic here would be one no call pins down.
 export function enqueueConcurrentClassUpdate(
   fiber: Fiber,
-  queue: ClassQueue<unknown>,
-  update: ClassUpdate<unknown>,
+  queue: ClassQueue,
+  update: ClassUpdate,
   lane: Lane,
 ): FiberRoot | null {
-  enqueueUpdate(fiber, asConcurrentQueue(queue), asConcurrentUpdate(update), lane);
+  const index = concurrentQueuesIndex;
+  enqueueUpdate(fiber, lane);
+  queuedClassQueues[index] = queue;
+  queuedClassUpdates[index] = update;
   return getRootForUpdatedFiber(fiber);
 }
 
 export function enqueueConcurrentRenderForLane(fiber: Fiber, lane: Lane): FiberRoot | null {
-  enqueueUpdate(fiber, null, null, lane);
+  enqueueUpdate(fiber, lane);
   return getRootForUpdatedFiber(fiber);
 }
 
@@ -178,7 +189,7 @@ export function unsafe_markUpdateLaneFromFiberToRoot(sourceFiber: Fiber, lane: L
 
 function markUpdateLaneFromFiberToRoot(
   sourceFiber: Fiber,
-  update: ConcurrentUpdate | null,
+  update: LanedUpdate | null,
   lane: Lane,
 ): FiberRoot | null {
   // Update the source fiber's lanes

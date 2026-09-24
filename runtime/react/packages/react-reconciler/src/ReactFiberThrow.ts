@@ -75,7 +75,7 @@ interface ErrorBoundaryInstance {
   componentDidCatch?: unknown;
 }
 
-function createRootErrorUpdate(root: FiberRoot, errorInfo: CapturedValue<unknown>, lane: Lane): Update<unknown> {
+function createRootErrorUpdate(root: FiberRoot, errorInfo: CapturedValue<unknown>, lane: Lane): Update {
   const update = createUpdate(lane);
   // Unmount the root by rendering null.
   update.tag = CaptureUpdate;
@@ -92,14 +92,14 @@ function createRootErrorUpdate(root: FiberRoot, errorInfo: CapturedValue<unknown
   return update;
 }
 
-function createClassErrorUpdate(lane: Lane): Update<unknown> {
+function createClassErrorUpdate(lane: Lane): Update {
   const update = createUpdate(lane);
   update.tag = CaptureUpdate;
   return update;
 }
 
 function initializeClassErrorUpdate(
-  update: Update<unknown>,
+  update: Update,
   root: FiberRoot,
   fiber: Fiber,
   errorInfo: CapturedValue<unknown>,

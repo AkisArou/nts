@@ -173,7 +173,7 @@ function applyDerivedStateFromProps(
   // base state.
   if (workInProgress.lanes === NoLanes) {
     // Queue is always non-null for classes
-    const updateQueue = workInProgress.updateQueue as UpdateQueue<unknown>;
+    const updateQueue = workInProgress.updateQueue as UpdateQueue;
     updateQueue.baseState = memoizedState;
   }
 }
