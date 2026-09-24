@@ -23187,6 +23187,41 @@ more than its fields". That is a decision to make about classes at the boundary,
 not seventeen unrelated obstacles -- and it is the kind of correction the 92
 could never have surfaced, because a grouped message is not a cause.
 
+##### And the seven classes are not a separate item either
+
+Opened one at a time they reduce to two questions already on the board:
+
+```text
+  events.EventEmitter      constructor `takes an object`   <- the inbound question
+  net.SocketAddress        constructor `takes an object`   <- the inbound question
+  http.Server              constructor not compiled (a lowering cascade)
+  assert.CallTracker       every member died
+  fs.Dirent                every member died
+  http.OutgoingMessage     every member died
+  readline.Interface       every member died
+```
+
+Measured with `fs.Stats` as the control, because it is the one class this profile
+*does* publish: 17 surviving `Stats__*` function definitions and a layout, against
+14 and a layout for `EventEmitter`. So surviving members and a layout are not what
+separates them -- `class_definition` is reached for both, and what stops
+`EventEmitter` is its constructor's object parameter.
+
+**So there is nothing cheap left at the boundary.** Every remaining row is the
+inbound-object design question -- a `napi_ref` and a lifetime in the runtime's
+reference counting, which `blockers/an-object-at-the-boundary` warns off the
+shortcut for -- or a lowering gap, or a refusal that must stay (a cycle; a class
+instance node does not publish). The shorthand-namespace fix was the last item
+here whose cost was a syntax kind.
+
+Two units to be careful with, both of which produced a wrong count on the way:
+`#` is not a C identifier character, so `Owner#member` is `Owner__member` in the
+emitted C and a grep for the first finds nothing; and a grep for `Owner__*`
+**symbols** counts struct fields and descriptors as well as functions, which is
+several times the function count for some classes. Count definitions, and keep a
+published class in the sample as the control -- `Stats` reading zero is what
+caught both.
+
 ### The fix that is landed
 
 Step 3, because it is correct independently of the rest: an empty array literal
