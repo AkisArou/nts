@@ -2,6 +2,7 @@
 //! layout calculator on every emitted definition.
 use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name, Spelling};
 use nts_core::hir::Callee;
+use nts_codegen_common::symbols::bridge_name;
 use nts_core::hir::native::{Pointee, Type};
 
 /// Whether this program needs a type one of its bindings' headers defines.
@@ -638,11 +639,6 @@ fn pointee_is_foreign(pointee: &Pointee) -> bool {
 /// Both halves are in it because neither alone identifies the bridge: the same
 /// function can be handed to two callbacks with different C signatures, and two
 /// functions can share one signature.
-pub(super) fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPointer, once: bool) -> String {
-    let kind = if once { "Once" } else { "" };
-    format!("NtsBridge{kind}_{}_{}", c_identifier(target), signature.name)
-}
-
 /// The typedefs and definitions the program's `NativeBridge` operations need.
 ///
 /// A bridge is a real C function with the foreign signature that calls the
@@ -688,7 +684,7 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             // With a context, the foreign signature's last parameter *is* that
             // receiver. And the compiled function may take *fewer* than C
             // passes -- `() => count++` is a perfectly good handler for a signal
-            // that passes the instance -- so C's extra leading arguments are
+            // that passes the instance -- so C's extra trailing arguments are
             // accepted and dropped. More than C passes is the mismatch.
             let foreign = signature.parameters.len() - usize::from(*context);
             if compiled.params.is_empty() || compiled.params.len() - 1 > foreign {

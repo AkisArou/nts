@@ -1034,7 +1034,7 @@ fn bridges(program: &Program) -> Result<String, Diagnostic> {
                 .first()
                 .and_then(|method| method.as_deref())
                 .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
-            let name = bridge_name(target, signature, *once);
+            let name = nts_codegen_common::symbols::bridge_name(target, signature, *once);
             if !seen.insert(name.clone()) {
                 continue;
             }
@@ -1054,7 +1054,7 @@ fn bridges(program: &Program) -> Result<String, Diagnostic> {
             // is passed on as it arrives.
             // And the compiled function may take fewer than C passes -- `() =>
             // count++` handles a signal that passes the instance -- so C's
-            // extra leading arguments are accepted and dropped. More is the
+            // extra trailing arguments are accepted and dropped. More is the
             // mismatch.
             let foreign = signature.parameters.len() - usize::from(*context);
             if compiled.params.is_empty() || compiled.params.len() - 1 > foreign {
@@ -1151,11 +1151,6 @@ fn closure_layout<'p>(
 /// The same name the C backend derives, because the two must not disagree: a
 /// program compiled by one and linked against a consumer built for the other
 /// would otherwise differ in a symbol nobody looked at.
-fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPointer, once: bool) -> String {
-    let kind = if once { "Once" } else { "" };
-    format!("NtsBridge{kind}_{}_{}", nts_codegen_common::symbols::c_identifier(target), signature.name)
-}
-
 fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
     format!("nts_fnval_{}", descriptor_name(layout))
 }
@@ -2233,7 +2228,7 @@ fn allocation(
                 .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
             format!(
                 "{out} = getelementptr i8, ptr @{}, i64 0",
-                bridge_name(target, signature, *once)
+                nts_codegen_common::symbols::bridge_name(target, signature, *once)
             )
         }
         OpKind::ClosureStatic => {

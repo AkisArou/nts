@@ -443,6 +443,15 @@ fn escaped(c: char) -> String {
     format!("_u{:04x}_", c as u32)
 }
 
+/// The C symbol of the bridge from a foreign function pointer to `target`,
+/// the compiled function C calls through it. One spelling for every backend,
+/// since the name is what a native operation and its definition agree on.
+#[must_use]
+pub fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPointer, once: bool) -> String {
+    let kind = if once { "Once" } else { "" };
+    format!("NtsBridge{kind}_{}_{}", c_identifier(target), signature.name)
+}
+
 pub fn c_identifier(name: &str) -> String {
     // A qualified name carries punctuation no C identifier may: `Class#method`
     // for a method, `Class.method` for a static one, `Class<id>` for one

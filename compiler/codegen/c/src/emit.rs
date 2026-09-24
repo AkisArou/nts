@@ -2291,7 +2291,7 @@ fn bridge_text(
             op.origin.location,
         )
     })?;
-    Ok(format!("{name} = {};", native_memory::bridge_name(target, signature, once)))
+    Ok(format!("{name} = {};", nts_codegen_common::symbols::bridge_name(target, signature, once)))
 }
 
 fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
