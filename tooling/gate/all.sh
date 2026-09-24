@@ -1828,7 +1828,9 @@ interop() {
   #     with gtk-loop's four arms. It SKIPs without a macOS SDK.
   # 26: `macos-blocks` (A2's blocks), TypeScript closures as Objective-C
   #     blocks against an ARC oracle. It SKIPs without a macOS SDK.
-  interop_floor=26
+  # 27: `macos-subclass` (A2's classes), an NSObject subclass defined from
+  #     TypeScript, whose method is a closure Foundation calls.
+  interop_floor=27
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"

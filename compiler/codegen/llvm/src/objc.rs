@@ -11,7 +11,7 @@ use nts_codegen_common::objc::{
     selector_symbol,
 };
 use nts_core::hir::native::{FnPointer, Function, Send, Type};
-use nts_core::hir::{Func, HirType, Program, ValueId};
+use nts_core::hir::{Callee, Func, HirType, OpKind, Program, ValueId};
 use nts_diagnostics::Diagnostic;
 
 use super::{extension, name, refuse, ty_of};
@@ -53,13 +53,22 @@ pub(super) fn module(program: &Program) -> String {
         return text;
     }
     let found = lookups(program);
-    let _ = writeln!(text, "declare ptr @sel_registerName(ptr)");
+    // Each declared once: a program that binds the runtime's C API itself
+    // (`objc:runtime`, to define a class) has declared `sel_registerName`
+    // already, and LLVM refuses a second declaration where C accepts it.
     // Required, not `objc_getClass`: a missing class ends the process by
-    // name, where nil would answer every message with zero.
-    let _ = writeln!(text, "declare ptr @objc_getRequiredClass(ptr)");
-    // Declared with no parameters, as Apple's header does; every call spells
-    // the function type it actually makes.
-    let _ = writeln!(text, "declare void @objc_msgSend()");
+    // name, where nil would answer every message with zero. And
+    // `objc_msgSend` with no parameters, as Apple's header does; every call
+    // spells the function type it actually makes.
+    for (symbol, declaration) in [
+        ("sel_registerName", "declare ptr @sel_registerName(ptr)"),
+        ("objc_getRequiredClass", "declare ptr @objc_getRequiredClass(ptr)"),
+        ("objc_msgSend", "declare void @objc_msgSend()"),
+    ] {
+        if !bound(program, symbol) {
+            let _ = writeln!(text, "{declaration}");
+        }
+    }
     for selector in found.selectors {
         lookup(&mut text, &selector_symbol(selector), "sel_registerName", selector);
     }
@@ -114,6 +123,15 @@ pub(super) fn send(
         values.join(", ")
     ));
     Ok(before.join("\n"))
+}
+
+/// Whether the program binds `symbol` as a C function of its own, which the
+/// native declarations have already declared.
+fn bound(program: &Program, symbol: &str) -> bool {
+    program.funcs.iter().flat_map(|func| &func.values).any(|op| {
+        matches!(&op.kind, OpKind::Call { callee: Callee::Native(target), .. }
+            if target.send.is_none() && target.name == symbol)
+    })
 }
 
 /// The C backend's `objc::blocks`, in the other spelling: the block layout,

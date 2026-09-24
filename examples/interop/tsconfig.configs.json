@@ -36,6 +36,7 @@
     "macos-foundation/nts.config.ts",
     "macos-loop/nts.config.ts",
     "macos-blocks/nts.config.ts",
+    "macos-subclass/nts.config.ts",
     "native-string/nts.config.ts",
     "native-closure/nts.config.ts",
     "android-shape/nts.config.ts",

@@ -312,6 +312,18 @@ fn classify(
     decided: &Decided<'_>,
     of: &mut [Ownership],
 ) {
+    // What anything reads, for the one rule below that asks.
+    let read: rustc_hash::FxHashSet<ValueId> = func
+        .blocks
+        .iter()
+        .flat_map(|block| {
+            block
+                .ops
+                .iter()
+                .flat_map(|value| super::operands_of(&func.values[value.0 as usize].kind))
+                .chain(super::operands_of_terminator(&block.terminator))
+        })
+        .collect();
     for (at, block) in func.blocks.iter().enumerate() {
         let here = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
         let around = Surroundings {
@@ -389,7 +401,21 @@ fn classify(
                 // `mutableCopy`/`init`). Otherwise it is borrowed from the
                 // callee, which for Objective-C means from the autorelease
                 // pool, and keeping it takes a reference of our own.
-                if target.returns_owned { Ownership::Produced } else { Ownership::Copied }
+                //
+                // **A borrowed result nobody reads is not touched**, as ARC
+                // does not touch one: the pool that holds it gives it back.
+                // Retaining it anyway is a retain and a release for nothing
+                // on every call that ignores its result, and worse when the
+                // result is not an object at all: `performSelector:withObject:`
+                // on a `void` method answers whatever the return register
+                // held, and `objc_retain` of that ended the process.
+                if target.returns_owned {
+                    Ownership::Produced
+                } else if read.contains(value) {
+                    Ownership::Copied
+                } else {
+                    Ownership::Borrowed
+                }
             } else if produces_owned(kind) {
                 Ownership::Produced
             } else if (is_load(kind) || repackages(kind))
