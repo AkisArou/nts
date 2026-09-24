@@ -50,7 +50,8 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
     }
     for decl in &binding.types {
         match decl {
-            TypeDecl::Class { name, tag, parent } => {
+            TypeDecl::Class { name, tag, parent, counted } => {
+                let class = if *counted { "GObjectClass" } else { "Class" };
                 // `button.set_label(text)`: each method is the C function it
                 // names, with the receiver as its `this`. Intersected rather
                 // than extended, so a subclass method that shares a name with
@@ -65,10 +66,10 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                 out.push_str("  }\n");
                 if let Some((_, parent)) = parent {
                     let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods & {parent}Methods;");
-                    let _ = writeln!(out, "  export type {name} = Class<\"{tag}\", {parent}> & {name}Methods;");
+                    let _ = writeln!(out, "  export type {name} = {class}<\"{tag}\", {parent}> & {name}Methods;");
                 } else {
                     let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods;");
-                    let _ = writeln!(out, "  export type {name} = Class<\"{tag}\"> & {name}Methods;");
+                    let _ = writeln!(out, "  export type {name} = {class}<\"{tag}\"> & {name}Methods;");
                 }
             }
         }

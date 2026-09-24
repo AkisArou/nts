@@ -77,7 +77,6 @@ import {
   KeyFileFlags,
   type GError,
 } from "c:GLib-2.0";
-import { g_object_unref } from "c:GObject-2.0";
 import type { c_double, c_int, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
 import { gir_emit, gir_log } from "c:gir-shim";
@@ -139,9 +138,7 @@ async function fileKind(path: string): Promise<number> {
   const file = g_file_new_for_path(path);
   // No flags, the default priority, nothing to cancel it: left out.
   const info = await file.query_info_async("standard::type");
-  g_object_unref(file);
   const found = info.get_file_type();
-  g_object_unref(info);
   return found === FileType.DIRECTORY ? 2 : found;
 }
 
@@ -164,7 +161,6 @@ async function directories(path: string): Promise<void> {
     again = (e as Error).message.length > 0 ? "rejected" : "rejected-empty";
   }
   const removed = await directory.delete_async();
-  g_object_unref(directory);
   folders = "made=" + String(made) + " again=" + again + " removed=" + String(removed);
 }
 
@@ -233,7 +229,6 @@ function main(): void {
   // does not know would end the run.
   const status = application.run(["gir"]);
   gir_log("status=" + String(status));
-  g_object_unref(application);
   gir_log("ticks=" + String(ticks));
   gir_log("kind=" + String(kind));
   gir_log(folders);

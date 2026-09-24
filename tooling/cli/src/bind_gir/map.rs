@@ -55,7 +55,8 @@ pub(crate) struct Cast {
 pub(crate) enum TypeDecl {
     /// `Class<"_GtkButton", GtkWidget>`; the parent as `(module, name)` when
     /// it lives in another namespace.
-    Class { name: String, tag: String, parent: Option<(String, String)> },
+    /// `counted` for a `GObject`, which the compiler counts: `GObjectClass`.
+    Class { name: String, tag: String, parent: Option<(String, String)>, counted: bool },
 }
 
 #[derive(Debug, Clone)]
@@ -159,6 +160,9 @@ pub(crate) enum Reason {
     /// Dropped by the self-check: in GIR, and in none of the headers GIR
     /// names (`g_access` is in `glib/gstdio.h`, which `glib.h` leaves out).
     Undeclared,
+    /// `g_object_ref`, `g_object_unref` and their kin: the compiler counts a
+    /// `GObject` itself, and a program that also did would count it twice.
+    CountedByCompiler,
 }
 
 impl fmt::Display for Reason {
@@ -185,6 +189,7 @@ impl fmt::Display for Reason {
             Self::NoTag(c) => write!(f, "`{c}`, which the headers do not define as a tagged struct"),
             Self::Header(error) => write!(f, "the header disagrees: {error}"),
             Self::Undeclared => write!(f, "declared by none of the headers GIR names"),
+            Self::CountedByCompiler => write!(f, "a reference count the compiler keeps itself"),
         }
     }
 }
@@ -203,13 +208,18 @@ impl Reason {
     }
 }
 
-/// The module name a namespace binds as: `c:Gtk-4.0`.
-#[must_use]
+/// The functions a program would count a `GObject` with, which the compiler
+/// calls itself: bound, a program could release what it does not own.
+const COUNTING: [&str; 6] =
+    ["g_object_ref", "g_object_unref", "g_object_ref_sink", "g_object_take_ref", "g_object_force_floating", "g_clear_object"];
+
 /// Whether `name` can be a TypeScript type name as it is.
 fn is_type_name(name: &str) -> bool {
     name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
+/// The module name a namespace binds as: `c:Gtk-4.0`.
+#[must_use]
 pub(crate) fn module_of(namespace: &Namespace) -> String {
     format!("c:{}-{}", namespace.name, namespace.version)
 }
@@ -448,7 +458,11 @@ impl<'a> Mapper<'a> {
                 self.binding.brands.insert("c_size_t");
                 self.binding.casts.push(Cast { class: c_type.clone(), get_type: get_type.clone() });
             }
-            self.binding.types.push(TypeDecl::Class { name: c_type.clone(), tag, parent });
+            let counted = self.counted(self.namespace, class);
+            if counted {
+                self.binding.brands.insert("GObjectClass");
+            }
+            self.binding.types.push(TypeDecl::Class { name: c_type.clone(), tag, parent, counted });
         }
         // Records are roots: nothing derives from one by GIR's account, and a
         // root `Class` is an opaque handle that can also anchor a chain, which
@@ -457,7 +471,7 @@ impl<'a> Mapper<'a> {
             let Some(c_type) = &record.c_type else { continue };
             let Some(tag) = self.facts.tags.get(c_type) else { continue };
             self.binding.brands.insert("Class");
-            self.binding.types.push(TypeDecl::Class { name: c_type.clone(), tag: tag.clone(), parent: None });
+            self.binding.types.push(TypeDecl::Class { name: c_type.clone(), tag: tag.clone(), parent: None, counted: false });
         }
     }
 
@@ -466,20 +480,10 @@ impl<'a> Mapper<'a> {
     /// and one to its first member interconvertible, which is how `GObject`
     /// sits on `GTypeInstance` although GIR gives it no parent.
     fn parent_of(&mut self, class: &'a Class) -> Option<(String, String)> {
-        if let Some(parent) = &class.parent {
-            let qualified = self.qualify(parent);
-            let Some(Resolved::Class(namespace, parent)) = self.resolve(&qualified) else { return None };
+        if class.parent.is_some() || class.interface {
+            let (namespace, parent) = self.parent_class(self.namespace, class)?;
             let c_type = parent.c_type.clone()?;
             return Some(self.reference(namespace, &c_type));
-        }
-        // An interface GIR gives no prerequisite: what the type system says
-        // every instance of it also is -- `GObject` for `GFile`.
-        if class.interface
-            && let Some(prerequisite) = class.c_type.as_deref().and_then(|c| self.facts.prerequisites.get(c)).cloned()
-        {
-            let namespace = self.c_types.get(prerequisite.as_str()).copied()?;
-            let is_class = namespace.classes.iter().any(|c| c.c_type.as_deref() == Some(prerequisite.as_str()));
-            return is_class.then(|| self.reference(namespace, &prerequisite));
         }
         let Some(TypeRef::Named { c_type: Some(c_type), .. }) = &class.first_field else { return None };
         if c_type.contains('*') {
@@ -539,6 +543,9 @@ impl<'a> Mapper<'a> {
             return Err(Reason::NotIntrospectable);
         }
         let symbol = callable.c_identifier.clone().ok_or(Reason::NoSymbol)?;
+        if COUNTING.contains(&symbol.as_str()) {
+            return Err(Reason::CountedByCompiler);
+        }
         let signature = &callable.signature;
         let mut parameters = Vec::new();
         let mut c_parameters = Vec::new();
@@ -594,11 +601,9 @@ impl<'a> Mapper<'a> {
                 parameters.push((identifier(&param.name), mapped));
                 continue;
             }
-            let mapped = self.value(param)?;
+            let (mapped, omitted) = self.plain(param)?;
             c_parameters.push(mapped.c.clone());
-            if let Some(value) = self.omissible(param) {
-                omissible.insert(identifier(&param.name), value);
-            }
+            omissible.extend(omitted.map(|value| (identifier(&param.name), value)));
             parameters.push((identifier(&param.name), mapped));
         }
         let (result, free) = self.function_result(callable, owner)?;
@@ -1103,10 +1108,84 @@ impl<'a> Mapper<'a> {
     /// does -- `Gtk.Widget` for `gtk_box_new`.
     fn function_result(&mut self, callable: &Callable, owner: Option<&'a Class>) -> Result<(Mapped, Option<String>), Reason> {
         let (result, free) = self.result(&callable.signature.result)?;
-        Ok(match owner {
-            Some(class) if callable.kind == CallableKind::Constructor => (self.declared(result, class), free),
-            _ => (result, free),
-        })
+        let result = match owner {
+            Some(class) if callable.kind == CallableKind::Constructor => self.declared(result, class),
+            _ => result,
+        };
+        Ok((self.owned(result, callable.signature.result.transfer == Transfer::Full), free))
+    }
+
+    /// A parameter passed as it is -- a scalar, an enum, a handle -- with what
+    /// it hands over (`Consumed`) and what stands for leaving it out.
+    fn plain(&mut self, param: &Param) -> Result<(Mapped, Option<&'static str>), Reason> {
+        let value = self.value(param)?;
+        Ok((self.handed_over(value, param.transfer == Transfer::Full), self.omissible(param)))
+    }
+
+    /// A counted handle the caller receives a reference with -- GIR's
+    /// `transfer-ownership="full"` on a result: `Owned<GFile>`.
+    fn owned(&mut self, mapped: Mapped, full: bool) -> Mapped {
+        self.branded(mapped, full, "Owned")
+    }
+
+    /// A counted handle the callee keeps -- `transfer-ownership="full"` on a
+    /// parameter: `Consumed<GListModel>`.
+    fn handed_over(&mut self, mapped: Mapped, full: bool) -> Mapped {
+        self.branded(mapped, full, "Consumed")
+    }
+
+    fn branded(&mut self, mapped: Mapped, full: bool, brand: &'static str) -> Mapped {
+        let Shape::Handle { class, nullable } = &mapped.shape else { return mapped };
+        if !full || matches!(mapped.c, Type::Pointer(Pointee::Const(_))) || !self.counted_c_type(class) {
+            return mapped;
+        }
+        let inner = mapped.ts.strip_suffix(" | null").unwrap_or(&mapped.ts);
+        self.binding.brands.insert(brand);
+        let ts = format!("{brand}<{inner}>{}", if *nullable { " | null" } else { "" });
+        Mapped { ts, ..mapped }
+    }
+
+    /// The class above `class`: GIR's `parent`, or its `prerequisite` for an
+    /// interface -- and for an interface GIR gives none, what the type system
+    /// says every instance of it also is (`GObject` for `GFile`, probed).
+    /// The one derivation of a class's parent, which the chain, the counting
+    /// and a constructor's class all walk.
+    fn parent_class(&self, namespace: &'a Namespace, class: &'a Class) -> Option<(&'a Namespace, &'a Class)> {
+        if let Some(parent) = &class.parent {
+            let qualified = if parent.contains('.') { parent.clone() } else { format!("{}.{parent}", namespace.name) };
+            return match self.resolve(&qualified) {
+                Some(Resolved::Class(namespace, parent)) => Some((namespace, parent)),
+                _ => None,
+            };
+        }
+        if !class.interface {
+            return None;
+        }
+        let prerequisite = class.c_type.as_deref().and_then(|c| self.facts.prerequisites.get(c))?;
+        let namespace = self.c_types.get(prerequisite.as_str()).copied()?;
+        let parent = namespace.classes.iter().find(|c| c.c_type.as_deref() == Some(prerequisite.as_str()))?;
+        Some((namespace, parent))
+    }
+
+    /// Whether the chain takes `class` to `GObject.Object`: a `GObject`,
+    /// which the compiler counts.
+    fn counted(&self, namespace: &'a Namespace, class: &'a Class) -> bool {
+        let (mut namespace, mut class) = (namespace, class);
+        // Bounded, so a cycle in malformed GIR ends.
+        for _ in 0..64 {
+            if namespace.name == "GObject" && class.name == "Object" {
+                return true;
+            }
+            let Some(parent) = self.parent_class(namespace, class) else { return false };
+            (namespace, class) = parent;
+        }
+        false
+    }
+
+    /// [`Self::counted`] for a handle named by its C type, from any namespace.
+    fn counted_c_type(&self, c_type: &str) -> bool {
+        let Some(namespace) = self.c_types.get(c_type).copied() else { return false };
+        namespace.classes.iter().find(|class| class.c_type.as_deref() == Some(c_type)).is_some_and(|class| self.counted(namespace, class))
     }
 
     /// A constructor's result as the class GIR says it returns, where C
@@ -1132,9 +1211,7 @@ impl<'a> Mapper<'a> {
         let (mut namespace, mut class) = (namespace, class);
         // Bounded, so a cycle in malformed GIR ends.
         for _ in 0..64 {
-            let Some(parent) = &class.parent else { return false };
-            let qualified = if parent.contains('.') { parent.clone() } else { format!("{}.{parent}", namespace.name) };
-            let Some(Resolved::Class(next_namespace, next)) = self.resolve(&qualified) else { return false };
+            let Some((next_namespace, next)) = self.parent_class(namespace, class) else { return false };
             if next.c_type.as_deref() == Some(ancestor) {
                 return true;
             }
