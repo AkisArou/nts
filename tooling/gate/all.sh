@@ -1824,7 +1824,9 @@ interop() {
   # 24: `macos-foundation` (`cfc1f567`), Objective-C messages from TypeScript,
   #     compared on a Mac against the same messages sent from C. It SKIPs
   #     without a macOS SDK, and says "not run" by name with no Mac reachable.
-  interop_floor=24
+  # 25: `macos-loop` (A2's run-loop host), libuv turned by the main CFRunLoop,
+  #     with gtk-loop's four arms. It SKIPs without a macOS SDK.
+  interop_floor=25
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"

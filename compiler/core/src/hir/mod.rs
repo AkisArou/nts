@@ -1942,8 +1942,8 @@ pub struct Program {
     pub native_defines: Vec<String>,
     /// Whether the program sends an Objective-C message, so it links the
     /// Objective-C runtime (`-lobjc`). Sorted frameworks in
-    /// `native_frameworks`, collected from the sends the program makes, as
-    /// headers are from the functions it calls.
+    /// `native_frameworks`, collected from every native function the program
+    /// calls, as headers are.
     pub objc: bool,
     pub native_frameworks: Vec<String>,
     /// Bound foreign members, keyed by the **foreign key** -- `owner.member:descriptor`.

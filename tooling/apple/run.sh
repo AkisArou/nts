@@ -2,7 +2,7 @@
 # Runs a Mach-O artifact built here on the lane's Mac (the quickemu VM, or a
 # real Mac later), and returns its stdout, stderr and exit status unchanged.
 #
-#   tooling/apple/run.sh <artifact> [args...]
+#   tooling/apple/run.sh [--env NAME=VALUE]... <artifact> [args...]
 #   tooling/apple/run.sh --reachable        # exit 0 if a Mac answers, else 77
 #
 # NTS_APPLE_SSH names the ssh destination (default `nts-mac`, an alias in
@@ -21,7 +21,15 @@ reachable() { ssh "${ssh_opts[@]}" "$dest" true >/dev/null 2>&1; }
 if [[ "${1:-}" == "--reachable" ]]; then
   reachable && exit 0 || exit 77
 fi
-[[ $# -ge 1 ]] || { echo "usage: $0 <artifact> [args...]" >&2; exit 2; }
+# `--env NAME=VALUE`: set for the program on the Mac, which ssh does not
+# forward from here.
+environment=""
+while [[ "${1:-}" == "--env" ]]; do
+  [[ "${2:-}" == *=* ]] || { echo "--env takes NAME=VALUE" >&2; exit 2; }
+  environment="$environment $(printf '%q' "$2")"
+  shift 2
+done
+[[ $# -ge 1 ]] || { echo "usage: $0 [--env NAME=VALUE]... <artifact> [args...]" >&2; exit 2; }
 artifact="$1"; shift
 # Asserted before anything else: scp of a missing path and a failed run read
 # as one failure otherwise.
@@ -36,4 +44,4 @@ name=$(basename "$artifact")
 # and the program receives one empty argument it was never given.
 quoted=""
 [[ $# -eq 0 ]] || quoted=$(printf ' %q' "$@")
-ssh "${ssh_opts[@]}" "$dest" "cd $remote && chmod +x ./$name && ./$name$quoted"
+ssh "${ssh_opts[@]}" "$dest" "cd $remote && chmod +x ./$name && env$environment ./$name$quoted"

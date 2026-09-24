@@ -8119,10 +8119,8 @@ fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
         for op in &func.values {
             if let OpKind::Call { callee: super::Callee::Native(target), .. } = &op.kind {
                 reached.extend(target.declared_at);
-                if let Some(send) = &target.send {
-                    program.objc = true;
-                    program.native_frameworks.extend(send.frameworks.iter().cloned());
-                }
+                program.objc |= target.send.is_some();
+                program.native_frameworks.extend(target.frameworks.iter().cloned());
             }
             // A record enters a program through a type, not only through a
             // call: a program may hold a `Ptr<Rusage>` and call nothing from
@@ -39306,6 +39304,7 @@ impl<'a> FuncBuilder<'a> {
             send: None,
             returns_owned: false,
             consumes: Vec::new(),
+            frameworks: Vec::new(),
         });
         let char_pointer = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
         let message = self.push(
@@ -39334,6 +39333,7 @@ impl<'a> FuncBuilder<'a> {
             send: None,
             returns_owned: false,
             consumes: Vec::new(),
+            frameworks: Vec::new(),
         });
         self.push(OpKind::Call { callee: Callee::Native(release), args: vec![message], frame: None }, HirType::Void, origin);
         self.throw_provided_error_text(id, "Error", text)?;
@@ -39489,6 +39489,7 @@ impl<'a> FuncBuilder<'a> {
                 send: None,
                 returns_owned: false,
                 consumes: Vec::new(),
+                frameworks: Vec::new(),
             };
             self.push(
                 OpKind::Call { callee: Callee::Native(std::sync::Arc::new(release)), args: vec![pointer], frame: None },
@@ -39895,6 +39896,9 @@ impl<'a> FuncBuilder<'a> {
         // it, so a program carries the headers it reaches rather than every one
         // in the snapshot.
         native.declared_at = declaration.and_then(|decl| self.declaring_module(decl));
+        if let Some(decl) = declaration {
+            native.frameworks = self.declared_frameworks(call, decl)?;
+        }
         if let Some(decl) = declaration
             && let Some(selector) = self.node(decl).native.as_ref().and_then(|n| n.selector.clone())
         {
@@ -39983,6 +39987,23 @@ impl<'a> FuncBuilder<'a> {
         Ok(Callee::Native(std::sync::Arc::new(native)))
     }
 
+    /// The frameworks of the nearest enclosing declaration naming any, which is
+    /// the `declare module` a binding is written as.
+    fn declared_frameworks(&self, call: NodeId, declaration: NodeId) -> Result<Vec<String>, Diagnostic> {
+        let mut at = Some(declaration);
+        while let Some(id) = at {
+            let node = self.node(id);
+            if let Some(names) = node.native.as_ref().and_then(|n| n.frameworks.as_ref()) {
+                if let Some(bad) = names.iter().find(|name| !super::native::is_c_identifier(name)) {
+                    return Err(self.unsupported(call, &format!("@ntsFramework names frameworks by their names, as in `@ntsFramework Foundation`, and `{bad}` is not one")));
+                }
+                return Ok(names.clone());
+            }
+            at = node.parent;
+        }
+        Ok(Vec::new())
+    }
+
     /// The Objective-C message a declaration tagged `@ntsSelector` sends.
     ///
     /// Refused here, where the declaration is in hand, for everything the call
@@ -40042,21 +40063,6 @@ impl<'a> FuncBuilder<'a> {
                 ),
             ));
         }
-        // The frameworks of the nearest enclosing declaration naming any, which
-        // is the `declare module` a binding is written as.
-        let mut frameworks = Vec::new();
-        let mut at = Some(declaration);
-        while let Some(id) = at {
-            let node = self.node(id);
-            if let Some(names) = node.native.as_ref().and_then(|n| n.frameworks.as_ref()) {
-                frameworks.clone_from(names);
-                break;
-            }
-            at = node.parent;
-        }
-        if let Some(bad) = frameworks.iter().find(|name| !super::native::is_c_identifier(name)) {
-            return Err(self.unsupported(call, &format!("@ntsFramework names frameworks by their names, as in `@ntsFramework Foundation`, and `{bad}` is not one")));
-        }
         // An object the program counts is ARC's to retain and release. A
         // binding that still declares `release` (as A1a's had to) would
         // release behind the count's back: a use-after-free in a program that
@@ -40069,7 +40075,7 @@ impl<'a> FuncBuilder<'a> {
                 &format!("`{selector}` sent to an Objective-C object the program counts, which ARC reserves: the compiler retains and releases it"),
             ));
         }
-        Ok(super::native::Send { selector, class, frameworks })
+        Ok(super::native::Send { selector, class })
     }
 
     /// A lowered call, at the type its result actually has.

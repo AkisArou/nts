@@ -2614,7 +2614,7 @@ fn write_standalone(
     linking: bool,
     witness: bool,
     declined: &[String],
-    glib: bool,
+    host: nts_codegen_c::LoopHost,
 ) -> Result<()> {
     // A program that is only declarations has nothing to evaluate, and calling
     // a function that was never emitted is a link error.
@@ -2646,20 +2646,13 @@ fn write_standalone(
         out.join(nts_codegen_c::UV_HOST_SOURCE_NAME),
         nts_codegen_c::UV_HOST_SOURCE,
     )?;
-    if glib {
-        std::fs::write(
-            out.join(nts_codegen_c::GLIB_HOST_HEADER_NAME),
-            nts_codegen_c::GLIB_HOST_HEADER,
-        )?;
-        std::fs::write(
-            out.join(nts_codegen_c::GLIB_HOST_SOURCE_NAME),
-            nts_codegen_c::GLIB_HOST_SOURCE,
-        )?;
+    for (name, text) in host.files().into_iter().flatten() {
+        std::fs::write(out.join(name), text)?;
     }
     let main_path = out.join("main.c");
     let main = nts_codegen_c::main_for(nts_codegen_c::MainShape {
         initializes,
-        glib,
+        host,
         autorelease_pool: program.objc,
     });
     std::fs::write(&main_path, main).with_context(|| format!("writing {main_path}"))?;
@@ -2678,15 +2671,7 @@ fn write_standalone(
         sources.join(", "),
         nts_codegen_c::UV_HOST_HEADER_NAME,
         nts_codegen_c::UV_HOST_SOURCE_NAME,
-        if glib {
-            format!(
-                ", {}, {}",
-                nts_codegen_c::GLIB_HOST_HEADER_NAME,
-                nts_codegen_c::GLIB_HOST_SOURCE_NAME
-            )
-        } else {
-            String::new()
-        },
+        host.files().map_or_else(String::new, |[(header, _), (source, _)]| format!(", {header}, {source}")),
         if witness { format!(", {}", nts_codegen_c::NATIVE_WITNESS_NAME) } else { String::new() },
     );
     // Every translation unit the program needs, which is not a fixed list: a
@@ -2701,10 +2686,11 @@ fn write_standalone(
     // 81 KB to 16 KB, because most of the runtime is unreachable from any one
     // program too.
     if !linking {
-        let (glib_source, glib_flags) = if glib {
-            (format!(" {}", nts_codegen_c::GLIB_HOST_SOURCE_NAME), " $(pkg-config --cflags --libs glib-2.0)")
-        } else {
-            (String::new(), "")
+        let glib_source = host.source().map_or_else(String::new, |source| format!(" {source}"));
+        let glib_flags = match host {
+            nts_codegen_c::LoopHost::Libuv => "",
+            nts_codegen_c::LoopHost::Glib => " $(pkg-config --cflags --libs glib-2.0)",
+            nts_codegen_c::LoopHost::CoreFoundation => " -lobjc -framework CoreFoundation",
         };
         println!(
         "  cc -std=c11 -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c program.c {} {}{glib_source} -luv -lm{glib_flags} -o program",
@@ -2828,7 +2814,7 @@ fn build(rest: &[String]) -> Result<()> {
             bail!("product `{name}` names no targets, so there is nothing to build it for")
         }
         let emission =
-            Emission { shape: Shape::of(&product.kind), product: Some((name, product)), linking: true, glib: false };
+            Emission { shape: Shape::of(&product.kind), product: Some((name, product)), linking: true, host: nts_codegen_c::LoopHost::Libuv };
         for target in targets_for(name, product, only_os.as_deref())? {
             // **Before anything is written.** A kind whose packaging does not
             // exist would otherwise emit, compile, and produce a file of the
@@ -3387,8 +3373,17 @@ fn build_c(
     cache_dir: Option<&Utf8Path>,
     needs: &nts_build::dependencies::Resolution,
 ) -> Result<usize> {
-    let glib = needs.libs.iter().any(|flag| flag == "-lglib-2.0");
-    let wrote = emit_c(tsconfig, Some(out), Emission { glib, ..emission })?;
+    // The platform loop this target offers a program: GLib's where the link
+    // has it, the main CFRunLoop on macOS. Whether the program uses it is
+    // the program's to say (see `Emission::host`).
+    let host = if needs.libs.iter().any(|flag| flag == "-lglib-2.0") {
+        nts_codegen_c::LoopHost::Glib
+    } else if target.os == "macos" {
+        nts_codegen_c::LoopHost::CoreFoundation
+    } else {
+        nts_codegen_c::LoopHost::Libuv
+    };
+    let wrote = emit_c(tsconfig, Some(out), Emission { host, ..emission })?;
     let artifact = link_c(name, product, out, &wrote, native, cache_dir, target, needs)?;
     println!("  {artifact}");
     // Named here as well as on stderr, because a build whose last line is
@@ -4930,7 +4925,7 @@ fn link_c(
     // flag below is a GNU spelling that `ld64.lld` and Apple's `ld` reject as
     // an unknown argument, so the branches say which linker they are talking to.
     let macho = matches!(target.os.as_str(), "macos" | "ios");
-    refuse_what_this_linker_cannot(name, target, addon && macho, wrote.objc && !macho)?;
+    refuse_what_this_linker_cannot(name, target, addon && macho, wrote.uses_apple() && !macho)?;
     // An addon needs one header and no library. Asked before anything is
     // compiled, so a missing toolchain is a message rather than forty
     // `node_api.h: No such file` lines.
@@ -5082,6 +5077,10 @@ fn link_c(
             if sources.iter().any(|s| s == nts_codegen_c::UV_HOST_SOURCE_NAME) {
                 command.arg("-luv");
             }
+            // The run-loop adapter's framework, by the same rule.
+            if sources.iter().any(|s| s == nts_codegen_c::CF_HOST_SOURCE_NAME) {
+                command.args(["-framework", "CoreFoundation"]);
+            }
             // **`--no-undefined` where it can be used**, which is the earliest
             // an unresolved symbol can be caught and the cheapest place to say
             // so. Not for an addon: a `.node` resolves `napi_*` out of the host
@@ -5143,21 +5142,18 @@ fn refuse_what_this_linker_cannot(
     }
     if objc_off_apple {
         bail!(
-            "product `{name}` sends Objective-C messages (`@ntsSelector`) and targets {}, \
-             which has no Objective-C runtime this build links. Build it for macOS",
+            "product `{name}` sends Objective-C messages (`@ntsSelector`) or links an Apple \
+             framework (`@ntsFramework`), and targets {}, which has neither. Build it for macOS",
             target.id
         )
     }
     Ok(())
 }
 
-/// `-lobjc` for `objc_msgSend`, and each framework the bindings name. Nothing
-/// for a program that sends no message.
+/// `-lobjc` for a program that sends messages, and each framework its
+/// bindings name, messages or C functions alike.
 fn objc_link_flags(wrote: &Wrote) -> Vec<String> {
-    if !wrote.objc {
-        return Vec::new();
-    }
-    let mut flags = vec!["-lobjc".to_owned()];
+    let mut flags = if wrote.objc { vec!["-lobjc".to_owned()] } else { Vec::new() };
     for framework in &wrote.frameworks {
         flags.push("-framework".to_owned());
         flags.push(framework.clone());
@@ -5970,7 +5966,12 @@ struct Emission<'a> {
     /// from the link rather than declared: a program that links `glib-2.0`
     /// has `GLib`'s loop available to it, and every GTK program does. Linking it
     /// and never running it costs one idle `GSource`.
-    glib: bool,
+    ///
+    /// On macOS it is the main `CFRunLoop`, and there the program decides:
+    /// only one that sends Objective-C messages is a Cocoa program that can
+    /// start that loop, so any other keeps libuv's own and links no
+    /// CoreFoundation. See `LoopHost::for_program`.
+    host: nts_codegen_c::LoopHost,
 }
 
 impl Emission<'_> {
@@ -5980,7 +5981,11 @@ impl Emission<'_> {
             shape: Shape::from_flags(),
             product: None,
             linking: false,
-            glib: std::env::args().any(|arg| arg == "--glib"),
+            host: if std::env::args().any(|arg| arg == "--glib") {
+                nts_codegen_c::LoopHost::Glib
+            } else {
+                nts_codegen_c::LoopHost::Libuv
+            },
         }
     }
 }
@@ -6389,8 +6394,8 @@ struct Wrote {
     sources: Vec<String>,
     /// C symbols the artifact publishes.
     published: Vec<String>,
-    /// Whether the program sends an Objective-C message, and the frameworks
-    /// its bindings name: `-lobjc` and one `-framework` each, at the link.
+    /// Whether the program sends an Objective-C message (`-lobjc`), and the
+    /// frameworks its bindings name (one `-framework` each), at the link.
     objc: bool,
     frameworks: Vec<String>,
     /// Whether the program has module-level code to evaluate.
@@ -6423,6 +6428,14 @@ struct Wrote {
     /// probe here emitted an executable whose only statement was refused: it
     /// compiled, linked, ran, exited zero and did nothing.
     refused: usize,
+}
+
+impl Wrote {
+    /// Whether the program is an Apple one: it sends messages or links a
+    /// framework, so it needs Apple's linker and libraries.
+    fn uses_apple(&self) -> bool {
+        self.objc || !self.frameworks.is_empty()
+    }
 }
 
 fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Result<Wrote> {
@@ -6588,6 +6601,7 @@ fn write_c_output(
                  build would evaluate none of it; the decline is reported above"
             );
         }
+        let host = emission.host.for_program(program.objc || !program.native_frameworks.is_empty());
         write_standalone(
             program,
             out,
@@ -6595,13 +6609,13 @@ fn write_c_output(
             emission.linking,
             !emitted.witness.is_empty(),
             &emitted.refused,
-            emission.glib,
+            host,
         )?;
         return Ok(Wrote {
             sources: std::iter::once("program.c".to_owned())
                 .chain(extra.iter().map(|name| (*name).to_owned()))
                 .chain(["main.c".to_owned(), nts_codegen_c::UV_HOST_SOURCE_NAME.to_owned()])
-                .chain(emission.glib.then(|| nts_codegen_c::GLIB_HOST_SOURCE_NAME.to_owned()))
+                .chain(host.source().map(str::to_owned))
                 .collect(),
             published,
             published_without_a_symbol,

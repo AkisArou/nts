@@ -63,6 +63,73 @@ pub const GLIB_HOST_HEADER_NAME: &str = "nts_glib_host.h";
 pub const GLIB_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_glib_host.h");
 pub const GLIB_HOST_SOURCE_NAME: &str = "nts_glib_host.c";
 pub const GLIB_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_glib_host.c");
+pub const CF_HOST_HEADER_NAME: &str = "nts_cf_host.h";
+pub const CF_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_cf_host.h");
+pub const CF_HOST_SOURCE_NAME: &str = "nts_cf_host.c";
+pub const CF_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_cf_host.c");
+
+/// Whose loop turns a standalone program's libuv.
+///
+/// libuv's own, unless the program runs a platform loop from inside module
+/// evaluation: `g_application_run` for a GTK program, `[NSApp run]` or
+/// `CFRunLoopRun` for a Cocoa one. Then an adapter attaches libuv to that
+/// loop, and a callback returning to it is a checkpoint.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LoopHost {
+    #[default]
+    Libuv,
+    /// `GLib`'s default main context: `nts_glib_host`.
+    Glib,
+    /// The main thread's `CFRunLoop`: `nts_cf_host`.
+    CoreFoundation,
+}
+
+impl LoopHost {
+    /// The adapter's header and source, as `(name, text)` pairs.
+    #[must_use]
+    pub const fn files(self) -> Option<[(&'static str, &'static str); 2]> {
+        match self {
+            Self::Libuv => None,
+            Self::Glib => Some([(GLIB_HOST_HEADER_NAME, GLIB_HOST_HEADER), (GLIB_HOST_SOURCE_NAME, GLIB_HOST_SOURCE)]),
+            Self::CoreFoundation => {
+                Some([(CF_HOST_HEADER_NAME, CF_HOST_HEADER), (CF_HOST_SOURCE_NAME, CF_HOST_SOURCE)])
+            }
+        }
+    }
+
+    /// The translation unit to compile, when there is an adapter.
+    #[must_use]
+    pub const fn source(self) -> Option<&'static str> {
+        match self.files() {
+            Some([_, (name, _)]) => Some(name),
+            None => None,
+        }
+    }
+
+    /// The host a program gets, given the one its target offers.
+    ///
+    /// Only a program that uses Apple's frameworks (it sends messages, or
+    /// calls a framework's C functions such as `CFRunLoopRun`) can start the
+    /// main `CFRunLoop`, so any other keeps libuv's own and links no
+    /// CoreFoundation. `GLib`'s is decided from the link, where a GTK program
+    /// always has it.
+    #[must_use]
+    pub const fn for_program(self, apple: bool) -> Self {
+        match self {
+            Self::CoreFoundation if !apple => Self::Libuv,
+            other => other,
+        }
+    }
+
+    /// The adapter's prefix: `nts_glib_host` or `nts_cf_host`.
+    const fn prefix(self) -> Option<&'static str> {
+        match self {
+            Self::Libuv => None,
+            Self::Glib => Some("nts_glib_host"),
+            Self::CoreFoundation => Some("nts_cf_host"),
+        }
+    }
+}
 
 /// The vendored half of the runtime, shipped as a `quickjs/` subdirectory.
 ///
@@ -195,7 +262,7 @@ pub fn standalone_main(initializes: bool) -> String {
 /// evaluation, because the flag must never change after it starts.
 #[must_use]
 pub fn standalone_main_in_glib(initializes: bool) -> String {
-    main_for(MainShape { initializes, glib: true, ..MainShape::default() })
+    main_for(MainShape { initializes, host: LoopHost::Glib, ..MainShape::default() })
 }
 
 /// What a standalone program's `main` has to do besides run the loop.
@@ -203,8 +270,8 @@ pub fn standalone_main_in_glib(initializes: bool) -> String {
 pub struct MainShape {
     /// The program has top-level code, so `module__init` exists and runs.
     pub initializes: bool,
-    /// `GLib`'s main loop drives the program: see [`standalone_main_in_glib`].
-    pub glib: bool,
+    /// Whose loop turns libuv's: see [`LoopHost`].
+    pub host: LoopHost,
     /// The program sends Objective-C messages, so an autorelease pool is in
     /// place for the whole run.
     ///
@@ -221,15 +288,18 @@ pub struct MainShape {
 /// The `main` a standalone program is linked with.
 #[must_use]
 pub fn main_for(shape: MainShape) -> String {
-    let MainShape { initializes, glib, autorelease_pool } = shape;
-    let (include, attach, detach) = if glib {
-        (
-            "#include \"nts_glib_host.h\"\n",
-            "    nts_glib_host_attach();\n    nts_checkpoint_after_callbacks(true);\n",
-            "    nts_glib_host_detach();\n",
-        )
-    } else {
-        ("", "", "")
+    let MainShape { initializes, host, autorelease_pool } = shape;
+    // The adapter attaches after libuv is installed and before module
+    // evaluation, which is where a program starts the platform's loop, and
+    // makes a callback returning to that loop a checkpoint. The flag must
+    // never change once evaluation starts.
+    let (include, attach, detach) = match host.prefix() {
+        Some(prefix) => (
+            format!("#include \"{prefix}.h\"\n"),
+            format!("    {prefix}_attach();\n    nts_checkpoint_after_callbacks(true);\n"),
+            format!("    {prefix}_detach();\n"),
+        ),
+        None => (String::new(), String::new(), String::new()),
     };
     let declare = if initializes {
         "/* Emitted only when the program has top-level code to evaluate. */\nvoid module__init(void);\n\n"

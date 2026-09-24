@@ -73,6 +73,11 @@ pub struct Function {
     /// hands the one it holds rather than releasing it after the call. `init`
     /// consumes its receiver.
     pub consumes: Vec<usize>,
+    /// What the declaring module's `@ntsFramework` names: the Apple
+    /// frameworks the program links because it calls this, the way
+    /// `declared_at` makes it include a header. A C function can live in one
+    /// (CoreFoundation's `CFRunLoopRun`) as well as a message.
+    pub frameworks: Vec<String>,
 }
 
 /// An Objective-C message: `[receiver selector:arguments]`.
@@ -91,10 +96,6 @@ pub struct Send {
     /// object, looked up by name, and is not a parameter. `None` for an
     /// instance method: `parameters[0]` is the receiver (`this`).
     pub class: Option<String>,
-    /// What the declaring module's `@ntsFramework` names, which the program
-    /// links. Carried on the send because a send is what makes a program
-    /// reach a framework, the way `declared_at` makes it reach a header.
-    pub frameworks: Vec<String>,
 }
 
 /// The selectors ARC reserves to itself. On an object the program counts,
@@ -1263,6 +1264,7 @@ impl Function {
             send: None,
             returns_owned: false,
             consumes: Vec::new(),
+            frameworks: Vec::new(),
         })
     }
 }

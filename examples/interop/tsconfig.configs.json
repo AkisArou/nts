@@ -34,6 +34,7 @@
     "gtk-gir/nts.config.ts",
     "macos-hello/nts.config.ts",
     "macos-foundation/nts.config.ts",
+    "macos-loop/nts.config.ts",
     "native-string/nts.config.ts",
     "native-closure/nts.config.ts",
     "android-shape/nts.config.ts",

@@ -67,12 +67,14 @@ for arch in x86_64 aarch64; do
     *) echo "macos-foundation: $program is not a $cpu Mach-O executable: $kind" >&2; exit 1 ;;
   esac
   loads=$(llvm-objdump --macho --dylibs-used "$program" | tail -n +2 | awk '{print $1}' | LC_ALL=C sort | tr '\n' ' ')
-  want="/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation /usr/lib/libSystem.B.dylib /usr/lib/libobjc.A.dylib "
+  # CoreFoundation is the run-loop host's (`nts_cf_host`), which every
+  # macOS program that sends messages gets.
+  want="/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation /System/Library/Frameworks/Foundation.framework/Versions/C/Foundation /usr/lib/libSystem.B.dylib /usr/lib/libobjc.A.dylib "
   if [ "$loads" != "$want" ]; then
     echo "macos-foundation: $arch loads [$loads], expected [$want]" >&2
     exit 1
   fi
-  echo "macos-$arch: Mach-O $cpu, libobjc + Foundation + libSystem"
+  echo "macos-$arch: Mach-O $cpu, libobjc + Foundation + CoreFoundation + libSystem"
 done
 
 clang -target x86_64-apple-macos13 -isysroot "$sdk" -fuse-ld=lld -std=c11 -Wall -Wextra -Werror \
@@ -132,12 +134,12 @@ if grep -q "NTS[0-9]" "$llvm/emit.log"; then
 fi
 set -- -target x86_64-apple-macos13 -isysroot "$sdk"
 clang "$@" -x ir -w -O2 -c "$llvm/program.ll" -o "$llvm/program.o"
-for unit in main nts_runtime nts_uv_host nts_unicode; do
+for unit in main nts_runtime nts_uv_host nts_cf_host nts_unicode; do
   [ -f "$c_out/$unit.c" ] || continue
   clang "$@" -std=c11 -O2 -w -DNTS_PROVIDER_RC -I"$c_out" -I"$apple/x86_64/include" -c "$c_out/$unit.c" -o "$llvm/$unit.o"
 done
 clang "$@" -std=c11 -O2 -w -c "$source/native/report.c" -o "$llvm/report.o"
-clang "$@" -fuse-ld=lld "$llvm"/*.o -L"$apple/x86_64/lib" -luv -lobjc -framework Foundation -o "$llvm/foundation"
+clang "$@" -fuse-ld=lld "$llvm"/*.o -L"$apple/x86_64/lib" -luv -lobjc -framework Foundation -framework CoreFoundation -o "$llvm/foundation"
 run_quietly "$llvm/foundation" "$llvm/actual"
 diff -u "$out/expected.txt" "$llvm/actual.txt"
 echo "macos-x86_64 (LLVM): the same, from the LLVM backend under --rc"
