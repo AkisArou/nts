@@ -540,10 +540,29 @@ backends against real libgobject
 an instance the library let go of is never collected, and with the family not
 registered no cycle is.
 
-## After M3
+## M4: against GJS, and a real application
 
-- **M4: a real application,** benchmarked against GJS: startup to first frame,
-  RSS, signal dispatch.
+`tooling/gtk-bench/run.sh`: the same program in TypeScript (nts, `--rc`) and
+in GJS, one process per case under xvfb, beside C calling GTK directly --
+the floor, which says how much of a row is GTK's own work. GJS 1.88.1,
+GTK 4.22; ns per operation, best of three in-process runs after one untimed.
+
+| case | C | nts | GJS | GJS / nts |
+|---|---:|---:|---:|---:|
+| signal round trip (`set_value` -> `value-changed`) | 218 | 185 | 701 | 3.8x |
+| property write + read (`label.label`) | 263 | 273 | 400 | 1.5x |
+| construct (`new GtkLabel({ label })`) | 4890 | 4814 | 5759 | 1.2x |
+| inherited method (`get_visible()`) | 7.3 | 4.1 | 128 | 31x |
+| startup to a mapped window (ms) | | 69.7 | 73.3 | 1.1x |
+| startup peak RSS (MB) | | 101 | 120 | 1.2x |
+
+The method row was 20.3 ns until an upcast borrowed its handle's reference
+(`own::views_borrow`): `g_object_ref_sink`/`g_object_unref` around every
+inherited call was 45-55 ns against GTK's 5-6. Every other nts row is at the
+C floor within noise; startup and RSS are GTK's.
+
+**Next in M4:** a real application -- a list, an entry, a file loaded
+through Gio -- built on these bindings, benchmarked the same way.
 
 ## Rules this lane keeps
 
