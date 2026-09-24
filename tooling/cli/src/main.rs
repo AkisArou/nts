@@ -470,6 +470,10 @@ INSPECTING
   --product <name>   build one product rather than all of them
   --os <os>          build only the targets whose OS is this
   --no-acquire       do not fetch dependencies first
+  --rc               count references instead of never freeing: lowering
+                     inserts retains and releases and the runtime is compiled
+                     to free (-DNTS_PROVIDER_RC). Also read by emit-c, which
+                     prints the define for you to pass, and by hir
 
 The config is `nts.config.ts` beside the project's `tsconfig.json`. See
 docs/nts-config.md for what it declares.",
@@ -3318,6 +3322,17 @@ fn compile_program(
                 .collect();
         if pic {
             arguments.push("-fPIC".to_owned());
+        }
+        // **The runtime's provider has to be the lowering's.** `--rc` made
+        // lowering insert every retain and release, and the runtime was then
+        // compiled without the define. Its `nts_free_block` is a no-op there,
+        // so a `--rc` build counted everything and freed nothing, silently.
+        // Every unit gets the define, because `nts_runtime.h` reads it too.
+        //
+        // `emit-c --rc` still prints the define instead of passing it: there
+        // the caller compiles the C, and the note is that interface.
+        if selected_provider() == hir::Provider::ReferenceCounting {
+            arguments.push("-DNTS_PROVIDER_RC".to_owned());
         }
         arguments.extend(program_includes(out, native, napi, with.cflags));
         let from = out.join(source);
