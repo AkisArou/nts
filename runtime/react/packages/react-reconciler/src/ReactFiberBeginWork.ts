@@ -757,7 +757,7 @@ function deferHiddenOffscreenComponent(
   nextBaseLanes: Lanes,
   renderLanes: Lanes,
   remainingChildLanes: Lanes,
-): null {
+): Fiber | null {
   const nextState: OffscreenState = {
     baseLanes: nextBaseLanes,
     // Save the cache pool so we can resume later.
@@ -1746,7 +1746,7 @@ function updateHostComponent(current: Fiber | null, workInProgress: Fiber, rende
   return workInProgress.child;
 }
 
-function updateHostHoistable(current: Fiber | null, workInProgress: Fiber, _renderLanes: Lanes): null {
+function updateHostHoistable(current: Fiber | null, workInProgress: Fiber, _renderLanes: Lanes): Fiber | null {
   markRef(current, workInProgress);
 
   if (current === null) {
@@ -1802,7 +1802,7 @@ function updateHostSingleton(current: Fiber | null, workInProgress: Fiber, rende
   return workInProgress.child;
 }
 
-function updateHostText(current: Fiber | null, workInProgress: Fiber): null {
+function updateHostText(current: Fiber | null, workInProgress: Fiber): Fiber | null {
   if (current === null) {
     tryToClaimNextHydratableTextInstance(workInProgress);
   }

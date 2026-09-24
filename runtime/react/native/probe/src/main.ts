@@ -18,13 +18,15 @@ export const testHostIsComplete: [MissingFrom<typeof TestHost>] extends [never] 
 function ignoreError(): void {}
 
 function mount(container: TestContainer) {
-  return createContainer(container, ConcurrentRoot, null, false, null, "", ignoreError, ignoreError, ignoreError, () => {}, null);
+  return createContainer(container, ConcurrentRoot, null, false, false, "", ignoreError, ignoreError, ignoreError, () => {}, null);
 }
 
 type ItemsProps = { [key: string]: unknown };
 
 function Item(props: ItemsProps): ReactElement {
-  return createElement("li", { label: props["label"] }, "item " + props["label"]);
+  const label = props["label"];
+  const text = typeof label === "string" ? label : "";
+  return createElement("li", { label: text }, "item " + text);
 }
 
 // Keyed reconciliation: the same items in a new order must move, not

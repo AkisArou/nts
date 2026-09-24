@@ -13,6 +13,7 @@
 //
 // Port of upstream's ReactFiberCommitWork.js (stable channel).
 
+import { ownerDocumentOf } from "./ReactFiberStateNode.ts";
 import type {
   Container,
   FormInstance,
@@ -1401,7 +1402,7 @@ function commitSuspenseHydrationCallbacks(_finishedRoot: FiberRoot, finishedWork
   }
 }
 
-type RetryCache = WeakSet<Wakeable> | Set<Wakeable>;
+type RetryCache = Set<Wakeable>;
 
 function getRetryCache(finishedWork: Fiber): RetryCache {
   // TODO: Unify the interface for the retry cache so we don't have to switch
@@ -1412,7 +1413,7 @@ function getRetryCache(finishedWork: Fiber): RetryCache {
     case SuspenseListComponent: {
       let retryCache = finishedWork.stateNode as RetryCache | null;
       if (retryCache === null) {
-        retryCache = new WeakSet();
+        retryCache = new Set<Wakeable>();
         finishedWork.stateNode = retryCache;
       }
       return retryCache;
@@ -1421,7 +1422,7 @@ function getRetryCache(finishedWork: Fiber): RetryCache {
       const instance = finishedWork.stateNode as OffscreenInstance;
       let retryCache: RetryCache | null = instance._retryCache;
       if (retryCache === null) {
-        retryCache = instance._retryCache = new WeakSet();
+        retryCache = instance._retryCache = new Set<Wakeable>();
       }
       return retryCache;
     }
@@ -2676,15 +2677,14 @@ function reappearLayoutEffects(
         // subtree (the mutation traversal is gated by subtreeFlags and would
         // skip an unchanged hoistable). This is the same tradeoff as for
         // HostSingleton.
-        // DOM only (supportsResources): a hoistable instance knows its document.
-        const instance = finishedWork.stateNode as (Instance & { readonly ownerDocument: Container }) | null;
+        const instance = finishedWork.stateNode as Instance | null;
         if (finishedWork.memoizedState === null && instance !== null && !offscreenSubtreeIsHidden) {
           // currentHoistableRoot is only maintained during the mutation
           // phase. Derive the hoistable root from the instance's owner
           // document so this works in the layout phase too. Hoistable
           // Instances are hoisted to document.head, which always lives in
           // ownerDocument.
-          mountHoistable(getHoistableRoot(instance.ownerDocument), finishedWork.type as string, instance);
+          mountHoistable(getHoistableRoot(ownerDocumentOf(instance)), finishedWork.type as string, instance);
         }
       }
       recursivelyTraverseReappearLayoutEffects(finishedRoot, finishedWork, layoutEffectTraversalFlags);

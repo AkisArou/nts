@@ -62,7 +62,7 @@ export function resetAppearingViewTransitions(): void {
 
 export function trackAppearingViewTransition(name: string, state: ViewTransitionState): void {
   if (appearingViewTransitions === null) {
-    appearingViewTransitions = new Map();
+    appearingViewTransitions = new Map<string, ViewTransitionState>();
   }
   appearingViewTransitions.set(name, state);
 }

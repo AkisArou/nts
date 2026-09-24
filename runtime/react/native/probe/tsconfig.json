@@ -9,6 +9,9 @@
       "shared/Build.ts": [
         "./src/Build.ts"
       ],
+      "shared/reportGlobalError.ts": [
+        "./src/reportGlobalError.ts"
+      ],
       "scheduler/src/Host.ts": [
         "./src/SchedulerHost.ts"
       ],

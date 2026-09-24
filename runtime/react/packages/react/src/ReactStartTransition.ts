@@ -23,7 +23,7 @@ export function startTransition(scope: () => unknown, _options?: StartTransition
     startTime: -1,
   };
   if (isDevelopment) {
-    currentTransition._updatedFibers = new Set();
+    currentTransition._updatedFibers = new Set<unknown>();
   }
   ReactSharedInternals.T = currentTransition;
   try {

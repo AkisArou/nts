@@ -43,5 +43,8 @@ export interface OffscreenInstance {
   _visibility: OffscreenVisibility;
   _pendingMarkers: Set<TracingMarkerInstance> | null;
   _transitions: Set<Transition> | null;
-  _retryCache: WeakSet<Wakeable> | Set<Wakeable> | null;
+  // A Set rather than upstream's WeakSet-when-available: a union of the two
+  // has no fixed layout. Retried wakeables are held until the boundary
+  // unmounts instead of until they are collected.
+  _retryCache: Set<Wakeable> | null;
 }

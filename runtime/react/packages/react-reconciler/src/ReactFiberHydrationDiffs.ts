@@ -329,7 +329,7 @@ function isTextLike(value: unknown): value is string | number | bigint {
 function describeElementDiff(type: string, clientProps: PropsObject, serverProps: PropsObject, indent: number): string {
   let content = "";
   // Maps any previously unmatched lower case server prop name to its full prop name
-  const serverPropNames: Map<string, string> = new Map();
+  const serverPropNames: Map<string, string> = new Map<string, string>();
   for (const propName in serverProps) {
     if (!hasOwn(serverProps, propName)) {
       continue;

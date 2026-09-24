@@ -11,7 +11,7 @@ import type { ViewTransitionProps } from "./ReactFiberViewTransitionComponent.ts
 import { isDevelopment } from "shared/Build.ts";
 import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";
 
-const mountedNamedViewTransitions: Map<string, Fiber> = new Map();
+const mountedNamedViewTransitions: Map<string, Fiber> = new Map<string, Fiber>();
 const didWarnAboutName: { [name: string]: boolean } = {};
 
 export function trackNamedViewTransition(fiber: Fiber): void {

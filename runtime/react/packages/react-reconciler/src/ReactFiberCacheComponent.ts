@@ -34,8 +34,13 @@ class AbortControllerShim implements CacheController {
   }
 }
 
-const createController: () => CacheController =
-  typeof AbortController !== "undefined" ? () => new AbortController() : () => new AbortControllerShim();
+// A real AbortController where the host has one, a shim otherwise. Decided
+// once, when the module loads, as upstream does.
+const hasAbortController = typeof AbortController !== "undefined";
+
+function createController(): CacheController {
+  return hasAbortController ? new AbortController() : new AbortControllerShim();
+}
 
 export interface Cache {
   controller: CacheController;
@@ -76,7 +81,7 @@ if (isDevelopment) {
 export function createCache(): Cache {
   return {
     controller: createController(),
-    data: new Map(),
+    data: new Map<() => unknown, unknown>(),
     refCount: 0,
   };
 }

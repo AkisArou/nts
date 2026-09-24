@@ -39,3 +39,11 @@ export interface PortalStateNode {
 export function portalStateOf(fiber: Fiber): PortalStateNode {
   return fiber.stateNode as PortalStateNode;
 }
+
+// DOM only (renderers with supportsResources): a hoistable host instance is
+// an element, and its document is the root its hoistables mount into.
+// JS object model: the reconciler reads the DOM's own property, as upstream's
+// does; no other renderer reaches this.
+export function ownerDocumentOf(instance: Instance): Container {
+  return (instance as unknown as { readonly ownerDocument: Container }).ownerDocument;
+}

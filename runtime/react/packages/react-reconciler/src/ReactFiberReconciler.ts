@@ -4,7 +4,7 @@
 import { hostNodeOf } from "./ReactFiberStateNode.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { disableLegacyMode, enableSchedulingProfiler } from "shared/ReactFeatureFlags.ts";
-import type { ErrorInfo, Fiber, FiberRoot } from "./ReactInternalTypes.ts";
+import type { ErrorInfo, Fiber, FiberRoot, SuspenseHydrationCallbacks, TransitionTracingCallbacks } from "./ReactInternalTypes.ts";
 import type { RootTag } from "./ReactRootTags.ts";
 import type { Container, PublicInstance } from "react-reconciler/ReactFiberConfig.ts";
 import type { Lane } from "./ReactFiberLane.ts";
@@ -178,7 +178,7 @@ function findHostInstanceWithWarning(component: object, methodName: string): Pub
 export function createContainer(
   containerInfo: Container,
   tag: RootTag,
-  hydrationCallbacks: null,
+  hydrationCallbacks: SuspenseHydrationCallbacks | null,
   isStrictMode: boolean,
   // TODO: Remove `concurrentUpdatesByDefaultOverride`. It is now ignored.
   _concurrentUpdatesByDefaultOverride: boolean | null,
@@ -187,10 +187,10 @@ export function createContainer(
   onCaughtError: ErrorCallback,
   onRecoverableError: ErrorCallback,
   onDefaultTransitionIndicator: () => void | (() => void),
-  transitionCallbacks: null,
+  transitionCallbacks: TransitionTracingCallbacks | null,
 ): OpaqueRoot {
   const hydrate = false;
-  const initialChildren = null;
+  const initialChildren: unknown = null;
   const root = createFiberRoot(
     containerInfo,
     tag,
@@ -216,7 +216,7 @@ export function createHydrationContainer(
   callback: (() => unknown) | null | undefined,
   containerInfo: Container,
   tag: RootTag,
-  hydrationCallbacks: null,
+  hydrationCallbacks: SuspenseHydrationCallbacks | null,
   isStrictMode: boolean,
   // TODO: Remove `concurrentUpdatesByDefaultOverride`. It is now ignored.
   _concurrentUpdatesByDefaultOverride: boolean | null,
@@ -225,7 +225,7 @@ export function createHydrationContainer(
   onCaughtError: ErrorCallback,
   onRecoverableError: ErrorCallback,
   onDefaultTransitionIndicator: () => void | (() => void),
-  transitionCallbacks: null,
+  transitionCallbacks: TransitionTracingCallbacks | null,
   formState: unknown,
 ): OpaqueRoot {
   const hydrate = true;
@@ -467,16 +467,24 @@ export function findHostInstanceWithNoPortals(fiber: Fiber): PublicInstance | nu
   return getPublicInstance(hostNodeOf(hostFiber));
 }
 
-let shouldErrorImpl: (fiber: Fiber) => boolean | null | undefined = () => null;
-
-export function shouldError(fiber: Fiber): boolean | null | undefined {
-  return shouldErrorImpl(fiber);
+// Handlers DevTools can inject to force a fiber into an error or a
+// suspended state. They are fields of one object rather than mutable
+// module-scope functions: a closure's layout is fixed by its type there.
+class DevToolsOverrides {
+  shouldError: ((fiber: Fiber) => boolean | null | undefined) | null = null;
+  shouldSuspend: ((fiber: Fiber) => boolean) | null = null;
 }
 
-let shouldSuspendImpl: (fiber: Fiber) => boolean = () => false;
+const devToolsOverrides = new DevToolsOverrides();
+
+export function shouldError(fiber: Fiber): boolean | null | undefined {
+  const handler = devToolsOverrides.shouldError;
+  return handler === null ? null : handler(fiber);
+}
 
 export function shouldSuspend(fiber: Fiber): boolean {
-  return shouldSuspendImpl(fiber);
+  const handler = devToolsOverrides.shouldSuspend;
+  return handler === null ? false : handler(fiber);
 }
 
 // DevTools editing support, development only.
@@ -657,11 +665,11 @@ function scheduleRetry(fiber: Fiber): void {
 }
 
 function setErrorHandler(newShouldErrorImpl: (fiber: Fiber) => boolean | null | undefined): void {
-  shouldErrorImpl = newShouldErrorImpl;
+  devToolsOverrides.shouldError = newShouldErrorImpl;
 }
 
 function setSuspenseHandler(newShouldSuspendImpl: (fiber: Fiber) => boolean): void {
-  shouldSuspendImpl = newShouldSuspendImpl;
+  devToolsOverrides.shouldSuspend = newShouldSuspendImpl;
 }
 
 function getCurrentFiberForDevTools(): Fiber | null {
@@ -672,7 +680,7 @@ function getLaneLabelMap(): Map<Lane, string> | null {
   if (!enableSchedulingProfiler) {
     return null;
   }
-  const map: Map<Lane, string> = new Map();
+  const map: Map<Lane, string> = new Map<Lane, string>();
   let lane = 1;
   for (let index = 0; index < TotalLanes; index++) {
     const label = getLabelForLane(lane) as string;

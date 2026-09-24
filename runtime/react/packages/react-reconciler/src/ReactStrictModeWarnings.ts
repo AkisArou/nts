@@ -232,7 +232,7 @@ function flushPendingUnsafeLifecycleWarnings(): void {
   }
 }
 
-let pendingLegacyContextWarning: FiberToFiberComponentsMap = new Map();
+let pendingLegacyContextWarning: FiberToFiberComponentsMap = new Map<Fiber, FiberArray>();
 
 // Tracks components we have already warned about.
 const didWarnAboutLegacyContext = new Set<unknown>();
@@ -312,7 +312,7 @@ function discardPendingWarnings(): void {
   pendingUNSAFE_ComponentWillReceivePropsWarnings = [];
   pendingComponentWillUpdateWarnings = [];
   pendingUNSAFE_ComponentWillUpdateWarnings = [];
-  pendingLegacyContextWarning = new Map();
+  pendingLegacyContextWarning = new Map<Fiber, FiberArray>();
 }
 
 export const ReactStrictModeWarnings = {

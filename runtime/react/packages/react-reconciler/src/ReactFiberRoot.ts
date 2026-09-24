@@ -8,7 +8,7 @@ import {
   enableUpdaterTracking,
 } from "shared/ReactFeatureFlags.ts";
 import type { Transition, TransitionTypes, Wakeable } from "shared/ReactTypes.ts";
-import type { ErrorInfo, Fiber, FiberRoot } from "./ReactInternalTypes.ts";
+import type { ErrorInfo, Fiber, FiberRoot, SuspenseHydrationCallbacks, TransitionTracingCallbacks } from "./ReactInternalTypes.ts";
 import type { RootTag } from "./ReactRootTags.ts";
 import type { Cache } from "./ReactFiberCacheComponent.ts";
 import type { ConcurrentUpdate } from "./ReactFiberConcurrentUpdates.ts";
@@ -77,7 +77,7 @@ export class FiberRootNode {
   pooledCacheLanes: Lanes = NoLanes;
 
   // enableSuspenseCallback only.
-  hydrationCallbacks: null = null;
+  hydrationCallbacks: SuspenseHydrationCallbacks | null = null;
 
   formState: unknown;
 
@@ -85,12 +85,13 @@ export class FiberRootNode {
   transitionTypes: TransitionTypes | null = null;
 
   // enableGestureTransition only.
-  pendingGestures: null = null;
+  // enableGestureTransition only (off in stable): never set.
+  pendingGestures: unknown = null;
   gestureClone: Instance | null = null;
 
-  incompleteTransitions: Map<Transition, unknown> = new Map();
+  incompleteTransitions: Map<Transition, unknown> = new Map<Transition, unknown>();
   // enableTransitionTracing only.
-  transitionCallbacks: null = null;
+  transitionCallbacks: TransitionTracingCallbacks | null = null;
   transitionLanes: LaneMap<Set<Transition> | null> = [];
 
   // enableProfilerTimer && enableProfilerCommitHooks only.
@@ -98,7 +99,7 @@ export class FiberRootNode {
   passiveEffectDuration = -0;
 
   // enableUpdaterTracking only.
-  memoizedUpdaters: Set<Fiber> = new Set();
+  memoizedUpdaters: Set<Fiber> = new Set<Fiber>();
   pendingUpdatersLaneMap: LaneMap<Set<Fiber>> = [];
 
   // Development only.
@@ -136,7 +137,7 @@ export class FiberRootNode {
     if (enableUpdaterTracking) {
       const pendingUpdatersLaneMap: Set<Fiber>[] = (this.pendingUpdatersLaneMap = []);
       for (let i = 0; i < TotalLanes; i++) {
-        pendingUpdatersLaneMap.push(new Set());
+        pendingUpdatersLaneMap.push(new Set<Fiber>());
       }
     }
 
@@ -163,7 +164,7 @@ export function createFiberRoot(
   tag: RootTag,
   hydrate: boolean,
   initialChildren: unknown,
-  hydrationCallbacks: null,
+  hydrationCallbacks: SuspenseHydrationCallbacks | null,
   isStrictMode: boolean,
   // TODO: We have several of these arguments that are conceptually part of the
   // host config, but because they are passed in at runtime, we have to thread
@@ -175,7 +176,7 @@ export function createFiberRoot(
   onCaughtError: ErrorCallback,
   onRecoverableError: ErrorCallback,
   onDefaultTransitionIndicator: () => void | (() => void),
-  transitionCallbacks: null,
+  transitionCallbacks: TransitionTracingCallbacks | null,
 ): FiberRoot {
   const root: FiberRoot = new FiberRootNode(
     containerInfo,

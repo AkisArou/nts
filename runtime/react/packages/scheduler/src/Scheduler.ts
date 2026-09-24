@@ -1,7 +1,7 @@
 // The production scheduler: runs tasks in priority order, in slices of about
 // five milliseconds, yielding to the host between slices.
 
-import { cancelTimer, createWorkPoster, now, startTimer, type Timer } from "scheduler/src/Host.ts";
+import { bindPerformWork, cancelTimer, now, postWork, startTimer, type Timer } from "scheduler/src/Host.ts";
 import { peek, pop, push } from "./MinHeap.ts";
 import {
   IdlePriority,
@@ -270,7 +270,11 @@ function performWorkUntilDeadline(): void {
   }
 }
 
-const schedulePerformWorkUntilDeadline = createWorkPoster(performWorkUntilDeadline);
+bindPerformWork(performWorkUntilDeadline);
+
+function schedulePerformWorkUntilDeadline(): void {
+  postWork();
+}
 
 function requestHostCallback(): void {
   if (!isMessageLoopRunning) {

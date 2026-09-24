@@ -87,7 +87,8 @@ export type UpdatePayload = null;
 export type TimeoutHandle = number;
 export type NoTimeout = number;
 export type RendererInspectionConfig = null;
-export type TransitionStatus = null;
+// Form transitions are not supported: the status never exists.
+export type TransitionStatus = unknown;
 // Features this host does not support: their values never exist.
 export type FormInstance = unknown;
 export type SuspendedState = unknown;

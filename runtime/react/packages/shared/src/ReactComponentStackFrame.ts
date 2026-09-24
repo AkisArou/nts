@@ -69,7 +69,7 @@ export function describeDebugInfoFrame(name: string, env: string | null | undefi
 }
 
 let reentry = false;
-const componentFrameCache: WeakMap<Function, string> = new WeakMap();
+const componentFrameCache: WeakMap<Function, string> = new WeakMap<Function, string>();
 
 function displayNameOf(fn: ComponentFunction): string {
   if (fn.displayName) {

@@ -23,9 +23,21 @@ function createClock(): () => number {
   return () => localDate.now() - initialTime;
 }
 
-// Returns a function that schedules `perform` on a later turn. The scheduler
-// yields so the host can paint and handle input between slices of work.
-export function createWorkPoster(perform: () => void): () => void {
+// The scheduler's work loop, bound when its module loads so that the
+// transport is chosen then, as upstream does, and requested on a later turn
+// by postWork. The scheduler yields so the host can paint and handle input
+// between slices of work.
+let poster: (() => void) | null = null;
+
+export function bindPerformWork(perform: () => void): void {
+  poster = createWorkPoster(perform);
+}
+
+export function postWork(): void {
+  poster!();
+}
+
+function createWorkPoster(perform: () => void): () => void {
   if (typeof localSetImmediate === "function") {
     // Node and jsdom. It runs earlier than a message, and unlike a
     // MessageChannel it does not keep a Node process alive.

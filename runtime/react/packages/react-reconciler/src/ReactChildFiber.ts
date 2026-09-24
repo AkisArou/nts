@@ -424,7 +424,7 @@ class ChildReconcilerImpl {
     }
   }
 
-  deleteRemainingChildren(returnFiber: Fiber, currentFirstChild: Fiber | null): null {
+  deleteRemainingChildren(returnFiber: Fiber, currentFirstChild: Fiber | null): Fiber | null {
     if (!this.shouldTrackSideEffects) {
       // Noop.
       return null;
@@ -443,7 +443,7 @@ class ChildReconcilerImpl {
     // Add the remaining children to a temporary map so that we can find them by
     // keys quickly. Implicit (null) keys get added to this set with their index
     // instead.
-    const existingChildren: Map<ChildKey, Fiber> = new Map();
+    const existingChildren: Map<ChildKey, Fiber> = new Map<ChildKey, Fiber>();
     let existingChild: Fiber | null = currentFirstChild;
     while (existingChild !== null) {
       if (existingChild.key === null) {
@@ -869,7 +869,7 @@ class ChildReconcilerImpl {
             break;
           }
           if (knownKeys === null) {
-            knownKeys = new Set();
+            knownKeys = new Set<string>();
             knownKeys.add(key);
             break;
           }

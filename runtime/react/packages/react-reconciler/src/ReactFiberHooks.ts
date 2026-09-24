@@ -1982,7 +1982,7 @@ function createTransition(prevTransition: Transition | null): Transition {
     startTime: -1,
   };
   if (isDevelopment) {
-    currentTransition._updatedFibers = new Set();
+    currentTransition._updatedFibers = new Set<unknown>();
   }
   return currentTransition;
 }

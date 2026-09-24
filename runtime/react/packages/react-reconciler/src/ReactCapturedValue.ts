@@ -9,7 +9,7 @@ export interface CapturedValue<T> {
 }
 
 // An object thrown more than once keeps the stack of its first capture.
-const CapturedStacks: WeakMap<object, CapturedValue<unknown>> = new WeakMap();
+const CapturedStacks: WeakMap<object, CapturedValue<unknown>> = new WeakMap<object, CapturedValue<unknown>>();
 
 export function createCapturedValueAtFiber<T>(value: T, source: Fiber): CapturedValue<T> {
   // If the value is an error, call this function immediately after it is thrown

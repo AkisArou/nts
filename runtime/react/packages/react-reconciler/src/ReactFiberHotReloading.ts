@@ -136,7 +136,7 @@ export function markFailedErrorBoundaryForHotReloading(fiber: Fiber): void {
       return;
     }
     if (failedBoundaries === null) {
-      failedBoundaries = new WeakSet();
+      failedBoundaries = new WeakSet<Fiber>();
     }
     failedBoundaries.add(fiber);
   }

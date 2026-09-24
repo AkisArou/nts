@@ -79,3 +79,16 @@ export type FiberRoot = FiberRootNode;
 // Re-exported for modules that import the dispatcher types from here, as
 // upstream's do.
 export type { AsyncDispatcher, Dispatcher } from "shared/ReactTypes.ts";
+
+// Callbacks for dehydrated Suspense boundaries (enableSuspenseCallback, off
+// in stable).
+export interface SuspenseHydrationCallbacks {
+  onHydrated?: (hydrationBoundary: unknown) => void;
+  onDeleted?: (hydrationBoundary: unknown) => void;
+}
+
+// Transition tracing callbacks (enableTransitionTracing, off in stable).
+export interface TransitionTracingCallbacks {
+  onTransitionStart?: (transitionName: string, startTime: number) => void;
+  onTransitionComplete?: (transitionName: string, startTime: number, endTime: number) => void;
+}

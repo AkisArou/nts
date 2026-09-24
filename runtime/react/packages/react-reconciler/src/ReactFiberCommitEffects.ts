@@ -493,7 +493,7 @@ export function commitRootCallbacks(finishedWork: Fiber): void {
 
 let didWarnAboutUndefinedSnapshotBeforeUpdate: Set<unknown> | null = null;
 if (isDevelopment) {
-  didWarnAboutUndefinedSnapshotBeforeUpdate = new Set();
+  didWarnAboutUndefinedSnapshotBeforeUpdate = new Set<unknown>();
 }
 
 function callGetSnapshotBeforeUpdates(instance: CommitClassInstance, prevProps: unknown, prevState: unknown): unknown {

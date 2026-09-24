@@ -490,7 +490,7 @@ export function addMarkerProgressCallbackToPendingTransition(
       currentPendingTransitionCallbacks = emptyPendingTransitionCallbacks();
     }
     if (currentPendingTransitionCallbacks.markerProgress === null) {
-      currentPendingTransitionCallbacks.markerProgress = new Map();
+      currentPendingTransitionCallbacks.markerProgress = new Map<string, { pendingBoundaries: PendingBoundaries; transitions: Set<Transition> }>();
     }
     currentPendingTransitionCallbacks.markerProgress.set(markerName, {
       pendingBoundaries,
@@ -509,7 +509,7 @@ export function addMarkerIncompleteCallbackToPendingTransition(
       currentPendingTransitionCallbacks = emptyPendingTransitionCallbacks();
     }
     if (currentPendingTransitionCallbacks.markerIncomplete === null) {
-      currentPendingTransitionCallbacks.markerIncomplete = new Map();
+      currentPendingTransitionCallbacks.markerIncomplete = new Map<string, { aborts: TransitionAbort[]; transitions: Set<Transition> }>();
     }
     currentPendingTransitionCallbacks.markerIncomplete.set(markerName, {
       transitions,
@@ -524,7 +524,7 @@ export function addMarkerCompleteCallbackToPendingTransition(markerName: string,
       currentPendingTransitionCallbacks = emptyPendingTransitionCallbacks();
     }
     if (currentPendingTransitionCallbacks.markerComplete === null) {
-      currentPendingTransitionCallbacks.markerComplete = new Map();
+      currentPendingTransitionCallbacks.markerComplete = new Map<string, Set<Transition>>();
     }
     currentPendingTransitionCallbacks.markerComplete.set(markerName, transitions);
   }
@@ -539,7 +539,7 @@ export function addTransitionProgressCallbackToPendingTransition(
       currentPendingTransitionCallbacks = emptyPendingTransitionCallbacks();
     }
     if (currentPendingTransitionCallbacks.transitionProgress === null) {
-      currentPendingTransitionCallbacks.transitionProgress = new Map();
+      currentPendingTransitionCallbacks.transitionProgress = new Map<Transition, PendingBoundaries>();
     }
     currentPendingTransitionCallbacks.transitionProgress.set(transition, boundaries);
   }
@@ -686,7 +686,7 @@ export function requestUpdateLane(fiber: Fiber): Lane {
     }
     if (isDevelopment) {
       if (!transition._updatedFibers) {
-        transition._updatedFibers = new Set();
+        transition._updatedFibers = new Set<unknown>();
       }
       transition._updatedFibers.add(fiber);
       if (hasPotentialUseWarnings() && resolveUpdatePriority() === DiscreteEventPriority) {
@@ -4106,13 +4106,13 @@ export function attachPingListener(root: FiberRoot, wakeable: Wakeable, lanes: L
   let pingCache = root.pingCache;
   let threadIDs: Set<unknown> | undefined;
   if (pingCache === null) {
-    pingCache = root.pingCache = new Map();
-    threadIDs = new Set();
+    pingCache = root.pingCache = new Map<Wakeable, Set<unknown>>();
+    threadIDs = new Set<unknown>();
     pingCache.set(wakeable, threadIDs);
   } else {
     threadIDs = pingCache.get(wakeable);
     if (threadIDs === undefined) {
-      threadIDs = new Set();
+      threadIDs = new Set<unknown>();
       pingCache.set(wakeable, threadIDs);
     }
   }

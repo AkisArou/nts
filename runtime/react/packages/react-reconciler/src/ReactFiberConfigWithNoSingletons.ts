@@ -5,8 +5,8 @@
 // renderer's config, which the build forks in for ReactFiberConfig.ts.
 import type { Container, HostContext, Instance, Props, Type } from "react-reconciler/ReactFiberConfig.ts";
 
-function shim(..._args: unknown[]): never {
-  throw new Error(
+function notSupported(): Error {
+  return new Error(
     "The current renderer does not support Singletons. " +
       "This error is likely caused by a bug in React. " +
       "Please file an issue.",
@@ -14,8 +14,18 @@ function shim(..._args: unknown[]): never {
 }
 
 export const supportsSingletons: boolean = false;
-export const resolveSingletonInstance: (type: Type, props: Props, rootContainerInstance: Container, hostContext: HostContext, validateDOMNestingDev: boolean) => Instance = shim;
-export const acquireSingletonInstance: (type: Type, props: Props, instance: Instance, internalInstanceHandle: object) => void = shim;
-export const releaseSingletonInstance: (instance: Instance) => void = shim;
-export const isHostSingletonType: (type: Type) => boolean = shim;
-export const isSingletonScope: (type: Type) => boolean = shim;
+export function resolveSingletonInstance(_type: Type, _props: Props, _rootContainerInstance: Container, _hostContext: HostContext, _validateDOMNestingDev: boolean): Instance {
+  throw notSupported();
+}
+export function acquireSingletonInstance(_type: Type, _props: Props, _instance: Instance, _internalInstanceHandle: object): void {
+  throw notSupported();
+}
+export function releaseSingletonInstance(_instance: Instance): void {
+  throw notSupported();
+}
+export function isHostSingletonType(_type: Type): boolean {
+  throw notSupported();
+}
+export function isSingletonScope(_type: Type): boolean {
+  throw notSupported();
+}

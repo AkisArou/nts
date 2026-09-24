@@ -910,7 +910,7 @@ function clearBubbledViewTransitions(workInProgress: Fiber): void {
   }
 }
 
-function completeHostHoistable(current: Fiber | null, workInProgress: Fiber, newProps: Props, renderLanes: Lanes): null {
+function completeHostHoistable(current: Fiber | null, workInProgress: Fiber, newProps: Props, renderLanes: Lanes): Fiber | null {
   // The branching here is more complicated than you might expect because
   // a HostHoistable sometimes corresponds to a Resource and sometimes
   // corresponds to an Instance. It can also switch during an update.
@@ -973,7 +973,7 @@ function completeHostHoistable(current: Fiber | null, workInProgress: Fiber, new
   return null;
 }
 
-function completeHostSingleton(current: Fiber | null, workInProgress: Fiber, newProps: Props, renderLanes: Lanes): null {
+function completeHostSingleton(current: Fiber | null, workInProgress: Fiber, newProps: Props, renderLanes: Lanes): Fiber | null {
   popHostContext(workInProgress);
   const rootContainerInstance = getRootHostContainer();
   const type = workInProgress.type as Type;
@@ -1018,7 +1018,7 @@ function completeHostSingleton(current: Fiber | null, workInProgress: Fiber, new
   return null;
 }
 
-function completeHostComponent(current: Fiber | null, workInProgress: Fiber, newProps: Props, renderLanes: Lanes): null {
+function completeHostComponent(current: Fiber | null, workInProgress: Fiber, newProps: Props, renderLanes: Lanes): Fiber | null {
   popHostContext(workInProgress);
   const type = workInProgress.type as Type;
   if (current !== null && workInProgress.stateNode != null) {

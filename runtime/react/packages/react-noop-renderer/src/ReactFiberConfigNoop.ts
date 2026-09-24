@@ -339,7 +339,7 @@ export function preloadInstance(_instance: Instance, type: string, props: Props)
   }
   const src = props.src;
   if (suspenseyThingCache === null) {
-    suspenseyThingCache = new Map();
+    suspenseyThingCache = new Map<string, SuspenseyThingRecord>();
   }
   const record = suspenseyThingCache.get(src);
   if (record === undefined) {
@@ -426,7 +426,7 @@ export function getSuspenseyThingStatus(src: string): string | null {
 
 export function resolveSuspenseyThing(key: string): void {
   if (suspenseyThingCache === null) {
-    suspenseyThingCache = new Map();
+    suspenseyThingCache = new Map<string, SuspenseyThingRecord>();
   }
   const record = suspenseyThingCache.get(key);
   if (record === undefined) {

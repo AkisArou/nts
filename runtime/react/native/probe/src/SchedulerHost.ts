@@ -32,10 +32,21 @@ export function now(): number {
   return logicalTime;
 }
 
-export function createWorkPoster(perform: () => void): () => void {
-  return () => {
+class BoundWork {
+  perform: (() => void) | null = null;
+}
+
+const boundWork = new BoundWork();
+
+export function bindPerformWork(perform: () => void): void {
+  boundWork.perform = perform;
+}
+
+export function postWork(): void {
+  const perform = boundWork.perform;
+  if (perform !== null) {
     posted.push(new PostedWork(perform));
-  };
+  }
 }
 
 export type Timer = number;

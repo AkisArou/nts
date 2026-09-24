@@ -5,8 +5,8 @@
 // renderer's config, which the build forks in for ReactFiberConfig.ts.
 import type { ActivityInstance, Container, Instance, Props, SuspenseInstance, TextInstance, Type } from "react-reconciler/ReactFiberConfig.ts";
 
-function shim(..._args: unknown[]): never {
-  throw new Error(
+function notSupported(): Error {
+  return new Error(
     "The current renderer does not support mutation. " +
       "This error is likely caused by a bug in React. " +
       "Please file an issue.",
@@ -15,21 +15,57 @@ function shim(..._args: unknown[]): never {
 
 export type GestureTimeline = unknown;
 export const supportsMutation: boolean = false;
-export const cloneMutableInstance: (instance: Instance, keepChildren: boolean) => Instance = shim;
-export const cloneMutableTextInstance: (textInstance: TextInstance) => TextInstance = shim;
-export const appendChild: (parentInstance: Instance, child: Instance | TextInstance) => void = shim;
-export const appendChildToContainer: (container: Container, child: Instance | TextInstance) => void = shim;
-export const commitTextUpdate: (textInstance: TextInstance, oldText: string, newText: string) => void = shim;
-export const commitMount: (instance: Instance, type: Type, newProps: Props, internalInstanceHandle: object) => void = shim;
-export const commitUpdate: (instance: Instance, type: Type, oldProps: Props, newProps: Props, internalInstanceHandle: object) => void = shim;
-export const insertBefore: (parentInstance: Instance, child: Instance | TextInstance, beforeChild: Instance | TextInstance | SuspenseInstance | ActivityInstance) => void = shim;
-export const insertInContainerBefore: (container: Container, child: Instance | TextInstance, beforeChild: Instance | TextInstance | SuspenseInstance | ActivityInstance) => void = shim;
-export const removeChild: (parentInstance: Instance, child: Instance | TextInstance | SuspenseInstance | ActivityInstance) => void = shim;
-export const removeChildFromContainer: (container: Container, child: Instance | TextInstance | SuspenseInstance | ActivityInstance) => void = shim;
-export const resetTextContent: (instance: Instance) => void = shim;
-export const hideInstance: (instance: Instance) => void = shim;
-export const hideTextInstance: (textInstance: TextInstance) => void = shim;
-export const unhideInstance: (instance: Instance, props: Props) => void = shim;
-export const unhideTextInstance: (textInstance: TextInstance, text: string) => void = shim;
-export const clearContainer: (container: Container) => void = shim;
-export const getCurrentGestureOffset: (provider: GestureTimeline) => number = shim;
+export function cloneMutableInstance(_instance: Instance, _keepChildren: boolean): Instance {
+  throw notSupported();
+}
+export function cloneMutableTextInstance(_textInstance: TextInstance): TextInstance {
+  throw notSupported();
+}
+export function appendChild(_parentInstance: Instance, _child: Instance | TextInstance): void {
+  throw notSupported();
+}
+export function appendChildToContainer(_container: Container, _child: Instance | TextInstance): void {
+  throw notSupported();
+}
+export function commitTextUpdate(_textInstance: TextInstance, _oldText: string, _newText: string): void {
+  throw notSupported();
+}
+export function commitMount(_instance: Instance, _type: Type, _newProps: Props, _internalInstanceHandle: object): void {
+  throw notSupported();
+}
+export function commitUpdate(_instance: Instance, _type: Type, _oldProps: Props, _newProps: Props, _internalInstanceHandle: object): void {
+  throw notSupported();
+}
+export function insertBefore(_parentInstance: Instance, _child: Instance | TextInstance, _beforeChild: Instance | TextInstance | SuspenseInstance | ActivityInstance): void {
+  throw notSupported();
+}
+export function insertInContainerBefore(_container: Container, _child: Instance | TextInstance, _beforeChild: Instance | TextInstance | SuspenseInstance | ActivityInstance): void {
+  throw notSupported();
+}
+export function removeChild(_parentInstance: Instance, _child: Instance | TextInstance | SuspenseInstance | ActivityInstance): void {
+  throw notSupported();
+}
+export function removeChildFromContainer(_container: Container, _child: Instance | TextInstance | SuspenseInstance | ActivityInstance): void {
+  throw notSupported();
+}
+export function resetTextContent(_instance: Instance): void {
+  throw notSupported();
+}
+export function hideInstance(_instance: Instance): void {
+  throw notSupported();
+}
+export function hideTextInstance(_textInstance: TextInstance): void {
+  throw notSupported();
+}
+export function unhideInstance(_instance: Instance, _props: Props): void {
+  throw notSupported();
+}
+export function unhideTextInstance(_textInstance: TextInstance, _text: string): void {
+  throw notSupported();
+}
+export function clearContainer(_container: Container): void {
+  throw notSupported();
+}
+export function getCurrentGestureOffset(_provider: GestureTimeline): number {
+  throw notSupported();
+}
