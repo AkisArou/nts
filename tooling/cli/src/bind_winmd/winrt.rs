@@ -19,7 +19,7 @@
 //! What is not bound yet is refused into `<namespace>.refused.txt` with the
 //! reason, one line each: generic interfaces and their instantiations
 //! (`IVector<T>`, whose IID is computed rather than read), structs, arrays,
-//! `out` parameters, `boolean`, and events.
+//! `out` parameters, and events.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -335,7 +335,8 @@ impl Writer<'_> {
                 self.brands.insert("HString");
                 Ok("HString".to_owned())
             }
-            Type::Bool => Err("a `boolean`, which WinRT passes as one byte".to_owned()),
+            // One byte, 0 or 1: C's `bool`.
+            Type::Bool => Ok("boolean".to_owned()),
             Type::ClassName(name) if !name.generics.is_empty() => Err(format!("`{}`, a generic instantiation", name.name)),
             Type::ClassName(name) if name.namespace != self.namespace => {
                 Err(format!("`{}.{}`, from a namespace not bound with this one", name.namespace, name.name))

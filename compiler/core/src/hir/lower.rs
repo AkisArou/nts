@@ -11508,7 +11508,7 @@ enum Lent {
     /// A C string, beside the string it was made from and how it was encoded.
     String { string: ValueId, pointer: ValueId, encoding: super::native::Encoding },
     /// The slot an `@ntsHresult` call writes its result to, read after it.
-    Result { slot: ValueId, string: bool },
+    Result { slot: ValueId, written: super::native::Written },
     /// A `char **` made from a `string[]`.
     Strings { pointer: ValueId },
     /// A `Uint8Array` whose bytes C reads in place: nothing to free, and the
@@ -40621,7 +40621,8 @@ impl<'a> FuncBuilder<'a> {
     /// and then the result read out of the slot C wrote it to.
     ///
     /// **What the slot holds decides how it is read**, and each reading is one
-    /// the rest of the compiler already knows: a counted handle through
+    /// the rest of the compiler already knows: a `boolean` byte compared with
+    /// zero; a counted handle through
     /// `nts_com_take`, a runtime call, whose result the ownership pass reads
     /// as produced -- the `+1` a Windows Runtime `[out]` object is -- and
     /// releases; an
@@ -40656,17 +40657,24 @@ impl<'a> FuncBuilder<'a> {
         self.throw_c_message(id, message, &origin)?;
         self.switch_to(after);
         let written = lent.iter().find_map(|lent| match lent {
-            Lent::Result { slot, string } => Some((*slot, *string)),
+            Lent::Result { slot, written } => Some((*slot, *written)),
             _ => None,
         });
         let value = match written {
             None => self.push(OpKind::ConstUndefined, typed.unwrap_or(HirType::Void), origin.clone()),
-            Some((slot, true)) => {
+            Some((slot, super::native::Written::HString)) => {
                 let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
                 let hstring = self.push(OpKind::NativeLoad { pointer: slot, index: first }, HirType::NativePointer(super::native::Pointee::Void), origin.clone());
                 self.runtime_call("nts_string_from_hstring", vec![hstring], HirType::Managed(ManagedType::String), origin.clone())
             }
-            Some((slot, false)) => {
+            Some((slot, super::native::Written::Bool)) => {
+                let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                let byte_type = HirType::Int { bits: 8, signed: false };
+                let byte = self.push(OpKind::NativeLoad { pointer: slot, index: first }, byte_type.clone(), origin.clone());
+                let zero = self.push(OpKind::ConstInt(0), byte_type, origin.clone());
+                self.push(OpKind::Binary { op: BinOp::Ne, lhs: byte, rhs: zero }, HirType::Bool, origin.clone())
+            }
+            Some((slot, super::native::Written::Value)) => {
                 let HirType::NativePointer(super::native::Pointee::Pointer(held)) = self.values[slot.0 as usize].ty.clone() else {
                     let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
                     let HirType::NativePointer(super::native::Pointee::Scalar(scalar)) = self.values[slot.0 as usize].ty.clone() else {
@@ -41571,9 +41579,9 @@ impl<'a> FuncBuilder<'a> {
                 }
                 // Where C writes the result (`@ntsHresult`): a zeroed local,
                 // read by `finish_call` once the HRESULT says it was written.
-                Role::Result { string } => {
+                Role::Result { written } => {
                     let slot = self.push(OpKind::NativeLocal { count: 1 }, target.parameters[at].representation(), origin.clone());
-                    lent.push(Lent::Result { slot, string });
+                    lent.push(Lent::Result { slot, written });
                     c_args.push(slot);
                 }
                 Role::String(encoding) => {

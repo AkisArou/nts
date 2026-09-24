@@ -176,6 +176,6 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
     assert!(module.contains("ComClass<\"Windows_Data_Json_IJsonValue\">"), "{module}");
     // Refused, each with the reason, and not written.
     assert!(refused.contains("IJsonValueStatics.TryParse\tan `out` parameter"), "{refused}");
-    assert!(refused.contains("IJsonValue.GetBoolean\ta `boolean`"), "{refused}");
+    declared_in("export interface IJsonValueMethods", 10, "GetBoolean", "GetBoolean(this: IJsonValue): boolean;");
     assert!(!module.contains("TryParse("), "a refused method was written:\n{module}");
 }

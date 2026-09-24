@@ -15,7 +15,7 @@
 # - **On Windows:** each build prints its expectation. The line is built so a
 #   part that did not work shows (see `src/main.ts`): the factory cache is
 #   asserted by its count (a cache that never hit prints `activations=3`,
-#   measured), and `released` is 0 without a counting provider and 2 under
+#   measured), and `released` is 0 without a counting provider and 4 under
 #   `--rc`, one per object the program was handed.
 #
 # With no Windows reachable the run arms say so by name, and the rest still

@@ -390,9 +390,20 @@ pub enum Role {
     NSArray(Bridged),
     /// Where C writes the call's declared result, returning a status instead
     /// (`@ntsHresult`): a slot of the compiler's, read after the call once the
-    /// status says it succeeded. `string` when what is written is an `HSTRING`
-    /// the caller owns. Hidden from TypeScript.
-    Result { string: bool },
+    /// status says it succeeded, as `written` says. Hidden from TypeScript.
+    Result { written: Written },
+}
+
+/// What C writes to an `@ntsHresult` call's result slot, which decides how the
+/// slot is read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Written {
+    /// The declared result as it is: a handle, or a C scalar.
+    Value,
+    /// An `HSTRING` the caller owns, copied into a `string` and deleted.
+    HString,
+    /// A Windows Runtime `boolean`, one byte, read as `!= 0`.
+    Bool,
 }
 
 /// What an array crossing an Objective-C message holds, as Swift bridges
@@ -2250,8 +2261,8 @@ fn hresult_result(
     parameters: &mut Vec<Type>,
     roles: &mut Vec<Role>,
 ) -> Result<Returned, String> {
-    let (written, string) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
-        (Type::Pointer(Pointee::Void), true)
+    let (written, kind) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
+        (Type::Pointer(Pointee::Void), Written::HString)
     } else {
         let declared = returned(snapshot, name, ty, abi)?;
         if declared.string.is_some() {
@@ -2264,7 +2275,11 @@ fn hresult_result(
                 "foreign function `{name}` is `@ntsHresult` and its result is `Declared`, `Owned` or a `CBool`, which a written result does not take"
             ));
         }
-        (declared.result, false)
+        match declared.result {
+            // A Windows Runtime `boolean` is one byte, 0 or 1.
+            Type::Bool => (Type::Scalar(Scalar::UInt8), Written::Bool),
+            result => (result, Written::Value),
+        }
     };
     let pointee = match written {
         Type::Void => None,
@@ -2278,7 +2293,7 @@ fn hresult_result(
     };
     if let Some(pointee) = pointee {
         parameters.push(Type::Pointer(pointee));
-        roles.push(Role::Result { string });
+        roles.push(Role::Result { written: kind });
     }
     Ok(Returned { result: Type::Scalar(Scalar::Int32), array: None, string: None, owned: false, program: None })
 }
