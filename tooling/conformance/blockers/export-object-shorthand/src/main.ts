@@ -30,6 +30,29 @@
 //     shadowed binding and refused `blockers/value-export-holding-functions`,
 //     whose whole subject is the shorthand.
 //
+// # The obvious follow-on is measured and worth nothing
+//
+// `export default { … }` is still not a namespace, because `namespace_of` starts
+// from a `VARIABLE_DECLARATION` and an export assignment is not one. That reads
+// like the next commit and it is not: `namespace_of` is **all-or-nothing** --
+// half a namespace is worse than none -- and every default export in the corpus
+// has a member that cannot resolve to a function declaration.
+//
+//     util             `types` is a namespace import; `isArray`, `_extend` and
+//                      `isDeepStrictEqual` are `const`s bound to calls
+//     string_decoder   `{ StringDecoder }`, a class
+//     buffer, console  `export default Buffer` / `globalConsole` -- not literals
+//
+// So extending the declaration kinds buys **zero exports** until the
+// all-or-nothing rule is relaxed too, and relaxing that is the thing the rule
+// exists to prevent: `emit_namespaces` publishes the container, so a member
+// whose wrapper is missing leaves a hole in an object that *is* present, and
+// `a name bound to {} answers every presence check and no call`.
+//
+// Measured 2026-09-24 rather than assumed, because the cheap-looking follow-on
+// to a cheap fix is exactly where this ledger keeps finding an hour spent for
+// nothing.
+//
 // **The message changed on 2026-09-11**, from `is exported and is not a function
 // this backend can name`. That sentence was true of the export *shape* and sent
 // a reader there, when what is wanted is a crossing for an object type -- and it
