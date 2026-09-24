@@ -17,6 +17,17 @@ export default defineConfig({
         target.windows({ arch: "aarch64", backend: "c" }),
       ],
     }),
+    // The same program through the LLVM backend, beside the C runtime it
+    // links with. A product of its own because a build directory is named
+    // for the target, not the backend.
+    helloLlvm: app({
+      kind: "executable",
+      entry: "./src/main.ts",
+      targets: [
+        target.linux({ backend: "llvm" }),
+        target.windows({ arch: "x86_64", backend: "llvm" }),
+      ],
+    }),
   },
   native: [sources({ dir: "native" })],
 });

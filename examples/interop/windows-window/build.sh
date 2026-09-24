@@ -15,6 +15,9 @@
 #   `by=failsafe`, which is what a libuv that never turns inside the message
 #   loop produces. It was measured so, with `nts_win_host_attach` removed and
 #   with only its schedule hook removed.
+# - **LLVM:** `windowLlvm` is the same program through the LLVM backend, held
+#   to the same PE checks and the same output: its window procedure is a
+#   bridge the LLVM backend writes, and its `POINT` crosses as Win64's integer.
 #
 # With no Windows reachable the run arm says so by name, and the rest still
 # count.
@@ -51,31 +54,33 @@ if grep -q -E "refused and are absent|NTS[0-9]{4}" "$log"; then
   exit 1
 fi
 
-exe="$out/window/windows-x86_64/window.exe"
-kind=$(file -b "$exe")
-case $kind in
-  *PE32+*console*x86-64*) ;;
-  *) echo "windows-window: $exe is not an x86-64 console PE32+: $kind" >&2; exit 1 ;;
-esac
-foreign=$(llvm-objdump -p "$exe" | sed -n 's/^ *DLL Name: //p' | tr 'A-Z' 'a-z' |
-  grep -v -e '^api-ms-win-' -e '^kernel32.dll$' -e '^advapi32.dll$' -e '^user32.dll$' \
-    -e '^ws2_32.dll$' -e '^iphlpapi.dll$' -e '^userenv.dll$' -e '^dbghelp.dll$' \
-    -e '^ole32.dll$' -e '^shell32.dll$' -e '^psapi.dll$' || true)
-if [ -n "$foreign" ]; then
-  echo "windows-window: loads DLLs a stock Windows does not have: $foreign" >&2
-  exit 1
-fi
-echo "windows-x86_64: console PE32+ x86-64, Windows DLLs only"
+for product in window windowLlvm; do
+  exe="$out/$product/windows-x86_64/$product.exe"
+  kind=$(file -b "$exe")
+  case $kind in
+    *PE32+*console*x86-64*) ;;
+    *) echo "windows-window: $exe is not an x86-64 console PE32+: $kind" >&2; exit 1 ;;
+  esac
+  foreign=$(llvm-objdump -p "$exe" | sed -n 's/^ *DLL Name: //p' | tr 'A-Z' 'a-z' |
+    grep -v -e '^api-ms-win-' -e '^kernel32.dll$' -e '^advapi32.dll$' -e '^user32.dll$' \
+      -e '^ws2_32.dll$' -e '^iphlpapi.dll$' -e '^userenv.dll$' -e '^dbghelp.dll$' \
+      -e '^ole32.dll$' -e '^shell32.dll$' -e '^psapi.dll$' || true)
+  if [ -n "$foreign" ]; then
+    echo "windows-window: loads DLLs a stock Windows does not have: $foreign" >&2
+    exit 1
+  fi
+  echo "windows-x86_64: console PE32+ x86-64, Windows DLLs only"
 
-set +e
-"$root/tooling/windows/run.sh" "$exe" >"$out/windows.txt"
-status=$?
-set -e
-case $status in
-  0)
-    diff -u "$source/expected.txt" "$out/windows.txt"
-    echo "windows-x86_64: closed by TypeScript inside the message loop, run on Windows"
-    ;;
-  77) echo "windows-x86_64: not run -- no Windows reachable (tooling/windows/vm.md)" ;;
-  *) echo "windows-window: the program exited $status on Windows" >&2; exit 1 ;;
-esac
+  set +e
+  "$root/tooling/windows/run.sh" "$exe" >"$out/windows-$product.txt"
+  status=$?
+  set -e
+  case $status in
+    0)
+      diff -u "$source/expected.txt" "$out/windows-$product.txt"
+      echo "windows-x86_64 ($product): closed by TypeScript inside the message loop, run on Windows"
+      ;;
+    77) echo "windows-x86_64: not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+    *) echo "windows-window: $product exited $status on Windows" >&2; exit 1 ;;
+  esac
+done

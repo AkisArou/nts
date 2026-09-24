@@ -181,43 +181,103 @@ fn a_shared_library_publishes_its_entry_and_nothing_else() {
     );
 }
 
-/// A backend that cannot write a program is named, not skipped.
+/// `backend: "llvm"` builds a program: the LLVM module in `program.c`'s place,
+/// linked with the runtime and the entry point the C build writes.
 ///
-/// Silently omitting one of several targets is worse than stopping, because the
-/// missing artifact is found by whoever links against it.
+/// **Run, and against the C build of the same program**, because a module that
+/// compiles and links has said nothing about its calls into the runtime: the
+/// verifier accepts a call whose type differs from its callee's. Module
+/// evaluation throws, so `nts: uncaught` and a non-zero status are the runtime
+/// reporting through the program; the two builds must agree on both.
+///
+/// It replaces a test that asserted the opposite -- that llvm was refused by
+/// name because it "cannot write a program yet".
 #[test]
-fn a_backend_that_cannot_write_is_refused_by_name() {
+fn an_llvm_product_builds_and_runs_as_its_c_build_does() {
     if !available() {
         eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
         return;
     }
-    // **`backend: "llvm"` is said out loud, and that is the point of the test.**
-    // It used to arrive by default, which meant this asserted the refusal *and*
-    // silently asserted that the default was unbuildable. The default is now
-    // `c`, so a config has to ask for llvm to get this message -- and asking
-    // for it is a thing somebody might legitimately do.
-    // Not `build-llvm`: the assertion below looks for "llvm" in the message, and
-    // a directory named for it would put it in every path printed. See
-    // `a_build_that_drops_functions_says_how_many`, where that mistake made a
-    // test pass for two hours without checking anything.
     let project = fixture(
-        "build-backend-refusal",
+        "build-backend-llvm",
         r#"
-import { defineConfig, library, target } from "@nts/config";
+import { app, defineConfig, target } from "@nts/config";
 export default defineConfig({
   products: {
-    acme: library.native({
-      targets: [target.linux({ backend: "llvm" })],
-      entry: "./src/main.ts",
-    }),
+    viaC: app({ kind: "executable", entry: "./src/main.ts", targets: [target.linux({ backend: "c" })] }),
+    viaLlvm: app({ kind: "executable", entry: "./src/main.ts", targets: [target.linux({ backend: "llvm" })] }),
   },
 });
 "#,
     );
+    std::fs::write(
+        project.join("src/main.ts"),
+        "const seen = new Map<string, number>();\n\
+         seen.set(\"a\", 1);\n\
+         function boom(n: number): number { if (n > 0) { throw new Error('evaluated ' + String(seen.get(\"a\"))); } return n; }\n\
+         const answer = boom(1);\n\
+         export function unused(): number { return answer; }\n",
+    )
+    .expect("entry");
     let run = build(&project, &[]);
-    assert!(!run.ok, "expected a refusal:\n{}", run.stdout);
-    assert!(run.stderr.contains("llvm"), "{}", run.stderr);
-    assert!(run.stderr.contains("acme"), "{}", run.stderr);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+    let built = project.join(".nts/build/viaLlvm/linux-gnu-x86_64");
+    assert!(built.join("program.ll.o").is_file(), "the llvm product did not compile program.ll:\n{}", run.stdout);
+    assert!(!built.join("program.c.o").exists(), "the llvm product compiled program.c too");
+    let answer = |product: &str| {
+        let exe = project.join(format!(".nts/build/{product}/linux-gnu-x86_64/{product}"));
+        let output = Command::new(&exe).output().unwrap_or_else(|e| panic!("running {}: {e}", exe.display()));
+        (output.status.code(), String::from_utf8_lossy(&output.stderr).into_owned())
+    };
+    let (via_c, via_llvm) = (answer("viaC"), answer("viaLlvm"));
+    assert_ne!(via_c.0, Some(0), "the C build did not evaluate the module: {via_c:?}");
+    assert!(via_c.1.contains("evaluated 1"), "{via_c:?}");
+    assert_eq!(via_llvm, via_c, "the llvm build disagrees with the C build");
+}
+
+/// A static library built on `backend: "llvm"` evaluates its module when it
+/// loads, as the C build's does: the constructor is `llvm.global_ctors` in the
+/// program's own object, so the member a consumer pulls in for `total` brings
+/// it. A heap array built by module evaluation is the state, because a constant
+/// would fold and answer whether or not the constructor ran
+/// (`examples/interop/library-module-state` is the C arm of the same claim).
+#[test]
+fn an_llvm_static_library_evaluates_its_module_when_linked() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let project = fixture(
+        "build-llvm-library-init",
+        r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    viaC: library.staticNative({ targets: [target.linux({ backend: "c" })], entry: "./src/main.ts" }),
+    viaLlvm: library.staticNative({ targets: [target.linux({ backend: "llvm" })], entry: "./src/main.ts" }),
+  },
+});
+"#,
+    );
+    std::fs::write(
+        project.join("src/main.ts"),
+        "const table: number[] = [];\nfor (let i = 0; i < 4; i++) { table.push(i * 2); }\n\
+         export function total(): number {\n  let sum = table.length === 0 ? -1 : 0;\n\
+         for (let i = 0; i < table.length; i++) { sum += table[i] ?? 0; }\n  return sum;\n}\n",
+    )
+    .expect("entry");
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+    let consumer = project.join("caller.c");
+    std::fs::write(&consumer, "double total(void);\nint main(void) { return (int)total(); }\n").expect("consumer");
+    for product in ["viaC", "viaLlvm"] {
+        let archive = project.join(format!(".nts/build/{product}/linux-gnu-x86_64/lib{product}.a"));
+        let exe = project.join(format!("caller-{product}"));
+        let linked = Command::new("clang").arg(&consumer).arg(&archive).args(["-lm", "-o"]).arg(&exe).output().expect("clang");
+        assert!(linked.status.success(), "{product}: {}", String::from_utf8_lossy(&linked.stderr));
+        let status = Command::new(&exe).status().expect("running the consumer");
+        assert_eq!(status.code(), Some(12), "{product}: module evaluation did not run when the library loaded");
+    }
 }
 
 /// Several products build by default; `--product` builds one.

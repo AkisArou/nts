@@ -16,6 +16,10 @@
 # - **x86_64 on Windows:** runs through `tooling/windows/run.sh` (the lane's
 #   VM) and prints `expected.txt`. With no Windows reachable this arm says so by
 #   name and the others still count. arm64 is never run (tooling/windows/vm.md).
+# - **LLVM:** `helloLlvm` is the same program through the LLVM backend, linked
+#   with the same C runtime. Its Linux and Windows x86_64 builds are held to the
+#   same text, which on Windows is the Win64 calling convention for every
+#   erased value and bigint the program hands the runtime.
 #
 # `nts build` exits 0 with refused functions missing, so its output is checked
 # for that as well as its status.
@@ -51,6 +55,9 @@ linux="$out/hello/linux-gnu-x86_64/hello"
 "$linux" >"$out/linux.txt"
 diff -u "$source/expected.txt" "$out/linux.txt"
 echo "linux: matches node"
+"$out/helloLlvm/linux-gnu-x86_64/helloLlvm" >"$out/linux-llvm.txt"
+diff -u "$source/expected.txt" "$out/linux-llvm.txt"
+echo "linux, llvm backend: matches node"
 
 sed 's/^bigint .*/bigint 0/' "$source/expected.txt" >"$out/control.txt"
 if diff -q "$out/control.txt" "$out/linux.txt" >/dev/null; then
@@ -79,15 +86,17 @@ for arch in x86_64 aarch64; do
   echo "windows-$arch: console PE32+ $machine, Windows DLLs only"
 done
 
-set +e
-"$root/tooling/windows/run.sh" "$out/hello/windows-x86_64/hello.exe" >"$out/windows.txt"
-status=$?
-set -e
-case $status in
-  0)
-    diff -u "$source/expected.txt" "$out/windows.txt"
-    echo "windows-x86_64: matches node, run on Windows"
-    ;;
-  77) echo "windows-x86_64: not run -- no Windows reachable (tooling/windows/vm.md)" ;;
-  *) echo "windows-hello: the x86_64 program exited $status on Windows" >&2; exit 1 ;;
-esac
+for product in hello helloLlvm; do
+  set +e
+  "$root/tooling/windows/run.sh" "$out/$product/windows-x86_64/$product.exe" >"$out/windows-$product.txt"
+  status=$?
+  set -e
+  case $status in
+    0)
+      diff -u "$source/expected.txt" "$out/windows-$product.txt"
+      echo "windows-x86_64 ($product): matches node, run on Windows"
+      ;;
+    77) echo "windows-x86_64 ($product): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+    *) echo "windows-hello: $product exited $status on Windows" >&2; exit 1 ;;
+  esac
+done
