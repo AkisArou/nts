@@ -93,22 +93,44 @@ Found by running these: `run.sh` passed one empty argument to a program given
 none. `native-buffer`'s `argc` check caught it; `macos-hello` ignores its
 arguments and could not.
 
+## A1a, landed: Foundation from TypeScript
+
+`cfc1f567`. A binding declares an Objective-C method as gtk-gir declares a C
+one: on a handle's methods interface, with `this: T`, tagged
+`@ntsSelector initWithUTF8String:` instead of `@ntsSymbol`. A class method is a
+function tagged `@ntsSelector` and `@ntsClass NSString`, and the module names
+what to link with `@ntsFramework Foundation`.
+
+- **The call** is `objc_msgSend` cast to the exact function type, in C and in
+  LLVM. It is never variadic. Selectors and classes are cached by `static`
+  lookups, and a missing class ends the process by name.
+- **Refused where the declaration is read:** a colon count that is not the
+  message's argument count, a malformed selector, `@ntsClass` on a method, a
+  function with no class, both `@ntsSymbol` and `@ntsSelector`, variadics, the
+  managed ABI, and callbacks.
+- **Link and target:** `-lobjc` and `-framework X`. A send off Apple is refused
+  by name.
+- **Measured on the VM:** `examples/interop/macos-foundation` prints exactly
+  what `reference/foundation.c` prints, on both backends. That file sends the
+  same messages from hand-written C against the same Foundation. A selector
+  sabotage dies with `unrecognized selector`.
+
+What A1a does not do is ownership: `release` is itself a send, called by hand.
+
 **Never measured here: arm64 at run time.** The VM is x86_64. arm64 is built,
 linked and inspected, and the lane never emits a variadic `objc_msgSend`, so
 correctness does not depend on arm64 running by luck.
 
 ## Next
 
-1. **A1, Foundation from TypeScript:**
-   - an `objc:` specifier;
-   - typed `objc_msgSend` lowering;
-   - a family marker on the GTK lane's `Handle` (`c` or `objc`), which decides
-     the spelling, the downcast check, and retain/release;
-   - `NSString` ↔ `string`;
-   - hand-written declarations for about 15 Foundation classes.
-
-   Fixture `macos-foundation`: `α😀` round-trips through NSString, and a
-   retain-count arm fails when release is skipped.
+1. **A1b, ARC-managed handles.** An `objc` family on the GTK lane's `Handle`.
+   Storing a handle retains it and dropping it releases it. The method family
+   decides +1 or +0 (`alloc`/`new`/`copy`/`mutableCopy`/`init`), and an
+   autorelease pool drains around each host task.
+   - Falsifier: a zeroing weak reference (`objc_loadWeakRetained`) is nil
+     after the TypeScript value dies, and not before. Not `retainCount`, which
+     Apple documents as meaningless.
+   - Also `NSString` ↔ `string` directly, not through `UTF8String`.
 2. **A2, a window:** blocks, `extends NSObject`, the CFRunLoop host, and
    `macos-window` with a capturing target/action handler that starts a timer
    and an await.
