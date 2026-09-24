@@ -6,6 +6,7 @@
 //! diagnosed precisely, and that promise starts here.
 
 mod bind;
+mod bind_objc;
 mod bind_gir;
 
 use std::fmt::Write as _;
@@ -342,6 +343,42 @@ fn bind_gir(rest: &[String]) -> Result<()> {
     bind_gir::run(&bind_gir::Request { root: root.clone(), search, out })
 }
 
+/// `nts bind-objc --module objc:AppKit --framework AppKit --class NSWindow ...`
+///
+/// The SDK is `--sdk`, else `NTS_APPLE_SDK`, else the one
+/// `tooling/apple/sync-sdk.sh` keeps: a real SDK, since zig's Darwin libc
+/// has no frameworks to read.
+fn bind_objc(rest: &[String]) -> Result<()> {
+    let repeated = |flag: &str| -> Vec<String> {
+        rest.windows(2).filter(|pair| pair[0] == flag).map(|pair| pair[1].clone()).collect()
+    };
+    let single = |flag: &str| -> Option<String> {
+        rest.windows(2).find(|pair| pair[0] == flag).map(|pair| pair[1].clone())
+    };
+    let sdk = single("--sdk")
+        .or_else(|| std::env::var("NTS_APPLE_SDK").ok())
+        .unwrap_or_else(|| apple_root().join("MacOSX.sdk").into_string());
+    let request = bind_objc::Request {
+        frameworks: repeated("--framework"),
+        module: single("--module").ok_or_else(|| anyhow::anyhow!("`nts bind-objc` needs `--module objc:<name>`"))?,
+        classes: repeated("--class"),
+        sdk,
+        target: single("--target").unwrap_or_else(|| "x86_64-apple-macos13".to_owned()),
+    };
+    if request.frameworks.is_empty() || request.classes.is_empty() {
+        anyhow::bail!("`nts bind-objc` needs at least one `--framework` and one `--class`");
+    }
+    let text = bind_objc::run(&request)?;
+    match single("--out") {
+        Some(path) => {
+            std::fs::write(&path, &text).with_context(|| format!("writing the binding to {path}"))?;
+            println!("wrote {path}");
+        }
+        None => print!("{text}"),
+    }
+    Ok(())
+}
+
 /// `nts bind-c --header sys/epoll.h --record epoll_event --fn epoll_ctl ...`
 ///
 /// Repeatable flags rather than a request file: the command *is* the record of
@@ -448,6 +485,7 @@ EMITTING ONE BACKEND
 
 BINDINGS
   bind-c       generate a TypeScript declaration from a C header
+  bind-objc    generate an objc: declaration from macOS framework headers
   bind-gir     generate TypeScript declarations from GObject introspection
   bind         generate declarations and a binding table from class files
   deps         acquire the TypeScript behind this project's dependencies
@@ -536,6 +574,9 @@ fn arguments() -> Option<Vec<String>> {
     Some(given)
 }
 
+// A dispatch table, one arm per command: it grows by one line a command, and
+// the usage test reads its arms as written, so it is not folded to fit.
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     let Some(given) = arguments() else { return Ok(()) };
     let mut args = given.into_iter();
@@ -554,6 +595,7 @@ fn main() -> Result<()> {
         // an arm added above it silently shadowed that command. Named for what
         // it emits, the way `emit-c` is.
         Some("bind-c") => bind_c(&args.collect::<Vec<String>>()),
+        Some("bind-objc") => bind_objc(&args.collect::<Vec<String>>()),
         Some("bind-gir") => bind_gir(&args.collect::<Vec<String>>()),
         Some("emit-c") => {
             let rest: Vec<String> = args.collect();

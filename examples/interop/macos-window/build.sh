@@ -44,6 +44,22 @@ fi
   NTS_APPLE_ROOT="$apple" "$root/tooling/apple/build-libuv.sh" >/dev/null
 
 mkdir -p "$out"
+# `types/appkit.d.ts` is `nts bind-objc`'s, and must still be: regenerated
+# and compared, so a generator change or an SDK update is a diff here rather
+# than a program that quietly compiles against something else.
+# NTS_REGENERATE=1 writes it instead.
+"$nts" bind-objc --sdk "$sdk" --module objc:AppKit --framework AppKit --framework Foundation \
+  --class NSApplication --class NSWindow --class NSButton --class NSString --class NSTimer --class NSEvent \
+  --out "$out/appkit.d.ts" >/dev/null
+if [ "${NTS_REGENERATE:-}" = 1 ]; then
+  command cp -f "$out/appkit.d.ts" "$source/types/appkit.d.ts"
+fi
+diff -u "$source/types/appkit.d.ts" "$out/appkit.d.ts" >"$out/appkit.diff" || {
+  head -40 "$out/appkit.diff" >&2
+  echo "macos-window: types/appkit.d.ts is not what nts bind-objc writes; NTS_REGENERATE=1 rewrites it" >&2
+  exit 1
+}
+echo "bind-objc: types/appkit.d.ts is the generator's, unchanged"
 log="$out/build.log"
 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
   { cat "$log" >&2; exit 1; }

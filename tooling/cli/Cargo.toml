@@ -31,6 +31,9 @@ anyhow.workspace = true
 # `nts bind` reads clang's JSON AST. Already a workspace dependency, which is
 # the reason that tool shells out to clang rather than linking libclang.
 serde_json.workspace = true
+# `nts bind-objc` streams clang's dump of a whole framework, 388 MB for
+# AppKit, through a seed that keeps only the classes asked for.
+serde.workspace = true
 # `nts bind-gir` reads GObject-introspection XML.
 roxmltree.workspace = true
 camino.workspace = true

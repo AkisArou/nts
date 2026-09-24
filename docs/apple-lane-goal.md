@@ -230,9 +230,41 @@ correctness does not depend on arm64 running by luck.
      `stret` included. A `readonly` property has no setter. `macos-window`
      uses both.
 
-   Next: `nts bind-objc`, writing exactly this surface.
+3. **A3: `nts bind-objc`, landed without its witness.** `nts bind-objc
+   --module objc:AppKit --framework AppKit --framework Foundation --class
+   NSWindow ...` writes the surface above from the SDK's headers, each class
+   with its ancestors and its categories. It streams clang's whole-framework
+   dump (388 MB for AppKit) in two passes, in about 6 s. `macos-window` runs on
+   its output: every AppKit and Foundation declaration there is generated, and
+   `build.sh` regenerates the file and fails on a diff. `NTS_REGENERATE=1`
+   rewrites it.
 
-3. **A3:** `nts bind-objc` from SDK headers, with an Objective-C witness.
+   The rules, each with a test on a synthetic framework
+   (`bind_objc::tests`):
+   - A method takes its `NativeScript` name, and its selector is its
+     `@ntsSelector`.
+   - `instancetype` is the class a method is called on, and an ancestor's
+     class methods and `instancetype` methods are repeated at each
+     descendant's type.
+   - Only a declared `_Nullable` may be null. An unannotated pointer is
+     present, as Swift imports it: `+alloc` is unannotated.
+   - An enum crosses as its fixed width's brand, and a struct by value is
+     declared with `Struct`.
+   - A member this cannot write is left out with the reason in a comment:
+     blocks, `void *`, C function pointers, pointers to structs, variadic
+     methods.
+
+   Not yet:
+   - The Objective-C witness (a `@selector` and `method_getTypeEncoding`
+     check per member, run on the Mac).
+   - Availability filtering. Clang's JSON carries no version on
+     `AvailabilityAttr`.
+   - Enum constants as values.
+   - Protocols, so delegates are still declared by hand.
+   - Blocks in generated signatures.
+   - A lowering gap it found: an optional call (`window.contentView?.addSubview(v)`)
+     on a native method takes its return type from the whole expression and
+     is refused.
    It replaces the hand-written `.d.ts` in every `macos-*` fixture. Sugar for
    `class X extends NSObject` belongs to A4, and so does per-instance
    TypeScript state, and so does `NSMakeRect`-style construction. Today a

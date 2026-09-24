@@ -19,10 +19,11 @@ import {
   NSString,
   NSTimer,
   NSWindow,
-  NtsWindowController,
   type CGPoint,
   type CGRect,
+  type NSString as NSStringHandle,
 } from "objc:AppKit";
+import { NtsWindowController } from "objc:Controller";
 import { actionImplementation, nested_while_readable, report, timerImplementation, window_control } from "c:support";
 import { class_addMethod, objc_allocateClassPair, objc_registerClassPair, sel_registerName } from "objc:runtime";
 import { local } from "c:memory";
@@ -38,6 +39,16 @@ async function afterAJob(line: string): Promise<void> {
   report(line);
 }
 
+// `stringWithUTF8String:` answers nil for bytes that are not UTF-8, which a
+// TypeScript string never is.
+function text(value: string): NSStringHandle {
+  const made = NSString.stringWithUTF8String(value);
+  if (made === null) {
+    throw new Error("not UTF-8");
+  }
+  return made;
+}
+
 function setRect(r: Ptr<CGRect>, x: number, y: number, width: number, height: number): void {
   r.origin.x = x as c_double;
   r.origin.y = y as c_double;
@@ -47,19 +58,23 @@ function setRect(r: Ptr<CGRect>, x: number, y: number, width: number, height: nu
 
 function main(): void {
   window_control();
-  const app = NSApplication.sharedApplication();
+  const app = NSApplication.sharedApplication;
   app.setActivationPolicy(0n as c_long);
 
   const frame = local<CGRect>();
   setRect(frame, 200, 200, 320, 200);
   // Titled and closable, buffered, not deferred.
-  const window = NSWindow.alloc().initWithContentRect(frame, 3n as c_ulong, 2n as c_ulong, false);
-  window.title = NSString.stringWithUTF8String("nts");
+  const window = NSWindow.alloc().initWithContentRectStyleMaskBackingDefer(frame, 3n as c_ulong, 2n as c_ulong, false);
+  window.title = text("nts");
   const buttonFrame = local<CGRect>();
   setRect(buttonFrame, 110, 80, 100, 32);
   const button = NSButton.alloc().initWithFrame(buttonFrame);
-  button.title = NSString.stringWithUTF8String("Press");
-  window.contentView.addSubview(button);
+  button.title = text("Press");
+  // `contentView` is `nullable` in NSWindow.h.
+  const content = window.contentView;
+  if (content !== null) {
+    content.addSubview(button);
+  }
 
   const cls = objc_allocateClassPair(NSObject, "NtsWindowController", 0n as c_size_t);
   if (cls === null) {
@@ -86,8 +101,11 @@ function main(): void {
     report("stopped");
     app.stop(null);
     // `stop:` is seen when the loop next finishes an event, so one is posted.
-    app.postEvent(NSEvent.otherEventWithTypeLocationModifierFlagsTimestampWindowNumberContextSubtypeData1Data2(15n as c_ulong, local<CGPoint>(), 0n as c_ulong, 0 as c_double, 0n as c_long, null,
-      0 as c_int16, 0n as c_long, 0n as c_long), true);
+    const wake = NSEvent.otherEventWithTypeLocationModifierFlagsTimestampWindowNumberContextSubtypeData1Data2(15n as c_ulong, local<CGPoint>(), 0n as c_ulong, 0 as c_double, 0n as c_long, null,
+      0 as c_int16, 0n as c_long, 0n as c_long);
+    if (wake !== null) {
+      app.postEventAtStart(wake, true);
+    }
   });
   class_addMethod(cls, sel_registerName("pressed:"), pressed, "v@:@");
   class_addMethod(cls, sel_registerName("tick:"), tick, "v@:@");
