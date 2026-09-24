@@ -11,15 +11,32 @@ import { cloneAndReplaceKey, isValidElement } from "./jsx/ReactJSXElement.ts";
 const SEPARATOR = ".";
 const SUBSEPARATOR = ":";
 
-// Escapes a key so that it cannot collide with the separators.
+// Escapes a key so that it cannot collide with the separators: `=` becomes
+// `=0` and `:` becomes `=2`. A character loop rather than a regular
+// expression, which a native build has no engine for.
 function escape(key: string): string {
-  return "$" + key.replace(/[=:]/g, (match) => (match === "=" ? "=0" : "=2"));
+  let escaped = "$";
+  for (let i = 0; i < key.length; i++) {
+    const char = key.charAt(i);
+    escaped += char === "=" ? "=0" : char === ":" ? "=2" : char;
+  }
+  return escaped;
 }
 
 let didWarnAboutMaps = false;
 
+// Doubles the last slash of every run of slashes (`a//b` becomes `a///b`),
+// so that a user key cannot fake the `/` that separates mapped keys.
 function escapeUserProvidedKey(text: string): string {
-  return text.replace(/\/+/g, "$&/");
+  let escaped = "";
+  for (let i = 0; i < text.length; i++) {
+    const char = text.charAt(i);
+    escaped += char;
+    if (char === "/" && text.charAt(i + 1) !== "/") {
+      escaped += "/";
+    }
+  }
+  return escaped;
 }
 
 // A child's key within its set: its own key, or its index in base 36.
